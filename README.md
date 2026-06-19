@@ -1,7 +1,15 @@
 本项目是一个面向 AI Agent 编排平台。它通过 LLM 驱动的决策引擎，结合能力（内置工具、MCP 协议、CLI 执行、浏览器操作等），实现从**感知→规划→执行→反馈**的初级闭环。
 
 ---
-运行预览
+
+截图效果
+
+![ui-register.png](agent-sphere-readme/ui-register.png)
+
+![ui-chat.png](agent-sphere-readme/ui-chat.png)
+
+视频预览
+
 https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15
 
 ## 1. 开发quick start
