@@ -52,13 +52,13 @@ JUnit 5 + Mockito + MockMvc `standaloneSetup` — **NOT** `@SpringBootTest`. Con
 
 ## Runtime prerequisites
 
-PostgreSQL `buukle_agent` + Redis. `docker-compose.yml` at repo root starts both, but volume paths are hardcoded to macOS (`/Users/elvin/Desktop/...`) — override or remove volumes on other machines.
+PostgreSQL (DB name `buukle_agent_2026061101`) + Redis. `docker-compose.yml` lives at `agent-sphere/agent-docker-middleware/docker-compose.yml` (under this project, **not** the repo root) and starts both, but volume paths are hardcoded to macOS (`/Users/elvin/Desktop/...`) — override or remove volumes on other machines.
 
 Env overrides (defaults): `DB_HOST` (127.0.0.1), `DB_PORT` (5432), `DB_USERNAME` (buukle), `DB_PASSWORD` (buukle123), `REDIS_HOST` (127.0.0.1), `REDIS_PORT` (6379).
 
 ## Flyway
 
-Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql` (V1–V28). `baseline-on-migrate: true`, baseline 0. Add new `V<n>` files; never edit applied migrations.
+Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql` (currently V1–V5; check the directory for the current highest number before adding a new one). `baseline-on-migrate: true`, baseline 0. Add new `V<n>` files; never edit applied migrations.
 
 ## MyBatis-Plus
 
@@ -72,7 +72,7 @@ Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.s
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).
 - Virtual threads enabled by default (`ENABLE_VIRTUAL_THREADS=true`).
 - API prefix: `/api/v1/...`; SSE streaming routes contain `/stream`.
-- Logging: `com.buukle` → DEBUG, repository packages → WARN.
+- Logging: `com.buukle` → DEBUG; `*.repository` packages and `com.buukle.agent.capability` → WARN.
 - Key libs beyond Spring: langgraph4j, redisson, resilience4j, caffeine, hutool, victools, swagger.
 
 ## Code style

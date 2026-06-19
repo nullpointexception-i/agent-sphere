@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "AgentSphere",
+  "version": "1.0",
+  "description": "Bridges AgentSphere AI with your browser for automated operations",
+  "permissions": ["tabs", "scripting", "storage", "activeTab", "alarms", "debugger"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "128": "icon-128.png"
+  },
+  "web_accessible_resources": [{
+    "resources": ["page-script.js"],
+    "matches": ["<all_urls>"]
+  }]
+}
