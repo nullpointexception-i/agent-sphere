@@ -1,0 +1,155 @@
+server:
+  port: 8080                                       # 服务端口 / Server port
+
+spring:
+  application:
+    name: agent-sphere
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5432}/buukle_agent_2026061101
+    username: ${DB_USERNAME:buukle}
+    password: ${DB_PASSWORD:buukle123}
+    driver-class-name: org.postgresql.Driver
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}                  # Redis 主机 / Redis host
+    port: ${REDIS_PORT:6379}                       # Redis 端口 / Redis port
+  threads:
+    virtual:
+      enabled: ${ENABLE_VIRTUAL_THREADS:true}      # 启用虚拟线程（Java 21+）/ Enable virtual threads
+  flyway:
+    enabled: true                                  # 启用 Flyway 数据库迁移 / Enable Flyway migration
+    locations: classpath:db/migration               # 迁移脚本目录 / Migration scripts location
+    baseline-on-migrate: true                       # 自动基线已有数据库 / Auto-baseline existing DB
+    baseline-version: 0                             # 基线版本号 / Baseline version
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss               # JSON 日期格式 / JSON date format
+    time-zone: Asia/Shanghai                        # 时区 / Time zone
+    serialization:
+      fail-on-empty-beans: false                    # 空对象不报错 / Don't fail on empty beans
+
+mybatis-plus:
+  type-handlers-package: com.buukle.agent.infrastructure.handler
+  configuration:
+    map-underscore-to-camel-case: true              # 下划线转驼峰 / Underscore to camel case
+  global-config:
+    db-config:
+      logic-delete-field: delete_flag               # 逻辑删除字段名 / Logical delete field
+      logic-delete-value: 1                         # 已删除值 / Deleted value
+      logic-not-delete-value: 0                     # 未删除值 / Not deleted value
+      id-type: auto                                 # 主键策略：自增 / ID strategy: auto-increment
+
+logging:
+  level:
+    com.buukle: DEBUG                              # 框架日志级别 / Framework log level
+    com.buukle.agent.instance.repository: WARN      # SQL 日志级别（生产建议 WARN）/ SQL log level
+    com.buukle.agent.model.repository: WARN         # Model SQL 日志级别 / Model SQL log level
+    com.buukle.agent.capability: WARN               # 能力组件日志级别 / Capability log level
+    org.springframework: INFO                       # Spring 框架日志 / Spring framework log
+
+buukle:
+  agent:
+    # ============================================================
+    # 会话配置 / Session Config
+    # ============================================================
+    session:
+      idle-timeout: 30m                            # 会话空闲超时 / Session idle timeout
+      max-concurrent-runs: 10                      # 最大并发执行数 / Max concurrent runs
+      cache-ttl: 60m                               # 上下文缓存存活时间 / Context cache TTL
+
+    # ============================================================
+    # 步骤配置 / Step Config
+    # ============================================================
+    step:
+      max-retries: 3                               # 步骤最大重试次数 / Step max retries
+      execution-timeout: 5m                        # 步骤执行超时 / Step execution timeout
+
+    # ============================================================
+    # SSE 推送配置 / SSE Config
+    # ============================================================
+    sse:
+      buffer-size: 1024                            # SSE 缓冲区大小（字节）/ SSE buffer size (bytes)
+      cache-ttl: 30s                               # SSE 事件缓存 TTL / SSE event cache TTL
+      heartbeat-interval: 15s                      # SSE 心跳间隔 / SSE heartbeat interval
+
+    # ============================================================
+    # LLM 模型配置 / LLM Config
+    # ============================================================
+    llm:
+      log-body-max-length: 128                     # LLM 请求体日志截断长度 / LLM request body log truncation
+      connect-timeout: 30s                         # LLM API 连接超时 / LLM API connect timeout
+      read-timeout: 60s                            # LLM API 读取超时 / LLM API read timeout
+      stream-read-timeout: 120s                    # 流式读取超时 / Stream read timeout
+      stream-timeout: 120s                         # 流式总超时（含思考）/ Stream total timeout (incl. reasoning)
+
+    # ============================================================
+    # Runner 执行引擎配置 / Runner Config
+    # ============================================================
+    runner:
+      max-loop-count: 128                          # 单次 run 最大循环次数 / Max loop count per run
+      turn-timeout: 180s                           # 单轮 LLM 调用超时 / Single LLM turn timeout
+      compaction:
+        budget-ratio: 0.7                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio
+
+    # ============================================================
+    # 工具执行配置 / Tool Config
+    # ============================================================
+    tool:
+      max-parallel: 3                              # 工具最大并行数 / Max parallel tool executions
+      submit-timeout: 30s                          # 工具提交超时 / Tool submit timeout
+      execution-timeout: 60s                       # 工具执行超时 / Tool execution timeout
+      cli-timeout: 30s                             # CLI 工具超时 / CLI tool timeout
+
+      # ---- 网页读取工具 / Web Read Tool ----
+      web-read:
+        connect-timeout: 10s                       # 连接超时 / Connect timeout
+        read-timeout: 30s                          # 读取超时 / Read timeout
+      web-fetch:
+        connect-timeout: 10s                       # 连接超时 / Connect timeout
+        read-timeout: 30s                          # 读取超时 / Read timeout
+
+      # ---- Jina AI 高级网页读取 / Jina AI Advanced Web Read ----
+      web-read-advanced:
+        use-jina-fallback: true                    # 启用 Jina Reader 降级 / Enable Jina Reader fallback
+        jina-reader-url: "https://r.jina.ai/"      # Jina Reader 服务地址 / Jina Reader service URL
+        jina-api-key: "jina_4f83c63666fd475c964d5c31fc6b4f54KNOJvJAOeMovU0AkaRZGpg64fbJ3"
+        jina-engine: "direct"                      # Jina 引擎模式（direct/browser）/ Jina engine mode
+        jina-connect-timeout: 30                   # Jina 连接超时（秒）/ Jina connect timeout (s)
+        jina-read-timeout: 30                      # Jina 读取超时（秒）/ Jina read timeout (s)
+        jina-timeout-buffer: 10                    # Jina 超时缓冲（秒）/ Jina timeout buffer (s)
+        html-to-markdown:
+          max-content-length: 2097152              # HTML 转 Markdown 最大长度（字节）/ Max HTML→Markdown length (bytes)
+          exclude-tags: "script,style,noscript,meta,link,header,footer,nav,iframe,embed,object"
+
+      # ---- Web Fetch 高级配置 / Web Fetch Advanced ----
+      web-fetch-advanced:
+        max-retries: 3                             # 最大重试次数 / Max retries
+        retry-backoff-multiplier: 2                # 退避倍率 / Retry backoff multiplier
+        retry-delay-ms: 1000                       # 初始重试延迟（毫秒）/ Initial retry delay (ms)
+        max-redirects: 5                           # 最大重定向次数 / Max redirects
+        max-response-bytes: 5242880                # 最大响应体大小（字节）/ Max response body (bytes)
+
+      # ---- JS 渲染配置 / JS Render Config ----
+      js-render:
+        enabled: true                              # 启用 JS 渲染 / Enable JS rendering
+        max-wait-millis: 10000                     # 最大等待时间（毫秒）/ Max wait time (ms)
+        background-js-timeout: 3000                # 后台 JS 超时（毫秒）/ Background JS timeout (ms)
+        max-pool-size: 3                           # 浏览器池最大大小 / Browser pool max size
+
+    # ============================================================
+    # MCP 协议配置 / MCP Config
+    # ============================================================
+    mcp:
+      connect-timeout: 30s                         # MCP 连接超时 / MCP connect timeout
+      sse-init-timeout: 30s                        # MCP SSE 初始化超时 / MCP SSE init timeout
+      sse-read-timeout: 30s                        # MCP SSE 读取超时 / MCP SSE read timeout
+      rpc-timeout: 30s                             # MCP RPC 超时 / MCP RPC timeout
+      detection-timeout: 10s                       # MCP 服务发现超时 / MCP service detection timeout
+      direct-read-timeout: 30s                     # MCP 直接读取超时 / MCP direct read timeout
+      direct-connect-timeout: 10s                  # MCP 直接连接超时 / MCP direct connect timeout
+
+    # ============================================================
+    # 分布式锁配置 / Lock Config
+    # ============================================================
+    lock:
+      capability:
+        wait-time: 5s                              # 获取锁等待超时 / Lock acquire wait timeout
+        lease-time: 10s                            # 锁持有时间 / Lock lease duration

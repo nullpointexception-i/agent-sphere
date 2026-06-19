@@ -1,0 +1,55 @@
+
+.DS_Store
+node_modules
+/dist
+
+# local env files
+.env.local
+.env.*.local
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw*
+package-lock.json
+
+/.settings/
+target
+
+# built application files
+*.apk
+*.ap_
+
+# files for the dex VM
+*.dex
+
+# Java class files
+*.class
+*.jar
+
+# generated files
+bin/
+gen/
+
+# Eclipse project files
+.classpath
+.project
+.DS_Store
+
+# IDEA files
+*/.idea/*
+*/*.iml
+*.iml
+
+#dubbo cache files
+*.cache/**
+

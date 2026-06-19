@@ -1,0 +1,49 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:14.23-trixie
+    environment:
+      POSTGRES_USER: buukle
+      POSTGRES_PASSWORD: buukle123
+      POSTGRES_DB: buukle_agent_2026061101
+    volumes:
+      - /Users/elvin/Desktop/File/postgrs_2026061101:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buukle"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - /Users/elvin/Desktop/File/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@buukle.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    volumes:
+      - ./pgadmin/servers.json:/pgadmin4/servers.json
+      - ./pgadmin/pgpass:/pgadmin4/pgpass
+    entrypoint:
+      - sh
+      - -c
+      - |
+        chmod 600 /pgadmin4/pgpass
+        /entrypoint.sh
+

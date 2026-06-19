@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Agent Sphere",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "postgres",
+      "Username": "buukle",
+      "PassFile": "/pgadmin4/pgpass",
+      "SSLMode": "prefer"
+    }
+  }
+}

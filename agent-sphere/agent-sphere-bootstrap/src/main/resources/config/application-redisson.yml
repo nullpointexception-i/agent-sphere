@@ -1,0 +1,6 @@
+redisson:
+  single-server-config:
+    address: redis://${REDIS_HOST:localhost}:${REDIS_PORT:6379}
+    connection-pool-size: 32
+    connection-minimum-idle-size: 8
+    timeout: 3000

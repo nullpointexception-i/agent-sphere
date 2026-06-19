@@ -1,0 +1,197 @@
+// https://umijs.org/config/
+
+import { join } from 'node:path';
+import { defineConfig } from '@umijs/max';
+import defaultSettings from './defaultSettings';
+import proxy from './proxy';
+
+import routes from './routes';
+
+const { UMI_ENV = 'dev' } = process.env;
+
+// Compute commit hash: env vars take precedence, fall back to git at build time
+const commitHash =
+  process.env.COMMIT_HASH ||
+  process.env.CF_PAGES_COMMIT_SHA ||
+  (() => {
+    try {
+      return require('node:child_process')
+        .execSync('git rev-parse HEAD', {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          encoding: 'utf-8',
+        })
+        .trim();
+    } catch {
+      return '';
+    }
+  })();
+
+/**
+ * @name 使用公共路径
+ * @description 部署时的路径，如果部署在非根目录下，需要配置这个变量
+ * @doc https://umijs.org/docs/api/config#publicpath
+ */
+const PUBLIC_PATH: string = '/';
+
+export default defineConfig({
+  alias: {
+    '@root': join(__dirname, '..'),
+  },
+  /**
+   * @name 开启 hash 模式
+   * @description 让 build 之后的产物包含 hash 后缀。通常用于增量发布和避免浏览器加载缓存。
+   * @doc https://umijs.org/docs/api/config#hash
+   */
+  hash: true,
+
+  publicPath: PUBLIC_PATH,
+
+  /**
+   * @name 兼容性设置
+   * @description 设置 ie11 不一定完美兼容，需要检查自己使用的所有依赖
+   * @doc https://umijs.org/docs/api/config#targets
+   */
+  // targets: {
+  //   ie: 11,
+  // },
+  /**
+   * @name 路由的配置，不在路由中引入的文件不会编译
+   * @description 只支持 path，component，routes，redirect，wrappers，title 的配置
+   * @doc https://umijs.org/docs/guides/routes
+   */
+  // umi routes: https://umijs.org/docs/routing
+  routes,
+  /**
+   * @name 主题的配置
+   * @description 虽然叫主题，但是其实只是 less 的变量设置
+   * @doc umi 的 theme 配置 https://umijs.org/docs/api/config#theme
+   */
+  // theme: { '@primary-color': '#1DA57A' }
+  /**
+   * @name moment 的国际化配置
+   * @description 如果对国际化没有要求，打开之后能减少js的包大小
+   * @doc https://umijs.org/docs/api/config#ignoremomentlocale
+   */
+  ignoreMomentLocale: true,
+  /**
+   * @name 代理配置
+   * @description 可以让你的本地服务器代理到你的服务器上，这样你就可以访问服务器的数据了
+   * @see 要注意以下 代理只能在本地开发时使用，build 之后就无法使用了。
+   * @doc 代理介绍 https://umijs.org/docs/guides/proxy
+   * @doc 代理配置 https://umijs.org/docs/api/config#proxy
+   */
+  proxy: proxy[UMI_ENV as keyof typeof proxy],
+  /**
+   * @name 快速热更新配置
+   * @description 一个不错的热更新组件，更新时可以保留 state
+   */
+  fastRefresh: true,
+  /**
+   * @name 路由预加载
+   * @description 预加载路由资源，提升页面切换速度
+   * @doc https://umijs.org/docs/api/config#routePrefetch
+   */
+  routePrefetch: {},
+  /**
+   * @name manifest 配置
+   * @description 生成资源清单，配合 routePrefetch 使用
+   */
+  manifest: {},
+  //============== 以下都是max的插件配置 ===============
+  /**
+   * @name 数据流插件
+   * @@doc https://umijs.org/docs/max/data-flow
+   */
+  model: {},
+  initialState: {},
+  /**
+   * @name layout 插件
+   * @doc https://umijs.org/docs/max/layout-menu
+   */
+  title: 'Ant Design Pro',
+  layout: {
+    locale: true,
+    ...defaultSettings,
+  },
+  /**
+   * @name moment2dayjs 插件
+   * @description 将项目中的 moment 替换为 dayjs
+   * @doc https://umijs.org/docs/max/moment2dayjs
+   */
+  moment2dayjs: {
+    preset: 'antd',
+    plugins: ['duration', 'relativeTime'],
+  },
+  /**
+   * @name 国际化插件
+   * @doc https://umijs.org/docs/max/i18n
+   */
+  locale: {
+    // default zh-CN
+    default: 'zh-CN',
+    antd: true,
+    // default true, when it is true, will use `navigator.language` overwrite default
+    baseNavigator: true,
+  },
+  /**
+   * @name antd 插件
+   * @description 内置了 babel import 插件
+   * @doc https://umijs.org/docs/max/antd#antd
+   */
+  antd: {
+    configProvider: {
+      variant: 'filled',
+      theme: {
+        token: {
+          fontFamily: 'AlibabaSans, sans-serif',
+        },
+      },
+    },
+  },
+  /**
+   * @name 网络请求配置
+   * @description 它基于 axios 和 ahooks 的 useRequest 提供了一套统一的网络请求和错误处理方案。
+   * @doc https://umijs.org/docs/max/request
+   */
+  request: {},
+  /**
+   * @name React Query 插件
+   * @description 使用 react-query 管理服务端状态
+   * @doc https://umijs.org/docs/max/react-query
+   */
+  reactQuery: {},
+  /**
+   * @name 权限插件
+   * @description 基于 initialState 的权限插件，必须先打开 initialState
+   * @doc https://umijs.org/docs/max/access
+   */
+  access: {},
+  /**
+   * @name Google Analytics
+   * @description 使用 GA4 (gtag.js) 进行站点分析
+   * @doc https://umijs.org/docs/max/analytics
+   */
+  analytics: {
+    ga_v2: 'G-59NF1VHHPF',
+  },
+  /**
+   * @name <head> 中额外的 script
+   * @description 配置 <head> 中额外的 script
+   */
+  headScripts: [
+    `var l=document.createElement('link');l.rel='icon';l.href='/favicon.svg';document.head.appendChild(l)`,
+    // 解决首次加载时白屏的问题
+    { src: join(PUBLIC_PATH, 'scripts/loading.js'), async: true },
+  ],
+
+  mock: {},
+  exportStatic: {},
+  esbuildMinifyIIFE: true,
+  define: {
+    'process.env.CI': process.env.CI,
+    'process.env.COMMIT_HASH': commitHash,
+    __APP_VERSION__: require('./../package.json').version,
+    __UMI_VERSION__: require('@umijs/max/package.json').version,
+    __UTOO_VERSION__: require('@utoo/pack/package.json').version,
+  },
+});

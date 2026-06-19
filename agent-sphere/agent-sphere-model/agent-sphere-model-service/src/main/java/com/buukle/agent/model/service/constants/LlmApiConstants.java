@@ -1,0 +1,30 @@
+package com.buukle.agent.model.service.constants;
+
+public final class LlmApiConstants {
+    private LlmApiConstants() {}
+
+    // URL
+    public static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
+
+    // Headers
+    public static final String HEADER_AUTHORIZATION = "Authorization";
+    public static final String HEADER_CONTENT_TYPE = "Content-Type";
+    public static final String HEADER_ACCEPT = "Accept";
+    public static final String APPLICATION_JSON = "application/json";
+    public static final String TEXT_EVENT_STREAM = "text/event-stream";
+    public static final String BEARER_PREFIX = "Bearer ";
+
+    // SSE
+    public static final String SSE_DATA_PREFIX = "data: ";
+    public static final String SSE_DONE_MARKER = "[DONE]";
+
+    // JSON fields
+    public static final String FIELD_MODEL = "model";
+    public static final String FIELD_STREAM = "stream";
+    public static final String FIELD_MESSAGES = "messages";
+    public static final String FIELD_CHOICES = "choices";
+    public static final String FIELD_DELTA = "delta";
+    public static final String FIELD_CONTENT = "content";
+    public static final String FIELD_REASONING_CONTENT = "reasoning_content";
+
+}

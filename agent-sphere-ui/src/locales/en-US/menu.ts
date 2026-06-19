@@ -1,0 +1,18 @@
+export default {
+  'menu.login': 'Login',
+  'menu.register': 'Register',
+  'menu.dashboard': 'Dashboard',
+  'menu.chat': 'Chat',
+  'menu.instances': 'Instances',
+  'menu.models': 'Model Providers',
+  'menu.capabilities': 'Capabilities',
+  'menu.capabilities.mcp': 'MCP',
+  'menu.capabilities.skill': 'Skills',
+  'menu.capabilities.cli': 'CLI Tools',
+  'menu.capabilities.builtin': 'Built-in',
+  'menu.exception.403': '403',
+  'menu.exception.404': '404',
+  'menu.exception.500': '500',
+  'menu.profile': 'Profile',
+  'menu.password': 'Change Password',
+};
