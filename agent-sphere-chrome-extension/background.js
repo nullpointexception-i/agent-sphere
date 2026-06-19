@@ -39,8 +39,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const m = changeInfo.url.match(/\/chat\/(\d+)/);
   if (!m) return;
   const newSessionId = Number(m[1]);
-  if (newSessionId === sessionId) return;
+  injectContentScript(tabId);
 
+  if (newSessionId === sessionId) return;
   chrome.storage.local.get(['token', 'baseUrl'], (data) => {
     if (data.token && data.baseUrl) {
       token = data.token;
@@ -48,6 +49,27 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       sessionId = newSessionId;
       chrome.storage.local.set({ sessionId: newSessionId }).catch(() => {});
       console.log('[AgentSphere] Tab URL changed, switching to session', newSessionId);
+      connectSSE();
+    }
+  });
+});
+
+// --- Detect SPA route changes (pushState/replaceState) for session following ---
+chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
+  if (!details.url) return;
+  const m = details.url.match(/\/chat\/(\d+)/);
+  if (!m) return;
+  const newSessionId = Number(m[1]);
+  injectContentScript(details.tabId);
+
+  if (newSessionId === sessionId) return;
+  chrome.storage.local.get(['token', 'baseUrl'], (data) => {
+    if (data.token && data.baseUrl) {
+      token = data.token;
+      baseUrl = data.baseUrl;
+      sessionId = newSessionId;
+      chrome.storage.local.set({ sessionId: newSessionId }).catch(() => {});
+      console.log('[AgentSphere] SPA route changed, switching to session', newSessionId);
       connectSSE();
     }
   });

@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1030" viewBox="0 0 1400 1030">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .layer-title { font: 700 21px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .box-title { font: 700 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#172033; }
+      .box-text { font: 400 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#536273; }
+      .mono { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#334155; }
+      .small { font: 500 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
+      .pill { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .code { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#1e293b; }
+      .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
+      .branch { stroke:#94a3b8; stroke-width:2.2; fill:none; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="1030" fill="url(#bg)"/>
+
+  <text x="700" y="62" class="title" text-anchor="middle">浏览器操作流程</text>
+  <text x="700" y="90" class="small" text-anchor="middle">Chrome 工具调用全链路：DTO → SSE → Extension action → 回调完成</text>
+
+  <rect x="540" y="116" width="320" height="46" rx="23" fill="#334155"/>
+  <text x="700" y="145" class="pill" text-anchor="middle">LLM 决策需要操作浏览器</text>
+
+  <path d="M700 162 L700 198" class="line"/>
+
+  <rect x="510" y="198" width="380" height="46" rx="23" fill="#475569"/>
+  <text x="700" y="227" class="pill" text-anchor="middle">调用 builtin_5 (Chrome Tool)</text>
+
+  <path d="M700 244 L700 280" class="line"/>
+
+  <rect x="40" y="280" width="1320" height="450" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="70" y="320" class="layer-title">CapabilityBuiltinToolChrome.execute()</text>
+
+  <rect x="70" y="340" width="390" height="126" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
+  <text x="265" y="374" class="box-title" text-anchor="middle">构建 ChromeCommandDTO</text>
+  <text x="265" y="407" class="mono" text-anchor="middle">(action, url, selector, text,</text>
+  <text x="265" y="430" class="mono" text-anchor="middle"> code, tabId, append)</text>
+
+  <rect x="505" y="340" width="390" height="126" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
+  <text x="700" y="374" class="box-title" text-anchor="middle">SseManager.sendBySession</text>
+  <text x="700" y="407" class="mono" text-anchor="middle">→ SSE 事件</text>
+  <text x="700" y="430" class="mono" text-anchor="middle">→ Extension Service Worker</text>
+
+  <rect x="940" y="340" width="390" height="126" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
+  <text x="1135" y="374" class="box-title" text-anchor="middle">CompletableFuture.get(10s)</text>
+  <text x="1135" y="407" class="mono" text-anchor="middle">← 阻塞等待回调</text>
+  <text x="1135" y="430" class="mono" text-anchor="middle">超时 10s</text>
+
+  <path d="M460 403 L505 403" class="line"/>
+  <path d="M895 403 L940 403" class="line"/>
+
+  <text x="700" y="506" class="small" text-anchor="middle">Extension Service Worker 根据 action 执行：</text>
+
+  <rect x="70" y="528" width="240" height="190" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
+  <text x="190" y="563" class="box-title" text-anchor="middle">navigate</text>
+  <text x="190" y="596" class="mono" text-anchor="middle">chrome.tabs.create({</text>
+  <text x="190" y="619" class="mono" text-anchor="middle">  url, active:false })</text>
+  <text x="190" y="642" class="mono" text-anchor="middle">→ requestIdleCallback</text>
+  <text x="190" y="665" class="mono" text-anchor="middle">→ callback POST</text>
+  <text x="190" y="688" class="mono" text-anchor="middle">→ {tabId, redirected}</text>
+
+  <rect x="325" y="528" width="240" height="190" rx="14" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="445" y="563" class="box-title" text-anchor="middle">click</text>
+  <text x="445" y="596" class="mono" text-anchor="middle">chrome.tabs.sendMessage</text>
+  <text x="445" y="619" class="mono" text-anchor="middle">  tabId, action, params</text>
+  <text x="445" y="642" class="mono" text-anchor="middle">→ 3-phase XPath 匹配</text>
+  <text x="445" y="665" class="mono" text-anchor="middle">→ callback POST</text>
+
+  <rect x="580" y="528" width="240" height="190" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
+  <text x="700" y="563" class="box-title" text-anchor="middle">type</text>
+  <text x="700" y="596" class="mono" text-anchor="middle">chrome.tabs.sendMessage</text>
+  <text x="700" y="619" class="mono" text-anchor="middle">  tabId, action, append</text>
+  <text x="700" y="642" class="mono" text-anchor="middle">→ input.value /</text>
+  <text x="700" y="665" class="mono" text-anchor="middle">  textContent</text>
+  <text x="700" y="688" class="mono" text-anchor="middle">→ append=true 追加</text>
+
+  <rect x="835" y="528" width="240" height="190" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
+  <text x="955" y="563" class="box-title" text-anchor="middle">getContent</text>
+  <text x="955" y="596" class="mono" text-anchor="middle">chrome.tabs.sendMessage</text>
+  <text x="955" y="619" class="mono" text-anchor="middle">  tabId, action, mode</text>
+  <text x="955" y="642" class="mono" text-anchor="middle">→ mode=summary 摘要</text>
+  <text x="955" y="665" class="mono" text-anchor="middle">→ 否则完整 DOM JSON</text>
+
+  <rect x="1090" y="528" width="240" height="190" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
+  <text x="1210" y="563" class="box-title" text-anchor="middle">executeJS</text>
+  <text x="1210" y="596" class="mono" text-anchor="middle">chrome.debugger</text>
+  <text x="1210" y="619" class="mono" text-anchor="middle">  .Runtime.evaluate</text>
+  <text x="1210" y="642" class="mono" text-anchor="middle">→ 绕过 CSP</text>
+  <text x="1210" y="665" class="mono" text-anchor="middle">→ callback POST</text>
+
+  <path d="M700 730 L700 772" class="line"/>
+
+  <rect x="380" y="772" width="640" height="128" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="700" y="812" class="box-title" text-anchor="middle">ChromeCallbackController.receive(commandId, result)</text>
+  <text x="700" y="850" class="mono" text-anchor="middle">→ ChromePendingStore.complete(commandId, result)</text>
+  <text x="700" y="875" class="mono" text-anchor="middle">→ CompletableFuture 完成 → execute() 返回</text>
+
+  <path d="M700 900 L700 942" class="line"/>
+
+  <rect x="540" y="942" width="320" height="46" rx="23" fill="#334155"/>
+  <text x="700" y="971" class="pill" text-anchor="middle">LLM 收到操作结果 → 继续决策</text>
+</svg>

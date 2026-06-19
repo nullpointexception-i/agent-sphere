@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1000" viewBox="0 0 1200 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .layer-title { font: 700 21px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .box-title { font: 700 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#172033; }
+      .box-text { font: 400 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#536273; }
+      .mono { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#334155; }
+      .small { font: 500 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
+      .pill { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .code { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#1e293b; }
+      .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
+      .branch { stroke:#94a3b8; stroke-width:2.2; fill:none; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="1000" fill="url(#bg)"/>
+
+  <text x="600" y="50" class="title" text-anchor="middle">HistoryLoader 上下文组装</text>
+  <text x="600" y="80" class="small" text-anchor="middle">从持久化存储加载历史消息，组装成 LLM 上下文</text>
+
+  <rect x="40" y="110" width="1120" height="847" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="75" y="155" class="layer-title">HistoryLoader.load(sessionId) — 加载并组装 messages</text>
+
+  <!-- Step 1 -->
+  <rect x="80" y="185" width="1040" height="106" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
+  <circle cx="135" cy="219" r="22" fill="#334155"/>
+  <text x="135" y="224" class="pill" text-anchor="middle">1</text>
+  <text x="185" y="225" class="box-title">读取最新 compact record</text>
+  <text x="185" y="253" class="box-text">→ 如果有：插入 <tspan class="mono">[Conversation summary]</tspan> system 消息</text>
+  <text x="185" y="275" class="box-text">→ 确定 <tspan class="mono">compactedUptoRunId</tspan> 游标</text>
+
+  <path d="M600 291 L600 327" class="line"/>
+
+  <!-- Step 2 -->
+  <rect x="80" y="327" width="1040" height="64" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
+  <circle cx="135" cy="361" r="22" fill="#334155"/>
+  <text x="135" y="366" class="pill" text-anchor="middle">2</text>
+  <text x="185" y="367" class="box-title">加载游标之后的所有 run（无 limit）</text>
+
+  <path d="M600 391 L600 427" class="line"/>
+
+  <!-- Step 3 -->
+  <rect x="80" y="427" width="1040" height="106" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
+  <circle cx="135" cy="461" r="22" fill="#334155"/>
+  <text x="135" y="466" class="pill" text-anchor="middle">3</text>
+  <text x="185" y="467" class="box-title">收集每个 run 的 tool call 记录</text>
+  <text x="185" y="495" class="box-text">→ 查 <tspan class="mono">agent_tool_call_record</tspan> 表</text>
+  <text x="185" y="517" class="box-text">→ 包含 <tspan class="mono">compressedArtifact</tspan>（已在写入时压缩）</text>
+
+  <path d="M600 533 L600 569" class="line"/>
+
+  <!-- Step 4 -->
+  <rect x="80" y="569" width="1040" height="106" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
+  <circle cx="135" cy="603" r="22" fill="#334155"/>
+  <text x="135" y="608" class="pill" text-anchor="middle">4</text>
+  <text x="185" y="609" class="box-title">预算控制（从最新向旧累加）</text>
+  <text x="185" y="637" class="box-text">→ 优先保留最近的工具结果</text>
+  <text x="185" y="659" class="box-text">→ 超 <tspan class="mono">budget</tspan> 的标记 <tspan class="mono">[Tool result omitted]</tspan></text>
+
+  <path d="M600 675 L600 711" class="line"/>
+
+  <!-- Step 5 -->
+  <rect x="80" y="711" width="1040" height="216" rx="14" fill="#eef2ff" stroke="#818cf8"/>
+  <circle cx="135" cy="745" r="22" fill="#334155"/>
+  <text x="135" y="750" class="pill" text-anchor="middle">5</text>
+  <text x="185" y="751" class="box-title">按序组装 messages</text>
+  <text x="185" y="779" class="box-text">→ <tspan class="mono">[system]</tspan> 压缩摘要</text>
+  <text x="185" y="801" class="box-text">→ <tspan class="mono">[user]</tspan> 历史用户消息</text>
+  <text x="185" y="823" class="box-text">→ <tspan class="mono">[assistant]</tspan> <tspan class="mono">tool_calls</tspan> 请求</text>
+  <text x="185" y="845" class="box-text">→ <tspan class="mono">[tool]</tspan> 工具结果</text>
+  <text x="185" y="867" class="box-text">→ <tspan class="mono">[assistant]</tspan> 历史助理回复</text>
+  <text x="185" y="889" class="box-text">→ ... （每个 run 重复）</text>
+  <text x="185" y="911" class="box-text">→ <tspan class="mono">[user]</tspan> 当前用户输入</text>
+</svg>

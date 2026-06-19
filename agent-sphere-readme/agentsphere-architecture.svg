@@ -28,8 +28,7 @@
 
   <rect width="1600" height="1600" fill="url(#bg)"/>
 
-  <text x="95" y="105" class="title">AgentSphere 编排</text>
-  <text x="95" y="150" class="subtitle">源码视角：LLM 决策、ReAct 循环、统一工具分发、浏览器桥接、记忆压缩与模型容错</text>
+  <text x="95" y="150" class="subtitle">LLM 决策、ReAct 循环、统一工具分发、浏览器桥接、记忆压缩与模型容错</text>
 
   <rect x="90" y="205" width="1420" height="170" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <text x="125" y="254" class="layer-title">1. User Interface Layer</text>

@@ -1,47 +1,18 @@
-# AgentSphere
-
-**AgentSphere** 是一个面向 AI Agent 的通用自动化编排平台。它通过 LLM 驱动的决策引擎，结合多种能力（内置工具、MCP 协议、CLI 执行、浏览器操作等），实现从**感知→规划→执行→反馈**的完整闭环。
-
-> 浏览器自动化只是 AgentSphere 的能力之一。通过 MCP（Model Context Protocol）可以接入任意外部服务（Jira、GitHub、数据库、云平台等），构建真正的通用 Web Agent。
-
-> 项目基于 **4A 架构**（Analysis, Architecture, Algorithm, Administration）设计，强调模块化、可扩展性和可观测性。
+本项目是一个面向 AI Agent 编排平台。它通过 LLM 驱动的决策引擎，结合能力（内置工具、MCP 协议、CLI 执行、浏览器操作等），实现从**感知→规划→执行→反馈**的初级闭环。
 
 ---
+运行预览
+https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15
 
-## 1. Analysis — 需求分析
+## 1. 开发quick start
 
-### 1.1 业务目标
+见 : [QUICK_START.md](QUICK_START.md)
 
-让 AI Agent 能够像人类一样理解任务、规划步骤、执行操作，并学习改进。AgentSphere 不局限于浏览器自动化，而是作为一个通用编排平台，支持通过多种能力通道与真实世界交互。
+## 2. Architecture
 
-### 1.2 核心能力
-
-| 能力通道 | 集成方式 | 应用场景示例 |
-|---------|---------|-------------|
-| **MCP (Model Context Protocol)** | 标准协议接入 | Jira 操作、GitHub 管理、数据库查询、云平台运维 |
-| **Chrome 浏览器** | Chrome Extension + DOM API | 网页信息采集、CMS 内容发布、Web 系统配置 |
-| **CLI 命令行** | Process 执行 | 本地脚本运行、服务器管理、构建部署 |
-| **Builtin 工具** | Java SPI | HTTP 请求、网页解析、待办管理 |
-| **Skill 复合技能** | 多步任务编排 | 跨系统工作流、数据同步、自动化报告 |
-
-### 1.3 核心非功能需求
-
-| 需求 | 要求 |
-|------|------|
-| **实时性** | 用户能实时看到浏览器被操作的过程 |
-| **稳定性** | 工具执行超时后有兜底机制，不阻塞后续流程 |
-| **安全性** | 所有操作经过用户本地 Chrome 执行，不经过云端 |
-| **可扩展** | 工具 SPI 机制，可注册任意类型的能力 |
-| **可观测** | 每次工具调用都有日志/事件记录，可回溯 |
-
----
-
-## 2. Architecture — 系统架构
-
-### 2.1 整体架构
+### 2.1 整体结构
 
 ![agentsphere-architecture.svg](agent-sphere-readme/agentsphere-architecture.svg)
-
 
 ### 2.2 核心组件
 
@@ -49,45 +20,11 @@
 
 管理一次 AI 会话的完整执行生命周期，实现 **Plan → Act → Observe → Learn** 循环：
 
-```
-run(sessionId)
-  │
-  ├─ [Plan]   messages = system + history + user
-  │           shouldCompact(messages, route)→ compact → reassemble
-  │
-  ├─ [Act]    runTurn() → LLM 流式调用
-  │   ├─ LLM 返回 text → allContent.append → 继续
-  │   ├─ LLM 返回 tool_calls → 执行工具
-  │   │   ├─ FiberSet.submit(tool1, tool2, ...)  ← 并行
-  │   │   └─ FiberSet.awaitAll() → 收集结果
-  │   └─ 工具结果 → append tool-role messages
-  │
-  ├─ [Observe] 工具回调 → 结果写入 messages
-  │   ├─ Chrome → POST /chrome/callback
-  │   ├─ WebFetch → HTTP response
-  │   └─ CLI → stdout / exit code
-  │
-  ├─ [Learn]   下一轮循环（loopCount++）
-  │   ├─ hasToolCalls = true → 跳过 promoteInput
-  │   └─ 带着工具结果再次调用 LLM
-  │
-  └─ 终止条件
-      ├─ LLM 返回 stop 且无 tool_calls → COMPLETED
-      ├─ maxLoopCount 耗尽 → 强制总结
-      ├─ 用户取消 → CANCELLED
-      └─ 无更多输入 → break
-```
+![SessionRunner.run 执行生命周期](agent-sphere-readme/session-runner-flow.svg)
 
 **与 ReAct 模式的对齐：**
 
-```
-ReAct 经典模式           AgentSphere 实现
-──────────────────────────────────────────────
-Thought（思考）          LLM 推理 + tool_calls 决策
-Action（行动）           executeJS / navigate / click / type
-Observation（观察）      tool 返回结果写入 messages
-Final Answer（最终回答）  LLM 返回 stop，无 tool_calls
-```
+![ReAct 模式对齐](agent-sphere-readme/react-mode.svg)
 
 #### 2.2.2 Capability 能力层
 
@@ -101,25 +38,7 @@ Final Answer（最终回答）  LLM 返回 stop，无 tool_calls
 
 #### 2.2.3 Chrome Extension（浏览器桥接）
 
-```
-Content Script (页面上下文)
-  ├─ checkAuth() → localStorage 读取 token
-  ├─ SSE 状态 Toast → 浮动提示
-  ├─ domToJSON() → DOM → 结构化 JSON
-  └─ 执行 click / type / getContent / executeJS
-        │ chrome.runtime.sendMessage
-        ▼
-Service Worker (后台)
-  ├─ SSE 连接 → fetch + ReadableStream
-  ├─ 会话跟随 → URL 变化自动重建 SSE
-  ├─ 标签页管理 → 受控标签页追踪 + tabId 透传
-  └─ 操作回调 → POST /chrome/callback
-
-Popup (状态面板)
-  ├─ 连接状态显示
-  ├─ URL 配置
-  └─ 操作日志
-```
+![Chrome Extension 浏览器桥接结构](agent-sphere-readme/chrome-extension-structure.svg)
 
 ---
 
@@ -129,17 +48,7 @@ Popup (状态面板)
 
 AgentSphere 的核心循环遵循 **ReAct (Reasoning + Acting)** 模式，将 LLM 的推理能力和工具执行能力有机结合：
 
-```
-每轮循环（Loop Iteration）:
-┌────────────────────────────────────────────────────────────┐
-│  messages = [system, history..., user_input]               │
-│  messages += assistant(tool_calls)  ← LLM 生成的工具调用    │
-│  messages += tool(results)          ← 工具执行结果          │
-│  messages += assistant(text)        ← LLM 的文本回复       │
-│                                                            │
-│  LLM 看到的是完整的对话历史 + 工具调用链                     │
-└────────────────────────────────────────────────────────────┘
-```
+![ReAct 执行循环](agent-sphere-readme/react-loop.svg)
 
 **消息构成：**
 
@@ -157,74 +66,13 @@ AgentSphere 的核心循环遵循 **ReAct (Reasoning + Acting)** 模式，将 LL
 
 **多轮工具调用示例：**
 
-```
-Loop 0: LLM → todowrite(创建计划)
-        → LLM → navigate(天气网站)
-Loop 1: LLM → getContent(提取页面结构)
-Loop 2: LLM → executeJS(解析具体数据)
-Loop 3: LLM → todowrite(更新状态)
-        → LLM → stop(输出结果) ✅ 完成
-```
+![多轮工具调用示例](agent-sphere-readme/multi-loop-sequence.svg)
 
 ### 3.2 多级记忆体系 (Memory System)
 
 AgentSphere 实现了多级记忆系统，覆盖从持久化到运行时缓存的完整链路：
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│  记忆层级 / Memory Level                                            │
-│                                                                    │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │  L1: 运行时上下文 (KernelContext)                             │  │
-│  │  · 当前 session 的 KernelContext（TTL: 30min）                │  │
-│  │  · 包含 tools, modelRoute, fallbackRoutes                    │  │
-│  │  · 存储在 SessionRunner.contexts 的 ConcurrentHashMap        │  │
-│  │  · run() 结束后自动移除                                      │  │
-│  └──────────────────────┬──────────────────────────────────────┘  │
-│                         │                                         │
-│  ┌──────────────────────▼──────────────────────────────────────┐  │
-│  │  L2: 对话消息 (Messages)                                     │  │
-│  │  · 当前 run 的 messages ArrayList（LLM 所见即所得）          │  │
-│  │  · 包含 system + user + assistant(tool_calls) + tool(result) │  │
-│  │  · 每次 runTurn() 时发送给 LLM                               │  │
-│  │  · Loop 之间积累，compaction 后部分被摘要替代                 │  │
-│  └──────────────────────┬──────────────────────────────────────┘  │
-│                         │                                         │
-│  ┌──────────────────────▼──────────────────────────────────────┐  │
-│  │  L3: LLM 交互记录 (agent_llm_interaction_record)             │  │
-│  │  · 每次 LLM 调用的完整记录（请求体、响应、耗时、状态）       │  │
-│  │  · 类型: CHAT_REPLY / COMPACTION / TITLE_GENERATION         │  │
-│  │  · 保留原始 request body 和 response body                   │  │
-│  │  · 用于调试、审计、性能分析                                  │  │
-│  └──────────────────────┬──────────────────────────────────────┘  │
-│                         │                                         │
-│  ┌──────────────────────▼──────────────────────────────────────┐  │
-│  │  L4: 工具调用记录 (agent_tool_call_record)                   │  │
-│  │  · 每次工具调用的完整记录                                     │  │
-│  │  · 字段: callId, stepId, toolName, argumentsJson,           │  │
-│  │    compressedArguments, artifact, compressedArtifact, status │  │
-│  │  · 生命周期: PENDING → RUNNING → SUCCEEDED / FAILED         │  │
-│  │  · 结果写时压缩 (jsonCompress, 2000 char limit)              │  │
-│  │  · 用于 HistoryLoader 回放、观测面板展示                      │  │
-│  └──────────────────────┬──────────────────────────────────────┘  │
-│                         │                                         │
-│  ┌──────────────────────▼──────────────────────────────────────┐  │
-│  │  L5: 压缩摘要 (agent_compact_record)                         │  │
-│  │  · 当上下文 token 超过 budget 时触发                          │  │
-│  │  · 由专区 summarizer 模型生成结构化摘要                       │  │
-│  │  · 字段: compactedUptoRunId, summaryBefore, summaryAfter    │  │
-│  │  · 游标: compactedUptoRunId 标记已压缩的 run                 │  │
-│  │  · 后续 HistoryLoader 跳过已压缩的 run                       │  │
-│  └──────────────────────┬──────────────────────────────────────┘  │
-│                         │                                         │
-│  ┌──────────────────────▼──────────────────────────────────────┐  │
-│  │  L6: 会话持久化 (agent_session)                              │  │
-│  │  · 一次用户会话的元数据（title, summary, status）            │  │
-│  │  · 包含会话级别摘要（compaction 后更新）                      │  │
-│  │  · 用于会话列表展示、run 历史关联                              │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────┘
-```
+![多级记忆体系 Memory System](agent-sphere-readme/memory-system.svg)
 
 #### 记忆层级详细说明
 
@@ -241,113 +89,25 @@ AgentSphere 实现了多级记忆系统，覆盖从持久化到运行时缓存�
 
 `HistoryLoader` 负责从持久化存储中加载历史消息，组装成 LLM 的上下文：
 
-```
-HistoryLoader.load(sessionId)
-  │
-  ├─ 1. 读取最新 compact record
-  │      → 如果有: 插入 [Conversation summary] system 消息
-  │      → 确定 compactedUptoRunId 游标
-  │
-  ├─ 2. 加载游标之后的所有 run（无 limit）
-  │
-  ├─ 3. 收集每个 run 的 tool call 记录
-  │      → 查 agent_tool_call_record 表
-  │      → 包含 compressedArtifact（已在写入时压缩）
-  │
-  ├─ 4. 预算控制（从最新向旧累加）
-  │      → 优先保留最近的工具结果
-  │      → 超 budget 的标记 [Tool result omitted]
-  │
-  └─ 5. 按序组装 messages
-       → [system] 压缩摘要
-       → [user] 历史用户消息
-       → [assistant] tool_calls 请求
-       → [tool] 工具结果
-       → [assistant] 历史助理回复
-       → ... (每个 run 重复)
-       → [user] 当前用户输入
-```
+![HistoryLoader 上下文组装](agent-sphere-readme/history-loader.svg)
 
 **工具结果压缩流程：**
 
-```
-RuntimeEventListener.SUCCEEDED
-  ├─ artifact（原始）→ 写入 agent_tool_call_record.artifact
-  └─ jsonCompress(artifact, 2000) → .compressed_artifact
-                                      ↓
-                                HistoryLoader 读 .compressed_artifact
-                                → 直接用于 messages（不再重新压缩）
-```
+![工具结果写时压缩流程](agent-sphere-readme/tool-result-compress.svg)
 
 #### 3.2.2 上下文压缩 (Compaction)
 
 当 messages 的估算 token 超过 `maxInputTokens × budget-ratio` 时触发：
 
-```
-shouldCompact(messages, route) == true
-  │
-  ├─ compact(sessionId, runId, ctx)
-  │   ├─ 加载游标之后所有 run
-  │   ├─ 从最新向旧估算每个 run 的 token
-  │   │   → 超出 budget 的部分标记为待压缩
-  │   ├─ buildCompactInput → 拼接 [User:] + Tool[] + [Assistant:]
-  │   │   → 工具结果用 jsonCompress(artifact, 500) 压缩
-  │   │   → 受 compactionInputLimit (maxInputTokens × 0.5) 截断
-  │   ├─ callLLM → 专用 summarizer 生成摘要
-  │   │   → summaryMaxLen = inputToken × 2/3
-  │   │   → 提示 LLM 输出必须比输入短
-  │   └─ 写入 agent_compact_record
-  │       → compactedUptoRunId = 最新被压缩的 run ID
-  │
-  └─ messages.clear() → 重新组装
-     → historyLoader 现在加载的是压缩后的数据
-     → shouldCompact 再次检查 → 可能还需压缩（最多 3 次）
-```
+![上下文压缩 Compaction](agent-sphere-readme/compaction-flow.svg)
 
 **压缩链完整流程：**
 
-```
-每次 LLM 调用前
-  ├─ 查历史 → HistoryLoader.load()
-  │            ↓ 跳过 compactedUptoRunId 之前的 run
-  │            ↓ 回放之后的 run（含工具记录）
-  │            ↓ 超过 TOOL_RESULT_HISTORY_CHARS_BUDGET 的截断
-  │
-  ├─ 组消息
-  │   [system] 压缩摘要（如果有）
-  │   [user]   + [assistant(tool_calls)] + [tool(results)] + [assistant(text)]
-  │   ...（每个未压缩的 run）
-  │   [user] 当前输入
-  │
-  ├─ shouldCompact()
-  │   ├─ 估算 messages 的 token
-  │   ├─ 比较 budget = maxInputTokens × budget-ratio
-  │   ├─ 未超 → 直接发 LLM ✅
-  │   └─ 超出 → 触发 compaction
-  │              → 写入 compact record
-  │              → clear + 重新组装 → 重试（最多 3 次）
-  │
-  └─ runTurn(messages) → LLM
-```
+![压缩链完整流程](agent-sphere-readme/compression-chain.svg)
 
 #### 3.2.3 工具调用记录状态机
 
-```
-                   ┌──────────┐
-                   │  PENDING  │  ← LLM 返回 tool_calls 时创建
-                   └────┬─────┘
-                        │
-                        ▼
-                   ┌──────────┐
-                   │  RUNNING  │  ← FiberSet 开始执行
-                   └────┬─────┘
-                        │
-              ┌─────────┴─────────┐
-              ▼                   ▼
-       ┌──────────┐         ┌──────────┐
-       │SUCCEEDED │         │  FAILED   │
-       └──────────┘         └──────────┘
-```
+![工具调用记录状态机](agent-sphere-readme/tool-call-state-machine.svg)
 
 每条记录包含：
 - `callId` — LLM 生成的工具调用 ID（如 `call_abc123`）
@@ -390,43 +150,13 @@ AgentSphere 提供了多层次的模型容错机制，确保 LLM 调用的高可
 
 #### 路由配置
 
-```
-ModelRoute (主路由)
-  ├─ provider_id → 供应商 (DeepSeek / OpenAI / 自定义)
-  ├─ model_name → 模型 (deepseek-v4-flash / gpt-4o)
-  ├─ maxInputTokens → 输入上限（驱动压缩预算计算）
-  ├─ maxOutputTokens → 输出上限
-  └─ fallback_ids → 备选路由列表
-
-ModelProvider (供应商)
-  ├─ base_url → API 地址
-  ├─ api_key_id → 密钥引用
-  └─ config → 供应商配置 (JSON)
-```
+![模型路由配置](agent-sphere-readme/model-route-config.svg)
 
 #### Fallback 执行流程
 
-```
-SessionRunner.runTurn()
-  │
-  ├─ resolveRoutes() → 构建路由列表
-  │   ├─ 从 KernelContext 获取（直接指定）
-  │   └─ 从 Instance 获取（管理后台配置）
-  │       ├─ 主路由 (primary)
-  │       └─ Fallback 路由 (fallbackIds)
-  │
-  ├─ FallbackRouteExecutor.execute(routes)
-  │   ├─ Attempt #1: primary route
-  │   │   ├─ success → LLM 流 ✅
-  │   │   └─ exception → log.warn → 自动切换
-  │   ├─ Attempt #2: fallback 1
-  │   │   └─ ...
-  │   └─ All failed → RuntimeException
-  │
-  └─ compactionService.shouldCompact()
-      → 使用实际 route 的 maxInputTokens 计算 budget
-      → 在 execute 回调内检测（确保和 LLM 调用同源）
-```
+![Fallback 执行流程](agent-sphere-readme/fallback-flow.svg)
+
+> 说明：压缩预算计算基于实际 route 的 maxInputTokens，在 execute 回调内检测。详细公式见下方。
 
 #### 压缩预算计算
 
@@ -455,96 +185,19 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 ### 3.4 浏览器操作流程
 
-```
-LLM 决策需要操作浏览器
-  │
-  ├─ 调用 builtin_5 (Chrome Tool)
-  ├─ CapabilityBuiltinToolChrome.execute()
-  │   ├─ 构建 ChromeCommandDTO (action, url, selector, text, code, tabId, append)
-  │   ├─ SseManager.sendBySession(sessionId, dto)
-  │   │   → SSE 事件 → Extension Service Worker
-  │   ├─ CompletableFuture.get(10s)  ← 等待回调
-  │   │
-  │   ├─ [navigate]  chrome.tabs.create({ url, active:false })
-  │   │              → requestIdleCallback → callback POST
-  │   │              → 返回 { tabId, url, redirected }
-  │   │
-  │   ├─ [click]     chrome.tabs.sendMessage(tabId, { action, params })
-  │   │              → 3-phase XPath text matching
-  │   │              → callback POST
-  │   │
-  │   ├─ [type]      chrome.tabs.sendMessage(tabId, { action, params, append })
-  │   │              → input.value / textContent (contenteditable)
-  │   │              → append=true 时追加而非替换
-  │   │              → InputEvent dispatch
-  │   │
-  │   ├─ [getContent] chrome.tabs.sendMessage(tabId, { action, params, mode })
-  │   │              → mode=summary: 结构化摘要 (inputs/buttons/forms/navLinks/...)
-  │   │              → 不传 mode: 完整 DOM JSON
-  │   │              → callback POST
-  │   │
-  │   └─ [executeJS] chrome.debugger.Runtime.evaluate 绕过 CSP
-  │                  → callback POST
-  │
-  ├─ ChromeCallbackController.receive(commandId, result)
-  │   → ChromePendingStore.complete(commandId, result)
-  │   → CompletableFuture 完成 → execute() 返回
-  │
-  └─ LLM 收到操作结果 → 继续决策
-```
+![浏览器操作流程](agent-sphere-readme/browser-operation-flow.svg)
 
 ### 3.5 多标签页管理
 
-```
-LLM 操作两个页面:
-  navigate(url: "https://github.com/...") → tabId: 1644814353
-  navigate(url: "https://zhuanlan.zhihu.com/...") → tabId: 1644814350
-
-LLM 可分别操作:
-  getContent(tabId: 1644814353) → GitHub 页面
-  getContent(tabId: 1644814350) → Zhihu 页面
-
-无 tabId 时 → 操作最后导航的标签页（controlledTabId）
-```
+![多标签页管理](agent-sphere-readme/multi-tab.svg)
 
 ### 3.6 超时与取消链
 
-```
-SessionRunner.run()
-  │
-  ├─ tool.execution-timeout: 60s     → FiberSet.awaitAll()
-  │   └─ 超时 → future.cancel(true) → 中断虚拟线程
-  │       └─ Chrome 工具：CompletableFuture.get() 抛出 CancellationException
-  │       └─ WebFetch：HttpClient.send() 抛出 InterruptedIOException
-  │       └─ CLI：Process.destroyForcibly() 强制终止
-  │
-  ├─ turn-timeout: 180s              → CountDownLatch.await()
-  │   └─ 超时 → llmFuture.cancel(true) → 中断 LLM 流
-  │       └─ KernelLlmService → 虚拟线程检测 isCancelled → 退出
-  │
-  └─ maxLoopCount: 128               → while 循环上限
-      └─ 最后 1 轮注入强制总结指令
-
-用户取消:
-  POST /api/v1/runtime/{sessionId}/run/{runId}/stop
-    → SessionRunner.cancelRun(runId)
-    → CANCELLED_RUNS 标记
-    → 循环检测 → break → 发布 CANCELLED 事件
-```
+![超时与取消链](agent-sphere-readme/timeout-cancel-chain.svg)
 
 ### 3.7 会话跟随（Session Following）
 
-```
-Content Script → checkAuth 轮询
-  │
-  ├─ 读取 location.pathname → /chat/{sessionId}
-  ├─ 变化 → chrome.runtime.sendMessage({ type: 'auth' })
-  │   → Service Worker → connectSSE() → 新 session
-  │
-  └─ 新标签页 → chrome.tabs.create({ url, active:false })
-      → controlledTabId 记录
-      → tabId 透传（LLM 可指定 tabId 操作多个标签页）
-```
+![会话跟随 Session Following](agent-sphere-readme/session-following.svg)
 
 ---
 
@@ -718,55 +371,7 @@ public class CapabilityBuiltinToolMyTool implements CapabilityBuiltinToolSpi {
 
 ## 5. 项目结构
 
-```
-agent-sphere/                          # 后端主项目
-├── agent-sphere-bootstrap/           # 应用启动入口
-├── agent-sphere-common/              # 公共库 (配置、异常、工具)
-├── agent-sphere-infrastructure/      # 基础设施 (AOP、鉴权)
-├── agent-sphere-instance/            # 实例/会话管理
-│   ├── controller/                   #   API 控制器
-│   ├── service/                      #   业务逻辑
-│   ├── repository/                   #   数据访问
-│   └── domain/                       #   领域模型
-├── agent-sphere-model/               # 模型管理
-│   ├── provider/                     #   LLM 供应商
-│   ├── route/                        #   路由管理
-│   └── api-key/                      #   API Key
-├── agent-sphere-capability/          # 能力层 (可扩展)
-│   ├── builtin/                      #   内置工具 SPI
-│   │   ├── tool-chrome/              #     Chrome 浏览器操作
-│   │   ├── tool-webfetch/            #     HTTP 网页获取
-│   │   ├── tool-webread/             #     网页内容读取
-│   │   └── tool-todowrite/           #     待办任务管理
-│   ├── mcp/                          #   MCP 协议 (Jira/GitHub/DB...)
-│   ├── cli/                          #   命令行执行
-│   └── skill/                        #   复合技能
-├── agent-sphere-runtime/             # 运行引擎
-│   ├── kernel/                       #   核心执行
-│   │   ├── runner/                   #     SessionRunner
-│   │   ├── async/                    #     FiberSet
-│   │   ├── service/                  #     CompactionService
-│   │   └── tool/                     #     ToolExecutor
-│   └── orchestration/                #   编排层
-│       ├── sse/                      #     SSE Manager
-│       ├── chrome/                   #     Chrome 指令 Handler
-│       └── handler/                  #     RuntimeEventListener
-├── agent-sphere-util/                # 工具类
-└── pom.xml                           # 父 POM
-
-agent-sphere-chrome-extension/        # Chrome 扩展 (独立项目)
-├── manifest.json                     # 扩展配置
-├── background.js                     # Service Worker — SSE + 指令路由
-├── content.js                        # Content Script — DOM 操作 + Toast
-├── popup.html / popup.js             # 状态面板 (Info/Settings/Logs)
-└── icon-128.png                      # 图标
-
-agent-sphere-ui/                      # Web UI (独立项目，UmiJS)
-├── src/
-│   ├── pages/chat/                   # 聊天页面
-│   └── services/agentSphere/         # API 客户端
-└── package.json
-```
+![项目结构](agent-sphere-readme/project-structure.svg)
 
 ## 6. 技术栈
 

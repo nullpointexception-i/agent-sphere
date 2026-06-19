@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1400" viewBox="0 0 1100 1400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .layer-title { font: 700 21px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .box-title { font: 700 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#172033; }
+      .box-text { font: 400 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#536273; }
+      .mono { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#334155; }
+      .small { font: 500 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
+      .pill { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .code { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#1e293b; }
+      .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
+      .branch { stroke:#94a3b8; stroke-width:2.2; fill:none; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1100" height="1400" fill="url(#bg)"/>
+
+  <text x="40" y="58" class="title">项目结构</text>
+  <text x="40" y="86" class="small">三大独立项目 · 后端 / Chrome 扩展 / Web UI</text>
+
+  <rect x="140" y="120" width="820" height="1224" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="170" y="165" class="layer-title">项目结构 · Project Structure</text>
+
+  <rect x="170" y="190" width="190" height="36" rx="18" fill="#7aa7e8"/>
+  <text x="265" y="213" class="pill" text-anchor="middle">agent-sphere/ · 后端</text>
+  <rect x="380" y="190" width="320" height="36" rx="18" fill="#f0ad4e"/>
+  <text x="540" y="213" class="pill" text-anchor="middle">agent-sphere-chrome-extension/ · 扩展</text>
+  <rect x="720" y="190" width="200" height="36" rx="18" fill="#818cf8"/>
+  <text x="820" y="213" class="pill" text-anchor="middle">agent-sphere-ui/ · UI</text>
+
+  <rect x="170" y="246" width="760" height="1068" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="184" y="260" width="5" height="748" rx="2.5" fill="#7aa7e8"/>
+  <rect x="184" y="1030" width="5" height="132" rx="2.5" fill="#f0ad4e"/>
+  <rect x="184" y="1184" width="5" height="110" rx="2.5" fill="#818cf8"/>
+  <text x="206" y="276" class="mono">agent-sphere/                         # 后端主项目</text>
+  <text x="206" y="298" class="mono">├── agent-sphere-bootstrap/           # 应用启动入口</text>
+  <text x="206" y="320" class="mono">├── agent-sphere-common/              # 公共库 (配置、异常、工具)</text>
+  <text x="206" y="342" class="mono">├── agent-sphere-infrastructure/      # 基础设施 (AOP、鉴权)</text>
+  <text x="206" y="364" class="mono">├── agent-sphere-instance/            # 实例/会话管理</text>
+  <text x="206" y="386" class="mono">│   ├── controller/                   #   API 控制器</text>
+  <text x="206" y="408" class="mono">│   ├── service/                      #   业务逻辑</text>
+  <text x="206" y="430" class="mono">│   ├── repository/                   #   数据访问</text>
+  <text x="206" y="452" class="mono">│   └── domain/                       #   领域模型</text>
+  <text x="206" y="474" class="mono">├── agent-sphere-model/               # 模型管理</text>
+  <text x="206" y="496" class="mono">│   ├── provider/                     #   LLM 供应商</text>
+  <text x="206" y="518" class="mono">│   ├── route/                        #   路由管理</text>
+  <text x="206" y="540" class="mono">│   └── api-key/                      #   API Key</text>
+  <text x="206" y="562" class="mono">├── agent-sphere-capability/          # 能力层 (可扩展)</text>
+  <text x="206" y="584" class="mono">│   ├── builtin/                      #   内置工具 SPI</text>
+  <text x="206" y="606" class="mono">│   │   ├── tool-chrome/              #     Chrome 浏览器操作</text>
+  <text x="206" y="628" class="mono">│   │   ├── tool-webfetch/            #     HTTP 网页获取</text>
+  <text x="206" y="650" class="mono">│   │   ├── tool-webread/             #     网页内容读取</text>
+  <text x="206" y="672" class="mono">│   │   └── tool-todowrite/           #     待办任务管理</text>
+  <text x="206" y="694" class="mono">│   ├── mcp/                          #   MCP 协议 (Jira/GitHub/DB...)</text>
+  <text x="206" y="716" class="mono">│   ├── cli/                          #   命令行执行</text>
+  <text x="206" y="738" class="mono">│   └── skill/                        #   复合技能</text>
+  <text x="206" y="760" class="mono">├── agent-sphere-runtime/             # 运行引擎</text>
+  <text x="206" y="782" class="mono">│   ├── kernel/                       #   核心执行</text>
+  <text x="206" y="804" class="mono">│   │   ├── runner/                   #     SessionRunner</text>
+  <text x="206" y="826" class="mono">│   │   ├── async/                    #     FiberSet</text>
+  <text x="206" y="848" class="mono">│   │   ├── service/                  #     CompactionService</text>
+  <text x="206" y="870" class="mono">│   │   └── tool/                     #     ToolExecutor</text>
+  <text x="206" y="892" class="mono">│   └── orchestration/                #   编排层</text>
+  <text x="206" y="914" class="mono">│       ├── sse/                      #     SSE Manager</text>
+  <text x="206" y="936" class="mono">│       ├── chrome/                   #     Chrome 指令 Handler</text>
+  <text x="206" y="958" class="mono">│       └── handler/                  #     RuntimeEventListener</text>
+  <text x="206" y="980" class="mono">├── agent-sphere-util/                # 工具类</text>
+  <text x="206" y="1002" class="mono">└── pom.xml                           # 父 POM</text>
+  <text x="206" y="1046" class="mono">agent-sphere-chrome-extension/        # Chrome 扩展 (独立项目)</text>
+  <text x="206" y="1068" class="mono">├── manifest.json                     # 扩展配置</text>
+  <text x="206" y="1090" class="mono">├── background.js                     # Service Worker — SSE + 指令路由</text>
+  <text x="206" y="1112" class="mono">├── content.js                        # Content Script — DOM 操作 + Toast</text>
+  <text x="206" y="1134" class="mono">├── popup.html / popup.js             # 状态面板 (Info/Settings/Logs)</text>
+  <text x="206" y="1156" class="mono">└── icon-128.png                      # 图标</text>
+  <text x="206" y="1200" class="mono">agent-sphere-ui/                      # Web UI (独立项目，UmiJS)</text>
+  <text x="206" y="1222" class="mono">├── src/</text>
+  <text x="206" y="1244" class="mono">│   ├── pages/chat/                   # 聊天页面</text>
+  <text x="206" y="1266" class="mono">│   └── services/agentSphere/         # API 客户端</text>
+  <text x="206" y="1288" class="mono">└── package.json</text>
+</svg>

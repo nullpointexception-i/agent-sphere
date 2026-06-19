@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1250" height="1100" viewBox="0 0 1250 1100">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .layer-title { font: 700 20px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#1e293b; }
+      .box-title { font: 700 17px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#1e293b; }
+      .box-text { font: 400 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#334155; }
+      .mono { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#475569; }
+      .small { font: 500 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
+      .pill { font: 700 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
+      .branch { stroke:#94a3b8; stroke-width:2.2; fill:none; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <rect width="1250" height="1100" fill="url(#bg)"/>
+  <text x="50" y="80" class="title">压缩链完整流程</text>
+
+  <!-- Header pill -->
+  <rect x="425" y="110" width="400" height="40" rx="20" fill="#334155"/>
+  <text x="625" y="137" class="pill" text-anchor="middle">每次 LLM 调用前</text>
+
+  <path d="M625 150 L625 180" class="line"/>
+
+  <!-- Stage 1: 查历史 -->
+  <rect x="75" y="180" width="1100" height="130" rx="16" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="75" y="180" width="1100" height="44" rx="16" fill="#e8f1ff"/>
+  <rect x="75" y="194" width="1100" height="30" fill="#e8f1ff"/>
+  <text x="100" y="209" class="box-title">1. 查历史 → HistoryLoader.load()</text>
+
+  <text x="115" y="247" class="box-text">跳过 compactedUptoRunId 之前的 run</text>
+  <text x="115" y="274" class="box-text">回放之后的 run（含工具记录）</text>
+  <text x="115" y="301" class="box-text">超过 TOOL_RESULT_HISTORY_CHARS_BUDGET 的截断</text>
+
+  <path d="M625 310 L625 340" class="line"/>
+
+  <!-- Stage 2: 组消息 -->
+  <rect x="75" y="340" width="1100" height="160" rx="16" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="75" y="340" width="1100" height="44" rx="16" fill="#edf7f6"/>
+  <rect x="75" y="354" width="1100" height="30" fill="#edf7f6"/>
+  <text x="100" y="369" class="box-title">2. 组消息</text>
+
+  <text x="115" y="405" class="mono">[system] 压缩摘要（如果有）</text>
+  <text x="115" y="427" class="mono">[user] + [assistant(tool_calls)] + [tool(results)] + [assistant(text)]</text>
+  <text x="135" y="449" class="small">（每个未压缩的 run）</text>
+  <text x="115" y="475" class="mono">[user] 当前输入</text>
+
+  <path d="M625 500 L625 530" class="line"/>
+
+  <!-- Stage 3: shouldCompact -->
+  <rect x="75" y="530" width="1100" height="200" rx="16" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="75" y="530" width="1100" height="44" rx="16" fill="#fff4e6"/>
+  <rect x="75" y="544" width="1100" height="30" fill="#fff4e6"/>
+  <text x="100" y="559" class="box-title">3. shouldCompact()</text>
+
+  <text x="115" y="598" class="box-text">估算 messages 的 token</text>
+  <text x="115" y="625" class="box-text">比较 budget = maxInputTokens × budget-ratio</text>
+
+  <!-- Fork -->
+  <path d="M335 647 L335 665" class="branch"/>
+  <path d="M335 665 L335 680" class="branch"/>
+  <path d="M335 665 L625 665" class="branch"/>
+  <path d="M335 665 L335 652" class="branch"/>
+
+  <!-- Left branch: 未超 -->
+  <rect x="160" y="680" width="340" height="42" rx="21" fill="#75bd88"/>
+  <text x="330" y="707" class="pill" text-anchor="middle">未超 → 直接发 LLM ✅</text>
+
+  <!-- Right branch: 超出 -->
+  <rect x="560" y="680" width="570" height="42" rx="10" fill="#fff4e6" stroke="#f0ad4e"/>
+  <text x="615" y="695" class="box-title">超出 → 触发 compaction</text>
+
+  <rect x="575" y="730" width="540" height="36" rx="10" fill="#fff4e6" stroke="#f0ad4e"/>
+  <text x="845" y="754" class="box-text" text-anchor="middle">写入 compact record → clear + 重新组装</text>
+
+  <rect x="575" y="772" width="540" height="36" rx="10" fill="#fdf2f8" stroke="#ec4899"/>
+  <text x="845" y="796" class="box-text" text-anchor="middle">重试（最多 3 次）</text>
+
+  <!-- Arrow down from both branches -->
+  <path d="M330 722 L625 830" class="line"/>
+  <path d="M845 808 L625 830" class="line"/>
+
+  <!-- Stage 4: runTurn -->
+  <rect x="75" y="830" width="1100" height="60" rx="16" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="75" y="830" width="1100" height="60" rx="16" fill="#eef2ff"/>
+  <text x="625" y="868" class="box-title" text-anchor="middle">4. runTurn(messages) → LLM</text>
+
+  <path d="M625 890 L625 920" class="line"/>
+
+  <!-- End pill -->
+  <rect x="475" y="920" width="300" height="42" rx="21" fill="#334155"/>
+  <text x="625" y="947" class="pill" text-anchor="middle">LLM 流式返回</text>
+</svg>

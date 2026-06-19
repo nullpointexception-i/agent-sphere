@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="620" viewBox="0 0 1100 620">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .box-title { font: 700 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#172033; }
+      .box-text { font: 400 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#536273; }
+      .pill { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
+      .branch { stroke:#94a3b8; stroke-width:2.2; fill:none; }
+    </style>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="620" fill="url(#bg)"/>
+  <text x="50" y="80" class="title">ReAct 模式对齐</text>
+
+  <rect x="50" y="120" width="1000" height="460" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+
+  <!-- Left column header -->
+  <rect x="85" y="140" width="280" height="40" rx="20" fill="#818cf8"/>
+  <text x="225" y="167" class="pill" text-anchor="middle">ReAct 经典模式</text>
+
+  <!-- Right column header -->
+  <rect x="735" y="140" width="280" height="40" rx="20" fill="#4db6ac"/>
+  <text x="875" y="167" class="pill" text-anchor="middle">AgentSphere 实现</text>
+
+  <!-- Row 1: Thought -->
+  <rect x="85" y="200" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="225" y="231" class="box-title" text-anchor="middle">Thought（思考）</text>
+  <rect x="735" y="200" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
+  <text x="875" y="231" class="box-text" text-anchor="middle">LLM 推理 + tool_calls 决策</text>
+  <path d="M365 225 L725 225" class="dash"/>
+
+  <!-- Row 2: Action -->
+  <rect x="85" y="270" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="225" y="301" class="box-title" text-anchor="middle">Action（行动）</text>
+  <rect x="735" y="270" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
+  <text x="875" y="299" class="box-text" text-anchor="middle">executeJS / navigate</text>
+  <text x="875" y="316" class="box-text" text-anchor="middle">click / type</text>
+  <path d="M365 295 L725 295" class="dash"/>
+
+  <!-- Row 3: Observation -->
+  <rect x="85" y="340" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="225" y="371" class="box-title" text-anchor="middle">Observation（观察）</text>
+  <rect x="735" y="340" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
+  <text x="875" y="371" class="box-text" text-anchor="middle">tool 返回结果写入 messages</text>
+  <path d="M365 365 L725 365" class="dash"/>
+
+  <!-- Row 4: Final Answer -->
+  <rect x="85" y="410" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="225" y="441" class="box-title" text-anchor="middle">Final Answer（最终回答）</text>
+  <rect x="735" y="410" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
+  <text x="875" y="441" class="box-text" text-anchor="middle">LLM 返回 stop，无 tool_calls</text>
+  <path d="M365 435 L725 435" class="dash"/>
+
+  <text x="550" y="550" class="box-text" text-anchor="middle" fill="#94a3b8">ReAct 经典模式与 AgentSphere 实现对应关系</text>
+</svg>
