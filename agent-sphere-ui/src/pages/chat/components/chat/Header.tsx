@@ -86,7 +86,7 @@ export default function Header({
           icon={<ToolOutlined />}
           onClick={onTogglePanel}
         >
-          {intl.formatMessage({ id: 'pages.chat.tools', defaultMessage: 'Tools' })}
+          {intl.formatMessage({ id: 'pages.chat.sessionPanel', defaultMessage: 'Session Panel' })}
         </Button>
         <Button size="small" icon={<DatabaseOutlined />} onClick={() => onToggleMemory(currentSession.id)}>
           {intl.formatMessage({ id: 'pages.chat.memory', defaultMessage: 'Memory' })}
