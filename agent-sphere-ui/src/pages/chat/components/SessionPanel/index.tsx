@@ -59,7 +59,7 @@ export default function SessionPanel({ open, onClose, todos, toolCalls, runUserM
   if (!open) return null;
 
   const toolGroups = groupByRunId(toolCalls);
-  const sortedRunIds = Object.keys(toolGroups).sort();
+  const sortedRunIds = Object.keys(toolGroups).sort((a, b) => Number(b) - Number(a));
 
   return (
     <div
@@ -163,7 +163,7 @@ export default function SessionPanel({ open, onClose, todos, toolCalls, runUserM
                   <div style={{ fontSize: 11, color: '#bbb', padding: '4px 0', fontWeight: 500 }}>
                     {label}
                   </div>
-                  {toolGroups[runId].map((tc, i) => (
+                  {[...toolGroups[runId]].reverse().map((tc, i) => (
                     <div
                       key={tc._publishId || i}
                       style={{
