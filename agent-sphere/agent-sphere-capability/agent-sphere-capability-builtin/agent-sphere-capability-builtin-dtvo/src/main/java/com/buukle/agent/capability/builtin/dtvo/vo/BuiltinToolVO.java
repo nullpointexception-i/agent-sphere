@@ -11,4 +11,6 @@ public class BuiltinToolVO implements Serializable {
     private String paramSchema;
     private String responseSchema;
     private boolean needConfig;
+    private String displayNameCn;
+    private String displayNameEn;
 }

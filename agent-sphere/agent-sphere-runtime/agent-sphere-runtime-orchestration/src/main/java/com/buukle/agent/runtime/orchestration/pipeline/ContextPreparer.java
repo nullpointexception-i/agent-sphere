@@ -147,7 +147,9 @@ public class ContextPreparer {
                 .capabilityType(CAPABILITY_TYPE_BUILTIN)
                 .capabilityId(tool.getId())
                 .llmToolName(llmName)
-                .displayName(tool.getName())
+                .displayName(tool.getDisplayNameCn())
+                .displayNameCn(tool.getDisplayNameCn())
+                .displayNameEn(tool.getDisplayNameEn())
                 .description(tool.getDescription() != null ? tool.getDescription() : "")
                 .parametersSchemaJson(tool.getParamSchema())
                 .execBinding(binding).build());
@@ -165,7 +167,9 @@ public class ContextPreparer {
                 .capabilityType(CAPABILITY_TYPE_BUILTIN)
                 .capabilityId(cap.getCapabilityId())
                 .llmToolName(llmName)
-                .displayName(tool.getName())
+                .displayName(tool.getDisplayNameCn())
+                .displayNameCn(tool.getDisplayNameCn())
+                .displayNameEn(tool.getDisplayNameEn())
                 .description(tool.getDescription() != null ? tool.getDescription() : "")
                 .parametersSchemaJson(tool.getParamSchema())
                 .execBinding(binding).build());

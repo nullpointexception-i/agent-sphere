@@ -21,14 +21,15 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
 
     @Override
     public AgentToolCallRecordVO createRecord(Long stepId, String callId, Long runId, Long sessionId,
-                                               String toolName, String displayName, String argumentsJson) {
+                                               String toolName, String displayNameCn, String displayNameEn, String argumentsJson) {
         AgentToolCallRecord record = new AgentToolCallRecord();
         record.setStepId(stepId);
         record.setCallId(callId);
         record.setRunId(runId);
         record.setSessionId(sessionId);
         record.setToolName(toolName);
-        record.setDisplayName(displayName);
+        record.setDisplayNameCn(displayNameCn);
+        record.setDisplayNameEn(displayNameEn);
         record.setArgumentsJson(argumentsJson);
         record.setStatus(ToolCallRecordStatus.PENDING.name());
         mapper.insert(record);
@@ -118,7 +119,8 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         vo.setRunId(r.getRunId());
         vo.setSessionId(r.getSessionId());
         vo.setToolName(r.getToolName());
-        vo.setDisplayName(r.getDisplayName());
+        vo.setDisplayNameCn(r.getDisplayNameCn());
+        vo.setDisplayNameEn(r.getDisplayNameEn());
         vo.setArgumentsJson(r.getArgumentsJson());
         vo.setCompressedArguments(r.getCompressedArguments());
         vo.setArtifact(r.getArtifact());

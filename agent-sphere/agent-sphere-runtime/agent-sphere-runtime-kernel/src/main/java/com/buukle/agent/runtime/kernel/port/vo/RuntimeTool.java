@@ -16,6 +16,8 @@ public class RuntimeTool implements Serializable {
     private Long capabilityId;
     private String llmToolName;
     private String displayName;
+    private String displayNameCn;
+    private String displayNameEn;
     private String description;
     private String parametersSchemaJson;
     private Map<String, Object> execBinding;

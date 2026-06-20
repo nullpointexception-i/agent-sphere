@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface AgentToolCallRecordSpi {
     AgentToolCallRecordVO createRecord(Long stepId, String callId, Long runId, Long sessionId,
-                                       String toolName, String displayName, String argumentsJson);
+                                       String toolName, String displayNameCn, String displayNameEn, String argumentsJson);
     void updateStatus(Long id, String status, String artifact, String errorMessage);
     void updateCompressedArguments(Long id, String compressedArguments);
     void updateCompressedArtifact(Long id, String compressedArtifact);

@@ -77,6 +77,8 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
         ToolInfoVO info = new ToolInfoVO();
         info.setName(BuiltinToolConstants.NAME_PREFIX + CapabilityBuiltinToolWebFetch.class.getSimpleName());
         info.setDescription(DESCRIPTION);
+        info.setDisplayNameCn("网页获取");
+        info.setDisplayNameEn("Web Fetch");
         info.setParamSchema(ToolSchemaUtil.generateParamSchema(WebFetchExecuteContext.class));
         info.setResponseSchema(ToolSchemaUtil.generateParamSchema(WebFetchResultVO.class));
         return info;

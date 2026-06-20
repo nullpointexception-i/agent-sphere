@@ -11,7 +11,8 @@ public class AgentToolCallRecordVO implements Serializable {
     private Long runId;
     private Long sessionId;
     private String toolName;
-    private String displayName;
+    private String displayNameCn;
+    private String displayNameEn;
     private String argumentsJson;
     private String compressedArguments;
     private String artifact;

@@ -103,9 +103,10 @@ public class RuntimeEventListener  {
             .setArgumentsJson(src.getArgumentsJson())
             .setType(src.getType());
 
-        String name = src.getDisplayName() != null ? src.getDisplayName()
+        String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
             : (src.getToolName() != null ? src.getToolName() : "");
-        dst.setDisplayName(name);
+        dst.setDisplayNameCn(name);
+        dst.setDisplayNameEn(src.getDisplayNameEn());
         dst.setToolName(src.getToolName());
 
         String text = switch (subType) {
@@ -172,7 +173,7 @@ public class RuntimeEventListener  {
                 AgentToolCallRecordVO vo = toolCallRecordSpi.createRecord(
                     stepId, callId, data.getRunId(), data.getSessionId(),
                     data.getToolName() != null ? data.getToolName() : "",
-                    data.getDisplayName(), rawArgs);
+                    data.getDisplayNameCn(), data.getDisplayNameEn(), rawArgs);
                 if (compressedArgs != null) {
                     toolCallRecordSpi.updateCompressedArguments(vo.getId(), compressedArgs);
                 }

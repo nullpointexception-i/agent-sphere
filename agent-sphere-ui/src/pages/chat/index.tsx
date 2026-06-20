@@ -181,10 +181,11 @@ export default function Chat() {
               const isSystem = (d?.reasoningType === 'system');
 
               if (subType === 'tool_call_in_progress' || subType === 'tool_call_succeeded' || subType === 'tool_call_failed') {
-                const name = d?.displayName || d?.toolName || '';
+                const name = d?.displayNameCn || d?.displayName || d?.toolName || '';
+                const nameEn = d?.displayNameEn || name;
                 const status = subType === 'tool_call_in_progress' ? 'in_progress' : subType === 'tool_call_succeeded' ? 'succeeded' : 'failed';
                 setToolCalls(prev => prev.map(tc =>
-                  tc._publishId === publishId ? { ...tc, name: name || tc.name, status } : tc
+                  tc._publishId === publishId ? { ...tc, name: name || tc.name, displayNameCn: name, displayNameEn: nameEn, status } : tc
                 ));
                 setMessages((prev) => {
                   const idx = publishId ? prev.findIndex((m) => (m as any)._publishId === publishId) : -1;
@@ -234,8 +235,9 @@ export default function Chat() {
               }
 
               if (subType === 'tool_call_started') {
-                const name = d?.displayName || d?.toolName || '';
-                setToolCalls(prev => [...prev, { name, status: 'started', _publishId: publishId, _runId: runId, ts: Date.now() }]);
+                const name = d?.displayNameCn || d?.displayName || d?.toolName || '';
+                const nameEn = d?.displayNameEn || name;
+                setToolCalls(prev => [...prev, { name, displayNameCn: name, displayNameEn: nameEn, status: 'started', _publishId: publishId, _runId: runId, ts: Date.now() }]);
                 setSending(true);
                 setSessionPanelOpen(true);
                 setMessages((prev) => {
@@ -409,7 +411,9 @@ export default function Chat() {
         agentApi.sessions.getLatestToolCalls(sid).then((data: any) => {
           if (Array.isArray(data)) {
             setToolCalls(data.map((r: any) => ({
-              name: r.displayName || r.toolName || '',
+              name: r.displayNameCn || r.displayName || r.toolName || '',
+              displayNameCn: r.displayNameCn || r.displayName || '',
+              displayNameEn: r.displayNameEn || '',
               status: r.status === TOOL_CALL_RECORD_STATUS.SUCCEEDED ? 'succeeded' : r.status === TOOL_CALL_RECORD_STATUS.FAILED ? 'failed' : 'pending',
               _publishId: `tool-${r.id}`,
               _runId: r.runId,

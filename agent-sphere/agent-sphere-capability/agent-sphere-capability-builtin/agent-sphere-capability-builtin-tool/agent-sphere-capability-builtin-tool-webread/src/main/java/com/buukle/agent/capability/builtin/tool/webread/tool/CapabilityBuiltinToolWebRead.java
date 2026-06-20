@@ -65,6 +65,8 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
         ToolInfoVO info = new ToolInfoVO();
         info.setName(BuiltinToolConstants.NAME_PREFIX + CapabilityBuiltinToolWebRead.class.getSimpleName());
         info.setDescription("Read web page content and extract as clean markdown");
+        info.setDisplayNameCn("网页读取");
+        info.setDisplayNameEn("Web Read");
         info.setParamSchema(ToolSchemaUtil.generateParamSchema(WebReadExecuteContext.class));
         info.setResponseSchema(ToolSchemaUtil.generateParamSchema(WebReadResultVO.class));
         return info;

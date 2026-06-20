@@ -31,6 +31,8 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
             vo.setId((long) t.getToolType().getId());
             vo.setName(info.getName());
             vo.setDescription(info.getDescription());
+            vo.setDisplayNameCn(info.getDisplayNameCn());
+            vo.setDisplayNameEn(info.getDisplayNameEn());
             vo.setParamSchema(info.getParamSchema());
             vo.setResponseSchema(info.getResponseSchema());
             vo.setNeedConfig(t.needConfig());
@@ -48,6 +50,8 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
                 vo.setId((long) t.getToolType().getId());
                 vo.setName(info.getName());
                 vo.setDescription(info.getDescription());
+                vo.setDisplayNameCn(info.getDisplayNameCn());
+                vo.setDisplayNameEn(info.getDisplayNameEn());
                 vo.setParamSchema(info.getParamSchema());
                 vo.setResponseSchema(info.getResponseSchema());
                 vo.setNeedConfig(false);

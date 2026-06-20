@@ -283,7 +283,8 @@ public class SessionRunner {
                         .setSessionId(sessionId)
                         .setRunId(currentRunId)
                         .setToolName(tc.name())
-                        .setDisplayName(toolExecutor.resolveDisplayName(tc.name(), tools))
+                        .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
                         .setArgumentsJson(tc.arguments())
                         .setPublishId(runPublishId)));
             }
@@ -310,7 +311,8 @@ public class SessionRunner {
                         .setSessionId(sid)
                         .setRunId(rid)
                         .setToolName(matching.name())
-                        .setDisplayName(toolExecutor.resolveDisplayName(matching.name(), tl))
+                        .setDisplayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
+                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
                         .setArtifact(artifact)
                         .setArgumentsJson(matching.arguments())
                         .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
@@ -337,7 +339,8 @@ public class SessionRunner {
                             .setSessionId(sessionId)
                             .setRunId(currentRunId)
                             .setToolName(tc.name())
-                            .setDisplayName(toolExecutor.resolveDisplayName(tc.name(), tools))
+                            .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                            .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id())));
                 }
                 break;
@@ -466,7 +469,8 @@ public class SessionRunner {
                                     new RuntimeEventDataVO()
                                         .setSessionId(sessionId).setRunId(runId)
                                         .setToolName(tc.name())
-                                        .setDisplayName(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                        .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
                                         .setArgumentsJson(tc.arguments())
                                         .setPublishId(callPublishId)));
                             }

@@ -40,6 +40,8 @@ public class CapabilityBuiltinToolTodowrite implements CapabilityBuiltinToolSpi 
         ToolInfoVO info = new ToolInfoVO();
         info.setName(BuiltinToolConstants.NAME_PREFIX + CapabilityBuiltinToolTodowrite.class.getSimpleName());
         info.setDescription(TOOL_DESCRIPTION);
+        info.setDisplayNameCn("待办写入");
+        info.setDisplayNameEn("Todo Write");
         info.setParamSchema(ToolSchemaUtil.generateParamSchema(TodowriteExecuteContext.class));
         info.setResponseSchema(ToolSchemaUtil.generateParamSchema(TodowriteResultVO.class));
         return info;

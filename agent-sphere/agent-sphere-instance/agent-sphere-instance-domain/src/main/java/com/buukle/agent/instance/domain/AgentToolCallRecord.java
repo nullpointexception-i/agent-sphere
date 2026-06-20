@@ -14,7 +14,10 @@ public class AgentToolCallRecord {
     private Long runId;
     private Long sessionId;
     private String toolName;
-    private String displayName;
+    @TableField("display_name_cn")
+    private String displayNameCn;
+    @TableField("display_name_en")
+    private String displayNameEn;
     private String argumentsJson;
     private String compressedArguments;
     private String artifact;

@@ -84,6 +84,16 @@ public class ToolExecutor {
             .orElse(toolName);
     }
 
+    public String resolveDisplayNameEn(String toolName, List<RuntimeTool> tools) {
+        if (tools == null || tools.isEmpty()) return toolName;
+        return tools.stream()
+            .filter(t -> toolName.equals(t.getLlmToolName()))
+            .map(RuntimeTool::getDisplayNameEn)
+            .filter(n -> n != null && !n.isBlank())
+            .findFirst()
+            .orElse(toolName);
+    }
+
     private void persistTodosFromResult(Long sessionId, Long runId, String resultJson) {
         try {
             TodowriteResultDTO result = JSON.readValue(resultJson, TodowriteResultDTO.class);

@@ -13,7 +13,8 @@ public class RuntimeEventDataVO {
     private String type;
     private String nodeName;
     private String toolName;
-    private String displayName;
+    private String displayNameCn;
+    private String displayNameEn;
     private String argumentsJson;
     private String prompt;
     private String approvedBy;

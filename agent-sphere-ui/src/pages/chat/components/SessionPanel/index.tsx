@@ -11,6 +11,8 @@ interface TodoItem {
 interface ToolCallItem {
   name: string;
   status: string;
+  displayNameCn?: string;
+  displayNameEn?: string;
   _publishId?: string;
   _runId?: number;
   ts?: number;
@@ -57,6 +59,10 @@ function userMessageLabel(runUserMessages: Map<number, string>, runId: number): 
 export default function SessionPanel({ open, onClose, todos, toolCalls, runUserMessages }: SessionPanelProps) {
   const intl = useIntl();
   if (!open) return null;
+
+  const locale = intl.locale;
+  const toolLabel = (tc: ToolCallItem) =>
+    locale === 'en-US' ? (tc.displayNameEn || tc.name) : (tc.displayNameCn || tc.name);
 
   const toolGroups = groupByRunId(toolCalls);
   const sortedRunIds = Object.keys(toolGroups).sort((a, b) => Number(b) - Number(a));
@@ -177,7 +183,7 @@ export default function SessionPanel({ open, onClose, todos, toolCalls, runUserM
                       <span>{statusIcon(tc.status)}</span>
                       <Tooltip title={tc.name}>
                         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'default' }}>
-                          {tc.name}
+                          {toolLabel(tc)}
                         </span>
                       </Tooltip>
                       <Tag

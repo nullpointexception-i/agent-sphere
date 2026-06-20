@@ -24,8 +24,12 @@ export default function BuiltinList() {
     }
   };
 
+  const locale = intl.locale;
+  const localizedName = (record: any) =>
+    locale === 'en-US' ? (record.displayNameEn || record.name) : (record.displayNameCn || record.name);
+
   const columns = [
-    { title: intl.formatMessage({ id: 'pages.table.name' }), dataIndex: 'name', key: 'name' },
+    { title: intl.formatMessage({ id: 'pages.table.name' }), dataIndex: 'name', key: 'name', render: (_: any, record: any) => localizedName(record) },
     { title: intl.formatMessage({ id: 'pages.table.description' }), dataIndex: 'description', key: 'description', ellipsis: true },
     {
       title: intl.formatMessage({ id: 'pages.capabilities.paramSchema' }),

@@ -10,4 +10,6 @@ public class ToolInfoVO implements Serializable {
     private String description;
     private String paramSchema;
     private String responseSchema;
+    private String displayNameCn;
+    private String displayNameEn;
 }

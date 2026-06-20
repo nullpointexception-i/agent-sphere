@@ -65,6 +65,8 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
         ToolInfoVO info = new ToolInfoVO();
         info.setName(BuiltinToolConstants.NAME_PREFIX + CapabilityBuiltinToolChrome.class.getSimpleName());
         info.setDescription(DESCRIPTION);
+        info.setDisplayNameCn("浏览器");
+        info.setDisplayNameEn("Chrome");
         info.setParamSchema(ToolSchemaUtil.generateParamSchema(ChromeExecuteContext.class));
         info.setResponseSchema(ToolSchemaUtil.generateParamSchema(ChromeResultVO.class));
         return info;
