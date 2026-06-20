@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @RestController
@@ -72,7 +73,7 @@ public class InstanceCapabilityController extends BaseController {
         Map<Long, String> mcpNames = capabilityMcpSpi.listMcpsByIds(mcpIds).stream().collect(Collectors.toMap(McpVO::getId, McpVO::getName));
         Map<Long, String> skillNames = capabilitySkillSpi.listSkillsByIds(skillIds).stream().collect(Collectors.toMap(SkillVO::getId, SkillVO::getName));
         Map<Long, String> cliNames = capabilityCliSpi.listClisByIds(cliIds).stream().collect(Collectors.toMap(CliVO::getId, CliVO::getName));
-        Map<Long, String> builtinNames = capabilityBuiltinSpi.listBuiltinTools().stream().collect(Collectors.toMap(BuiltinToolVO::getId, BuiltinToolVO::getName));
+        Map<Long, BuiltinToolVO> builtinMap = capabilityBuiltinSpi.listBuiltinTools().stream().collect(Collectors.toMap(BuiltinToolVO::getId, Function.identity()));
         List<CapabilityFullVO> result = new ArrayList<>();
         for (CapabilityVO c : caps) {
             CapabilityFullVO vo = new CapabilityFullVO();
@@ -84,7 +85,14 @@ public class InstanceCapabilityController extends BaseController {
                 case "mcp" -> mcpNames.get(c.getCapabilityId());
                 case "skill" -> skillNames.get(c.getCapabilityId());
                 case "cli" -> cliNames.get(c.getCapabilityId());
-                case "builtin" -> builtinNames.get(c.getCapabilityId());
+                case "builtin" -> {
+                    BuiltinToolVO b = builtinMap.get(c.getCapabilityId());
+                    if (b != null) {
+                        vo.setDisplayNameCn(b.getDisplayNameCn());
+                        vo.setDisplayNameEn(b.getDisplayNameEn());
+                    }
+                    yield b != null ? b.getName() : null;
+                }
                 default -> null;
             };
             vo.setName(name);

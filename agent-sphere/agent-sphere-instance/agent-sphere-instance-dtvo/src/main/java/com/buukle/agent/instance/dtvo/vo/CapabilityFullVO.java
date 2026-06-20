@@ -12,4 +12,6 @@ public class CapabilityFullVO extends CapabilityVO {
     private String serverType;
     private String authConfig;
     private String toolSchema;
+    private String displayNameCn;
+    private String displayNameEn;
 }

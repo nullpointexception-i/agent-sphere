@@ -173,7 +173,13 @@ export default function InstanceList() {
 
   const capsColumns = [
     { title: intl.formatMessage({ id: 'pages.table.type' }), dataIndex: 'capabilityType', key: 'capabilityType' },
-    { title: intl.formatMessage({ id: 'pages.table.name' }), dataIndex: 'name', key: 'name', ellipsis: true, render: (v: any) => v ? <Tooltip title={v}>{v}</Tooltip> : '-' },
+    { title: intl.formatMessage({ id: 'pages.table.name' }), dataIndex: 'name', key: 'name', ellipsis: true, render: (v: any, record: any) => {
+      if (record.capabilityType === 'builtin') {
+        const display = intl.locale === 'en-US' ? (record.displayNameEn || v) : (record.displayNameCn || v);
+        return display ? <Tooltip title={display}>{display}</Tooltip> : '-';
+      }
+      return v ? <Tooltip title={v}>{v}</Tooltip> : '-';
+    }},
   ];
 
   return (
