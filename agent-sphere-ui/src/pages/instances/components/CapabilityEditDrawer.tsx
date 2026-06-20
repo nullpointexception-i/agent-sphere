@@ -15,6 +15,9 @@ interface Props {
 export default function CapabilityEditDrawer({ record, open, onClose, onSaved }: Props) {
   const { message } = App.useApp();
   const intl = useIntl();
+  const locale = intl.locale;
+  const builtinDisplay = (tool: any) =>
+    locale === 'en-US' ? (tool?.displayNameEn || tool?.name || '') : (tool?.displayNameCn || tool?.name || '');
   const [boundCaps, setBoundCaps] = useState<any[]>([]);
   const [addCaps, setAddCaps] = useState<any[]>([]);
   const [addingType, setAddingType] = useState<string | null>(null);
@@ -64,23 +67,23 @@ export default function CapabilityEditDrawer({ record, open, onClose, onSaved }:
 
   const builtinName = (id: number) => {
     const tool = allBuiltin.find((b) => b.id === id);
-    return tool?.name || `#${id}`;
+    return builtinDisplay(tool) || `#${id}`;
   };
 
   const markRemove = (id: number) => setToRemoveIds((prev) => new Set(prev).add(id));
   const unmarkRemove = (id: number) => setToRemoveIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
 
-  const toggleBuiltinPick = (id: number, name: string) => {
+  const toggleBuiltinPick = (id: number) => {
     if (addCaps.some((c) => c.capabilityType === 'builtin' && c.id === id)) {
       setAddCaps((prev) => prev.filter((c) => !(c.capabilityType === 'builtin' && c.id === id)));
     } else {
-      setAddCaps((prev) => [...prev, { id, name, capabilityType: 'builtin' }]);
+      setAddCaps((prev) => [...prev, { id, capabilityType: 'builtin' }]);
     }
   };
 
   const bindName = (cap: any) => {
+    if (cap.capabilityType === 'builtin') return builtinName(cap.capabilityId ?? cap.id);
     if (cap.name) return cap.name;
-    if (cap.capabilityType === 'builtin') return builtinName(cap.capabilityId);
     return `#${cap.capabilityId}`;
   };
 
@@ -117,6 +120,8 @@ export default function CapabilityEditDrawer({ record, open, onClose, onSaved }:
               capabilityId: b.id,
               capabilityType: 'builtin',
               name: b.name,
+              displayNameCn: b.displayNameCn,
+              displayNameEn: b.displayNameEn,
               _auto: true,
             })) : [];
             const userBound = type === 'builtin' ? bound.filter(b => !autoBuiltinIds.has(b.capabilityId)) : bound;
@@ -215,7 +220,7 @@ export default function CapabilityEditDrawer({ record, open, onClose, onSaved }:
               pagination={false}
               locale={{ emptyText: intl.formatMessage({ id: 'pages.table.empty' }) }}
               columns={[
-                { title: intl.formatMessage({ id: 'pages.table.name' }), dataIndex: 'name', ellipsis: true },
+                { title: intl.formatMessage({ id: 'pages.table.name' }), dataIndex: 'name', ellipsis: true, render: (_: any, record: any) => builtinDisplay(record) },
                 { title: intl.formatMessage({ id: 'pages.table.description' }), dataIndex: 'description', ellipsis: true },
                 {
                   title: '',
@@ -225,7 +230,7 @@ export default function CapabilityEditDrawer({ record, open, onClose, onSaved }:
                       size="small"
                       disabled={bound.has(record.id) || already.has(record.id)}
                       type={already.has(record.id) ? 'primary' : 'default'}
-                      onClick={() => toggleBuiltinPick(record.id, record.name)}
+                      onClick={() => toggleBuiltinPick(record.id)}
                     >
                       {already.has(record.id) || bound.has(record.id)
                         ? intl.formatMessage({ id: 'pages.instances.selected', defaultMessage: 'Selected' })
