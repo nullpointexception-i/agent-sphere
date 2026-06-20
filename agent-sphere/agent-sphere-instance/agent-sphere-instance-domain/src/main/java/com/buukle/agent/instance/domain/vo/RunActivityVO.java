@@ -22,7 +22,8 @@ public class RunActivityVO implements Serializable {
 
     private Long stepId;
     private String toolName;
-    private String displayName;
+    private String displayNameCn;
+    private String displayNameEn;
     private String argumentsJson;
     private String artifact;
     private String toolStatus;

@@ -64,6 +64,7 @@ export default function InteractionModal({ open, runId, sessionId, onClose }: In
     }
   };
 
+  const locale = intl.locale;
   const columns = [
     {
       title: intl.formatMessage({ id: 'pages.chat.interactionType', defaultMessage: 'Type' }),
@@ -72,7 +73,7 @@ export default function InteractionModal({ open, runId, sessionId, onClose }: In
         r.activityType === 'llm_interaction' ? (
           <Tag color={TYPE_COLORS[r.interactionType] || 'default'}>{r.interactionType || '-'}</Tag>
         ) : (
-          <Tag color="green">{r.displayName || r.toolName}</Tag>
+          <Tag color="green">{locale === 'en-US' ? (r.displayNameEn || r.displayNameCn || r.toolName) : (r.displayNameCn || r.toolName)}</Tag>
         ),
     },
     {
