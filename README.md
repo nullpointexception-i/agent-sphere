@@ -22,7 +22,7 @@ https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02
 
 ### 2.1 整体结构
 
-![agentsphere-architecture.svg](agent-sphere-readme/agentsphere-architecture.svg)
+![agentsphere-architecture.png](agent-sphere-readme/agentsphere-architecture.png)
 
 ### 2.2 核心组件
 
@@ -30,11 +30,11 @@ https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02
 
 管理一次 AI 会话的完整执行生命周期，实现 **Plan → Act → Observe → Learn** 循环：
 
-![SessionRunner.run 执行生命周期](agent-sphere-readme/session-runner-flow.svg)
+![SessionRunner.run 执行生命周期](agent-sphere-readme/session-runner-flow.png)
 
 **与 ReAct 模式的对齐：**
 
-![ReAct 模式对齐](agent-sphere-readme/react-mode.svg)
+![ReAct 模式对齐](agent-sphere-readme/react-mode.png)
 
 #### 2.2.2 Capability 能力层
 
@@ -48,7 +48,7 @@ https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02
 
 #### 2.2.3 Chrome Extension（浏览器桥接）
 
-![Chrome Extension 浏览器桥接结构](agent-sphere-readme/chrome-extension-structure.svg)
+![Chrome Extension 浏览器桥接结构](agent-sphere-readme/chrome-extension-structure.png)
 
 ---
 
@@ -58,7 +58,7 @@ https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02
 
 AgentSphere 的核心循环遵循 **ReAct (Reasoning + Acting)** 模式，将 LLM 的推理能力和工具执行能力有机结合：
 
-![ReAct 执行循环](agent-sphere-readme/react-loop.svg)
+![ReAct 执行循环](agent-sphere-readme/react-loop.png)
 
 **消息构成：**
 
@@ -76,13 +76,13 @@ AgentSphere 的核心循环遵循 **ReAct (Reasoning + Acting)** 模式，将 LL
 
 **多轮工具调用示例：**
 
-![多轮工具调用示例](agent-sphere-readme/multi-loop-sequence.svg)
+![多轮工具调用示例](agent-sphere-readme/multi-loop-sequence.png)
 
 ### 3.2 多级记忆体系 (Memory System)
 
 AgentSphere 实现了多级记忆系统，覆盖从持久化到运行时缓存的完整链路：
 
-![多级记忆体系 Memory System](agent-sphere-readme/memory-system.svg)
+![多级记忆体系 Memory System](agent-sphere-readme/memory-system.png)
 
 #### 记忆层级详细说明
 
@@ -99,25 +99,25 @@ AgentSphere 实现了多级记忆系统，覆盖从持久化到运行时缓存�
 
 `HistoryLoader` 负责从持久化存储中加载历史消息，组装成 LLM 的上下文：
 
-![HistoryLoader 上下文组装](agent-sphere-readme/history-loader.svg)
+![HistoryLoader 上下文组装](agent-sphere-readme/history-loader.png)
 
 **工具结果压缩流程：**
 
-![工具结果写时压缩流程](agent-sphere-readme/tool-result-compress.svg)
+![工具结果写时压缩流程](agent-sphere-readme/tool-result-compress.png)
 
 #### 3.2.2 上下文压缩 (Compaction)
 
 当 messages 的估算 token 超过 `maxInputTokens × budget-ratio` 时触发：
 
-![上下文压缩 Compaction](agent-sphere-readme/compaction-flow.svg)
+![上下文压缩 Compaction](agent-sphere-readme/compaction-flow.png)
 
 **压缩链完整流程：**
 
-![压缩链完整流程](agent-sphere-readme/compression-chain.svg)
+![压缩链完整流程](agent-sphere-readme/compression-chain.png)
 
 #### 3.2.3 工具调用记录状态机
 
-![工具调用记录状态机](agent-sphere-readme/tool-call-state-machine.svg)
+![工具调用记录状态机](agent-sphere-readme/tool-call-state-machine.png)
 
 每条记录包含：
 - `callId` — LLM 生成的工具调用 ID（如 `call_abc123`）
@@ -160,11 +160,11 @@ AgentSphere 提供了多层次的模型容错机制，确保 LLM 调用的高可
 
 #### 路由配置
 
-![模型路由配置](agent-sphere-readme/model-route-config.svg)
+![模型路由配置](agent-sphere-readme/model-route-config.png)
 
 #### Fallback 执行流程
 
-![Fallback 执行流程](agent-sphere-readme/fallback-flow.svg)
+![Fallback 执行流程](agent-sphere-readme/fallback-flow.png)
 
 > 说明：压缩预算计算基于实际 route 的 maxInputTokens，在 execute 回调内检测。详细公式见下方。
 
@@ -195,19 +195,19 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 ### 3.4 浏览器操作流程
 
-![浏览器操作流程](agent-sphere-readme/browser-operation-flow.svg)
+![浏览器操作流程](agent-sphere-readme/browser-operation-flow.png)
 
 ### 3.5 多标签页管理
 
-![多标签页管理](agent-sphere-readme/multi-tab.svg)
+![多标签页管理](agent-sphere-readme/multi-tab.png)
 
 ### 3.6 超时与取消链
 
-![超时与取消链](agent-sphere-readme/timeout-cancel-chain.svg)
+![超时与取消链](agent-sphere-readme/timeout-cancel-chain.png)
 
 ### 3.7 会话跟随（Session Following）
 
-![会话跟随 Session Following](agent-sphere-readme/session-following.svg)
+![会话跟随 Session Following](agent-sphere-readme/session-following.png)
 
 ---
 
@@ -381,7 +381,7 @@ public class CapabilityBuiltinToolMyTool implements CapabilityBuiltinToolSpi {
 
 ## 5. 项目结构
 
-![项目结构](agent-sphere-readme/project-structure.svg)
+![项目结构](agent-sphere-readme/project-structure.png)
 
 ## 6. 技术栈
 
