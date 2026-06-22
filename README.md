@@ -10,7 +10,9 @@
 
 ![ui-chat-toolcalls.png](agent-sphere-readme/ui-chat-toolcalls.png)
 
-[![视频预览](agent-sphere-readme/ui-chat-toolcalls.png)](https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15)
+▶ [点击观看视频演示](https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15)
+
+[![视频预览](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15)
 
 ## 1. 开发quick start
 
