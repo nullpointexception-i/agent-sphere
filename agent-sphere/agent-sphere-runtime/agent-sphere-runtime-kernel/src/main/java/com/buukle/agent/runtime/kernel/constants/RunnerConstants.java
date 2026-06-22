@@ -29,7 +29,12 @@ public final class RunnerConstants {
             IMPORTANT: When calling the task list tool, the JSON MUST be strictly valid.
             Each key-value pair MUST be separated by a comma. Example:
             {"todos": [{"content": "...", "status": "pending", "priority": "high"}]}
-            Never omit commas between object properties.""";
+            Never omit commas between object properties.
+
+            CRITICAL: When you need to call a tool, you MUST use the function calling API
+            (respond with tool_calls in the API format). Do NOT describe or plan tool calls
+            as JSON or text in your reply — invoke the tool directly through the available
+            function definitions.""";
     public static final String COMPACTION_USER_PREFIX = "User: ";
     public static final String COMPACTION_ASSISTANT_PREFIX = "Assistant: ";
     public static final String COMPACTION_NEWLINE = "\n";

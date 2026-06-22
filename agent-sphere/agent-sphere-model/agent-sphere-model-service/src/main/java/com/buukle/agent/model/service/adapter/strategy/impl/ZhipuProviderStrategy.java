@@ -13,7 +13,7 @@ public class ZhipuProviderStrategy implements ProviderStrategy {
 
     @Override
     public ModelProviderCompany getCompany() {
-        return ModelProviderCompany.ZHIPU;
+        return ModelProviderCompany.GLM;
     }
 
     @Override

@@ -8,7 +8,7 @@ import lombok.Getter;
 public enum ModelProviderCompany {
     DEEPSEEK("DeepSeek", "深度求索", "deepseek"),
     OPENAI("OpenAI", "OpenAI", "openai"),
-    ZHIPU("Zhipu", "智谱", "zhipu"),
+    GLM("GLM", "智谱", "GLM"),
     ;
 
     private final String nameEn;
