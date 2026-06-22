@@ -28,6 +28,7 @@ public class ZhipuProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptResponse(JsonNode choice, ToolStream toolStream) {
+        parseDeltaToolCalls(choice, toolStream);
         parseMessageToolCalls(choice, toolStream);
     }
 
