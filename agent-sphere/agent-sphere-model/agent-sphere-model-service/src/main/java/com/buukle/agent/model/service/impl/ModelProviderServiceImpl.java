@@ -135,6 +135,12 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
             if (response.statusCode() >= 400) {
                 String errorBody = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 log.error("LLM stream error: status={}, body={}", response.statusCode(), errorBody);
+                String uiMsg = switch (response.statusCode()) {
+                    case 429 -> "请求过于频繁，请稍后再试";
+                    case 502 -> "模型服务暂时不可用";
+                    default -> "模型调用异常 (" + response.statusCode() + "): " + truncate(errorBody);
+                };
+                onEvent.accept(new LLMEvent.Error(uiMsg));
                 onDone.run();
                 return;
             }

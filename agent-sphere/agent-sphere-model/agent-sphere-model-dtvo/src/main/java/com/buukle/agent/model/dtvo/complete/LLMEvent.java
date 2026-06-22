@@ -13,4 +13,5 @@ public sealed interface LLMEvent {
     record ToolCall(String id, String name, String arguments) implements LLMEvent {}
     record ToolResult(String id, String name, String result) implements LLMEvent {}
     record Finish(String reason, Map<String, Object> usage) implements LLMEvent {}
+    record Error(String message) implements LLMEvent {}
 }

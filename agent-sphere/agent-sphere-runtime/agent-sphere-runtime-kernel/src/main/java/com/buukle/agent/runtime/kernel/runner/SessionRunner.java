@@ -144,7 +144,7 @@ public class SessionRunner {
 
         int maxLoopCount = properties.getRunner().getMaxLoopCount();
         int compactionRetries = 0;
-        while (loopCount < maxLoopCount) {
+        loop: while (loopCount < maxLoopCount) {
             if (CANCELLED_RUNS.contains(currentRunId)) break;
           log.info("------******************--------run:{}-loopCount:{}",currentRunId,loopCount);
             SessionInputManager.InputMessage input = null;
@@ -207,57 +207,75 @@ public class SessionRunner {
 
             TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx);
 
-            if (CANCELLED_RUNS.contains(currentRunId)) break;
+            if (CANCELLED_RUNS.contains(currentRunId)) break loop;
 
-            // ★ 压缩触发信号 → 清空消息重新组装
-            if (CompactionService.COMPACTED_SENTINEL.equals(turn.content())) {
-                if (compactionRetries++ >= 3) {
-                    log.warn("Compaction retry exhausted for run {}, sending oversized context", currentRunId);
-                } else {
-                    log.info("Compaction triggered, reassembling messages (attempt {})", compactionRetries);
-                    String userText = input != null ? input.text() : "";
-                    messages.clear();
-                    titleService.generateIfNeeded(ctx, userText, sessionId);
-                    String todolistText = null;
-                    try {
-                        AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
-                            sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
-                        if (todoRecord != null && todoRecord.getArtifact() != null) {
-                            todolistText = todoRecord.getArtifact();
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to load todolist for session {}", sessionId, e);
-                    }
-                    String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx, todolistText);
-                    if (systemPrompt != null && !systemPrompt.isBlank()) {
-                        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
-                    }
-                    messages.addAll(historyLoader.load(sessionId, currentRunId));
-                    messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(userText));
-                    hasToolCalls = true;
-                    continue;
-                }
-            }
-
+            // 统一收口：根据 TurnOutcome 判定 run 状态
             if (turn.content() != null && !turn.content().isBlank()) {
                 allContent.append(turn.content());
             }
 
-            if (turn.toolCalls().isEmpty()) {
-                String reply = allContent.length() > 0 ? allContent.toString() : null;
-                if (reply != null && !reply.isBlank()) {
-                    currentRun.setAssistantReply(reply);
+            switch (turn.outcome()) {
+                case COMPACTED -> {
+                    if (compactionRetries++ >= 3) {
+                        log.warn("Compaction retry exhausted for run {}, sending oversized context", currentRunId);
+                    } else {
+                        log.info("Compaction triggered, reassembling messages (attempt {})", compactionRetries);
+                        String userText = input != null ? input.text() : "";
+                        messages.clear();
+                        titleService.generateIfNeeded(ctx, userText, sessionId);
+                        String todolistText = null;
+                        try {
+                            AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
+                                sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
+                            if (todoRecord != null && todoRecord.getArtifact() != null) {
+                                todolistText = todoRecord.getArtifact();
+                            }
+                        } catch (Exception e) {
+                            log.warn("Failed to load todolist for session {}", sessionId, e);
+                        }
+                        String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx, todolistText);
+                        if (systemPrompt != null && !systemPrompt.isBlank()) {
+                            messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
+                        }
+                        messages.addAll(historyLoader.load(sessionId, currentRunId));
+                        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(userText));
+                        hasToolCalls = true;
+                        continue;
+                    }
+                    break loop;
                 }
-                currentRun.setStatus(RunStatus.COMPLETED.name());
-                runSpi.updateRun(currentRun);
-
-                eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                    new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(currentRunId)
-                        .setAssistantReply(currentRun.getAssistantReply())
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
-                break;
+                case ERROR -> {
+                    currentRun.setStatus(RunStatus.FAILED.name());
+                    runSpi.updateRun(currentRun);
+                    eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
+                        new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(currentRunId)
+                            .setErrorMessage(turn.errorMessage())
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    break loop;
+                }
+                case COMPLETE -> {
+                    String reply = allContent.length() > 0 ? allContent.toString() : null;
+                    if (reply != null && !reply.isBlank()) {
+                        currentRun.setAssistantReply(reply);
+                    }
+                    currentRun.setStatus(RunStatus.COMPLETED.name());
+                    runSpi.updateRun(currentRun);
+                    eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
+                        new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(currentRunId)
+                            .setAssistantReply(currentRun.getAssistantReply())
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    break loop;
+                }
+                case CANCELLED -> {
+                    break loop;
+                }
+                default -> {
+                    // TOOL_CALLS — fall through to tool execution below
+                }
             }
 
             List<ToolCallDTO> toolCallDTOs = new ArrayList<>();
@@ -419,6 +437,7 @@ public class SessionRunner {
                                 KernelContext ctx) {
         AtomicReference<String> contentRef = new AtomicReference<>("");
         List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
+        AtomicReference<String> errorRef = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
         final CompletableFuture<Void>[] llmFuture = new CompletableFuture[1];
         java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -474,6 +493,7 @@ public class SessionRunner {
                                         .setArgumentsJson(tc.arguments())
                                         .setPublishId(callPublishId)));
                             }
+                            case LLMEvent.Error e -> errorRef.set(e.message());
                             default -> {}
                         }
                     },
@@ -495,7 +515,7 @@ public class SessionRunner {
                 if (CANCELLED_RUNS.contains(runId)) {
                     log.warn("Turn cancelled for run {}", runId);
                     if (llmFuture[0] != null) llmFuture[0].cancel(true);
-                    return new TurnResult(contentRef.get(), toolCalls);
+                    return TurnResult.cancelled(contentRef.get(), toolCalls);
                 }
                 if (System.nanoTime() >= deadline) {
                     log.warn("Turn timed out after {}s for session {}, cancelling LLM stream", turnTimeout, sessionId);
@@ -510,10 +530,19 @@ public class SessionRunner {
         // ★ 压缩触发：compact 后让 caller 重新组装
         if (compactionTriggered.get()) {
             compactionService.compact(sessionId, runId, ctx);
-            return new TurnResult(CompactionService.COMPACTED_SENTINEL, List.of());
+            return TurnResult.compacted();
         }
 
-        return new TurnResult(contentRef.get(), toolCalls);
+        String error = errorRef.get();
+        if (error != null) {
+            return TurnResult.error(error);
+        }
+
+        if (!toolCalls.isEmpty()) {
+            return TurnResult.toolCalls(contentRef.get(), toolCalls);
+        }
+
+        return TurnResult.complete(contentRef.get());
     }
 
     private List<ModelRouteFullVO> resolveRoutes(Long sessionId, KernelContext ctx) {

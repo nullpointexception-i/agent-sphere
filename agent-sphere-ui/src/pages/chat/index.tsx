@@ -255,8 +255,27 @@ export default function Chat() {
 
               if (subType === 'run_completed' || subType === 'run_failed' || subType === 'run_cancelled') {
                 setSending(false);
-                const reply = d?.assistantReply;
                 const runId = d?.runId;
+
+                // 展示 LLM 错误消息（429/502/其他）
+                if (subType === 'run_failed') {
+                  const errorMsg = d?.errorMessage;
+                  if (runId && errorMsg) {
+                    setMessages((prev) => {
+                      const existingIdx = prev.findIndex(
+                        (m) => (m as any).runId === runId && m.role === 'ai'
+                      );
+                      if (existingIdx >= 0) {
+                        return prev.map((m, i) =>
+                          i === existingIdx ? { ...m, content: errorMsg, _pending: false } : m
+                        );
+                      }
+                      return [...prev, { role: 'ai', content: errorMsg, ts: Date.now(), fromSSE: true }];
+                    });
+                  }
+                }
+
+                const reply = d?.assistantReply;
                 if (runId && reply) {
                   setMessages((prev) => {
                     const reasoningKeys = prev

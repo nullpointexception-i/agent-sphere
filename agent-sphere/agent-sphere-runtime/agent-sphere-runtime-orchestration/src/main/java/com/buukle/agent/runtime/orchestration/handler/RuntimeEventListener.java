@@ -101,6 +101,7 @@ public class RuntimeEventListener  {
             .setAssistantReply(src.getAssistantReply())
             .setArtifact(src.getArtifact())
             .setArgumentsJson(src.getArgumentsJson())
+            .setErrorMessage(src.getErrorMessage())
             .setType(src.getType());
 
         String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
