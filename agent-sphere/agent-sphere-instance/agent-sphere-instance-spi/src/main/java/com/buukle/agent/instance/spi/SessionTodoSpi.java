@@ -6,5 +6,6 @@ import java.util.List;
 
 public interface SessionTodoSpi {
     void replaceAll(Long sessionId, Long runId, List<SessionTodoVO> todos);
+
     List<SessionTodoVO> listBySession(Long sessionId);
 }

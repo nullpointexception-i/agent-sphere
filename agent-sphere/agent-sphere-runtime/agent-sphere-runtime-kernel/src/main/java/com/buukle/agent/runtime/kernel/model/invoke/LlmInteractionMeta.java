@@ -12,5 +12,6 @@ public class LlmInteractionMeta {
     private Long sessionId;
     private LlmInteractionType interactionType;
 
-    public LlmInteractionMeta() {}
+    public LlmInteractionMeta() {
+    }
 }

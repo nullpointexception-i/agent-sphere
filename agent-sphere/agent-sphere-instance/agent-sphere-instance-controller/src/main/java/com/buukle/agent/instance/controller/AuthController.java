@@ -1,8 +1,8 @@
 package com.buukle.agent.instance.controller;
 
-import com.buukle.agent.common.util.BaseController;
-import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.LoginDTO;
 import com.buukle.agent.instance.dtvo.dto.RegisterDTO;
 import com.buukle.agent.instance.dtvo.dto.UpdatePasswordDTO;

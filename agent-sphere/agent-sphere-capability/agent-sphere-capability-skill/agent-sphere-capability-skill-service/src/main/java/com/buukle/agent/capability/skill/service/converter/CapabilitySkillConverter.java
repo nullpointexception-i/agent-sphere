@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 @Component
 public class CapabilitySkillConverter {
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     public SkillVO toVO(CapabilitySkill skill) {
         if (skill == null) return null;
         SkillVO vo = new SkillVO();

@@ -12,11 +12,7 @@ import com.buukle.agent.capability.builtin.tool.webfetch.dtvo.vo.WebFetchResultV
 import com.buukle.agent.capability.builtin.tool.webfetch.tool.CapabilityBuiltinToolWebFetch;
 import com.buukle.agent.capability.builtin.tool.webread.dtvo.dto.WebReadExecuteContext;
 import com.buukle.agent.capability.builtin.tool.webread.dtvo.vo.WebReadResultVO;
-import com.buukle.agent.capability.builtin.tool.webread.util.HtmlCleaner;
-import com.buukle.agent.capability.builtin.tool.webread.util.HtmlToMarkdownConverter;
-import com.buukle.agent.capability.builtin.tool.webread.util.HtmlValidationUtils;
-import com.buukle.agent.capability.builtin.tool.webread.util.JinaReader;
-import com.buukle.agent.capability.builtin.tool.webread.util.TitleExtractor;
+import com.buukle.agent.capability.builtin.tool.webread.util.*;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -72,8 +68,10 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
         return info;
     }
 
-  @Override
-  public boolean needConfig() { return true; }
+    @Override
+    public boolean needConfig() {
+        return true;
+    }
 
     @Override
     public Class<? extends ExecuteContext> getContextType() {

@@ -25,11 +25,31 @@ public class LlmInteractionEvent extends ApplicationEvent {
         this.errorMessage = errorMessage;
     }
 
-    public LlmInteractionMeta getMeta() { return meta; }
-    public String getModelName() { return modelName; }
-    public String getRequestBody() { return requestBody; }
-    public String getResponseBody() { return responseBody; }
-    public long getDurationMs() { return durationMs; }
-    public boolean isSuccess() { return success; }
-    public String getErrorMessage() { return errorMessage; }
+    public LlmInteractionMeta getMeta() {
+        return meta;
+    }
+
+    public String getModelName() {
+        return modelName;
+    }
+
+    public String getRequestBody() {
+        return requestBody;
+    }
+
+    public String getResponseBody() {
+        return responseBody;
+    }
+
+    public long getDurationMs() {
+        return durationMs;
+    }
+
+    public boolean isSuccess() {
+        return success;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
 }

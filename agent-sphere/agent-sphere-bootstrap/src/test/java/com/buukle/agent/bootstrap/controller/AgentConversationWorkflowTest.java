@@ -61,11 +61,11 @@ class AgentConversationWorkflowTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
-            new RouteController(routeService),
-            new CapabilityMcpController(capabilityMcpService),
-            new InstanceController(instanceService),
-            new SessionController(sessionService),
-            new ChatRuntimeController(chatRuntimeService)
+                new RouteController(routeService),
+                new CapabilityMcpController(capabilityMcpService),
+                new InstanceController(instanceService),
+                new SessionController(sessionService),
+                new ChatRuntimeController(chatRuntimeService)
         ).build();
     }
 
@@ -80,21 +80,21 @@ class AgentConversationWorkflowTest {
         Long modelRouteId = postAndReadId("/api/v1/model/routes", createRouteRequest());
 
         mockMvc.perform(post("/api/v1/capability/mcp")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(createMcpRequest())))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").value(201L))
-            .andExpect(jsonPath("$.serverType").value("sse"));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createMcpRequest())))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(201L))
+                .andExpect(jsonPath("$.serverType").value("sse"));
 
         Long agentInstanceId = postAndReadId("/api/v1/instance/instances", createInstanceRequest(modelRouteId));
         Long sessionId = postAndReadId("/api/v1/instance/sessions", createSessionRequest(agentInstanceId));
 
         mockMvc.perform(post("/api/v1/runtime/{sessionId}/chat", sessionId)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(sendMessageRequest())))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.runId").value(501L))
-            .andExpect(jsonPath("$.status").value("PROCESSING"));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(sendMessageRequest())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").value(501L))
+                .andExpect(jsonPath("$.status").value("PROCESSING"));
 
         ArgumentCaptor<CreateInstanceDTO> instanceCaptor = ArgumentCaptor.forClass(CreateInstanceDTO.class);
         verify(instanceService).createInstance(instanceCaptor.capture());
@@ -108,11 +108,11 @@ class AgentConversationWorkflowTest {
 
     private Long postAndReadId(String url, Object request) throws Exception {
         MvcResult result = mockMvc.perform(post(url)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").exists())
-            .andReturn();
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
     }
 

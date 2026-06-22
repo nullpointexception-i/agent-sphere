@@ -29,9 +29,9 @@ public class ChromeCallbackController extends BaseController {
 
         if (body.getScreenshot() != null) {
             RuntimeEventDataVO data = new RuntimeEventDataVO()
-                .setSessionId(sessionId)
-                .setScreenshot(body.getScreenshot())
-                .setResponse(extractUrl(body.getData()));
+                    .setSessionId(sessionId)
+                    .setScreenshot(body.getScreenshot())
+                    .setResponse(extractUrl(body.getData()));
             RuntimeEventVO event = new RuntimeEventVO(ScreenshotEventType.PAGE_SCREENSHOT, data);
             Thread.startVirtualThread(() -> eventPublisher.publishEvent(event));
         }

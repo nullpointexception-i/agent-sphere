@@ -4,5 +4,7 @@ public enum CompactionStatus implements EventType {
     PENDING, RUNNING, COMPLETED, FAILED;
 
     @Override
-    public String value() { return name(); }
+    public String value() {
+        return name();
+    }
 }

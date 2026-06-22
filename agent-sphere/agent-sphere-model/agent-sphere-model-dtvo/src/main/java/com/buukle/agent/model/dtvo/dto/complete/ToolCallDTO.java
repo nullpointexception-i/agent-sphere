@@ -2,6 +2,7 @@ package com.buukle.agent.model.dtvo.dto.complete;
 
 import lombok.Builder;
 import lombok.Data;
+
 import java.io.Serializable;
 
 @Data

@@ -16,7 +16,7 @@ public class HtmlValidationUtils {
     /**
      * 验证 HTML 内容是否有效
      *
-     * @param html HTML 内容
+     * @param html      HTML 内容
      * @param maxLength 允许的最大长度
      * @return 如果有效返回 true
      */
@@ -86,9 +86,9 @@ public class HtmlValidationUtils {
 
         String lower = content.toLowerCase();
         // 检查是否包含常见的 HTML 标签
-        return lower.contains("<html") || lower.contains("<body") || 
-               lower.contains("<div") || lower.contains("<p") || 
-               lower.contains("<!doctype");
+        return lower.contains("<html") || lower.contains("<body") ||
+                lower.contains("<div") || lower.contains("<p") ||
+                lower.contains("<!doctype");
     }
 
     /**

@@ -12,7 +12,8 @@ public class ChromeCallbackDTO {
     private String error;
     private String screenshot;
 
-    public ChromeCallbackDTO() {}
+    public ChromeCallbackDTO() {
+    }
 
     public ChromeCallbackDTO(String commandId, boolean success, Object data, String error) {
         this.commandId = commandId;

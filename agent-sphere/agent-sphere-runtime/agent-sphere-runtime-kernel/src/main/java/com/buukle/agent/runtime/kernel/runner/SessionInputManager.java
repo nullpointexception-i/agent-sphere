@@ -61,5 +61,6 @@ public class SessionInputManager {
         queues.remove(sessionId);
     }
 
-    public record InputMessage(String text, Long modelRouteId, long timestamp) {}
+    public record InputMessage(String text, Long modelRouteId, long timestamp) {
+    }
 }

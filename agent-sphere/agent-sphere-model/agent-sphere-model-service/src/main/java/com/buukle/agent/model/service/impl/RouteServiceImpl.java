@@ -1,16 +1,16 @@
 package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.model.domain.AgentModelProvider;
 import com.buukle.agent.model.domain.AgentModelRoute;
+import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
+import com.buukle.agent.model.exception.ModelErrorCode;
 import com.buukle.agent.model.repository.ModelProviderMapper;
 import com.buukle.agent.model.repository.RouteMapper;
 import com.buukle.agent.model.service.RouteService;
 import com.buukle.agent.model.service.converter.RouteConverter;
-import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
-import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
-import com.buukle.agent.model.exception.ModelErrorCode;
-import com.buukle.agent.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -66,10 +66,10 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     @Override
     public List<ModelRouteVO> listRoutesByProvider(Long providerId, String keyword) {
         List<AgentModelRoute> routes = lambdaQuery()
-            .eq(AgentModelRoute::getProviderId, providerId)
-            .like(keyword != null && !keyword.isBlank(), AgentModelRoute::getModelName, keyword)
-            .orderByDesc(AgentModelRoute::getCreatedAt)
-            .list();
+                .eq(AgentModelRoute::getProviderId, providerId)
+                .like(keyword != null && !keyword.isBlank(), AgentModelRoute::getModelName, keyword)
+                .orderByDesc(AgentModelRoute::getCreatedAt)
+                .list();
         List<ModelRouteVO> vos = routes.stream().map(routeConverter::toVO).toList();
         enrichFallbackNames(vos);
         enrichApiKeyConfigured(vos);
@@ -80,9 +80,9 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     @Override
     public List<ModelRouteVO> listAllRoutes(String keyword) {
         List<AgentModelRoute> routes = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), AgentModelRoute::getModelName, keyword)
-            .orderByDesc(AgentModelRoute::getCreatedAt)
-            .list();
+                .like(keyword != null && !keyword.isBlank(), AgentModelRoute::getModelName, keyword)
+                .orderByDesc(AgentModelRoute::getCreatedAt)
+                .list();
         List<ModelRouteVO> vos = routes.stream().map(routeConverter::toVO).toList();
         enrichFallbackNames(vos);
         enrichApiKeyConfigured(vos);
@@ -99,12 +99,12 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     private void enrichApiKeyConfigured(List<ModelRouteVO> vos) {
         if (vos == null || vos.isEmpty()) return;
         Set<Long> providerIds = vos.stream()
-            .map(ModelRouteVO::getProviderId)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
+                .map(ModelRouteVO::getProviderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
         if (providerIds.isEmpty()) return;
         Map<Long, Boolean> keyMap = modelProviderMapper.selectBatchIds(providerIds)
-            .stream().collect(Collectors.toMap(AgentModelProvider::getId, p -> p.getApiKeyId() != null));
+                .stream().collect(Collectors.toMap(AgentModelProvider::getId, p -> p.getApiKeyId() != null));
         for (ModelRouteVO vo : vos) {
             if (vo.getProviderId() != null)
                 vo.setApiKeyConfigured(keyMap.getOrDefault(vo.getProviderId(), false));
@@ -120,12 +120,12 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     private void enrichProviderName(List<ModelRouteVO> vos) {
         if (vos == null || vos.isEmpty()) return;
         Set<Long> providerIds = vos.stream()
-            .map(ModelRouteVO::getProviderId)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
+                .map(ModelRouteVO::getProviderId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
         if (providerIds.isEmpty()) return;
         Map<Long, String> nameMap = modelProviderMapper.selectBatchIds(providerIds)
-            .stream().collect(Collectors.toMap(AgentModelProvider::getId, AgentModelProvider::getName));
+                .stream().collect(Collectors.toMap(AgentModelProvider::getId, AgentModelProvider::getName));
         for (ModelRouteVO vo : vos) {
             if (vo.getProviderId() != null)
                 vo.setProviderName(nameMap.get(vo.getProviderId()));
@@ -137,18 +137,18 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
         if (fallbackIds == null || fallbackIds.isBlank()) return;
 
         List<Long> fbIdList = Arrays.stream(fallbackIds.split(","))
-            .map(String::trim)
-            .filter(s -> !s.isEmpty())
-            .map(Long::valueOf)
-            .toList();
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(Long::valueOf)
+                .toList();
 
         if (fbIdList.isEmpty()) return;
 
         List<AgentModelRoute> allRoutes = lambdaQuery()
-            .eq(AgentModelRoute::getProviderId, dto.getProviderId())
-            .list();
+                .eq(AgentModelRoute::getProviderId, dto.getProviderId())
+                .list();
         Map<Long, AgentModelRoute> routeMap = allRoutes.stream()
-            .collect(Collectors.toMap(AgentModelRoute::getId, r -> r));
+                .collect(Collectors.toMap(AgentModelRoute::getId, r -> r));
 
         for (Long fbId : fbIdList) {
             if (!routeMap.containsKey(fbId)) {
@@ -161,7 +161,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
 
         while (!queue.isEmpty()) {
             Long current = queue.poll();
-            if (routeId != null && current.equals(routeId)) {
+            if (current.equals(routeId)) {
                 throw new BizException(ModelErrorCode.ROUTE_FALLBACK_CYCLE);
             }
             if (!visited.add(current)) continue;
@@ -172,10 +172,10 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
             String fb = RouteConverter.fromJsonArray(currentRoute.getFallbackIds());
             if (fb != null && !fb.isBlank()) {
                 Arrays.stream(fb.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .map(Long::valueOf)
-                    .forEach(queue::add);
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .map(Long::valueOf)
+                        .forEach(queue::add);
             }
         }
     }
@@ -186,59 +186,59 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
             return;
         }
         List<Long> ids = Arrays.stream(vo.getFallbackIds().split(","))
-            .map(String::trim)
-            .filter(s -> !s.isEmpty())
-            .map(Long::valueOf)
-            .toList();
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(Long::valueOf)
+                .toList();
         if (ids.isEmpty()) {
             vo.setFallbackNames("");
             return;
         }
         List<AgentModelRoute> fallbackRoutes = lambdaQuery()
-            .in(AgentModelRoute::getId, ids)
-            .list();
+                .in(AgentModelRoute::getId, ids)
+                .list();
         Map<Long, String> nameMap = fallbackRoutes.stream()
-            .collect(Collectors.toMap(AgentModelRoute::getId, AgentModelRoute::getModelName));
+                .collect(Collectors.toMap(AgentModelRoute::getId, AgentModelRoute::getModelName));
         String names = ids.stream()
-            .map(id -> {
-                String name = nameMap.getOrDefault(id, "?");
-                return name + "(ID:" + id + ")";
-            })
-            .collect(Collectors.joining(", "));
+                .map(id -> {
+                    String name = nameMap.getOrDefault(id, "?");
+                    return name + "(ID:" + id + ")";
+                })
+                .collect(Collectors.joining(", "));
         vo.setFallbackNames(names);
     }
 
     private void enrichFallbackNames(List<ModelRouteVO> vos) {
         Set<Long> allIds = vos.stream()
-            .filter(vo -> vo.getFallbackIds() != null && !vo.getFallbackIds().isBlank())
-            .flatMap(vo -> Arrays.stream(vo.getFallbackIds().split(",")))
-            .map(String::trim)
-            .filter(s -> !s.isEmpty())
-            .map(Long::valueOf)
-            .collect(Collectors.toSet());
+                .filter(vo -> vo.getFallbackIds() != null && !vo.getFallbackIds().isBlank())
+                .flatMap(vo -> Arrays.stream(vo.getFallbackIds().split(",")))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(Long::valueOf)
+                .collect(Collectors.toSet());
         if (allIds.isEmpty()) {
             vos.forEach(vo -> vo.setFallbackNames(""));
             return;
         }
         List<AgentModelRoute> fallbackRoutes = lambdaQuery()
-            .in(AgentModelRoute::getId, allIds)
-            .list();
+                .in(AgentModelRoute::getId, allIds)
+                .list();
         Map<Long, String> nameMap = fallbackRoutes.stream()
-            .collect(Collectors.toMap(AgentModelRoute::getId, AgentModelRoute::getModelName));
+                .collect(Collectors.toMap(AgentModelRoute::getId, AgentModelRoute::getModelName));
         for (ModelRouteVO vo : vos) {
             if (vo.getFallbackIds() == null || vo.getFallbackIds().isBlank()) {
                 vo.setFallbackNames("");
                 continue;
             }
             String names = Arrays.stream(vo.getFallbackIds().split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .map(Long::valueOf)
-                .map(id -> {
-                    String name = nameMap.getOrDefault(id, "?");
-                    return name + "(ID:" + id + ")";
-                })
-                .collect(Collectors.joining(", "));
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Long::valueOf)
+                    .map(id -> {
+                        String name = nameMap.getOrDefault(id, "?");
+                        return name + "(ID:" + id + ")";
+                    })
+                    .collect(Collectors.joining(", "));
             vo.setFallbackNames(names);
         }
     }

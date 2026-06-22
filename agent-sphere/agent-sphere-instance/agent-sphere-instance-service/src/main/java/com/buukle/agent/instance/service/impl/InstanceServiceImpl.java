@@ -3,20 +3,21 @@ package com.buukle.agent.instance.service.impl;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.util.AvatarGenerator;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
+import com.buukle.agent.instance.dtvo.vo.InstanceVO;
+import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.InstanceMapper;
 import com.buukle.agent.instance.service.InstanceService;
 import com.buukle.agent.instance.service.converter.InstanceConverter;
-import com.buukle.agent.instance.dtvo.vo.InstanceVO;
-import com.buukle.agent.instance.exception.InstanceErrorCode;
-import com.buukle.agent.common.exception.BizException;
-import com.buukle.agent.common.util.AvatarGenerator;
 import com.buukle.agent.model.spi.ModelProviderSpi;
 import com.buukle.agent.model.spi.RouteSpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -79,11 +80,11 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     public List<InstanceVO> listInstances(String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         log.info("listInstances called: keyword='{}', startTime={}, endTime={}", keyword, startTime, endTime);
         List<AgentInstance> instances = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
-            .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
-            .le(endTime != null, AgentInstance::getCreatedAt, endTime)
-            .orderByDesc(AgentInstance::getCreatedAt)
-            .list();
+                .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
+                .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
+                .le(endTime != null, AgentInstance::getCreatedAt, endTime)
+                .orderByDesc(AgentInstance::getCreatedAt)
+                .list();
         log.info("listInstances result: {} rows", instances.size());
         return instances.stream().map(instanceConverter::toVO).toList();
     }
@@ -91,11 +92,11 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     @Override
     public IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         Page<AgentInstance> p = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
-            .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
-            .le(endTime != null, AgentInstance::getCreatedAt, endTime)
-            .orderByDesc(AgentInstance::getCreatedAt)
-            .page(new Page<>(page, size));
+                .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
+                .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
+                .le(endTime != null, AgentInstance::getCreatedAt, endTime)
+                .orderByDesc(AgentInstance::getCreatedAt)
+                .page(new Page<>(page, size));
         return p.convert(instanceConverter::toVO);
     }
 
@@ -119,9 +120,9 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     public List<InstanceVO> listLatestNInstances(int n) {
         int limit = Math.min(Math.max(n, 1), 32);
         List<AgentInstance> instances = lambdaQuery()
-            .orderByDesc(AgentInstance::getCreatedAt)
-            .last("LIMIT " + limit)
-            .list();
+                .orderByDesc(AgentInstance::getCreatedAt)
+                .last("LIMIT " + limit)
+                .list();
         return instances.stream().map(instanceConverter::toVO).toList();
     }
 }

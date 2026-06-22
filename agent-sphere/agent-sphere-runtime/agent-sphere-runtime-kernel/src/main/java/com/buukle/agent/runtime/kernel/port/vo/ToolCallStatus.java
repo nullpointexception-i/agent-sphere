@@ -4,5 +4,7 @@ public enum ToolCallStatus implements EventType {
     PENDING, RUNNING, SUCCEEDED, FAILED;
 
     @Override
-    public String value() { return name(); }
+    public String value() {
+        return name();
+    }
 }

@@ -5,4 +5,5 @@ import com.buukle.agent.model.domain.AgentModelRoute;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface RouteMapper extends BaseMapper<AgentModelRoute> {}
+public interface RouteMapper extends BaseMapper<AgentModelRoute> {
+}

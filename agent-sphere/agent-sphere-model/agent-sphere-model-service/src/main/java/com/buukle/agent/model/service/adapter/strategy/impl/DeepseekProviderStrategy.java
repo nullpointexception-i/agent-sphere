@@ -17,7 +17,8 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
     }
 
     @Override
-    public void adaptRequest(ChatCompletionRequestDTO request) {}
+    public void adaptRequest(ChatCompletionRequestDTO request) {
+    }
 
     @Override
     public void adaptResponse(JsonNode choice, ToolStream toolStream) {
@@ -28,12 +29,12 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
         if (!choice.has(LlmApiConstants.FIELD_DELTA)) return;
         JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
         if (delta.has(LlmApiConstants.FIELD_TOOL_CALLS)
-            && delta.get(LlmApiConstants.FIELD_TOOL_CALLS).isArray()) {
+                && delta.get(LlmApiConstants.FIELD_TOOL_CALLS).isArray()) {
             for (JsonNode tc : delta.get(LlmApiConstants.FIELD_TOOL_CALLS)) {
                 int index = tc.has(LlmApiConstants.FIELD_INDEX)
-                    ? tc.get(LlmApiConstants.FIELD_INDEX).asInt() : 0;
+                        ? tc.get(LlmApiConstants.FIELD_INDEX).asInt() : 0;
                 String tcId = tc.has(LlmApiConstants.FIELD_ID)
-                    ? tc.get(LlmApiConstants.FIELD_ID).asText() : null;
+                        ? tc.get(LlmApiConstants.FIELD_ID).asText() : null;
                 String tcName = null;
                 String tcArgs = null;
                 if (tc.has(LlmApiConstants.FIELD_FUNCTION)) {

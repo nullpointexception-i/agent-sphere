@@ -8,7 +8,8 @@ import java.util.Base64;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class AvatarGenerator {
-    private AvatarGenerator() {}
+    private AvatarGenerator() {
+    }
 
     public static String generateBase64() {
         return generateRobotBase64();

@@ -8,11 +8,11 @@ import lombok.Getter;
 
 @Getter
 public class ChromeCommandEvent extends RuntimeEventVO {
-    private ChromeCommandDTO command;
+    private final ChromeCommandDTO command;
 
     public ChromeCommandEvent(ChromeCommandDTO cmd) {
         super(ChromeCommandEventType.SEND_COMMAND,
-              new RuntimeEventDataVO().setSessionId(cmd.getSessionId()));
+                new RuntimeEventDataVO().setSessionId(cmd.getSessionId()));
         this.command = cmd;
     }
 }

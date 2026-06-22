@@ -1,8 +1,9 @@
 package com.buukle.agent.model.dtvo.dto.complete;
 
-import java.io.Serializable;
 import lombok.Data;
 import lombok.experimental.Accessors;
+
+import java.io.Serializable;
 
 @Data
 @Accessors(chain = true)

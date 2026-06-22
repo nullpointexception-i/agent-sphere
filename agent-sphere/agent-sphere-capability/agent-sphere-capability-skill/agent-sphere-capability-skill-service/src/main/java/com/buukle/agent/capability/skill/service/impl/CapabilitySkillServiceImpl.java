@@ -4,17 +4,18 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.capability.skill.domain.CapabilitySkill;
-import com.buukle.agent.capability.skill.repository.SkillMapper;
-import com.buukle.agent.capability.skill.service.CapabilitySkillService;
-import com.buukle.agent.capability.skill.service.converter.CapabilitySkillConverter;
 import com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.exception.CapabilitySkillErrorCode;
+import com.buukle.agent.capability.skill.repository.SkillMapper;
+import com.buukle.agent.capability.skill.service.CapabilitySkillService;
+import com.buukle.agent.capability.skill.service.converter.CapabilitySkillConverter;
 import com.buukle.agent.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -61,11 +62,11 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
     public List<SkillVO> listSkills(String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         log.warn("listSkills called: keyword='{}', startTime={}, endTime={}", keyword, startTime, endTime);
         List<CapabilitySkill> list = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), CapabilitySkill::getName, keyword)
-            .ge(startTime != null, CapabilitySkill::getCreatedAt, startTime)
-            .le(endTime != null, CapabilitySkill::getCreatedAt, endTime)
-            .orderByDesc(CapabilitySkill::getCreatedAt)
-            .list();
+                .like(keyword != null && !keyword.isBlank(), CapabilitySkill::getName, keyword)
+                .ge(startTime != null, CapabilitySkill::getCreatedAt, startTime)
+                .le(endTime != null, CapabilitySkill::getCreatedAt, endTime)
+                .orderByDesc(CapabilitySkill::getCreatedAt)
+                .list();
         log.warn("listSkills result: {} rows", list.size());
         return list.stream().map(capabilitySkillConverter::toVO).toList();
     }
@@ -73,11 +74,11 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
     @Override
     public IPage<SkillVO> pageSkills(int page, int size, String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         Page<CapabilitySkill> p = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), CapabilitySkill::getName, keyword)
-            .ge(startTime != null, CapabilitySkill::getCreatedAt, startTime)
-            .le(endTime != null, CapabilitySkill::getCreatedAt, endTime)
-            .orderByDesc(CapabilitySkill::getCreatedAt)
-            .page(new Page<>(page, size));
+                .like(keyword != null && !keyword.isBlank(), CapabilitySkill::getName, keyword)
+                .ge(startTime != null, CapabilitySkill::getCreatedAt, startTime)
+                .le(endTime != null, CapabilitySkill::getCreatedAt, endTime)
+                .orderByDesc(CapabilitySkill::getCreatedAt)
+                .page(new Page<>(page, size));
         return p.convert(capabilitySkillConverter::toVO);
     }
 

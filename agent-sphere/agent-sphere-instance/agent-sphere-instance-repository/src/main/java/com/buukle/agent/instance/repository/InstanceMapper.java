@@ -5,4 +5,5 @@ import com.buukle.agent.instance.domain.AgentInstance;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface InstanceMapper extends BaseMapper<AgentInstance> {}
+public interface InstanceMapper extends BaseMapper<AgentInstance> {
+}

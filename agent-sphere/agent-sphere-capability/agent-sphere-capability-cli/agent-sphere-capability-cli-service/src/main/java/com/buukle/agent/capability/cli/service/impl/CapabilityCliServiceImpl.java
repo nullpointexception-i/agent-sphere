@@ -4,17 +4,18 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.capability.cli.domain.CapabilityCli;
-import com.buukle.agent.capability.cli.repository.CliMapper;
-import com.buukle.agent.capability.cli.service.CapabilityCliService;
-import com.buukle.agent.capability.cli.service.converter.CapabilityCliConverter;
 import com.buukle.agent.capability.cli.dtvo.dto.CreateCliDTO;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
 import com.buukle.agent.capability.cli.exception.CapabilityCliErrorCode;
+import com.buukle.agent.capability.cli.repository.CliMapper;
+import com.buukle.agent.capability.cli.service.CapabilityCliService;
+import com.buukle.agent.capability.cli.service.converter.CapabilityCliConverter;
 import com.buukle.agent.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -61,11 +62,11 @@ public class CapabilityCliServiceImpl extends ServiceImpl<CliMapper, CapabilityC
     public List<CliVO> listClis(String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         log.warn("listClis called: keyword='{}', startTime={}, endTime={}", keyword, startTime, endTime);
         List<CapabilityCli> list = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), CapabilityCli::getName, keyword)
-            .ge(startTime != null, CapabilityCli::getCreatedAt, startTime)
-            .le(endTime != null, CapabilityCli::getCreatedAt, endTime)
-            .orderByDesc(CapabilityCli::getCreatedAt)
-            .list();
+                .like(keyword != null && !keyword.isBlank(), CapabilityCli::getName, keyword)
+                .ge(startTime != null, CapabilityCli::getCreatedAt, startTime)
+                .le(endTime != null, CapabilityCli::getCreatedAt, endTime)
+                .orderByDesc(CapabilityCli::getCreatedAt)
+                .list();
         log.warn("listClis result: {} rows", list.size());
         return list.stream().map(capabilityCliConverter::toVO).toList();
     }
@@ -73,11 +74,11 @@ public class CapabilityCliServiceImpl extends ServiceImpl<CliMapper, CapabilityC
     @Override
     public IPage<CliVO> pageClis(int page, int size, String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         Page<CapabilityCli> p = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), CapabilityCli::getName, keyword)
-            .ge(startTime != null, CapabilityCli::getCreatedAt, startTime)
-            .le(endTime != null, CapabilityCli::getCreatedAt, endTime)
-            .orderByDesc(CapabilityCli::getCreatedAt)
-            .page(new Page<>(page, size));
+                .like(keyword != null && !keyword.isBlank(), CapabilityCli::getName, keyword)
+                .ge(startTime != null, CapabilityCli::getCreatedAt, startTime)
+                .le(endTime != null, CapabilityCli::getCreatedAt, endTime)
+                .orderByDesc(CapabilityCli::getCreatedAt)
+                .page(new Page<>(page, size));
         return p.convert(capabilityCliConverter::toVO);
     }
 

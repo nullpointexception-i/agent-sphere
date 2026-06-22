@@ -2,22 +2,22 @@ package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.event.SessionCreatedEvent;
-import java.time.LocalDateTime;
-import java.util.List;
+import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.domain.AgentSession;
+import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.enums.SessionEnum;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
+import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.InstanceMapper;
 import com.buukle.agent.instance.repository.SessionMapper;
 import com.buukle.agent.instance.service.SessionService;
 import com.buukle.agent.instance.service.converter.SessionConverter;
-import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
-import com.buukle.agent.instance.dtvo.vo.SessionVO;
-import com.buukle.agent.instance.exception.InstanceErrorCode;
-import com.buukle.agent.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -50,7 +50,8 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     public SessionVO getSession(Long id) {
         AgentSession session = getById(id);
         if (session == null) throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);
-        if (SessionEnum.STATUS_CLOSED.equals(session.getStatus())) throw new BizException(InstanceErrorCode.SESSION_CLOSED);
+        if (SessionEnum.STATUS_CLOSED.equals(session.getStatus()))
+            throw new BizException(InstanceErrorCode.SESSION_CLOSED);
         return sessionConverter.toVO(session);
     }
 
@@ -67,11 +68,11 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     @Override
     public List<SessionVO> listSessions(int offset, int limit, String keyword) {
         List<AgentSession> sessions = lambdaQuery()
-            .eq(AgentSession::getStatus, SessionEnum.STATUS_ACTIVE)
-            .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword)
-            .orderByDesc(AgentSession::getUpdatedAt)
-            .last("OFFSET " + offset + " LIMIT " + limit)
-            .list();
+                .eq(AgentSession::getStatus, SessionEnum.STATUS_ACTIVE)
+                .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword)
+                .orderByDesc(AgentSession::getUpdatedAt)
+                .last("OFFSET " + offset + " LIMIT " + limit)
+                .list();
         return sessions.stream().map(sessionConverter::toVO).toList();
     }
 
@@ -87,9 +88,9 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     public void batchCloseSessions(List<Long> ids) {
         if (ids == null || ids.isEmpty()) return;
         lambdaUpdate()
-            .in(AgentSession::getId, ids)
-            .set(AgentSession::getStatus, SessionEnum.STATUS_CLOSED)
-            .update();
+                .in(AgentSession::getId, ids)
+                .set(AgentSession::getStatus, SessionEnum.STATUS_CLOSED)
+                .update();
     }
 
     @Override

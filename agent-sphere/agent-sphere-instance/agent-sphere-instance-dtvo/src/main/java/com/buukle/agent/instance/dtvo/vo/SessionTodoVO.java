@@ -14,7 +14,8 @@ public class SessionTodoVO implements Serializable {
     private String priority;
     private Integer sortOrder;
 
-    public SessionTodoVO() {}
+    public SessionTodoVO() {
+    }
 
     public SessionTodoVO(String content, String status, String priority) {
         this.content = content;

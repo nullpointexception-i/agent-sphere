@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.contract;
 
 import lombok.Data;
+
 import java.io.Serializable;
 
 @Data

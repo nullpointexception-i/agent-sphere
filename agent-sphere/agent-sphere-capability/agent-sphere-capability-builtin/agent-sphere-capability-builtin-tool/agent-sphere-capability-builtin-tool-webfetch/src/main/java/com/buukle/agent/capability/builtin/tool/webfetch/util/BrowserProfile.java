@@ -3,23 +3,11 @@ package com.buukle.agent.capability.builtin.tool.webfetch.util;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class BrowserProfile {
+public record BrowserProfile(String userAgent, Map<String, String> headers) {
 
-    private final String userAgent;
-    private final Map<String, String> headers;
-
-    public BrowserProfile(String userAgent, Map<String, String> headers) {
-        this.userAgent = userAgent;
-        this.headers = headers;
-    }
-
-    public String userAgent() { return userAgent; }
-
-    public Map<String, String> headers() { return headers; }
-
-    public void applyTo(Map<String, String> target) {
-        target.putAll(headers);
-    }
+    private static final BrowserProfile[] PROFILES = new BrowserProfile[]{
+            chromeWin(), chromeMac(), edgeWin(), firefoxWin(), safariMac()
+    };
 
     public static BrowserProfile chromeWin() {
         Map<String, String> h = baseHeaders();
@@ -89,10 +77,6 @@ public class BrowserProfile {
         return h;
     }
 
-    private static final BrowserProfile[] PROFILES = new BrowserProfile[]{
-        chromeWin(), chromeMac(), edgeWin(), firefoxWin(), safariMac()
-    };
-
     public static BrowserProfile random() {
         return PROFILES[(int) (Math.random() * PROFILES.length)];
     }
@@ -103,5 +87,9 @@ public class BrowserProfile {
             next = random();
         } while (next == current && PROFILES.length > 1);
         return next;
+    }
+
+    public void applyTo(Map<String, String> target) {
+        target.putAll(headers);
     }
 }

@@ -22,18 +22,22 @@ public class CapabilityBuiltinToolTodowrite implements CapabilityBuiltinToolSpi 
     static final String STATUS_PENDING = "pending";
     static final String PRIORITY_MEDIUM = "medium";
     static final String TOOL_DESCRIPTION = """
-        Create and maintain a structured task list for the current coding session.
-        Call this tool whenever a task starts, completes, or is cancelled — do NOT
-        treat it as a one-time initialization. Mark a task as in_progress BEFORE
-        working on it (max one at a time). Mark completed ONLY after the work is
-        done AND verified. If blocked, keep it in_progress and add a follow-up
-        todo. Call again whenever any task status changes.""";
+            Create and maintain a structured task list for the current coding session.
+            Call this tool whenever a task starts, completes, or is cancelled — do NOT
+            treat it as a one-time initialization. Mark a task as in_progress BEFORE
+            working on it (max one at a time). Mark completed ONLY after the work is
+            done AND verified. If blocked, keep it in_progress and add a follow-up
+            todo. Call again whenever any task status changes.""";
 
     @Override
-    public BuiltinToolEnum getToolType() { return BuiltinToolEnum.TODOWRITE; }
+    public BuiltinToolEnum getToolType() {
+        return BuiltinToolEnum.TODOWRITE;
+    }
 
     @Override
-    public boolean needConfig() { return false; }
+    public boolean needConfig() {
+        return false;
+    }
 
     @Override
     public ToolInfoVO getInfo() {
@@ -48,10 +52,14 @@ public class CapabilityBuiltinToolTodowrite implements CapabilityBuiltinToolSpi 
     }
 
     @Override
-    public Class<? extends ExecuteContext> getContextType() { return TodowriteExecuteContext.class; }
+    public Class<? extends ExecuteContext> getContextType() {
+        return TodowriteExecuteContext.class;
+    }
 
     @Override
-    public Class<? extends ExecuteResult> getResultType() { return TodowriteResultVO.class; }
+    public Class<? extends ExecuteResult> getResultType() {
+        return TodowriteResultVO.class;
+    }
 
     @Override
     public ExecuteResult execute(ExecuteContext ctx) {
@@ -62,9 +70,9 @@ public class CapabilityBuiltinToolTodowrite implements CapabilityBuiltinToolSpi 
         if (input != null) {
             for (TodowriteExecuteContext.TodoItemDTO item : input) {
                 resultTodos.add(new TodowriteResultVO.TodoItemVO(
-                    item.getContent() != null ? item.getContent() : "",
-                    item.getStatus() != null ? item.getStatus() : STATUS_PENDING,
-                    item.getPriority() != null ? item.getPriority() : PRIORITY_MEDIUM));
+                        item.getContent() != null ? item.getContent() : "",
+                        item.getStatus() != null ? item.getStatus() : STATUS_PENDING,
+                        item.getPriority() != null ? item.getPriority() : PRIORITY_MEDIUM));
             }
         }
         return new TodowriteResultVO(resultTodos);

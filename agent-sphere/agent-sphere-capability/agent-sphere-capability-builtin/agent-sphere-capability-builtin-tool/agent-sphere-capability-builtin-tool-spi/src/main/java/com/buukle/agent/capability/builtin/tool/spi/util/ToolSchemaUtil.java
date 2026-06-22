@@ -14,7 +14,8 @@ public final class ToolSchemaUtil {
 
     private static final String SCHEMA_REF_PREFIX = "#/components/schemas/";
 
-    private ToolSchemaUtil() {}
+    private ToolSchemaUtil() {
+    }
 
     public static String generateParamSchema(Class<?> contextClass) {
         try {

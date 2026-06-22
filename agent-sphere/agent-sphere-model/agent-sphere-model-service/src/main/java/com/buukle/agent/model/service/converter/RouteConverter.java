@@ -1,10 +1,10 @@
 package com.buukle.agent.model.service.converter;
 
 import com.buukle.agent.model.domain.AgentModelRoute;
-import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
-import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
-import com.buukle.agent.model.dtvo.enums.RouteEnum;
 import com.buukle.agent.model.dtvo.constants.RouteConstants;
+import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
+import com.buukle.agent.model.dtvo.enums.RouteEnum;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import org.springframework.stereotype.Component;
 
 import java.time.format.DateTimeFormatter;
@@ -19,10 +19,10 @@ public class RouteConverter {
         if (csv == null || csv.isBlank()) return "[]";
         if (csv.trim().startsWith("[")) return csv; // already JSON
         return Arrays.stream(csv.split(","))
-            .map(String::trim)
-            .filter(s -> !s.isEmpty())
-            .map(s -> "\"" + s.replace("\"", "\\\"") + "\"")
-            .collect(Collectors.joining(",", "[", "]"));
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(s -> "\"" + s.replace("\"", "\\\"") + "\"")
+                .collect(Collectors.joining(",", "[", "]"));
     }
 
     public static String fromJsonArray(String json) {

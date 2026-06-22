@@ -1,10 +1,12 @@
 package com.buukle.agent.model.service.stream;
 
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 public class ToolStream {
@@ -48,5 +50,6 @@ public class ToolStream {
         return pending.isEmpty();
     }
 
-    private record PendingTool(String id, String name, StringBuilder arguments) {}
+    private record PendingTool(String id, String name, StringBuilder arguments) {
+    }
 }

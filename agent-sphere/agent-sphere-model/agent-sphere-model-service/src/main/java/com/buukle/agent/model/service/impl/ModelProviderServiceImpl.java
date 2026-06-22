@@ -4,17 +4,17 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.model.domain.AgentModelProvider;
-import com.buukle.agent.model.service.constants.LlmApiConstants;
+import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.vo.ModelProviderVO;
 import com.buukle.agent.model.exception.ModelErrorCode;
 import com.buukle.agent.model.repository.ModelProviderMapper;
 import com.buukle.agent.model.service.ModelProviderService;
-import com.buukle.agent.model.service.converter.ModelProviderConverter;
 import com.buukle.agent.model.service.adapter.ChatRequestAdapter;
 import com.buukle.agent.model.service.adapter.ChatResponseAdapter;
-import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.service.constants.LlmApiConstants;
+import com.buukle.agent.model.service.converter.ModelProviderConverter;
 import com.buukle.agent.model.service.stream.ToolStream;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -39,6 +40,10 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     private final AgentRuntimeProperties properties;
     private final HttpClient httpClient;
     private final int logBodyMaxLength;
+    @Autowired
+    ChatRequestAdapter chatRequestAdapter;
+    @Autowired
+    ChatResponseAdapter chatResponseAdapter;
 
     public ModelProviderServiceImpl(ModelProviderConverter modelProviderConverter,
                                     AgentRuntimeProperties properties,
@@ -50,12 +55,6 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 .connectTimeout(properties.getLlm().getConnectTimeout())
                 .build();
     }
-
-    @Autowired
-    ChatRequestAdapter chatRequestAdapter;
-
-    @Autowired
-    ChatResponseAdapter chatResponseAdapter;
 
     @Override
     public ModelProviderVO createProvider(CreateModelProviderDTO dto) {
@@ -74,9 +73,9 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     @Override
     public List<ModelProviderVO> listProviders(String keyword) {
         List<AgentModelProvider> providers = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), AgentModelProvider::getName, keyword)
-            .orderByDesc(AgentModelProvider::getCreatedAt)
-            .list();
+                .like(keyword != null && !keyword.isBlank(), AgentModelProvider::getName, keyword)
+                .orderByDesc(AgentModelProvider::getCreatedAt)
+                .list();
         return providers.stream().map(modelProviderConverter::toVO).toList();
     }
 
@@ -101,7 +100,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     @Override
     public void setActiveKey(Long id, Long apiKeyId) {
         lambdaUpdate().eq(AgentModelProvider::getId, id)
-            .set(AgentModelProvider::getApiKeyId, apiKeyId).update();
+                .set(AgentModelProvider::getApiKeyId, apiKeyId).update();
     }
 
     @Override
@@ -119,7 +118,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
         StringBuilder reasoningBuilder = new StringBuilder();
         int chunkCount = 0;
         try {
-            String url = baseUrl.endsWith("/") ? baseUrl + LlmApiConstants.CHAT_COMPLETIONS_PATH : baseUrl + LlmApiConstants.CHAT_COMPLETIONS_PATH;
+            String url = baseUrl + LlmApiConstants.CHAT_COMPLETIONS_PATH;
             log.info("LLM stream request: model={}, url={}, body={}", modelName, url, truncate(requestBody));
 
             HttpRequest request = HttpRequest.newBuilder()
@@ -153,21 +152,21 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     if (line.startsWith(LlmApiConstants.SSE_DATA_PREFIX)) {
                         String data = line.substring(LlmApiConstants.SSE_DATA_PREFIX.length()).trim();
                         if (LlmApiConstants.SSE_DONE_MARKER.equals(data)) break;
-                    chunkCount++;
+                        chunkCount++;
                         try {
                             JsonNode chunk = JsonUtils.parse(data, JsonNode.class);
                             if (chunk != null && chunk.has(LlmApiConstants.FIELD_CHOICES)
-                                && chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
-                                && chunk.get(LlmApiConstants.FIELD_CHOICES).size() > 0) {
+                                    && chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
+                                    && chunk.get(LlmApiConstants.FIELD_CHOICES).size() > 0) {
                                 JsonNode choice = chunk.get(LlmApiConstants.FIELD_CHOICES).get(0);
                                 if (choice.has(LlmApiConstants.FIELD_FINISH_REASON)
-                                    && !choice.get(LlmApiConstants.FIELD_FINISH_REASON).isNull()) {
+                                        && !choice.get(LlmApiConstants.FIELD_FINISH_REASON).isNull()) {
                                     log.debug("LLM finish_reason: {}", choice.get(LlmApiConstants.FIELD_FINISH_REASON).asText());
                                 }
                                 JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
                                 if (delta != null) {
                                     if (delta.has(LlmApiConstants.FIELD_REASONING_CONTENT)
-                                        && delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).isTextual()) {
+                                            && delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).isTextual()) {
                                         String r = delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).asText();
                                         if (!r.isEmpty()) {
                                             reasoningBuilder.append(r);
@@ -175,7 +174,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                                         }
                                     }
                                     if (delta.has(LlmApiConstants.FIELD_CONTENT)
-                                        && delta.get(LlmApiConstants.FIELD_CONTENT).isTextual()) {
+                                            && delta.get(LlmApiConstants.FIELD_CONTENT).isTextual()) {
                                         String c = delta.get(LlmApiConstants.FIELD_CONTENT).asText();
                                         if (!c.isEmpty()) {
                                             contentBuilder.append(c);
@@ -185,7 +184,8 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                                     chatResponseAdapter.adaptResponse(choice, toolStream, company);
                                 }
                             }
-                        } catch (Exception ignored) {}
+                        } catch (Exception ignored) {
+                        }
                     }
                 }
             }
@@ -194,11 +194,11 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
             String content = contentBuilder.toString();
             String reasoning = reasoningBuilder.toString();
             log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}",
-                modelName, chunkCount, content.length(), reasoning.length());
+                    modelName, chunkCount, content.length(), reasoning.length());
             onEvent.accept(new LLMEvent.Finish(LlmApiConstants.FINISH_REASON_STOP, usage));
         } catch (Exception e) {
             log.error("LLM stream failed: model={}, chunks={}, content={}, reasoning={}",
-                modelName, chunkCount, truncate(contentBuilder.toString()), truncate(reasoningBuilder.toString()), e);
+                    modelName, chunkCount, truncate(contentBuilder.toString()), truncate(reasoningBuilder.toString()), e);
         } finally {
             onDone.run();
         }

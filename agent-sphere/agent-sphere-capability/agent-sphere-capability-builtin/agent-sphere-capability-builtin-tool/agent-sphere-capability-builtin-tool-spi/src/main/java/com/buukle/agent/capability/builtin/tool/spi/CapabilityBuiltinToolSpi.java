@@ -14,10 +14,15 @@ import java.util.stream.Collectors;
 
 public interface CapabilityBuiltinToolSpi {
     BuiltinToolEnum getToolType();
+
     ToolInfoVO getInfo();
+
     Class<? extends ExecuteContext> getContextType();
+
     ExecuteResult execute(ExecuteContext ctx);
+
     Class<? extends ExecuteResult> getResultType();
+
     boolean needConfig();
 
     default ParameterVerifyResultVO parameterVerify(String argumentsJson) {

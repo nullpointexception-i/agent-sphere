@@ -32,8 +32,8 @@ import java.util.concurrent.Executor;
 public class TitleService {
 
     private static final String TITLE_PROMPT =
-        "Generate a concise session title (max 25 characters) based on the user's message. " +
-        "Output ONLY the title, no quotes, no extra text.\n\nUser message: ";
+            "Generate a concise session title (max 25 characters) based on the user's message. " +
+                    "Output ONLY the title, no quotes, no extra text.\n\nUser message: ";
 
     private final SessionSpi sessionSpi;
     private final KernelLlmService kernelLlmService;
@@ -55,9 +55,9 @@ public class TitleService {
             if (title != null && !title.isBlank()) {
                 sessionSpi.updateSession(sessionId, title);
                 eventPublisher.publishEvent(new RuntimeEventVO(SessionStatus.TITLE_UPDATED,
-                    new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setAssistantReply(title)));
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setAssistantReply(title)));
             }
         });
     }
@@ -71,28 +71,32 @@ public class TitleService {
 
             return fallbackRouteExecutor.execute(routes, (i, route) -> {
                 ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
-                    .setModel(route.getModelName())
-                    .setStream(true)
-                    .setMessages(List.of(
-                        new ChatMessageDTO().setRole("user")
-                            .setContent(TITLE_PROMPT + userMessage)));
+                        .setModel(route.getModelName())
+                        .setStream(true)
+                        .setMessages(List.of(
+                                new ChatMessageDTO().setRole("user")
+                                        .setContent(TITLE_PROMPT + userMessage)));
 
                 String apiKey = resolveApiKey(route);
                 StringBuilder content = new StringBuilder();
                 CountDownLatch done = new CountDownLatch(1);
 
                 kernelLlmService.stream(
-                    route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
-                    request,
-                    event -> {
-                        if (event instanceof LLMEvent.TextDelta t) content.append(t.text());
-                        else if (event instanceof LLMEvent.Finish f) done.countDown();
-                    },
-                    new LlmInteractionMeta()
-                        .setSessionId(sessionId)
-                        .setInteractionType(LlmInteractionType.TITLE_GENERATION));
+                        route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
+                        request,
+                        event -> {
+                            if (event instanceof LLMEvent.TextDelta(String text)) content.append(text);
+                            else if (event instanceof LLMEvent.Finish f) done.countDown();
+                        },
+                        new LlmInteractionMeta()
+                                .setSessionId(sessionId)
+                                .setInteractionType(LlmInteractionType.TITLE_GENERATION));
 
-                try { done.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                try {
+                    done.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
                 String title = content.toString().trim();
                 if (title.isBlank()) throw new RuntimeException("empty");
                 return title.length() > 25 ? title.substring(0, 25) : title;

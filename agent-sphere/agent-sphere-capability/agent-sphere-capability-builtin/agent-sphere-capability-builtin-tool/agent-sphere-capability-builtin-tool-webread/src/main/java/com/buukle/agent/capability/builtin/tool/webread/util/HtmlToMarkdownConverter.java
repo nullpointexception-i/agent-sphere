@@ -55,8 +55,7 @@ public class HtmlToMarkdownConverter {
             if (!text.isEmpty()) {
                 output.append(text).append(" ");
             }
-        } else if (node instanceof Element) {
-            Element element = (Element) node;
+        } else if (node instanceof Element element) {
             String tagName = element.tagName().toLowerCase();
             convertElement(element, tagName, output, ctx);
         }
@@ -67,27 +66,63 @@ public class HtmlToMarkdownConverter {
      */
     private void convertElement(Element element, String tagName, StringBuilder output, Context ctx) {
         switch (tagName) {
-            case "h1": appendHeading(1, element, output, ctx); break;
-            case "h2": appendHeading(2, element, output, ctx); break;
-            case "h3": appendHeading(3, element, output, ctx); break;
-            case "h4": appendHeading(4, element, output, ctx); break;
-            case "h5": appendHeading(5, element, output, ctx); break;
-            case "h6": appendHeading(6, element, output, ctx); break;
-            case "p": appendParagraph(element, output, ctx); break;
-            case "br": output.append("\n"); break;
-            case "a": appendLink(element, output, ctx); break;
+            case "h1":
+                appendHeading(1, element, output, ctx);
+                break;
+            case "h2":
+                appendHeading(2, element, output, ctx);
+                break;
+            case "h3":
+                appendHeading(3, element, output, ctx);
+                break;
+            case "h4":
+                appendHeading(4, element, output, ctx);
+                break;
+            case "h5":
+                appendHeading(5, element, output, ctx);
+                break;
+            case "h6":
+                appendHeading(6, element, output, ctx);
+                break;
+            case "p":
+                appendParagraph(element, output, ctx);
+                break;
+            case "br":
+                output.append("\n");
+                break;
+            case "a":
+                appendLink(element, output, ctx);
+                break;
             case "strong":
-            case "b": appendStrong(element, output, ctx); break;
+            case "b":
+                appendStrong(element, output, ctx);
+                break;
             case "em":
-            case "i": appendEmphasis(element, output, ctx); break;
+            case "i":
+                appendEmphasis(element, output, ctx);
+                break;
             case "ul":
-            case "ol": appendList(element, tagName, output, ctx); break;
-            case "li": appendListItem(element, output, ctx); break;
-            case "code": appendCode(element, output, ctx); break;
-            case "pre": appendPreformatted(element, output, ctx); break;
-            case "blockquote": appendBlockquote(element, output, ctx); break;
-            case "img": appendImage(element, output, ctx); break;
-            case "hr": output.append("\n---\n"); break;
+            case "ol":
+                appendList(element, tagName, output, ctx);
+                break;
+            case "li":
+                appendListItem(element, output, ctx);
+                break;
+            case "code":
+                appendCode(element, output, ctx);
+                break;
+            case "pre":
+                appendPreformatted(element, output, ctx);
+                break;
+            case "blockquote":
+                appendBlockquote(element, output, ctx);
+                break;
+            case "img":
+                appendImage(element, output, ctx);
+                break;
+            case "hr":
+                output.append("\n---\n");
+                break;
             case "div":
             case "section":
             case "article":
@@ -138,7 +173,7 @@ public class HtmlToMarkdownConverter {
         ensureNewline(output);
         ctx.listLevel++;
         ctx.isList = true;
-        
+
         for (Element li : element.select("> li")) {
             for (int i = 0; i < ctx.listLevel; i++) {
                 output.append("  ");
@@ -151,7 +186,7 @@ public class HtmlToMarkdownConverter {
             appendChildren(li, output, ctx);
             output.append("\n");
         }
-        
+
         ctx.listLevel--;
         output.append("\n");
     }

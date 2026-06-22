@@ -5,4 +5,5 @@ import com.buukle.agent.model.domain.AgentApiKey;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface ApiKeyMapper extends BaseMapper<AgentApiKey> {}
+public interface ApiKeyMapper extends BaseMapper<AgentApiKey> {
+}

@@ -11,22 +11,18 @@ import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
-import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
-import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
-import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
-import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
-import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
+import com.buukle.agent.model.dtvo.dto.complete.*;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.async.FiberSet;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
-import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
-import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
+import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.contract.TurnResult;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
+import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
@@ -36,13 +32,12 @@ import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
-
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -50,13 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
@@ -64,6 +53,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @RequiredArgsConstructor
 public class SessionRunner {
 
+    private static final Duration CONTEXT_TTL = Duration.ofMinutes(30);
+    private static final Set<Long> CANCELLED_RUNS = ConcurrentHashMap.newKeySet();
     private final AgentRuntimeProperties properties;
     private final RunSpi runSpi;
     private final SessionSpi sessionSpi;
@@ -79,20 +70,17 @@ public class SessionRunner {
     private final ToolExecutor toolExecutor;
     private final TitleService titleService;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
-
-    private static final Duration CONTEXT_TTL = Duration.ofMinutes(30);
-
     private final ConcurrentHashMap<Long, ContextEntry> contexts = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> pendingRunIds = new ConcurrentHashMap<>();
-    private static final Set<Long> CANCELLED_RUNS = ConcurrentHashMap.newKeySet();
-
     private final ScheduledExecutorService contextSweeper = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "context-sweeper");
         t.setDaemon(true);
         return t;
     });
 
-    private record ContextEntry(KernelContext ctx, Instant createdAt) {}
+    public static void cancelRun(Long runId) {
+        if (runId != null) CANCELLED_RUNS.add(runId);
+    }
 
     @PostConstruct
     void startContextSweeper() {
@@ -110,10 +98,6 @@ public class SessionRunner {
     @PreDestroy
     void stopContextSweeper() {
         contextSweeper.shutdown();
-    }
-
-    public static void cancelRun(Long runId) {
-        if (runId != null) CANCELLED_RUNS.add(runId);
     }
 
     public void registerContext(Long sessionId, KernelContext ctx) {
@@ -144,9 +128,10 @@ public class SessionRunner {
 
         int maxLoopCount = properties.getRunner().getMaxLoopCount();
         int compactionRetries = 0;
-        loop: while (loopCount < maxLoopCount) {
+        loop:
+        while (loopCount < maxLoopCount) {
             if (CANCELLED_RUNS.contains(currentRunId)) break;
-          log.info("------******************--------run:{}-loopCount:{}",currentRunId,loopCount);
+            log.info("------******************--------run:{}-loopCount:{}", currentRunId, loopCount);
             SessionInputManager.InputMessage input = null;
             if (!hasToolCalls) {
                 input = inputManager.promoteInput(sessionId);
@@ -167,10 +152,10 @@ public class SessionRunner {
             runSpi.updateRun(currentRun);
 
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.RUNNING,
-                new RuntimeEventDataVO()
-                    .setSessionId(sessionId)
-                    .setRunId(currentRunId)
-                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(currentRunId)
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
 
             if (!hasToolCalls) {
                 if (messages.isEmpty()) {
@@ -178,7 +163,7 @@ public class SessionRunner {
                     String todolistText = null;
                     try {
                         AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
-                            sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
+                                sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
                         if (todoRecord != null && todoRecord.getArtifact() != null) {
                             todolistText = todoRecord.getArtifact();
                         }
@@ -202,12 +187,12 @@ public class SessionRunner {
             if (isLastLoop && !messages.isEmpty() && LlmApiConstant.ROLE_SYSTEM.equals(messages.get(0).getRole())) {
                 ChatMessageDTO sysMsg = messages.get(0);
                 sysMsg.setContent(sysMsg.getContent()
-                    + "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**");
+                        + "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**");
             }
 
             TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx);
 
-            if (CANCELLED_RUNS.contains(currentRunId)) break loop;
+            if (CANCELLED_RUNS.contains(currentRunId)) break;
 
             // 统一收口：根据 TurnOutcome 判定 run 状态
             if (turn.content() != null && !turn.content().isBlank()) {
@@ -226,7 +211,7 @@ public class SessionRunner {
                         String todolistText = null;
                         try {
                             AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
-                                sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
+                                    sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
                             if (todoRecord != null && todoRecord.getArtifact() != null) {
                                 todolistText = todoRecord.getArtifact();
                             }
@@ -248,11 +233,11 @@ public class SessionRunner {
                     currentRun.setStatus(RunStatus.FAILED.name());
                     runSpi.updateRun(currentRun);
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                        new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(currentRunId)
-                            .setErrorMessage(turn.errorMessage())
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setErrorMessage(turn.errorMessage())
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
                     break loop;
                 }
                 case COMPLETE -> {
@@ -263,11 +248,11 @@ public class SessionRunner {
                     currentRun.setStatus(RunStatus.COMPLETED.name());
                     runSpi.updateRun(currentRun);
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                        new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(currentRunId)
-                            .setAssistantReply(currentRun.getAssistantReply())
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setAssistantReply(currentRun.getAssistantReply())
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
                     break loop;
                 }
                 case CANCELLED -> {
@@ -281,36 +266,36 @@ public class SessionRunner {
             List<ToolCallDTO> toolCallDTOs = new ArrayList<>();
             for (TurnToolCall tc : turn.toolCalls()) {
                 toolCallDTOs.add(ToolCallDTO.builder()
-                    .id(tc.id())
-                    .type(RunnerConstants.TOOL_TYPE_FUNCTION)
-                    .function(FunctionDefinitionDTO.builder()
-                        .name(tc.name())
-                        .arguments(tc.arguments())
-                        .build())
-                    .build());
+                        .id(tc.id())
+                        .type(RunnerConstants.TOOL_TYPE_FUNCTION)
+                        .function(FunctionDefinitionDTO.builder()
+                                .name(tc.name())
+                                .arguments(tc.arguments())
+                                .build())
+                        .build());
             }
 
             messages.add(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_ASSISTANT)
-                .setToolCalls(toolCallDTOs));
+                    .setRole(LlmApiConstant.ROLE_ASSISTANT)
+                    .setToolCalls(toolCallDTOs));
 
             for (TurnToolCall tc : turn.toolCalls()) {
                 String runPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
-                    new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(currentRunId)
-                        .setToolName(tc.name())
-                        .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                        .setArgumentsJson(tc.arguments())
-                        .setPublishId(runPublishId)));
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(currentRunId)
+                                .setToolName(tc.name())
+                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                .setArgumentsJson(tc.arguments())
+                                .setPublishId(runPublishId)));
             }
 
             FiberSet fibers = new FiberSet(
-                properties.getTool().getMaxParallel(),
-                properties.getTool().getSubmitTimeout(),
-                properties.getTool().getExecutionTimeout());
+                    properties.getTool().getMaxParallel(),
+                    properties.getTool().getSubmitTimeout(),
+                    properties.getTool().getExecutionTimeout());
             final Long sid = sessionId;
             final Long rid = currentRunId;
             final List<RuntimeTool> tl = tools;
@@ -318,28 +303,28 @@ public class SessionRunner {
             // 逐个完成时立即推送 SUCCEEDED 事件，不等所有工具完成
             fibers.onEachResult(sr -> {
                 TurnToolCall matching = turn.toolCalls().stream()
-                    .filter(tc -> tc.id().equals(sr.callId()))
-                    .findFirst().orElse(null);
+                        .filter(tc -> tc.id().equals(sr.callId()))
+                        .findFirst().orElse(null);
                 if (matching == null) return;
                 String artifact = sr.error() != null
-                    ? "{\"error\":\"" + sr.error() + "\"}"
-                    : (sr.result() != null ? sr.result() : "");
+                        ? "{\"error\":\"" + sr.error() + "\"}"
+                        : (sr.result() != null ? sr.result() : "");
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
-                    new RuntimeEventDataVO()
-                        .setSessionId(sid)
-                        .setRunId(rid)
-                        .setToolName(matching.name())
-                        .setDisplayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
-                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
-                        .setArtifact(artifact)
-                        .setArgumentsJson(matching.arguments())
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
+                        new RuntimeEventDataVO()
+                                .setSessionId(sid)
+                                .setRunId(rid)
+                                .setToolName(matching.name())
+                                .setDisplayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
+                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
+                                .setArtifact(artifact)
+                                .setArgumentsJson(matching.arguments())
+                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
             });
 
             for (int i = 0; i < turn.toolCalls().size(); i++) {
                 int fi = i;
                 fibers.submit(turn.toolCalls().get(fi).id(),
-                    () -> toolExecutor.execute(turn.toolCalls().get(fi), sid, rid, tl));
+                        () -> toolExecutor.execute(turn.toolCalls().get(fi), sid, rid, tl));
             }
             // Check for cancellation before tool execution
             if (CANCELLED_RUNS.contains(currentRunId)) {
@@ -353,43 +338,43 @@ public class SessionRunner {
                 fibers.close();
                 for (TurnToolCall tc : turn.toolCalls()) {
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                        new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(currentRunId)
-                            .setToolName(tc.name())
-                            .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                            .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id())));
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setToolName(tc.name())
+                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id())));
                 }
                 break;
             }
 
             for (TurnToolCall tc : turn.toolCalls()) {
                 String toolResult = results.getOrDefault(tc.id(),
-                    "{\"error\":\"Tool execution lost\"}");
+                        "{\"error\":\"Tool execution lost\"}");
                 String toolMessage = toolResult;
                 if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId())) {
                     toolMessage = toolResult + "\n\n**Reminder: If you completed a task, update its status to 'completed' by calling " + InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId() + " again.**";
                 }
                 messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_TOOL)
-                    .setToolCallId(tc.id())
-                    .setContent(toolMessage));
+                        .setRole(LlmApiConstant.ROLE_TOOL)
+                        .setToolCallId(tc.id())
+                        .setContent(toolMessage));
                 // SUCCEEDED 事件已在 onEachResult 回调中发布，此处不再重复
             }
 
             boolean todowriteCalled = turn.toolCalls().stream().anyMatch(tc ->
-                tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId()));
+                    tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId()));
             if (todowriteCalled && !messages.isEmpty()) {
                 try {
                     AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
-                        sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
+                            sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
                     String freshTodolist = todoRecord != null && todoRecord.getArtifact() != null
-                        ? todoRecord.getArtifact() : null;
+                            ? todoRecord.getArtifact() : null;
                     String newSystemPrompt = runPromptBuilder.buildSystemPrompt(ctx, freshTodolist);
                     messages.set(0, new ChatMessageDTO()
-                        .setRole(LlmApiConstant.ROLE_SYSTEM)
-                        .setContent(newSystemPrompt));
+                            .setRole(LlmApiConstant.ROLE_SYSTEM)
+                            .setContent(newSystemPrompt));
                 } catch (Exception e) {
                     log.warn("Failed to refresh todolist for session {}", sessionId, e);
                 }
@@ -398,17 +383,17 @@ public class SessionRunner {
             // 最后一轮工具执行后，直接结束
             if (isLastLoop) {
                 String fallback = allContent.length() > 0
-                    ? allContent.toString()
-                    : "Task completed. Please check the results above.";
+                        ? allContent.toString()
+                        : "Task completed. Please check the results above.";
                 currentRun.setAssistantReply(fallback);
                 currentRun.setStatus(RunStatus.COMPLETED.name());
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                    new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(currentRunId)
-                        .setAssistantReply(fallback)
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(currentRunId)
+                                .setAssistantReply(fallback)
+                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
                 break;
             }
 
@@ -421,11 +406,11 @@ public class SessionRunner {
             currentRun.setStatus(RunStatus.CANCELLED.name());
             runSpi.updateRun(currentRun);
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                new RuntimeEventDataVO()
-                    .setSessionId(sessionId)
-                    .setRunId(currentRunId)
-                    .setAssistantReply("⏹️ Run cancelled by user")
-                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(currentRunId)
+                            .setAssistantReply("⏹️ Run cancelled by user")
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
         }
 
         inputManager.clear(sessionId);
@@ -433,8 +418,8 @@ public class SessionRunner {
     }
 
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
-                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
-                                KernelContext ctx) {
+                               List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
+                               KernelContext ctx) {
         AtomicReference<String> contentRef = new AtomicReference<>("");
         List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
         AtomicReference<String> errorRef = new AtomicReference<>();
@@ -455,50 +440,51 @@ public class SessionRunner {
 
                 String apiKey = resolveApiKey(route);
                 ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
-                    .setModel(route.getModelName())
-                    .setStream(true)
-                    .setMessages(new ArrayList<>(messages));
+                        .setModel(route.getModelName())
+                        .setStream(true)
+                        .setMessages(new ArrayList<>(messages));
                 if (!toolDefs.isEmpty()) {
                     request.setTools(toolDefs);
                 }
 
                 llmFuture[0] = kernelLlmService.stream(
-                    route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
-                    request,
-                    event -> {
-                        switch (event) {
-                            case LLMEvent.TextDelta t -> {
-                                contentRef.updateAndGet(c -> c + t.text());
-                                eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
-                                    new RuntimeEventDataVO()
-                                        .setSessionId(sessionId).setRunId(runId).setResponse(t.text())));
+                        route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
+                        request,
+                        event -> {
+                            switch (event) {
+                                case LLMEvent.TextDelta t -> {
+                                    contentRef.updateAndGet(c -> c + t.text());
+                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
+                                            new RuntimeEventDataVO()
+                                                    .setSessionId(sessionId).setRunId(runId).setResponse(t.text())));
+                                }
+                                case LLMEvent.ReasoningDelta r ->
+                                        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                                new RuntimeEventDataVO()
+                                                        .setSessionId(sessionId).setRunId(runId)
+                                                        .setResponse(r.text())
+                                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                                        .setPublishId(UUID.randomUUID().toString())));
+                                case LLMEvent.ToolCall tc -> {
+                                    String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
+                                    toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
+                                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
+                                            new RuntimeEventDataVO()
+                                                    .setSessionId(sessionId).setRunId(runId)
+                                                    .setToolName(tc.name())
+                                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                                    .setArgumentsJson(tc.arguments())
+                                                    .setPublishId(callPublishId)));
+                                }
+                                case LLMEvent.Error e -> errorRef.set(e.message());
+                                default -> {
+                                }
                             }
-                            case LLMEvent.ReasoningDelta r ->
-                                eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                    new RuntimeEventDataVO()
-                                        .setSessionId(sessionId).setRunId(runId)
-                                        .setResponse(r.text())
-                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                        .setPublishId(UUID.randomUUID().toString())));
-                            case LLMEvent.ToolCall tc -> {
-                                String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
-                                toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
-                                eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
-                                    new RuntimeEventDataVO()
-                                        .setSessionId(sessionId).setRunId(runId)
-                                        .setToolName(tc.name())
-                                        .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                                        .setArgumentsJson(tc.arguments())
-                                        .setPublishId(callPublishId)));
-                            }
-                            case LLMEvent.Error e -> errorRef.set(e.message());
-                            default -> {}
-                        }
-                    },
-                    new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
-                        .setInteractionType(LlmInteractionType.CHAT_REPLY));
+                        },
+                        new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
+                                .setInteractionType(LlmInteractionType.CHAT_REPLY));
 
                 llmFuture[0].whenComplete((v, ex) -> done.countDown());
                 return null;
@@ -564,5 +550,8 @@ public class SessionRunner {
             log.warn("Failed to resolve API key id={}", route.getApiKeyId(), e);
             return "";
         }
+    }
+
+    private record ContextEntry(KernelContext ctx, Instant createdAt) {
     }
 }

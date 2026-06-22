@@ -32,7 +32,7 @@ public class FiberSet implements AutoCloseable {
             if (!semaphore.tryAcquire(submitTimeoutSeconds, TimeUnit.SECONDS)) {
                 log.warn("Tool submission timed out for call {}", callId);
                 futures.add(CompletableFuture.completedFuture(
-                    new FiberResult(callId, null, "Tool submission timeout (" + submitTimeoutSeconds + "s)")));
+                        new FiberResult(callId, null, "Tool submission timeout (" + submitTimeoutSeconds + "s)")));
                 return;
             }
         } catch (InterruptedException e) {
@@ -88,6 +88,9 @@ public class FiberSet implements AutoCloseable {
         }
     }
 
-    public record SingleResult(String callId, String result, String error) {}
-    public record FiberResult(String callId, String result, String error) {}
+    public record SingleResult(String callId, String result, String error) {
+    }
+
+    public record FiberResult(String callId, String result, String error) {
+    }
 }

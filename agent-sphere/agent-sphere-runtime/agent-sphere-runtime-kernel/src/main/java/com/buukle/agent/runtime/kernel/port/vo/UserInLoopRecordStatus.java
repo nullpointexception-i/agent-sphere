@@ -4,5 +4,7 @@ public enum UserInLoopRecordStatus implements EventType {
     WAITING, RESPONDED;
 
     @Override
-    public String value() { return name(); }
+    public String value() {
+        return name();
+    }
 }

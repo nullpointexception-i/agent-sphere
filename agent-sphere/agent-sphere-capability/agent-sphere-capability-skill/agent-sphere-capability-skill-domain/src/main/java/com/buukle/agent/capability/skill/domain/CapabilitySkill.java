@@ -2,6 +2,7 @@ package com.buukle.agent.capability.skill.domain;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
 @Data

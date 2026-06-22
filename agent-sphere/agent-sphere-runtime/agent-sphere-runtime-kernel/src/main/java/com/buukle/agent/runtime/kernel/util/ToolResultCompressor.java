@@ -2,7 +2,10 @@ package com.buukle.agent.runtime.kernel.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class ToolResultCompressor {
 
@@ -45,7 +48,7 @@ public class ToolResultCompressor {
                 return list.stream().map(e -> jsonCompress(e, depth + 1, maxValueChars)).toList();
             }
             var head = list.subList(0, ARRAY_SHOW_ITEMS).stream()
-                .map(e -> jsonCompress(e, depth + 1, maxValueChars)).toList();
+                    .map(e -> jsonCompress(e, depth + 1, maxValueChars)).toList();
             Map<String, Object> arr = new LinkedHashMap<>();
             arr.put("_count", list.size());
             arr.put("_showing", ARRAY_SHOW_ITEMS);
@@ -58,8 +61,8 @@ public class ToolResultCompressor {
             int head = Math.min(maxValueChars / 2, STRING_HEAD_CHARS);
             int tail = Math.min(maxValueChars / 3, STRING_TAIL_CHARS);
             return s.substring(0, head)
-                + "\n... [+" + (s.length() - head - tail) + " chars] ...\n"
-                + s.substring(s.length() - tail);
+                    + "\n... [+" + (s.length() - head - tail) + " chars] ...\n"
+                    + s.substring(s.length() - tail);
         }
 
         return node;
@@ -70,8 +73,8 @@ public class ToolResultCompressor {
         int head = maxChars / 2;
         int tail = maxChars / 3;
         return text.substring(0, head)
-            + "\n... [omitted " + (text.length() - head - tail) + " chars] ...\n"
-            + text.substring(text.length() - tail);
+                + "\n... [omitted " + (text.length() - head - tail) + " chars] ...\n"
+                + text.substring(text.length() - tail);
     }
 
 }

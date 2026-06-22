@@ -17,33 +17,11 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class RuntimeEventListener  {
+public class RuntimeEventListener {
     private final SseManager sseManager;
     private final RunSpi runSpi;
     private final AgentUserInLoopRecordSpi hitlRecordSpi;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
-
-    @EventListener
-    public void onEvent(RuntimeEventVO event) {
-        EventType eventType = event.getEventType();
-        RuntimeEventDataVO data = event.getData();
-
-        switch (eventType) {
-            case RunStatus r -> handleRunLifecycle(data, r);
-            case ToolCallStatus s -> handleToolCallLifecycle(data, s);
-            case UserInLoopRecordStatus s -> handleUserInLoopLifecycle(data, s);
-            case CompactionStatus s -> {}
-            case SessionStatus s -> handleSessionLifecycle(data, s);
-            case FlowEventType f -> {}
-            case ScreenshotEventType s -> {}
-            case ChromeCommandEventType s -> {}
-        }
-
-        Long sessionId = data != null ? data.getSessionId() : null;
-        if (sessionId != null) {
-            sseManager.sendBySession(sessionId, transformForFrontend(event));
-        }
-    }
 
     private static RuntimeEventVO transformForFrontend(RuntimeEventVO event) {
         EventType type = event.getEventType();
@@ -93,26 +71,26 @@ public class RuntimeEventListener  {
     private static RuntimeEventVO wrapReasoning(RuntimeEventVO event, String subType) {
         RuntimeEventDataVO src = event.getData();
         RuntimeEventDataVO dst = new RuntimeEventDataVO()
-            .setSessionId(src.getSessionId())
-            .setRunId(src.getRunId())
-            .setPublishId(src.getPublishId())
-            .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-            .setReasoningSubType(subType)
-            .setAssistantReply(src.getAssistantReply())
-            .setArtifact(src.getArtifact())
-            .setArgumentsJson(src.getArgumentsJson())
-            .setErrorMessage(src.getErrorMessage())
-            .setType(src.getType());
+                .setSessionId(src.getSessionId())
+                .setRunId(src.getRunId())
+                .setPublishId(src.getPublishId())
+                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                .setReasoningSubType(subType)
+                .setAssistantReply(src.getAssistantReply())
+                .setArtifact(src.getArtifact())
+                .setArgumentsJson(src.getArgumentsJson())
+                .setErrorMessage(src.getErrorMessage())
+                .setType(src.getType());
 
         String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
-            : (src.getToolName() != null ? src.getToolName() : "");
+                : (src.getToolName() != null ? src.getToolName() : "");
         dst.setDisplayNameCn(name);
         dst.setDisplayNameEn(src.getDisplayNameEn());
         dst.setToolName(src.getToolName());
 
         String text = switch (subType) {
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_CALL_STARTED -> "⚙️ **" + name + "**: starting...";
-            case RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_CALL_IN_PROGRESS ->  "⚙️ **" + name + "**: calling...";
+            case RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_CALL_IN_PROGRESS -> "⚙️ **" + name + "**: calling...";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_CALL_SUCCEEDED -> "⚙️ **" + name + "**: succeeded ✅";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_CALL_FAILED -> "⚙️ **" + name + "**: failed ❌";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_RUNNING -> "\n🔄 ------Compacting------\n";
@@ -129,6 +107,32 @@ public class RuntimeEventListener  {
         dst.setResponse(text);
 
         return new RuntimeEventVO(FlowEventType.REASONING_TOKEN, dst);
+    }
+
+    @EventListener
+    public void onEvent(RuntimeEventVO event) {
+        EventType eventType = event.getEventType();
+        RuntimeEventDataVO data = event.getData();
+
+        switch (eventType) {
+            case RunStatus r -> handleRunLifecycle(data, r);
+            case ToolCallStatus s -> handleToolCallLifecycle(data, s);
+            case UserInLoopRecordStatus s -> handleUserInLoopLifecycle(data, s);
+            case CompactionStatus s -> {
+            }
+            case SessionStatus s -> handleSessionLifecycle(data, s);
+            case FlowEventType f -> {
+            }
+            case ScreenshotEventType s -> {
+            }
+            case ChromeCommandEventType s -> {
+            }
+        }
+
+        Long sessionId = data != null ? data.getSessionId() : null;
+        if (sessionId != null) {
+            sseManager.sendBySession(sessionId, transformForFrontend(event));
+        }
     }
 
     private void handleRunLifecycle(RuntimeEventDataVO data, RunStatus status) {
@@ -162,19 +166,19 @@ public class RuntimeEventListener  {
         // 0x7FFFFFFF masks off the sign bit so the result is always non-negative,
         // fitting cleanly into a DB bigint column.
         long stepId = data.getPublishId() != null
-            ? data.getPublishId().hashCode() & 0x7FFFFFFF
-            : data.getRunId();
+                ? data.getPublishId().hashCode() & 0x7FFFFFFF
+                : data.getRunId();
         switch (status) {
             case PENDING -> {
                 String prefix = RuntimeEventTypeConstant.PUBLISH_ID_TOOL;
                 String callId = data.getPublishId() != null && data.getPublishId().startsWith(prefix)
-                    ? data.getPublishId().substring(prefix.length()) : null;
+                        ? data.getPublishId().substring(prefix.length()) : null;
                 String rawArgs = data.getArgumentsJson() != null ? data.getArgumentsJson() : "";
                 String compressedArgs = ToolResultCompressor.compress(rawArgs, RunnerConstants.TOOL_RESULT_MAX_CHARS);
                 AgentToolCallRecordVO vo = toolCallRecordSpi.createRecord(
-                    stepId, callId, data.getRunId(), data.getSessionId(),
-                    data.getToolName() != null ? data.getToolName() : "",
-                    data.getDisplayNameCn(), data.getDisplayNameEn(), rawArgs);
+                        stepId, callId, data.getRunId(), data.getSessionId(),
+                        data.getToolName() != null ? data.getToolName() : "",
+                        data.getDisplayNameCn(), data.getDisplayNameEn(), rawArgs);
                 if (compressedArgs != null) {
                     toolCallRecordSpi.updateCompressedArguments(vo.getId(), compressedArgs);
                 }
@@ -213,9 +217,9 @@ public class RuntimeEventListener  {
             case WAITING -> {
                 if (data.getSessionId() == null) return;
                 hitlRecordSpi.createRecord(
-                    data.getRunId(), data.getRunId(), data.getSessionId(),
-                    data.getType() != null ? data.getType() : "APPROVAL",
-                    data.getPrompt());
+                        data.getRunId(), data.getRunId(), data.getSessionId(),
+                        data.getType() != null ? data.getType() : "APPROVAL",
+                        data.getPrompt());
             }
             case RESPONDED -> {
                 AgentUserInLoopRecordVO vo = hitlRecordSpi.getByStepId(data.getRunId());

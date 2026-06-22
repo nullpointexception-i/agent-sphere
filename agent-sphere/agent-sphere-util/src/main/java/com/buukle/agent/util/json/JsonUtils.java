@@ -10,10 +10,11 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class JsonUtils {
     private static final ObjectMapper MAPPER = new ObjectMapper()
-        .registerModule(new JavaTimeModule())
-        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            .registerModule(new JavaTimeModule())
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    private JsonUtils() {}
+    private JsonUtils() {
+    }
 
     public static String toJson(Object obj) {
         try {

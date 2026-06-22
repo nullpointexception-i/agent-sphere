@@ -30,7 +30,7 @@ public class DataPermissionInterceptor implements InnerInterceptor {
 
     @Override
     public void beforeQuery(Executor executor, MappedStatement ms, Object parameter,
-                             RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
+                            RowBounds rowBounds, ResultHandler resultHandler, BoundSql boundSql) throws SQLException {
         String tenant = TenantUtil.get();
         if (tenant == null || tenant.isBlank()) return;
 
@@ -39,8 +39,7 @@ public class DataPermissionInterceptor implements InnerInterceptor {
 
             Select select = (Select) CCJSqlParserUtil.parse(sql);
             PlainSelect ps = (PlainSelect) select.getSelectBody();
-            if (!(ps.getFromItem() instanceof Table)) return;
-            Table table = (Table) ps.getFromItem();
+            if (!(ps.getFromItem() instanceof Table table)) return;
             if (SKIP_TABLES.contains(table.getName().toLowerCase())) return;
 
             if (ps.getWhere() != null && ps.getWhere().toString().toLowerCase().contains("created_by")) return;

@@ -7,8 +7,8 @@ import com.buukle.agent.capability.builtin.tool.spi.CapabilityBuiltinToolSpi;
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ExecuteContext;
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ExecuteResult;
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ToolInfoVO;
-import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.BizException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
@@ -43,20 +43,20 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
     @Override
     public List<BuiltinToolVO> listAutoIncludeBuiltinTools() {
         return tools.stream()
-            .filter(t -> !t.needConfig())
-            .map(t -> {
-                ToolInfoVO info = t.getInfo();
-                BuiltinToolVO vo = new BuiltinToolVO();
-                vo.setId((long) t.getToolType().getId());
-                vo.setName(info.getName());
-                vo.setDescription(info.getDescription());
-                vo.setDisplayNameCn(info.getDisplayNameCn());
-                vo.setDisplayNameEn(info.getDisplayNameEn());
-                vo.setParamSchema(info.getParamSchema());
-                vo.setResponseSchema(info.getResponseSchema());
-                vo.setNeedConfig(false);
-                return vo;
-            }).toList();
+                .filter(t -> !t.needConfig())
+                .map(t -> {
+                    ToolInfoVO info = t.getInfo();
+                    BuiltinToolVO vo = new BuiltinToolVO();
+                    vo.setId((long) t.getToolType().getId());
+                    vo.setName(info.getName());
+                    vo.setDescription(info.getDescription());
+                    vo.setDisplayNameCn(info.getDisplayNameCn());
+                    vo.setDisplayNameEn(info.getDisplayNameEn());
+                    vo.setParamSchema(info.getParamSchema());
+                    vo.setResponseSchema(info.getResponseSchema());
+                    vo.setNeedConfig(false);
+                    return vo;
+                }).toList();
     }
 
     @Override

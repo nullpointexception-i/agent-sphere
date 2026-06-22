@@ -5,4 +5,5 @@ import com.buukle.agent.capability.cli.domain.CapabilityCli;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface CliMapper extends BaseMapper<CapabilityCli> {}
+public interface CliMapper extends BaseMapper<CapabilityCli> {
+}

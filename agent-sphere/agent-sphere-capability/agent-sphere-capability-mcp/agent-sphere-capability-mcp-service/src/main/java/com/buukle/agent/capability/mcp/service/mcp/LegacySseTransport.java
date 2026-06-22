@@ -1,9 +1,9 @@
 package com.buukle.agent.capability.mcp.service.mcp;
 
 import com.buukle.agent.capability.mcp.dtvo.vo.McpToolInfoVO;
+import com.buukle.agent.capability.mcp.exception.CapabilityMcpErrorCode;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
-import com.buukle.agent.capability.mcp.exception.CapabilityMcpErrorCode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -34,10 +34,9 @@ public class LegacySseTransport implements McpTransportClient {
     private final Duration sseInitTimeout;
     private final Duration sseReadTimeout;
     private final Duration rpcTimeout;
-
+    private final AtomicLong requestId = new AtomicLong(1);
     private volatile boolean initialized = false;
     private String postEndpointUrl;
-    private final AtomicLong requestId = new AtomicLong(1);
 
     public LegacySseTransport(String serverUrl, String authConfig, AgentRuntimeProperties.McpConfig config) {
         this.connectTimeout = config.getConnectTimeout();
@@ -45,8 +44,8 @@ public class LegacySseTransport implements McpTransportClient {
         this.sseReadTimeout = config.getSseReadTimeout();
         this.rpcTimeout = config.getRpcTimeout();
         this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(connectTimeout)
-            .build();
+                .connectTimeout(connectTimeout)
+                .build();
         this.authConfigJson = authConfig;
         this.sseUrl = serverUrl.endsWith("/") ? serverUrl + "sse" : serverUrl + DEFAULT_SSE_PATH;
     }
@@ -55,18 +54,18 @@ public class LegacySseTransport implements McpTransportClient {
     public void initialize() {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(sseUrl))
-                .header(HEADER_ACCEPT, CONTENT_TYPE_SSE)
-                .timeout(sseInitTimeout)
-                .GET();
+                    .uri(URI.create(sseUrl))
+                    .header(HEADER_ACCEPT, CONTENT_TYPE_SSE)
+                    .timeout(sseInitTimeout)
+                    .GET();
             applyAuth(builder);
 
             HttpResponse<java.io.InputStream> response = httpClient.send(builder.build(),
-                HttpResponse.BodyHandlers.ofInputStream());
+                    HttpResponse.BodyHandlers.ofInputStream());
 
             if (response.statusCode() >= 400) {
                 throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED,
-                    "Legacy SSE: HTTP " + response.statusCode() + " from " + sseUrl);
+                        "Legacy SSE: HTTP " + response.statusCode() + " from " + sseUrl);
             }
 
             boolean foundEndpoint = false;
@@ -78,7 +77,7 @@ public class LegacySseTransport implements McpTransportClient {
                 while ((line = reader.readLine()) != null) {
                     if (System.currentTimeMillis() - sseReadStart > sseReadTimeoutMs) {
                         throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED,
-                            "Legacy SSE: timed out waiting for endpoint event from " + sseUrl);
+                                "Legacy SSE: timed out waiting for endpoint event from " + sseUrl);
                     }
                     if (line.startsWith(SSE_EVENT_PREFIX)) {
                         foundEndpoint = SSE_EVENT_ENDPOINT.equals(line.substring(SSE_EVENT_PREFIX.length()).trim());
@@ -92,7 +91,7 @@ public class LegacySseTransport implements McpTransportClient {
 
             if (postEndpointUrl == null || postEndpointUrl.isBlank()) {
                 throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED,
-                    "Legacy SSE: no endpoint event received from " + sseUrl);
+                        "Legacy SSE: no endpoint event received from " + sseUrl);
             }
             initialized = true;
         } catch (BizException e) {
@@ -100,7 +99,7 @@ public class LegacySseTransport implements McpTransportClient {
         } catch (Exception e) {
             log.error("Legacy SSE initialization failed", e);
             throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED,
-                "Legacy SSE init failed: " + e.getMessage());
+                    "Legacy SSE init failed: " + e.getMessage());
         }
     }
 
@@ -117,10 +116,14 @@ public class LegacySseTransport implements McpTransportClient {
     }
 
     @Override
-    public boolean isConnected() { return initialized; }
+    public boolean isConnected() {
+        return initialized;
+    }
 
     @Override
-    public void close() { initialized = false; }
+    public void close() {
+        initialized = false;
+    }
 
     private void ensureInitialized() {
         if (!initialized) {
@@ -157,7 +160,8 @@ public class LegacySseTransport implements McpTransportClient {
                 tools.add(McpToolInfoVO.builder().name(name).description(description).inputSchema(inputSchemaStr).build());
             }
             return tools;
-        } catch (BizException e) { throw e;
+        } catch (BizException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Legacy SSE tools/list failed", e);
             throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED, "Legacy SSE list tools: " + e.getMessage());
@@ -173,8 +177,11 @@ public class LegacySseTransport implements McpTransportClient {
             ObjectNode params = request.putObject(JSONRPC_PARAMS);
             params.put(CALL_NAME, toolName);
             if (argumentsJson != null && !argumentsJson.isBlank()) {
-                try { params.set(CALL_ARGUMENTS, JSON.readTree(argumentsJson)); }
-                catch (Exception e) { params.put(CALL_ARGUMENTS, argumentsJson); }
+                try {
+                    params.set(CALL_ARGUMENTS, JSON.readTree(argumentsJson));
+                } catch (Exception e) {
+                    params.put(CALL_ARGUMENTS, argumentsJson);
+                }
             } else {
                 params.set(CALL_ARGUMENTS, JSON.createObjectNode());
             }
@@ -184,12 +191,13 @@ public class LegacySseTransport implements McpTransportClient {
                 JsonNode err = root.get(JSONRPC_ERROR);
                 String errMsg = err.has("message") ? err.get("message").asText() : "unknown legacy SSE error";
                 return "{\"isError\":true,\"content\":[{\"type\":\"text\",\"text\":\"MCP legacy SSE error: "
-                    + errMsg.replace("\"", "\\\"") + "\"}]}";
+                        + errMsg.replace("\"", "\\\"") + "\"}]}";
             }
             JsonNode result = root.get(JSONRPC_RESULT);
             return result != null ? JSON.writeValueAsString(result)
-                : "{\"isError\":false,\"content\":[{\"type\":\"text\",\"text\":\"\"}]}";
-        } catch (BizException e) { throw e;
+                    : "{\"isError\":false,\"content\":[{\"type\":\"text\",\"text\":\"\"}]}";
+        } catch (BizException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Legacy SSE tool call failed: {}", toolName, e);
             throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED, "Legacy SSE call failed: " + e.getMessage());
@@ -199,20 +207,21 @@ public class LegacySseTransport implements McpTransportClient {
     private String doPost(String body) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(postEndpointUrl))
-                .header(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
-                .timeout(rpcTimeout)
-                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
+                    .uri(URI.create(postEndpointUrl))
+                    .header(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
+                    .timeout(rpcTimeout)
+                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
             applyAuth(builder);
 
             HttpResponse<String> response = httpClient.send(builder.build(),
-                HttpResponse.BodyHandlers.ofString());
+                    HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
                 throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED,
-                    "Legacy SSE POST returned " + response.statusCode());
+                        "Legacy SSE POST returned " + response.statusCode());
             }
             return response.body();
-        } catch (BizException e) { throw e;
+        } catch (BizException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Legacy SSE POST request failed", e);
             throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED, "Legacy SSE POST failed: " + e.getMessage());

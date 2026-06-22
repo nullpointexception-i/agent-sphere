@@ -17,7 +17,8 @@ public class OpenaiProviderStrategy implements ProviderStrategy {
     }
 
     @Override
-    public void adaptRequest(ChatCompletionRequestDTO request) {}
+    public void adaptRequest(ChatCompletionRequestDTO request) {
+    }
 
     @Override
     public void adaptResponse(JsonNode choice, ToolStream toolStream) {

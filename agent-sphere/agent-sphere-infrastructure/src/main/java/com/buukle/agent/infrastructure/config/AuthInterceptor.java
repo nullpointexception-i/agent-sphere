@@ -21,11 +21,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
-    private final UserMapper userMapper;
-    private final CacheService cacheService;
-
     private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register");
     private static final String TOKEN_CACHE_PREFIX = "token:user:";
+    private final UserMapper userMapper;
+    private final CacheService cacheService;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -39,8 +38,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             AgentUser user = cacheService.get(cacheKey);
             if (user == null) {
                 user = userMapper.selectOne(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentUser>()
-                        .eq(AgentUser::getToken, token));
+                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentUser>()
+                                .eq(AgentUser::getToken, token));
                 if (user != null) {
                     cacheService.set(cacheKey, user, 5);
                 }
@@ -53,7 +52,7 @@ public class AuthInterceptor implements HandlerInterceptor {
                 if (handler instanceof HandlerMethod hm) {
                     Class<?> beanType = ClassUtils.getUserClass(hm.getBeanType());
                     if (beanType.isAnnotationPresent(WithTenant.class)
-                        && !UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin())) {
+                            && !UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin())) {
                         TenantUtil.start(user.getUsername());
                     }
                 }

@@ -2,8 +2,8 @@ package com.buukle.agent.model.service.converter;
 
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.dtvo.dto.CreateApiKeyDTO;
-import com.buukle.agent.model.dtvo.vo.ApiKeyVO;
 import com.buukle.agent.model.dtvo.enums.ApiKeyEnum;
+import com.buukle.agent.model.dtvo.vo.ApiKeyVO;
 import org.springframework.stereotype.Component;
 
 import java.time.format.DateTimeFormatter;
@@ -11,6 +11,12 @@ import java.time.format.DateTimeFormatter;
 @Component
 public class ApiKeyConverter {
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private static String maskApiKey(String key) {
+        if (key == null || key.length() < 8) return "****";
+        return key.substring(0, 4) + "..." + key.substring(key.length() - 4);
+    }
+
     public ApiKeyVO toVO(AgentApiKey apiKey) {
         if (apiKey == null) return null;
         ApiKeyVO vo = new ApiKeyVO();
@@ -25,11 +31,6 @@ public class ApiKeyConverter {
         vo.setUpdatedBy(apiKey.getUpdatedBy());
         vo.setUpdatedAt(apiKey.getUpdatedAt() != null ? apiKey.getUpdatedAt().format(DTF) : null);
         return vo;
-    }
-
-    private static String maskApiKey(String key) {
-        if (key == null || key.length() < 8) return "****";
-        return key.substring(0, 4) + "..." + key.substring(key.length() - 4);
     }
 
     public AgentApiKey toDO(CreateApiKeyDTO dto) {

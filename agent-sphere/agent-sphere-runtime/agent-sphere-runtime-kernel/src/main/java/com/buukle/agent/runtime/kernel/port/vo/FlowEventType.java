@@ -6,8 +6,12 @@ public enum FlowEventType implements EventType {
 
     private final String value;
 
-    FlowEventType(String value) { this.value = value; }
+    FlowEventType(String value) {
+        this.value = value;
+    }
 
     @Override
-    public String value() { return value; }
+    public String value() {
+        return value;
+    }
 }

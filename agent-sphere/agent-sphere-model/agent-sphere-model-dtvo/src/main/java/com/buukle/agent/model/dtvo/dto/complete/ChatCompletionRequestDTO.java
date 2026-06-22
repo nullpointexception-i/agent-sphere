@@ -5,9 +5,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
-import java.io.Serializable;
 import lombok.experimental.Accessors;
 
+import java.io.Serializable;
 import java.util.List;
 
 @Data

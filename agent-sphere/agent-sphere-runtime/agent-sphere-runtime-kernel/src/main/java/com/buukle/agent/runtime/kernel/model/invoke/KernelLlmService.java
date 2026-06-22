@@ -43,13 +43,13 @@ public class KernelLlmService {
             try {
                 CountDownLatch done = new CountDownLatch(1);
                 modelProviderSpi.stream(company, baseUrl, apiKey, modelName, request,
-                    event -> {
-                        if (future.isCancelled()) return;
-                        if (event instanceof LLMEvent.TextDelta t) resultCollector.append(t.text());
-                        else if (event instanceof LLMEvent.ReasoningDelta r) resultCollector.append(r.text());
-                        onEvent.accept(event);
-                    },
-                    done::countDown);
+                        event -> {
+                            if (future.isCancelled()) return;
+                            if (event instanceof LLMEvent.TextDelta(String text1)) resultCollector.append(text1);
+                            else if (event instanceof LLMEvent.ReasoningDelta(String text)) resultCollector.append(text);
+                            onEvent.accept(event);
+                        },
+                        done::countDown);
                 long timeout = properties.getLlm().getStreamTimeout().getSeconds();
                 if (!done.await(timeout, TimeUnit.SECONDS)) {
                     throw new RuntimeException("LLM stream timed out after " + timeout + "s");
@@ -62,8 +62,8 @@ public class KernelLlmService {
                 future.completeExceptionally(e instanceof RuntimeException re ? re : new RuntimeException(e));
             } finally {
                 eventPublisher.publishEvent(new LlmInteractionEvent(
-                    this, meta, modelName, requestBody, resultCollector.toString(),
-                    System.currentTimeMillis() - start, success, errorMessage));
+                        this, meta, modelName, requestBody, resultCollector.toString(),
+                        System.currentTimeMillis() - start, success, errorMessage));
             }
         });
 

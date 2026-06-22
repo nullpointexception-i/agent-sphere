@@ -18,7 +18,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class RunControllerTest {
@@ -53,13 +54,13 @@ class RunControllerTest {
         given(runService.createRun(any(CreateRunDTO.class))).willReturn(vo);
 
         mockMvc.perform(post("/api/v1/instance/runs")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").value(1L))
-            .andExpect(jsonPath("$.sessionId").value(1L))
-            .andExpect(jsonPath("$.type").value("USER"))
-            .andExpect(jsonPath("$.userMessage").value("你好，请帮我查一下订单"))
-            .andExpect(jsonPath("$.status").value("PENDING"));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.sessionId").value(1L))
+                .andExpect(jsonPath("$.type").value("USER"))
+                .andExpect(jsonPath("$.userMessage").value("你好，请帮我查一下订单"))
+                .andExpect(jsonPath("$.status").value("PENDING"));
     }
 }

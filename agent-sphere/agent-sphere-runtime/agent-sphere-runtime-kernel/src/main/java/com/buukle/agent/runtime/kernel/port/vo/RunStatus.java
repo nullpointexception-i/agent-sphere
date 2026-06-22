@@ -4,5 +4,7 @@ public enum RunStatus implements EventType {
     PENDING, RUNNING, COMPLETED, FAILED, CANCELLED;
 
     @Override
-    public String value() { return name(); }
+    public String value() {
+        return name();
+    }
 }

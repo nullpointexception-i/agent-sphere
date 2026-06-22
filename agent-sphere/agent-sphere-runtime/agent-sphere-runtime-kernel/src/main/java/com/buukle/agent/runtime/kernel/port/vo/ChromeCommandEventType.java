@@ -7,9 +7,13 @@ public enum ChromeCommandEventType implements EventType {
 
     private final String value;
 
-    ChromeCommandEventType(String value) { this.value = value; }
+    ChromeCommandEventType(String value) {
+        this.value = value;
+    }
 
     @Override
     @JsonValue
-    public String value() { return value; }
+    public String value() {
+        return value;
+    }
 }

@@ -21,7 +21,8 @@ import java.util.Map;
 public class RunPromptBuilder {
 
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     public String buildSystemPrompt(KernelContext ctx) {
         return buildSystemPrompt(ctx, null);
@@ -31,10 +32,10 @@ public class RunPromptBuilder {
         StringBuilder sb = new StringBuilder();
         if (ctx != null && ctx.getAgentInstance() != null) {
             sb.append(ctx.getAgentInstance().getSystemPrompt() != null
-                ? ctx.getAgentInstance().getSystemPrompt() : "");
+                    ? ctx.getAgentInstance().getSystemPrompt() : "");
         }
         sb.append(RunnerConstants.PROMPT_CURRENT_TIME)
-            .append(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                .append(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         List<RuntimeTool> tools = ctx != null ? ctx.getTools() : null;
         if (tools != null && !tools.isEmpty()) {
             sb.append(RunnerConstants.PROMPT_TOOLS_HEADER);
@@ -49,8 +50,8 @@ public class RunPromptBuilder {
         sb.append(RunnerConstants.PROMPT_TOOLS_FOOTER);
         if (todolistText != null && !todolistText.isBlank()) {
             sb.append("\n\n## 当前待办列表\n")
-              .append(todolistText)
-              .append("\n\n**请根据任务状态变更及时更新此列表，不要等待用户提醒。**");
+                    .append(todolistText)
+                    .append("\n\n**请根据任务状态变更及时更新此列表，不要等待用户提醒。**");
         }
         return sb.toString();
     }
@@ -62,13 +63,13 @@ public class RunPromptBuilder {
             try {
                 Map<String, Object> params = JSON.readValue(tool.getParametersSchemaJson(), MAP_TYPE);
                 defs.add(ToolDefinitionDTO.builder()
-                    .type(RunnerConstants.TOOL_TYPE_FUNCTION)
-                    .function(FunctionDefinitionDTO.builder()
-                        .name(tool.getLlmToolName())
-                        .description(tool.getDescription())
-                        .parameters(params)
-                        .build())
-                    .build());
+                        .type(RunnerConstants.TOOL_TYPE_FUNCTION)
+                        .function(FunctionDefinitionDTO.builder()
+                                .name(tool.getLlmToolName())
+                                .description(tool.getDescription())
+                                .parameters(params)
+                                .build())
+                        .build());
             } catch (Exception e) {
                 log.warn("Failed to parse tool schema for {}", tool.getLlmToolName());
             }

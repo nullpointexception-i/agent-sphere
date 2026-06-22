@@ -67,10 +67,14 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
     }
 
     @Override
-    public BuiltinToolEnum getToolType() { return BuiltinToolEnum.WEB_SEARCH; }
+    public BuiltinToolEnum getToolType() {
+        return BuiltinToolEnum.WEB_SEARCH;
+    }
 
     @Override
-    public boolean needConfig() { return true; }
+    public boolean needConfig() {
+        return true;
+    }
 
     @Override
     public ToolInfoVO getInfo() {
@@ -85,10 +89,14 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
     }
 
     @Override
-    public Class<? extends ExecuteContext> getContextType() { return WebFetchExecuteContext.class; }
+    public Class<? extends ExecuteContext> getContextType() {
+        return WebFetchExecuteContext.class;
+    }
 
     @Override
-    public Class<? extends ExecuteResult> getResultType() { return WebFetchResultVO.class; }
+    public Class<? extends ExecuteResult> getResultType() {
+        return WebFetchResultVO.class;
+    }
 
     @Override
     public ExecuteResult execute(ExecuteContext ctx) {

@@ -18,7 +18,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class SessionControllerTest {
@@ -51,12 +52,12 @@ class SessionControllerTest {
         given(sessionService.createSession(any(CreateSessionDTO.class))).willReturn(vo);
 
         mockMvc.perform(post("/api/v1/instance/sessions")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").value(1L))
-            .andExpect(jsonPath("$.title").value("Test Session"))
-            .andExpect(jsonPath("$.agentInstanceId").value(1L))
-            .andExpect(jsonPath("$.status").value("ACTIVE"));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.title").value("Test Session"))
+                .andExpect(jsonPath("$.agentInstanceId").value(1L))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
     }
 }

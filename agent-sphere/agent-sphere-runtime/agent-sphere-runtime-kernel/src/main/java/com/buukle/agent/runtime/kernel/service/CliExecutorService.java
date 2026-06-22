@@ -20,24 +20,35 @@ import java.util.concurrent.TimeUnit;
 public class CliExecutorService {
 
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     private static final int MAX_OUTPUT_BYTES = 100 * 1024;
     private static final String OS_NAME = System.getProperty("os.name").toLowerCase();
     private static final boolean IS_WINDOWS = OS_NAME.contains("win");
-
+    private static final String KEY_EXIT_CODE = "exitCode";
+    private static final String KEY_STDOUT = "stdout";
+    private static final String KEY_STDERR = "stderr";
+    private static final String TRUNCATION_MESSAGE = "\n... [output truncated at 100KB]";
+    private static final String TIMEOUT_TEMPLATE = "CLI command timed out after %ds";
     private final long defaultTimeoutSeconds;
-
     public CliExecutorService(AgentRuntimeProperties properties) {
         this.defaultTimeoutSeconds = properties.getTool().getCliTimeout().getSeconds();
     }
 
-    private static final String KEY_EXIT_CODE = "exitCode";
-    private static final String KEY_STDOUT = "stdout";
-    private static final String KEY_STDERR = "stderr";
+    private static String toJsonString(String s) {
+        if (s == null) return "\"\"";
+        return "\"" + s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t") + "\"";
+    }
 
-    private static final String TRUNCATION_MESSAGE = "\n... [output truncated at 100KB]";
-    private static final String TIMEOUT_TEMPLATE = "CLI command timed out after %ds";
+    private static String getString(Map<String, Object> map, String key) {
+        Object v = map.get(key);
+        return v instanceof String ? (String) v : null;
+    }
 
     public String execute(Map<String, Object> binding, String argumentsJson) {
         String commandTemplate = getString(binding, "commandTemplate");
@@ -51,7 +62,7 @@ public class CliExecutorService {
         try {
             ProcessBuilder pb = new ProcessBuilder();
             pb.directory(workingDir != null && !workingDir.isBlank()
-                ? new java.io.File(workingDir) : null);
+                    ? new java.io.File(workingDir) : null);
 
             if (IS_WINDOWS) {
                 pb.command("cmd.exe", "/c", resolvedCommand);
@@ -66,7 +77,7 @@ public class CliExecutorService {
             if (!finished) {
                 process.destroyForcibly();
                 throw new BizException(KernelErrorCode.TOOL_EXECUTION_FAILED,
-                    String.format(TIMEOUT_TEMPLATE, defaultTimeoutSeconds));
+                        String.format(TIMEOUT_TEMPLATE, defaultTimeoutSeconds));
             }
 
             StringBuilder output = new StringBuilder();
@@ -125,23 +136,9 @@ public class CliExecutorService {
 
     private String buildResult(int exitCode, String stdout, String stderr) {
         return "{" +
-            "\"" + KEY_EXIT_CODE + "\":" + exitCode + "," +
-            "\"" + KEY_STDOUT + "\":" + toJsonString(stdout) + "," +
-            "\"" + KEY_STDERR + "\":" + toJsonString(stderr) +
-            "}";
-    }
-
-    private static String toJsonString(String s) {
-        if (s == null) return "\"\"";
-        return "\"" + s.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t") + "\"";
-    }
-
-    private static String getString(Map<String, Object> map, String key) {
-        Object v = map.get(key);
-        return v instanceof String ? (String) v : null;
+                "\"" + KEY_EXIT_CODE + "\":" + exitCode + "," +
+                "\"" + KEY_STDOUT + "\":" + toJsonString(stdout) + "," +
+                "\"" + KEY_STDERR + "\":" + toJsonString(stderr) +
+                "}";
     }
 }

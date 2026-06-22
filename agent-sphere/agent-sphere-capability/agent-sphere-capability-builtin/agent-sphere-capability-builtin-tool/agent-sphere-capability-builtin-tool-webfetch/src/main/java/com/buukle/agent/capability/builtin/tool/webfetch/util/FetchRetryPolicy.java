@@ -34,7 +34,7 @@ public class FetchRetryPolicy {
     /**
      * 检查是否应该重试
      *
-     * @param attempt 当前尝试次数（从 0 开始）
+     * @param attempt   当前尝试次数（从 0 开始）
      * @param exception 发生的异常
      * @return 如果应该重试返回 true
      */
@@ -59,14 +59,14 @@ public class FetchRetryPolicy {
 
         // 超时异常：可重试
         if (exception instanceof HttpTimeoutException ||
-            exception instanceof SocketTimeoutException) {
+                exception instanceof SocketTimeoutException) {
             log.debug("Timeout exception detected, will retry");
             return true;
         }
 
         // 连接异常：可重试
         if (exception instanceof ConnectException ||
-            exception instanceof SocketException) {
+                exception instanceof SocketException) {
             log.debug("Connection exception detected, will retry");
             return true;
         }
@@ -77,10 +77,10 @@ public class FetchRetryPolicy {
             if (message != null) {
                 message = message.toLowerCase();
                 // 检查常见的网络错误信息
-                if (message.contains("connection") || 
-                    message.contains("timeout") || 
-                    message.contains("reset") ||
-                    message.contains("broken pipe")) {
+                if (message.contains("connection") ||
+                        message.contains("timeout") ||
+                        message.contains("reset") ||
+                        message.contains("broken pipe")) {
                     log.debug("Network-related IOException detected, will retry: {}", message);
                     return true;
                 }

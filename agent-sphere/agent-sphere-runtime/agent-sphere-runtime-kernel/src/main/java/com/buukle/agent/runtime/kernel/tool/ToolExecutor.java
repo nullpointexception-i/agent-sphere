@@ -35,8 +35,8 @@ public class ToolExecutor {
 
     public String execute(TurnToolCall tc, Long sessionId, Long runId, List<RuntimeTool> tools) {
         RuntimeTool tool = tools.stream()
-            .filter(t -> tc.name().equals(t.getLlmToolName()))
-            .findFirst().orElse(null);
+                .filter(t -> tc.name().equals(t.getLlmToolName()))
+                .findFirst().orElse(null);
 
         if (tool == null) {
             return "{\"error\":\"Unknown tool: " + tc.name() + "\"}";
@@ -49,12 +49,12 @@ public class ToolExecutor {
 
             if (CAPABILITY_TYPE_MCP.equals(type) && !mcpSpis.isEmpty()) {
                 return mcpSpis.get(0).executeTool(
-                    (String) binding.get(ExecBindingKeys.MCP_SERVER_URL),
-                    (String) binding.get(ExecBindingKeys.MCP_NATIVE_TOOL_NAME), args);
+                        (String) binding.get(ExecBindingKeys.MCP_SERVER_URL),
+                        (String) binding.get(ExecBindingKeys.MCP_NATIVE_TOOL_NAME), args);
             }
             if (CAPABILITY_TYPE_BUILTIN.equals(type)) {
                 String result = builtinSpi.executeBuiltinTool(
-                    (String) binding.get(ExecBindingKeys.BUILTIN_INTERNAL_NAME), args, sessionId, runId);
+                        (String) binding.get(ExecBindingKeys.BUILTIN_INTERNAL_NAME), args, sessionId, runId);
                 String todowriteName = LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId();
                 if (tc.name().equals(todowriteName)) {
                     persistTodosFromResult(sessionId, runId, result);
@@ -77,21 +77,21 @@ public class ToolExecutor {
     public String resolveDisplayName(String toolName, List<RuntimeTool> tools) {
         if (tools == null || tools.isEmpty()) return toolName;
         return tools.stream()
-            .filter(t -> toolName.equals(t.getLlmToolName()))
-            .map(RuntimeTool::getDisplayName)
-            .filter(n -> n != null && !n.isBlank())
-            .findFirst()
-            .orElse(toolName);
+                .filter(t -> toolName.equals(t.getLlmToolName()))
+                .map(RuntimeTool::getDisplayName)
+                .filter(n -> n != null && !n.isBlank())
+                .findFirst()
+                .orElse(toolName);
     }
 
     public String resolveDisplayNameEn(String toolName, List<RuntimeTool> tools) {
         if (tools == null || tools.isEmpty()) return toolName;
         return tools.stream()
-            .filter(t -> toolName.equals(t.getLlmToolName()))
-            .map(RuntimeTool::getDisplayNameEn)
-            .filter(n -> n != null && !n.isBlank())
-            .findFirst()
-            .orElse(toolName);
+                .filter(t -> toolName.equals(t.getLlmToolName()))
+                .map(RuntimeTool::getDisplayNameEn)
+                .filter(n -> n != null && !n.isBlank())
+                .findFirst()
+                .orElse(toolName);
     }
 
     private void persistTodosFromResult(Long sessionId, Long runId, String resultJson) {
@@ -103,8 +103,8 @@ public class ToolExecutor {
                 return;
             }
             List<SessionTodoVO> todos = items.stream()
-                .map(item -> new SessionTodoVO(item.getContent(), item.getStatus(), item.getPriority()))
-                .toList();
+                    .map(item -> new SessionTodoVO(item.getContent(), item.getStatus(), item.getPriority()))
+                    .toList();
             sessionTodoSpi.replaceAll(sessionId, runId, todos);
         } catch (Exception e) {
             log.warn("Failed to persist todowrite result for session {}", sessionId, e);

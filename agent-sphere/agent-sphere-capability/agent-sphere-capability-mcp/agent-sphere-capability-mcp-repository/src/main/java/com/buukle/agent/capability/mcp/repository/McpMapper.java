@@ -5,4 +5,5 @@ import com.buukle.agent.capability.mcp.domain.CapabilityMcp;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface McpMapper extends BaseMapper<CapabilityMcp> {}
+public interface McpMapper extends BaseMapper<CapabilityMcp> {
+}

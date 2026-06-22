@@ -45,6 +45,6 @@ public class LlmInteractionPersistListener {
 
         interactionRecordSpi.createRecord(vo);
         log.debug("LLM interaction recorded: runId={}, type={}, duration={}ms, success={}",
-            meta.getRunId(), meta.getInteractionType().name(), event.getDurationMs(), event.isSuccess());
+                meta.getRunId(), meta.getInteractionType().name(), event.getDurationMs(), event.isSuccess());
     }
 }

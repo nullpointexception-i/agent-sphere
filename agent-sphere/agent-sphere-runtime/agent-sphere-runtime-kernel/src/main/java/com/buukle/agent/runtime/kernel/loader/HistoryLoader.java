@@ -8,8 +8,8 @@ import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
-import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import lombok.RequiredArgsConstructor;
@@ -33,14 +33,14 @@ public class HistoryLoader {
 
         AgentCompactRecordVO latestCompact = compactRecordSpi.getLatestCompleted(sessionId);
         if (latestCompact != null && latestCompact.getSummaryAfter() != null
-            && !latestCompact.getSummaryAfter().isBlank()) {
+                && !latestCompact.getSummaryAfter().isBlank()) {
             messages.add(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_SYSTEM)
-                .setContent(RunnerConstants.HISTORY_SUMMARY_PREFIX + latestCompact.getSummaryAfter()));
+                    .setRole(LlmApiConstant.ROLE_SYSTEM)
+                    .setContent(RunnerConstants.HISTORY_SUMMARY_PREFIX + latestCompact.getSummaryAfter()));
         }
 
         Long afterRunId = latestCompact != null && latestCompact.getCompactedUptoRunId() != null
-            ? latestCompact.getCompactedUptoRunId() : 0L;
+                ? latestCompact.getCompactedUptoRunId() : 0L;
 
         List<RunVO> runs = runSpi.listRunsBySessionAfterId(sessionId, afterRunId);
 
@@ -77,8 +77,8 @@ public class HistoryLoader {
 
             if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
                 messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_USER)
-                    .setContent(run.getUserMessage()));
+                        .setRole(LlmApiConstant.ROLE_USER)
+                        .setContent(run.getUserMessage()));
             }
 
             List<AgentToolCallRecordVO> calls = callsByRun.get(run.getId());
@@ -87,15 +87,15 @@ public class HistoryLoader {
                     String callId = c.getCallId() != null ? c.getCallId() : RunnerConstants.FALLBACK_CALL_ID_PREFIX + c.getStepId();
 
                     messages.add(new ChatMessageDTO()
-                        .setRole(LlmApiConstant.ROLE_ASSISTANT)
-                        .setToolCalls(List.of(ToolCallDTO.builder()
-                            .id(callId)
-                            .type(RunnerConstants.TOOL_TYPE_FUNCTION)
-                            .function(FunctionDefinitionDTO.builder()
-                                .name(c.getToolName())
-                                .arguments(c.getArgumentsJson())
-                                .build())
-                            .build())));
+                            .setRole(LlmApiConstant.ROLE_ASSISTANT)
+                            .setToolCalls(List.of(ToolCallDTO.builder()
+                                    .id(callId)
+                                    .type(RunnerConstants.TOOL_TYPE_FUNCTION)
+                                    .function(FunctionDefinitionDTO.builder()
+                                            .name(c.getToolName())
+                                            .arguments(c.getArgumentsJson())
+                                            .build())
+                                    .build())));
 
                     String result;
                     if (overBudget.contains(c.getId())) {
@@ -104,20 +104,20 @@ public class HistoryLoader {
                         result = c.getCompressedArtifact() != null ? c.getCompressedArtifact() : "";
                     } else {
                         result = c.getErrorMessage() != null
-                            ? "{\"error\":\"" + c.getErrorMessage() + "\"}"
-                            : "{\"error\":\"Tool execution failed\"}";
+                                ? "{\"error\":\"" + c.getErrorMessage() + "\"}"
+                                : "{\"error\":\"Tool execution failed\"}";
                     }
                     messages.add(new ChatMessageDTO()
-                        .setRole(LlmApiConstant.ROLE_TOOL)
-                        .setToolCallId(callId)
-                        .setContent(result));
+                            .setRole(LlmApiConstant.ROLE_TOOL)
+                            .setToolCallId(callId)
+                            .setContent(result));
                 }
             }
 
             if (run.getAssistantReply() != null && !run.getAssistantReply().isBlank()) {
                 messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_ASSISTANT)
-                    .setContent(run.getAssistantReply()));
+                        .setRole(LlmApiConstant.ROLE_ASSISTANT)
+                        .setContent(run.getAssistantReply()));
             }
         }
 

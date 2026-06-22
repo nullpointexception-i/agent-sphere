@@ -29,5 +29,6 @@ public final class RuntimeEventTypeConstant {
 
     public static final String REASONING_SUB_TYPE_SESSION_UPDATED = "session_updated";
 
-    private RuntimeEventTypeConstant() {}
+    private RuntimeEventTypeConstant() {
+    }
 }

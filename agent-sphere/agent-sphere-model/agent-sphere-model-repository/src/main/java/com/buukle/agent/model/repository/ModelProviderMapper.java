@@ -5,4 +5,5 @@ import com.buukle.agent.model.domain.AgentModelProvider;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface ModelProviderMapper extends BaseMapper<AgentModelProvider> {}
+public interface ModelProviderMapper extends BaseMapper<AgentModelProvider> {
+}

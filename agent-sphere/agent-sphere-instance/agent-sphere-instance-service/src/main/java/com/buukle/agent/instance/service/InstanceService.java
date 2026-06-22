@@ -8,5 +8,6 @@ import com.buukle.agent.instance.spi.InstanceSpi;
 
 public interface InstanceService extends IService<AgentInstance>, InstanceSpi {
     InstanceVO createInstance(CreateInstanceDTO dto);
+
     InstanceVO setModelRoute(Long id, Long modelRouteId);
 }

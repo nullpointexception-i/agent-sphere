@@ -38,8 +38,8 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
     private final Duration directConnectTimeout;
 
     public CapabilityMcpServiceImpl(CapabilityMcpConverter capabilityMcpConverter,
-                                     McpTransportFactory mcpTransportFactory,
-                                     AgentRuntimeProperties properties) {
+                                    McpTransportFactory mcpTransportFactory,
+                                    AgentRuntimeProperties properties) {
         this.capabilityMcpConverter = capabilityMcpConverter;
         this.mcpTransportFactory = mcpTransportFactory;
         this.directReadTimeout = properties.getMcp().getDirectReadTimeout();
@@ -64,11 +64,11 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
     public List<McpVO> listMcps(String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         log.warn("listMcps called: keyword='{}', startTime={}, endTime={}", keyword, startTime, endTime);
         List<CapabilityMcp> list = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), CapabilityMcp::getName, keyword)
-            .ge(startTime != null, CapabilityMcp::getCreatedAt, startTime)
-            .le(endTime != null, CapabilityMcp::getCreatedAt, endTime)
-            .orderByDesc(CapabilityMcp::getCreatedAt)
-            .list();
+                .like(keyword != null && !keyword.isBlank(), CapabilityMcp::getName, keyword)
+                .ge(startTime != null, CapabilityMcp::getCreatedAt, startTime)
+                .le(endTime != null, CapabilityMcp::getCreatedAt, endTime)
+                .orderByDesc(CapabilityMcp::getCreatedAt)
+                .list();
         log.warn("listMcps result: {} rows", list.size());
         return list.stream().map(capabilityMcpConverter::toVO).toList();
     }
@@ -76,11 +76,11 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
     @Override
     public IPage<McpVO> pageMcps(int page, int size, String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         Page<CapabilityMcp> p = lambdaQuery()
-            .like(keyword != null && !keyword.isBlank(), CapabilityMcp::getName, keyword)
-            .ge(startTime != null, CapabilityMcp::getCreatedAt, startTime)
-            .le(endTime != null, CapabilityMcp::getCreatedAt, endTime)
-            .orderByDesc(CapabilityMcp::getCreatedAt)
-            .page(new Page<>(page, size));
+                .like(keyword != null && !keyword.isBlank(), CapabilityMcp::getName, keyword)
+                .ge(startTime != null, CapabilityMcp::getCreatedAt, startTime)
+                .le(endTime != null, CapabilityMcp::getCreatedAt, endTime)
+                .orderByDesc(CapabilityMcp::getCreatedAt)
+                .page(new Page<>(page, size));
         return p.convert(capabilityMcpConverter::toVO);
     }
 
@@ -119,7 +119,7 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
         McpVO mcp = getMcp(mcpId);
         try {
             McpTransportClient client = mcpTransportFactory.getOrCreateClient(
-                mcpId, mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig());
+                    mcpId, mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig());
             return client.listTools();
         } catch (Exception e) {
             log.error("Failed to list MCP tools for mcpId={}: {}", mcpId, e.getMessage());
@@ -130,9 +130,9 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
     @Override
     public String executeTool(String serverUrl, String toolName, String argumentsJson) {
         CapabilityMcp mcp = lambdaQuery()
-            .eq(CapabilityMcp::getServerUrl, serverUrl)
-            .last(SQL_LIMIT_ONE)
-            .one();
+                .eq(CapabilityMcp::getServerUrl, serverUrl)
+                .last(SQL_LIMIT_ONE)
+                .one();
 
         if (mcp == null) {
             log.warn(DIRECT_HTTP_HINT, serverUrl);
@@ -141,7 +141,7 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
 
         try {
             McpTransportClient client = mcpTransportFactory.getOrCreateClient(
-                mcp.getId(), mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig());
+                    mcp.getId(), mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig());
             return client.callTool(toolName, argumentsJson);
         } catch (Exception e) {
             log.error("MCP tool call failed via client, falling back to direct HTTP: {}", e.getMessage());
@@ -165,7 +165,7 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                     .connectTimeout(directConnectTimeout)
                     .build();
             java.net.http.HttpResponse<String> response = httpClient.send(request,
-                java.net.http.HttpResponse.BodyHandlers.ofString());
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
                 log.error("MCP direct HTTP error: status={}, body={}", response.statusCode(), response.body());
                 throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED);

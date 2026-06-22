@@ -4,5 +4,7 @@ public enum SessionStatus implements EventType {
     TITLE_UPDATED;
 
     @Override
-    public String value() { return name(); }
+    public String value() {
+        return name();
+    }
 }

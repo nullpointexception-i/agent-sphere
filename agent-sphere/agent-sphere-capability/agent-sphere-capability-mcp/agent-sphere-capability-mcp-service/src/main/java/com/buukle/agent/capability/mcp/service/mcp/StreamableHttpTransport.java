@@ -1,12 +1,11 @@
 package com.buukle.agent.capability.mcp.service.mcp;
 
 import com.buukle.agent.capability.mcp.dtvo.vo.McpToolInfoVO;
+import com.buukle.agent.capability.mcp.exception.CapabilityMcpErrorCode;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
-import com.buukle.agent.capability.mcp.exception.CapabilityMcpErrorCode;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,18 +32,17 @@ public class StreamableHttpTransport implements McpTransportClient {
     private final String authConfigJson;
     private final Duration connectTimeout;
     private final Duration rpcTimeout;
-
+    private final AtomicLong requestId = new AtomicLong(1);
     private String sessionId;
     private volatile boolean initialized = false;
-    private final AtomicLong requestId = new AtomicLong(1);
     private String negotiatedProtocolVersion;
 
     public StreamableHttpTransport(String serverUrl, String serverType, String authConfig, AgentRuntimeProperties.McpConfig config) {
         this.connectTimeout = config.getConnectTimeout();
         this.rpcTimeout = config.getRpcTimeout();
         this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(connectTimeout)
-            .build();
+                .connectTimeout(connectTimeout)
+                .build();
         this.authConfigJson = authConfig;
         this.endpointUrl = resolveEndpoint(serverUrl, serverType);
     }
@@ -98,8 +96,8 @@ public class StreamableHttpTransport implements McpTransportClient {
             }
 
             negotiatedProtocolVersion = result.has(FIELD_PROTOCOL_VERSION)
-                ? result.get(FIELD_PROTOCOL_VERSION).asText()
-                : PROTOCOL_VERSION;
+                    ? result.get(FIELD_PROTOCOL_VERSION).asText()
+                    : PROTOCOL_VERSION;
 
             log.info("MCP initialized: protocol={}, serverInfo={}", negotiatedProtocolVersion, result.get("serverInfo"));
 
@@ -149,7 +147,7 @@ public class StreamableHttpTransport implements McpTransportClient {
                     inputSchemaStr = JSON.writeValueAsString(inputSchema);
                 }
                 tools.add(McpToolInfoVO.builder()
-                    .name(name).description(description).inputSchema(inputSchemaStr).build());
+                        .name(name).description(description).inputSchema(inputSchemaStr).build());
             }
             log.debug("MCP tools/list returned {} tools", tools.size());
             return tools;
@@ -189,7 +187,7 @@ public class StreamableHttpTransport implements McpTransportClient {
                 String errMsg = err.has("message") ? err.get("message").asText() : "unknown MCP error";
                 log.error("MCP tool call error: {} - {}", toolName, errMsg);
                 return "{\"isError\":true,\"content\":[{\"type\":\"text\",\"text\":\"MCP error: " +
-                    errMsg.replace("\"", "\\\"") + "\"}]}";
+                        errMsg.replace("\"", "\\\"") + "\"}]}";
             }
             JsonNode result = root.get(JSONRPC_RESULT);
             if (result == null) {
@@ -205,7 +203,9 @@ public class StreamableHttpTransport implements McpTransportClient {
     }
 
     @Override
-    public boolean isConnected() { return initialized; }
+    public boolean isConnected() {
+        return initialized;
+    }
 
     @Override
     public void close() {
@@ -233,11 +233,11 @@ public class StreamableHttpTransport implements McpTransportClient {
     private String doPostRaw(String body) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(endpointUrl))
-                .header(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
-                .header(HEADER_ACCEPT, ACCEPT_JSON_SSE)
-                .timeout(rpcTimeout)
-                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
+                    .uri(URI.create(endpointUrl))
+                    .header(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
+                    .header(HEADER_ACCEPT, ACCEPT_JSON_SSE)
+                    .timeout(rpcTimeout)
+                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
 
             applyAuth(builder);
             if (sessionId != null) {
@@ -248,7 +248,7 @@ public class StreamableHttpTransport implements McpTransportClient {
             }
 
             HttpResponse<String> response = httpClient.send(builder.build(),
-                HttpResponse.BodyHandlers.ofString());
+                    HttpResponse.BodyHandlers.ofString());
 
             String newSessionId = response.headers().firstValue(HEADER_MCP_SESSION_ID).orElse(null);
             if (newSessionId != null) {

@@ -22,6 +22,27 @@ public class ControllerLogAspect {
     private static final Logger log = LoggerFactory.getLogger(ControllerLogAspect.class);
     private final ObjectMapper mapper = new ObjectMapper();
 
+    private static String resolveHttpMethod(MethodSignature sig) {
+        for (Annotation a : sig.getMethod().getDeclaredAnnotations()) {
+            if (a instanceof GetMapping) return "GET";
+            if (a instanceof PostMapping) return "POST";
+            if (a instanceof PutMapping) return "PUT";
+            if (a instanceof DeleteMapping) return "DELETE";
+            if (a instanceof PatchMapping) return "PATCH";
+            if (a.annotationType().getAnnotation(RequestMapping.class) != null) return "REQUEST";
+        }
+        return "?";
+    }
+
+    private static String resolvePath(MethodSignature sig, Object[] args) {
+        try {
+            var attr = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attr != null) return attr.getRequest().getRequestURI();
+        } catch (Exception ignored) {
+        }
+        return sig.getMethod().getName();
+    }
+
     @Around("execution(* com.buukle.agent..*Controller.*(..))")
     public Object logController(ProceedingJoinPoint pjp) throws Throwable {
         MethodSignature sig = (MethodSignature) pjp.getSignature();
@@ -56,26 +77,6 @@ public class ControllerLogAspect {
         return result;
     }
 
-    private static String resolveHttpMethod(MethodSignature sig) {
-        for (Annotation a : sig.getMethod().getDeclaredAnnotations()) {
-            if (a instanceof GetMapping) return "GET";
-            if (a instanceof PostMapping) return "POST";
-            if (a instanceof PutMapping) return "PUT";
-            if (a instanceof DeleteMapping) return "DELETE";
-            if (a instanceof PatchMapping) return "PATCH";
-            if (a.annotationType().getAnnotation(RequestMapping.class) != null) return "REQUEST";
-        }
-        return "?";
-    }
-
-    private static String resolvePath(MethodSignature sig, Object[] args) {
-        try {
-            var attr = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-            if (attr != null) return attr.getRequest().getRequestURI();
-        } catch (Exception ignored) {}
-        return sig.getMethod().getName();
-    }
-
     private String argsToJson(String[] names, Object[] args) {
         if (args == null || args.length == 0) return "";
         try {
@@ -83,7 +84,8 @@ public class ControllerLogAspect {
             for (int i = 0; i < args.length; i++) {
                 if (args[i] != null) {
                     String cls = args[i].getClass().getName();
-                    if (cls.startsWith("jakarta.servlet") || cls.startsWith("org.springframework") || cls.startsWith("java.time")) continue;
+                    if (cls.startsWith("jakarta.servlet") || cls.startsWith("org.springframework") || cls.startsWith("java.time"))
+                        continue;
                     if (sb.length() > 0) sb.append(", ");
                     String val = args[i] instanceof String s ? s : mapper.writeValueAsString(args[i]);
                     if (val.length() > 200) val = val.substring(0, 200) + "...";

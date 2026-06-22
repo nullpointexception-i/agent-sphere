@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.kernel.service;
 
+import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.instance.dtvo.enums.ToolCallRecordStatus;
 import com.buukle.agent.instance.dtvo.vo.AgentCompactRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
@@ -13,19 +14,21 @@ import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
-import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
-import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
+import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
-import com.buukle.agent.runtime.kernel.port.vo.*;
+import com.buukle.agent.runtime.kernel.port.vo.CompactionStatus;
+import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
+import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
+import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.CompactionPromptConstant;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import lombok.RequiredArgsConstructor;
@@ -63,7 +66,7 @@ public class CompactionService {
     public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route) {
         if (route == null) return false;
         long maxInputTokens = route.getMaxInputTokens() != null ? route.getMaxInputTokens()
-            : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
+                : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
         long budget = (long) (maxInputTokens * agentRuntimeProperties.getRunner().getCompaction().getBudgetRatio());
         return estimateMessagesTokens(messages) > budget;
     }
@@ -85,15 +88,15 @@ public class CompactionService {
     private void doCompact(Long sessionId, SessionVO session, ModelRouteFullVO route, Long runId) {
         AgentCompactRecordVO latest = compactRecordSpi.getLatestCompleted(sessionId);
         Long cursor = latest != null && latest.getCompactedUptoRunId() != null
-            ? latest.getCompactedUptoRunId() : 0L;
+                ? latest.getCompactedUptoRunId() : 0L;
 
         List<RunVO> allAfterCursor = runSpi.listRunsBySessionAfterId(sessionId, cursor);
         if (allAfterCursor.isEmpty()) return;
 
         long maxInputTokens = route.getMaxInputTokens() != null ? route.getMaxInputTokens()
-            : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
+                : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
         long maxOutputTokens = route.getMaxOutputTokens() != null ? route.getMaxOutputTokens()
-            : RunnerConstants.DEFAULT_MAX_OUTPUT_TOKENS;
+                : RunnerConstants.DEFAULT_MAX_OUTPUT_TOKENS;
 
         long budget = (long) (maxInputTokens * agentRuntimeProperties.getRunner().getCompaction().getBudgetRatio());
         long accumulated = 0;
@@ -109,10 +112,10 @@ public class CompactionService {
         if (compactCount <= 0) return;
 
         eventPublisher.publishEvent(new RuntimeEventVO(CompactionStatus.RUNNING,
-            new RuntimeEventDataVO()
-                .setSessionId(sessionId)
-                .setRunId(runId)
-                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId)));
+                new RuntimeEventDataVO()
+                        .setSessionId(sessionId)
+                        .setRunId(runId)
+                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId)));
 
         List<RunVO> toCompact = allAfterCursor.subList(0, compactCount);
         Long newCursor = toCompact.get(compactCount - 1).getId();
@@ -121,11 +124,11 @@ public class CompactionService {
         String inputText = buildCompactInput(sessionId, toCompact, compactionInputLimit);
 
         long summaryMaxLen = Math.min(
-            (long) (maxOutputTokens * OUTPUT_RATIO),
-            (long) (inputText.length() / RunnerConstants.TOKEN_ESTIMATE_DIVISOR * 2 / 3));
+                (long) (maxOutputTokens * OUTPUT_RATIO),
+                inputText.length() / RunnerConstants.TOKEN_ESTIMATE_DIVISOR * 2 / 3);
         String newSummary = callLLM(
-            CompactionPromptConstant.buildPrompt(session.getSummary(), inputText, summaryMaxLen),
-            route, sessionId, runId);
+                CompactionPromptConstant.buildPrompt(session.getSummary(), inputText, summaryMaxLen),
+                route, sessionId, runId);
 
         if (newSummary != null && !newSummary.isBlank()) {
             sessionSpi.updateSummary(sessionId, newSummary, LocalDateTime.now().toString(), route.getId());
@@ -134,10 +137,10 @@ public class CompactionService {
         }
 
         eventPublisher.publishEvent(new RuntimeEventVO(CompactionStatus.COMPLETED,
-            new RuntimeEventDataVO()
-                .setSessionId(sessionId)
-                .setRunId(runId)
-                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId)));
+                new RuntimeEventDataVO()
+                        .setSessionId(sessionId)
+                        .setRunId(runId)
+                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId)));
     }
 
     private String buildCompactInput(Long sessionId, List<RunVO> runs, long tokenLimit) {
@@ -149,7 +152,7 @@ public class CompactionService {
             StringBuilder runSb = new StringBuilder();
 
             String userText = r.getUserMessage() != null
-                ? RunnerConstants.COMPACTION_USER_PREFIX + r.getUserMessage() + RunnerConstants.COMPACTION_NEWLINE : "";
+                    ? RunnerConstants.COMPACTION_USER_PREFIX + r.getUserMessage() + RunnerConstants.COMPACTION_NEWLINE : "";
             runSb.append(userText);
 
             List<AgentToolCallRecordVO> calls = new ArrayList<>(toolCallRecordSpi.listBySessionId(sessionId, r.getId()));
@@ -157,14 +160,14 @@ public class CompactionService {
             for (AgentToolCallRecordVO c : calls) {
                 boolean succeeded = ToolCallRecordStatus.SUCCEEDED.name().equals(c.getStatus());
                 String result = succeeded
-                    ? ToolResultCompressor.compress(c.getArtifact(), RunnerConstants.COMPACTION_TOOL_RESULT_MAX_CHARS)
-                    : "error: " + (c.getErrorMessage() != null ? c.getErrorMessage() : "unknown");
+                        ? ToolResultCompressor.compress(c.getArtifact(), RunnerConstants.COMPACTION_TOOL_RESULT_MAX_CHARS)
+                        : "error: " + (c.getErrorMessage() != null ? c.getErrorMessage() : "unknown");
                 String artifact = result != null ? result : "";
                 runSb.append("Tool[").append(c.getToolName()).append("]: ").append(artifact).append("\n");
             }
 
             String asstText = r.getAssistantReply() != null
-                ? RunnerConstants.COMPACTION_ASSISTANT_PREFIX + r.getAssistantReply() + RunnerConstants.COMPACTION_NEWLINE : "";
+                    ? RunnerConstants.COMPACTION_ASSISTANT_PREFIX + r.getAssistantReply() + RunnerConstants.COMPACTION_NEWLINE : "";
             runSb.append(asstText);
 
             int added = runSb.length() / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
@@ -199,52 +202,53 @@ public class CompactionService {
                 }
             }
         }
-      int i = len / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
-      log.debug("length:{}",i);
-      return i;
+        int i = len / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
+        log.debug("length:{}", i);
+        return i;
     }
 
     private String callLLM(String messagesText, ModelRouteFullVO route, Long sessionId, Long runId) {
         try {
             ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
-                .setModel(route.getModelName())
-                .setStream(true)
-                .setMessages(List.of(
-                    new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM)
-                        .setContent(CompactionPromptConstant.getSystemPrompt()),
-                    new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(messagesText)));
+                    .setModel(route.getModelName())
+                    .setStream(true)
+                    .setMessages(List.of(
+                            new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM)
+                                    .setContent(CompactionPromptConstant.getSystemPrompt()),
+                            new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(messagesText)));
             String apiKeyValue = resolveApiKey(route);
             StringBuilder content = new StringBuilder();
             var future = kernelLlmService.stream(
-                route.getCompany(), route.getBaseUrl(), apiKeyValue, route.getModelName(),
-                request,
-                event -> {
-                    switch (event) {
-                        case LLMEvent.TextDelta t -> {
-                            content.append(t.text());
-                            eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(runId)
-                                    .setResponse(t.text())
-                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                    .setPublishId(java.util.UUID.randomUUID().toString())));
+                    route.getCompany(), route.getBaseUrl(), apiKeyValue, route.getModelName(),
+                    request,
+                    event -> {
+                        switch (event) {
+                            case LLMEvent.TextDelta t -> {
+                                content.append(t.text());
+                                eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                        new RuntimeEventDataVO()
+                                                .setSessionId(sessionId)
+                                                .setRunId(runId)
+                                                .setResponse(t.text())
+                                                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                                                .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                                .setPublishId(java.util.UUID.randomUUID().toString())));
+                            }
+                            case LLMEvent.ReasoningDelta r ->
+                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                            new RuntimeEventDataVO()
+                                                    .setSessionId(sessionId)
+                                                    .setRunId(runId)
+                                                    .setResponse(r.text())
+                                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                                    .setPublishId(java.util.UUID.randomUUID().toString())));
+                            default -> {
+                            }
                         }
-                        case LLMEvent.ReasoningDelta r ->
-                            eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(runId)
-                                    .setResponse(r.text())
-                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                    .setPublishId(java.util.UUID.randomUUID().toString())));
-                        default -> {}
-                    }
-                },
-                new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
-                    .setInteractionType(LlmInteractionType.COMPACTION));
+                    },
+                    new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
+                            .setInteractionType(LlmInteractionType.COMPACTION));
             future.get(agentRuntimeProperties.getLlm().getStreamTimeout().getSeconds(), TimeUnit.SECONDS);
             return content.toString();
         } catch (Exception e) {

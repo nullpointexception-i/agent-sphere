@@ -1,11 +1,11 @@
 package com.buukle.agent.instance.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
 import com.buukle.agent.instance.dtvo.enums.ToolCallRecordStatus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,9 +19,30 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final AgentToolCallRecordMapper mapper;
 
+    private static AgentToolCallRecordVO toVO(AgentToolCallRecord r) {
+        AgentToolCallRecordVO vo = new AgentToolCallRecordVO();
+        vo.setId(r.getId());
+        vo.setStepId(r.getStepId());
+        vo.setCallId(r.getCallId());
+        vo.setRunId(r.getRunId());
+        vo.setSessionId(r.getSessionId());
+        vo.setToolName(r.getToolName());
+        vo.setDisplayNameCn(r.getDisplayNameCn());
+        vo.setDisplayNameEn(r.getDisplayNameEn());
+        vo.setArgumentsJson(r.getArgumentsJson());
+        vo.setCompressedArguments(r.getCompressedArguments());
+        vo.setArtifact(r.getArtifact());
+        vo.setCompressedArtifact(r.getCompressedArtifact());
+        vo.setStatus(r.getStatus());
+        vo.setErrorMessage(r.getErrorMessage());
+        if (r.getCreatedAt() != null) vo.setCreatedAt(r.getCreatedAt().format(DATE_FMT));
+        if (r.getUpdatedAt() != null) vo.setUpdatedAt(r.getUpdatedAt().format(DATE_FMT));
+        return vo;
+    }
+
     @Override
     public AgentToolCallRecordVO createRecord(Long stepId, String callId, Long runId, Long sessionId,
-                                               String toolName, String displayNameCn, String displayNameEn, String argumentsJson) {
+                                              String toolName, String displayNameCn, String displayNameEn, String argumentsJson) {
         AgentToolCallRecord record = new AgentToolCallRecord();
         record.setStepId(stepId);
         record.setCallId(callId);
@@ -65,29 +86,29 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
     @Override
     public AgentToolCallRecordVO getLatestByStepId(Long stepId) {
         AgentToolCallRecord r = mapper.selectOne(
-            new LambdaQueryWrapper<AgentToolCallRecord>()
-                .eq(AgentToolCallRecord::getStepId, stepId)
-                .orderByDesc(AgentToolCallRecord::getId)
-                .last("LIMIT 1"));
+                new LambdaQueryWrapper<AgentToolCallRecord>()
+                        .eq(AgentToolCallRecord::getStepId, stepId)
+                        .orderByDesc(AgentToolCallRecord::getId)
+                        .last("LIMIT 1"));
         return r != null ? toVO(r) : null;
     }
 
     @Override
     public AgentToolCallRecordVO getLatestBySessionAndToolName(Long sessionId, String toolName) {
         AgentToolCallRecord r = mapper.selectOne(
-            new LambdaQueryWrapper<AgentToolCallRecord>()
-                .eq(AgentToolCallRecord::getSessionId, sessionId)
-                .eq(AgentToolCallRecord::getToolName, toolName)
-                .eq(AgentToolCallRecord::getStatus, ToolCallRecordStatus.SUCCEEDED.name())
-                .orderByDesc(AgentToolCallRecord::getId)
-                .last("LIMIT 1"));
+                new LambdaQueryWrapper<AgentToolCallRecord>()
+                        .eq(AgentToolCallRecord::getSessionId, sessionId)
+                        .eq(AgentToolCallRecord::getToolName, toolName)
+                        .eq(AgentToolCallRecord::getStatus, ToolCallRecordStatus.SUCCEEDED.name())
+                        .orderByDesc(AgentToolCallRecord::getId)
+                        .last("LIMIT 1"));
         return r != null ? toVO(r) : null;
     }
 
     @Override
     public List<AgentToolCallRecordVO> listBySessionId(Long sessionId, Long runId) {
         var query = new LambdaQueryWrapper<AgentToolCallRecord>()
-            .eq(AgentToolCallRecord::getSessionId, sessionId);
+                .eq(AgentToolCallRecord::getSessionId, sessionId);
 
         if (runId != null) {
             query.eq(AgentToolCallRecord::getRunId, runId);
@@ -104,31 +125,10 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
 
     private Long getLatestRunIdWithToolCalls(Long sessionId) {
         var w = new LambdaQueryWrapper<AgentToolCallRecord>()
-            .eq(AgentToolCallRecord::getSessionId, sessionId)
-            .orderByDesc(AgentToolCallRecord::getId)
-            .last("LIMIT 1");
+                .eq(AgentToolCallRecord::getSessionId, sessionId)
+                .orderByDesc(AgentToolCallRecord::getId)
+                .last("LIMIT 1");
         AgentToolCallRecord r = mapper.selectOne(w);
         return r != null ? r.getRunId() : null;
-    }
-
-    private static AgentToolCallRecordVO toVO(AgentToolCallRecord r) {
-        AgentToolCallRecordVO vo = new AgentToolCallRecordVO();
-        vo.setId(r.getId());
-        vo.setStepId(r.getStepId());
-        vo.setCallId(r.getCallId());
-        vo.setRunId(r.getRunId());
-        vo.setSessionId(r.getSessionId());
-        vo.setToolName(r.getToolName());
-        vo.setDisplayNameCn(r.getDisplayNameCn());
-        vo.setDisplayNameEn(r.getDisplayNameEn());
-        vo.setArgumentsJson(r.getArgumentsJson());
-        vo.setCompressedArguments(r.getCompressedArguments());
-        vo.setArtifact(r.getArtifact());
-        vo.setCompressedArtifact(r.getCompressedArtifact());
-        vo.setStatus(r.getStatus());
-        vo.setErrorMessage(r.getErrorMessage());
-        if (r.getCreatedAt() != null) vo.setCreatedAt(r.getCreatedAt().format(DATE_FMT));
-        if (r.getUpdatedAt() != null) vo.setUpdatedAt(r.getUpdatedAt().format(DATE_FMT));
-        return vo;
     }
 }

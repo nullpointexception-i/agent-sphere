@@ -6,17 +6,16 @@ import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
-import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
-import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
+import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
+import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
-import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
+import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
+import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.orchestrator.RuntimeOrchestrator;
-
-import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -44,11 +43,11 @@ public class ChatRuntimeService {
         log.info("Run created: runId={}, type={}", run.getId(), run.getType());
 
         eventPublisher.publishEvent(new RuntimeEventVO(
-            RunStatus.PENDING,
-            new RuntimeEventDataVO()
-                .setSessionId(sessionId)
-                .setRunId(run.getId())
-                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
+                RunStatus.PENDING,
+                new RuntimeEventDataVO()
+                        .setSessionId(sessionId)
+                        .setRunId(run.getId())
+                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
 
         orchestrator.asyncHandleUserMessage(run, sessionId, dto.getMessage(), dto.getModelRouteId());
         log.info("Async execution started for runId={}", run.getId());

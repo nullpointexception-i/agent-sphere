@@ -5,4 +5,5 @@ import com.buukle.agent.instance.domain.AgentRun;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface RunMapper extends BaseMapper<AgentRun> {}
+public interface RunMapper extends BaseMapper<AgentRun> {
+}

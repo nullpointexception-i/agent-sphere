@@ -9,7 +9,6 @@ import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
-import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 import com.buukle.agent.instance.dtvo.vo.CapabilityFullVO;
 import com.buukle.agent.instance.dtvo.vo.CapabilityVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
@@ -23,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,62 +44,9 @@ public class ContextPreparer {
     private final CapabilityCliSpi cliSpi;
     private final CapabilityBuiltinSpi builtinSpi;
 
-    public KernelContext prepare(RunVO run, ValidationResult validated, String message) {
-        List<CapabilityVO> capabilities = capabilitySpi.getCapabilitiesByInstance(
-            validated.getAgentInstance().getId());
-        List<CapabilityFullVO> fullCapabilities = resolveFullCapabilities(capabilities);
-        List<RuntimeTool> tools = resolveTools(capabilities, validated);
-
-        return KernelContext.builder()
-            .agentInstance(validated.getAgentInstance())
-            .session(validated.getSession())
-            .run(run)
-            .capabilities(fullCapabilities)
-            .tools(tools)
-            .modelRoute(validated.getModelRoute())
-            .fallbackRoutes(validated.getFallbackRoutes())
-            .userMessage(message)
-            .build();
-    }
-
-    // ---- Legacy full capability resolution (for existing prompt builders) ----
-    private List<CapabilityFullVO> resolveFullCapabilities(List<CapabilityVO> capabilities) {
-        List<CapabilityFullVO> result = new ArrayList<>();
-        for (CapabilityVO cap : capabilities) {
-            if (!STATUS_ENABLED.equals(cap.getStatus())) continue;
-            try {
-                switch (cap.getCapabilityType()) {
-                    case CAPABILITY_TYPE_MCP -> {
-                        McpVO mcp = mcpSpi.getMcp(cap.getCapabilityId());
-                        if (mcp != null) result.add(buildFull(cap, mcp.getName(), mcp.getDescription(),
-                            mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig(), mcp.getToolDefinitions()));
-                    }
-                    case CAPABILITY_TYPE_SKILL -> {
-                        SkillVO skill = skillSpi.getSkill(cap.getCapabilityId());
-                        if (skill != null) result.add(buildFull(cap, skill.getName(), skill.getDescription(),
-                            null, null, null, skill.getDefinition()));
-                    }
-                    case CAPABILITY_TYPE_CLI -> {
-                        CliVO cli = cliSpi.getCli(cap.getCapabilityId());
-                        if (cli != null) result.add(buildFull(cap, cli.getName(), null,
-                            cli.getWorkingDir(), null, null, cli.getParamSchema()));
-                    }
-                    case CAPABILITY_TYPE_BUILTIN -> {
-                        for (var tool : builtinSpi.listBuiltinTools())
-                            result.add(buildFull(cap, tool.getName(), tool.getDescription(),
-                                null, null, null, tool.getParamSchema()));
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to resolve capability id={} type={}", cap.getId(), cap.getCapabilityType(), e);
-            }
-        }
-        return result;
-    }
-
     private static CapabilityFullVO buildFull(CapabilityVO cap, String name, String description,
-                                               String endpoint, String serverType,
-                                               String authConfig, String toolSchema) {
+                                              String endpoint, String serverType,
+                                              String authConfig, String toolSchema) {
         CapabilityFullVO full = new CapabilityFullVO();
         full.setId(cap.getId());
         full.setCapabilityType(cap.getCapabilityType());
@@ -112,6 +59,87 @@ public class ContextPreparer {
         full.setAuthConfig(authConfig);
         full.setToolSchema(toolSchema);
         return full;
+    }
+
+    static SkillDefinition parseSkillDefinition(String definition) {
+        if (definition == null || definition.isBlank()) return null;
+        String jsonStr = definition;
+
+        int jsonStart = definition.indexOf(SKILL_MARKDOWN_FENCE);
+        if (jsonStart >= 0) {
+            int contentStart = jsonStart + SKILL_MARKDOWN_FENCE.length();
+            int jsonEnd = definition.indexOf("```", contentStart);
+            if (jsonEnd >= 0) {
+                jsonStr = definition.substring(contentStart, jsonEnd).trim();
+            }
+        }
+
+        try {
+            JsonNode root = JSON.readTree(jsonStr);
+            JsonNode params = root.get(SKILL_DEF_PARAMETERS);
+            JsonNode promptTemplate = root.get(SKILL_DEF_PROMPT_TEMPLATE);
+            if (params == null || promptTemplate == null) {
+                log.warn("Skill definition missing '{}' or '{}'", SKILL_DEF_PARAMETERS, SKILL_DEF_PROMPT_TEMPLATE);
+                return null;
+            }
+            return new SkillDefinition(params.toString(), promptTemplate.asText());
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to parse skill definition JSON: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    public KernelContext prepare(RunVO run, ValidationResult validated, String message) {
+        List<CapabilityVO> capabilities = capabilitySpi.getCapabilitiesByInstance(
+                validated.getAgentInstance().getId());
+        List<CapabilityFullVO> fullCapabilities = resolveFullCapabilities(capabilities);
+        List<RuntimeTool> tools = resolveTools(capabilities, validated);
+
+        return KernelContext.builder()
+                .agentInstance(validated.getAgentInstance())
+                .session(validated.getSession())
+                .run(run)
+                .capabilities(fullCapabilities)
+                .tools(tools)
+                .modelRoute(validated.getModelRoute())
+                .fallbackRoutes(validated.getFallbackRoutes())
+                .userMessage(message)
+                .build();
+    }
+
+    // ---- Legacy full capability resolution (for existing prompt builders) ----
+    private List<CapabilityFullVO> resolveFullCapabilities(List<CapabilityVO> capabilities) {
+        List<CapabilityFullVO> result = new ArrayList<>();
+        for (CapabilityVO cap : capabilities) {
+            if (!STATUS_ENABLED.equals(cap.getStatus())) continue;
+            try {
+                switch (cap.getCapabilityType()) {
+                    case CAPABILITY_TYPE_MCP -> {
+                        McpVO mcp = mcpSpi.getMcp(cap.getCapabilityId());
+                        if (mcp != null) result.add(buildFull(cap, mcp.getName(), mcp.getDescription(),
+                                mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig(), mcp.getToolDefinitions()));
+                    }
+                    case CAPABILITY_TYPE_SKILL -> {
+                        SkillVO skill = skillSpi.getSkill(cap.getCapabilityId());
+                        if (skill != null) result.add(buildFull(cap, skill.getName(), skill.getDescription(),
+                                null, null, null, skill.getDefinition()));
+                    }
+                    case CAPABILITY_TYPE_CLI -> {
+                        CliVO cli = cliSpi.getCli(cap.getCapabilityId());
+                        if (cli != null) result.add(buildFull(cap, cli.getName(), null,
+                                cli.getWorkingDir(), null, null, cli.getParamSchema()));
+                    }
+                    case CAPABILITY_TYPE_BUILTIN -> {
+                        for (var tool : builtinSpi.listBuiltinTools())
+                            result.add(buildFull(cap, tool.getName(), tool.getDescription(),
+                                    null, null, null, tool.getParamSchema()));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to resolve capability id={} type={}", cap.getId(), cap.getCapabilityType(), e);
+            }
+        }
+        return result;
     }
 
     // ---- New RuntimeTool resolution ----
@@ -144,15 +172,15 @@ public class ContextPreparer {
             Map<String, Object> binding = new HashMap<>();
             binding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, tool.getName());
             result.add(RuntimeTool.builder()
-                .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                .capabilityId(tool.getId())
-                .llmToolName(llmName)
-                .displayName(tool.getDisplayNameCn())
-                .displayNameCn(tool.getDisplayNameCn())
-                .displayNameEn(tool.getDisplayNameEn())
-                .description(tool.getDescription() != null ? tool.getDescription() : "")
-                .parametersSchemaJson(tool.getParamSchema())
-                .execBinding(binding).build());
+                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                    .capabilityId(tool.getId())
+                    .llmToolName(llmName)
+                    .displayName(tool.getDisplayNameCn())
+                    .displayNameCn(tool.getDisplayNameCn())
+                    .displayNameEn(tool.getDisplayNameEn())
+                    .description(tool.getDescription() != null ? tool.getDescription() : "")
+                    .parametersSchemaJson(tool.getParamSchema())
+                    .execBinding(binding).build());
         }
         return result;
     }
@@ -164,15 +192,15 @@ public class ContextPreparer {
             Map<String, Object> binding = new HashMap<>();
             binding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, tool.getName());
             result.add(RuntimeTool.builder()
-                .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                .capabilityId(cap.getCapabilityId())
-                .llmToolName(llmName)
-                .displayName(tool.getDisplayNameCn())
-                .displayNameCn(tool.getDisplayNameCn())
-                .displayNameEn(tool.getDisplayNameEn())
-                .description(tool.getDescription() != null ? tool.getDescription() : "")
-                .parametersSchemaJson(tool.getParamSchema())
-                .execBinding(binding).build());
+                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                    .capabilityId(cap.getCapabilityId())
+                    .llmToolName(llmName)
+                    .displayName(tool.getDisplayNameCn())
+                    .displayNameCn(tool.getDisplayNameCn())
+                    .displayNameEn(tool.getDisplayNameEn())
+                    .description(tool.getDescription() != null ? tool.getDescription() : "")
+                    .parametersSchemaJson(tool.getParamSchema())
+                    .execBinding(binding).build());
         }
     }
 
@@ -182,13 +210,13 @@ public class ContextPreparer {
         binding.put(ExecBindingKeys.CLI_COMMAND_TEMPLATE, cli.getCommandTemplate());
         binding.put(ExecBindingKeys.CLI_WORKING_DIR, cli.getWorkingDir());
         result.add(RuntimeTool.builder()
-            .capabilityType(CAPABILITY_TYPE_CLI)
-            .capabilityId(cap.getCapabilityId())
-            .llmToolName(llmName)
-            .displayName(cli.getName())
-            .description("")
-            .parametersSchemaJson(cli.getParamSchema())
-            .execBinding(binding).build());
+                .capabilityType(CAPABILITY_TYPE_CLI)
+                .capabilityId(cap.getCapabilityId())
+                .llmToolName(llmName)
+                .displayName(cli.getName())
+                .description("")
+                .parametersSchemaJson(cli.getParamSchema())
+                .execBinding(binding).build());
     }
 
     void resolveSkillTool(SkillVO skill, CapabilityVO cap, List<RuntimeTool> result) {
@@ -201,13 +229,13 @@ public class ContextPreparer {
         Map<String, Object> binding = new HashMap<>();
         binding.put(ExecBindingKeys.SKILL_PROMPT_TEMPLATE, def.promptTemplate);
         result.add(RuntimeTool.builder()
-            .capabilityType(CAPABILITY_TYPE_SKILL)
-            .capabilityId(cap.getCapabilityId())
-            .llmToolName(llmName)
-            .displayName(skill.getName())
-            .description(skill.getDescription() != null ? skill.getDescription() : "")
-            .parametersSchemaJson(def.parametersSchemaJson)
-            .execBinding(binding).build());
+                .capabilityType(CAPABILITY_TYPE_SKILL)
+                .capabilityId(cap.getCapabilityId())
+                .llmToolName(llmName)
+                .displayName(skill.getName())
+                .description(skill.getDescription() != null ? skill.getDescription() : "")
+                .parametersSchemaJson(def.parametersSchemaJson)
+                .execBinding(binding).build());
     }
 
     void resolveMcpTools(McpVO mcp, CapabilityVO cap, List<RuntimeTool> result) {
@@ -225,13 +253,13 @@ public class ContextPreparer {
                     binding.put(ExecBindingKeys.MCP_AUTH_CONFIG, mcp.getAuthConfig());
                     binding.put(ExecBindingKeys.MCP_NATIVE_TOOL_NAME, tool.getName());
                     result.add(RuntimeTool.builder()
-                        .capabilityType(CAPABILITY_TYPE_MCP)
-                        .capabilityId(cap.getCapabilityId())
-                        .llmToolName(llmName)
-                        .displayName(tool.getName())
-                        .description(tool.getDescription() != null ? tool.getDescription() : "")
-                        .parametersSchemaJson(tool.getInputSchema())
-                        .execBinding(binding).build());
+                            .capabilityType(CAPABILITY_TYPE_MCP)
+                            .capabilityId(cap.getCapabilityId())
+                            .llmToolName(llmName)
+                            .displayName(tool.getName())
+                            .description(tool.getDescription() != null ? tool.getDescription() : "")
+                            .parametersSchemaJson(tool.getInputSchema())
+                            .execBinding(binding).build());
                 }
                 return;
             }
@@ -246,49 +274,15 @@ public class ContextPreparer {
         binding.put(ExecBindingKeys.MCP_AUTH_CONFIG, mcp.getAuthConfig());
         binding.put(ExecBindingKeys.MCP_NATIVE_TOOL_NAME, mcp.getName());
         result.add(RuntimeTool.builder()
-            .capabilityType(CAPABILITY_TYPE_MCP)
-            .capabilityId(cap.getCapabilityId())
-            .llmToolName(llmName)
-            .displayName(mcp.getName())
-            .description(mcp.getDescription() != null ? mcp.getDescription() : "")
-            .parametersSchemaJson(DEFAULT_EMPTY_SCHEMA)
-            .execBinding(binding).build());
+                .capabilityType(CAPABILITY_TYPE_MCP)
+                .capabilityId(cap.getCapabilityId())
+                .llmToolName(llmName)
+                .displayName(mcp.getName())
+                .description(mcp.getDescription() != null ? mcp.getDescription() : "")
+                .parametersSchemaJson(DEFAULT_EMPTY_SCHEMA)
+                .execBinding(binding).build());
     }
 
-    static SkillDefinition parseSkillDefinition(String definition) {
-        if (definition == null || definition.isBlank()) return null;
-        String jsonStr = definition;
-
-        int jsonStart = definition.indexOf(SKILL_MARKDOWN_FENCE);
-        if (jsonStart >= 0) {
-            int contentStart = jsonStart + SKILL_MARKDOWN_FENCE.length();
-            int jsonEnd = definition.indexOf("```", contentStart);
-            if (jsonEnd >= 0) {
-                jsonStr = definition.substring(contentStart, jsonEnd).trim();
-            }
-        }
-
-        try {
-            JsonNode root = JSON.readTree(jsonStr);
-            JsonNode params = root.get(SKILL_DEF_PARAMETERS);
-            JsonNode promptTemplate = root.get(SKILL_DEF_PROMPT_TEMPLATE);
-            if (params == null || promptTemplate == null) {
-                log.warn("Skill definition missing '{}' or '{}'", SKILL_DEF_PARAMETERS, SKILL_DEF_PROMPT_TEMPLATE);
-                return null;
-            }
-            return new SkillDefinition(params.toString(), promptTemplate.asText());
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to parse skill definition JSON: {}", e.getMessage());
-            return null;
-        }
-    }
-
-    static class SkillDefinition {
-        final String parametersSchemaJson;
-        final String promptTemplate;
-        SkillDefinition(String parametersSchemaJson, String promptTemplate) {
-            this.parametersSchemaJson = parametersSchemaJson;
-            this.promptTemplate = promptTemplate;
-        }
+    record SkillDefinition(String parametersSchemaJson, String promptTemplate) {
     }
 }

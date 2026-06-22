@@ -2,9 +2,9 @@ package com.buukle.agent.model.controller;
 
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
-import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
 import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
 import com.buukle.agent.model.dtvo.dto.SetActiveKeyDTO;
+import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
 import com.buukle.agent.model.service.ModelProviderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +37,7 @@ public class ModelProviderController extends BaseController {
 
     @GetMapping
     public ResponseEntity<?> list(
-        @RequestParam(required = false) String keyword) {
+            @RequestParam(required = false) String keyword) {
         return ok(modelProviderService.listProviders(keyword));
     }
 

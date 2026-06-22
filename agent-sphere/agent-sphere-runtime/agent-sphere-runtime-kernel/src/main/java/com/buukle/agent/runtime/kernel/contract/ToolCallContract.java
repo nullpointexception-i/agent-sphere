@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.contract;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
+
 import java.io.Serializable;
 
 @Data

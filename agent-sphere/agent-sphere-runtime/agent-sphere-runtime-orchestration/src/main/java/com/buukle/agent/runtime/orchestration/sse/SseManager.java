@@ -1,8 +1,8 @@
 package com.buukle.agent.runtime.orchestration.sse;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
-import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -13,12 +13,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 @Component
 public class SseManager {
@@ -89,9 +84,9 @@ public class SseManager {
     public void sendBySession(Long sessionId, Object event) {
         // 新 run 开始时清空该 session 的缓存，避免重连后重放旧 run 的事件
         if (event instanceof RuntimeEventVO re
-            && re.getEventType() instanceof RunStatus s
-            && s == RunStatus.PENDING
-            && re.getData() != null && re.getData().getSessionId() != null) {
+                && re.getEventType() instanceof RunStatus s
+                && s == RunStatus.PENDING
+                && re.getData() != null && re.getData().getSessionId() != null) {
             ConcurrentLinkedQueue<CachedEvent> q = eventCache.get(re.getData().getSessionId());
             if (q != null) q.clear();
         }
@@ -167,5 +162,6 @@ public class SseManager {
         }
     }
 
-    private record CachedEvent(Object event, Instant timestamp) {}
+    private record CachedEvent(Object event, Instant timestamp) {
+    }
 }

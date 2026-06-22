@@ -10,10 +10,10 @@ import org.springframework.stereotype.Component;
 public class KernelContextAssembler {
     public KernelContext assemble(InstanceVO agentInstance, SessionVO session, RunVO run, String userMessage) {
         return KernelContext.builder()
-            .agentInstance(agentInstance)
-            .session(session)
-            .run(run)
-            .userMessage(userMessage)
-            .build();
+                .agentInstance(agentInstance)
+                .session(session)
+                .run(run)
+                .userMessage(userMessage)
+                .build();
     }
 }

@@ -151,7 +151,7 @@ public class LlmContextValidator {
             long htmlMax = wrAdv.getHtmlToMarkdown().getMaxContentLength();
             if (wfAdv.getMaxResponseBytes() > htmlMax) {
                 log.warn("web-fetch-advanced.max-response-bytes ({}) > html-to-markdown.max-content-length ({}), "
-                        + "fetched content may be truncated by Markdown converter",
+                                + "fetched content may be truncated by Markdown converter",
                         wfAdv.getMaxResponseBytes(), htmlMax);
             }
         }
@@ -218,7 +218,7 @@ public class LlmContextValidator {
 
     private String valueToString(Object value) {
         if (value instanceof Duration) {
-            return String.valueOf(((Duration) value).getSeconds()) + "s";
+            return ((Duration) value).getSeconds() + "s";
         }
         return value.toString();
     }

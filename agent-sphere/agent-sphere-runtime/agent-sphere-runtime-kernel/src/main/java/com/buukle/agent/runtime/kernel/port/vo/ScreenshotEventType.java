@@ -7,9 +7,13 @@ public enum ScreenshotEventType implements EventType {
 
     private final String value;
 
-    ScreenshotEventType(String value) { this.value = value; }
+    ScreenshotEventType(String value) {
+        this.value = value;
+    }
 
     @Override
     @JsonValue
-    public String value() { return value; }
+    public String value() {
+        return value;
+    }
 }

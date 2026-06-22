@@ -18,7 +18,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class CapabilityMcpControllerTest {
@@ -55,12 +56,12 @@ class CapabilityMcpControllerTest {
         given(capabilityMcpService.createMcp(any(CreateMcpDTO.class))).willReturn(vo);
 
         mockMvc.perform(post("/api/v1/capability/mcp")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(dto)))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").value(1L))
-            .andExpect(jsonPath("$.name").value("My MCP Server"))
-            .andExpect(jsonPath("$.serverUrl").value("http://localhost:9090"))
-            .andExpect(jsonPath("$.serverType").value("sse"));
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.name").value("My MCP Server"))
+                .andExpect(jsonPath("$.serverUrl").value("http://localhost:9090"))
+                .andExpect(jsonPath("$.serverType").value("sse"));
     }
 }

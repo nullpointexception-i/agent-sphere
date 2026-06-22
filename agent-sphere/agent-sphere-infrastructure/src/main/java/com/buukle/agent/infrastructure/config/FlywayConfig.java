@@ -10,7 +10,7 @@ public class FlywayConfig {
     @Bean
     public FlywayConfigurationCustomizer flywayCustomizer() {
         return configuration -> configuration
-            .baselineOnMigrate(true)
-            .baselineVersion("0");
+                .baselineOnMigrate(true)
+                .baselineVersion("0");
     }
 }

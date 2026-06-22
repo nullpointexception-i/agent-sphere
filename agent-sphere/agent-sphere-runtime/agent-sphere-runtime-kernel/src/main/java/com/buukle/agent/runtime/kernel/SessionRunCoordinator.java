@@ -52,5 +52,5 @@ public class SessionRunCoordinator {
         });
     }
 
-    enum State { IDLE, RUNNING, RUNNING_WITH_PENDING }
+    enum State {IDLE, RUNNING, RUNNING_WITH_PENDING}
 }

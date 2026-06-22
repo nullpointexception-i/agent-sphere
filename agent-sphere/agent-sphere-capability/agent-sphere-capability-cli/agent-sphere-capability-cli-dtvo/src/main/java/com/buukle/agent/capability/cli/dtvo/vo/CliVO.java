@@ -1,6 +1,7 @@
 package com.buukle.agent.capability.cli.dtvo.vo;
 
 import lombok.Data;
+
 import java.io.Serializable;
 
 @Data

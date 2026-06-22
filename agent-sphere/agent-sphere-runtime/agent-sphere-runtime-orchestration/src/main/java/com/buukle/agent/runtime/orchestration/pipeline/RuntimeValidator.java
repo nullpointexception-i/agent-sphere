@@ -27,6 +27,18 @@ public class RuntimeValidator {
     private final RouteSpi routeSpi;
     private final ModelProviderSpi providerSpi;
 
+    private static ModelRouteVO weightedSelect(List<ModelRouteVO> routes) {
+        int totalWeight = routes.stream().mapToInt(r -> r.getWeight() != null ? r.getWeight() : 100).sum();
+        if (totalWeight <= 0) return routes.get(0);
+        int roll = ThreadLocalRandom.current().nextInt(totalWeight);
+        int cumulative = 0;
+        for (ModelRouteVO r : routes) {
+            cumulative += r.getWeight() != null ? r.getWeight() : 100;
+            if (roll < cumulative) return r;
+        }
+        return routes.get(routes.size() - 1);
+    }
+
     public ValidationResult validate(Long sessionId, Long overrideRouteId) {
         SessionVO session = sessionSpi.getSession(sessionId);
         if (session == null) {
@@ -51,7 +63,7 @@ public class RuntimeValidator {
             ModelProviderVO provider = providerSpi.getProvider(primaryRoute.getProviderId());
             String name = provider != null ? provider.getName() : String.valueOf(primaryRoute.getProviderId());
             throw new BizException(OrchestrationErrorCode.MODEL_ROUTE_NO_API_KEY,
-                "供应商 [" + name + "] 未配置 API 密钥");
+                    "供应商 [" + name + "] 未配置 API 密钥");
         }
 
         ModelRouteFullVO modelRoute = toFull(primaryRoute);
@@ -73,11 +85,11 @@ public class RuntimeValidator {
         }
 
         return ValidationResult.builder()
-            .session(session)
-            .agentInstance(agentInstance)
-            .modelRoute(modelRoute)
-            .fallbackRoutes(fallbackRoutes)
-            .build();
+                .session(session)
+                .agentInstance(agentInstance)
+                .modelRoute(modelRoute)
+                .fallbackRoutes(fallbackRoutes)
+                .build();
     }
 
     private ModelRouteVO resolvePrimaryRoute(InstanceVO agentInstance, Long overrideRouteId) {
@@ -94,18 +106,6 @@ public class RuntimeValidator {
         List<ModelRouteVO> allRoutes = routeSpi.listRoutesByProvider(null, null);
         if (allRoutes.isEmpty()) return null;
         return weightedSelect(allRoutes);
-    }
-
-    private static ModelRouteVO weightedSelect(List<ModelRouteVO> routes) {
-        int totalWeight = routes.stream().mapToInt(r -> r.getWeight() != null ? r.getWeight() : 100).sum();
-        if (totalWeight <= 0) return routes.get(0);
-        int roll = ThreadLocalRandom.current().nextInt(totalWeight);
-        int cumulative = 0;
-        for (ModelRouteVO r : routes) {
-            cumulative += r.getWeight() != null ? r.getWeight() : 100;
-            if (roll < cumulative) return r;
-        }
-        return routes.get(routes.size() - 1);
     }
 
     private ModelRouteFullVO toFull(ModelRouteVO route) {

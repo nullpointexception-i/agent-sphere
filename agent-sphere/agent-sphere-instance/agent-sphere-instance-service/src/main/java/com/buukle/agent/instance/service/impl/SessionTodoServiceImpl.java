@@ -21,7 +21,7 @@ public class SessionTodoServiceImpl implements SessionTodoSpi {
     @Transactional
     public void replaceAll(Long sessionId, Long runId, List<SessionTodoVO> todos) {
         mapper.delete(new LambdaQueryWrapper<SessionTodo>()
-            .eq(SessionTodo::getSessionId, sessionId));
+                .eq(SessionTodo::getSessionId, sessionId));
 
         if (todos == null || todos.isEmpty()) return;
 
@@ -44,19 +44,19 @@ public class SessionTodoServiceImpl implements SessionTodoSpi {
     @Override
     public List<SessionTodoVO> listBySession(Long sessionId) {
         return mapper.selectList(new LambdaQueryWrapper<SessionTodo>()
-                .eq(SessionTodo::getSessionId, sessionId)
-                .orderByAsc(SessionTodo::getSortOrder)
-                .orderByAsc(SessionTodo::getId))
-            .stream().map(e -> {
-                SessionTodoVO vo = new SessionTodoVO();
-                vo.setId(e.getId());
-                vo.setSessionId(e.getSessionId());
-                vo.setRunId(e.getRunId());
-                vo.setContent(e.getContent());
-                vo.setStatus(e.getStatus());
-                vo.setPriority(e.getPriority());
-                vo.setSortOrder(e.getSortOrder());
-                return vo;
-            }).toList();
+                        .eq(SessionTodo::getSessionId, sessionId)
+                        .orderByAsc(SessionTodo::getSortOrder)
+                        .orderByAsc(SessionTodo::getId))
+                .stream().map(e -> {
+                    SessionTodoVO vo = new SessionTodoVO();
+                    vo.setId(e.getId());
+                    vo.setSessionId(e.getSessionId());
+                    vo.setRunId(e.getRunId());
+                    vo.setContent(e.getContent());
+                    vo.setStatus(e.getStatus());
+                    vo.setPriority(e.getPriority());
+                    vo.setSortOrder(e.getSortOrder());
+                    return vo;
+                }).toList();
     }
 }

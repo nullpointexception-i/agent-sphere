@@ -15,7 +15,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class InstanceControllerTest {
@@ -45,9 +46,9 @@ class InstanceControllerTest {
         given(instanceService.getInstance(1L)).willReturn(vo);
 
         mockMvc.perform(get("/api/v1/instance/instances/1"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.id").value(1L))
-            .andExpect(jsonPath("$.name").value("Customer Support Agent"))
-            .andExpect(jsonPath("$.status").value("ENABLED"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1L))
+                .andExpect(jsonPath("$.name").value("Customer Support Agent"))
+                .andExpect(jsonPath("$.status").value("ENABLED"));
     }
 }

@@ -1,16 +1,17 @@
 package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.model.domain.AgentApiKey;
-import com.buukle.agent.model.repository.ApiKeyMapper;
-import com.buukle.agent.model.service.ApiKeyService;
-import com.buukle.agent.model.service.converter.ApiKeyConverter;
 import com.buukle.agent.model.dtvo.dto.CreateApiKeyDTO;
 import com.buukle.agent.model.dtvo.vo.ApiKeyVO;
 import com.buukle.agent.model.exception.ModelErrorCode;
-import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.model.repository.ApiKeyMapper;
+import com.buukle.agent.model.service.ApiKeyService;
+import com.buukle.agent.model.service.converter.ApiKeyConverter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
 import java.util.List;
 
 @Service
@@ -35,10 +36,10 @@ public class ApiKeyServiceImpl extends ServiceImpl<ApiKeyMapper, AgentApiKey> im
     @Override
     public List<ApiKeyVO> listApiKeysByProvider(Long providerId, String keyword) {
         List<AgentApiKey> apiKeys = lambdaQuery()
-            .eq(AgentApiKey::getProviderId, providerId)
-            .like(keyword != null && !keyword.isBlank(), AgentApiKey::getAlias, keyword)
-            .orderByDesc(AgentApiKey::getCreatedAt)
-            .list();
+                .eq(AgentApiKey::getProviderId, providerId)
+                .like(keyword != null && !keyword.isBlank(), AgentApiKey::getAlias, keyword)
+                .orderByDesc(AgentApiKey::getCreatedAt)
+                .list();
         return apiKeys.stream().map(apiKeyConverter::toVO).toList();
     }
 

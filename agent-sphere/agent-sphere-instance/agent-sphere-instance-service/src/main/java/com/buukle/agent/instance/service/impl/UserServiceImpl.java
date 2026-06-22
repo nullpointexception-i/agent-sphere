@@ -1,8 +1,9 @@
 package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.AvatarGenerator;
 import com.buukle.agent.instance.domain.AgentUser;
 import com.buukle.agent.instance.dtvo.dto.LoginDTO;
@@ -13,10 +14,9 @@ import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.UserMapper;
 import com.buukle.agent.instance.service.UserService;
 import lombok.RequiredArgsConstructor;
-import com.buukle.agent.common.context.AuthContext;
-import java.security.MessageDigest;
 import org.springframework.stereotype.Service;
 
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -24,6 +24,36 @@ import java.util.HexFormat;
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implements UserService {
+
+    public static String sha256(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes());
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            throw new BizException(CommonErrorCode.INTERNAL_ERROR, "SHA-256 error", e);
+        }
+    }
+
+    private static String generateToken() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private static UserVO toVO(AgentUser user) {
+        UserVO vo = new UserVO();
+        vo.setId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setDisplayName(user.getDisplayName());
+        vo.setEnglishName(user.getEnglishName());
+        vo.setEmail(user.getEmail());
+        vo.setAvatar(user.getAvatar());
+        vo.setToken(user.getToken());
+        vo.setStatus(user.getStatus());
+        vo.setSuperAdmin(user.getSuperAdmin());
+        return vo;
+    }
 
     @Override
     public UserVO login(LoginDTO dto) {
@@ -56,7 +86,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     public void logout() {
         String token = AuthContext.getToken();
         if (token != null) {
-            lambdaUpdate().eq(AgentUser::getToken, token).set(AgentUser::getToken, (String) null).update();
+            lambdaUpdate().eq(AgentUser::getToken, token).set(AgentUser::getToken, null).update();
         }
         AuthContext.clear();
     }
@@ -81,7 +111,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     public void updatePassword(Long userId, String oldPassword, String newPassword) {
         AgentUser user = getById(userId);
         if (user == null) throw new BizException(InstanceErrorCode.USER_NOT_FOUND);
-        if (!sha256(oldPassword).equals(user.getPassword())) throw new BizException(InstanceErrorCode.OLD_PASSWORD_MISMATCH);
+        if (!sha256(oldPassword).equals(user.getPassword()))
+            throw new BizException(InstanceErrorCode.OLD_PASSWORD_MISMATCH);
         user.setPassword(sha256(newPassword));
         updateById(user);
     }
@@ -122,35 +153,5 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
         return toVO(user);
-    }
-
-    public static String sha256(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(input.getBytes());
-            return HexFormat.of().formatHex(digest);
-        } catch (Exception e) {
-            throw new BizException(CommonErrorCode.INTERNAL_ERROR, "SHA-256 error", e);
-        }
-    }
-
-    private static String generateToken() {
-        byte[] bytes = new byte[32];
-        new SecureRandom().nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    private static UserVO toVO(AgentUser user) {
-        UserVO vo = new UserVO();
-        vo.setId(user.getId());
-        vo.setUsername(user.getUsername());
-        vo.setDisplayName(user.getDisplayName());
-        vo.setEnglishName(user.getEnglishName());
-        vo.setEmail(user.getEmail());
-        vo.setAvatar(user.getAvatar());
-        vo.setToken(user.getToken());
-        vo.setStatus(user.getStatus());
-        vo.setSuperAdmin(user.getSuperAdmin());
-        return vo;
     }
 }

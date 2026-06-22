@@ -23,7 +23,8 @@ public interface McpTransportClient extends AutoCloseable {
 
     /**
      * Call a tool on the MCP server.
-     * @param toolName the tool name as defined by the server
+     *
+     * @param toolName      the tool name as defined by the server
      * @param argumentsJson JSON arguments as a string
      * @return the tool result as a string
      */

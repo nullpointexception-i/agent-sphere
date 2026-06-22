@@ -1,8 +1,8 @@
 package com.buukle.agent.infrastructure.handler;
 
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
-import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantUtil;
 import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.stereotype.Component;
 

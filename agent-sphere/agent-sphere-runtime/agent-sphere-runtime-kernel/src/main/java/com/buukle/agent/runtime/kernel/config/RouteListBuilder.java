@@ -57,7 +57,8 @@ public class RouteListBuilder {
                         Long fallbackId = Long.parseLong(idStr.trim());
                         ModelRouteVO fb = routeSpi.getRoute(fallbackId);
                         if (fb != null) routes.add(toFull(fb));
-                    } catch (NumberFormatException ignored) {}
+                    } catch (NumberFormatException ignored) {
+                    }
                 }
             }
         }
@@ -83,7 +84,8 @@ public class RouteListBuilder {
                     full.setBaseUrl(provider.getBaseUrl());
                     full.setApiKeyId(provider.getApiKeyId());
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         return full;
     }

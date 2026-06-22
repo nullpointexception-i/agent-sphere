@@ -26,18 +26,18 @@ import java.util.concurrent.TimeUnit;
 public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
 
     private static final String DESCRIPTION = "Chrome browser automation. Operations in priority order:\n"
-        + "1. navigate — open a URL in the browser.\n"
-        + "2. getContent(mode: summary) — discover interactive elements, navigation links (navLinks), expandable sections, and open dialogs/modals (dialogs). Returns inputs/buttons/forms/navLinks/sections/dialogs. Icon-only buttons are reported by their aria-label or title attribute (e.g. 'plus').\n"
-        + "3. click(selector) or click(text) — click an element by CSS selector OR by visible text. Text-based click uses 3-phase fuzzy matching: exact text → contains(text) → contains(any descendant) with up-search to nearest clickable ancestor. Works even when text is nested in child elements (e.g. menus, submenu-titles).\n"
-        + "4. type(selector, text, append?): fill input fields (works with modern SPA frameworks like React/Vue/Angular). "
-        + "When append=true, text is appended to existing content instead of replacing it. Useful for incrementally writing articles, multi-line inputs, or chat message boxes.\n"
-        + "   For Draft.js editors (Zhihu article editor, Facebook): first click() the editor area (e.g. by placeholder text '请输入正文') to activate it, "
-        + "then type() on selector '.public-DraftEditor-content'. If type() returns success but no visible text change, the editor likely needs activation first.\n"
-        + "5. executeJS — last resort for complex interactions when other actions fail. If the JS expression has no return value (undefined), the result data is '__NO_RETURN__' with _resultType 'void'.\n"
-        + "6. Tab following: clicking a link that opens a new tab (target=\"_blank\" or window.open) will automatically switch control to the new tab. The result will include _newTabId and _newTabUrl.\n"
-        + "The _url field in click/getContent results reflects the page URL after SPA route changes (500ms polling window).\n"
-        + "Always prefer getContent to discover the page structure, and text-based click over CSS selectors for navigation elements.\n"
-        + "7. Multi-tab management: navigate returns tabId. To operate a specific tab, pass the tabId parameter to getContent/click/type/executeJS. Without tabId, operations target the last navigated tab.";
+            + "1. navigate — open a URL in the browser.\n"
+            + "2. getContent(mode: summary) — discover interactive elements, navigation links (navLinks), expandable sections, and open dialogs/modals (dialogs). Returns inputs/buttons/forms/navLinks/sections/dialogs. Icon-only buttons are reported by their aria-label or title attribute (e.g. 'plus').\n"
+            + "3. click(selector) or click(text) — click an element by CSS selector OR by visible text. Text-based click uses 3-phase fuzzy matching: exact text → contains(text) → contains(any descendant) with up-search to nearest clickable ancestor. Works even when text is nested in child elements (e.g. menus, submenu-titles).\n"
+            + "4. type(selector, text, append?): fill input fields (works with modern SPA frameworks like React/Vue/Angular). "
+            + "When append=true, text is appended to existing content instead of replacing it. Useful for incrementally writing articles, multi-line inputs, or chat message boxes.\n"
+            + "   For Draft.js editors (Zhihu article editor, Facebook): first click() the editor area (e.g. by placeholder text '请输入正文') to activate it, "
+            + "then type() on selector '.public-DraftEditor-content'. If type() returns success but no visible text change, the editor likely needs activation first.\n"
+            + "5. executeJS — last resort for complex interactions when other actions fail. If the JS expression has no return value (undefined), the result data is '__NO_RETURN__' with _resultType 'void'.\n"
+            + "6. Tab following: clicking a link that opens a new tab (target=\"_blank\" or window.open) will automatically switch control to the new tab. The result will include _newTabId and _newTabUrl.\n"
+            + "The _url field in click/getContent results reflects the page URL after SPA route changes (500ms polling window).\n"
+            + "Always prefer getContent to discover the page structure, and text-based click over CSS selectors for navigation elements.\n"
+            + "7. Multi-tab management: navigate returns tabId. To operate a specific tab, pass the tabId parameter to getContent/click/type/executeJS. Without tabId, operations target the last navigated tab.";
     private static final long TIMEOUT_SECONDS = 30;
 
     private static final String ACTION_NAVIGATE = "navigate";
@@ -58,7 +58,9 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
     }
 
     @Override
-    public boolean needConfig() { return true; }
+    public boolean needConfig() {
+        return true;
+    }
 
     @Override
     public ToolInfoVO getInfo() {
@@ -101,13 +103,13 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
         }
 
         ChromeCommandDTO cmd = new ChromeCommandDTO(cec.getSessionId(), commandId, action)
-            .withUrl(cec.getUrl())
-            .withSelector(cec.getSelector())
-            .withText(cec.getText())
-            .withCode(cec.getCode())
-            .withMode(cec.getMode())
-            .withTabId(cec.getTabId())
-            .withAppend(cec.getAppend());
+                .withUrl(cec.getUrl())
+                .withSelector(cec.getSelector())
+                .withText(cec.getText())
+                .withCode(cec.getCode())
+                .withMode(cec.getMode())
+                .withTabId(cec.getTabId())
+                .withAppend(cec.getAppend());
 
         try {
             eventPublisher.publishEvent(cmd);
@@ -119,8 +121,8 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             ChromePendingStore.remove(commandId);
 
             return cb.isSuccess()
-                ? ChromeResultVO.ok(cb.getData())
-                : ChromeResultVO.fail(cb.getError());
+                    ? ChromeResultVO.ok(cb.getData())
+                    : ChromeResultVO.fail(cb.getError());
 
         } catch (java.util.concurrent.TimeoutException e) {
             ChromePendingStore.remove(commandId);

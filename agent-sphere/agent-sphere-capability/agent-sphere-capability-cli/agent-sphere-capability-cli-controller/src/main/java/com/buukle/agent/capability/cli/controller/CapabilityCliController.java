@@ -1,14 +1,15 @@
 package com.buukle.agent.capability.cli.controller;
 
-import com.buukle.agent.common.context.WithTenant;
-import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.capability.cli.dtvo.dto.CreateCliDTO;
 import com.buukle.agent.capability.cli.service.CapabilityCliService;
+import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.common.util.BaseController;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.time.LocalDateTime;
 
 @RestController
@@ -30,11 +31,11 @@ public class CapabilityCliController extends BaseController {
 
     @GetMapping
     public ResponseEntity<?> list(
-        @RequestParam(defaultValue = "1") int page,
-        @RequestParam(defaultValue = "10") int size,
-        @RequestParam(required = false) String keyword,
-        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
         return ok(capabilityCliService.pageClis(page, size, keyword, startTime, endTime));
     }
 
