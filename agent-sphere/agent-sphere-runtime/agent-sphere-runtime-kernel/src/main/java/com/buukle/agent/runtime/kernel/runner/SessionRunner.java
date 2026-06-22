@@ -423,18 +423,21 @@ public class SessionRunner {
         AtomicReference<String> contentRef = new AtomicReference<>("");
         List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
         AtomicReference<String> errorRef = new AtomicReference<>();
-        CountDownLatch done = new CountDownLatch(1);
-        final CompletableFuture<Void>[] llmFuture = new CompletableFuture[1];
         java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
         try {
             List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
 
             fallbackRouteExecutor.execute(routes, (i, route) -> {
+                if (CANCELLED_RUNS.contains(runId)) {
+                    cancelled.set(true);
+                    throw new RuntimeException("Run cancelled");
+                }
+
                 // ★ 压缩检查：使用实际 route（和 LLM 调用同源）
                 if (compactionService.shouldCompact(messages, route)) {
                     compactionTriggered.set(true);
-                    done.countDown();
                     return null;
                 }
 
@@ -447,7 +450,8 @@ public class SessionRunner {
                     request.setTools(toolDefs);
                 }
 
-                llmFuture[0] = kernelLlmService.stream(
+                CountDownLatch streamDone = new CountDownLatch(1);
+                CompletableFuture<Void> future = kernelLlmService.stream(
                         route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
                         request,
                         event -> {
@@ -486,37 +490,55 @@ public class SessionRunner {
                         new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
                                 .setInteractionType(LlmInteractionType.CHAT_REPLY));
 
-                llmFuture[0].whenComplete((v, ex) -> done.countDown());
+                future.whenComplete((v, ex) -> streamDone.countDown());
+
+                try {
+                    long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
+                    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
+                    while (!streamDone.await(1, TimeUnit.SECONDS)) {
+                        if (CANCELLED_RUNS.contains(runId)) {
+                            cancelled.set(true);
+                            future.cancel(true);
+                            throw new RuntimeException("Run cancelled");
+                        }
+                        if (System.nanoTime() >= deadline) {
+                            future.cancel(true);
+                            throw new RuntimeException("Turn timed out for route " + route.getId());
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+
+                String error = errorRef.get();
+                if (error != null) {
+                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId).setRunId(runId)
+                                    .setResponse("⚠️ " + route.getModelName() + ": " + error + "，尝试备用路由...")
+                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                    .setPublishId(UUID.randomUUID().toString())));
+                    throw new RuntimeException("Route failed: " + error);
+                }
+
                 return null;
             });
         } catch (Exception e) {
-            log.error("Turn execution failed for session {}", sessionId, e);
-        }
-
-        // Wait for LLM stream to complete (or timeout / cancelled)
-        try {
-            long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
-            while (!done.await(1, TimeUnit.SECONDS)) {
-                if (CANCELLED_RUNS.contains(runId)) {
-                    log.warn("Turn cancelled for run {}", runId);
-                    if (llmFuture[0] != null) llmFuture[0].cancel(true);
-                    return TurnResult.cancelled(contentRef.get(), toolCalls);
-                }
-                if (System.nanoTime() >= deadline) {
-                    log.warn("Turn timed out after {}s for session {}, cancelling LLM stream", turnTimeout, sessionId);
-                    if (llmFuture[0] != null) llmFuture[0].cancel(true);
-                    break;
-                }
+            if (!cancelled.get()) {
+                log.error("Turn execution failed for session {}", sessionId, e);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         }
 
         // ★ 压缩触发：compact 后让 caller 重新组装
         if (compactionTriggered.get()) {
             compactionService.compact(sessionId, runId, ctx);
             return TurnResult.compacted();
+        }
+
+        if (cancelled.get()) {
+            return TurnResult.cancelled(contentRef.get(), toolCalls);
         }
 
         String error = errorRef.get();

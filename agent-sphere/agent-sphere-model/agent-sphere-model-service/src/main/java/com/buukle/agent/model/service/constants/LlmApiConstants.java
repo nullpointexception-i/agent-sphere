@@ -26,8 +26,22 @@ public final class LlmApiConstants {
     public static final String FIELD_INDEX = "index";
     public static final String FIELD_ID = "id";
     public static final String FIELD_MESSAGE = "message";
-    // Values
     public static final String FINISH_REASON_STOP = "stop";
+    // Content field names (for model output JSON parsing)
+    public static final String FIELD_ACTION = "action";
+    public static final String FIELD_TOOL = "tool";
+    public static final String FIELD_FUNC = "func";
+    public static final String FIELD_PARAMETERS = "parameters";
+    public static final String FIELD_PARAMS = "params";
+    public static final String FIELD_FUNC_ARGS = "func_args";
+    public static final String FIELD_KWARGS = "kwargs";
+    // Content wrapper markers (Zhipu thinking models)
+    public static final String CONTENT_WRAPPER_BEGIN = "<|begin_of_box|>";
+    public static final String CONTENT_WRAPPER_END = "<|end_of_box|>";
+    // Call ID prefix
+    public static final String PARSED_CALL_ID_PREFIX = "parsed_";
+    // Empty JSON
+    public static final String EMPTY_JSON_ARGS = "{}";
 
     private LlmApiConstants() {
     }

@@ -2,6 +2,7 @@ package com.buukle.agent.model.service.adapter.strategy.impl;
 
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
+import com.buukle.agent.model.service.adapter.record.ContentToolCallResult;
 import com.buukle.agent.model.service.adapter.strategy.ProviderStrategy;
 import com.buukle.agent.model.service.constants.LlmApiConstants;
 import com.buukle.agent.model.service.stream.ToolStream;
@@ -23,6 +24,11 @@ public class OpenaiProviderStrategy implements ProviderStrategy {
     @Override
     public void adaptResponse(JsonNode choice, ToolStream toolStream) {
         parseDeltaToolCalls(choice, toolStream);
+    }
+
+    @Override
+    public ContentToolCallResult extractToolCallsFromContent(String content) {
+        return ContentToolCallResult.EMPTY;
     }
 
     private void parseDeltaToolCalls(JsonNode choice, ToolStream toolStream) {

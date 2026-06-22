@@ -13,6 +13,7 @@ import com.buukle.agent.model.repository.ModelProviderMapper;
 import com.buukle.agent.model.service.ModelProviderService;
 import com.buukle.agent.model.service.adapter.ChatRequestAdapter;
 import com.buukle.agent.model.service.adapter.ChatResponseAdapter;
+import com.buukle.agent.model.service.adapter.record.ContentToolCallResult;
 import com.buukle.agent.model.service.constants.LlmApiConstants;
 import com.buukle.agent.model.service.converter.ModelProviderConverter;
 import com.buukle.agent.model.service.stream.ToolStream;
@@ -190,6 +191,22 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 }
             }
             toolStream.finishAll();
+
+            ContentToolCallResult ctcr = chatResponseAdapter.extractToolCalls(contentBuilder.toString(), company);
+            if (ctcr.isEmpty()) {
+                ctcr = chatResponseAdapter.extractToolCalls(reasoningBuilder.toString(), company);
+            }
+            if (!ctcr.isEmpty()) {
+                contentBuilder.setLength(0);
+                if (ctcr.cleanedContent() != null) {
+                    contentBuilder.append(ctcr.cleanedContent());
+                }
+                for (ContentToolCallResult.ContentToolCall tc : ctcr.toolCalls()) {
+                    String callId = LlmApiConstants.PARSED_CALL_ID_PREFIX + System.nanoTime();
+                    onEvent.accept(new LLMEvent.ToolCall(callId, tc.name(), tc.arguments()));
+                }
+            }
+
             Map<String, Object> usage = Map.of();
             String content = contentBuilder.toString();
             String reasoning = reasoningBuilder.toString();
