@@ -8,6 +8,7 @@ import lombok.Getter;
 public enum ModelProviderCompany {
     DEEPSEEK("DeepSeek", "深度求索", "deepseek"),
     OPENAI("OpenAI", "OpenAI", "openai"),
+    ZHIPU("Zhipu", "智谱", "zhipu"),
     ;
 
     private final String nameEn;
@@ -18,5 +19,12 @@ public enum ModelProviderCompany {
         this.nameEn = nameEn;
         this.nameCn = nameCn;
         this.value = value;
+    }
+
+    public static ModelProviderCompany fromValue(String value) {
+        for (ModelProviderCompany c : values()) {
+            if (c.value.equalsIgnoreCase(value)) return c;
+        }
+        return null;
     }
 }

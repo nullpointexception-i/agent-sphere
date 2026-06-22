@@ -25,6 +25,8 @@ public class ChatCompletionRequestDTO implements Serializable {
     private ResponseFormatDTO responseFormat;
     @JsonProperty("thinking")
     private ThinkingDTO thinking;
+    @JsonProperty("tool_stream")
+    private Boolean toolStream;
 
     @JsonProperty("tool_choice")
     public Object getToolChoice() {

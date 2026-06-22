@@ -19,12 +19,20 @@ public final class LlmApiConstants {
     public static final String SSE_DONE_MARKER = "[DONE]";
 
     // JSON fields
-    public static final String FIELD_MODEL = "model";
-    public static final String FIELD_STREAM = "stream";
-    public static final String FIELD_MESSAGES = "messages";
     public static final String FIELD_CHOICES = "choices";
     public static final String FIELD_DELTA = "delta";
     public static final String FIELD_CONTENT = "content";
     public static final String FIELD_REASONING_CONTENT = "reasoning_content";
+    public static final String FIELD_FINISH_REASON = "finish_reason";
+    public static final String FIELD_TOOL_CALLS = "tool_calls";
+    public static final String FIELD_FUNCTION = "function";
+    public static final String FIELD_NAME = "name";
+    public static final String FIELD_ARGUMENTS = "arguments";
+    public static final String FIELD_INDEX = "index";
+    public static final String FIELD_ID = "id";
+    public static final String FIELD_MESSAGE = "message";
+
+    // Values
+    public static final String FINISH_REASON_STOP = "stop";
 
 }

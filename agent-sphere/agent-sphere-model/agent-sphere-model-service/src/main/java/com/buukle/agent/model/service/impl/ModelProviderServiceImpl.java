@@ -12,7 +12,8 @@ import com.buukle.agent.model.exception.ModelErrorCode;
 import com.buukle.agent.model.repository.ModelProviderMapper;
 import com.buukle.agent.model.service.ModelProviderService;
 import com.buukle.agent.model.service.converter.ModelProviderConverter;
-import com.buukle.agent.model.service.helper.ChatRequestAdapter;
+import com.buukle.agent.model.service.adapter.ChatRequestAdapter;
+import com.buukle.agent.model.service.adapter.ChatResponseAdapter;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.service.stream.ToolStream;
 import com.buukle.agent.util.json.JsonUtils;
@@ -26,7 +27,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -53,6 +53,9 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
 
     @Autowired
     ChatRequestAdapter chatRequestAdapter;
+
+    @Autowired
+    ChatResponseAdapter chatResponseAdapter;
 
     @Override
     public ModelProviderVO createProvider(CreateModelProviderDTO dto) {
@@ -107,11 +110,11 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                        Consumer<LLMEvent> onEvent, Runnable onDone) {
         chatRequestAdapter.adapt(request, company);
         String requestBody = JsonUtils.toJson(request);
-        streamEvents(baseUrl, apiKey, modelName, requestBody, onEvent, onDone);
+        streamEvents(baseUrl, apiKey, modelName, requestBody, company, onEvent, onDone);
     }
 
     private void streamEvents(String baseUrl, String apiKey, String modelName, String requestBody,
-                              Consumer<LLMEvent> onEvent, Runnable onDone) {
+                              String company, Consumer<LLMEvent> onEvent, Runnable onDone) {
         StringBuilder contentBuilder = new StringBuilder();
         StringBuilder reasoningBuilder = new StringBuilder();
         int chunkCount = 0;
@@ -151,8 +154,9 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                                 && chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
                                 && chunk.get(LlmApiConstants.FIELD_CHOICES).size() > 0) {
                                 JsonNode choice = chunk.get(LlmApiConstants.FIELD_CHOICES).get(0);
-                                if (choice.has("finish_reason") && !choice.get("finish_reason").isNull()) {
-                                    log.debug("LLM finish_reason: {}", choice.get("finish_reason").asText());
+                                if (choice.has(LlmApiConstants.FIELD_FINISH_REASON)
+                                    && !choice.get(LlmApiConstants.FIELD_FINISH_REASON).isNull()) {
+                                    log.debug("LLM finish_reason: {}", choice.get(LlmApiConstants.FIELD_FINISH_REASON).asText());
                                 }
                                 JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
                                 if (delta != null) {
@@ -172,20 +176,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                                             onEvent.accept(new LLMEvent.TextDelta(c));
                                         }
                                     }
-                                    if (delta.has("tool_calls") && delta.get("tool_calls").isArray()) {
-                                        for (JsonNode tc : delta.get("tool_calls")) {
-                                            int index = tc.has("index") ? tc.get("index").asInt() : 0;
-                                            String tcId = tc.has("id") ? tc.get("id").asText() : null;
-                                            String tcName = null;
-                                            String tcArgs = null;
-                                            if (tc.has("function")) {
-                                                JsonNode fn = tc.get("function");
-                                                if (fn.has("name") && !fn.get("name").isNull()) tcName = fn.get("name").asText();
-                                                if (fn.has("arguments")) tcArgs = fn.get("arguments").asText();
-                                            }
-                                            toolStream.onDelta(index, tcId, tcName, tcArgs);
-                                        }
-                                    }
+                                    chatResponseAdapter.adaptResponse(choice, toolStream, company);
                                 }
                             }
                         } catch (Exception ignored) {}
@@ -198,7 +189,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
             String reasoning = reasoningBuilder.toString();
             log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}",
                 modelName, chunkCount, content.length(), reasoning.length());
-            onEvent.accept(new LLMEvent.Finish("stop", usage));
+            onEvent.accept(new LLMEvent.Finish(LlmApiConstants.FINISH_REASON_STOP, usage));
         } catch (Exception e) {
             log.error("LLM stream failed: model={}, chunks={}, content={}, reasoning={}",
                 modelName, chunkCount, truncate(contentBuilder.toString()), truncate(reasoningBuilder.toString()), e);
