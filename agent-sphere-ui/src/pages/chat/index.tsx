@@ -12,7 +12,6 @@ import Sidebar from './components/Sidebar';
 import Landing from './components/Landing';
 import ChatMain from './components/chat';
 import SessionPanel from './components/SessionPanel';
-import MemoryModal from './components/MemoryModal';
 import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
 import SetModelRouteModal from '@/components/SetModelRouteModal';
@@ -42,10 +41,7 @@ export default function Chat() {
   const [currentInstanceObj, setCurrentInstanceObj] = useState<any>(null);
   const [modelRoutes, setModelRoutes] = useState<any[]>([]);
   const [selectedModelRouteId, setSelectedModelRouteId] = useState<number | undefined>(undefined);
-  const [showMemory, setShowMemory] = useState(false);
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
-  const [memorySummary, setMemorySummary] = useState('');
-  const [memoryRuns, setMemoryRuns] = useState<any[]>([]);
   const [expandOpen, setExpandOpen] = useState(false);
   const [expandText, setExpandText] = useState('');
   const [instanceDrawerOpen, setInstanceDrawerOpen] = useState(false);
@@ -547,17 +543,6 @@ export default function Chat() {
     }).catch(() => {});
   }, []);
 
-  const handleToggleMemory = async (sessionId: number) => {
-    try {
-      const s = await agentApi.sessions.get(sessionId);
-      setMemorySummary(s.summary || '');
-      const res = await agentApi.runs.listBySession(sessionId, 1, 5);
-      const runs = res.records || [];
-      setMemoryRuns(runs.reverse());
-      setShowMemory(true);
-    } catch {}
-  };
-
   return (
     <PageContainer
       title={false}
@@ -619,7 +604,6 @@ export default function Chat() {
                 currentRunIdRef.current = null;
               }}
               onExpandOpen={() => { setExpandText(inputValue); setExpandOpen(true); }}
-              onToggleMemory={handleToggleMemory}
               sessionPanelOpen={sessionPanelOpen}
               onTogglePanel={() => setSessionPanelOpen(!sessionPanelOpen)}
             />
@@ -656,14 +640,6 @@ export default function Chat() {
         />
       </div>
       <PiPWindow screenshot={latestScreenshot} artifact={latestArtifact} />
-      <MemoryModal
-        open={showMemory}
-        onClose={() => setShowMemory(false)}
-        sessionId={currentSession?.id}
-        summary={memorySummary}
-        onSummaryChange={setMemorySummary}
-        runs={memoryRuns}
-      />
       <ExpandModal
         open={expandOpen}
         onClose={() => setExpandOpen(false)}

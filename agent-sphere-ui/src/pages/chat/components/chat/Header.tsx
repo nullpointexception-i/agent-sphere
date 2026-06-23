@@ -1,5 +1,5 @@
 import { Button, Dropdown, Tooltip } from 'antd';
-import { CheckOutlined, DatabaseOutlined, DownOutlined, ToolOutlined } from '@ant-design/icons';
+import { CheckOutlined, DownOutlined, ToolOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { useMemo } from 'react';
 import { useStyles } from '../../style';
@@ -11,7 +11,6 @@ interface HeaderProps {
   onModelRouteChange: (id: number | undefined) => void;
   modelRoutes: any[];
   sseConnected: boolean;
-  onToggleMemory: (sessionId: number) => void;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
 }
@@ -19,7 +18,7 @@ interface HeaderProps {
 export default function Header({
   currentSession, instances,
   selectedModelRouteId, onModelRouteChange,
-  modelRoutes, sseConnected, onToggleMemory,
+  modelRoutes, sseConnected,
   sessionPanelOpen, onTogglePanel,
 }: HeaderProps) {
   const intl = useIntl();
@@ -80,17 +79,15 @@ export default function Header({
       </Dropdown>
       {sseConnected && <span className={styles.statusDot} />}
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Button
-          size="small"
-          type={sessionPanelOpen ? 'primary' : 'default'}
-          icon={<ToolOutlined />}
-          onClick={onTogglePanel}
-        >
-          {intl.formatMessage({ id: 'pages.chat.sessionPanel', defaultMessage: 'Session Panel' })}
-        </Button>
-        <Button size="small" icon={<DatabaseOutlined />} onClick={() => onToggleMemory(currentSession.id)}>
-          {intl.formatMessage({ id: 'pages.chat.memory', defaultMessage: 'Memory' })}
-        </Button>
+        {!sessionPanelOpen && (
+          <Button
+            size="small"
+            icon={<ToolOutlined />}
+            onClick={onTogglePanel}
+          >
+            {intl.formatMessage({ id: 'pages.chat.sessionPanel', defaultMessage: 'Session Panel' })}
+          </Button>
+        )}
       </div>
     </div>
   );

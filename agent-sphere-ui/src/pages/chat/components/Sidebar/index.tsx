@@ -3,6 +3,7 @@ import { Conversations } from '@ant-design/x';
 import { CheckOutlined, CheckSquareOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { useMemo, useState } from 'react';
+import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import { useStyles } from '../../style';
 import RunDrawer from '../RunDrawer';
@@ -33,6 +34,20 @@ export default function Sidebar({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [viewSession, setViewSession] = useState<any>(null);
   const [runDrawerSessionId, setRunDrawerSessionId] = useState<number | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryContent, setSummaryContent] = useState('');
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  const handleShowSummary = async (sessionId: number) => {
+    setSummaryLoading(true);
+    setSummaryOpen(true);
+    try {
+      const s = await agentApi.sessions.get(sessionId);
+      setSummaryContent(s.summary || '');
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   const conversationsItems = useMemo(() =>
     sessions.map((s: any) => ({
@@ -92,6 +107,7 @@ export default function Sidebar({
             <EyeOutlined style={{ fontSize: 13, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setViewSession(s); }} />
             <EditOutlined style={{ fontSize: 13, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setEditingValue(s.title); setEditingKey(String(s.id)); }} />
             <UnorderedListOutlined style={{ fontSize: 13, cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setRunDrawerSessionId(s.id); }} />
+            <span style={{ fontSize: 13, cursor: 'pointer', userSelect: 'none' }} onClick={(e) => { e.stopPropagation(); handleShowSummary(s.id); }}>🧠</span>
             <DeleteOutlined style={{ fontSize: 13, cursor: 'pointer' }} className="delete-icon" onClick={(e) => {
               e.stopPropagation();
               modal.confirm({
@@ -193,6 +209,17 @@ export default function Sidebar({
         sessionId={runDrawerSessionId}
         onClose={() => setRunDrawerSessionId(null)}
       />
+      <Modal
+        title={intl.formatMessage({ id: 'pages.chat.sessionSummary', defaultMessage: 'Session Summary' })}
+        open={summaryOpen}
+        onCancel={() => setSummaryOpen(false)}
+        footer={null}
+        loading={summaryLoading}
+      >
+        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: 40 }}>
+          {summaryContent || intl.formatMessage({ id: 'pages.chat.noSummary', defaultMessage: 'No summary available' })}
+        </div>
+      </Modal>
     </>
   );
 }

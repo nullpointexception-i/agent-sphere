@@ -24,7 +24,6 @@ interface ChatMainProps {
   onSendMessage: () => void;
   onCancelSend: () => void;
   onExpandOpen: () => void;
-  onToggleMemory: (sessionId: number) => void;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
 }
@@ -35,7 +34,7 @@ export default function ChatMain({
   modelRoutes, sseConnected, messages, collapsedKeys,
   onCollapsedKeysChange, hasMoreHistory, onLoadMoreHistory,
   inputValue, onInputValueChange, sending, onSendMessage, onCancelSend,
-  onExpandOpen, onToggleMemory,
+  onExpandOpen,
   sessionPanelOpen, onTogglePanel,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
@@ -54,7 +53,6 @@ export default function ChatMain({
         onModelRouteChange={onModelRouteChange}
         modelRoutes={modelRoutes}
         sseConnected={sseConnected}
-        onToggleMemory={onToggleMemory}
         sessionPanelOpen={sessionPanelOpen}
         onTogglePanel={onTogglePanel}
       />
