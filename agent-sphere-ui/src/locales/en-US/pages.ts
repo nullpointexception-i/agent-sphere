@@ -308,4 +308,7 @@ export default {
   'pages.chat.todoList.empty': 'No todo items yet',
   'pages.chat.toolCalls': 'Tool Calls',
   'pages.chat.toolCalls.empty': 'No tool calls yet',
+  'pages.chat.sessionSummary': 'Session Summary',
+  'pages.chat.noSummary': 'No summary available',
+  'pages.chat.saveFailed': 'Save failed',
 };

@@ -303,4 +303,7 @@ export default {
   'pages.chat.todoList.empty': '暂无待办事项',
   'pages.chat.toolCalls': '工具调用',
   'pages.chat.toolCalls.empty': '暂无工具调用',
+  'pages.chat.sessionSummary': '会话摘要',
+  'pages.chat.noSummary': '暂无摘要',
+  'pages.chat.saveFailed': '保存失败',
 };

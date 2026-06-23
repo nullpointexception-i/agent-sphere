@@ -35,17 +35,33 @@ export default function Sidebar({
   const [viewSession, setViewSession] = useState<any>(null);
   const [runDrawerSessionId, setRunDrawerSessionId] = useState<number | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [summaryContent, setSummaryContent] = useState('');
+  const [summarySessionId, setSummarySessionId] = useState<number | null>(null);
+  const [summaryEditValue, setSummaryEditValue] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summarySaving, setSummarySaving] = useState(false);
 
   const handleShowSummary = async (sessionId: number) => {
     setSummaryLoading(true);
+    setSummarySessionId(sessionId);
     setSummaryOpen(true);
     try {
       const s = await agentApi.sessions.get(sessionId);
-      setSummaryContent(s.summary || '');
+      setSummaryEditValue(s.summary || '');
     } finally {
       setSummaryLoading(false);
+    }
+  };
+
+  const handleSaveSummary = async () => {
+    if (!summarySessionId) return;
+    setSummarySaving(true);
+    try {
+      await agentApi.sessions.updateSummary(summarySessionId, summaryEditValue);
+      message.success(intl.formatMessage({ id: 'pages.chat.saveSummary', defaultMessage: 'Save Summary' }));
+    } catch {
+      message.error(intl.formatMessage({ id: 'pages.chat.saveFailed', defaultMessage: 'Save failed' }));
+    } finally {
+      setSummarySaving(false);
     }
   };
 
@@ -213,12 +229,19 @@ export default function Sidebar({
         title={intl.formatMessage({ id: 'pages.chat.sessionSummary', defaultMessage: 'Session Summary' })}
         open={summaryOpen}
         onCancel={() => setSummaryOpen(false)}
-        footer={null}
         loading={summaryLoading}
+        footer={
+          <Button type="primary" onClick={handleSaveSummary} loading={summarySaving}>
+            {intl.formatMessage({ id: 'pages.chat.saveSummary', defaultMessage: 'Save Summary' })}
+          </Button>
+        }
       >
-        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: 40 }}>
-          {summaryContent || intl.formatMessage({ id: 'pages.chat.noSummary', defaultMessage: 'No summary available' })}
-        </div>
+        <Input.TextArea
+          rows={4}
+          value={summaryEditValue}
+          onChange={(e) => setSummaryEditValue(e.target.value)}
+          placeholder={intl.formatMessage({ id: 'pages.chat.noSummary', defaultMessage: 'No summary available' })}
+        />
       </Modal>
     </>
   );
