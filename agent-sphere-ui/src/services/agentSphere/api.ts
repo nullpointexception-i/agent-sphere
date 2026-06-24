@@ -60,6 +60,10 @@ export const agentApi = {
         method: 'PUT',
         data: { summary },
       }),
+    messageHistory: (id: number, direction: 'prev' | 'next', runId?: number) =>
+      request<{ runId: number; userMessage: string; hasMore: boolean }>(
+        `${BASE}/instance/sessions/${id}/history/messages?direction=${direction}${runId != null ? `&runId=${runId}` : ''}`,
+      ),
     close: (id: number) =>
       request<void>(`${BASE}/instance/sessions/${id}`, {
         method: 'DELETE',

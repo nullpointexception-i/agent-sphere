@@ -81,6 +81,7 @@ export default function ChatMain({
             onCancel={onCancelSend}
             onExpandOpen={onExpandOpen}
             sessionKey={sessionKey}
+            sessionId={currentSession?.id}
           />
         </div>
       )}
@@ -94,6 +95,7 @@ export default function ChatMain({
             onCancel={onCancelSend}
             onExpandOpen={onExpandOpen}
             sessionKey={sessionKey}
+            sessionId={currentSession?.id}
           />
         </div>
       )}

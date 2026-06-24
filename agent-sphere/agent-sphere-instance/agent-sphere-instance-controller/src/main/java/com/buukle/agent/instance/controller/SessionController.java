@@ -7,6 +7,7 @@ import com.buukle.agent.instance.dtvo.dto.UpdateSessionDTO;
 import com.buukle.agent.instance.dtvo.dto.UpdateSummaryDTO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.service.SessionService;
+import com.buukle.agent.instance.spi.RunSpi;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +21,7 @@ import java.util.List;
 @WithTenant
 public class SessionController extends BaseController {
     private final SessionService sessionService;
+    private final RunSpi runSpi;
 
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateSessionDTO dto) {
@@ -60,5 +62,12 @@ public class SessionController extends BaseController {
     public ResponseEntity<?> batchClose(@RequestBody List<Long> ids) {
         sessionService.batchCloseSessions(ids);
         return deleted();
+    }
+
+    @GetMapping("/{id}/history/messages")
+    public ResponseEntity<?> messageHistory(@PathVariable Long id,
+                                            @RequestParam String direction,
+                                            @RequestParam(required = false) Long runId) {
+        return ok(runSpi.getMessageHistory(id, direction, runId));
     }
 }
