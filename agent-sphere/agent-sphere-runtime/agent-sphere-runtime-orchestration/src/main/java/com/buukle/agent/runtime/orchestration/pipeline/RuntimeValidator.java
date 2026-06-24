@@ -75,7 +75,7 @@ public class RuntimeValidator {
                 try {
                     Long fbId = Long.parseLong(idStr.trim());
                     ModelRouteVO fbRoute = routeSpi.getRoute(fbId);
-                    if (fbRoute != null) {
+                    if (fbRoute != null && (fbRoute.getApiKeyConfigured() == null || fbRoute.getApiKeyConfigured())) {
                         fallbackRoutes.add(toFull(fbRoute));
                     }
                 } catch (Exception e) {

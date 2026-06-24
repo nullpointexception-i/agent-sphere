@@ -1,4 +1,4 @@
-import { Button, Dropdown, Tooltip } from 'antd';
+import { App, Button, Dropdown, Tooltip } from 'antd';
 import { CheckOutlined, DownOutlined, ToolOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { useMemo } from 'react';
@@ -22,6 +22,7 @@ export default function Header({
   sessionPanelOpen, onTogglePanel,
 }: HeaderProps) {
   const intl = useIntl();
+  const { message } = App.useApp();
   const { styles } = useStyles();
 
   const currentInstanceName = useMemo(() => {
@@ -36,17 +37,50 @@ export default function Header({
     return r ? (r.providerName ? `${r.providerName} / ${r.modelName}` : r.modelName) : '';
   }, [selectedModelRouteId, modelRoutes]);
 
-  const modelMenuItems = useMemo(() =>
-    modelRoutes.map((r: any) => ({
-      key: String(r.id),
-      label: r.providerName ? `${r.providerName} / ${r.modelName}` : r.modelName,
-      icon: selectedModelRouteId === r.id ? <CheckOutlined /> : undefined,
-      disabled: r.apiKeyConfigured === false,
-      title: r.apiKeyConfigured === false ? intl.formatMessage({ id: 'pages.instances.routeNoApiKey', defaultMessage: 'The provider for this route has no API key configured' }) : undefined,
-      onClick: () => onModelRouteChange(r.id),
-    })),
-    [modelRoutes, selectedModelRouteId, onModelRouteChange],
-  );
+  const modelMenuItems = useMemo(() => {
+    const sorted = modelRoutes
+      .slice()
+      .sort((a: any, b: any) =>
+        (a.providerName || '').localeCompare(b.providerName || '')
+        || (a.modelName || '').localeCompare(b.modelName || ''),
+      );
+
+    const noKeyMsg = intl.formatMessage({ id: 'pages.instances.routeNoApiKey', defaultMessage: 'The provider for this route has no API key configured' });
+    const items: any[] = [];
+    let lastProvider = '';
+    for (const r of sorted) {
+      const provider = r.providerName || '';
+      if (provider && provider !== lastProvider) {
+        items.push({
+          key: `group_${provider}`,
+          label: <span style={{ fontWeight: 600, fontSize: 12, color: '#999' }}>{provider}</span>,
+          disabled: true,
+        });
+        lastProvider = provider;
+      }
+      const noApiKey = r.apiKeyConfigured === false;
+      items.push({
+        key: String(r.id),
+        label: (
+          <span
+            title={noApiKey ? noKeyMsg : undefined}
+            style={noApiKey ? { color: '#bfbfbf', cursor: 'not-allowed' } : undefined}
+          >
+            {provider ? `    ${r.modelName}` : r.modelName}
+          </span>
+        ),
+        icon: selectedModelRouteId === r.id ? <CheckOutlined /> : undefined,
+        onClick: () => {
+          if (noApiKey) {
+            message.warning(noKeyMsg);
+            return;
+          }
+          onModelRouteChange(r.id);
+        },
+      });
+    }
+    return items;
+  }, [modelRoutes, selectedModelRouteId, onModelRouteChange, intl, message]);
 
   return (
     <div className={styles.header}>

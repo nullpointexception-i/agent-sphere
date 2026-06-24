@@ -12,7 +12,6 @@ import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.InstanceMapper;
 import com.buukle.agent.instance.service.InstanceService;
 import com.buukle.agent.instance.service.converter.InstanceConverter;
-import com.buukle.agent.model.spi.ModelProviderSpi;
 import com.buukle.agent.model.spi.RouteSpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +26,6 @@ import java.util.List;
 public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstance> implements InstanceService {
     private final InstanceConverter instanceConverter;
     private final RouteSpi routeSpi;
-    private final ModelProviderSpi modelProviderSpi;
 
     @Override
     public InstanceVO createInstance(CreateInstanceDTO dto) {
@@ -106,8 +104,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
         if (instance == null) throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
         if (modelRouteId != null) {
             var route = routeSpi.getRoute(modelRouteId);
-            var provider = modelProviderSpi.getProvider(route.getProviderId());
-            if (provider == null || provider.getApiKeyId() == null) {
+            if (route.getApiKeyConfigured() != null && !route.getApiKeyConfigured()) {
                 throw new BizException(InstanceErrorCode.ROUTE_NO_API_KEY);
             }
         }

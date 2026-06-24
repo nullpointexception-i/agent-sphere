@@ -2,11 +2,13 @@ package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.domain.AgentModelProvider;
 import com.buukle.agent.model.domain.AgentModelRoute;
 import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.exception.ModelErrorCode;
+import com.buukle.agent.model.repository.ApiKeyMapper;
 import com.buukle.agent.model.repository.ModelProviderMapper;
 import com.buukle.agent.model.repository.RouteMapper;
 import com.buukle.agent.model.service.RouteService;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
 public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> implements RouteService {
     private final RouteConverter routeConverter;
     private final ModelProviderMapper modelProviderMapper;
+    private final ApiKeyMapper apiKeyMapper;
 
     @Override
     public ModelRouteVO createRoute(CreateRouteDTO dto) {
@@ -93,7 +96,13 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     private void enrichApiKeyConfigured(ModelRouteVO vo) {
         if (vo == null || vo.getProviderId() == null) return;
         AgentModelProvider provider = modelProviderMapper.selectById(vo.getProviderId());
-        vo.setApiKeyConfigured(provider != null && provider.getApiKeyId() != null);
+        vo.setApiKeyConfigured(provider != null && provider.getApiKeyId() != null
+                && apiKeyExists(provider.getApiKeyId()));
+    }
+
+    private boolean apiKeyExists(Long apiKeyId) {
+        if (apiKeyId == null) return false;
+        return apiKeyMapper.selectById(apiKeyId) != null;
     }
 
     private void enrichApiKeyConfigured(List<ModelRouteVO> vos) {
@@ -103,11 +112,19 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         if (providerIds.isEmpty()) return;
-        Map<Long, Boolean> keyMap = modelProviderMapper.selectBatchIds(providerIds)
-                .stream().collect(Collectors.toMap(AgentModelProvider::getId, p -> p.getApiKeyId() != null));
+        List<AgentModelProvider> providers = modelProviderMapper.selectBatchIds(providerIds);
+        Map<Long, Long> providerKeyMap = providers.stream()
+                .filter(p -> p.getApiKeyId() != null)
+                .collect(Collectors.toMap(AgentModelProvider::getId, AgentModelProvider::getApiKeyId));
+        Set<Long> validKeyIds = providerKeyMap.values().isEmpty() ? Collections.emptySet()
+                : apiKeyMapper.selectBatchIds(providerKeyMap.values())
+                .stream().map(AgentApiKey::getId)
+                .collect(Collectors.toSet());
         for (ModelRouteVO vo : vos) {
-            if (vo.getProviderId() != null)
-                vo.setApiKeyConfigured(keyMap.getOrDefault(vo.getProviderId(), false));
+            if (vo.getProviderId() != null) {
+                Long apiKeyId = providerKeyMap.get(vo.getProviderId());
+                vo.setApiKeyConfigured(apiKeyId != null && validKeyIds.contains(apiKeyId));
+            }
         }
     }
 
