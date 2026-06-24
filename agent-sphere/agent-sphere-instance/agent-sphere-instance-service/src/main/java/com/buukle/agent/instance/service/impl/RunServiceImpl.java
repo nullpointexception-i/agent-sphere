@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentRun;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
+import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.MessageHistoryVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
@@ -69,13 +70,13 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .select(AgentRun::getId, AgentRun::getUserMessage);
 
         if (runId != null) {
-            if ("prev".equals(direction)) {
+            if (RunEnum.DIRECTION_PREV.equals(direction)) {
                 query.lt(AgentRun::getId, runId).orderByDesc(AgentRun::getId);
             } else {
                 query.gt(AgentRun::getId, runId).orderByAsc(AgentRun::getId);
             }
         } else {
-            if ("next".equals(direction)) {
+            if (RunEnum.DIRECTION_NEXT.equals(direction)) {
                 return new MessageHistoryVO(null, null, false);
             }
             query.orderByDesc(AgentRun::getId);
@@ -85,7 +86,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         if (run == null) return new MessageHistoryVO(null, null, false);
 
         boolean hasMore;
-        if ("prev".equals(direction) || runId == null) {
+        if (RunEnum.DIRECTION_PREV.equals(direction) || runId == null) {
             hasMore = lambdaQuery()
                     .eq(AgentRun::getSessionId, sessionId)
                     .ne(AgentRun::getUserMessage, "")
