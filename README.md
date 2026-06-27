@@ -11,6 +11,8 @@ Screenshots
 
 ![ui-chat-toolcalls.png](agent-sphere-readme/ui-chat-toolcalls.png)
 
+![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
+
 ▶ [Click to watch the video demo](https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15)
 
 [![Video preview](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15)
@@ -42,7 +44,7 @@ Manages the complete execution lifecycle of an AI session, implementing the **Pl
 | Capability Type | Implementation | Description | Examples |
 |-----------------|----------------|-------------|----------|
 | **MCP (Model Context Protocol)** | MCP Server client | Standard protocol, connects to any MCP Server | Jira, GitHub, Slack, databases |
-| **Builtin (built-in tools)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI extension | WebFetch, WebRead, Chrome, Todowrite |
+| **Builtin (built-in tools)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI extension | WebFetch, WebRead, Chrome, Todowrite, DocWrite |
 | **Chrome Browser** | Chrome Extension bridge | DOM operations + real-time visual feedback | Navigate, click, fill forms, screenshot |
 | **CLI (command line)** | `ProcessBuilder` execution | Local or remote shell | Git operations, build/deploy, system administration |
 | **Skill (composite skills)** | Multi-step task orchestration | LLM-driven task decomposition | Cross-system workflows |

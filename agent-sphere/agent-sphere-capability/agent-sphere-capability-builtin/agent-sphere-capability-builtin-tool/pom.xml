@@ -15,5 +15,6 @@
         <module>agent-sphere-capability-builtin-tool-todowrite</module>
         <module>agent-sphere-capability-builtin-tool-webread</module>
         <module>agent-sphere-capability-builtin-tool-chrome</module>
+        <module>agent-sphere-capability-builtin-tool-docwrite</module>
     </modules>
 </project>

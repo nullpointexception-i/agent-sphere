@@ -15,4 +15,6 @@ export default {
   'menu.exception.500': '500',
   'menu.profile': 'Profile',
   'menu.password': 'Change Password',
+  'menu.artifacts': 'Artifacts',
+  'menu.artifacts.documents': 'Documents',
 };

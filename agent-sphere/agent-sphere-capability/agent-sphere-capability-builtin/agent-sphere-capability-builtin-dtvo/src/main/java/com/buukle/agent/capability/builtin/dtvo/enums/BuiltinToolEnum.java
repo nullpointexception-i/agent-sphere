@@ -4,7 +4,8 @@ public enum BuiltinToolEnum {
     WEB_SEARCH(2),
     TODOWRITE(3),
     WEB_READ(4),
-    CHROME(5);
+    CHROME(5),
+    DOCWRITE(6);
 
     private final int id;
 

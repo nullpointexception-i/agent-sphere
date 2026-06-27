@@ -82,6 +82,8 @@ export const agentApi = {
       request<any>(`${BASE}/instance/sessions/${id}/todos`),
     getLatestToolCalls: (id: number) =>
       request<any>(`${BASE}/instance/sessions/${id}/toolcalls/latest`),
+    getDocuments: (id: number, page = 1, size = 20) =>
+      request<any>(`${BASE}/artifacts/documents?sessionId=${id}&page=${page}&size=${size}`),
   },
 
   runs: {
@@ -212,6 +214,18 @@ export const agentApi = {
 
   builtin: {
     list: () => request<any[]>(`${BASE}/capability/builtin`),
+  },
+
+  artifacts: {
+    documents: {
+      list: (params?: { sessionId?: number; page?: number; size?: number }) =>
+        request<any>(`${BASE}/artifacts/documents`, { params }),
+      getById: (id: number) => request<any>(`${BASE}/artifacts/documents/${id}`),
+      delete: (id: number) =>
+        request<void>(`${BASE}/artifacts/documents/${id}`, { method: 'DELETE' }),
+      update: (id: number, title: string, content: string) =>
+        request<void>(`${BASE}/artifacts/documents/${id}`, { method: 'PUT', data: { title, content } }),
+    },
   },
 
   auth: {

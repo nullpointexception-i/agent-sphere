@@ -306,4 +306,11 @@ export default {
   'pages.chat.sessionSummary': '会话摘要',
   'pages.chat.noSummary': '暂无摘要',
   'pages.chat.saveFailed': '保存失败',
+  'pages.document.title': '标题',
+  'pages.document.preview': '预览',
+  'pages.document.session': '会话',
+  'pages.document.createdAt': '创建时间',
+  'pages.document.notFound': '文档不存在',
+  'pages.document.back': '返回',
+  'pages.chat.viewDocument': '查看文档',
 };

@@ -311,4 +311,11 @@ export default {
   'pages.chat.sessionSummary': 'Session Summary',
   'pages.chat.noSummary': 'No summary available',
   'pages.chat.saveFailed': 'Save failed',
+  'pages.document.title': 'Title',
+  'pages.document.preview': 'Preview',
+  'pages.document.session': 'Session',
+  'pages.document.createdAt': 'Created',
+  'pages.document.notFound': 'Document not found',
+  'pages.document.back': 'Back',
+  'pages.chat.viewDocument': 'View Document',
 };

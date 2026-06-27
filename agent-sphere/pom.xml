@@ -267,6 +267,11 @@
             </dependency>
             <dependency>
                 <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-capability-builtin-tool-docwrite</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
                 <artifactId>agent-sphere-capability-builtin-tool-spi</artifactId>
                 <version>${project.version}</version>
             </dependency>

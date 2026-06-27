@@ -18,4 +18,6 @@ export default {
   'menu.exception.500': '500',
   'menu.profile': '个人资料',
   'menu.password': '修改密码',
+  'menu.artifacts': '产出',
+  'menu.artifacts.documents': '文档',
 };

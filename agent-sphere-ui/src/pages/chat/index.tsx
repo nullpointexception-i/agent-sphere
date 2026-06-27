@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { connectSse } from '@/utils/sse';
 import { getToken } from '@/utils/auth';
-import { TODOWRITE_TOOL_NAME, TOOL_CALL_RECORD_STATUS } from '@/constants/toolCall';
+import { TODOWRITE_TOOL_NAME, DOCWRITE_TOOL_NAME, TOOL_CALL_RECORD_STATUS } from '@/constants/toolCall';
 import { useStyles } from './style';
 import Sidebar from './components/Sidebar';
 import Landing from './components/Landing';
@@ -220,6 +220,24 @@ export default function Chat() {
                     agentApi.sessions.getTodos(sid).then((data: any) => {
                       if (Array.isArray(data)) setTodos(data);
                     }).catch(() => {});
+                  }
+                  if (toolName === DOCWRITE_TOOL_NAME) {
+                    try {
+                      const docInfo = JSON.parse(d?.artifact || '{}');
+                      if (docInfo.documentId) {
+                        setMessages((prev) => {
+                          const lastReasoning = prev.findLastIndex((m: any) => m.role === 'reasoning' && (m as any)._runId === d?.runId);
+                          if (lastReasoning >= 0) {
+                            return prev.map((m, i) =>
+                              i === lastReasoning
+                                ? { ...m, content: m.content + `\n📄 **${docInfo.title || 'Document'}**: ${(docInfo.preview || '').slice(0, 50)} [${intl.formatMessage({ id: 'pages.chat.viewDocument', defaultMessage: 'View' })}](/artifacts/documents/${docInfo.documentId})` }
+                                : m,
+                            );
+                          }
+                          return prev;
+                        });
+                      }
+                    } catch {}
                   }
                   // Update PiP window with latest screenshot
                   if (d?.screenshot) {

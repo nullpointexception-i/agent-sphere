@@ -1,4 +1,5 @@
 export const TODOWRITE_TOOL_NAME = 'builtin_3';
+export const DOCWRITE_TOOL_NAME = 'builtin_6';
 
 export const TOOL_CALL_RECORD_STATUS = {
   PENDING: 'PENDING',
