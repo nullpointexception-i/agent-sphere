@@ -148,10 +148,20 @@ export default function DocumentEdit() {
     if (!editor) return;
     editor.chain().focus().setTextSelection(item.pos).run();
 
+    let headingEl: HTMLElement | null = null;
+    const { node } = editor.view.domAtPos(item.pos + 1);
+    let cur: Node | null = node;
+    while (cur && cur !== editor.view.dom) {
+      if (cur instanceof HTMLElement && /^H[1-3]$/i.test(cur.tagName)) {
+        headingEl = cur;
+        break;
+      }
+      cur = cur.parentElement;
+    }
+    if (headingEl) headingEl.scrollIntoView({ block: 'center' });
+
     const { top, bottom } = editor.view.coordsAtPos(item.pos + 1);
     const editorRect = editor.view.dom.getBoundingClientRect();
-
-    console.log('[jumpToHeading]', { pos: item.pos, top, bottom, left: editorRect.left, width: editorRect.width, height: bottom - top });
 
     const overlay = document.createElement('div');
     overlay.style.cssText = `
