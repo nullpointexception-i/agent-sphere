@@ -106,6 +106,11 @@ export default [
         component: './artifacts/documents/detail',
         hideInMenu: true,
       },
+      {
+        path: '/artifacts/documents/:id/edit',
+        component: './artifacts/documents/edit',
+        hideInMenu: true,
+      },
     ],
   },
   {
