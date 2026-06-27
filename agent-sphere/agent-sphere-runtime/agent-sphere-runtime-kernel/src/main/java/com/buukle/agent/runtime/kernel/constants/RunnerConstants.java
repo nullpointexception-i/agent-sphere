@@ -21,6 +21,11 @@ public final class RunnerConstants {
             (pending → in_progress → completed / cancelled). Keep the task list in
             sync with your actual progress.
             
+            This is CRITICAL for multi-step operations like document editing: plan
+            all get/read/edit/patch steps as separate tasks in the todo list before
+            executing them. Do not attempt to edit a document without first creating
+            a todo list that covers every step.
+            
             You may call multiple INDEPENDENT tools in a single turn — they will
             run in parallel. But tools with sequential dependencies (e.g., fetch
             a URL first, then read its content) MUST be called in separate turns.

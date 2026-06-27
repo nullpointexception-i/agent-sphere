@@ -11,7 +11,6 @@ import java.util.List;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-@AllArgsConstructor
 public class DocWriteResultVO extends ExecuteResult {
     private Long documentId;
     private String title;
@@ -20,6 +19,8 @@ public class DocWriteResultVO extends ExecuteResult {
     private String content;
     private List<DocReadSummaryVO> documents;
     private Integer total;
+    private List<HeadingInfo> headings;
+    private Integer totalLines;
 
     @Data
     @NoArgsConstructor

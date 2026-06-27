@@ -20,4 +20,20 @@ public class DocWriteExecuteContext extends ExecuteContext {
     private int page = 1;
 
     private int pageSize = 20;
+
+    private Boolean structure;
+
+    private String sectionHeading;
+
+    private Integer startLine;
+
+    private Integer endLine;
+
+    private String operation;
+
+    private String headingSearch;
+
+    private String searchText;
+
+    private String replaceText;
 }
