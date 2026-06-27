@@ -27,86 +27,15 @@ import {
 } from 'react';
 import { Markdown } from 'tiptap-markdown';
 import { agentApi } from '@/services/agentSphere/api';
+import { useStyles } from './style';
+import { type TocItemBase, TocPanel } from './TocPanel';
 
-interface TocItem {
-  level: number;
-  text: string;
+interface TocItem extends TocItemBase {
   pos: number;
 }
 
-function TocPanel({
-  items,
-  onJump,
-  visible,
-  onClose,
-}: {
-  items: TocItem[];
-  onJump: (pos: number) => void;
-  visible: boolean;
-  onClose: () => void;
-}) {
-  if (!visible) return null;
-  return (
-    <div
-      style={{
-        width: 200,
-        flexShrink: 0,
-        borderLeft: '1px solid #e8e8e8',
-        padding: '12px 0',
-        overflowY: 'auto',
-        maxHeight: 'calc(100vh - 280px)',
-        position: 'sticky',
-        top: 16,
-        alignSelf: 'flex-start',
-        background: '#fafafa',
-      }}
-    >
-      <div
-        style={{
-          padding: '0 12px 8px',
-          fontSize: 12,
-          color: '#999',
-          display: 'flex',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span>Outline</span>
-        <a onClick={onClose} style={{ cursor: 'pointer' }}>
-          ✕
-        </a>
-      </div>
-      {items.length === 0 && (
-        <div style={{ padding: '0 12px', fontSize: 12, color: '#ccc' }}>
-          No headings
-        </div>
-      )}
-      {items.map((item, i) => (
-        <div
-          key={i}
-          onClick={() => onJump(item.pos)}
-          style={{
-            padding: '4px 12px 4px ' + (12 + (item.level - 1) * 16) + 'px',
-            fontSize: 13,
-            cursor: 'pointer',
-            color: '#333',
-            lineHeight: 1.6,
-            borderLeft: item.level === 1 ? '2px solid #1677ff' : undefined,
-          }}
-          onMouseEnter={(e) => {
-            (e.target as HTMLElement).style.background = '#e6f4ff';
-          }}
-          onMouseLeave={(e) => {
-            (e.target as HTMLElement).style.background = '';
-          }}
-        >
-          {item.text}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function DocumentEdit() {
+  const { styles } = useStyles();
   const { id } = useParams<{ id: string }>();
   const intl = useIntl();
   const { message } = App.useApp();
@@ -215,12 +144,34 @@ export default function DocumentEdit() {
     }
   };
 
-  const jumpToHeading = (pos: number) => {
+  const jumpToHeading = (item: TocItem) => {
     if (!editor) return;
-    editor.chain().focus().setTextSelection(pos).run();
-    const dom = editor.view.nodeDOM(pos);
-    if (dom instanceof HTMLElement)
-      dom.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    editor.chain().focus().setTextSelection(item.pos).run();
+
+    const { top, bottom } = editor.view.coordsAtPos(item.pos + 1);
+    const editorRect = editor.view.dom.getBoundingClientRect();
+
+    console.log('[jumpToHeading]', { pos: item.pos, top, bottom, left: editorRect.left, width: editorRect.width, height: bottom - top });
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      top: ${top}px;
+      left: ${editorRect.left}px;
+      width: ${editorRect.width}px;
+      height: ${bottom - top}px;
+      background: #ffe58f;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.6s ease-out;
+    `;
+    document.body.appendChild(overlay);
+
+    void overlay.offsetHeight;
+    overlay.style.opacity = '0';
+
+    setTimeout(() => overlay.remove(), 700);
   };
 
   const ToolbarBtn = ({
@@ -240,7 +191,7 @@ export default function DocumentEdit() {
       icon={icon}
       onClick={onClick}
       title={tooltip}
-      style={{ marginRight: 2 }}
+      className={styles.toolbarBtn}
     />
   );
 
@@ -257,50 +208,28 @@ export default function DocumentEdit() {
   return (
     <div
       ref={containerRef}
-      style={{
-        height: containerHeight,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        maxWidth: 1400,
-        margin: '0 auto',
-        padding: '0 32px 16px',
-      }}
+      className={styles.container}
+      style={{ height: containerHeight }}
     >
       {loading ? (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            flex: 1,
-          }}
-        >
+        <div className={styles.spinWrapper}>
           <Spin size="large" />
         </div>
       ) : (
         <>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              paddingTop: 24,
-              paddingBottom: 8,
-            }}
-          >
+          <div className={styles.headerBarEdit}>
             <Button
               type="link"
               icon={<ArrowLeftOutlined />}
               onClick={() => history.push('/artifacts/documents')}
-              style={{ padding: 0 }}
+              className={styles.backBtn}
             >
               {intl.formatMessage({
                 id: 'pages.document.back',
                 defaultMessage: 'Back',
               })}
             </Button>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className={styles.headerRight}>
               <Button
                 icon={<MenuOutlined />}
                 type="default"
@@ -330,77 +259,14 @@ export default function DocumentEdit() {
               id: 'pages.document.title',
               defaultMessage: 'Title',
             })}
-            style={{
-              fontSize: 18,
-              fontWeight: 600,
-              flexShrink: 0,
-              border: 'none',
-              borderBottom: '1px solid #e8e8e8',
-              borderRadius: 0,
-              padding: '8px 0 12px',
-            }}
+            className={styles.titleInput}
             variant="borderless"
           />
 
-          <style>{`
-        .tiptap-editor {
-          min-height: 400px;
-          padding: 16px;
-          outline: none;
-        }
-        .tiptap-editor table {
-          border-collapse: collapse;
-          width: 100%;
-          margin: 8px 0;
-        }
-        .tiptap-editor th, .tiptap-editor td {
-          border: 1px solid #d9d9d9;
-          padding: 6px 10px;
-          text-align: left;
-          vertical-align: top;
-        }
-        .tiptap-editor th {
-          background: #fafafa;
-          font-weight: 600;
-        }
-        .tiptap-editor p { margin: 0; }
-      `}</style>
-
           {editor && (
-            <div
-              style={{
-                flex: 1,
-                overflow: 'hidden',
-                display: 'flex',
-                gap: 0,
-                border: '1px solid #e8e8e8',
-                borderRadius: 6,
-              }}
-            >
-              <div
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minWidth: 0,
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 10,
-                    background: '#fafafa',
-                    borderBottom: '1px solid #e8e8e8',
-                    borderTopLeftRadius: 6,
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 2,
-                    padding: '6px 8px',
-                    flexShrink: 0,
-                  }}
-                >
+            <div className={styles.editorWrapper}>
+              <div className={styles.editorColumn}>
+                <div className={styles.toolbar}>
                   <ToolbarBtn
                     onClick={() => {
                       editor.chain().focus().toggleBold().run();
@@ -480,14 +346,7 @@ export default function DocumentEdit() {
                     active={editor.isActive('table')}
                   />
                 </div>
-                <div
-                  style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    overscrollBehavior: 'contain',
-                    minHeight: 0,
-                  }}
-                >
+                <div className={styles.editorScroll}>
                   <EditorContent editor={editor} />
                 </div>
               </div>

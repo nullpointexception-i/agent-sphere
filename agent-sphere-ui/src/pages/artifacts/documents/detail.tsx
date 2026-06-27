@@ -5,83 +5,11 @@ import { Button, Spin, Typography } from 'antd';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { agentApi } from '@/services/agentSphere/api';
+import { useStyles } from './style';
+import { type TocItemBase, TocPanel } from './TocPanel';
 
-interface TocItem {
-  level: number;
-  text: string;
+interface TocItem extends TocItemBase {
   id: string;
-}
-
-function TocPanel({
-  items,
-  onJump,
-  visible,
-  onClose,
-}: {
-  items: TocItem[];
-  onJump: (id: string) => void;
-  visible: boolean;
-  onClose: () => void;
-}) {
-  if (!visible) return null;
-  return (
-    <div
-      style={{
-        width: 200,
-        flexShrink: 0,
-        borderLeft: '1px solid #e8e8e8',
-        padding: '12px 0',
-        overflowY: 'auto',
-        maxHeight: 'calc(100vh - 280px)',
-        position: 'sticky',
-        top: 16,
-        alignSelf: 'flex-start',
-        background: '#fafafa',
-      }}
-    >
-      <div
-        style={{
-          padding: '0 12px 8px',
-          fontSize: 12,
-          color: '#999',
-          display: 'flex',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span>Outline</span>
-        <a onClick={onClose} style={{ cursor: 'pointer' }}>
-          ✕
-        </a>
-      </div>
-      {items.length === 0 && (
-        <div style={{ padding: '0 12px', fontSize: 12, color: '#ccc' }}>
-          No headings
-        </div>
-      )}
-      {items.map((item, i) => (
-        <div
-          key={i}
-          onClick={() => onJump(item.id)}
-          style={{
-            padding: '4px 12px 4px ' + (12 + (item.level - 1) * 16) + 'px',
-            fontSize: 13,
-            cursor: 'pointer',
-            color: '#333',
-            lineHeight: 1.6,
-            borderLeft: item.level === 1 ? '2px solid #1677ff' : undefined,
-          }}
-          onMouseEnter={(e) => {
-            (e.target as HTMLElement).style.background = '#e6f4ff';
-          }}
-          onMouseLeave={(e) => {
-            (e.target as HTMLElement).style.background = '';
-          }}
-        >
-          {item.text}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function parseToc(content: string): TocItem[] {
@@ -104,6 +32,7 @@ function parseToc(content: string): TocItem[] {
 }
 
 export default function DocumentDetail() {
+  const { styles } = useStyles();
   const { id } = useParams<{ id: string }>();
   const intl = useIntl();
   const locale = intl.locale;
@@ -173,37 +102,23 @@ export default function DocumentDetail() {
     [tocItems],
   );
 
-  const jumpToHeading = (id: string) => {
-    const el = document.getElementById(id);
+  const jumpToHeading = (item: TocItem) => {
+    const el = document.getElementById(item.id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   return (
     <div
       ref={containerRef}
-      style={{
-        height: containerHeight,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        maxWidth: 1200,
-        margin: '0 auto',
-        padding: '0 32px 16px',
-      }}
+      className={styles.containerDetail}
+      style={{ height: containerHeight }}
     >
       {loading ? (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
+        <div className={styles.spinWrapper}>
           <Spin size="large" />
         </div>
       ) : !doc ? (
-        <div style={{ padding: 32 }}>
+        <div className={styles.notFound}>
           <Typography.Text type="secondary">
             {intl.formatMessage({
               id: 'pages.document.notFound',
@@ -213,20 +128,12 @@ export default function DocumentDetail() {
         </div>
       ) : (
         <>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              paddingTop: 24,
-              paddingBottom: 12,
-            }}
-          >
+          <div className={styles.headerBarDetail}>
             <Button
               type="link"
               icon={<ArrowLeftOutlined />}
               onClick={() => history.push('/artifacts/documents')}
-              style={{ padding: 0 }}
+              className={styles.backBtn}
             >
               {intl.formatMessage({
                 id: 'pages.document.back',
@@ -243,25 +150,13 @@ export default function DocumentDetail() {
             </Button>
           </div>
 
-          <div style={{ display: 'flex', gap: 0, flex: 1, overflow: 'hidden' }}>
-            <div
-              style={{
-                flex: 1,
-                minWidth: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                padding: 24,
-                background: '#fff',
-                borderRadius: 8,
-                border: '1px solid #e8e8e8',
-              }}
-            >
-              <div style={{ flexShrink: 0 }}>
+          <div className={styles.contentFlex}>
+            <div className={styles.contentCard}>
+              <div className={styles.metaBar}>
                 <Typography.Title level={3}>
                   {doc.title || '-'}
                 </Typography.Title>
-                <div style={{ fontSize: 12, color: '#999', marginBottom: 16 }}>
+                <div className={styles.metaInfo}>
                   {intl.formatMessage({
                     id: 'pages.document.createdAt',
                     defaultMessage: 'Created',
@@ -280,17 +175,7 @@ export default function DocumentDetail() {
                   : {doc.sessionId || '-'}
                 </div>
               </div>
-              <div
-                className="markdown-body"
-                style={{
-                  flex: 1,
-                  overflowY: 'auto',
-                  overscrollBehavior: 'contain',
-                  minHeight: 0,
-                  borderTop: '1px solid #e8e8e8',
-                  paddingTop: 16,
-                }}
-              >
+              <div className={`markdown-body ${styles.markdownScroll}`}>
                 <XMarkdown components={headingComponents}>
                   {doc.content || ''}
                 </XMarkdown>
