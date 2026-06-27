@@ -419,6 +419,8 @@ curl -X POST /api/v1/instance/instance-capabilities \
 # → LLM calls MCP tool → Jira API → returns result
 ```
 
+![MCP Configuration UI](agent-sphere-readme/ui-new-mcp.png)
+
 ## 8. License
 
 MIT License
