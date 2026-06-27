@@ -70,6 +70,11 @@ ol {
   list-style: none;
 }
 
+/* Remove ProLayout padding so full-viewport pages can use 100vh */
+.ant-pro-layout .ant-pro-layout-content {
+  padding: 0;
+}
+
 /* Built-in Add modal: widens the dialog width for better readability */
 .ant-modal:has(> .ant-modal-container > .ant-modal-body > .ant-table-wrapper) {
   width: 1200px !important;
