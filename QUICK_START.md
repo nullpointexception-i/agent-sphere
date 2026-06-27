@@ -1,218 +1,218 @@
-以下步骤从零开始搭建完整的 AgentSphere 开发环境。
+The following steps set up a complete AgentSphere development environment from scratch.
 
-### 1.1 环境准备
+### 1.1 Prerequisites
 
-| 依赖 | 版本要求 | 用途 |
-|------|---------|------|
-| **Java** | 21+（推荐 Eclipse Temurin 21） | 后端运行环境 |
-| **Maven** | 3.9+ | 后端构建工具 |
-| **Node.js** | ≥20 | 前端构建运行 |
-| **npm** | 10+（随 Node 自带） | 前端包管理 |
-| **Docker & Docker Compose** | 最新稳定版 | 启动 Postgres + Redis 中间件 |
-| **Chrome 浏览器** | 最新稳定版 | 加载扩展、执行浏览器操作 |
-| **LLM API Key** | — | DeepSeek / OpenAI / GLM 等模型供应商 |
+| Dependency | Version Requirement | Purpose |
+|------------|---------------------|---------|
+| **Java** | 21+ (Eclipse Temurin 21 recommended) | Backend runtime |
+| **Maven** | 3.9+ | Backend build tool |
+| **Node.js** | ≥20 | Frontend build & runtime |
+| **npm** | 10+ (bundled with Node) | Frontend package manager |
+| **Docker & Docker Compose** | Latest stable | Start Postgres + Redis middleware |
+| **Chrome Browser** | Latest stable | Load extension, execute browser operations |
+| **LLM API Key** | — | DeepSeek / OpenAI / GLM or other model providers |
 
-### 1.2 克隆仓库
+### 1.2 Clone the Repository
 
 ```bash
 git clone https://github.com/nullpointexception-i/agent-sphere
 cd agent-sphere
 ```
 
-项目包含三个子模块：
-- `agent-sphere/` — 后端（Java 21, Spring Boot, Maven multi-module）
-- `agent-sphere-ui/` — 前端（React 19, UmiJS Max, Ant Design Pro）
-- `agent-sphere-chrome-extension/` — Chrome 扩展（Manifest V3）
+The project contains three submodules:
+- `agent-sphere/` — Backend (Java 21, Spring Boot, Maven multi-module)
+- `agent-sphere-ui/` — Frontend (React 19, UmiJS Max, Ant Design Pro)
+- `agent-sphere-chrome-extension/` — Chrome Extension (Manifest V3)
 
-### 1.3 启动中间件（Postgres + Redis）
+### 1.3 Start Middleware (Postgres + Redis)
 
 ```bash
 cd agent-sphere/agent-docker-middleware
 docker compose up -d
 ```
 
-> **macOS 注意：** `docker-compose.yml` 中 volume 路径硬编码为 macOS 路径（`/Users/.../Desktop/...`）。如果启动报错，删除 compose 中的 `volumes` 配置，或替换为本机路径。
+> **macOS note:** The `docker-compose.yml` has volume paths hardcoded to macOS paths (`/Users/.../Desktop/...`). If startup fails, remove the `volumes` configuration in the compose file, or replace with your local path.
 
-启动3个服务：
+This starts 3 services:
 
-- PostgreSQL 14（`localhost:5432`），数据库名 `buukle_agent_2026061101`，用户 `buukle:buukle123`
-- postadmin（`localhost:5050`）, postgre数据库的web客户端,便于查询本地数据
-- Redis 7（`localhost:6379`）
+- PostgreSQL 14 (`localhost:5432`), database name `buukle_agent_2026061101`, user `buukle:buukle123`
+- pgAdmin (`localhost:5050`), a web client for PostgreSQL, convenient for querying local data
+- Redis 7 (`localhost:6379`)
 
 ![middleware-docker.png](agent-sphere-readme/middleware-docker.png)
 
 ![middleware-postadmin-web.png](agent-sphere-readme/middleware-postadmin-web.png)
 
-验证连接：
+Verify the connection:
 ```bash
 docker compose ps
-# 确保 postgres 和 redis 状态均为 Up
+# Ensure both postgres and redis show status Up
 ```
 
-### 1.4 启动后端
+### 1.4 Start the Backend
 
-后端使用 Maven 多模块项目，首次需要全量编译：
+The backend is a Maven multi-module project. A full build is required the first time:
 
 ```bash
 cd agent-sphere
 
-# 首次：全量编译并安装依赖（跳过测试加速）
+# First time: full build and install dependencies (skip tests for speed)
 mvn install -DskipTests -q
 
-# 启动 Spring Boot
+# Start Spring Boot
 mvn -pl agent-sphere-bootstrap spring-boot:run -am
 ```
 
-后端将在 `http://localhost:8080` 启动，API 前缀 `/api/v1/...`。
+The backend will start at `http://localhost:8080` with API prefix `/api/v1/...`.
 
-**环境变量覆盖（可选）：**
+**Environment Variable Overrides (optional):**
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `DB_HOST` | `127.0.0.1` | PostgreSQL 主机 |
-| `DB_PORT` | `5432` | PostgreSQL 端口 |
-| `DB_USERNAME` | `buukle` | 数据库用户 |
-| `DB_PASSWORD` | `buukle123` | 数据库密码 |
-| `REDIS_HOST` | `127.0.0.1` | Redis 主机 |
-| `REDIS_PORT` | `6379` | Redis 端口 |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `127.0.0.1` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_USERNAME` | `buukle` | Database username |
+| `DB_PASSWORD` | `buukle123` | Database password |
+| `REDIS_HOST` | `127.0.0.1` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
 
-示例：
+Example:
 ```bash
 DB_HOST=192.168.1.100 mvn -pl agent-sphere-bootstrap spring-boot:run -am
 ```
 
-启动后 Flyway 会自动执行数据库迁移。观察日志确认无报错：
+After startup, Flyway will automatically execute database migrations. Check the logs to confirm no errors:
 ```
 ... Flyway: Successfully applied 1 migration ...
 ... Started Application in X.XXX seconds ...
 ```
 
-### 1.5 启动前端
+### 1.5 Start the Frontend
 
 ```bash
 cd agent-sphere-ui
-npm install     # 首次需要（项目使用 legacy-peer-deps）
+npm install     # Required the first time (project uses legacy-peer-deps)
 npm run dev
 ```
 
-前端开发服务器将在 `http://localhost:8000` 启动。`npm run dev` 自动将 `/api/` 请求代理到 `http://localhost:8080`（配置见 `config/proxy.ts`）。
+The frontend dev server will start at `http://localhost:8000`. `npm run dev` automatically proxies `/api/` requests to `http://localhost:8080` (see `config/proxy.ts`).
 
-> SSE（`/stream`）代理有特殊配置：剥离 `Accept-Encoding` 并设置 `Cache-Control: no-transform`，确保流式推送正常。修改 proxy 时请保留此逻辑。
+> The SSE (`/stream`) proxy has special configuration: it strips `Accept-Encoding` and sets `Cache-Control: no-transform` to ensure streaming works correctly. Preserve this logic when modifying the proxy.
 
-### 1.6 注册与登录
+### 1.6 Register and Log In
 
-1. 浏览器打开 `http://localhost:8000/user/register`
-2. 输入用户名、密码、显示名，点击注册
+1. Open `http://localhost:8000/user/register` in your browser
+2. Enter username, password, and display name, then click Register
    ![ui-register.png](agent-sphere-readme/ui-register.png)
-3. 注册成功后跳转到登录页，用相同凭证登录
+3. After successful registration, you'll be redirected to the login page. Log in with the same credentials
    ![ui-login.png](agent-sphere-readme/ui-login.png)
-4. 登录成功进入 Dashboard
+4. After successful login, you'll enter the Dashboard
    ![ui-dashboard.png](agent-sphere-readme/ui-dashboard.png)
 
 
 
-> 注册接口 `POST /api/v1/auth/register`，仅需用户名 + 密码，无邮箱验证环节。
+> The registration endpoint `POST /api/v1/auth/register` only requires username + password, with no email verification step.
 
-### 1.7 加载 Chrome 扩展
+### 1.7 Load the Chrome Extension
 
-1. Chrome 地址栏输入 `chrome://extensions`
-2. 右上角开启 **开发者模式**
-3. 点击 **加载已解压的扩展**
-4. 选择项目中的 `agent-sphere-chrome-extension/` 目录
+1. Enter `chrome://extensions` in the Chrome address bar
+2. Enable **Developer mode** in the top right corner
+3. Click **Load unpacked**
+4. Select the `agent-sphere-chrome-extension/` directory from the project
    ![ui-extension.png](agent-sphere-readme/ui-extension.png)
-5. 扩展图标出现在工具栏，点击图标 → **Settings** Tab
-6. 填写：
+5. The extension icon appears in the toolbar. Click the icon → **Settings** tab
+6. Fill in:
     - **Backend URL:** `http://localhost:8080`
     - **Frontend URL:** `http://localhost:8000`
-7. 点击 **保存**
+7. Click **Save**
    ![ui-extension-pop.png](agent-sphere-readme/ui-extension-pop.png)
 
-> 每次更新扩展代码后，在 `chrome://extensions` 页面点击扩展卡片上的刷新按钮重新加载。
+> After each update to the extension code, click the refresh button on the extension card in `chrome://extensions` to reload.
 
 ![ui-extension-refresh.png](agent-sphere-readme/ui-extension-refresh.png)
 
-### 1.8 配置模型供应商
+### 1.8 Configure Model Providers
 
-Agent 对话依赖 LLM，需要先配置模型供应商和路由。
+Agent conversations depend on an LLM. You need to configure model providers and routes first.
 
-1. 在 UI 中进入 **模型供应商** 页面（`/models`）
-2. 点击 **添加供应商**
+1. Navigate to the **Model Providers** page in the UI (`/models`)
+2. Click **Add Provider**
    ![ui-model-provider.png](agent-sphere-readme/ui-model-provider.png)
-3. 创建 **模型路由**：
-    - 为刚添加的供应商创建一条主路由
-    - 设置 `maxInputTokens`（影响后续压缩预算计算）
-    - 可选：添加一条 fallback 路由，主路由超时后自动切换
-4. 保存路由配置
+3. Create a **Model Route**:
+    - Create a primary route for the provider you just added
+    - Set `maxInputTokens` (affects subsequent compaction budget calculation)
+    - Optional: add a fallback route that auto-switches when the primary route times out
+4. Save the route configuration
    ![ui-model-route.png](agent-sphere-readme/ui-model-route.png)
 
-> `maxInputTokens` 很重要：压缩预算 = `maxInputTokens × budget-ratio`（默认 0.7），超过此预算触发上下文压缩。
+> `maxInputTokens` is important: compaction budget = `maxInputTokens × budget-ratio` (default 0.7). Context compaction is triggered when this budget is exceeded.
 
-5. 创建 **api-key**:
-    - 为刚添加的供应商创建n个api-key
-    - 通过单选框,指定使用哪个key
-   
-  ![ui-model-api-key.png](agent-sphere-readme/ui-model-api-key.png)
+5. Create an **API Key**:
+    - Create one or more API keys for the provider you just added
+    - Use the radio button to select which key to use
+
+   ![ui-model-api-key.png](agent-sphere-readme/ui-model-api-key.png)
 
 
-### 1.9 配置 Agent 实例
+### 1.9 Configure an Agent Instance
 
-1. 进入 **实例管理** 页面（`/instances`）
-2. 点击 **创建实例**
-3. 保存实例
-    - **名称**：实例标识
-    - **System Prompt**：系统指令，定义 Agent 的角色和行为
-4. 配置能力和模型
-    - **模型路由**：选择上一步创建的路由
-    - **能力绑定**：为该实例绑定可用能力（MCP / Builtin / CLI / Skill）
+1. Navigate to the **Instances** page (`/instances`)
+2. Click **Create Instance**
+3. Save the instance:
+    - **Name**: Instance identifier
+    - **System Prompt**: System instructions defining the Agent's role and behavior
+4. Configure capabilities and model:
+    - **Model Route**: Select the route created in the previous step
+    - **Capability Binding**: Bind available capabilities to this instance (MCP / Builtin / CLI / Skill)
 
 ![ui-instance-capability.png](agent-sphere-readme/ui-instance-capability.png)
-### 1.10 开始对话
+### 1.10 Start a Conversation
 
-1. 进入 **聊天** 页面（`/chat`）
-2. 选择或新建会话（Session）
-3. 在输入框输入消息，按 Enter 发送
-4. 观察：
-    - **打字机效果**：LLM 逐 token 输出
-    - **推理面板**：展示 LLM 推理过程和工具调用状态
-    - **工具调用**：浏览器操作、网页读取等实时回显
-    - **SSE 推送**：浏览器 DevTools → Network → Filter `/stream`
-   
+1. Navigate to the **Chat** page (`/chat`)
+2. Select or create a new session
+3. Type a message in the input box and press Enter to send
+4. Observe:
+    - **Typewriter effect**: LLM outputs token by token
+    - **Reasoning panel**: Shows LLM reasoning process and tool call status
+    - **Tool calls**: Browser operations, web reading, etc. displayed in real time
+    - **SSE push**: Browser DevTools → Network → Filter `/stream`
+
 ![ui-chat.png](agent-sphere-readme/ui-chat.png)
 
-#### 典型交互示例
+#### Typical Interaction Examples
 
 ```
-用户：帮我查一下今天的新闻
-Agent：→ [调用 WebFetch 工具] → 返回结果 → 整理并回复
+User: Help me check today's news
+Agent: → [calls WebFetch tool] → returns results → organizes and replies
 ```
 
 ```
-用户：打开百度，搜索"广州天气"
-Agent：→ [Chrome Extension 导航到 baidu.com] → [输入搜索词] → [截图返回] → 回复
+User: Open Baidu and search for "Guangzhou weather"
+Agent: → [Chrome Extension navigates to baidu.com] → [types search query] → [returns screenshot] → replies
 ```
 
-> 表单自动填写是 Builtin 工具之一，Agent 可以自动识别表单字段并填入内容。
+> Form auto-fill is one of the Builtin tools. The Agent can automatically identify form fields and fill in content.
 
-### 1.11 调试技巧
+### 1.11 Debugging Tips
 
-| 场景 | 方法 |
-|------|------|
-| 查看后端日志 | 后端终端实时输出，或 `tail -f agent-sphere/logs/*.log` |
-| 查看前端日志 | 浏览器 DevTools → Console |
-| 查看 SSE 通信 | 浏览器 DevTools → Network → Filter `/stream` |
-| 检查插件状态 | 点击扩展图标，绿色"已连接"表示正常 |
-| 数据库查询 | `docker exec -it agent-docker-middleware-postgres-1 psql -U buukle -d buukle_agent_2026061101` |
-| Flyway 迁移检查 | `select * from flyway_schema_history;`（在 psql 中执行） |
-| 重置数据库 | `docker compose down -v && docker compose up -d`（⚠️ 删除所有数据） |
+| Scenario | Method |
+|----------|--------|
+| View backend logs | Real-time output in the backend terminal, or `tail -f agent-sphere/logs/*.log` |
+| View frontend logs | Browser DevTools → Console |
+| View SSE communication | Browser DevTools → Network → Filter `/stream` |
+| Check extension status | Click the extension icon; green "Connected" indicates normal |
+| Database queries | `docker exec -it agent-docker-middleware-postgres-1 psql -U buukle -d buukle_agent_2026061101` |
+| Check Flyway migrations | `select * from flyway_schema_history;` (execute in psql) |
+| Reset database | `docker compose down -v && docker compose up -d` (⚠️ deletes all data) |
 
-### 1.12 特点
+### 1.12 Features
 
-| 维度 | 方式 |
-|------|------|
-| **实时性** | 用户能实时看到浏览器被操作的过程 |
-| **稳定性** | 工具执行超时后有兜底机制，不阻塞后续流程 |
-| **安全性** | 所有操作经过用户本地 Chrome 执行，不经过云端 |
-| **可扩展** | 工具 SPI 机制，可注册任意类型的能力 |
-| **可观测** | 每次工具调用都有日志/事件记录，可回溯 |
+| Dimension | Approach |
+|-----------|----------|
+| **Real-time** | Users can see browser operations happening in real time |
+| **Stability** | Tool execution timeouts have fallback mechanisms, won't block subsequent flows |
+| **Security** | All operations run through the user's local Chrome, not through the cloud |
+| **Extensibility** | Tool SPI mechanism allows registering any type of capability |
+| **Observability** | Every tool call has log/event records for traceability |
 
 ---
