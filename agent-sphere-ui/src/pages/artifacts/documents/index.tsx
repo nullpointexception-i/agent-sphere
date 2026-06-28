@@ -1,7 +1,7 @@
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl, history } from '@umijs/max';
 import { useEffect, useState } from 'react';
-import { Modal, Descriptions, Tag, Space } from 'antd';
+import { Modal, Descriptions, Tag, Button } from 'antd';
 import { EditOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons';
 import { agentApi } from '@/services/agentSphere/api';
 
@@ -52,19 +52,13 @@ export default function DocumentList() {
     {
       title: intl.formatMessage({ id: 'pages.table.actions', defaultMessage: 'Actions' }),
       key: 'actions',
-      width: 140,
+      width: 160,
       render: (_: any, record: any) => (
-        <Space>
-          <a onClick={() => setDetailModal({ open: true, doc: record })}>
-            <EyeOutlined /> {intl.formatMessage({ id: 'pages.document.viewDetail', defaultMessage: 'View' })}
-          </a>
-          <a onClick={() => history.push(`/artifacts/documents/${record.id}`)}>
-            <FileTextOutlined /> {intl.formatMessage({ id: 'pages.document.previewContent', defaultMessage: 'Preview' })}
-          </a>
-          <a onClick={() => history.push(`/artifacts/documents/${record.id}/edit`)}>
-            <EditOutlined /> {intl.formatMessage({ id: 'pages.document.edit', defaultMessage: 'Edit' })}
-          </a>
-        </Space>
+        <>
+          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setDetailModal({ open: true, doc: record })} />
+          <Button type="link" size="small" icon={<FileTextOutlined />} onClick={() => history.push(`/artifacts/documents/${record.id}`)} />
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => history.push(`/artifacts/documents/${record.id}/edit`)} />
+        </>
       ),
     },
   ];

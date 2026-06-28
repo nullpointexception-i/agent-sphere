@@ -1,3 +1,4 @@
+import { useIntl } from '@umijs/max';
 import { useStyles } from './style';
 
 interface TocItemBase {
@@ -17,16 +18,17 @@ function TocPanel<T extends TocItemBase>({
   onClose: () => void;
 }) {
   const { styles } = useStyles();
+  const intl = useIntl();
   if (!visible) return null;
   return (
     <div className={styles.tocPanel}>
       <div className={styles.tocHeader}>
-        <span>Outline</span>
+        <span>{intl.formatMessage({ id: 'pages.document.outline', defaultMessage: 'Outline' })}</span>
         <a onClick={onClose} className={styles.tocClose}>
           ✕
         </a>
       </div>
-      {items.length === 0 && <div className={styles.tocEmpty}>No headings</div>}
+      {items.length === 0 && <div className={styles.tocEmpty}>{intl.formatMessage({ id: 'pages.document.noHeadings', defaultMessage: 'No headings' })}</div>}
       {items.map((item, i) => (
         <div
           key={i}

@@ -146,7 +146,7 @@ export default function DocumentDetail() {
               size="small"
               onClick={() => setTocOpen(!tocOpen)}
             >
-              Outline
+              {intl.formatMessage({ id: 'pages.document.outline', defaultMessage: 'Outline' })}
             </Button>
           </div>
 

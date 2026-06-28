@@ -246,7 +246,7 @@ export default function DocumentEdit() {
                 size="small"
                 onClick={() => setTocOpen(!tocOpen)}
               >
-                Outline
+                {intl.formatMessage({ id: 'pages.document.outline', defaultMessage: 'Outline' })}
               </Button>
               <Button
                 type="primary"

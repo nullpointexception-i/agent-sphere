@@ -329,4 +329,6 @@ export default {
   'pages.document.viewDetail': 'View',
   'pages.document.previewContent': 'Preview',
   'pages.document.loadFailed': 'Failed to load document',
+  'pages.document.outline': 'Outline',
+  'pages.document.noHeadings': 'No headings',
 };
