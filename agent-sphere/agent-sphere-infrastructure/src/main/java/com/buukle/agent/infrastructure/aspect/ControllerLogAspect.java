@@ -8,6 +8,8 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -21,6 +23,12 @@ public class ControllerLogAspect {
 
     private static final Logger log = LoggerFactory.getLogger(ControllerLogAspect.class);
     private final ObjectMapper mapper = new ObjectMapper();
+
+    @Value("${buukle.agent.controller-log.max-param-length:200}")
+    private int maxParamLength;
+
+    @Value("${buukle.agent.controller-log.max-result-length:300}")
+    private int maxResultLength;
 
     private static String resolveHttpMethod(MethodSignature sig) {
         for (Annotation a : sig.getMethod().getDeclaredAnnotations()) {
@@ -88,7 +96,7 @@ public class ControllerLogAspect {
                         continue;
                     if (sb.length() > 0) sb.append(", ");
                     String val = args[i] instanceof String s ? s : mapper.writeValueAsString(args[i]);
-                    if (val.length() > 200) val = val.substring(0, 200) + "...";
+                    if (val.length() > maxParamLength) val = val.substring(0, maxParamLength) + "...";
                     sb.append(names != null && i < names.length ? names[i] : "arg" + i).append("=").append(val);
                 }
             }
@@ -101,10 +109,13 @@ public class ControllerLogAspect {
     private String resultToJson(Object result) {
         if (result == null) return "null";
         try {
-            String json = mapper.writeValueAsString(result);
-            return json.length() > 300 ? json.substring(0, 300) + "..." : json;
+            Object target = (result instanceof ResponseEntity<?> re) ? re.getBody() : result;
+            if (target == null) return "null";
+            String json = mapper.writeValueAsString(target);
+            return json.length() > maxResultLength ? json.substring(0, maxResultLength) + "..." : json;
         } catch (Exception e) {
-            return result.toString();
+            String fallback = result.toString();
+            return fallback.length() > maxResultLength ? fallback.substring(0, maxResultLength) + "..." : fallback;
         }
     }
 }

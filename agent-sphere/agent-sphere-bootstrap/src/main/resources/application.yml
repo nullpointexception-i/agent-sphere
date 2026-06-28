@@ -135,6 +135,13 @@ buukle:
         max-pool-size: 3                           # 浏览器池最大大小 / Browser pool max size
 
     # ============================================================
+    # Controller 日志截断配置 / Controller Log Config
+    # ============================================================
+    controller-log:
+      max-param-length: 200                         # 请求参数日志截断长度 / Request param log truncation
+      max-result-length: 300                        # 响应结果日志截断长度 / Response result log truncation
+
+    # ============================================================
     # MCP 协议配置 / MCP Config
     # ============================================================
     mcp:
