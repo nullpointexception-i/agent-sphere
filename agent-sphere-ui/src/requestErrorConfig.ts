@@ -30,7 +30,9 @@ export const errorConfig: RequestConfig = {
             }),
           );
         } catch {
-          showError('Network unavailable. Please check your connection and try again.');
+          showError(
+            'Network unavailable. Please check your connection and try again.',
+          );
         }
       } else if (error.request) {
         showError('None response! Please retry.');

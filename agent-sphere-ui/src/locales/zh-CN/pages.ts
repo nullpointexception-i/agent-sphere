@@ -4,8 +4,7 @@ export default {
   'chat.footer.hint': 'Shift+Enter 换行 · Enter 发送',
   'pages.login.subtitle': '智能代理管理与AI编排平台',
   'pages.login.accountLogin.tab': '账户密码登录',
-  'pages.login.accountLogin.errorMessage':
-    '错误的用户名和密码',
+  'pages.login.accountLogin.errorMessage': '错误的用户名和密码',
   'pages.login.failure': '登录失败，请重试！',
   'pages.login.success': '登录成功！',
   'pages.login.username.placeholder': '用户名',
@@ -21,7 +20,8 @@ export default {
   'pages.login.captcha.required': '验证码是必填项！',
   'pages.login.phoneLogin.getVerificationCode': '获取验证码',
   'chat.empty.title': '开始一个新的对话',
-  'chat.empty.desc': '从左侧选择一个已有的会话，或点击「New Chat」创建一个新的对话，与 AI 代理进行交互。',
+  'chat.empty.desc':
+    '从左侧选择一个已有的会话，或点击「New Chat」创建一个新的对话，与 AI 代理进行交互。',
   'chat.reasoning.show': '显示推理',
   'chat.reasoning.hide': '隐藏推理',
   'chat.reasoning.label': '推理',
@@ -328,4 +328,6 @@ export default {
   'pages.document.outline': '大纲',
   'pages.document.noHeadings': '暂无标题',
   'pages.document.charCount': '字数',
+  'pages.document.exported': '导出成功',
+  'pages.document.exportFailed': '导出失败',
 };

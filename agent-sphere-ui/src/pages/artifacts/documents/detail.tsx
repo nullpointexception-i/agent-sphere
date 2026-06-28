@@ -146,7 +146,10 @@ export default function DocumentDetail() {
               size="small"
               onClick={() => setTocOpen(!tocOpen)}
             >
-              {intl.formatMessage({ id: 'pages.document.outline', defaultMessage: 'Outline' })}
+              {intl.formatMessage({
+                id: 'pages.document.outline',
+                defaultMessage: 'Outline',
+              })}
             </Button>
           </div>
 
@@ -197,7 +200,11 @@ export default function DocumentDetail() {
                   })}
                   : {doc.sessionId || '-'}
                   &nbsp;|&nbsp;
-                  {intl.formatMessage({ id: 'pages.document.charCount', defaultMessage: 'Chars' })}: {(doc.content || '').length.toLocaleString()}
+                  {intl.formatMessage({
+                    id: 'pages.document.charCount',
+                    defaultMessage: 'Chars',
+                  })}
+                  : {(doc.content || '').length.toLocaleString()}
                 </div>
               </div>
               <div className={`markdown-body ${styles.markdownScroll}`}>

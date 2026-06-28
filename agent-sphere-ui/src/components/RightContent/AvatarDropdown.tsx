@@ -4,7 +4,7 @@ import {
   SkinOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { history, useIntl, useModel, request as umiRequest } from '@umijs/max';
+import { history, request as umiRequest, useIntl, useModel } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Spin } from 'antd';
 import React, { startTransition } from 'react';
@@ -70,17 +70,26 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: intl.formatMessage({ id: 'pages.settings.profile', defaultMessage: 'Profile' }),
+      label: intl.formatMessage({
+        id: 'pages.settings.profile',
+        defaultMessage: 'Profile',
+      }),
     },
     {
       key: 'password',
       icon: <KeyOutlined />,
-      label: intl.formatMessage({ id: 'pages.settings.password', defaultMessage: 'Change Password' }),
+      label: intl.formatMessage({
+        id: 'pages.settings.password',
+        defaultMessage: 'Change Password',
+      }),
     },
     {
       key: 'theme',
       icon: <SkinOutlined />,
-      label: intl.formatMessage({ id: 'pages.theme', defaultMessage: 'Theme Settings' }),
+      label: intl.formatMessage({
+        id: 'pages.theme',
+        defaultMessage: 'Theme Settings',
+      }),
     },
     {
       type: 'divider' as const,
@@ -88,7 +97,10 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
     {
       key: 'logout',
       icon: <LogoutOutlined />,
-      label: intl.formatMessage({ id: 'pages.logout', defaultMessage: 'Logout' }),
+      label: intl.formatMessage({
+        id: 'pages.logout',
+        defaultMessage: 'Logout',
+      }),
     },
   ];
 

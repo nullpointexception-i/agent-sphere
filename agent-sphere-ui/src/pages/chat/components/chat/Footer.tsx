@@ -1,8 +1,8 @@
+import { FullscreenOutlined } from '@ant-design/icons';
 import { Sender } from '@ant-design/x';
 import type { SenderRef } from '@ant-design/x/es/sender/interface';
-import { Tooltip } from 'antd';
-import { FullscreenOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
+import { Tooltip } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 
@@ -18,8 +18,14 @@ interface FooterProps {
 }
 
 export default function Footer({
-  inputValue, onInputValueChange, sending, onSendMessage, onCancel, onExpandOpen,
-  sessionKey, sessionId,
+  inputValue,
+  onInputValueChange,
+  sending,
+  onSendMessage,
+  onCancel,
+  onExpandOpen,
+  sessionKey,
+  sessionId,
 }: FooterProps) {
   const intl = useIntl();
   const senderRef = useRef<SenderRef>(null);
@@ -57,10 +63,13 @@ export default function Footer({
         setLoadingHistory(true);
         try {
           const res = await agentApi.sessions.messageHistory(
-            sessionId, 'prev', historyRunIdRef.current ?? undefined,
+            sessionId,
+            'prev',
+            historyRunIdRef.current ?? undefined,
           );
           if (res.userMessage != null) {
-            if (historyRunIdRef.current == null) setSavedInput(inputRef.current);
+            if (historyRunIdRef.current == null)
+              setSavedInput(inputRef.current);
             setHistoryRunId(res.runId);
             onInputValueChange(res.userMessage);
           }
@@ -68,12 +77,15 @@ export default function Footer({
           setLoadingHistory(false);
         }
       } else if (ke.key === 'ArrowDown') {
-        if (historyRunIdRef.current == null || sending || loadingHistory) return;
+        if (historyRunIdRef.current == null || sending || loadingHistory)
+          return;
         ke.preventDefault();
         setLoadingHistory(true);
         try {
           const res = await agentApi.sessions.messageHistory(
-            sessionId, 'next', historyRunIdRef.current,
+            sessionId,
+            'next',
+            historyRunIdRef.current,
           );
           if (res.userMessage != null) {
             setHistoryRunId(res.runId);
@@ -94,7 +106,15 @@ export default function Footer({
   }, [sessionId, sending, loadingHistory, onInputValueChange]);
 
   return (
-    <div style={{ display: 'flex', gap: 8, maxWidth: 940, width: '100%', alignItems: 'center' }}>
+    <div
+      style={{
+        display: 'flex',
+        gap: 8,
+        maxWidth: 940,
+        width: '100%',
+        alignItems: 'center',
+      }}
+    >
       <Sender
         ref={senderRef}
         value={inputValue}
@@ -103,13 +123,28 @@ export default function Footer({
         submitType="enter"
         onSubmit={onSendMessage}
         onCancel={onCancel}
-        placeholder={intl.formatMessage({ id: 'pages.chat.typeMessageHint', defaultMessage: 'Type a message... (Shift+Enter for new line)' })}
+        placeholder={intl.formatMessage({
+          id: 'pages.chat.typeMessageHint',
+          defaultMessage: 'Type a message... (Shift+Enter for new line)',
+        })}
         maxLength={5000}
         style={{ flex: 1 }}
         autoSize={false}
         suffix={(oriNode) => (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, transform: 'translateY(-3px)' }}>
-            <Tooltip title={intl.formatMessage({ id: 'pages.chat.expandInput', defaultMessage: 'Expand Input' })}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              transform: 'translateY(-3px)',
+            }}
+          >
+            <Tooltip
+              title={intl.formatMessage({
+                id: 'pages.chat.expandInput',
+                defaultMessage: 'Expand Input',
+              })}
+            >
               <FullscreenOutlined
                 style={{ fontSize: 16, cursor: 'pointer', color: '#8c8c8c' }}
                 onClick={onExpandOpen}
@@ -118,7 +153,23 @@ export default function Footer({
             {oriNode}
           </span>
         )}
-        styles={{ root: { height: 60, borderRadius: 24, display: 'flex', flexDirection: 'column' }, content: { flex: 1, alignItems: 'center', paddingBlock: 8 }, input: { display: 'flex', alignItems: 'center', paddingTop: 6, overflowY: 'auto', resize: 'none' }, suffix: { alignItems: 'center' } }}
+        styles={{
+          root: {
+            height: 60,
+            borderRadius: 24,
+            display: 'flex',
+            flexDirection: 'column',
+          },
+          content: { flex: 1, alignItems: 'center', paddingBlock: 8 },
+          input: {
+            display: 'flex',
+            alignItems: 'center',
+            paddingTop: 6,
+            overflowY: 'auto',
+            resize: 'none',
+          },
+          suffix: { alignItems: 'center' },
+        }}
       />
     </div>
   );

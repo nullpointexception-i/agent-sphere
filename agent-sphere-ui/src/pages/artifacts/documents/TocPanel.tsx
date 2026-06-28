@@ -23,12 +23,24 @@ function TocPanel<T extends TocItemBase>({
   return (
     <div className={styles.tocPanel}>
       <div className={styles.tocHeader}>
-        <span>{intl.formatMessage({ id: 'pages.document.outline', defaultMessage: 'Outline' })}</span>
+        <span>
+          {intl.formatMessage({
+            id: 'pages.document.outline',
+            defaultMessage: 'Outline',
+          })}
+        </span>
         <a onClick={onClose} className={styles.tocClose}>
           ✕
         </a>
       </div>
-      {items.length === 0 && <div className={styles.tocEmpty}>{intl.formatMessage({ id: 'pages.document.noHeadings', defaultMessage: 'No headings' })}</div>}
+      {items.length === 0 && (
+        <div className={styles.tocEmpty}>
+          {intl.formatMessage({
+            id: 'pages.document.noHeadings',
+            defaultMessage: 'No headings',
+          })}
+        </div>
+      )}
       {items.map((item, i) => (
         <div
           key={i}

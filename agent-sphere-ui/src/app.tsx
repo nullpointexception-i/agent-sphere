@@ -9,14 +9,14 @@ import React from 'react';
 dayjs.extend(relativeTime);
 
 import { App } from 'antd';
-import MessageInitializer from '@/components/MessageInitializer';
 import {
   AvatarDropdown,
   ErrorBoundary,
   LangDropdown,
   OfflineBanner,
 } from '@/components';
-import { getStoredUser, clearStoredUser, toProCurrentUser } from '@/utils/auth';
+import MessageInitializer from '@/components/MessageInitializer';
+import { clearStoredUser, getStoredUser, toProCurrentUser } from '@/utils/auth';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 
@@ -86,7 +86,10 @@ export const layout: RunTimeLayoutConfig = ({
     actionsRender: () => [<LangDropdown key="lang" />],
     avatarProps: {
       src: initialState?.currentUser?.avatar,
-      title: initialState?.currentUser?.englishName || initialState?.currentUser?.name || 'User',
+      title:
+        initialState?.currentUser?.englishName ||
+        initialState?.currentUser?.name ||
+        'User',
       render: (_, avatarChildren) => (
         <AvatarDropdown>{avatarChildren}</AvatarDropdown>
       ),

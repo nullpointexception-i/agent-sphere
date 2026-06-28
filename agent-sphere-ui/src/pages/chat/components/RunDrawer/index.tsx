@@ -1,5 +1,5 @@
-import { Drawer, Empty, Input, Spin, Table, Tag } from 'antd';
 import { useIntl } from '@umijs/max';
+import { Drawer, Empty, Input, Spin, Table, Tag } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
@@ -21,7 +21,11 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: 'warning',
 };
 
-export default function RunDrawer({ open, sessionId, onClose }: RunDrawerProps) {
+export default function RunDrawer({
+  open,
+  sessionId,
+  onClose,
+}: RunDrawerProps) {
   const intl = useIntl();
   const [runs, setRuns] = useState<any[]>([]);
   const [page, setPage] = useState(1);
@@ -39,7 +43,12 @@ export default function RunDrawer({ open, sessionId, onClose }: RunDrawerProps) 
   const loadRuns = useCallback(async (sid: number, p: number, kw: string) => {
     setLoading(true);
     try {
-      const res = await agentApi.runs.listBySession(sid, p, PAGE_SIZE, kw || undefined);
+      const res = await agentApi.runs.listBySession(
+        sid,
+        p,
+        PAGE_SIZE,
+        kw || undefined,
+      );
       setRuns(res.records || []);
       setTotal(res.total || 0);
       setPage(p);
@@ -63,13 +72,19 @@ export default function RunDrawer({ open, sessionId, onClose }: RunDrawerProps) 
   const columns = [
     { title: 'ID', dataIndex: 'id', width: 70 },
     {
-      title: intl.formatMessage({ id: 'pages.chat.userMessage', defaultMessage: 'User Message' }),
+      title: intl.formatMessage({
+        id: 'pages.chat.userMessage',
+        defaultMessage: 'User Message',
+      }),
       dataIndex: 'userMessage',
       ellipsis: true,
       render: (v: string) => v || '-',
     },
     {
-      title: intl.formatMessage({ id: 'pages.chat.type', defaultMessage: 'Type' }),
+      title: intl.formatMessage({
+        id: 'pages.chat.type',
+        defaultMessage: 'Type',
+      }),
       dataIndex: 'type',
       width: 80,
     },
@@ -92,21 +107,29 @@ export default function RunDrawer({ open, sessionId, onClose }: RunDrawerProps) 
   return (
     <>
       <Drawer
-        title={intl.formatMessage({ id: 'pages.chat.runList', defaultMessage: 'Runs' })}
+        title={intl.formatMessage({
+          id: 'pages.chat.runList',
+          defaultMessage: 'Runs',
+        })}
         placement="right"
         size="large"
         open={open}
         onClose={onClose}
       >
         <Input.Search
-          placeholder={intl.formatMessage({ id: 'pages.search.placeholder', defaultMessage: 'Search...' })}
+          placeholder={intl.formatMessage({
+            id: 'pages.search.placeholder',
+            defaultMessage: 'Search...',
+          })}
           allowClear
           onSearch={handleSearch}
           style={{ marginBottom: 12 }}
         />
         <Spin spinning={loading}>
           {runs.length === 0 && !loading ? (
-            <Empty description={intl.formatMessage({ id: 'pages.table.empty' })} />
+            <Empty
+              description={intl.formatMessage({ id: 'pages.table.empty' })}
+            />
           ) : (
             <Table
               dataSource={runs}

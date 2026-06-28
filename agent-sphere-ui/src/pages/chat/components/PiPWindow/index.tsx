@@ -1,6 +1,12 @@
+import {
+  ArrowsAltOutlined,
+  CloseOutlined,
+  CompressOutlined,
+  MinusOutlined,
+  PushpinOutlined,
+} from '@ant-design/icons';
 import { Modal } from 'antd';
-import { CloseOutlined, MinusOutlined, ArrowsAltOutlined, CompressOutlined, PushpinOutlined } from '@ant-design/icons';
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface PiPWindowProps {
   screenshot: string | null;
@@ -51,7 +57,14 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
   }));
   const [size, setSize] = useState({ w: NORMAL_W, h: NORMAL_H });
   const [dragging, setDragging] = useState<'move' | 'resize' | null>(null);
-  const dragRef = useRef({ startX: 0, startY: 0, startL: 0, startT: 0, startW: 0, startH: 0 });
+  const dragRef = useRef({
+    startX: 0,
+    startY: 0,
+    startL: 0,
+    startT: 0,
+    startW: 0,
+    startH: 0,
+  });
   const ratioRef = useRef(NORMAL_W / NORMAL_H);
   const pipWindowRef = useRef<Window | null>(null);
   const [detached, setDetached] = useState(false);
@@ -59,7 +72,9 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
   useEffect(() => {
     if (!screenshot) return;
     const img = new Image();
-    img.onload = () => { ratioRef.current = img.naturalWidth / img.naturalHeight; };
+    img.onload = () => {
+      ratioRef.current = img.naturalWidth / img.naturalHeight;
+    };
     img.src = `data:image/jpeg;base64,${screenshot}`;
   }, [screenshot]);
 
@@ -72,14 +87,23 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
           y: dragRef.current.startT + e.clientY - dragRef.current.startY,
         });
       } else if (dragging === 'resize') {
-        const nw = Math.max(MIN_W, dragRef.current.startW + e.clientX - dragRef.current.startX);
-        setSize({ w: nw, h: Math.max(MIN_H, Math.round(nw / ratioRef.current)) });
+        const nw = Math.max(
+          MIN_W,
+          dragRef.current.startW + e.clientX - dragRef.current.startX,
+        );
+        setSize({
+          w: nw,
+          h: Math.max(MIN_H, Math.round(nw / ratioRef.current)),
+        });
       }
     };
     const onUp = () => setDragging(null);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
   }, [dragging]);
 
   useEffect(() => {
@@ -96,7 +120,9 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
     try {
       const parsed = JSON.parse(artifact);
       return parsed?.data?.url || null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, [artifact]);
 
   const openPip = useCallback(async () => {
@@ -104,7 +130,7 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
       const dpip = (window as any).documentPictureInPicture;
       if (!dpip) return;
       const pip = await dpip.requestWindow({ width: 480, height: 360 });
-      let styleEl = pip.document.createElement('style');
+      const styleEl = pip.document.createElement('style');
       styleEl.textContent = PIP_STYLES;
       pip.document.head.appendChild(styleEl);
       pip.document.body.innerHTML = `
@@ -151,7 +177,18 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
             cursor: minimized ? 'pointer' : dragging ? 'grabbing' : 'default',
             userSelect: dragging ? 'none' : 'auto',
           }}
-          onClick={minimized ? () => { setMinimized(false); setSize({ w: NORMAL_W, h: NORMAL_H }); setPos({ x: window.innerWidth - NORMAL_W - 16, y: window.innerHeight - NORMAL_H - 16 }); } : undefined}
+          onClick={
+            minimized
+              ? () => {
+                  setMinimized(false);
+                  setSize({ w: NORMAL_W, h: NORMAL_H });
+                  setPos({
+                    x: window.innerWidth - NORMAL_W - 16,
+                    y: window.innerHeight - NORMAL_H - 16,
+                  });
+                }
+              : undefined
+          }
         >
           <div
             style={{
@@ -166,7 +203,13 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
             }}
             onMouseDown={(e) => {
               if (minimized) return;
-              dragRef.current = { ...dragRef.current, startX: e.clientX, startY: e.clientY, startL: pos.x, startT: pos.y };
+              dragRef.current = {
+                ...dragRef.current,
+                startX: e.clientX,
+                startY: e.clientY,
+                startL: pos.x,
+                startT: pos.y,
+              };
               setDragging('move');
             }}
           >
@@ -176,33 +219,65 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
             <div style={{ display: 'flex', gap: 4 }}>
               {(window as any).documentPictureInPicture && (
                 <span
-                  style={{ fontSize: 12, cursor: 'pointer', color: '#1677ff', padding: '0 2px' }}
+                  style={{
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    color: '#1677ff',
+                    padding: '0 2px',
+                  }}
                   title="Detach to system window"
-                  onClick={(e) => { e.stopPropagation(); openPip(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openPip();
+                  }}
                 >
                   <PushpinOutlined />
                 </span>
               )}
               <span
-                style={{ fontSize: 12, cursor: 'pointer', color: '#999', padding: '0 2px' }}
+                style={{
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  color: '#999',
+                  padding: '0 2px',
+                }}
                 title={minimized ? 'Expand' : 'Minimize'}
-                onClick={(e) => { e.stopPropagation(); setMinimized(true); setExpanded(false); setPos({ x: window.innerWidth - 64, y: window.innerHeight - 64 }); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMinimized(true);
+                  setExpanded(false);
+                  setPos({
+                    x: window.innerWidth - 64,
+                    y: window.innerHeight - 64,
+                  });
+                }}
               >
                 {minimized ? <ArrowsAltOutlined /> : <MinusOutlined />}
               </span>
               <span
-                style={{ fontSize: 12, cursor: 'pointer', color: '#999', padding: '0 2px' }}
+                style={{
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  color: '#999',
+                  padding: '0 2px',
+                }}
                 title={expanded ? 'Normal' : 'Large View'}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (expanded) {
                     setSize({ w: NORMAL_W, h: NORMAL_H });
                     setExpanded(false);
-                    setPos({ x: window.innerWidth - NORMAL_W - 16, y: window.innerHeight - NORMAL_H - 16 });
+                    setPos({
+                      x: window.innerWidth - NORMAL_W - 16,
+                      y: window.innerHeight - NORMAL_H - 16,
+                    });
                   } else {
                     setSize({ w: EXPANDED_W, h: EXPANDED_H });
                     setExpanded(true);
-                    setPos({ x: window.innerWidth - EXPANDED_W - 16, y: window.innerHeight - EXPANDED_H - 16 });
+                    setPos({
+                      x: window.innerWidth - EXPANDED_W - 16,
+                      y: window.innerHeight - EXPANDED_H - 16,
+                    });
                   }
                   setMinimized(false);
                 }}
@@ -210,9 +285,17 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
                 {expanded ? <CompressOutlined /> : <ArrowsAltOutlined />}
               </span>
               <span
-                style={{ fontSize: 12, cursor: 'pointer', color: '#999', padding: '0 2px' }}
+                style={{
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  color: '#999',
+                  padding: '0 2px',
+                }}
                 title="Close"
-                onClick={(e) => { e.stopPropagation(); setHidden(true); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHidden(true);
+                }}
               >
                 <CloseOutlined />
               </span>
@@ -235,7 +318,12 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
                 <>
                   <img
                     src={`data:image/jpeg;base64,${screenshot}`}
-                    style={{ objectFit: 'contain', maxWidth: '100%', maxHeight: '100%', cursor: 'zoom-in' }}
+                    style={{
+                      objectFit: 'contain',
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      cursor: 'zoom-in',
+                    }}
                     onClick={() => setPreviewVisible(true)}
                     alt="page screenshot"
                   />
@@ -254,7 +342,9 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
                   </Modal>
                 </>
               ) : (
-                <span style={{ color: '#ccc', fontSize: 12 }}>No page data</span>
+                <span style={{ color: '#ccc', fontSize: 12 }}>
+                  No page data
+                </span>
               )}
               {pageUrl && (
                 <div
@@ -302,7 +392,16 @@ export default function PiPWindow({ screenshot, artifact }: PiPWindowProps) {
                 setDragging('resize');
               }}
             >
-              <svg viewBox="0 0 10 10" style={{ width: 16, height: 16, position: 'absolute', bottom: 4, right: 4 }}>
+              <svg
+                viewBox="0 0 10 10"
+                style={{
+                  width: 16,
+                  height: 16,
+                  position: 'absolute',
+                  bottom: 4,
+                  right: 4,
+                }}
+              >
                 <path d="M0 10 L10 0" stroke="#bbb" strokeWidth="1.5" />
                 <path d="M0 7 L7 0" stroke="#bbb" strokeWidth="1.5" />
                 <path d="M0 4 L4 0" stroke="#bbb" strokeWidth="1.5" />

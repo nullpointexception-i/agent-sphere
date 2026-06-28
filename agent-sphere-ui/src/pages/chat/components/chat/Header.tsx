@@ -1,6 +1,6 @@
-import { App, Button, Dropdown, Tooltip } from 'antd';
 import { CheckOutlined, DownOutlined, ToolOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
+import { App, Button, Dropdown, Tooltip } from 'antd';
 import { useMemo } from 'react';
 import { useStyles } from '../../style';
 
@@ -16,10 +16,14 @@ interface HeaderProps {
 }
 
 export default function Header({
-  currentSession, instances,
-  selectedModelRouteId, onModelRouteChange,
-  modelRoutes, sseConnected,
-  sessionPanelOpen, onTogglePanel,
+  currentSession,
+  instances,
+  selectedModelRouteId,
+  onModelRouteChange,
+  modelRoutes,
+  sseConnected,
+  sessionPanelOpen,
+  onTogglePanel,
 }: HeaderProps) {
   const intl = useIntl();
   const { message } = App.useApp();
@@ -27,25 +31,35 @@ export default function Header({
 
   const currentInstanceName = useMemo(() => {
     if (!currentSession?.agentInstanceId) return '';
-    const inst = instances.find((i: any) => i.id === currentSession.agentInstanceId);
+    const inst = instances.find(
+      (i: any) => i.id === currentSession.agentInstanceId,
+    );
     return inst?.name || '';
   }, [currentSession?.agentInstanceId, instances]);
 
   const selectedModelName = useMemo(() => {
     if (!selectedModelRouteId) return '';
     const r = modelRoutes.find((r: any) => r.id === selectedModelRouteId);
-    return r ? (r.providerName ? `${r.providerName} / ${r.modelName}` : r.modelName) : '';
+    return r
+      ? r.providerName
+        ? `${r.providerName} / ${r.modelName}`
+        : r.modelName
+      : '';
   }, [selectedModelRouteId, modelRoutes]);
 
   const modelMenuItems = useMemo(() => {
     const sorted = modelRoutes
       .slice()
-      .sort((a: any, b: any) =>
-        (a.providerName || '').localeCompare(b.providerName || '')
-        || (a.modelName || '').localeCompare(b.modelName || ''),
+      .sort(
+        (a: any, b: any) =>
+          (a.providerName || '').localeCompare(b.providerName || '') ||
+          (a.modelName || '').localeCompare(b.modelName || ''),
       );
 
-    const noKeyMsg = intl.formatMessage({ id: 'pages.instances.routeNoApiKey', defaultMessage: 'The provider for this route has no API key configured' });
+    const noKeyMsg = intl.formatMessage({
+      id: 'pages.instances.routeNoApiKey',
+      defaultMessage: 'The provider for this route has no API key configured',
+    });
     const items: any[] = [];
     let lastProvider = '';
     for (const r of sorted) {
@@ -53,7 +67,11 @@ export default function Header({
       if (provider && provider !== lastProvider) {
         items.push({
           key: `group_${provider}`,
-          label: <span style={{ fontWeight: 600, fontSize: 12, color: '#999' }}>{provider}</span>,
+          label: (
+            <span style={{ fontWeight: 600, fontSize: 12, color: '#999' }}>
+              {provider}
+            </span>
+          ),
           disabled: true,
         });
         lastProvider = provider;
@@ -64,7 +82,9 @@ export default function Header({
         label: (
           <span
             title={noApiKey ? noKeyMsg : undefined}
-            style={noApiKey ? { color: '#bfbfbf', cursor: 'not-allowed' } : undefined}
+            style={
+              noApiKey ? { color: '#bfbfbf', cursor: 'not-allowed' } : undefined
+            }
           >
             {provider ? `    ${r.modelName}` : r.modelName}
           </span>
@@ -85,41 +105,77 @@ export default function Header({
   return (
     <div className={styles.header}>
       <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 11, color: '#8c8c8c', lineHeight: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div
+          style={{
+            fontSize: 11,
+            color: '#8c8c8c',
+            lineHeight: '16px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {currentInstanceName}
         </div>
         <strong style={{ lineHeight: '22px' }}>{currentSession.title}</strong>
       </div>
       <Dropdown
-        menu={{ items: modelMenuItems, selectedKeys: selectedModelRouteId ? [String(selectedModelRouteId)] : [] }}
+        menu={{
+          items: modelMenuItems,
+          selectedKeys: selectedModelRouteId
+            ? [String(selectedModelRouteId)]
+            : [],
+        }}
         trigger={['click']}
       >
-        <Tooltip title={intl.formatMessage({ id: 'pages.chat.modelPlaceholder', defaultMessage: 'Model' })}>
+        <Tooltip
+          title={intl.formatMessage({
+            id: 'pages.chat.modelPlaceholder',
+            defaultMessage: 'Model',
+          })}
+        >
           <Button
             size="small"
             type="text"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              flexShrink: 0,
+            }}
           >
-            <span style={{
-              color: selectedModelName ? undefined : '#999',
-              fontWeight: 600,
-              fontSize: 15,
-            }}>
-              {selectedModelName || intl.formatMessage({ id: 'pages.chat.modelPlaceholder', defaultMessage: 'Model' })}
+            <span
+              style={{
+                color: selectedModelName ? undefined : '#999',
+                fontWeight: 600,
+                fontSize: 15,
+              }}
+            >
+              {selectedModelName ||
+                intl.formatMessage({
+                  id: 'pages.chat.modelPlaceholder',
+                  defaultMessage: 'Model',
+                })}
             </span>
             <DownOutlined style={{ fontSize: 10 }} />
           </Button>
         </Tooltip>
       </Dropdown>
       {sseConnected && <span className={styles.statusDot} />}
-      <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div
+        style={{
+          marginLeft: 'auto',
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+        }}
+      >
         {!sessionPanelOpen && (
-          <Button
-            size="small"
-            icon={<ToolOutlined />}
-            onClick={onTogglePanel}
-          >
-            {intl.formatMessage({ id: 'pages.chat.sessionPanel', defaultMessage: 'Session Panel' })}
+          <Button size="small" icon={<ToolOutlined />} onClick={onTogglePanel}>
+            {intl.formatMessage({
+              id: 'pages.chat.sessionPanel',
+              defaultMessage: 'Session Panel',
+            })}
           </Button>
         )}
       </div>

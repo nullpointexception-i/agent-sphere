@@ -1,21 +1,31 @@
-import { PageContainer } from '@ant-design/pro-components';
-import { useIntl, useNavigate, useParams, useLocation, history } from '@umijs/max';
-import { App } from 'antd';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { PageContainer } from '@ant-design/pro-components';
+import {
+  history,
+  useIntl,
+  useLocation,
+  useNavigate,
+  useParams,
+} from '@umijs/max';
+import { App } from 'antd';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import SetModelRouteModal from '@/components/SetModelRouteModal';
+import {
+  DOCWRITE_TOOL_NAME,
+  TODOWRITE_TOOL_NAME,
+  TOOL_CALL_RECORD_STATUS,
+} from '@/constants/toolCall';
 import { agentApi } from '@/services/agentSphere/api';
-import { connectSse } from '@/utils/sse';
 import { getToken } from '@/utils/auth';
-import { TODOWRITE_TOOL_NAME, DOCWRITE_TOOL_NAME, TOOL_CALL_RECORD_STATUS } from '@/constants/toolCall';
-import { useStyles } from './style';
-import Sidebar from './components/Sidebar';
-import Landing from './components/Landing';
+import { connectSse } from '@/utils/sse';
 import ChatMain from './components/chat';
-import SessionPanel from './components/SessionPanel';
 import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
-import SetModelRouteModal from '@/components/SetModelRouteModal';
+import Landing from './components/Landing';
 import PiPWindow from './components/PiPWindow';
+import SessionPanel from './components/SessionPanel';
+import Sidebar from './components/Sidebar';
+import { useStyles } from './style';
 
 const SESSION_PAGE_SIZE = 10;
 
@@ -40,7 +50,9 @@ export default function Chat() {
   const [chosenInstance, setChosenInstance] = useState('');
   const [currentInstanceObj, setCurrentInstanceObj] = useState<any>(null);
   const [modelRoutes, setModelRoutes] = useState<any[]>([]);
-  const [selectedModelRouteId, setSelectedModelRouteId] = useState<number | undefined>(undefined);
+  const [selectedModelRouteId, setSelectedModelRouteId] = useState<
+    number | undefined
+  >(undefined);
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
   const [expandOpen, setExpandOpen] = useState(false);
   const [expandText, setExpandText] = useState('');
@@ -77,15 +89,24 @@ export default function Chat() {
   }, []);
 
   useEffect(() => {
-    agentApi.instances.listLatest(3).then((data) => {
-      const sorted = [...data].sort((a, b) => {
-        if (a.modelRouteId && !b.modelRouteId) return -1;
-        if (!a.modelRouteId && b.modelRouteId) return 1;
-        return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
-      });
-      setInstances(sorted);
-    }).catch(() => {});
-    agentApi.routes.listAll().then(setModelRoutes).catch(() => {});
+    agentApi.instances
+      .listLatest(3)
+      .then((data) => {
+        const sorted = [...data].sort((a, b) => {
+          if (a.modelRouteId && !b.modelRouteId) return -1;
+          if (!a.modelRouteId && b.modelRouteId) return 1;
+          return (
+            new Date(b.updatedAt || b.createdAt).getTime() -
+            new Date(a.updatedAt || a.createdAt).getTime()
+          );
+        });
+        setInstances(sorted);
+      })
+      .catch(() => {});
+    agentApi.routes
+      .listAll()
+      .then(setModelRoutes)
+      .catch(() => {});
     loadSessions(0);
   }, [loadSessions]);
 
@@ -99,7 +120,8 @@ export default function Chat() {
       }
     };
     window.addEventListener('page_screenshot', handler as EventListener);
-    return () => window.removeEventListener('page_screenshot', handler as EventListener);
+    return () =>
+      window.removeEventListener('page_screenshot', handler as EventListener);
   }, []);
 
   useEffect(() => {
@@ -124,11 +146,24 @@ export default function Chat() {
       for (const r of runs) {
         if (r.assistantReply && seenReplyRunIdsRef.current.has(r.id)) continue;
         if (r.userMessage && r.userMessage !== '{}' && r.userMessage.trim()) {
-          historyMsgs.push({ role: 'user', content: r.userMessage, ts: new Date(r.createdAt).getTime() });
+          historyMsgs.push({
+            role: 'user',
+            content: r.userMessage,
+            ts: new Date(r.createdAt).getTime(),
+          });
         }
-        if (r.assistantReply && r.assistantReply !== '{}' && r.assistantReply.trim()) {
+        if (
+          r.assistantReply &&
+          r.assistantReply !== '{}' &&
+          r.assistantReply.trim()
+        ) {
           seenReplyRunIdsRef.current.add(r.id);
-          historyMsgs.push({ role: 'ai', content: r.assistantReply, runId: r.id, ts: new Date(r.createdAt).getTime() });
+          historyMsgs.push({
+            role: 'ai',
+            content: r.assistantReply,
+            runId: r.id,
+            ts: new Date(r.createdAt).getTime(),
+          });
           historyKeys.push(`run-${r.id}`);
         }
       }
@@ -160,7 +195,11 @@ export default function Chat() {
       `/api/v1/runtime/${sid}/stream`,
       token,
       {
-        onOpen: () => { setSseConnected(true); reconnectCountRef.current = 0; console.log('[SSE] connected'); },
+        onOpen: () => {
+          setSseConnected(true);
+          reconnectCountRef.current = 0;
+          console.log('[SSE] connected');
+        },
         onMessage: (payload) => {
           try {
             const parsed = JSON.parse(payload);
@@ -173,18 +212,42 @@ export default function Chat() {
               const publishId = d?.publishId;
               const runId = d?.runId;
               const isI18n = raw.startsWith('__i18n:');
-              const resolved = isI18n ? intl.formatMessage({ id: raw.replace('__i18n:', '') }) : raw;
-              const isSystem = (d?.reasoningType === 'system');
+              const resolved = isI18n
+                ? intl.formatMessage({ id: raw.replace('__i18n:', '') })
+                : raw;
+              const isSystem = d?.reasoningType === 'system';
 
-              if (subType === 'tool_call_in_progress' || subType === 'tool_call_succeeded' || subType === 'tool_call_failed') {
-                const name = d?.displayNameCn || d?.displayName || d?.toolName || '';
+              if (
+                subType === 'tool_call_in_progress' ||
+                subType === 'tool_call_succeeded' ||
+                subType === 'tool_call_failed'
+              ) {
+                const name =
+                  d?.displayNameCn || d?.displayName || d?.toolName || '';
                 const nameEn = d?.displayNameEn || name;
-                const status = subType === 'tool_call_in_progress' ? 'in_progress' : subType === 'tool_call_succeeded' ? 'succeeded' : 'failed';
-                setToolCalls(prev => prev.map(tc =>
-                  tc._publishId === publishId ? { ...tc, name: name || tc.name, displayNameCn: name, displayNameEn: nameEn, status } : tc
-                ));
+                const status =
+                  subType === 'tool_call_in_progress'
+                    ? 'in_progress'
+                    : subType === 'tool_call_succeeded'
+                      ? 'succeeded'
+                      : 'failed';
+                setToolCalls((prev) =>
+                  prev.map((tc) =>
+                    tc._publishId === publishId
+                      ? {
+                          ...tc,
+                          name: name || tc.name,
+                          displayNameCn: name,
+                          displayNameEn: nameEn,
+                          status,
+                        }
+                      : tc,
+                  ),
+                );
                 setMessages((prev) => {
-                  const idx = publishId ? prev.findIndex((m) => (m as any)._publishId === publishId) : -1;
+                  const idx = publishId
+                    ? prev.findIndex((m) => (m as any)._publishId === publishId)
+                    : -1;
                   if (idx >= 0) {
                     let updated = prev[idx].content;
                     if (subType === 'tool_call_in_progress') {
@@ -194,22 +257,46 @@ export default function Chat() {
                     } else if (subType === 'tool_call_failed') {
                       updated = updated.replace('calling...', 'failed ❌');
                     }
-                    return prev.map((m, i) => i === idx ? { ...m, content: updated } : m);
+                    return prev.map((m, i) =>
+                      i === idx ? { ...m, content: updated } : m,
+                    );
                   }
                   // No match by publishId — fallback to last reasoning line
-                  const lastIdx = prev.findLastIndex((m: any) => m.role === 'reasoning');
+                  const lastIdx = prev.findLastIndex(
+                    (m: any) => m.role === 'reasoning',
+                  );
                   if (lastIdx >= 0 && (prev[lastIdx] as any)._runId === runId) {
                     const last = prev[lastIdx];
                     const lines = last.content.split('\n');
                     const lastLine = lines[lines.length - 1];
                     if (lastLine.includes(`**${name}**`)) {
-                      if (subType === 'tool_call_in_progress' && lastLine.includes('starting...'))
-                        lines[lines.length - 1] = lastLine.replace('starting...', 'calling...');
-                      else if (subType === 'tool_call_succeeded' && lastLine.includes('calling...'))
-                        lines[lines.length - 1] = lastLine.replace('calling...', 'succeeded ✅');
-                      else if (subType === 'tool_call_failed' && lastLine.includes('calling...'))
-                        lines[lines.length - 1] = lastLine.replace('calling...', 'failed ❌');
-                      return prev.map((m, i) => i === lastIdx ? { ...m, content: lines.join('\n') } : m);
+                      if (
+                        subType === 'tool_call_in_progress' &&
+                        lastLine.includes('starting...')
+                      )
+                        lines[lines.length - 1] = lastLine.replace(
+                          'starting...',
+                          'calling...',
+                        );
+                      else if (
+                        subType === 'tool_call_succeeded' &&
+                        lastLine.includes('calling...')
+                      )
+                        lines[lines.length - 1] = lastLine.replace(
+                          'calling...',
+                          'succeeded ✅',
+                        );
+                      else if (
+                        subType === 'tool_call_failed' &&
+                        lastLine.includes('calling...')
+                      )
+                        lines[lines.length - 1] = lastLine.replace(
+                          'calling...',
+                          'failed ❌',
+                        );
+                      return prev.map((m, i) =>
+                        i === lastIdx ? { ...m, content: lines.join('\n') } : m,
+                      );
                     }
                   }
                   return prev;
@@ -217,20 +304,32 @@ export default function Chat() {
                 if (subType === 'tool_call_succeeded') {
                   const toolName = d?.toolName || '';
                   if (toolName === TODOWRITE_TOOL_NAME) {
-                    agentApi.sessions.getTodos(sid).then((data: any) => {
-                      if (Array.isArray(data)) setTodos(data);
-                    }).catch(() => {});
+                    agentApi.sessions
+                      .getTodos(sid)
+                      .then((data: any) => {
+                        if (Array.isArray(data)) setTodos(data);
+                      })
+                      .catch(() => {});
                   }
                   if (toolName === DOCWRITE_TOOL_NAME) {
                     try {
                       const docInfo = JSON.parse(d?.artifact || '{}');
                       if (docInfo.documentId) {
                         setMessages((prev) => {
-                          const lastReasoning = prev.findLastIndex((m: any) => m.role === 'reasoning' && (m as any)._runId === d?.runId);
+                          const lastReasoning = prev.findLastIndex(
+                            (m: any) =>
+                              m.role === 'reasoning' &&
+                              (m as any)._runId === d?.runId,
+                          );
                           if (lastReasoning >= 0) {
                             return prev.map((m, i) =>
                               i === lastReasoning
-                                ? { ...m, content: m.content + `\n📄 **${docInfo.title || 'Document'}**: ${(docInfo.preview || '').slice(0, 50)} [${intl.formatMessage({ id: 'pages.chat.viewDocument', defaultMessage: 'View' })}](/artifacts/documents/${docInfo.documentId})` }
+                                ? {
+                                    ...m,
+                                    content:
+                                      m.content +
+                                      `\n📄 **${docInfo.title || 'Document'}**: ${(docInfo.preview || '').slice(0, 50)} [${intl.formatMessage({ id: 'pages.chat.viewDocument', defaultMessage: 'View' })}](/artifacts/documents/${docInfo.documentId})`,
+                                  }
                                 : m,
                             );
                           }
@@ -249,25 +348,61 @@ export default function Chat() {
               }
 
               if (subType === 'tool_call_started') {
-                const name = d?.displayNameCn || d?.displayName || d?.toolName || '';
+                const name =
+                  d?.displayNameCn || d?.displayName || d?.toolName || '';
                 const nameEn = d?.displayNameEn || name;
-                setToolCalls(prev => [...prev, { name, displayNameCn: name, displayNameEn: nameEn, status: 'started', _publishId: publishId, _runId: runId, ts: Date.now() }]);
+                setToolCalls((prev) => [
+                  ...prev,
+                  {
+                    name,
+                    displayNameCn: name,
+                    displayNameEn: nameEn,
+                    status: 'started',
+                    _publishId: publishId,
+                    _runId: runId,
+                    ts: Date.now(),
+                  },
+                ]);
                 setSending(true);
                 setSessionPanelOpen(true);
                 setMessages((prev) => {
-                  const lastIdx = prev.findLastIndex((m: any) => m.role === 'reasoning');
+                  const lastIdx = prev.findLastIndex(
+                    (m: any) => m.role === 'reasoning',
+                  );
                   if (lastIdx >= 0 && (prev[lastIdx] as any)._runId === runId) {
-                    return prev.map((m, i) => i === lastIdx
-                      ? { ...m, content: m.content + '\n\n⚙️ **' + name + '**: starting...', _publishId: publishId }
-                      : m);
+                    return prev.map((m, i) =>
+                      i === lastIdx
+                        ? {
+                            ...m,
+                            content:
+                              m.content + '\n\n⚙️ **' + name + '**: starting...',
+                            _publishId: publishId,
+                          }
+                        : m,
+                    );
                   }
                   reasoningSectionIdRef.current++;
-                  return [...prev, { role: 'reasoning', content: '⚙️ **' + name + '**: starting...', ts: Date.now(), fromSSE: true, _runId: runId, _publishId: publishId, _reasoningId: reasoningSectionIdRef.current }];
+                  return [
+                    ...prev,
+                    {
+                      role: 'reasoning',
+                      content: '⚙️ **' + name + '**: starting...',
+                      ts: Date.now(),
+                      fromSSE: true,
+                      _runId: runId,
+                      _publishId: publishId,
+                      _reasoningId: reasoningSectionIdRef.current,
+                    },
+                  ];
                 });
                 return;
               }
 
-              if (subType === 'run_completed' || subType === 'run_failed' || subType === 'run_cancelled') {
+              if (
+                subType === 'run_completed' ||
+                subType === 'run_failed' ||
+                subType === 'run_cancelled'
+              ) {
                 setSending(false);
                 const runId = d?.runId;
 
@@ -277,14 +412,24 @@ export default function Chat() {
                   if (runId && errorMsg) {
                     setMessages((prev) => {
                       const existingIdx = prev.findIndex(
-                        (m) => (m as any).runId === runId && m.role === 'ai'
+                        (m) => (m as any).runId === runId && m.role === 'ai',
                       );
                       if (existingIdx >= 0) {
                         return prev.map((m, i) =>
-                          i === existingIdx ? { ...m, content: errorMsg, _pending: false } : m
+                          i === existingIdx
+                            ? { ...m, content: errorMsg, _pending: false }
+                            : m,
                         );
                       }
-                      return [...prev, { role: 'ai', content: errorMsg, ts: Date.now(), fromSSE: true }];
+                      return [
+                        ...prev,
+                        {
+                          role: 'ai',
+                          content: errorMsg,
+                          ts: Date.now(),
+                          fromSSE: true,
+                        },
+                      ];
                     });
                   }
                 }
@@ -293,21 +438,37 @@ export default function Chat() {
                 if (runId && reply) {
                   setMessages((prev) => {
                     const reasoningKeys = prev
-                      .filter((m) => (m as any).role === 'reasoning' && (m as any)._reasoningId)
+                      .filter(
+                        (m) =>
+                          (m as any).role === 'reasoning' &&
+                          (m as any)._reasoningId,
+                      )
                       .map((m) => `reasoning-${(m as any)._reasoningId}`);
                     if (reasoningKeys.length > 0) {
-                      setCollapsedKeys((k) => new Set([...k, ...reasoningKeys]));
+                      setCollapsedKeys(
+                        (k) => new Set([...k, ...reasoningKeys]),
+                      );
                     }
                     // If streaming content_token already built an AI message, update in-place
                     const existingIdx = prev.findIndex(
-                      (m) => (m as any).runId === runId && m.role === 'ai'
+                      (m) => (m as any).runId === runId && m.role === 'ai',
                     );
                     if (existingIdx >= 0) {
                       return prev.map((m, i) =>
-                        i === existingIdx ? { ...m, content: reply, _pending: false } : m
+                        i === existingIdx
+                          ? { ...m, content: reply, _pending: false }
+                          : m,
                       );
                     }
-                    return [...prev, { role: 'ai', content: reply, ts: Date.now(), fromSSE: true }];
+                    return [
+                      ...prev,
+                      {
+                        role: 'ai',
+                        content: reply,
+                        ts: Date.now(),
+                        fromSSE: true,
+                      },
+                    ];
                   });
                 }
                 return;
@@ -317,8 +478,12 @@ export default function Chat() {
                 const sid = d?.sessionId;
                 const title = d?.assistantReply;
                 if (sid && title) {
-                  setCurrentSession((prev: any) => prev?.id === sid ? { ...prev, title } : prev);
-                  setSessions((prev) => prev.map((s: any) => s.id === sid ? { ...s, title } : s));
+                  setCurrentSession((prev: any) =>
+                    prev?.id === sid ? { ...prev, title } : prev,
+                  );
+                  setSessions((prev) =>
+                    prev.map((s: any) => (s.id === sid ? { ...s, title } : s)),
+                  );
                 }
                 return;
               }
@@ -326,22 +491,46 @@ export default function Chat() {
               setMessages((prev) => {
                 let mutated = prev;
                 if (subType === 'intent_retry') {
-                  mutated = mutated.filter((m) => !(m.role === 'ai' && !(m as any).content?.trim()));
+                  mutated = mutated.filter(
+                    (m) => !(m.role === 'ai' && !(m as any).content?.trim()),
+                  );
                 }
-                const lastIdx = mutated.findLastIndex((m: any) => m.role === 'reasoning');
-                if (lastIdx >= 0 && (mutated[lastIdx] as any)._runId === runId) {
+                const lastIdx = mutated.findLastIndex(
+                  (m: any) => m.role === 'reasoning',
+                );
+                if (
+                  lastIdx >= 0 &&
+                  (mutated[lastIdx] as any)._runId === runId
+                ) {
                   const sep = isSystem ? '\n\n' : '';
-                  return mutated.map((m, i) => i === lastIdx ? { ...m, content: m.content + sep + resolved } : m);
+                  return mutated.map((m, i) =>
+                    i === lastIdx
+                      ? { ...m, content: m.content + sep + resolved }
+                      : m,
+                  );
                 }
                 reasoningSectionIdRef.current++;
-                return [...mutated, { role: 'reasoning' as const, content: resolved, ts: Date.now(), fromSSE: true, _runId: runId, _reasoningId: reasoningSectionIdRef.current, _publishId: publishId || undefined }];
+                return [
+                  ...mutated,
+                  {
+                    role: 'reasoning' as const,
+                    content: resolved,
+                    ts: Date.now(),
+                    fromSSE: true,
+                    _runId: runId,
+                    _reasoningId: reasoningSectionIdRef.current,
+                    _publishId: publishId || undefined,
+                  },
+                ];
               });
               return;
             }
             if (evtType === 'page_screenshot') {
               if (d?.screenshot) {
                 setLatestScreenshot(d.screenshot);
-                setLatestArtifact(JSON.stringify({ data: { url: d?.response || '' } }));
+                setLatestArtifact(
+                  JSON.stringify({ data: { url: d?.response || '' } }),
+                );
               }
               return;
             }
@@ -351,11 +540,25 @@ export default function Chat() {
               if (rid && delta) {
                 setSending(true);
                 setMessages((prev) => {
-                  const idx = prev.findIndex((m) => (m as any).runId === rid && m.role === 'ai');
+                  const idx = prev.findIndex(
+                    (m) => (m as any).runId === rid && m.role === 'ai',
+                  );
                   if (idx >= 0) {
-                    return prev.map((m, i) => i === idx ? { ...m, content: m.content + delta } : m);
+                    return prev.map((m, i) =>
+                      i === idx ? { ...m, content: m.content + delta } : m,
+                    );
                   }
-                  return [...prev, { role: 'ai', content: delta, runId: rid, ts: Date.now(), fromSSE: true, _pending: true }];
+                  return [
+                    ...prev,
+                    {
+                      role: 'ai',
+                      content: delta,
+                      runId: rid,
+                      ts: Date.now(),
+                      fromSSE: true,
+                      _pending: true,
+                    },
+                  ];
                 });
               }
               return;
@@ -365,9 +568,16 @@ export default function Chat() {
         onError: () => {
           setSseConnected(false);
           if (currentSessionIdRef.current === sid) {
-            const delay = Math.min(1000 * Math.pow(2, reconnectCountRef.current), 30000);
+            const delay = Math.min(
+              1000 * 2 ** reconnectCountRef.current,
+              30000,
+            );
             reconnectCountRef.current++;
-            console.log('[SSE] reconnecting session', sid, `attempt ${reconnectCountRef.current} in ${delay}ms`);
+            console.log(
+              '[SSE] reconnecting session',
+              sid,
+              `attempt ${reconnectCountRef.current} in ${delay}ms`,
+            );
             setTimeout(() => {
               if (currentSessionIdRef.current === sid) connectSSE(sid);
             }, delay);
@@ -392,7 +602,10 @@ export default function Chat() {
         if (s) setCurrentSession(s);
         else {
           setCurrentSession({ id: sid, title: '...' } as any);
-          agentApi.sessions.get(sid).then(setCurrentSession).catch(() => {});
+          agentApi.sessions
+            .get(sid)
+            .then(setCurrentSession)
+            .catch(() => {});
         }
         setMessages([{ role: 'user', content: pendingMsg, ts: Date.now() }]);
         setSending(true);
@@ -407,14 +620,21 @@ export default function Chat() {
         connectSSE(sid);
         (async () => {
           try {
-            const res = await agentApi.sessions.chat(sid, pendingMsg, modelRoute ? Number(modelRoute) : undefined);
+            const res = await agentApi.sessions.chat(
+              sid,
+              pendingMsg,
+              modelRoute ? Number(modelRoute) : undefined,
+            );
             if (res?.runId) {
               currentRunIdRef.current = res.runId;
               runUserMessageRef.current.set(res.runId, pendingMsg);
             }
           } catch (e) {
             setSending(false);
-            setMessages((prev) => [...prev, { role: 'ai', content: `Error: ${e}`, ts: Date.now() }]);
+            setMessages((prev) => [
+              ...prev,
+              { role: 'ai', content: `Error: ${e}`, ts: Date.now() },
+            ]);
           }
         })();
       } else {
@@ -424,7 +644,10 @@ export default function Chat() {
           setCurrentSession(s);
           setMessages([]);
         } else {
-          agentApi.sessions.get(sid).then(setCurrentSession).catch(() => navigate('/chat', { replace: true }));
+          agentApi.sessions
+            .get(sid)
+            .then(setCurrentSession)
+            .catch(() => navigate('/chat', { replace: true }));
         }
         setSelectedModelRouteId(undefined);
         setHasMoreHistory(true);
@@ -438,34 +661,58 @@ export default function Chat() {
         setTodos([]);
         setToolCalls([]);
         setSessionPanelOpen(true);
-        agentApi.sessions.getTodos(sid).then((data: any) => {
-          if (Array.isArray(data)) setTodos(data);
-        }).catch(() => {});
-        agentApi.sessions.getLatestToolCalls(sid).then((data: any) => {
-          if (Array.isArray(data)) {
-            setToolCalls(data.map((r: any) => ({
-              name: r.displayNameCn || r.displayName || r.toolName || '',
-              displayNameCn: r.displayNameCn || r.displayName || '',
-              displayNameEn: r.displayNameEn || '',
-              status: r.status === TOOL_CALL_RECORD_STATUS.SUCCEEDED ? 'succeeded' : r.status === TOOL_CALL_RECORD_STATUS.FAILED ? 'failed' : 'pending',
-              _publishId: `tool-${r.id}`,
-              _runId: r.runId,
-              ts: r.createdAt ? new Date(r.createdAt).getTime() : Date.now(),
-            })));
-          }
-        }).catch(() => {});
+        agentApi.sessions
+          .getTodos(sid)
+          .then((data: any) => {
+            if (Array.isArray(data)) setTodos(data);
+          })
+          .catch(() => {});
+        agentApi.sessions
+          .getLatestToolCalls(sid)
+          .then((data: any) => {
+            if (Array.isArray(data)) {
+              setToolCalls(
+                data.map((r: any) => ({
+                  name: r.displayNameCn || r.displayName || r.toolName || '',
+                  displayNameCn: r.displayNameCn || r.displayName || '',
+                  displayNameEn: r.displayNameEn || '',
+                  status:
+                    r.status === TOOL_CALL_RECORD_STATUS.SUCCEEDED
+                      ? 'succeeded'
+                      : r.status === TOOL_CALL_RECORD_STATUS.FAILED
+                        ? 'failed'
+                        : 'pending',
+                  _publishId: `tool-${r.id}`,
+                  _runId: r.runId,
+                  ts: r.createdAt
+                    ? new Date(r.createdAt).getTime()
+                    : Date.now(),
+                })),
+              );
+            }
+          })
+          .catch(() => {});
         loadHistory(sid, 1);
         connectSSE(sid);
       }
     }
     return () => {
-      if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
     };
   }, [sessionId]);
 
   useEffect(() => {
-    if (currentSession?.agentInstanceId && instances.length > 0 && !selectedModelRouteId) {
-      const instance = instances.find((i: any) => i.id === currentSession.agentInstanceId);
+    if (
+      currentSession?.agentInstanceId &&
+      instances.length > 0 &&
+      !selectedModelRouteId
+    ) {
+      const instance = instances.find(
+        (i: any) => i.id === currentSession.agentInstanceId,
+      );
       if (instance?.modelRouteId) {
         setSelectedModelRouteId(instance.modelRouteId);
       }
@@ -479,26 +726,37 @@ export default function Chat() {
 
   const sendMessage = async () => {
     if (!inputValue.trim() || !currentSession || sending) return;
-    setMessages((prev) => [...prev, { role: 'user', content: inputValue, ts: Date.now() }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: inputValue, ts: Date.now() },
+    ]);
     const msg = inputValue;
     setInputValue('');
     setSending(true);
     try {
-      const res = await agentApi.sessions.chat(currentSession.id, msg, selectedModelRouteId);
+      const res = await agentApi.sessions.chat(
+        currentSession.id,
+        msg,
+        selectedModelRouteId,
+      );
       if (res?.runId) {
         currentRunIdRef.current = res.runId;
         runUserMessageRef.current.set(res.runId, msg);
       }
     } catch (err) {
       setSending(false);
-      setMessages((prev) => [...prev, { role: 'ai', content: `Error: ${err}`, ts: Date.now() }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'ai', content: `Error: ${err}`, ts: Date.now() },
+      ]);
     }
   };
 
   const landingCreateSession = async () => {
     if (!inputValue.trim()) return;
     const firstAvailable = instances.find((i: any) => i.modelRouteId);
-    const instanceId = chosenInstance || (firstAvailable ? String(firstAvailable.id) : null);
+    const instanceId =
+      chosenInstance || (firstAvailable ? String(firstAvailable.id) : null);
     if (!instanceId) {
       message.warning('Please select an instance');
       return;
@@ -515,11 +773,19 @@ export default function Chat() {
       setSessions((prev) => [vo, ...prev]);
       setChosenInstance(String(instanceId));
       sessionStorage.setItem('landingPendingMsg', msg);
-      if (selectedModelRouteId) sessionStorage.setItem('landingModelRouteId', String(selectedModelRouteId));
+      if (selectedModelRouteId)
+        sessionStorage.setItem(
+          'landingModelRouteId',
+          String(selectedModelRouteId),
+        );
       history.push(`/chat/${vo.id}`);
     } catch (e: any) {
       setSending(false);
-      const errMsg = e?.data?.userTip || e?.data?.errorMessage || e?.message || 'Failed to create session';
+      const errMsg =
+        e?.data?.userTip ||
+        e?.data?.errorMessage ||
+        e?.message ||
+        'Failed to create session';
       message.error(errMsg);
     }
   };
@@ -527,16 +793,24 @@ export default function Chat() {
   const deleteSession = async (id: number) => {
     try {
       await agentApi.sessions.close(id);
-      if (currentSession?.id === id) { setCurrentSession(null); setMessages([]); navigate('/chat', { replace: true }); }
+      if (currentSession?.id === id) {
+        setCurrentSession(null);
+        setMessages([]);
+        navigate('/chat', { replace: true });
+      }
     } catch {}
     setSessions((prev) => prev.filter((s: any) => s.id !== id));
   };
 
   const handleSessionRename = async (id: number, title: string) => {
     await agentApi.sessions.update(id, title.trim());
-    setSessions((prev) => prev.map((s: any) => s.id === id ? { ...s, title: title.trim() } : s));
+    setSessions((prev) =>
+      prev.map((s: any) => (s.id === id ? { ...s, title: title.trim() } : s)),
+    );
     if (currentSession?.id === id) {
-      setCurrentSession((prev: any) => prev ? { ...prev, title: title.trim() } : prev);
+      setCurrentSession((prev: any) =>
+        prev ? { ...prev, title: title.trim() } : prev,
+      );
     }
   };
 
@@ -551,14 +825,20 @@ export default function Chat() {
   };
 
   const refreshInstances = useCallback(() => {
-    agentApi.instances.listLatest(3).then((data) => {
-      const sorted = [...data].sort((a, b) => {
-        if (a.modelRouteId && !b.modelRouteId) return -1;
-        if (!a.modelRouteId && b.modelRouteId) return 1;
-        return new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime();
-      });
-      setInstances(sorted);
-    }).catch(() => {});
+    agentApi.instances
+      .listLatest(3)
+      .then((data) => {
+        const sorted = [...data].sort((a, b) => {
+          if (a.modelRouteId && !b.modelRouteId) return -1;
+          if (!a.modelRouteId && b.modelRouteId) return 1;
+          return (
+            new Date(b.updatedAt || b.createdAt).getTime() -
+            new Date(a.updatedAt || a.createdAt).getTime()
+          );
+        });
+        setInstances(sorted);
+      })
+      .catch(() => {});
   }, []);
 
   return (
@@ -579,7 +859,9 @@ export default function Chat() {
     >
       <div className={styles.layout}>
         <div className={styles.sidebarWrapper}>
-          <div className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}>
+          <div
+            className={`${styles.sidebar} ${sidebarCollapsed ? styles.sidebarCollapsed : ''}`}
+          >
             <Sidebar
               sessions={sessions}
               currentSession={currentSession}
@@ -592,7 +874,10 @@ export default function Chat() {
               onNewChat={() => navigate('/chat')}
             />
           </div>
-          <div className={styles.sidebarToggle} onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
+          <div
+            className={styles.sidebarToggle}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          >
             {sidebarCollapsed ? <RightOutlined /> : <LeftOutlined />}
           </div>
         </div>
@@ -617,11 +902,16 @@ export default function Chat() {
               onCancelSend={async () => {
                 setSending(false);
                 if (currentRunIdRef.current && currentSession?.id) {
-                  await agentApi.runs.stop(currentSession.id, currentRunIdRef.current).catch(() => {});
+                  await agentApi.runs
+                    .stop(currentSession.id, currentRunIdRef.current)
+                    .catch(() => {});
                 }
                 currentRunIdRef.current = null;
               }}
-              onExpandOpen={() => { setExpandText(inputValue); setExpandOpen(true); }}
+              onExpandOpen={() => {
+                setExpandText(inputValue);
+                setExpandOpen(true);
+              }}
               sessionPanelOpen={sessionPanelOpen}
               onTogglePanel={() => setSessionPanelOpen(!sessionPanelOpen)}
             />
@@ -641,7 +931,9 @@ export default function Chat() {
               sending={sending}
               onStartSession={landingCreateSession}
               onOpenInstanceDrawer={() => setInstanceDrawerOpen(true)}
-              onCreateInstance={() => navigate('/instances', { state: { openCreate: true } })}
+              onCreateInstance={() =>
+                navigate('/instances', { state: { openCreate: true } })
+              }
               onConfigureModelRoute={(inst: any) => {
                 setConfigModelInstance(inst);
               }}
@@ -661,7 +953,10 @@ export default function Chat() {
       <ExpandModal
         open={expandOpen}
         onClose={() => setExpandOpen(false)}
-        onOk={() => { setInputValue(expandText); setExpandOpen(false); }}
+        onOk={() => {
+          setInputValue(expandText);
+          setExpandOpen(false);
+        }}
         text={expandText}
         onTextChange={setExpandText}
       />
@@ -680,8 +975,12 @@ export default function Chat() {
       <SetModelRouteModal
         open={!!configModelInstance}
         instance={configModelInstance}
-        onClose={() => { setConfigModelInstance(null); }}
-        onSuccess={() => { refreshInstances(); }}
+        onClose={() => {
+          setConfigModelInstance(null);
+        }}
+        onSuccess={() => {
+          refreshInstances();
+        }}
       />
     </PageContainer>
   );

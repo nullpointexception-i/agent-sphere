@@ -48,37 +48,37 @@ export async function connectSse(
     }, 10000);
 
     try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        callbacks.onError?.(new Error('SSE stream ended'));
-        return;
-      }
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          callbacks.onError?.(new Error('SSE stream ended'));
+          return;
+        }
 
-      buffer += decoder.decode(value, { stream: true });
-      lastPing = Date.now();
+        buffer += decoder.decode(value, { stream: true });
+        lastPing = Date.now();
 
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
 
-      for (const part of parts) {
-        const trimmed = part.trim();
-        if (!trimmed) continue;
-        if (trimmed.startsWith(':')) continue;
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (!trimmed) continue;
+          if (trimmed.startsWith(':')) continue;
 
-        const lines = trimmed.split('\n');
-        const dataLines: string[] = [];
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            dataLines.push(line.slice(5).trim());
+          const lines = trimmed.split('\n');
+          const dataLines: string[] = [];
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              dataLines.push(line.slice(5).trim());
+            }
+          }
+
+          if (dataLines.length > 0) {
+            callbacks.onMessage?.(dataLines.join('\n'));
           }
         }
-
-        if (dataLines.length > 0) {
-          callbacks.onMessage?.(dataLines.join('\n'));
-        }
       }
-    }
     } finally {
       clearInterval(watchdog);
     }

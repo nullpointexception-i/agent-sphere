@@ -7,4 +7,5 @@ export const TOOL_CALL_RECORD_STATUS = {
   FAILED: 'FAILED',
 } as const;
 
-export type ToolCallRecordStatus = (typeof TOOL_CALL_RECORD_STATUS)[keyof typeof TOOL_CALL_RECORD_STATUS];
+export type ToolCallRecordStatus =
+  (typeof TOOL_CALL_RECORD_STATUS)[keyof typeof TOOL_CALL_RECORD_STATUS];

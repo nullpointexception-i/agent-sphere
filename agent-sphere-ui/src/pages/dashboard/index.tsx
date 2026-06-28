@@ -9,7 +9,10 @@ export default function Dashboard() {
   const [providerCount, setProviderCount] = useState(0);
 
   useEffect(() => {
-    agentApi.modelProviders.count().then(setProviderCount).catch(() => {});
+    agentApi.modelProviders
+      .count()
+      .then(setProviderCount)
+      .catch(() => {});
   }, []);
 
   return (
@@ -18,8 +21,14 @@ export default function Dashboard() {
         <Col xs={24} sm={12} md={6}>
           <Card hoverable onClick={() => history.push('/chat')}>
             <Statistic
-              title={intl.formatMessage({ id: 'pages.dashboard.chat.title', defaultMessage: 'Chat' })}
-              value={intl.formatMessage({ id: 'pages.dashboard.chat.desc', defaultMessage: 'Start conversation' })}
+              title={intl.formatMessage({
+                id: 'pages.dashboard.chat.title',
+                defaultMessage: 'Chat',
+              })}
+              value={intl.formatMessage({
+                id: 'pages.dashboard.chat.desc',
+                defaultMessage: 'Start conversation',
+              })}
               styles={{ content: { fontSize: 14 } }}
             />
           </Card>
@@ -27,8 +36,14 @@ export default function Dashboard() {
         <Col xs={24} sm={12} md={6}>
           <Card hoverable onClick={() => history.push('/instances')}>
             <Statistic
-              title={intl.formatMessage({ id: 'pages.dashboard.instances.title', defaultMessage: 'Instances' })}
-              value={intl.formatMessage({ id: 'pages.dashboard.instances.desc', defaultMessage: 'Manage agents' })}
+              title={intl.formatMessage({
+                id: 'pages.dashboard.instances.title',
+                defaultMessage: 'Instances',
+              })}
+              value={intl.formatMessage({
+                id: 'pages.dashboard.instances.desc',
+                defaultMessage: 'Manage agents',
+              })}
               styles={{ content: { fontSize: 14 } }}
             />
           </Card>
@@ -36,7 +51,10 @@ export default function Dashboard() {
         <Col xs={24} sm={12} md={6}>
           <Card hoverable onClick={() => history.push('/models')}>
             <Statistic
-              title={intl.formatMessage({ id: 'pages.dashboard.models.title', defaultMessage: 'Model Providers' })}
+              title={intl.formatMessage({
+                id: 'pages.dashboard.models.title',
+                defaultMessage: 'Model Providers',
+              })}
               value={providerCount}
             />
           </Card>
@@ -44,8 +62,14 @@ export default function Dashboard() {
         <Col xs={24} sm={12} md={6}>
           <Card hoverable onClick={() => history.push('/capabilities/mcp')}>
             <Statistic
-              title={intl.formatMessage({ id: 'pages.dashboard.capabilities.title', defaultMessage: 'Capabilities' })}
-              value={intl.formatMessage({ id: 'pages.dashboard.capabilities.desc', defaultMessage: 'MCP / Skill / CLI' })}
+              title={intl.formatMessage({
+                id: 'pages.dashboard.capabilities.title',
+                defaultMessage: 'Capabilities',
+              })}
+              value={intl.formatMessage({
+                id: 'pages.dashboard.capabilities.desc',
+                defaultMessage: 'MCP / Skill / CLI',
+              })}
               styles={{ content: { fontSize: 14 } }}
             />
           </Card>

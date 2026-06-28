@@ -1,7 +1,4 @@
-import {
-  CheckOutlined,
-  GlobalOutlined,
-} from '@ant-design/icons';
+import { CheckOutlined, GlobalOutlined } from '@ant-design/icons';
 import { getAllLocales, getLocale, setLocale } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Button } from 'antd';

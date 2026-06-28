@@ -16,8 +16,7 @@ const Settings: ProLayoutProps & {
   title: 'Agent Sphere',
   logo: '/logo.svg',
   iconfontUrl: '',
-  token: {
-  },
+  token: {},
 };
 
 export default Settings;

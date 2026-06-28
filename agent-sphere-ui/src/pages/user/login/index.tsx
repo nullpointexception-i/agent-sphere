@@ -1,7 +1,4 @@
-import {
-  LockOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
+import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import {
   LoginForm,
   ProFormCheckbox,
@@ -10,18 +7,18 @@ import {
 import {
   FormattedMessage,
   Helmet,
-  SelectLang,
   history,
+  SelectLang,
+  request as umiRequest,
   useIntl,
   useModel,
-  request as umiRequest,
 } from '@umijs/max';
 import { Alert, App } from 'antd';
 import React, { startTransition, useState } from 'react';
 import { setStoredUser } from '@/utils/auth';
 import { labelWithRule } from '@/utils/labelWithRule';
-import { useStyles } from './style';
 import Settings from '../../../../config/defaultSettings';
+import { useStyles } from './style';
 
 const Lang = () => {
   const { styles } = useStyles();
@@ -97,7 +94,12 @@ const Login: React.FC = () => {
       const redirectUrl = getSafeRedirectUrl(urlParams.get('redirect'));
       window.location.href = redirectUrl;
     } catch (error: any) {
-      const msg = error?.data?.userTip || error?.data?.errorMessage || error?.data?.message || error?.message || '登录失败，请重试！';
+      const msg =
+        error?.data?.userTip ||
+        error?.data?.errorMessage ||
+        error?.data?.message ||
+        error?.message ||
+        '登录失败，请重试！';
       setErrorMessage(msg);
     }
   };
@@ -121,20 +123,29 @@ const Login: React.FC = () => {
             minWidth: 280,
             maxWidth: '75vw',
           }}
-          logo={<img alt="logo" src="/logo.svg" style={{ width: 64, height: 64 }} />}
+          logo={
+            <img alt="logo" src="/logo.svg" style={{ width: 64, height: 64 }} />
+          }
           title={<span>Agent Sphere</span>}
-          subTitle={intl.formatMessage({ id: 'pages.login.subtitle', defaultMessage: 'Intelligent Agent Management & AI Orchestration' })}
+          subTitle={intl.formatMessage({
+            id: 'pages.login.subtitle',
+            defaultMessage: 'Intelligent Agent Management & AI Orchestration',
+          })}
           initialValues={{ autoLogin: true }}
           onFinish={async (values) => {
             await handleSubmit(values);
           }}
         >
-          {errorMessage && (
-            <LoginMessage content={errorMessage} />
-          )}
+          {errorMessage && <LoginMessage content={errorMessage} />}
           <ProFormText
             name="username"
-            label={labelWithRule(intl.formatMessage({ id: 'pages.login.username.placeholder', defaultMessage: '用户名' }), intl.formatMessage({ id: 'pages.hint.username' }))}
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.login.username.placeholder',
+                defaultMessage: '用户名',
+              }),
+              intl.formatMessage({ id: 'pages.hint.username' }),
+            )}
             fieldProps={{
               size: 'large',
               prefix: <UserOutlined />,
@@ -154,12 +165,27 @@ const Login: React.FC = () => {
                   />
                 ),
               },
-              { min: 5, message: intl.formatMessage({ id: 'pages.form.minLength', defaultMessage: 'Min {min} characters' }, { min: 5 }) },
+              {
+                min: 5,
+                message: intl.formatMessage(
+                  {
+                    id: 'pages.form.minLength',
+                    defaultMessage: 'Min {min} characters',
+                  },
+                  { min: 5 },
+                ),
+              },
             ]}
           />
           <ProFormText.Password
             name="password"
-            label={labelWithRule(intl.formatMessage({ id: 'pages.login.password.placeholder', defaultMessage: '密码' }), intl.formatMessage({ id: 'pages.hint.password' }))}
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.login.password.placeholder',
+                defaultMessage: '密码',
+              }),
+              intl.formatMessage({ id: 'pages.hint.password' }),
+            )}
             fieldProps={{
               size: 'large',
               prefix: <LockOutlined />,
@@ -179,7 +205,16 @@ const Login: React.FC = () => {
                   />
                 ),
               },
-              { min: 5, message: intl.formatMessage({ id: 'pages.form.minLength', defaultMessage: 'Min {min} characters' }, { min: 5 }) },
+              {
+                min: 5,
+                message: intl.formatMessage(
+                  {
+                    id: 'pages.form.minLength',
+                    defaultMessage: 'Min {min} characters',
+                  },
+                  { min: 5 },
+                ),
+              },
             ]}
           />
           <div
@@ -201,7 +236,10 @@ const Login: React.FC = () => {
             }}
           >
             <a onClick={() => history.push('/user/register')}>
-              <FormattedMessage id="pages.login.register" defaultMessage="去注册" />
+              <FormattedMessage
+                id="pages.login.register"
+                defaultMessage="去注册"
+              />
             </a>
           </div>
         </LoginForm>

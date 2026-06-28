@@ -1,10 +1,10 @@
-import { Button } from 'antd';
 import { useIntl } from '@umijs/max';
+import { Button } from 'antd';
 import { useRef } from 'react';
 import { useStyles } from '../../style';
+import Footer from './Footer';
 import Header from './Header';
 import MessageList from './MessageList';
-import Footer from './Footer';
 
 interface ChatMainProps {
   currentSession: any;
@@ -29,20 +29,34 @@ interface ChatMainProps {
 }
 
 export default function ChatMain({
-  currentSession, instances,
-  selectedModelRouteId, onModelRouteChange,
-  modelRoutes, sseConnected, messages, collapsedKeys,
-  onCollapsedKeysChange, hasMoreHistory, onLoadMoreHistory,
-  inputValue, onInputValueChange, sending, onSendMessage, onCancelSend,
+  currentSession,
+  instances,
+  selectedModelRouteId,
+  onModelRouteChange,
+  modelRoutes,
+  sseConnected,
+  messages,
+  collapsedKeys,
+  onCollapsedKeysChange,
+  hasMoreHistory,
+  onLoadMoreHistory,
+  inputValue,
+  onInputValueChange,
+  sending,
+  onSendMessage,
+  onCancelSend,
   onExpandOpen,
-  sessionPanelOpen, onTogglePanel,
+  sessionPanelOpen,
+  onTogglePanel,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const intl = useIntl();
   const { styles } = useStyles();
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const hasMessages = messages.some((m: any) => m.content && m.content !== '{}');
+  const hasMessages = messages.some(
+    (m: any) => m.content && m.content !== '{}',
+  );
 
   return (
     <>
@@ -61,7 +75,10 @@ export default function ChatMain({
           <div ref={loadMoreRef} className={styles.loadMore}>
             {hasMoreHistory && (
               <Button type="link" size="small" onClick={onLoadMoreHistory}>
-                {intl.formatMessage({ id: 'chat.loadMoreMessages', defaultMessage: 'Load more messages' })}
+                {intl.formatMessage({
+                  id: 'chat.loadMoreMessages',
+                  defaultMessage: 'Load more messages',
+                })}
               </Button>
             )}
           </div>

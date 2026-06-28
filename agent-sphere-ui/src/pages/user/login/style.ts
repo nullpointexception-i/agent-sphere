@@ -15,8 +15,7 @@ export const useStyles = createStyles(({ token }) => ({
     flexDirection: 'column',
     height: '100vh',
     overflow: 'auto',
-    backgroundImage:
-      "url('/images/bg-login.png')",
+    backgroundImage: "url('/images/bg-login.png')",
     backgroundSize: '100% 100%',
   },
   wrapper: {

@@ -1,5 +1,5 @@
-import { App, Card, Drawer, Empty, Pagination, Spin } from 'antd';
 import { useIntl } from '@umijs/max';
+import { App, Card, Drawer, Empty, Pagination, Spin } from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 
@@ -12,7 +12,12 @@ interface InstanceDrawerProps {
 
 const PAGE_SIZE = 6;
 
-export default function InstanceDrawer({ open, onClose, onSelect, selectedId }: InstanceDrawerProps) {
+export default function InstanceDrawer({
+  open,
+  onClose,
+  onSelect,
+  selectedId,
+}: InstanceDrawerProps) {
   const { message } = App.useApp();
   const intl = useIntl();
   const [instances, setInstances] = useState<any[]>([]);
@@ -23,7 +28,8 @@ export default function InstanceDrawer({ open, onClose, onSelect, selectedId }: 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    agentApi.instances.list({ page, size: PAGE_SIZE })
+    agentApi.instances
+      .list({ page, size: PAGE_SIZE })
       .then((res: any) => {
         setInstances(res.records || []);
         setTotal(res.total || 0);
@@ -42,7 +48,9 @@ export default function InstanceDrawer({ open, onClose, onSelect, selectedId }: 
     >
       <Spin spinning={loading}>
         {instances.length === 0 ? (
-          <Empty description={intl.formatMessage({ id: 'pages.table.empty' })} />
+          <Empty
+            description={intl.formatMessage({ id: 'pages.table.empty' })}
+          />
         ) : (
           <div>
             {instances.map((inst: any) => {
@@ -59,7 +67,12 @@ export default function InstanceDrawer({ open, onClose, onSelect, selectedId }: 
                   }}
                   onClick={() => {
                     if (!inst.modelRouteId) {
-                      message.warning(intl.formatMessage({ id: 'pages.landing.noModelRoute', defaultMessage: '请先为该实例配置默认模型路由' }));
+                      message.warning(
+                        intl.formatMessage({
+                          id: 'pages.landing.noModelRoute',
+                          defaultMessage: '请先为该实例配置默认模型路由',
+                        }),
+                      );
                       return;
                     }
                     onSelect(inst);
@@ -67,7 +80,10 @@ export default function InstanceDrawer({ open, onClose, onSelect, selectedId }: 
                 >
                   <Card.Meta
                     title={inst.name}
-                    description={inst.description || intl.formatMessage({ id: 'pages.table.empty' })}
+                    description={
+                      inst.description ||
+                      intl.formatMessage({ id: 'pages.table.empty' })
+                    }
                   />
                 </Card>
               );
