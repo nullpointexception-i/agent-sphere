@@ -10,9 +10,9 @@ public interface DocumentSpi {
 
     DocumentVO getById(Long id);
 
-    List<DocumentVO> listBySession(Long sessionId);
-
     List<DocumentVO> listBySession(Long sessionId, int page, int size);
+
+    List<DocumentVO> listByInstanceAndCreator(Long instanceId, String createdBy, int page, int size);
 
     PageResult<DocumentVO> listAll(int page, int size);
 

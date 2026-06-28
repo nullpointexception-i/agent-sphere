@@ -169,6 +169,29 @@ export default function DocumentDetail() {
                     : '-'}
                   &nbsp;|&nbsp;
                   {intl.formatMessage({
+                    id: 'pages.document.updatedAt',
+                    defaultMessage: 'Updated',
+                  })}
+                  :{' '}
+                  {doc.updatedAt
+                    ? new Date(doc.updatedAt).toLocaleString(
+                        locale === 'en-US' ? 'en-US' : 'zh-CN',
+                      )
+                    : '-'}
+                  <br />
+                  {intl.formatMessage({
+                    id: 'pages.table.createdBy',
+                    defaultMessage: 'Created By',
+                  })}
+                  : {doc.createdBy || '-'}
+                  &nbsp;|&nbsp;
+                  {intl.formatMessage({
+                    id: 'pages.table.updatedBy',
+                    defaultMessage: 'Updated By',
+                  })}
+                  : {doc.updatedBy || '-'}
+                  &nbsp;|&nbsp;
+                  {intl.formatMessage({
                     id: 'pages.document.session',
                     defaultMessage: 'Session',
                   })}

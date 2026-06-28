@@ -34,20 +34,23 @@ public class DocumentServiceImpl implements DocumentSpi {
     }
 
     @Override
-    public List<DocumentVO> listBySession(Long sessionId) {
-        return mapper.selectList(
-                new LambdaQueryWrapper<AgentDocument>()
-                        .eq(AgentDocument::getSessionId, sessionId)
-                        .orderByDesc(AgentDocument::getId)
-        ).stream().map(this::toVo).toList();
-    }
-
-    @Override
     public List<DocumentVO> listBySession(Long sessionId, int page, int size) {
         Page<AgentDocument> p = mapper.selectPage(
                 new Page<>(page, size),
                 new LambdaQueryWrapper<AgentDocument>()
                         .eq(AgentDocument::getSessionId, sessionId)
+                        .orderByDesc(AgentDocument::getId)
+        );
+        return p.getRecords().stream().map(this::toVo).toList();
+    }
+
+    @Override
+    public List<DocumentVO> listByInstanceAndCreator(Long instanceId, String createdBy, int page, int size) {
+        Page<AgentDocument> p = mapper.selectPage(
+                new Page<>(page, size),
+                new LambdaQueryWrapper<AgentDocument>()
+                        .eq(AgentDocument::getInstanceId, instanceId)
+                        .eq(AgentDocument::getCreatedBy, createdBy)
                         .orderByDesc(AgentDocument::getId)
         );
         return p.getRecords().stream().map(this::toVo).toList();
@@ -88,6 +91,7 @@ public class DocumentServiceImpl implements DocumentSpi {
         e.setSessionId(vo.getSessionId());
         e.setInstanceId(vo.getInstanceId());
         e.setRunId(vo.getRunId());
+        e.setCreatedBy(vo.getCreatedBy());
         return e;
     }
 

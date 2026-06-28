@@ -324,6 +324,7 @@ export default {
   'pages.document.viewDetail': '查看',
   'pages.document.previewContent': '预览',
   'pages.document.loadFailed': '文档加载失败',
+  'pages.document.deleted': '已删除',
   'pages.document.outline': '大纲',
   'pages.document.noHeadings': '暂无标题',
 };

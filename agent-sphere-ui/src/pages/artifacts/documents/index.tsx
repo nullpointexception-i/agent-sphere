@@ -1,8 +1,8 @@
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl, history } from '@umijs/max';
-import { useEffect, useState } from 'react';
-import { Modal, Descriptions, Tag, Button } from 'antd';
-import { EditOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons';
+import { useEffect, useRef, useState } from 'react';
+import { Modal, Descriptions, Tag, Button, message } from 'antd';
+import { DeleteOutlined, EditOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons';
 import { agentApi } from '@/services/agentSphere/api';
 
 export default function DocumentList() {
@@ -10,6 +10,7 @@ export default function DocumentList() {
   const locale = intl.locale;
   const [tableScrollY, setTableScrollY] = useState(400);
   const [detailModal, setDetailModal] = useState<{ open: boolean; doc: any }>({ open: false, doc: null });
+  const actionRef = useRef<any>(null);
 
   useEffect(() => {
     const calc = () => setTableScrollY(window.innerHeight - 280);
@@ -52,12 +53,30 @@ export default function DocumentList() {
     {
       title: intl.formatMessage({ id: 'pages.table.actions', defaultMessage: 'Actions' }),
       key: 'actions',
-      width: 160,
+      width: 200,
       render: (_: any, record: any) => (
         <>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => setDetailModal({ open: true, doc: record })} />
           <Button type="link" size="small" icon={<FileTextOutlined />} onClick={() => history.push(`/artifacts/documents/${record.id}`)} />
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => history.push(`/artifacts/documents/${record.id}/edit`)} />
+          <Button
+            type="link"
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            onClick={() => {
+              Modal.confirm({
+                title: intl.formatMessage({ id: 'pages.deleteConfirm.title', defaultMessage: 'Delete {name}' }, { name: 'document' }),
+                content: intl.formatMessage({ id: 'pages.deleteConfirm.content', defaultMessage: 'Are you sure you want to delete this {name}?' }, { name: 'document' }),
+                okType: 'danger',
+                onOk: async () => {
+                  await agentApi.artifacts.documents.delete(record.id);
+                  message.success(intl.formatMessage({ id: 'pages.document.deleted', defaultMessage: 'Deleted' }));
+                  actionRef.current?.reload();
+                },
+              });
+            }}
+          />
         </>
       ),
     },
@@ -74,6 +93,7 @@ export default function DocumentList() {
         rowKey="id"
         search={false}
         options={false}
+        actionRef={actionRef}
         scroll={{ y: tableScrollY }}
         pagination={{ pageSize: 20, showSizeChanger: true }}
         request={async (params: any) => {
@@ -101,6 +121,12 @@ export default function DocumentList() {
             </Descriptions.Item>
             <Descriptions.Item label={intl.formatMessage({ id: 'pages.document.session', defaultMessage: 'Session' })}>
               {detailModal.doc.sessionId || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label={intl.formatMessage({ id: 'pages.table.createdBy', defaultMessage: 'Created By' })}>
+              {detailModal.doc.createdBy || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label={intl.formatMessage({ id: 'pages.table.updatedBy', defaultMessage: 'Updated By' })}>
+              {detailModal.doc.updatedBy || '-'}
             </Descriptions.Item>
             <Descriptions.Item label={intl.formatMessage({ id: 'pages.document.createdAt', defaultMessage: 'Created At' })}>
               {detailModal.doc.createdAt ? new Date(detailModal.doc.createdAt).toLocaleString(locale === 'en-US' ? 'en-US' : 'zh-CN') : '-'}

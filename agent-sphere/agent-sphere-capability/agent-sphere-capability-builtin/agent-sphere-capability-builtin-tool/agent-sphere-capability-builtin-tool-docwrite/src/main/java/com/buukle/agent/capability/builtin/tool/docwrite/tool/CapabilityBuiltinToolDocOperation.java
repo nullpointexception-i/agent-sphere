@@ -41,7 +41,7 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
             Create, append, list, read, or patch a user-visible document.
             action=create: create a new document (requires title, content)
             action=append: add content to an existing document (requires documentId, content, optional title)
-            action=list: list all documents in this session (returns id, title, preview per doc)
+            action=list: list all documents in the current workspace (returns id, title, preview per doc)
             action=get: get content from a specific document (requires documentId).
               Optional modes to control what to fetch:
               - structure=true: return only the outline (headings with line numbers)
@@ -65,7 +65,7 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
 
     @Override
     public boolean needConfig() {
-        return true;
+        return false;
     }
 
     @Override
@@ -136,6 +136,9 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         vo.setInstanceId(instanceId);
         vo.setRunId(ctx.getRunId());
 
+        String creator = resolveCreator(sessionId);
+        if (creator != null) vo.setCreatedBy(creator);
+
         Long newId = documentSpi.create(vo);
         String preview = ctx.getContent().substring(0, Math.min(PREVIEW_LENGTH, ctx.getContent().length()));
         DocWriteResultVO r = new DocWriteResultVO();
@@ -181,7 +184,9 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
             r.setPreview("sessionId is required");
             return r;
         }
-        List<DocumentVO> docs = documentSpi.listBySession(sessionId, ctx.getPage(), ctx.getPageSize());
+        Long instanceId = resolveInstanceId(sessionId);
+        String createdBy = resolveCreator(sessionId);
+        List<DocumentVO> docs = documentSpi.listByInstanceAndCreator(instanceId, createdBy, ctx.getPage(), ctx.getPageSize());
         List<DocWriteResultVO.DocReadSummaryVO> summaries = docs.stream()
                 .map(d -> {
                     String raw = d.getContent() != null ? d.getContent().replaceAll("[#*`\\n\\r]+", " ").trim() : "";
@@ -418,6 +423,17 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         } catch (Exception e) {
             log.warn("Failed to resolve instanceId from session {}", sessionId, e);
             return 0L;
+        }
+    }
+
+    private String resolveCreator(Long sessionId) {
+        if (sessionId == null) return null;
+        try {
+            SessionVO session = sessionSpi.getSession(sessionId);
+            return session != null ? session.getCreatedBy() : null;
+        } catch (Exception e) {
+            log.warn("Failed to resolve creator from session {}", sessionId, e);
+            return null;
         }
     }
 }

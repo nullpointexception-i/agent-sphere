@@ -25,8 +25,10 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.*;
 
@@ -182,7 +184,14 @@ public class ContextPreparer {
                     .parametersSchemaJson(tool.getParamSchema())
                     .execBinding(binding).build());
         }
-        return result;
+        Set<String> seen = new HashSet<>();
+        List<RuntimeTool> deduped = new ArrayList<>();
+        for (RuntimeTool t : result) {
+            if (seen.add(t.getLlmToolName())) {
+                deduped.add(t);
+            }
+        }
+        return deduped;
     }
 
     private void resolveBuiltinTool(CapabilityVO cap, List<RuntimeTool> result) {
