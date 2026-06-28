@@ -423,6 +423,7 @@ public class SessionRunner {
         AtomicReference<String> contentRef = new AtomicReference<>("");
         List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
         AtomicReference<String> errorRef = new AtomicReference<>();
+        AtomicReference<String> reasoningRef = new AtomicReference<>("");
         java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -462,14 +463,16 @@ public class SessionRunner {
                                             new RuntimeEventDataVO()
                                                     .setSessionId(sessionId).setRunId(runId).setResponse(t.text())));
                                 }
-                                case LLMEvent.ReasoningDelta r ->
-                                        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                                new RuntimeEventDataVO()
-                                                        .setSessionId(sessionId).setRunId(runId)
-                                                        .setResponse(r.text())
-                                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                                        .setPublishId(UUID.randomUUID().toString())));
+                                case LLMEvent.ReasoningDelta r -> {
+                                    reasoningRef.updateAndGet(c -> c + r.text());
+                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                            new RuntimeEventDataVO()
+                                                    .setSessionId(sessionId).setRunId(runId)
+                                                    .setResponse(r.text())
+                                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                                    .setPublishId(UUID.randomUUID().toString())));
+                                }
                                 case LLMEvent.ToolCall tc -> {
                                     String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
                                     toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
@@ -538,7 +541,7 @@ public class SessionRunner {
         }
 
         if (cancelled.get()) {
-            return TurnResult.cancelled(contentRef.get(), toolCalls);
+            return TurnResult.cancelled(getTurnContent(contentRef, reasoningRef), toolCalls);
         }
 
         String error = errorRef.get();
@@ -547,10 +550,21 @@ public class SessionRunner {
         }
 
         if (!toolCalls.isEmpty()) {
-            return TurnResult.toolCalls(contentRef.get(), toolCalls);
+            return TurnResult.toolCalls(getTurnContent(contentRef, reasoningRef), toolCalls);
         }
 
-        return TurnResult.complete(contentRef.get());
+        return TurnResult.complete(getTurnContent(contentRef, reasoningRef));
+    }
+
+    private static String getTurnContent(AtomicReference<String> contentRef, AtomicReference<String> reasoningRef) {
+        String content = contentRef.get();
+        if (content.isBlank()) {
+            String reasoning = reasoningRef.get();
+            if (!reasoning.isBlank()) {
+                return reasoning;
+            }
+        }
+        return content;
     }
 
     private List<ModelRouteFullVO> resolveRoutes(Long sessionId, KernelContext ctx) {
