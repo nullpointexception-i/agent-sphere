@@ -332,4 +332,5 @@ export default {
   'pages.document.deleted': 'Deleted',
   'pages.document.outline': 'Outline',
   'pages.document.noHeadings': 'No headings',
+  'pages.document.charCount': 'Chars',
 };

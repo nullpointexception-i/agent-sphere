@@ -196,6 +196,8 @@ export default function DocumentDetail() {
                     defaultMessage: 'Session',
                   })}
                   : {doc.sessionId || '-'}
+                  &nbsp;|&nbsp;
+                  {intl.formatMessage({ id: 'pages.document.charCount', defaultMessage: 'Chars' })}: {(doc.content || '').length.toLocaleString()}
                 </div>
               </div>
               <div className={`markdown-body ${styles.markdownScroll}`}>

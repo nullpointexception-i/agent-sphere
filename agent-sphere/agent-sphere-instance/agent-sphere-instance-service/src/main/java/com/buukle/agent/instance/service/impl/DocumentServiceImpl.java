@@ -39,7 +39,7 @@ public class DocumentServiceImpl implements DocumentSpi {
                 new Page<>(page, size),
                 new LambdaQueryWrapper<AgentDocument>()
                         .eq(AgentDocument::getSessionId, sessionId)
-                        .orderByDesc(AgentDocument::getId)
+                        .orderByDesc(AgentDocument::getUpdatedAt)
         );
         return p.getRecords().stream().map(this::toVo).toList();
     }
@@ -51,7 +51,7 @@ public class DocumentServiceImpl implements DocumentSpi {
                 new LambdaQueryWrapper<AgentDocument>()
                         .eq(AgentDocument::getInstanceId, instanceId)
                         .eq(AgentDocument::getCreatedBy, createdBy)
-                        .orderByDesc(AgentDocument::getId)
+                        .orderByDesc(AgentDocument::getUpdatedAt)
         );
         return p.getRecords().stream().map(this::toVo).toList();
     }
@@ -61,7 +61,7 @@ public class DocumentServiceImpl implements DocumentSpi {
         Page<AgentDocument> p = mapper.selectPage(
                 new Page<>(page, size),
                 new LambdaQueryWrapper<AgentDocument>()
-                        .orderByDesc(AgentDocument::getId)
+                        .orderByDesc(AgentDocument::getUpdatedAt)
         );
         List<DocumentVO> records = p.getRecords().stream().map(this::toVo).toList();
         return new PageResult<>(records, p.getTotal(), page, size);

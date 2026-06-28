@@ -327,4 +327,5 @@ export default {
   'pages.document.deleted': '已删除',
   'pages.document.outline': '大纲',
   'pages.document.noHeadings': '暂无标题',
+  'pages.document.charCount': '字数',
 };

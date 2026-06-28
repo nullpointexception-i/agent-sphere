@@ -156,6 +156,17 @@ export const useStyles = createStyles(({ css }) => ({
   toolbarBtn: css`
     margin-right: 2px;
   `,
+  charCountBar: css`
+    flex-shrink: 0;
+    text-align: right;
+    font-size: 12px;
+    color: #999;
+    padding: 4px 12px;
+    border-top: 1px solid #e8e8e8;
+    background: #fafafa;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+  `,
   notFound: css`
     padding: 32px;
   `,

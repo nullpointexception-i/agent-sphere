@@ -46,6 +46,7 @@ export default function DocumentEdit() {
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
   const [tocOpen, setTocOpen] = useState(true);
   const [containerHeight, setContainerHeight] = useState('100vh');
+  const [charCount, setCharCount] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const setContentDone = useRef(false);
   const fetchDone = useRef(false);
@@ -65,6 +66,18 @@ export default function DocumentEdit() {
       attributes: {
         class: 'tiptap-editor',
       },
+    },
+    onUpdate: ({ editor: ed }) => {
+      if (!ed) return;
+      const items: TocItem[] = [];
+      ed.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'heading') {
+          items.push({ level: node.attrs.level, text: node.textContent, pos });
+        }
+      });
+      setTocItems(items);
+      const text = ed.state.doc.textContent || '';
+      setCharCount(text.length);
     },
   });
 
@@ -116,7 +129,11 @@ export default function DocumentEdit() {
     if (!editor || !docContent || setContentDone.current) return;
     setContentDone.current = true;
     editor.commands.setContent(docContent);
-    setTimeout(() => updateToc(), 100);
+    setTimeout(() => {
+      updateToc();
+      const text = editor.state.doc.textContent || '';
+      setCharCount(text.length);
+    }, 100);
   }, [editor, docContent]);
 
   const onSave = async () => {
@@ -358,6 +375,9 @@ export default function DocumentEdit() {
                 </div>
                 <div className={styles.editorScroll}>
                   <EditorContent editor={editor} />
+                </div>
+                <div className={styles.charCountBar}>
+                  {charCount.toLocaleString()} chars
                 </div>
               </div>
               {tocOpen && (
