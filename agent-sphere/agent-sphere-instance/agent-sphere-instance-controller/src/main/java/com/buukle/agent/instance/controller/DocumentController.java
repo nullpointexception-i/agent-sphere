@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -44,6 +45,12 @@ public class DocumentController extends BaseController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         documentSpi.delete(id);
+        return ok();
+    }
+
+    @DeleteMapping("/batch")
+    public ResponseEntity<?> batchDelete(@RequestBody List<Long> ids) {
+        documentSpi.batchDelete(ids);
         return ok();
     }
 }

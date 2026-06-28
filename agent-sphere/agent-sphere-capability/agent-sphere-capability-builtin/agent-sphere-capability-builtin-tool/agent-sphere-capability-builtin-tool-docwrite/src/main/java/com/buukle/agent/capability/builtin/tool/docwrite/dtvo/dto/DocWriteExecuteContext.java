@@ -36,4 +36,6 @@ public class DocWriteExecuteContext extends ExecuteContext {
     private String searchText;
 
     private String replaceText;
+
+    private String keyword;
 }

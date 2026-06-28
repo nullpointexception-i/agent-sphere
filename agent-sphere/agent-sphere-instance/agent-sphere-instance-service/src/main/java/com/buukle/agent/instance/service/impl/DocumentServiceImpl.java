@@ -83,6 +83,32 @@ public class DocumentServiceImpl implements DocumentSpi {
         mapper.deleteById(id);
     }
 
+    @Override
+    @Transactional
+    public void batchDelete(List<Long> ids) {
+        mapper.deleteBatchIds(ids);
+    }
+
+    @Override
+    public long countByInstanceAndCreator(Long instanceId, String createdBy) {
+        return mapper.selectCount(new LambdaQueryWrapper<AgentDocument>()
+                .eq(AgentDocument::getInstanceId, instanceId)
+                .eq(AgentDocument::getCreatedBy, createdBy));
+    }
+
+    @Override
+    public List<DocumentVO> searchByTitle(Long instanceId, String createdBy, String keyword, int page, int size) {
+        Page<AgentDocument> p = mapper.selectPage(
+                new Page<>(page, size),
+                new LambdaQueryWrapper<AgentDocument>()
+                        .eq(AgentDocument::getInstanceId, instanceId)
+                        .eq(AgentDocument::getCreatedBy, createdBy)
+                        .like(AgentDocument::getTitle, keyword)
+                        .orderByDesc(AgentDocument::getId)
+        );
+        return p.getRecords().stream().map(this::toVo).toList();
+    }
+
     private AgentDocument toEntity(DocumentVO vo) {
         AgentDocument e = new AgentDocument();
         e.setTitle(vo.getTitle());

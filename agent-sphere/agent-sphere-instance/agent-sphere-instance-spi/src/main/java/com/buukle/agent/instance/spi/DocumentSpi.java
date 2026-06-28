@@ -19,4 +19,10 @@ public interface DocumentSpi {
     void update(Long id, String title, String content);
 
     void delete(Long id);
+
+    void batchDelete(List<Long> ids);
+
+    long countByInstanceAndCreator(Long instanceId, String createdBy);
+
+    List<DocumentVO> searchByTitle(Long instanceId, String createdBy, String keyword, int page, int size);
 }

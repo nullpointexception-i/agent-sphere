@@ -1,7 +1,7 @@
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl, history } from '@umijs/max';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Descriptions, Tag, Button, message } from 'antd';
+import { App, Descriptions, Tag, Button, Modal } from 'antd';
 import { DeleteOutlined, EditOutlined, EyeOutlined, FileTextOutlined } from '@ant-design/icons';
 import { agentApi } from '@/services/agentSphere/api';
 
@@ -10,7 +10,9 @@ export default function DocumentList() {
   const locale = intl.locale;
   const [tableScrollY, setTableScrollY] = useState(400);
   const [detailModal, setDetailModal] = useState<{ open: boolean; doc: any }>({ open: false, doc: null });
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const actionRef = useRef<any>(null);
+  const { message, modal } = App.useApp();
 
   useEffect(() => {
     const calc = () => setTableScrollY(window.innerHeight - 280);
@@ -65,7 +67,7 @@ export default function DocumentList() {
             size="small"
             icon={<DeleteOutlined />}
             onClick={() => {
-              Modal.confirm({
+              modal.confirm({
                 title: intl.formatMessage({ id: 'pages.deleteConfirm.title', defaultMessage: 'Delete {name}' }, { name: 'document' }),
                 content: intl.formatMessage({ id: 'pages.deleteConfirm.content', defaultMessage: 'Are you sure you want to delete this {name}?' }, { name: 'document' }),
                 okType: 'danger',
@@ -87,6 +89,21 @@ export default function DocumentList() {
     return text.length > 200 ? text.slice(0, 200) + '…' : text || '-';
   };
 
+  const handleBatchDelete = () => {
+    if (selectedRowKeys.length === 0) return;
+    modal.confirm({
+      title: intl.formatMessage({ id: 'pages.deleteConfirm.title', defaultMessage: 'Delete {name}' }, { name: `${selectedRowKeys.length} documents` }),
+      content: intl.formatMessage({ id: 'pages.deleteConfirm.content', defaultMessage: 'Are you sure you want to delete this {name}?' }, { name: 'documents' }),
+      okType: 'danger',
+      onOk: async () => {
+        await agentApi.artifacts.documents.batchDelete(selectedRowKeys);
+        message.success(intl.formatMessage({ id: 'pages.batchDelete.success', defaultMessage: 'Deleted {count} items' }, { count: selectedRowKeys.length }));
+        setSelectedRowKeys([]);
+        actionRef.current?.reload();
+      },
+    });
+  };
+
   return (
     <PageContainer title={false} breadcrumbRender={false}>
       <ProTable
@@ -95,7 +112,18 @@ export default function DocumentList() {
         options={false}
         actionRef={actionRef}
         scroll={{ y: tableScrollY }}
-        pagination={{ pageSize: 20, showSizeChanger: true }}
+        pagination={{ defaultPageSize: 10, showSizeChanger: true, showQuickJumper: true, pageSizeOptions: [5, 10, 20, 50] }}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: (keys: any) => setSelectedRowKeys(keys),
+        }}
+        toolBarRender={() => [
+          selectedRowKeys.length > 0 && (
+            <Button key="batchDelete" danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
+              {intl.formatMessage({ id: 'pages.batchDelete', defaultMessage: 'Delete ({count})' }, { count: selectedRowKeys.length })}
+            </Button>
+          ),
+        ]}
         request={async (params: any) => {
           const { current, pageSize } = params;
           const res = await agentApi.artifacts.documents.list({ page: current, size: pageSize });

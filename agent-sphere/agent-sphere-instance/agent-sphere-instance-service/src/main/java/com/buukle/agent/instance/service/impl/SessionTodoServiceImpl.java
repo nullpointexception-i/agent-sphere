@@ -3,19 +3,26 @@ package com.buukle.agent.instance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.instance.domain.SessionTodo;
 import com.buukle.agent.instance.dtvo.vo.SessionTodoVO;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.repository.SessionTodoMapper;
+import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.spi.SessionTodoSpi;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
+@Slf4j
 
 @Service
 @RequiredArgsConstructor
 public class SessionTodoServiceImpl implements SessionTodoSpi {
 
     private final SessionTodoMapper mapper;
+    private final SessionSpi sessionSpi;
 
     @Override
     @Transactional
@@ -25,6 +32,15 @@ public class SessionTodoServiceImpl implements SessionTodoSpi {
 
         if (todos == null || todos.isEmpty()) return;
 
+        AtomicReference<String> creatorRef = new AtomicReference<>();
+        try {
+            SessionVO session = sessionSpi.getSession(sessionId);
+            if (session != null) creatorRef.set(session.getCreatedBy());
+        } catch (Exception e) {
+            log.warn("Failed to resolve creator from session {}", sessionId, e);
+        }
+        String creator = creatorRef.get();
+
         List<SessionTodo> entities = todos.stream().map(t -> {
             SessionTodo e = new SessionTodo();
             e.setSessionId(sessionId);
@@ -33,6 +49,7 @@ public class SessionTodoServiceImpl implements SessionTodoSpi {
             e.setStatus(t.getStatus());
             e.setPriority(t.getPriority());
             e.setSortOrder(0);
+            if (creator != null) e.setCreatedBy(creator);
             return e;
         }).toList();
 

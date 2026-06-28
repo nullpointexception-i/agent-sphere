@@ -30,6 +30,8 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
     static final String ACTION_CREATE = "create";
     static final String ACTION_APPEND = "append";
     static final String ACTION_LIST = "list";
+    static final String ACTION_COUNT = "count";
+    static final String ACTION_SEARCH_TITLE = "search_by_title";
     static final String ACTION_GET = "get";
     static final String ACTION_PATCH = "patch";
 
@@ -42,6 +44,9 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
             action=create: create a new document (requires title, content)
             action=append: add content to an existing document (requires documentId, content, optional title)
             action=list: list all documents in the current workspace (returns id, title, preview per doc)
+            action=count: count all documents in the current workspace (returns total count).
+              Use this to determine pagination size for list.
+            action=search_by_title: search documents by title keyword in the current workspace (requires keyword, returns id, title, preview per matching doc).
             action=get: get content from a specific document (requires documentId).
               Optional modes to control what to fetch:
               - structure=true: return only the outline (headings with line numbers)
@@ -107,6 +112,8 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
             case ACTION_CREATE -> handleCreate(dwCtx);
             case ACTION_APPEND -> handleAppend(dwCtx, documentId);
             case ACTION_LIST -> handleList(dwCtx);
+            case ACTION_COUNT -> handleCount(dwCtx);
+            case ACTION_SEARCH_TITLE -> handleSearchByTitle(dwCtx);
             case ACTION_GET -> handleGet(dwCtx, documentId);
             case ACTION_PATCH -> handlePatch(dwCtx, documentId);
             default -> {
@@ -199,6 +206,58 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         r.setAction(ACTION_LIST);
         r.setDocuments(summaries);
         r.setTotal(summaries.size());
+        return r;
+    }
+
+    private DocWriteResultVO handleCount(DocWriteExecuteContext ctx) {
+        Long sessionId = ctx.getSessionId();
+        if (sessionId == null) {
+            DocWriteResultVO r = new DocWriteResultVO();
+            r.setAction(ACTION_COUNT);
+            r.setPreview("sessionId is required");
+            return r;
+        }
+        Long instanceId = resolveInstanceId(sessionId);
+        String createdBy = resolveCreator(sessionId);
+        long total = documentSpi.countByInstanceAndCreator(instanceId, createdBy);
+        DocWriteResultVO r = new DocWriteResultVO();
+        r.setAction(ACTION_COUNT);
+        r.setTotal((int) total);
+        r.setPreview("Total documents: " + total);
+        return r;
+    }
+
+    private DocWriteResultVO handleSearchByTitle(DocWriteExecuteContext ctx) {
+        Long sessionId = ctx.getSessionId();
+        if (sessionId == null) {
+            DocWriteResultVO r = new DocWriteResultVO();
+            r.setAction(ACTION_SEARCH_TITLE);
+            r.setPreview("sessionId is required");
+            return r;
+        }
+        String keyword = ctx.getKeyword();
+        if (keyword == null || keyword.isBlank()) {
+            DocWriteResultVO r = new DocWriteResultVO();
+            r.setAction(ACTION_SEARCH_TITLE);
+            r.setPreview("keyword is required");
+            return r;
+        }
+        Long instanceId = resolveInstanceId(sessionId);
+        String createdBy = resolveCreator(sessionId);
+        List<DocumentVO> docs = documentSpi.searchByTitle(instanceId, createdBy, keyword, ctx.getPage(), ctx.getPageSize());
+        List<DocWriteResultVO.DocReadSummaryVO> summaries = docs.stream()
+                .map(d -> {
+                    String raw = d.getContent() != null ? d.getContent().replaceAll("[#*`\\n\\r]+", " ").trim() : "";
+                    String preview = raw.length() > 100 ? raw.substring(0, 100) + "…" : raw;
+                    return new DocWriteResultVO.DocReadSummaryVO(
+                            d.getId(), d.getTitle(), preview, d.getCreatedAt() != null ? d.getCreatedAt().toString() : null);
+                })
+                .toList();
+        DocWriteResultVO r = new DocWriteResultVO();
+        r.setAction(ACTION_SEARCH_TITLE);
+        r.setDocuments(summaries);
+        r.setTotal(summaries.size());
+        r.setPreview("Found " + summaries.size() + " document(s) matching \"" + keyword + "\"");
         return r;
     }
 
