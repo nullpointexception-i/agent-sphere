@@ -29,7 +29,6 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
 
     static final String ACTION_CREATE = "create";
     static final String ACTION_APPEND = "append";
-    static final String ACTION_OVERWRITE = "overwrite";
     static final String ACTION_LIST = "list";
     static final String ACTION_GET = "get";
     static final String ACTION_PATCH = "patch";
@@ -39,10 +38,9 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
     static final String OP_REPLACE_TEXT = "replace_text";
 
     private static final String TOOL_DESCRIPTION = """
-            Create, append to, overwrite, list, read, or patch a user-visible document.
+            Create, append, list, read, or patch a user-visible document.
             action=create: create a new document (requires title, content)
             action=append: add content to an existing document (requires documentId, content, optional title)
-            action=overwrite: replace the content of an existing document (requires documentId, content, optional title)
             action=list: list all documents in this session (returns id, title, preview per doc)
             action=get: get content from a specific document (requires documentId).
               Optional modes to control what to fetch:
@@ -108,7 +106,6 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
             return switch (action) {
             case ACTION_CREATE -> handleCreate(dwCtx);
             case ACTION_APPEND -> handleAppend(dwCtx, documentId);
-            case ACTION_OVERWRITE -> handleOverwrite(dwCtx, documentId);
             case ACTION_LIST -> handleList(dwCtx);
             case ACTION_GET -> handleGet(dwCtx, documentId);
             case ACTION_PATCH -> handlePatch(dwCtx, documentId);
@@ -172,32 +169,6 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         r.setDocumentId(documentId);
         r.setTitle(title);
         r.setAction(ACTION_APPEND);
-        r.setPreview(preview);
-        return r;
-    }
-
-    private DocWriteResultVO handleOverwrite(DocWriteExecuteContext ctx, Long documentId) {
-        if (documentId == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_OVERWRITE);
-            r.setPreview("documentId is required for overwrite");
-            return r;
-        }
-        DocumentVO existing = documentSpi.getById(documentId);
-        if (existing == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setDocumentId(documentId);
-            r.setAction(ACTION_OVERWRITE);
-            r.setPreview("Document not found: " + documentId);
-            return r;
-        }
-        String title = ctx.getTitle() != null && !ctx.getTitle().isBlank() ? ctx.getTitle() : existing.getTitle();
-        documentSpi.update(documentId, title, ctx.getContent());
-        String preview = ctx.getContent().substring(0, Math.min(PREVIEW_LENGTH, ctx.getContent().length()));
-        DocWriteResultVO r = new DocWriteResultVO();
-        r.setDocumentId(documentId);
-        r.setTitle(title);
-        r.setAction(ACTION_OVERWRITE);
         r.setPreview(preview);
         return r;
     }
