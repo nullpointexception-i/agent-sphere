@@ -13,9 +13,9 @@ Screenshots
 
 ![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
 
-▶ [Click to watch the video demo](https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15)
+▶ [Click to watch the video demo](https://www.bilibili.com/video/BV1WqTT62Efq/)
 
-[![Video preview](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1bxjk6VEG6/?vd_source=c85252e0a26262947782e1b02533fb15)
+[![Video preview](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1WqTT62Efq/)
 
 ## 1. Quick Start for Development
 
