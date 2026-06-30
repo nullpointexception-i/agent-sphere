@@ -1,10 +1,11 @@
-import { FullscreenOutlined } from '@ant-design/icons';
+import { AudioOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { Sender } from '@ant-design/x';
 import type { SenderRef } from '@ant-design/x/es/sender/interface';
 import { useIntl } from '@umijs/max';
-import { Tooltip } from 'antd';
+import { message, Tooltip } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
+import { useVoiceInput } from './useVoiceInput';
 
 interface FooterProps {
   inputValue: string;
@@ -35,14 +36,42 @@ export default function Footer({
   const inputRef = useRef(inputValue);
   const historyRunIdRef = useRef(historyRunId);
   const savedInputRef = useRef(savedInput);
-
   inputRef.current = inputValue;
   historyRunIdRef.current = historyRunId;
   savedInputRef.current = savedInput;
 
+  const { isRecording, toggleRecording } = useVoiceInput({
+    inputRef,
+    onInputValueChange,
+    sending,
+    messageApi: message,
+    intl,
+  });
+
+  const toggleRecordingRef = useRef(toggleRecording);
+  toggleRecordingRef.current = toggleRecording;
+
   useEffect(() => {
     senderRef.current?.focus();
   }, [sessionKey]);
+
+  useEffect(() => {
+    const el = senderRef.current?.nativeElement;
+    if (!el) return;
+    const textarea = el.querySelector('textarea');
+    if (!textarea) return;
+
+    const onKeyDown = (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === ' ' && ke.shiftKey && !ke.repeat) {
+        ke.preventDefault();
+        toggleRecordingRef.current();
+      }
+    };
+
+    textarea.addEventListener('keydown', onKeyDown);
+    return () => textarea.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     const el = senderRef.current?.nativeElement;
@@ -115,6 +144,17 @@ export default function Footer({
         alignItems: 'center',
       }}
     >
+      <style>{`
+        @keyframes voice-pulse {
+          0% { box-shadow: 0 0 0 0 rgba(255,77,77,0.4); }
+          70% { box-shadow: 0 0 0 8px rgba(255,77,77,0); }
+          100% { box-shadow: 0 0 0 0 rgba(255,77,77,0); }
+        }
+        .voice-pulse {
+          animation: voice-pulse 1.5s infinite;
+          border-radius: 50%;
+        }
+      `}</style>
       <Sender
         ref={senderRef}
         value={inputValue}
@@ -139,6 +179,21 @@ export default function Footer({
               transform: 'translateY(-3px)',
             }}
           >
+            <Tooltip
+              title={intl.formatMessage({
+                id: isRecording ? 'pages.chat.voiceInputStop' : 'pages.chat.voiceInput',
+              })}
+            >
+              <AudioOutlined
+                className={isRecording ? 'voice-pulse' : ''}
+                style={{
+                  fontSize: 16,
+                  cursor: 'pointer',
+                  color: isRecording ? '#ff4d4f' : '#8c8c8c',
+                }}
+                onClick={toggleRecording}
+              />
+            </Tooltip>
             <Tooltip
               title={intl.formatMessage({
                 id: 'pages.chat.expandInput',

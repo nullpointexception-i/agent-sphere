@@ -1,10 +1,11 @@
-import { ExclamationCircleOutlined } from '@ant-design/icons';
+import { AudioOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { Sender } from '@ant-design/x';
 import type { SenderRef } from '@ant-design/x/es/sender/interface';
 import { useIntl } from '@umijs/max';
-import { App, Tag } from 'antd';
+import { App, Tag, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStyles } from '../../style';
+import { useVoiceInput } from '../chat/useVoiceInput';
 
 interface LandingProps {
   instances: any[];
@@ -37,6 +38,16 @@ export default function Landing({
   const intl = useIntl();
   const { styles } = useStyles();
   const senderRef = useRef<SenderRef>(null);
+  const inputRef = useRef(inputValue);
+  inputRef.current = inputValue;
+
+  const { isRecording, toggleRecording } = useVoiceInput({
+    inputRef,
+    onInputValueChange,
+    sending,
+    messageApi: message,
+    intl,
+  });
 
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -53,6 +64,27 @@ export default function Landing({
   useEffect(() => {
     const t = setTimeout(() => setDataLoaded(true), 3000);
     return () => clearTimeout(t);
+  }, []);
+
+  const toggleRecordingRef = useRef(toggleRecording);
+  toggleRecordingRef.current = toggleRecording;
+
+  useEffect(() => {
+    const el = senderRef.current?.nativeElement;
+    if (!el) return;
+    const textarea = el.querySelector('textarea');
+    if (!textarea) return;
+
+    const onKeyDown = (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === ' ' && ke.shiftKey && !ke.repeat) {
+        ke.preventDefault();
+        toggleRecordingRef.current();
+      }
+    };
+
+    textarea.addEventListener('keydown', onKeyDown);
+    return () => textarea.removeEventListener('keydown', onKeyDown);
   }, []);
 
   const currentInstance = useMemo(() => {
@@ -72,6 +104,17 @@ export default function Landing({
         {intl.formatMessage({ id: 'pages.landing.title' })}
       </div>
 
+      <style>{`
+        @keyframes voice-pulse {
+          0% { box-shadow: 0 0 0 0 rgba(255,77,77,0.4); }
+          70% { box-shadow: 0 0 0 8px rgba(255,77,77,0); }
+          100% { box-shadow: 0 0 0 0 rgba(255,77,77,0); }
+        }
+        .voice-pulse {
+          animation: voice-pulse 1.5s infinite;
+          border-radius: 50%;
+        }
+      `}</style>
       <div className={styles.landingRow}>
         <Sender
           ref={senderRef}
@@ -118,6 +161,33 @@ export default function Landing({
               resize: 'none',
             },
           }}
+          suffix={(oriNode) => (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                transform: 'translateY(-3px)',
+              }}
+            >
+              <Tooltip
+                title={intl.formatMessage({
+                  id: isRecording ? 'pages.chat.voiceInputStop' : 'pages.chat.voiceInput',
+                })}
+              >
+                <AudioOutlined
+                  className={isRecording ? 'voice-pulse' : ''}
+                  style={{
+                    fontSize: 16,
+                    cursor: 'pointer',
+                    color: isRecording ? '#ff4d4f' : '#8c8c8c',
+                  }}
+                  onClick={toggleRecording}
+                />
+              </Tooltip>
+              {oriNode}
+            </span>
+          )}
         />
       </div>
 
