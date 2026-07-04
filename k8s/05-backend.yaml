@@ -22,11 +22,10 @@ spec:
         - configMapRef:
             name: backend-config
         readinessProbe:
-          httpGet:
-            path: /api/v1/
+          tcpSocket:
             port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 15
+          initialDelaySeconds: 15
+          periodSeconds: 10
         resources:
           requests:
             memory: 512Mi
