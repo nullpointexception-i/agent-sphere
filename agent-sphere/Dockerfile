@@ -1,7 +1,7 @@
 FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /app
 COPY . .
-RUN mvn install -DskipTests -q
+RUN mvn install -Dmaven.test.skip=true -q
 
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache tzdata
