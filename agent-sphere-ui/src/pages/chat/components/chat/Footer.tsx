@@ -222,6 +222,7 @@ export default function Footer({
             paddingTop: 6,
             overflowY: 'auto',
             resize: 'none',
+            outline: 'none',
           },
           suffix: { alignItems: 'center' },
         }}

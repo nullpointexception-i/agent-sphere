@@ -129,7 +129,7 @@ export const layout: RunTimeLayoutConfig = ({
       return (
         <>
           {children}
-          <SettingDrawer
+          {isDev && <SettingDrawer
             disableUrlParams
             enableDarkTheme
             collapse={initialState?.settingDrawerOpen}
@@ -146,7 +146,7 @@ export const layout: RunTimeLayoutConfig = ({
                 settings,
               }));
             }}
-          />
+          />}
         </>
       );
     },

@@ -159,6 +159,7 @@ export default function Landing({
               alignItems: 'center',
               overflowY: 'auto',
               resize: 'none',
+              outline: 'none',
             },
           }}
           suffix={(oriNode) => (
