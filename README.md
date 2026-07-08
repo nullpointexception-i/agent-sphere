@@ -11,14 +11,6 @@
   <img src="https://img.shields.io/badge/License-MIT-%23FF9900" alt="MIT"/>
 </p>
 
-<a href="https://star-history.com/#nullpointexception-i/agent-sphere&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" width="500" />
-  </picture>
-</a>
-
 <p align="center"><b><a href="http://as.buukle.top" target="_blank">🔗 线上预览 / Live Demo → as.buukle.top</a></b></p>
 
 This project is an AI Agent orchestration platform. Driven by an LLM-based decision engine and combined with capabilities (built-in tools, MCP protocol, CLI execution, browser automation, etc.), it implements a primary closed loop of **Perception → Planning → Execution → Feedback**.
@@ -445,6 +437,14 @@ curl -X POST /api/v1/instance/instance-capabilities \
 ```
 
 ![MCP Configuration UI](agent-sphere-readme/ui-new-mcp.png)
+
+<a href="https://star-history.com/#nullpointexception-i/agent-sphere&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" width="500" />
+  </picture>
+</a>
 
 ## 8. License
 
