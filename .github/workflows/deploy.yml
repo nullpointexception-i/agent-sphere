@@ -2,7 +2,7 @@ name: Build & Deploy to k3s
 
 on:
   push:
-    branches: [main]
+    tags: ['v*']
 
 permissions:
   contents: write
@@ -64,3 +64,16 @@ jobs:
           git commit -m "chore: update image tags [skip ci]"
           git push
         fi
+
+    - name: Package Chrome Extension
+      run: |
+        mkdir -p output
+        cd agent-sphere-chrome-extension
+        zip -r ../output/agent-sphere-chrome-extension-${{ github.ref_name }}.zip \
+          manifest.json background.js content.js page-script.js popup.html popup.js icon-128.png
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: output/agent-sphere-chrome-extension-${{ github.ref_name }}.zip
+        generate_release_notes: true
