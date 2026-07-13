@@ -1,14 +1,19 @@
 import type { Settings as LayoutSettings } from '@ant-design/pro-components';
 import { SettingDrawer } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
-import { history, Link, request as umiRequest } from '@umijs/max';
+import {
+  FormattedMessage,
+  history,
+  Link,
+  request as umiRequest,
+} from '@umijs/max';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import React from 'react';
 
 dayjs.extend(relativeTime);
 
-import { App } from 'antd';
+import { Alert, App, Button } from 'antd';
 import {
   AvatarDropdown,
   ErrorBoundary,
@@ -126,8 +131,25 @@ export const layout: RunTimeLayoutConfig = ({
     ErrorBoundary,
     menuHeaderRender: false,
     childrenRender: (children) => {
+      const storedUser = getStoredUser();
+      const isDemo001 = storedUser?.username === 'demo001';
       return (
         <>
+          {isDemo001 && (
+            <Alert
+              message={<FormattedMessage id="pages.demo.banner" />}
+              type="info"
+              showIcon
+              closable
+              banner
+              style={{ marginBottom: 0 }}
+              action={
+                <Button size="small" type="link" onClick={() => history.push('/models')}>
+                  <FormattedMessage id="pages.demo.bannerAction" />
+                </Button>
+              }
+            />
+          )}
           {children}
           {isDev && (
             <SettingDrawer

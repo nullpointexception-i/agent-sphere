@@ -25,4 +25,8 @@ public interface DocumentSpi {
     long countByInstanceAndCreator(Long instanceId, String createdBy);
 
     List<DocumentVO> searchByTitle(Long instanceId, String createdBy, String keyword, int page, int size);
+
+    String createShareToken(Long documentId);
+
+    DocumentVO getByShareToken(String token);
 }

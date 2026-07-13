@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -109,6 +110,27 @@ public class DocumentServiceImpl implements DocumentSpi {
         return p.getRecords().stream().map(this::toVo).toList();
     }
 
+    @Override
+    public String createShareToken(Long documentId) {
+        AgentDocument doc = mapper.selectById(documentId);
+        if (doc == null) return null;
+        if (doc.getShareToken() != null) return doc.getShareToken();
+        String token = UUID.randomUUID().toString().replace("-", "");
+        AgentDocument update = new AgentDocument();
+        update.setId(documentId);
+        update.setShareToken(token);
+        mapper.updateById(update);
+        return token;
+    }
+
+    @Override
+    public DocumentVO getByShareToken(String token) {
+        AgentDocument doc = mapper.selectOne(
+                new LambdaQueryWrapper<AgentDocument>()
+                        .eq(AgentDocument::getShareToken, token));
+        return doc != null ? toVo(doc) : null;
+    }
+
     private AgentDocument toEntity(DocumentVO vo) {
         AgentDocument e = new AgentDocument();
         e.setTitle(vo.getTitle());
@@ -130,6 +152,7 @@ public class DocumentServiceImpl implements DocumentSpi {
         vo.setSessionId(e.getSessionId());
         vo.setInstanceId(e.getInstanceId());
         vo.setRunId(e.getRunId());
+        vo.setShareToken(e.getShareToken());
         vo.setCreatedBy(e.getCreatedBy());
         vo.setUpdatedBy(e.getUpdatedBy());
         vo.setCreatedAt(e.getCreatedAt());

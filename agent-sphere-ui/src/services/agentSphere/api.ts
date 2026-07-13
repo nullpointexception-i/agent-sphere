@@ -227,6 +227,8 @@ export const agentApi = {
         request<void>(`${BASE}/artifacts/documents/batch`, { method: 'DELETE', data: ids }),
       update: (id: number, title: string, content: string) =>
         request<void>(`${BASE}/artifacts/documents/${id}`, { method: 'PUT', data: { title, content } }),
+      createShare: (id: number) =>
+        request<{ shareToken: string }>(`${BASE}/artifacts/documents/${id}/share`, { method: 'POST' }),
     },
   },
 

@@ -23,6 +23,7 @@ public class AgentDocument {
     private String createdBy;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private String updatedBy;
+    private String shareToken;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE)

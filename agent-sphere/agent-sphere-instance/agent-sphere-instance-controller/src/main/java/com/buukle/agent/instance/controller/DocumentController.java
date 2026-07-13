@@ -36,6 +36,19 @@ public class DocumentController extends BaseController {
         return vo != null ? ok(vo) : ResponseEntity.notFound().build();
     }
 
+    @PostMapping("/{id}/share")
+    public ResponseEntity<Map<String, String>> createShare(@PathVariable Long id) {
+        String token = documentSpi.createShareToken(id);
+        if (token == null) return ResponseEntity.notFound().build();
+        return ok(Map.of("shareToken", token));
+    }
+
+    @GetMapping("/shared/{token}")
+    public ResponseEntity<DocumentVO> getShared(@PathVariable String token) {
+        DocumentVO vo = documentSpi.getByShareToken(token);
+        return vo != null ? ok(vo) : ResponseEntity.notFound().build();
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, String> body) {
         documentSpi.update(id, body.getOrDefault("title", ""), body.getOrDefault("content", ""));

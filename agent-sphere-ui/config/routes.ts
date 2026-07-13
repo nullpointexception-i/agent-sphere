@@ -141,6 +141,16 @@ export default [
     ],
   },
   {
+    path: '/s',
+    layout: false,
+    routes: [
+      {
+        path: '/s/:shareToken',
+        component: './artifacts/documents/shared',
+      },
+    ],
+  },
+  {
     path: '/',
     redirect: '/dashboard',
   },

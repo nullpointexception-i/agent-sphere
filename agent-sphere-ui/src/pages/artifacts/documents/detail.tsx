@@ -1,7 +1,12 @@
-import { ArrowLeftOutlined, MenuOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined,
+  MenuOutlined,
+  ShareAltOutlined,
+} from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import { history, useIntl, useParams } from '@umijs/max';
-import { Button, Spin, Typography } from 'antd';
+import { Button, Modal, Spin, Typography } from 'antd';
+import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { agentApi } from '@/services/agentSphere/api';
@@ -40,6 +45,8 @@ export default function DocumentDetail() {
   const [loading, setLoading] = useState(true);
   const [tocOpen, setTocOpen] = useState(true);
   const [containerHeight, setContainerHeight] = useState('100vh');
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareToken, setShareToken] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -63,6 +70,17 @@ export default function DocumentDetail() {
       .catch(() => setDoc(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const handleShare = async () => {
+    if (!id) return;
+    try {
+      const res = await agentApi.artifacts.documents.createShare(Number(id));
+      setShareToken(res.shareToken);
+      setShareModalOpen(true);
+    } catch {
+      // silent
+    }
+  };
 
   const tocItems = useMemo(
     () => (doc?.content ? parseToc(doc.content) : []),
@@ -140,17 +158,29 @@ export default function DocumentDetail() {
                 defaultMessage: 'Back',
               })}
             </Button>
-            <Button
-              icon={<MenuOutlined />}
-              type={tocOpen ? 'primary' : 'default'}
-              size="small"
-              onClick={() => setTocOpen(!tocOpen)}
-            >
-              {intl.formatMessage({
-                id: 'pages.document.outline',
-                defaultMessage: 'Outline',
-              })}
-            </Button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button
+                icon={<ShareAltOutlined />}
+                size="small"
+                onClick={handleShare}
+              >
+                {intl.formatMessage({
+                  id: 'pages.document.share',
+                  defaultMessage: 'Share',
+                })}
+              </Button>
+              <Button
+                icon={<MenuOutlined />}
+                type={tocOpen ? 'primary' : 'default'}
+                size="small"
+                onClick={() => setTocOpen(!tocOpen)}
+              >
+                {intl.formatMessage({
+                  id: 'pages.document.outline',
+                  defaultMessage: 'Outline',
+                })}
+              </Button>
+            </div>
           </div>
 
           <div className={styles.contentFlex}>
@@ -222,6 +252,61 @@ export default function DocumentDetail() {
               />
             )}
           </div>
+
+          <Modal
+            title={intl.formatMessage({
+              id: 'pages.document.shareTitle',
+              defaultMessage: 'Share Document',
+            })}
+            open={shareModalOpen}
+            onCancel={() => {
+              setShareModalOpen(false);
+              setShareToken('');
+            }}
+            footer={null}
+            width={360}
+            centered
+          >
+            {shareToken && (
+              <div
+                style={{
+                  padding: '16px 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 16,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    padding: 12,
+                    border: '1px solid #e8e8e8',
+                    borderRadius: 8,
+                    background: '#fff',
+                  }}
+                >
+                  <QRCodeSVG
+                    value={`${window.location.origin}/s/${shareToken}`}
+                    size={180}
+                  />
+                </div>
+                <Typography.Text
+                  copyable
+                  ellipsis
+                  style={{ maxWidth: 280, fontSize: 13 }}
+                >
+                  {window.location.origin}/s/{shareToken}
+                </Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {intl.formatMessage({
+                    id: 'pages.document.shareHint',
+                    defaultMessage: 'Scan QR code or copy link to share',
+                  })}
+                </Typography.Text>
+              </div>
+            )}
+          </Modal>
         </>
       )}
     </div>

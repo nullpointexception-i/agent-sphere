@@ -4,10 +4,12 @@ import {
   EditOutlined,
   EyeOutlined,
   FileTextOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useIntl } from '@umijs/max';
-import { App, Button, Descriptions, Modal, Tag } from 'antd';
+import { App, Button, Descriptions, Modal, Tag, Typography } from 'antd';
+import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { exportDocxToFile } from '@/utils/exportWord';
@@ -19,6 +21,15 @@ export default function DocumentList() {
   const [detailModal, setDetailModal] = useState<{ open: boolean; doc: any }>({
     open: false,
     doc: null,
+  });
+  const [shareModal, setShareModal] = useState<{
+    open: boolean;
+    doc: any;
+    shareToken: string;
+  }>({
+    open: false,
+    doc: null,
+    shareToken: '',
   });
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const actionRef = useRef<any>(null);
@@ -107,6 +118,30 @@ export default function DocumentList() {
             onClick={() =>
               history.push(`/artifacts/documents/${record.id}/edit`)
             }
+          />
+          <Button
+            type="link"
+            size="small"
+            icon={<ShareAltOutlined />}
+            onClick={async () => {
+              try {
+                const res = await agentApi.artifacts.documents.createShare(
+                  record.id,
+                );
+                setShareModal({
+                  open: true,
+                  doc: record,
+                  shareToken: res.shareToken,
+                });
+              } catch {
+                message.error(
+                  intl.formatMessage({
+                    id: 'pages.document.shareFailed',
+                    defaultMessage: 'Share failed',
+                  }),
+                );
+              }
+            }}
           />
           <Button
             type="link"
@@ -343,6 +378,60 @@ export default function DocumentList() {
                 : '-'}
             </Descriptions.Item>
           </Descriptions>
+        )}
+      </Modal>
+
+      <Modal
+        title={intl.formatMessage({
+          id: 'pages.document.shareTitle',
+          defaultMessage: 'Share Document',
+        })}
+        open={shareModal.open}
+        onCancel={() =>
+          setShareModal({ open: false, doc: null, shareToken: '' })
+        }
+        footer={null}
+        width={360}
+        centered
+      >
+        {shareModal.shareToken && (
+          <div
+            style={{
+              padding: '16px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 16,
+            }}
+          >
+            <div
+              style={{
+                display: 'inline-flex',
+                padding: 12,
+                border: '1px solid #e8e8e8',
+                borderRadius: 8,
+                background: '#fff',
+              }}
+            >
+              <QRCodeSVG
+                value={`${window.location.origin}/s/${shareModal.shareToken}`}
+                size={180}
+              />
+            </div>
+            <Typography.Text
+              copyable
+              ellipsis
+              style={{ maxWidth: 280, fontSize: 13 }}
+            >
+              {window.location.origin}/s/{shareModal.shareToken}
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {intl.formatMessage({
+                id: 'pages.document.shareHint',
+                defaultMessage: 'Scan QR code or copy link to share',
+              })}
+            </Typography.Text>
+          </div>
         )}
       </Modal>
     </PageContainer>

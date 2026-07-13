@@ -167,6 +167,11 @@ export const useStyles = createStyles(({ css }) => ({
     border-bottom-left-radius: 6px;
     border-bottom-right-radius: 6px;
   `,
+  sharedContainer: css`
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 48px 24px;
+  `,
   notFound: css`
     padding: 32px;
   `,
