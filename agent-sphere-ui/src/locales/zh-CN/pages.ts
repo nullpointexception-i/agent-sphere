@@ -346,6 +346,7 @@ export default {
   'pages.document.sharedDocCreated': '创建于',
   'pages.demo.banner': '演示账户，模型均为免费模型。使用 DeepSeek 官方 V4 Flash 及以上、OpenAI 5.1 以上，长任务效果更好。',
   'pages.demo.bannerAction': '去配置',
+  'pages.demo.bannerRegister': '注册并配置',
   'pages.admin.settings.title': '系统配置',
   'pages.admin.settings.group.security': '安全配置',
   'pages.admin.settings.group.chrome': '浏览器扩展',

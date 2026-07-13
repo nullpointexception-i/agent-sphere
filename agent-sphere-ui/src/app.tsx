@@ -13,7 +13,7 @@ import React from 'react';
 
 dayjs.extend(relativeTime);
 
-import { Alert, App, Button } from 'antd';
+import { Alert, App, Button, Space } from 'antd';
 import {
   AvatarDropdown,
   ErrorBoundary,
@@ -144,9 +144,14 @@ export const layout: RunTimeLayoutConfig = ({
               banner
               style={{ marginBottom: 0 }}
               action={
-                <Button size="small" type="link" onClick={() => history.push('/models')}>
-                  <FormattedMessage id="pages.demo.bannerAction" />
-                </Button>
+                <Space size={4}>
+                  <Button size="small" type="link" onClick={() => history.push('/user/register')}>
+                    <FormattedMessage id="pages.demo.bannerRegister" />
+                  </Button>
+                  <Button size="small" type="link" onClick={() => history.push('/models')}>
+                    <FormattedMessage id="pages.demo.bannerAction" />
+                  </Button>
+                </Space>
               }
             />
           )}

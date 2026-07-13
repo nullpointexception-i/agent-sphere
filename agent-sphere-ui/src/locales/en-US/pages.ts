@@ -358,6 +358,7 @@ export default {
   'pages.document.sharedDocCreated': 'Created',
   'pages.demo.banner': 'Demo account — all models are free. For complex tasks, use DeepSeek V4 Flash+ or OpenAI 5.1+ for better results.',
   'pages.demo.bannerAction': 'Configure',
+  'pages.demo.bannerRegister': 'Register & Configure',
   'pages.admin.settings.title': 'System Settings',
   'pages.admin.settings.group.security': 'Security',
   'pages.admin.settings.group.chrome': 'Chrome Extension',

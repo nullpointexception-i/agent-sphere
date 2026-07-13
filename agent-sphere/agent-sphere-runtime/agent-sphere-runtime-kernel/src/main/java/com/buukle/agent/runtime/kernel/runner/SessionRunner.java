@@ -190,7 +190,8 @@ public class SessionRunner {
                         + "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**");
             }
 
-            TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx);
+            AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
+            TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef);
 
             if (CANCELLED_RUNS.contains(currentRunId)) break;
 
@@ -241,7 +242,9 @@ public class SessionRunner {
                     break loop;
                 }
                 case COMPLETE -> {
-                    String reply = allContent.length() > 0 ? allContent.toString() : null;
+                    String reply = allContent.length() > 0
+                            ? allContent.toString()
+                            : turnReasoningRef.get();
                     if (reply != null && !reply.isBlank()) {
                         currentRun.setAssistantReply(reply);
                     }
@@ -419,7 +422,7 @@ public class SessionRunner {
 
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
-                               KernelContext ctx) {
+                               KernelContext ctx, AtomicReference<String> turnReasoning) {
         AtomicReference<String> contentRef = new AtomicReference<>("");
         List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
         AtomicReference<String> errorRef = new AtomicReference<>();
@@ -540,8 +543,10 @@ public class SessionRunner {
             return TurnResult.compacted();
         }
 
+        turnReasoning.set(reasoningRef.get());
+
         if (cancelled.get()) {
-            return TurnResult.cancelled(getTurnContent(contentRef, reasoningRef), toolCalls);
+            return TurnResult.cancelled(getTurnContent(contentRef), toolCalls);
         }
 
         String error = errorRef.get();
@@ -550,21 +555,14 @@ public class SessionRunner {
         }
 
         if (!toolCalls.isEmpty()) {
-            return TurnResult.toolCalls(getTurnContent(contentRef, reasoningRef), toolCalls);
+            return TurnResult.toolCalls(getTurnContent(contentRef), toolCalls);
         }
 
-        return TurnResult.complete(getTurnContent(contentRef, reasoningRef));
+        return TurnResult.complete(getTurnContent(contentRef));
     }
 
-    private static String getTurnContent(AtomicReference<String> contentRef, AtomicReference<String> reasoningRef) {
-        String content = contentRef.get();
-        if (content.isBlank()) {
-            String reasoning = reasoningRef.get();
-            if (!reasoning.isBlank()) {
-                return reasoning;
-            }
-        }
-        return content;
+    private static String getTurnContent(AtomicReference<String> contentRef) {
+        return contentRef.get();
     }
 
     private List<ModelRouteFullVO> resolveRoutes(Long sessionId, KernelContext ctx) {
