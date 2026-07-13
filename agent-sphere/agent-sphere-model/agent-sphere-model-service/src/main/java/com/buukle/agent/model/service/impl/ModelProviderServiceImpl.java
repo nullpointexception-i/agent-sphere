@@ -31,6 +31,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -41,6 +45,12 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     private final AgentRuntimeProperties properties;
     private final HttpClient httpClient;
     private final int logBodyMaxLength;
+    private final long streamReadTimeoutSeconds;
+    private static final ScheduledExecutorService READ_TIMEOUT_SCHEDULER = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "llm-read-timeout");
+        t.setDaemon(true);
+        return t;
+    });
     @Autowired
     ChatRequestAdapter chatRequestAdapter;
     @Autowired
@@ -52,6 +62,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
         this.modelProviderConverter = modelProviderConverter;
         this.properties = properties;
         this.logBodyMaxLength = logBodyMaxLength;
+        this.streamReadTimeoutSeconds = properties.getLlm().getStreamReadTimeout().getSeconds();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(properties.getLlm().getConnectTimeout())
                 .build();
@@ -127,11 +138,12 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     .header(LlmApiConstants.HEADER_CONTENT_TYPE, LlmApiConstants.APPLICATION_JSON)
                     .header(LlmApiConstants.HEADER_AUTHORIZATION, LlmApiConstants.BEARER_PREFIX + apiKey)
                     .header(LlmApiConstants.HEADER_ACCEPT, LlmApiConstants.TEXT_EVENT_STREAM)
-                    .timeout(properties.getLlm().getStreamReadTimeout())
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            HttpResponse<java.io.InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            HttpResponse<java.io.InputStream> response = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
+                    .orTimeout(streamReadTimeoutSeconds, TimeUnit.SECONDS)
+                    .get();
             if (response.statusCode() >= 400) {
                 String errorBody = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                 log.error("LLM stream error: status={}, body={}", response.statusCode(), errorBody);
@@ -147,6 +159,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
             log.info("LLM stream response: status={}", response.statusCode());
 
             ToolStream toolStream = new ToolStream(onEvent);
+            READ_TIMEOUT_SCHEDULER.schedule(Thread.currentThread()::interrupt, streamReadTimeoutSeconds, TimeUnit.SECONDS);
             try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -216,8 +229,9 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     modelName, chunkCount, content.length(), reasoning.length());
             onEvent.accept(new LLMEvent.Finish(LlmApiConstants.FINISH_REASON_STOP, usage));
         } catch (Exception e) {
-            log.error("LLM stream failed: model={}, chunks={}, content={}, reasoning={}",
-                    modelName, chunkCount, truncate(contentBuilder.toString()), truncate(reasoningBuilder.toString()), e);
+            boolean timedOut = Thread.interrupted();
+            log.error("LLM stream failed: model={}, timedOut={}, chunks={}, content={}, reasoning={}",
+                    modelName, timedOut, chunkCount, truncate(contentBuilder.toString()), truncate(reasoningBuilder.toString()), e);
         } finally {
             onDone.run();
         }

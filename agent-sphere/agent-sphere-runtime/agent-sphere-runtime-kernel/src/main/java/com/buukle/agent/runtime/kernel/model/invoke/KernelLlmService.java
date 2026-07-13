@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -42,17 +43,31 @@ public class KernelLlmService {
             String requestBody = JsonUtils.toJson(request);
             try {
                 CountDownLatch done = new CountDownLatch(1);
-                modelProviderSpi.stream(company, baseUrl, apiKey, modelName, request,
-                        event -> {
-                            if (future.isCancelled()) return;
-                            if (event instanceof LLMEvent.TextDelta(String text1)) resultCollector.append(text1);
-                            else if (event instanceof LLMEvent.ReasoningDelta(String text)) resultCollector.append(text);
-                            onEvent.accept(event);
-                        },
-                        done::countDown);
+                AtomicReference<Exception> streamError = new AtomicReference<>();
+
+                Thread.ofVirtual().start(() -> {
+                    try {
+                        modelProviderSpi.stream(company, baseUrl, apiKey, modelName, request,
+                                event -> {
+                                    if (future.isCancelled()) return;
+                                    if (event instanceof LLMEvent.TextDelta(String text1)) resultCollector.append(text1);
+                                    else if (event instanceof LLMEvent.ReasoningDelta(String text)) resultCollector.append(text);
+                                    onEvent.accept(event);
+                                },
+                                done::countDown);
+                    } catch (Exception e) {
+                        streamError.set(e);
+                        done.countDown();
+                    }
+                });
+
                 long timeout = properties.getLlm().getStreamTimeout().getSeconds();
                 if (!done.await(timeout, TimeUnit.SECONDS)) {
                     throw new RuntimeException("LLM stream timed out after " + timeout + "s");
+                }
+                Exception err = streamError.get();
+                if (err != null) {
+                    throw err;
                 }
                 if (!future.isCancelled()) future.complete(null);
             } catch (Exception e) {
