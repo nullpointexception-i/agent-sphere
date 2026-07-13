@@ -25,7 +25,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
-    private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/chrome");
+    private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/check-username", "/api/v1/chrome");
     private static final String TOKEN_CACHE_PREFIX = "token:user:";
     private final UserMapper userMapper;
     private final CacheService cacheService;
