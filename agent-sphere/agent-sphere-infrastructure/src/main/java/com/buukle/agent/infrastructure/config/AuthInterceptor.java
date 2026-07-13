@@ -10,56 +10,70 @@ import com.buukle.agent.instance.repository.UserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.io.IOException;
 import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
-    private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register");
+    private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/chrome");
     private static final String TOKEN_CACHE_PREFIX = "token:user:";
     private final UserMapper userMapper;
     private final CacheService cacheService;
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
         String path = request.getRequestURI();
         if (SKIP_PATHS.stream().anyMatch(path::startsWith)) return true;
 
         String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            String cacheKey = TOKEN_CACHE_PREFIX + token;
-            AgentUser user = cacheService.get(cacheKey);
-            if (user == null) {
-                user = userMapper.selectOne(
-                        new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentUser>()
-                                .eq(AgentUser::getToken, token));
-                if (user != null) {
-                    cacheService.set(cacheKey, user, 5);
-                }
-            }
-            if (user != null) {
-                AuthContext.setToken(token);
-                AuthContext.setUsername(user.getUsername());
-                AuthContext.setDisplayName(user.getDisplayName());
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            writeUnauthorized(response);
+            return false;
+        }
 
-                if (handler instanceof HandlerMethod hm) {
-                    Class<?> beanType = ClassUtils.getUserClass(hm.getBeanType());
-                    if (beanType.isAnnotationPresent(WithTenant.class)
-                            && !UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin())) {
-                        TenantUtil.start(user.getUsername());
-                    }
-                }
-                return true;
+        String token = authHeader.substring(7);
+        String cacheKey = TOKEN_CACHE_PREFIX + token;
+        AgentUser user = cacheService.get(cacheKey);
+        if (user == null) {
+            user = userMapper.selectOne(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentUser>()
+                            .eq(AgentUser::getToken, token));
+            if (user != null) {
+                cacheService.set(cacheKey, user, 5);
+            }
+        }
+        if (user == null) {
+            writeUnauthorized(response);
+            return false;
+        }
+
+        AuthContext.setToken(token);
+        AuthContext.setUserId(user.getId());
+        AuthContext.setUsername(user.getUsername());
+        AuthContext.setDisplayName(user.getDisplayName());
+        AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
+
+        if (handler instanceof HandlerMethod hm) {
+            Class<?> beanType = ClassUtils.getUserClass(hm.getBeanType());
+            if (beanType.isAnnotationPresent(WithTenant.class) && !AuthContext.isSuperAdmin()) {
+                TenantUtil.start(user.getUsername());
             }
         }
         return true;
+    }
+
+    private void writeUnauthorized(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpStatus.UNAUTHORIZED.value());
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"code\":\"A0200\",\"message\":\"未授权\",\"userTip\":\"请先登录\"}");
     }
 
     @Override

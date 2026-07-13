@@ -108,9 +108,9 @@ buukle:
 
       # ---- Jina AI 高级网页读取 / Jina AI Advanced Web Read ----
       web-read-advanced:
-        use-jina-fallback: true                    # 启用 Jina Reader 降级 / Enable Jina Reader fallback
+        use-jina-fallback: false                    # 启用 Jina Reader 降级 / Enable Jina Reader fallback
         jina-reader-url: "https://r.jina.ai/"      # Jina Reader 服务地址 / Jina Reader service URL
-        jina-api-key: "jina_4f83c63666fd475c964d5c31fc6b4f54KNOJvJAOeMovU0AkaRZGpg64fbJ3"
+        jina-api-key: ""
         jina-engine: "direct"                      # Jina 引擎模式（direct/browser）/ Jina engine mode
         jina-connect-timeout: 30                   # Jina 连接超时（秒）/ Jina connect timeout (s)
         jina-read-timeout: 30                      # Jina 读取超时（秒）/ Jina read timeout (s)
@@ -156,6 +156,18 @@ buukle:
     # ============================================================
     # 分布式锁配置 / Lock Config
     # ============================================================
+    # ============================================================
+    # Chrome 扩展配置 / Chrome Extension Config
+    # ============================================================
+    chrome:
+      extension-token: ""
+
+    # ============================================================
+    # 加密配置 / Crypto Config
+    # ============================================================
+    crypto:
+      aes-key: ""
+
     lock:
       capability:
         wait-time: 5s                              # 获取锁等待超时 / Lock acquire wait timeout

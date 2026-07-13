@@ -2,6 +2,7 @@ package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.security.CryptoService;
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.dtvo.dto.CreateApiKeyDTO;
 import com.buukle.agent.model.dtvo.vo.ApiKeyVO;
@@ -18,6 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ApiKeyServiceImpl extends ServiceImpl<ApiKeyMapper, AgentApiKey> implements ApiKeyService {
     private final ApiKeyConverter apiKeyConverter;
+    private final CryptoService cryptoService;
 
     @Override
     public ApiKeyVO createApiKey(CreateApiKeyDTO dto) {
@@ -65,6 +67,12 @@ public class ApiKeyServiceImpl extends ServiceImpl<ApiKeyMapper, AgentApiKey> im
     @Override
     public String getApiKeyValue(Long id) {
         AgentApiKey entity = getById(id);
-        return entity != null ? entity.getKeyValue() : null;
+        if (entity == null) return null;
+        try {
+            return cryptoService.decrypt(entity.getKeyValue());
+        } catch (Exception e) {
+            // Not encrypted or not decryptable — return as-is for backward compatibility
+            return entity.getKeyValue();
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.buukle.agent.capability.builtin.tool.webread.util;
 import com.buukle.agent.capability.builtin.tool.webread.dtvo.dto.JinaReaderResponseDto;
 import com.buukle.agent.capability.builtin.tool.webread.dtvo.vo.WebReadResultVO;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -44,19 +45,19 @@ public class JinaReader {
     private static final String MSG_API_ERROR = "Jina API error: ";
 
     private final HttpClient httpClient;
-    private final String apiKey;
     private final String readerUrl;
     private final String engine;
     private final int readTimeout;
     private final int timeoutBuffer;
+    private final SystemConfigSpi systemConfigSpi;
 
-    public JinaReader(AgentRuntimeProperties properties) {
+    public JinaReader(AgentRuntimeProperties properties, SystemConfigSpi systemConfigSpi) {
         var config = properties.getTool().getWebReadAdvanced();
-        this.apiKey = config.getJinaApiKey();
         this.readerUrl = config.getJinaReaderUrl();
         this.engine = config.getJinaEngine();
         this.readTimeout = Math.max(10, config.getJinaReadTimeout());
         this.timeoutBuffer = Math.max(5, config.getJinaTimeoutBuffer());
+        this.systemConfigSpi = systemConfigSpi;
 
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(Math.max(5, config.getJinaConnectTimeout())))
@@ -75,6 +76,8 @@ public class JinaReader {
         if (timeoutSeconds <= 0) {
             timeoutSeconds = readTimeout;
         }
+
+        String apiKey = systemConfigSpi.get("web-read.jina-api-key", "");
 
         try {
             String jsonBody = JsonUtils.toJson(Map.of(FIELD_URL, url));

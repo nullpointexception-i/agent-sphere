@@ -20,4 +20,6 @@ export default {
   'menu.password': '修改密码',
   'menu.artifacts': '产出',
   'menu.artifacts.documents': '文档',
+  'menu.admin': '系统管理',
+  'menu.admin.settings': '系统配置',
 };

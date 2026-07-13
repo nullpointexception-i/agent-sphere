@@ -17,4 +17,6 @@ export default {
   'menu.password': 'Change Password',
   'menu.artifacts': 'Artifacts',
   'menu.artifacts.documents': 'Documents',
+  'menu.admin': 'Administration',
+  'menu.admin.settings': 'System Settings',
 };

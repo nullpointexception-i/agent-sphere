@@ -21,4 +21,8 @@ public class ChromePendingStore {
     public static CompletableFuture<ChromeCallbackDTO> remove(String commandId) {
         return pending.remove(commandId);
     }
+
+    public static boolean contains(String commandId) {
+        return pending.containsKey(commandId);
+    }
 }

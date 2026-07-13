@@ -322,7 +322,8 @@ export default {
   'pages.chat.voiceInputOffline': 'Currently offline, voice input unavailable',
   'pages.chat.voiceInputNotSupported': 'Browser does not support voice input',
   'pages.chat.voiceInputNotAllowed': 'Microphone permission denied',
-  'pages.chat.voiceInputNetworkError': 'Network error, voice recognition failed',
+  'pages.chat.voiceInputNetworkError':
+    'Network error, voice recognition failed',
   'pages.chat.voiceInputError': 'Speech recognition failed',
   'pages.chat.voiceInputStartFailed': 'Failed to start voice input',
   'pages.document.title': 'Title',
@@ -349,4 +350,17 @@ export default {
   'pages.document.charCount': 'Chars',
   'pages.document.exported': 'Exported',
   'pages.document.exportFailed': 'Export failed',
+  'pages.admin.settings.title': 'System Settings',
+  'pages.admin.settings.group.security': 'Security',
+  'pages.admin.settings.group.chrome': 'Chrome Extension',
+  'pages.admin.settings.group.web-read': 'Web Read',
+  'pages.admin.settings.group.rate-limit': 'Rate Limit',
+  'pages.admin.settings.regenerate.btn': 'Regenerate',
+  'pages.admin.settings.regenerate.confirm':
+    'Regenerating the AES key will re-encrypt all API keys. This action cannot be undone. Continue?',
+  'pages.admin.settings.regenerate.success':
+    'AES key regenerated, all API keys re-encrypted',
+  'pages.admin.settings.edit.label': 'Configuration Value',
+  'pages.admin.settings.edit.secret.placeholder':
+    'Leave empty to keep current value',
 };

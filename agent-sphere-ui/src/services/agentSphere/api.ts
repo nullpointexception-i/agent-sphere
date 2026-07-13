@@ -241,6 +241,15 @@ export const agentApi = {
       request<void>(`/api/v1/auth/password`, { method: 'PUT', data }),
   },
 
+  admin: {
+    listConfigs: () =>
+      request<any[]>(`${BASE}/system/config`),
+    updateConfig: (key: string, value: string) =>
+      request<any>(`${BASE}/system/config/${key}`, { method: 'PUT', data: { value } }),
+    regenerateAesKey: () =>
+      request<any>(`${BASE}/system/config/crypto.aes-key/regenerate`, { method: 'POST' }),
+  },
+
   instanceCapabilities: {
     listByInstance: (instanceId: number) =>
       request<any[]>(

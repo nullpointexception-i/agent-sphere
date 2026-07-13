@@ -173,7 +173,9 @@ export default function Landing({
             >
               <Tooltip
                 title={intl.formatMessage({
-                  id: isRecording ? 'pages.chat.voiceInputStop' : 'pages.chat.voiceInput',
+                  id: isRecording
+                    ? 'pages.chat.voiceInputStop'
+                    : 'pages.chat.voiceInput',
                 })}
               >
                 <AudioOutlined

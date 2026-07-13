@@ -7,7 +7,6 @@ data:
   DB_HOST: postgres
   DB_PORT: "5432"
   DB_USERNAME: buukle
-  DB_PASSWORD: buukle123
   REDIS_HOST: redis
   REDIS_PORT: "6379"
   ENABLE_VIRTUAL_THREADS: "true"

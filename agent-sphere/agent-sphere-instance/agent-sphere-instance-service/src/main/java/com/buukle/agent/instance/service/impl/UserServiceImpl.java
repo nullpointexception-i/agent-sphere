@@ -14,6 +14,7 @@ import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.UserMapper;
 import com.buukle.agent.instance.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -24,6 +25,8 @@ import java.util.HexFormat;
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implements UserService {
+
+    private final PasswordEncoder passwordEncoder;
 
     public static String sha256(String input) {
         try {
@@ -60,16 +63,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         AgentUser user = lambdaQuery().eq(AgentUser::getUsername, dto.getUsername()).one();
         if (user == null) throw new BizException(InstanceErrorCode.INVALID_CREDENTIALS);
 
-        String hash = sha256(dto.getPassword());
-        if (!hash.equals(user.getPassword())) throw new BizException(InstanceErrorCode.INVALID_CREDENTIALS);
+        if (passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+            // BCrypt match — normal path
+        } else if (user.getPassword().length() == 64 && sha256(dto.getPassword()).equals(user.getPassword())) {
+            // SHA-256 legacy match → upgrade to bcrypt
+            user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        } else {
+            throw new BizException(InstanceErrorCode.INVALID_CREDENTIALS);
+        }
 
         String token = generateToken();
         user.setToken(token);
         updateById(user);
 
         AuthContext.setToken(token);
+        AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
+        AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
 
         return toVO(user);
     }
@@ -111,9 +122,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     public void updatePassword(Long userId, String oldPassword, String newPassword) {
         AgentUser user = getById(userId);
         if (user == null) throw new BizException(InstanceErrorCode.USER_NOT_FOUND);
-        if (!sha256(oldPassword).equals(user.getPassword()))
+        boolean bcryptMatch = passwordEncoder.matches(oldPassword, user.getPassword());
+        boolean sha256Match = user.getPassword().length() == 64 && sha256(oldPassword).equals(user.getPassword());
+        if (!bcryptMatch && !sha256Match)
             throw new BizException(InstanceErrorCode.OLD_PASSWORD_MISMATCH);
-        user.setPassword(sha256(newPassword));
+        user.setPassword(passwordEncoder.encode(newPassword));
         updateById(user);
     }
 
@@ -132,7 +145,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         }
         AgentUser user = new AgentUser();
         user.setUsername(dto.getUsername());
-        user.setPassword(sha256(dto.getPassword()));
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setDisplayName(dto.getUsername());
         user.setEnglishName(dto.getUsername());
         user.setAvatar(AvatarGenerator.generateUserBase64());
@@ -150,8 +163,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         user.setToken(token);
         updateById(user);
         AuthContext.setToken(token);
+        AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
+        AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
         return toVO(user);
     }
 }

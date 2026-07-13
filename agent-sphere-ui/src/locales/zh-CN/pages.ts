@@ -338,4 +338,16 @@ export default {
   'pages.document.charCount': '字数',
   'pages.document.exported': '导出成功',
   'pages.document.exportFailed': '导出失败',
+  'pages.admin.settings.title': '系统配置',
+  'pages.admin.settings.group.security': '安全配置',
+  'pages.admin.settings.group.chrome': '浏览器扩展',
+  'pages.admin.settings.group.web-read': '网页读取',
+  'pages.admin.settings.group.rate-limit': '限流配置',
+  'pages.admin.settings.regenerate.btn': '重新生成',
+  'pages.admin.settings.regenerate.confirm':
+    '重新生成 AES 密钥将重新加密所有 API Key，此操作不可撤销。确定继续？',
+  'pages.admin.settings.regenerate.success':
+    'AES 密钥已重新生成，所有 API Key 已重新加密',
+  'pages.admin.settings.edit.label': '配置值',
+  'pages.admin.settings.edit.secret.placeholder': '留空则保留原值',
 };

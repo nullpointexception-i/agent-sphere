@@ -128,6 +128,19 @@ export default [
     hideInMenu: true,
   },
   {
+    path: '/admin',
+    name: 'admin',
+    icon: 'setting',
+    access: 'canAdmin',
+    routes: [
+      {
+        path: '/admin/settings',
+        name: 'settings',
+        component: './admin/settings',
+      },
+    ],
+  },
+  {
     path: '/',
     redirect: '/dashboard',
   },

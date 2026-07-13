@@ -1,9 +1,13 @@
 package com.buukle.agent.runtime.orchestration.service;
 
+import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
@@ -31,6 +35,7 @@ public class ChatRuntimeService {
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
 
+        assertSessionOwnership(sessionId);
         sessionSpi.touchSession(sessionId);
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);
@@ -56,5 +61,13 @@ public class ChatRuntimeService {
         response.setRunId(run.getId());
         response.setStatus(ChatConstant.RESPONSE_STATUS_PROCESSING);
         return response;
+    }
+
+    private void assertSessionOwnership(Long sessionId) {
+        if (AuthContext.isSuperAdmin()) return;
+        SessionVO session = sessionSpi.getSession(sessionId);
+        if (session == null || !AuthContext.getUsername().equals(session.getCreatedBy())) {
+            throw new BizException(CommonErrorCode.FORBIDDEN);
+        }
     }
 }

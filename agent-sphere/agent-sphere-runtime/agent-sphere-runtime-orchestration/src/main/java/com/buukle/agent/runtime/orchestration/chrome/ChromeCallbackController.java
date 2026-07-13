@@ -2,29 +2,43 @@ package com.buukle.agent.runtime.orchestration.chrome;
 
 import com.buukle.agent.common.chrome.ChromeCallbackDTO;
 import com.buukle.agent.common.chrome.ChromePendingStore;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.ScreenshotEventType;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.Objects;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/chrome")
+@RequiredArgsConstructor
 public class ChromeCallbackController extends BaseController {
 
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private final ApplicationEventPublisher eventPublisher;
+    private final SystemConfigSpi systemConfigSpi;
 
     @PostMapping("/callback")
     public ResponseEntity<?> callback(@RequestParam Long sessionId,
-                                      @RequestBody ChromeCallbackDTO body) {
+                                      @RequestBody ChromeCallbackDTO body,
+                                      HttpServletRequest request) {
+        if (!ChromePendingStore.contains(body.getCommandId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        String token = systemConfigSpi.get("chrome.extension-token", "");
+        if (!token.isEmpty()
+                && !Objects.equals(token, request.getHeader("X-Extension-Token"))) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         ChromePendingStore.complete(body.getCommandId(), body);
 
         if (body.getScreenshot() != null) {

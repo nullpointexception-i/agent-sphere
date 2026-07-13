@@ -21,6 +21,8 @@ spec:
         envFrom:
         - configMapRef:
             name: backend-config
+        - secretRef:
+            name: backend-secret
         readinessProbe:
           tcpSocket:
             port: 8080

@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.orchestration.controller;
 
+import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/runtime")
+@WithTenant
 @RequiredArgsConstructor
 public class ChatRuntimeController {
 

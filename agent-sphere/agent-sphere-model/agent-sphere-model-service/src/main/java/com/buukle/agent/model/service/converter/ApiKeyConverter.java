@@ -1,16 +1,21 @@
 package com.buukle.agent.model.service.converter;
 
+import com.buukle.agent.common.security.CryptoService;
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.dtvo.dto.CreateApiKeyDTO;
 import com.buukle.agent.model.dtvo.enums.ApiKeyEnum;
 import com.buukle.agent.model.dtvo.vo.ApiKeyVO;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.format.DateTimeFormatter;
 
 @Component
+@RequiredArgsConstructor
 public class ApiKeyConverter {
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private final CryptoService cryptoService;
 
     private static String maskApiKey(String key) {
         if (key == null || key.length() < 8) return "****";
@@ -37,7 +42,7 @@ public class ApiKeyConverter {
         AgentApiKey apiKey = new AgentApiKey();
         apiKey.setProviderId(dto.getProviderId());
         apiKey.setAlias(dto.getAlias());
-        apiKey.setKeyValue(dto.getKeyValue());
+        apiKey.setKeyValue(cryptoService.encrypt(dto.getKeyValue()));
         apiKey.setExpiresAt(dto.getExpiresAt());
         apiKey.setStatus(ApiKeyEnum.STATUS_ACTIVE);
         return apiKey;

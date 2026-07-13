@@ -129,24 +129,26 @@ export const layout: RunTimeLayoutConfig = ({
       return (
         <>
           {children}
-          {isDev && <SettingDrawer
-            disableUrlParams
-            enableDarkTheme
-            collapse={initialState?.settingDrawerOpen}
-            onCollapseChange={(open) => {
-              setInitialState((s) => ({
-                ...s,
-                settingDrawerOpen: open,
-              }));
-            }}
-            settings={initialState?.settings}
-            onSettingChange={(settings) => {
-              setInitialState((s) => ({
-                ...s,
-                settings,
-              }));
-            }}
-          />}
+          {isDev && (
+            <SettingDrawer
+              disableUrlParams
+              enableDarkTheme
+              collapse={initialState?.settingDrawerOpen}
+              onCollapseChange={(open) => {
+                setInitialState((s) => ({
+                  ...s,
+                  settingDrawerOpen: open,
+                }));
+              }}
+              settings={initialState?.settings}
+              onSettingChange={(settings) => {
+                setInitialState((s) => ({
+                  ...s,
+                  settings,
+                }));
+              }}
+            />
+          )}
         </>
       );
     },
