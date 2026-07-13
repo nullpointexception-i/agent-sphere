@@ -59,7 +59,7 @@ public class InstanceController extends BaseController {
         return ok(instanceService.updateInstance(id, dto));
     }
 
-    @RequirePermission("instance:update")
+    @RequirePermission("instance:bind-model")
     @PutMapping("/{id}/model-route")
     public ResponseEntity<?> setModelRoute(@PathVariable Long id, @RequestBody SetModelRouteDTO dto) {
         return ok(instanceService.setModelRoute(id, dto.getModelRouteId()));

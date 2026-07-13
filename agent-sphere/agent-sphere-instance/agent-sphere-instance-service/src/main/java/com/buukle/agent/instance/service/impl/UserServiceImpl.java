@@ -23,6 +23,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -165,6 +166,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             }
             throw new BizException(InstanceErrorCode.REGISTER_FAILED);
         }
+        // Assign USER role
+        roleSpi.listAll().stream()
+                .filter(r -> "USER".equals(r.getCode()))
+                .findFirst()
+                .ifPresent(r -> roleSpi.assignRoles(user.getId(), List.of(r.getId())));
         // Auto-login
         String token = generateToken();
         user.setToken(token);

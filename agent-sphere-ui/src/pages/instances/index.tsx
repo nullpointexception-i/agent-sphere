@@ -35,6 +35,7 @@ import {
 import type dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { useCan } from '@/hooks/usePermission';
 import SetModelRouteModal from '@/components/SetModelRouteModal';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
@@ -47,6 +48,10 @@ export default function InstanceList() {
   const { message, modal } = App.useApp();
   const intl = useIntl();
   const { styles } = useStyles();
+  const canEdit = useCan('instance:update');
+  const canManageCaps = useCan('instance:capability:bind');
+  const canBindModel = useCan('instance:bind-model');
+  const canDelete = useCan('instance:delete');
   const actionRef = useRef<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -517,111 +522,127 @@ export default function InstanceList() {
                         })}
                       </span>
                     </div>,
-                    <div
-                      key="edit"
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 2,
-                      }}
-                      onClick={() => {
-                        setEditing(item);
-                        setInfoDrawerOpen(true);
-                      }}
-                    >
-                      <EditOutlined />
-                      <span style={{ fontSize: 11 }}>
-                        {intl.formatMessage({
-                          id: 'pages.table.edit',
-                          defaultMessage: 'Edit',
-                        })}
-                      </span>
-                    </div>,
-                    <div
-                      key="caps"
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 2,
-                      }}
-                      onClick={() => {
-                        setEditing(item);
-                        setCapDrawerOpen(true);
-                      }}
-                    >
-                      <ApiOutlined />
-                      <span style={{ fontSize: 11 }}>
-                        {intl.formatMessage({
-                          id: 'pages.instances.capabilities',
-                          defaultMessage: 'Capabilities',
-                        })}
-                      </span>
-                    </div>,
-                    <div
-                      key="model"
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 2,
-                      }}
-                      onClick={() => {
-                        setModelRouteInstance(item);
-                        setModelRouteModal(true);
-                      }}
-                    >
-                      <CloudOutlined />
-                      <span style={{ fontSize: 11 }}>
-                        {intl.formatMessage({
-                          id: 'pages.instances.modelRoute',
-                          defaultMessage: 'Model',
-                        })}
-                      </span>
-                    </div>,
-                    <div
-                      key="delete"
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 2,
-                      }}
-                      onClick={() => {
-                        modal.confirm({
-                          title: intl.formatMessage(
-                            {
-                              id: 'pages.deleteConfirm.title',
-                              defaultMessage: 'Delete {name}',
-                            },
-                            { name: 'instance' },
-                          ),
-                          content: intl.formatMessage(
-                            {
-                              id: 'pages.deleteConfirm.content',
-                              defaultMessage:
-                                'Are you sure you want to delete this {name}?',
-                            },
-                            { name: 'instance' },
-                          ),
-                          okType: 'danger',
-                          onOk: async () => {
-                            await agentApi.instances.delete(item.id);
-                            message.success('Deleted');
-                            fetchData(1);
-                          },
-                        });
-                      }}
-                    >
-                      <DeleteOutlined />
-                      <span style={{ fontSize: 11 }}>
-                        {intl.formatMessage({
-                          id: 'pages.table.delete',
-                          defaultMessage: 'Delete',
-                        })}
-                      </span>
-                    </div>,
+                    ...(canEdit
+                      ? [
+                          <div
+                            key="edit"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 2,
+                            }}
+                            onClick={() => {
+                              setEditing(item);
+                              setInfoDrawerOpen(true);
+                            }}
+                          >
+                            <EditOutlined />
+                            <span style={{ fontSize: 11 }}>
+                              {intl.formatMessage({
+                                id: 'pages.table.edit',
+                                defaultMessage: 'Edit',
+                              })}
+                            </span>
+                          </div>,
+                        ]
+                      : []),
+                    ...(canManageCaps
+                      ? [
+                          <div
+                            key="caps"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 2,
+                            }}
+                            onClick={() => {
+                              setEditing(item);
+                              setCapDrawerOpen(true);
+                            }}
+                          >
+                            <ApiOutlined />
+                            <span style={{ fontSize: 11 }}>
+                              {intl.formatMessage({
+                                id: 'pages.instances.capabilities',
+                                defaultMessage: 'Capabilities',
+                              })}
+                            </span>
+                          </div>,
+                        ]
+                      : []),
+                    ...(canBindModel
+                      ? [
+                          <div
+                            key="model"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 2,
+                            }}
+                            onClick={() => {
+                              setModelRouteInstance(item);
+                              setModelRouteModal(true);
+                            }}
+                          >
+                            <CloudOutlined />
+                            <span style={{ fontSize: 11 }}>
+                              {intl.formatMessage({
+                                id: 'pages.instances.modelRoute',
+                                defaultMessage: 'Model',
+                              })}
+                            </span>
+                          </div>,
+                        ]
+                      : []),
+                    ...(canDelete
+                      ? [
+                          <div
+                            key="delete"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 2,
+                            }}
+                            onClick={() => {
+                              modal.confirm({
+                                title: intl.formatMessage(
+                                  {
+                                    id: 'pages.deleteConfirm.title',
+                                    defaultMessage: 'Delete {name}',
+                                  },
+                                  { name: 'instance' },
+                                ),
+                                content: intl.formatMessage(
+                                  {
+                                    id: 'pages.deleteConfirm.content',
+                                    defaultMessage:
+                                      'Are you sure you want to delete this {name}?',
+                                  },
+                                  { name: 'instance' },
+                                ),
+                                okType: 'danger',
+                                onOk: async () => {
+                                  await agentApi.instances.delete(item.id);
+                                  message.success('Deleted');
+                                  fetchData(1);
+                                },
+                              });
+                            }}
+                          >
+                            <DeleteOutlined />
+                            <span style={{ fontSize: 11 }}>
+                              {intl.formatMessage({
+                                id: 'pages.table.delete',
+                                defaultMessage: 'Delete',
+                              })}
+                            </span>
+                          </div>,
+                        ]
+                      : []),
                   ]}
                 >
                   <Card.Meta

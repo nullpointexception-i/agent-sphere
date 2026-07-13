@@ -11,6 +11,7 @@ import { useIntl, useLocation } from '@umijs/max';
 import { App, Button, Card, Form, Input, Modal, Tag } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 import ApiKeyDrawer from './drawers/ApiKeyDrawer';
@@ -40,6 +41,9 @@ export default function ModelProviders() {
   const autoOpenedRef = useRef(false);
   const [keyDrawerOpen, setKeyDrawerOpen] = useState(false);
   const [routeDrawerOpen, setRouteDrawerOpen] = useState(false);
+
+  const canEditProvider = useCan('model:provider:update');
+  const canDeleteProvider = useCan('model:provider:delete');
 
   const loadProviders = () =>
     agentApi.modelProviders
@@ -155,28 +159,6 @@ export default function ModelProviders() {
                   {intl.formatMessage({ id: 'pages.models.modelRoutes' })}
                 </span>
               </div>,
-              <Can key="edit" code="model:provider:update">
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
-                onClick={() => {
-                  setEditingProvider(item);
-                  providerForm.setFieldsValue(item);
-                  setProviderModal(true);
-                }}
-              >
-                <EditOutlined />
-                <span style={{ fontSize: 11 }}>
-                  {intl.formatMessage({
-                    id: 'pages.table.edit',
-                    defaultMessage: 'Edit',
-                  })}
-                </span>
-              </div>,
               <div
                 key="view"
                 style={{
@@ -194,44 +176,72 @@ export default function ModelProviders() {
                     defaultMessage: 'View',
                   })}
                 </span>
-              </div>
-              </Can>,
-              <Can key="delete" code="model:provider:delete">
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
-                onClick={() => {
-                  modal.confirm({
-                    title: intl.formatMessage(
-                      {
-                        id: 'pages.deleteConfirm.title',
-                        defaultMessage: 'Delete {name}',
-                      },
-                      { name: item.name },
-                    ),
-                    okType: 'danger',
-                    onOk: async () => {
-                      await agentApi.modelProviders.delete(item.id);
-                      message.success('Deleted');
-                      loadProviders();
-                    },
-                  });
-                }}
-              >
-                <DeleteOutlined />
-                <span style={{ fontSize: 11 }}>
-                  {intl.formatMessage({
-                    id: 'pages.table.delete',
-                    defaultMessage: 'Delete',
-                  })}
-                </span>
-              </div>
-              </Can>,
-            ]}
+              </div>,
+              ...(canEditProvider
+                ? [
+                    <div
+                      key="edit"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 2,
+                      }}
+                      onClick={() => {
+                        setEditingProvider(item);
+                        providerForm.setFieldsValue(item);
+                        setProviderModal(true);
+                      }}
+                    >
+                      <EditOutlined />
+                      <span style={{ fontSize: 11 }}>
+                        {intl.formatMessage({
+                          id: 'pages.table.edit',
+                          defaultMessage: 'Edit',
+                        })}
+                      </span>
+                    </div>,
+                  ]
+                : []),
+              ...(canDeleteProvider
+                ? [
+                    <div
+                      key="delete"
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 2,
+                      }}
+                      onClick={() => {
+                        modal.confirm({
+                          title: intl.formatMessage(
+                            {
+                              id: 'pages.deleteConfirm.title',
+                              defaultMessage: 'Delete {name}',
+                            },
+                            { name: item.name },
+                          ),
+                          okType: 'danger',
+                          onOk: async () => {
+                            await agentApi.modelProviders.delete(item.id);
+                            message.success('Deleted');
+                            loadProviders();
+                          },
+                        });
+                      }}
+                    >
+                      <DeleteOutlined />
+                      <span style={{ fontSize: 11 }}>
+                        {intl.formatMessage({
+                          id: 'pages.table.delete',
+                          defaultMessage: 'Delete',
+                        })}
+                      </span>
+                    </div>,
+                  ]
+                : []),
+            ].filter(Boolean)}
           >
             <Card.Meta
               title={
