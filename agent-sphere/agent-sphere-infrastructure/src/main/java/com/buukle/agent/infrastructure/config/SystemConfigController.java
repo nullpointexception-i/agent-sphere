@@ -1,16 +1,13 @@
 package com.buukle.agent.infrastructure.config;
 
+import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
-import com.buukle.agent.common.context.AuthContext;
-import com.buukle.agent.common.error.CommonErrorCode;
-import com.buukle.agent.common.exception.ErrorResponse;
 import com.buukle.agent.common.security.CryptoService;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.repository.ApiKeyMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,11 +24,9 @@ public class SystemConfigController extends BaseController {
     private final CryptoService cryptoService;
     private final ApiKeyMapper apiKeyMapper;
 
+    @RequirePermission("admin:settings:read")
     @GetMapping
     public ResponseEntity<?> listConfigs() {
-        if (!AuthContext.isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.of(CommonErrorCode.FORBIDDEN));
-        }
         var configs = systemConfigService.listAll().stream()
                 .map(c -> {
                     var masked = c.getIsSecret() != null && c.getIsSecret()
@@ -47,22 +42,18 @@ public class SystemConfigController extends BaseController {
         return ok(configs);
     }
 
+    @RequirePermission("admin:settings:update")
     @PutMapping("/{key}")
     public ResponseEntity<?> updateConfig(@PathVariable String key, @RequestBody Map<String, String> body) {
-        if (!AuthContext.isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.of(CommonErrorCode.FORBIDDEN));
-        }
         String value = body.get("value");
         systemConfigSpi.set(key, value);
         systemConfigService.invalidateCache(key);
         return ok(Map.of("message", "已更新"));
     }
 
+    @RequirePermission("admin:settings:regenerate-aes")
     @PostMapping("/crypto.aes-key/regenerate")
     public ResponseEntity<?> regenerateAesKey() {
-        if (!AuthContext.isSuperAdmin()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.of(CommonErrorCode.FORBIDDEN));
-        }
         String oldBase64Key = systemConfigSpi.get(SystemConfigKeys.AES_KEY);
 
         // 2. Generate new key

@@ -9,6 +9,7 @@ import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
 import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.BatchCreateInstanceCapabilityDTO;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceCapabilityDTO;
@@ -42,16 +43,19 @@ public class InstanceCapabilityController extends BaseController {
         return ok(instanceCapabilityService.getCapabilitiesByInstance(instanceId));
     }
 
+    @RequirePermission("instance:capability:bind")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateInstanceCapabilityDTO dto) {
         return created(instanceCapabilityService.createCapability(dto));
     }
 
+    @RequirePermission("instance:capability:bind")
     @PostMapping("/batch")
     public ResponseEntity<?> batchCreate(@Valid @RequestBody BatchCreateInstanceCapabilityDTO dto) {
         return created(instanceCapabilityService.batchCreateCapabilities(dto));
     }
 
+    @RequirePermission("instance:capability:unbind")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         instanceCapabilityService.deleteCapability(id);

@@ -244,12 +244,38 @@ export const agentApi = {
   },
 
   admin: {
+    users: {
+      list: (page = 1, size = 20) =>
+        request<any>(`${BASE}/admin/users`, { params: { page, size } }),
+    },
     listConfigs: () =>
       request<any[]>(`${BASE}/system/config`),
     updateConfig: (key: string, value: string) =>
       request<any>(`${BASE}/system/config/${key}`, { method: 'PUT', data: { value } }),
     regenerateAesKey: () =>
       request<any>(`${BASE}/system/config/crypto.aes-key/regenerate`, { method: 'POST' }),
+    roles: {
+      list: (page = 1, size = 20) =>
+        request<any>(`${BASE}/admin/roles`, { params: { page, size } }),
+      listAll: () => request<any[]>(`${BASE}/admin/roles/all`),
+      listByUser: (userId: number) => request<any[]>(`${BASE}/admin/roles/user/${userId}`),
+      create: (data: any) => request<any>(`${BASE}/admin/roles`, { method: 'POST', data }),
+      update: (id: number, data: any) => request<any>(`${BASE}/admin/roles/${id}`, { method: 'PUT', data }),
+      delete: (id: number) => request<void>(`${BASE}/admin/roles/${id}`, { method: 'DELETE' }),
+      assignPermissions: (roleId: number, permissionIds: number[]) =>
+        request<void>(`${BASE}/admin/roles/assign-permissions`, { method: 'POST', data: { roleId, permissionIds } }),
+      assignUser: (userId: number, roleIds: number[]) =>
+        request<void>(`${BASE}/admin/roles/assign-user`, { method: 'POST', data: { userId, roleIds } }),
+    },
+    permissions: {
+      list: (page = 1, size = 20) =>
+        request<any>(`${BASE}/admin/permissions`, { params: { page, size } }),
+      tree: () => request<any[]>(`${BASE}/admin/permissions/tree`),
+      listByRole: (roleId: number) => request<any[]>(`${BASE}/admin/permissions/role/${roleId}`),
+      create: (data: any) => request<any>(`${BASE}/admin/permissions`, { method: 'POST', data }),
+      update: (id: number, data: any) => request<any>(`${BASE}/admin/permissions/${id}`, { method: 'PUT', data }),
+      delete: (id: number) => request<void>(`${BASE}/admin/permissions/${id}`, { method: 'DELETE' }),
+    },
   },
 
   instanceCapabilities: {

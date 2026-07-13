@@ -1,6 +1,8 @@
 package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.admin.spi.PermissionSpi;
+import com.buukle.agent.admin.spi.RoleSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
@@ -27,6 +29,8 @@ import java.util.HexFormat;
 public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implements UserService {
 
     private final PasswordEncoder passwordEncoder;
+    private final PermissionSpi permissionSpi;
+    private final RoleSpi roleSpi;
 
     public static String sha256(String input) {
         try {
@@ -44,7 +48,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private static UserVO toVO(AgentUser user) {
+    private UserVO toVO(AgentUser user) {
         UserVO vo = new UserVO();
         vo.setId(user.getId());
         vo.setUsername(user.getUsername());
@@ -55,6 +59,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         vo.setToken(user.getToken());
         vo.setStatus(user.getStatus());
         vo.setSuperAdmin(user.getSuperAdmin());
+        vo.setRoles(roleSpi.listByUserId(user.getId()).stream().map(r -> r.getCode()).toList());
+        boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
+        vo.setPermissions(isSuperAdmin ? permissionSpi.listAllCodes() : permissionSpi.listCodesByUserId(user.getId()));
         return vo;
     }
 
@@ -168,5 +175,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         AuthContext.setDisplayName(user.getDisplayName());
         AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
         return toVO(user);
+    }
+
+    @Override
+    public com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO> listPage(int page, int size) {
+        var mpPage = lambdaQuery().page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size));
+        var voPage = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
+        voPage.setRecords(mpPage.getRecords().stream().map(this::toVO).toList());
+        return voPage;
     }
 }

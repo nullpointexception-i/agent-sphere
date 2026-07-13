@@ -1,5 +1,6 @@
 package com.buukle.agent.infrastructure.config;
 
+import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.context.WithTenant;
@@ -19,7 +20,9 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     private static final String TOKEN_CACHE_PREFIX = "token:user:";
     private final UserMapper userMapper;
     private final CacheService cacheService;
+    private final PermissionSpi permissionSpi;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
@@ -61,7 +65,10 @@ public class AuthInterceptor implements HandlerInterceptor {
         AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
-        AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
+        boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
+        AuthContext.setSuperAdmin(isSuperAdmin);
+        AuthContext.setPermissions(new HashSet<>(
+                isSuperAdmin ? permissionSpi.listAllCodes() : permissionSpi.listCodesByUserId(user.getId())));
 
         if (handler instanceof HandlerMethod hm) {
             Class<?> beanType = ClassUtils.getUserClass(hm.getBeanType());

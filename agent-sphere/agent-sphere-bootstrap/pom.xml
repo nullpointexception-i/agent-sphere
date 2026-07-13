@@ -58,6 +58,10 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-admin-controller</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-infrastructure</artifactId>
         </dependency>
         <dependency>

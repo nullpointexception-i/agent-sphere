@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.controller;
 
+import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.BaseController;
@@ -53,12 +54,14 @@ public class AuthController extends BaseController {
         return ok();
     }
 
+    @RequirePermission("user:profile:update")
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(@Valid @RequestBody UpdateProfileDTO dto) {
         userService.updateProfile(getCurrentUserId(), dto.getDisplayName(), dto.getEnglishName(), dto.getAvatar());
         return ok();
     }
 
+    @RequirePermission("user:password:update")
     @PutMapping("/password")
     public ResponseEntity<?> updatePassword(@Valid @RequestBody UpdatePasswordDTO dto) {
         userService.updatePassword(getCurrentUserId(), dto.getOldPassword(), dto.getNewPassword());

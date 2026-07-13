@@ -21,6 +21,7 @@
         <module>agent-sphere-capability</module>
         <module>agent-sphere-runtime</module>
         <module>agent-sphere-infrastructure</module>
+        <module>agent-sphere-admin</module>
         <module>agent-sphere-bootstrap</module>
     </modules>
     <properties>
@@ -291,6 +292,41 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-admin-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-admin-exception</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-admin-dtvo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-admin-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-admin-repository</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-admin-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-admin-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
@@ -374,11 +410,15 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-test</artifactId>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-aop</artifactId>
+            </dependency>
     </dependencies>
     <build>
         <pluginManagement>

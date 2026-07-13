@@ -10,6 +10,7 @@ import { PageContainer } from '@ant-design/pro-components';
 import { useIntl, useLocation } from '@umijs/max';
 import { App, Button, Card, Form, Input, Modal, Tag } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 import ApiKeyDrawer from './drawers/ApiKeyDrawer';
@@ -93,20 +94,22 @@ export default function ModelProviders() {
     <PageContainer
       title={false}
       extra={
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingProvider(null);
-            providerForm.resetFields();
-            setProviderModal(true);
-          }}
-        >
-          {intl.formatMessage({
-            id: 'pages.modal.newProvider',
-            defaultMessage: 'New Provider',
-          })}
-        </Button>
+        <Can code="model:provider:create">
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingProvider(null);
+              providerForm.resetFields();
+              setProviderModal(true);
+            }}
+          >
+            {intl.formatMessage({
+              id: 'pages.modal.newProvider',
+              defaultMessage: 'New Provider',
+            })}
+          </Button>
+        </Can>
       }
     >
       <div className={styles.cardGrid}>
@@ -152,8 +155,8 @@ export default function ModelProviders() {
                   {intl.formatMessage({ id: 'pages.models.modelRoutes' })}
                 </span>
               </div>,
+              <Can key="edit" code="model:provider:update">
               <div
-                key="edit"
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -191,9 +194,10 @@ export default function ModelProviders() {
                     defaultMessage: 'View',
                   })}
                 </span>
-              </div>,
+              </div>
+              </Can>,
+              <Can key="delete" code="model:provider:delete">
               <div
-                key="delete"
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -225,7 +229,8 @@ export default function ModelProviders() {
                     defaultMessage: 'Delete',
                   })}
                 </span>
-              </div>,
+              </div>
+              </Can>,
             ]}
           >
             <Card.Meta

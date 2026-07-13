@@ -7,6 +7,8 @@ export interface UserVO {
   avatar: string;
   token: string;
   status: string;
+  roles?: string[];
+  permissions?: string[];
 }
 
 export function getStoredUser(): UserVO | null {

@@ -3,6 +3,7 @@ import { PageContainer } from '@ant-design/pro-components';
 import { useIntl, useModel } from '@umijs/max';
 import { App, Button, Card, Form, Input, Upload } from 'antd';
 import { useState } from 'react';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 
@@ -167,9 +168,11 @@ export default function Profile() {
               <Input maxLength={64} />
             </Form.Item>
             <Form.Item>
-              <Button type="primary" onClick={handleSave} loading={saving}>
-                {intl.formatMessage({ id: 'pages.settings.save' })}
-              </Button>
+              <Can code="user:profile:update">
+                <Button type="primary" onClick={handleSave} loading={saving}>
+                  {intl.formatMessage({ id: 'pages.settings.save' })}
+                </Button>
+              </Can>
             </Form.Item>
           </Form>
         </Card>

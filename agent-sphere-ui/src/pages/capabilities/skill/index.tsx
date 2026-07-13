@@ -10,6 +10,7 @@ import { useIntl } from '@umijs/max';
 import { App, Button, DatePicker, Form, Input, Modal } from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -75,47 +76,51 @@ export default function SkillList() {
             icon={<EyeOutlined />}
             onClick={() => setViewRecord(record)}
           />
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditing(record);
-              form.setFieldsValue(record);
-              setModalOpen(true);
-            }}
-          />
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              modal.confirm({
-                title: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.title',
-                    defaultMessage: 'Delete {name}',
+          <Can code="capability:skill:update">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditing(record);
+                form.setFieldsValue(record);
+                setModalOpen(true);
+              }}
+            />
+          </Can>
+          <Can code="capability:skill:delete">
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                modal.confirm({
+                  title: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.title',
+                      defaultMessage: 'Delete {name}',
+                    },
+                    { name: 'skill' },
+                  ),
+                  content: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.content',
+                      defaultMessage:
+                        'Are you sure you want to delete this {name}?',
+                    },
+                    { name: 'skill' },
+                  ),
+                  okType: 'danger',
+                  onOk: async () => {
+                    await agentApi.skill.delete(record.id);
+                    message.success('Deleted');
+                    actionRef.current?.reload();
                   },
-                  { name: 'skill' },
-                ),
-                content: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.content',
-                    defaultMessage:
-                      'Are you sure you want to delete this {name}?',
-                  },
-                  { name: 'skill' },
-                ),
-                okType: 'danger',
-                onOk: async () => {
-                  await agentApi.skill.delete(record.id);
-                  message.success('Deleted');
-                  actionRef.current?.reload();
-                },
-              });
-            }}
-          />
+                });
+              }}
+            />
+          </Can>
         </>
       ),
     },
@@ -267,16 +272,17 @@ export default function SkillList() {
               actionRef.current?.reload();
             }}
           />,
-          <Button
-            key="new"
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditing(null);
-              form.resetFields();
-              setModalOpen(true);
-            }}
-          />,
+          <Can key="new" code="capability:skill:create">
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditing(null);
+                form.resetFields();
+                setModalOpen(true);
+              }}
+            />
+          </Can>,
         ]}
       />
       <Modal

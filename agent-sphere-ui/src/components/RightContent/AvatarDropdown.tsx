@@ -1,7 +1,7 @@
 import {
   KeyOutlined,
   LogoutOutlined,
-  SkinOutlined,
+  SettingOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { history, request as umiRequest, useIntl, useModel } from '@umijs/max';
@@ -47,8 +47,8 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       loginOut();
       return;
     }
-    if (key === 'theme') {
-      setInitialState((s) => ({ ...s, settingDrawerOpen: true }));
+    if (key === 'admin') {
+      history.push('/admin/users');
       return;
     }
     history.push(`/account/${key}`);
@@ -58,7 +58,8 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
     return <Spin size="small" />;
   }
 
-  const { currentUser } = initialState;
+  const { currentUser, permissions } = initialState;
+  const canAdmin = permissions?.includes('admin:settings:read') ?? false;
 
   const intl = useIntl();
 
@@ -83,14 +84,21 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
         defaultMessage: 'Change Password',
       }),
     },
-    {
-      key: 'theme',
-      icon: <SkinOutlined />,
-      label: intl.formatMessage({
-        id: 'pages.theme',
-        defaultMessage: 'Theme Settings',
-      }),
-    },
+    ...(canAdmin
+      ? [
+          {
+            type: 'divider' as const,
+          },
+          {
+            key: 'admin',
+            icon: <SettingOutlined />,
+            label: intl.formatMessage({
+              id: 'menu.admin',
+              defaultMessage: 'System Admin',
+            }),
+          },
+        ]
+      : []),
     {
       type: 'divider' as const,
     },

@@ -34,12 +34,14 @@ export default [
     path: '/capabilities',
     name: 'capabilities',
     icon: 'api',
+    access: 'canManageCapabilities',
     routes: [
       {
         path: '/capabilities/mcp',
         name: 'MCP',
         icon: 'api',
         locale: 'menu.capabilities.mcp',
+        access: 'canManageMcp',
         component: './capabilities/mcp',
       },
       {
@@ -47,6 +49,7 @@ export default [
         name: 'Skill',
         icon: 'code',
         locale: 'menu.capabilities.skill',
+        access: 'canManageSkill',
         component: './capabilities/skill',
       },
       {
@@ -54,6 +57,7 @@ export default [
         name: 'CLI',
         icon: 'tool',
         locale: 'menu.capabilities.cli',
+        access: 'canManageCli',
         component: './capabilities/cli',
       },
       {
@@ -61,6 +65,7 @@ export default [
         name: 'Builtin',
         icon: 'tool',
         locale: 'menu.capabilities.builtin',
+        access: 'canManageBuiltin',
         component: './capabilities/builtin',
       },
     ],
@@ -69,12 +74,14 @@ export default [
     path: '/models',
     name: 'models',
     icon: 'cloud',
+    access: 'canManageModels',
     component: './model-providers',
   },
   {
     path: '/instances',
     name: 'instances',
     icon: 'robot',
+    access: 'canManageInstances',
     component: './instances',
   },
   {
@@ -94,11 +101,13 @@ export default [
     path: '/artifacts',
     name: 'artifacts',
     icon: 'folderOpen',
+    access: 'canViewDocuments',
     routes: [
       {
         path: '/artifacts/documents',
         name: 'documents',
         icon: 'fileText',
+        access: 'canViewDocuments',
         component: './artifacts/documents',
       },
       {
@@ -129,14 +138,19 @@ export default [
   },
   {
     path: '/admin',
-    name: 'admin',
-    icon: 'setting',
+    layout: false,
     access: 'canAdmin',
     routes: [
       {
-        path: '/admin/settings',
-        name: 'settings',
-        component: './admin/settings',
+        path: '/admin',
+        component: './admin/layout',
+        routes: [
+          { path: 'users', component: './admin/users' },
+          { path: 'roles', component: './admin/roles' },
+          { path: 'permissions', component: './admin/permissions' },
+          { path: 'settings', component: './admin/settings' },
+          { path: '', redirect: '/admin/users' },
+        ],
       },
     ],
   },

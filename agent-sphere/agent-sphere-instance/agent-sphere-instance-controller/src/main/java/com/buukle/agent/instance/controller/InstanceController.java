@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.controller;
 
 import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.dto.SetModelRouteDTO;
@@ -21,6 +22,7 @@ import java.util.List;
 public class InstanceController extends BaseController {
     private final InstanceService instanceService;
 
+    @RequirePermission("instance:create")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateInstanceDTO dto) {
         return created(instanceService.createInstance(dto));
@@ -51,22 +53,26 @@ public class InstanceController extends BaseController {
         return ok(instanceService.getInstance(id));
     }
 
+    @RequirePermission("instance:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateInstanceDTO dto) {
         return ok(instanceService.updateInstance(id, dto));
     }
 
+    @RequirePermission("instance:update")
     @PutMapping("/{id}/model-route")
     public ResponseEntity<?> setModelRoute(@PathVariable Long id, @RequestBody SetModelRouteDTO dto) {
         return ok(instanceService.setModelRoute(id, dto.getModelRouteId()));
     }
 
+    @RequirePermission("instance:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         instanceService.deleteInstance(id);
         return ok();
     }
 
+    @RequirePermission("instance:delete")
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody List<Long> ids) {
         instanceService.batchDeleteInstances(ids);

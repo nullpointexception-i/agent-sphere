@@ -2,6 +2,7 @@ import { PageContainer } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { App, Button, Card, Form, Input } from 'antd';
 import { useState } from 'react';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 
@@ -79,9 +80,11 @@ export default function Password() {
               <Input.Password maxLength={32} />
             </Form.Item>
             <Form.Item>
-              <Button type="primary" onClick={handleSubmit} loading={saving}>
-                {intl.formatMessage({ id: 'pages.settings.save' })}
-              </Button>
+              <Can code="user:password:update">
+                <Button type="primary" onClick={handleSubmit} loading={saving}>
+                  {intl.formatMessage({ id: 'pages.settings.save' })}
+                </Button>
+              </Can>
             </Form.Item>
           </Form>
         </Card>

@@ -1,16 +1,7 @@
-import { PageContainer } from '@ant-design/pro-components';
-import { useAccess, useIntl } from '@umijs/max';
-import {
-  App,
-  Button,
-  Collapse,
-  Form,
-  Input,
-  Modal,
-  Tag,
-  Typography,
-} from 'antd';
+import { useIntl } from '@umijs/max';
+import { App, Button, Collapse, Form, Input, Modal, Tag } from 'antd';
 import { useEffect, useState } from 'react';
+import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from './style';
 
@@ -29,60 +20,29 @@ const GROUP_LABELS: Record<string, string> = {
   'rate-limit': 'pages.admin.settings.group.rate-limit',
 };
 
-function getQueryString(key: string) {
-  return new URLSearchParams(window.location.search).get(key);
-}
-
 export default function AdminSettings() {
   const intl = useIntl();
-  const access = useAccess();
   const { styles } = useStyles();
   const { message, modal } = App.useApp();
-
   const [configs, setConfigs] = useState<ConfigItem[]>([]);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ConfigItem | null>(null);
   const [editValue, setEditValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const canUpdate = useCan('admin:settings:update');
+  const canRegenerate = useCan('admin:settings:regenerate-aes');
+
   const loadConfigs = () => {
     agentApi.admin
       .listConfigs()
-      .then((data: ConfigItem[]) => {
-        setConfigs(data);
-        const focusKey = getQueryString('focus');
-        if (focusKey && data.length > 0) {
-          const found = data.find((c: ConfigItem) => c.configKey === focusKey);
-          if (found) {
-            setEditingConfig(found);
-            setEditValue('');
-            setEditModalOpen(true);
-          }
-        }
-      })
+      .then((data) => setConfigs(data))
       .catch(() => {});
   };
 
   useEffect(() => {
-    if (!access.canAdmin) return;
     loadConfigs();
   }, []);
-
-  const groupedConfigs = configs.reduce<Record<string, ConfigItem[]>>(
-    (acc, c) => {
-      const group = c.configGroup || 'other';
-      if (!acc[group]) acc[group] = [];
-      acc[group].push(c);
-      return acc;
-    },
-    {},
-  );
-
-  const handleEdit = (config: ConfigItem) => {
-    setEditingConfig(config);
-    setEditValue('');
-    setEditModalOpen(true);
-  };
 
   const handleSave = async () => {
     if (!editingConfig) return;
@@ -124,13 +84,15 @@ export default function AdminSettings() {
     });
   };
 
-  if (!access.canAdmin) {
-    return (
-      <PageContainer>
-        <Typography.Text type="secondary">403 — Forbidden</Typography.Text>
-      </PageContainer>
-    );
-  }
+  const groupedConfigs = configs.reduce<Record<string, ConfigItem[]>>(
+    (acc, c) => {
+      const group = c.configGroup || 'other';
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(c);
+      return acc;
+    },
+    {},
+  );
 
   const items = Object.entries(groupedConfigs).map(([group, items]) => ({
     key: group,
@@ -159,13 +121,22 @@ export default function AdminSettings() {
             )
           )}
         </div>
-        <Button type="link" onClick={() => handleEdit(config)}>
-          {intl.formatMessage({ id: 'pages.table.edit' })}
-        </Button>
+        {canUpdate && (
+          <Button
+            type="link"
+            onClick={() => {
+              setEditingConfig(config);
+              setEditValue('');
+              setEditModalOpen(true);
+            }}
+          >
+            {intl.formatMessage({ id: 'pages.table.edit' })}
+          </Button>
+        )}
       </div>
     )),
     extra:
-      group === 'security' ? (
+      group === 'security' && canRegenerate ? (
         <Button
           className={styles.dangerBtn}
           size="small"
@@ -177,9 +148,8 @@ export default function AdminSettings() {
   }));
 
   return (
-    <PageContainer>
+    <>
       <Collapse defaultActiveKey={Object.keys(groupedConfigs)} items={items} />
-
       <Modal
         title={intl.formatMessage({ id: 'pages.table.edit' })}
         open={editModalOpen}
@@ -208,6 +178,6 @@ export default function AdminSettings() {
           </Form.Item>
         </Form>
       </Modal>
-    </PageContainer>
+    </>
   );
 }

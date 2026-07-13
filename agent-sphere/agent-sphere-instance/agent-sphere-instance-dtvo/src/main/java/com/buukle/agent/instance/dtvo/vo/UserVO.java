@@ -3,6 +3,7 @@ package com.buukle.agent.instance.dtvo.vo;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 public class UserVO implements Serializable {
@@ -15,4 +16,6 @@ public class UserVO implements Serializable {
     private String token;
     private String status;
     private String superAdmin;
+    private List<String> roles;
+    private List<String> permissions;
 }

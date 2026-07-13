@@ -26,6 +26,7 @@ import {
   useState,
 } from 'react';
 import { Markdown } from 'tiptap-markdown';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from './style';
 import { type TocItemBase, TocPanel } from './TocPanel';
@@ -268,17 +269,19 @@ export default function DocumentEdit() {
                   defaultMessage: 'Outline',
                 })}
               </Button>
-              <Button
-                type="primary"
-                size="small"
-                loading={saving}
-                onClick={onSave}
-              >
-                {intl.formatMessage({
-                  id: 'pages.document.save',
-                  defaultMessage: 'Save',
-                })}
-              </Button>
+              <Can code="document:update">
+                <Button
+                  type="primary"
+                  size="small"
+                  loading={saving}
+                  onClick={onSave}
+                >
+                  {intl.formatMessage({
+                    id: 'pages.document.save',
+                    defaultMessage: 'Save',
+                  })}
+                </Button>
+              </Can>
             </div>
           </div>
 

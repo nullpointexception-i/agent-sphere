@@ -9,6 +9,7 @@ import { Button, Modal, Spin, Typography } from 'antd';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from './style';
 import { type TocItemBase, TocPanel } from './TocPanel';
@@ -159,16 +160,18 @@ export default function DocumentDetail() {
               })}
             </Button>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Button
-                icon={<ShareAltOutlined />}
-                size="small"
-                onClick={handleShare}
-              >
-                {intl.formatMessage({
-                  id: 'pages.document.share',
-                  defaultMessage: 'Share',
-                })}
-              </Button>
+              <Can code="document:share">
+                <Button
+                  icon={<ShareAltOutlined />}
+                  size="small"
+                  onClick={handleShare}
+                >
+                  {intl.formatMessage({
+                    id: 'pages.document.share',
+                    defaultMessage: 'Share',
+                  })}
+                </Button>
+              </Can>
               <Button
                 icon={<MenuOutlined />}
                 type={tocOpen ? 'primary' : 'default'}

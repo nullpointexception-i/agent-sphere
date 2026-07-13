@@ -3,6 +3,7 @@ package com.buukle.agent.capability.cli.controller;
 import com.buukle.agent.capability.cli.dtvo.dto.CreateCliDTO;
 import com.buukle.agent.capability.cli.service.CapabilityCliService;
 import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 public class CapabilityCliController extends BaseController {
     private final CapabilityCliService capabilityCliService;
 
+    @RequirePermission("capability:cli:create")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateCliDTO dto) {
         return created(capabilityCliService.createCli(dto));
@@ -39,17 +41,20 @@ public class CapabilityCliController extends BaseController {
         return ok(capabilityCliService.pageClis(page, size, keyword, startTime, endTime));
     }
 
+    @RequirePermission("capability:cli:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateCliDTO dto) {
         return ok(capabilityCliService.updateCli(id, dto));
     }
 
+    @RequirePermission("capability:cli:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         capabilityCliService.deleteCli(id);
         return ok();
     }
 
+    @RequirePermission("capability:cli:delete")
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody java.util.List<Long> ids) {
         capabilityCliService.batchDeleteCli(ids);

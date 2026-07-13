@@ -11,6 +11,7 @@ import { history, useIntl } from '@umijs/max';
 import { App, Button, Descriptions, Modal, Tag, Typography } from 'antd';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useRef, useState } from 'react';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { exportDocxToFile } from '@/utils/exportWord';
 
@@ -111,38 +112,42 @@ export default function DocumentList() {
             icon={<FileTextOutlined />}
             onClick={() => history.push(`/artifacts/documents/${record.id}`)}
           />
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() =>
-              history.push(`/artifacts/documents/${record.id}/edit`)
-            }
-          />
-          <Button
-            type="link"
-            size="small"
-            icon={<ShareAltOutlined />}
-            onClick={async () => {
-              try {
-                const res = await agentApi.artifacts.documents.createShare(
-                  record.id,
-                );
-                setShareModal({
-                  open: true,
-                  doc: record,
-                  shareToken: res.shareToken,
-                });
-              } catch {
-                message.error(
-                  intl.formatMessage({
-                    id: 'pages.document.shareFailed',
-                    defaultMessage: 'Share failed',
-                  }),
-                );
+          <Can code="document:update">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() =>
+                history.push(`/artifacts/documents/${record.id}/edit`)
               }
-            }}
-          />
+            />
+          </Can>
+          <Can code="document:share">
+            <Button
+              type="link"
+              size="small"
+              icon={<ShareAltOutlined />}
+              onClick={async () => {
+                try {
+                  const res = await agentApi.artifacts.documents.createShare(
+                    record.id,
+                  );
+                  setShareModal({
+                    open: true,
+                    doc: record,
+                    shareToken: res.shareToken,
+                  });
+                } catch {
+                  message.error(
+                    intl.formatMessage({
+                      id: 'pages.document.shareFailed',
+                      defaultMessage: 'Share failed',
+                    }),
+                  );
+                }
+              }}
+            />
+          </Can>
           <Button
             type="link"
             size="small"
@@ -173,42 +178,44 @@ export default function DocumentList() {
               }
             }}
           />
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              modal.confirm({
-                title: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.title',
-                    defaultMessage: 'Delete {name}',
+          <Can code="document:delete">
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                modal.confirm({
+                  title: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.title',
+                      defaultMessage: 'Delete {name}',
+                    },
+                    { name: 'document' },
+                  ),
+                  content: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.content',
+                      defaultMessage:
+                        'Are you sure you want to delete this {name}?',
+                    },
+                    { name: 'document' },
+                  ),
+                  okType: 'danger',
+                  onOk: async () => {
+                    await agentApi.artifacts.documents.delete(record.id);
+                    message.success(
+                      intl.formatMessage({
+                        id: 'pages.document.deleted',
+                        defaultMessage: 'Deleted',
+                      }),
+                    );
+                    actionRef.current?.reload();
                   },
-                  { name: 'document' },
-                ),
-                content: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.content',
-                    defaultMessage:
-                      'Are you sure you want to delete this {name}?',
-                  },
-                  { name: 'document' },
-                ),
-                okType: 'danger',
-                onOk: async () => {
-                  await agentApi.artifacts.documents.delete(record.id);
-                  message.success(
-                    intl.formatMessage({
-                      id: 'pages.document.deleted',
-                      defaultMessage: 'Deleted',
-                    }),
-                  );
-                  actionRef.current?.reload();
-                },
-              });
-            }}
-          />
+                });
+              }}
+            />
+          </Can>
         </>
       ),
     },
@@ -271,17 +278,22 @@ export default function DocumentList() {
         }}
         toolBarRender={() => [
           selectedRowKeys.length > 0 && (
-            <Button
-              key="batchDelete"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={handleBatchDelete}
-            >
-              {intl.formatMessage(
-                { id: 'pages.batchDelete', defaultMessage: 'Delete ({count})' },
-                { count: selectedRowKeys.length },
-              )}
-            </Button>
+            <Can code="document:delete">
+              <Button
+                key="batchDelete"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={handleBatchDelete}
+              >
+                {intl.formatMessage(
+                  {
+                    id: 'pages.batchDelete',
+                    defaultMessage: 'Delete ({count})',
+                  },
+                  { count: selectedRowKeys.length },
+                )}
+              </Button>
+            </Can>
           ),
         ]}
         request={async (params: any) => {

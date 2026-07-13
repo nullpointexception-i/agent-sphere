@@ -2,6 +2,7 @@ import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { App, Button, Drawer, Form, Input, Modal, Radio, Table } from 'antd';
 import { useEffect, useState } from 'react';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -78,38 +79,40 @@ export default function ApiKeyDrawer({
       key: 'activeKey',
       width: 60,
       render: (_: any, record: any) => (
-        <Radio
-          checked={record.id === currentApiKeyId}
-          onClick={() => {
-            if (record.id === currentApiKeyId) {
-              agentApi.modelProviders
-                .setActiveKey(providerId!, null)
-                .then(() => {
-                  message.success(
-                    intl.formatMessage({
-                      id: 'pages.models.keyUnset',
-                      defaultMessage: '已取消',
-                    }),
-                  );
-                  onActiveKeyChange?.();
-                  loadKeys();
-                });
-            } else {
-              agentApi.modelProviders
-                .setActiveKey(providerId!, record.id)
-                .then(() => {
-                  message.success(
-                    intl.formatMessage({
-                      id: 'pages.models.keySetSuccess',
-                      defaultMessage: '已设为当前密钥',
-                    }),
-                  );
-                  onActiveKeyChange?.();
-                  loadKeys();
-                });
-            }
-          }}
-        />
+        <Can code="model:apikey:set-active">
+          <Radio
+            checked={record.id === currentApiKeyId}
+            onClick={() => {
+              if (record.id === currentApiKeyId) {
+                agentApi.modelProviders
+                  .setActiveKey(providerId!, null)
+                  .then(() => {
+                    message.success(
+                      intl.formatMessage({
+                        id: 'pages.models.keyUnset',
+                        defaultMessage: '已取消',
+                      }),
+                    );
+                    onActiveKeyChange?.();
+                    loadKeys();
+                  });
+              } else {
+                agentApi.modelProviders
+                  .setActiveKey(providerId!, record.id)
+                  .then(() => {
+                    message.success(
+                      intl.formatMessage({
+                        id: 'pages.models.keySetSuccess',
+                        defaultMessage: '已设为当前密钥',
+                      }),
+                    );
+                    onActiveKeyChange?.();
+                    loadKeys();
+                  });
+              }
+            }}
+          />
+        </Can>
       ),
     },
     {
@@ -135,47 +138,51 @@ export default function ApiKeyDrawer({
       width: 120,
       render: (_: any, record: any) => (
         <>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingKey(record);
-              keyForm.setFieldsValue(record);
-              setKeyFormOpen(true);
-            }}
-          />
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              modal.confirm({
-                title: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.title',
-                    defaultMessage: 'Delete {name}',
+          <Can code="model:apikey:update">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditingKey(record);
+                keyForm.setFieldsValue(record);
+                setKeyFormOpen(true);
+              }}
+            />
+          </Can>
+          <Can code="model:apikey:delete">
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                modal.confirm({
+                  title: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.title',
+                      defaultMessage: 'Delete {name}',
+                    },
+                    { name: 'API key' },
+                  ),
+                  content: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.content',
+                      defaultMessage:
+                        'Are you sure you want to delete this {name}?',
+                    },
+                    { name: 'API key' },
+                  ),
+                  okType: 'danger',
+                  onOk: async () => {
+                    await agentApi.apiKeys.delete(record.id);
+                    message.success('Deleted');
+                    loadKeys();
                   },
-                  { name: 'API key' },
-                ),
-                content: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.content',
-                    defaultMessage:
-                      'Are you sure you want to delete this {name}?',
-                  },
-                  { name: 'API key' },
-                ),
-                okType: 'danger',
-                onOk: async () => {
-                  await agentApi.apiKeys.delete(record.id);
-                  message.success('Deleted');
-                  loadKeys();
-                },
-              });
-            }}
-          />
+                });
+              }}
+            />
+          </Can>
         </>
       ),
     },
@@ -191,19 +198,24 @@ export default function ApiKeyDrawer({
       onClose={onClose}
       size="large"
       extra={
-        <Button
-          size="small"
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingKey(null);
-            keyForm.resetFields();
-            keyForm.setFieldValue('providerId', String(providerId));
-            setKeyFormOpen(true);
-          }}
-        >
-          {intl.formatMessage({ id: 'pages.form.new', defaultMessage: 'New' })}
-        </Button>
+        <Can code="model:apikey:create">
+          <Button
+            size="small"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingKey(null);
+              keyForm.resetFields();
+              keyForm.setFieldValue('providerId', String(providerId));
+              setKeyFormOpen(true);
+            }}
+          >
+            {intl.formatMessage({
+              id: 'pages.form.new',
+              defaultMessage: 'New',
+            })}
+          </Button>
+        </Can>
       }
     >
       <div

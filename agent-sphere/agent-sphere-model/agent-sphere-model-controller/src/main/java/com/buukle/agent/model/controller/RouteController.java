@@ -1,6 +1,7 @@
 package com.buukle.agent.model.controller;
 
 import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
 import com.buukle.agent.model.service.RouteService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 public class RouteController extends BaseController {
     private final RouteService routeService;
 
+    @RequirePermission("model:route:create")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateRouteDTO dto) {
         return created(routeService.createRoute(dto));
@@ -35,11 +37,13 @@ public class RouteController extends BaseController {
         return ok(routeService.listRoutesByProvider(providerId, keyword));
     }
 
+    @RequirePermission("model:route:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateRouteDTO dto) {
         return ok(routeService.updateRoute(id, dto));
     }
 
+    @RequirePermission("model:route:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         routeService.deleteRoute(id);

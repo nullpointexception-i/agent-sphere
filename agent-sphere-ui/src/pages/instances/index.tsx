@@ -34,6 +34,7 @@ import {
 } from 'antd';
 import type dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Can } from '@/components/Can';
 import SetModelRouteModal from '@/components/SetModelRouteModal';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
@@ -189,15 +190,17 @@ export default function InstanceList() {
               setDetailOpen(true);
             }}
           />
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditing(record);
-              setInfoDrawerOpen(true);
-            }}
-          />
+          <Can code="instance:update">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditing(record);
+                setInfoDrawerOpen(true);
+              }}
+            />
+          </Can>
           <Button
             type="link"
             size="small"
@@ -207,37 +210,39 @@ export default function InstanceList() {
               setCapDrawerOpen(true);
             }}
           />
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              modal.confirm({
-                title: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.title',
-                    defaultMessage: 'Delete {name}',
+          <Can code="instance:delete">
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                modal.confirm({
+                  title: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.title',
+                      defaultMessage: 'Delete {name}',
+                    },
+                    { name: 'instance' },
+                  ),
+                  content: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.content',
+                      defaultMessage:
+                        'Are you sure you want to delete this {name}?',
+                    },
+                    { name: 'instance' },
+                  ),
+                  okType: 'danger',
+                  onOk: async () => {
+                    await agentApi.instances.delete(record.id);
+                    message.success('Deleted');
+                    actionRef.current?.reload();
                   },
-                  { name: 'instance' },
-                ),
-                content: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.content',
-                    defaultMessage:
-                      'Are you sure you want to delete this {name}?',
-                  },
-                  { name: 'instance' },
-                ),
-                okType: 'danger',
-                onOk: async () => {
-                  await agentApi.instances.delete(record.id);
-                  message.success('Deleted');
-                  actionRef.current?.reload();
-                },
-              });
-            }}
-          />
+                });
+              }}
+            />
+          </Can>
         </>
       ),
     },
@@ -431,16 +436,18 @@ export default function InstanceList() {
                 setViewMode(viewMode === 'card' ? 'table' : 'card')
               }
             />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditing(null);
-                form.resetFields();
-                setImagePreview('');
-                setModalOpen(true);
-              }}
-            />
+            <Can code="instance:create">
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setEditing(null);
+                  form.resetFields();
+                  setImagePreview('');
+                  setModalOpen(true);
+                }}
+              />
+            </Can>
           </>
         )}
       </div>

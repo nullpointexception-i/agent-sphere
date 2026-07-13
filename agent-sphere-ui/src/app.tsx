@@ -34,6 +34,7 @@ export async function getInitialState(): Promise<{
   loading?: boolean;
   fetchUserInfo?: () => Promise<API.CurrentUser | undefined>;
   settingDrawerOpen?: boolean;
+  permissions?: string[];
 }> {
   const fetchUserInfo = async () => {
     try {
@@ -56,18 +57,25 @@ export async function getInitialState(): Promise<{
     }
     return undefined;
   };
+  let permissions: string[] | undefined;
+  try {
+    const stored = getStoredUser();
+    permissions = stored?.permissions;
+  } catch {}
   const { location } = history;
   if (location.pathname !== loginPath) {
     const currentUser = await fetchUserInfo();
     return {
       fetchUserInfo,
       currentUser,
+      permissions,
       settings: defaultSettings as Partial<LayoutSettings>,
       settingDrawerOpen: false,
     };
   }
   return {
     fetchUserInfo,
+    permissions,
     settings: defaultSettings as Partial<LayoutSettings>,
     settingDrawerOpen: false,
   };
@@ -145,10 +153,18 @@ export const layout: RunTimeLayoutConfig = ({
               style={{ marginBottom: 0 }}
               action={
                 <Space size={4}>
-                  <Button size="small" type="link" onClick={() => history.push('/user/register')}>
+                  <Button
+                    size="small"
+                    type="link"
+                    onClick={() => history.push('/user/register')}
+                  >
                     <FormattedMessage id="pages.demo.bannerRegister" />
                   </Button>
-                  <Button size="small" type="link" onClick={() => history.push('/models')}>
+                  <Button
+                    size="small"
+                    type="link"
+                    onClick={() => history.push('/models')}
+                  >
                     <FormattedMessage id="pages.demo.bannerAction" />
                   </Button>
                 </Space>

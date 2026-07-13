@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.controller;
 
+import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.vo.DocumentVO;
@@ -36,6 +37,7 @@ public class DocumentController extends BaseController {
         return vo != null ? ok(vo) : ResponseEntity.notFound().build();
     }
 
+    @RequirePermission("document:share")
     @PostMapping("/{id}/share")
     public ResponseEntity<Map<String, String>> createShare(@PathVariable Long id) {
         String token = documentSpi.createShareToken(id);
@@ -49,18 +51,21 @@ public class DocumentController extends BaseController {
         return vo != null ? ok(vo) : ResponseEntity.notFound().build();
     }
 
+    @RequirePermission("document:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, String> body) {
         documentSpi.update(id, body.getOrDefault("title", ""), body.getOrDefault("content", ""));
         return ok();
     }
 
+    @RequirePermission("document:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         documentSpi.delete(id);
         return ok();
     }
 
+    @RequirePermission("document:delete")
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody List<Long> ids) {
         documentSpi.batchDelete(ids);

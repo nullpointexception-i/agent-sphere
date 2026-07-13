@@ -7,6 +7,7 @@ import {
 import { getLocale, useIntl } from '@umijs/max';
 import { App, Button, Drawer, Form, Input, Modal, Select, Table } from 'antd';
 import { useEffect, useState } from 'react';
+import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 
@@ -125,63 +126,67 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
             icon={<EyeOutlined />}
             onClick={() => setViewRoute(record)}
           />
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingRoute(record);
-              routeForm.setFieldsValue({
-                ...record,
-                company: record.company,
-                weight: String(record.weight),
-                fallbackIds: record.fallbackIds
-                  ? String(record.fallbackIds)
-                      .split(',')
-                      .filter(Boolean)
-                      .map(Number)
-                  : [],
-                maxInputTokens: record.maxInputTokens
-                  ? String(record.maxInputTokens / 1000)
-                  : '',
-                maxOutputTokens: record.maxOutputTokens
-                  ? String(record.maxOutputTokens / 1000)
-                  : '',
-              });
-              setRouteFormOpen(true);
-            }}
-          />
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              modal.confirm({
-                title: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.title',
-                    defaultMessage: 'Delete {name}',
+          <Can code="model:route:update">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditingRoute(record);
+                routeForm.setFieldsValue({
+                  ...record,
+                  company: record.company,
+                  weight: String(record.weight),
+                  fallbackIds: record.fallbackIds
+                    ? String(record.fallbackIds)
+                        .split(',')
+                        .filter(Boolean)
+                        .map(Number)
+                    : [],
+                  maxInputTokens: record.maxInputTokens
+                    ? String(record.maxInputTokens / 1000)
+                    : '',
+                  maxOutputTokens: record.maxOutputTokens
+                    ? String(record.maxOutputTokens / 1000)
+                    : '',
+                });
+                setRouteFormOpen(true);
+              }}
+            />
+          </Can>
+          <Can code="model:route:delete">
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => {
+                modal.confirm({
+                  title: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.title',
+                      defaultMessage: 'Delete {name}',
+                    },
+                    { name: 'route' },
+                  ),
+                  content: intl.formatMessage(
+                    {
+                      id: 'pages.deleteConfirm.content',
+                      defaultMessage:
+                        'Are you sure you want to delete this {name}?',
+                    },
+                    { name: 'route' },
+                  ),
+                  okType: 'danger',
+                  onOk: async () => {
+                    await agentApi.routes.delete(record.id);
+                    message.success('Deleted');
+                    loadRoutes();
                   },
-                  { name: 'route' },
-                ),
-                content: intl.formatMessage(
-                  {
-                    id: 'pages.deleteConfirm.content',
-                    defaultMessage:
-                      'Are you sure you want to delete this {name}?',
-                  },
-                  { name: 'route' },
-                ),
-                okType: 'danger',
-                onOk: async () => {
-                  await agentApi.routes.delete(record.id);
-                  message.success('Deleted');
-                  loadRoutes();
-                },
-              });
-            }}
-          />
+                });
+              }}
+            />
+          </Can>
         </>
       ),
     },
@@ -197,19 +202,24 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
       onClose={onClose}
       size="large"
       extra={
-        <Button
-          size="small"
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingRoute(null);
-            routeForm.resetFields();
-            routeForm.setFieldValue('providerId', String(providerId));
-            setRouteFormOpen(true);
-          }}
-        >
-          {intl.formatMessage({ id: 'pages.form.new', defaultMessage: 'New' })}
-        </Button>
+        <Can code="model:route:create">
+          <Button
+            size="small"
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingRoute(null);
+              routeForm.resetFields();
+              routeForm.setFieldValue('providerId', String(providerId));
+              setRouteFormOpen(true);
+            }}
+          >
+            {intl.formatMessage({
+              id: 'pages.form.new',
+              defaultMessage: 'New',
+            })}
+          </Button>
+        </Can>
       }
     >
       <Table
