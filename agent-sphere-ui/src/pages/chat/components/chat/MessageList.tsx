@@ -295,12 +295,18 @@ export default function MessageList({
               ),
             };
           }
+          const elapsed = m.ts
+            ? Math.floor((Date.now() - m.ts) / 1000)
+            : 0;
           return {
             key,
             role: 'reasoning',
             content: m.content,
             footer: (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 11, color: '#bfbfbf', minWidth: 36 }}>
+                  ⏱️ {elapsed}s
+                </span>
                 <Button
                   type="link"
                   size="small"
