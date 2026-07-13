@@ -12,6 +12,7 @@
 </p>
 
 <p align="center"><b><a href="http://as.buukle.top" target="_blank">🔗 线上预览 / Live Demo → as.buukle.top</a></b></p>
+<p align="center"><b>👤 演示账户 / Demo Account: <code>demo001</code> / <code>demo001</code></b></p>
 
 This project is an AI Agent orchestration platform. Driven by an LLM-based decision engine and combined with capabilities (built-in tools, MCP protocol, CLI execution, browser automation, etc.), it implements a primary closed loop of **Perception → Planning → Execution → Feedback**.
 
@@ -366,7 +367,32 @@ npm run dev
 | **Compaction cursor** | `compactedUptoRunId` marks compacted runs | HistoryLoader skips compacted runs, only loads subsequent ones |
 | **Compaction protection loop** | Max 3 retries | Prevents infinite loops when compaction fails due to network fluctuations |
 
-### 4.6 Capability Extension
+### 4.6 Performance Optimizations
+
+#### 4.6.1 Virtual Thread Concurrency
+
+The `runtimeAsyncExecutor` was changed from a fixed thread pool (8 core threads) to per-task virtual threads. Previously, the thread pool bottleneck limited concurrent chat sessions to 8 — all pool threads blocked waiting for LLM streaming responses, causing subsequent requests to queue or get rejected. Virtual threads resolve this by being unmounted from the carrier thread during I/O waits, allowing hundreds of concurrent LLM streaming sessions without consuming OS thread resources.
+
+File: `AsyncConfig.java`
+
+#### 4.6.2 LLM Stream Timeout Fix
+
+Restructured `KernelLlmService.stream()` so the `CountDownLatch.await(timeout)` runs independently from the blocking `modelProviderSpi.stream()` call. Previously, if the HTTP stream hung, the timeout could never fire because the latch wait was placed after the blocking call.
+
+The fix: the streaming call runs on a separate virtual thread while the current thread waits for the latch with the configured `stream-timeout`. On timeout, the `CompletableFuture` completes exceptionally immediately, freeing the caller.
+
+File: `KernelLlmService.java`
+
+#### 4.6.3 HTTP Stream Read Timeout
+
+Added a read timeout mechanism in `ModelProviderServiceImpl.streamEvents()`:
+- Changed from synchronous `httpClient.send()` to `sendAsync().orTimeout()` for initial response timeout
+- Added a scheduled `Thread.interrupt()` for the streaming body read loop
+- Both use the `stream-read-timeout` (default 120s) configuration value
+
+File: `ModelProviderServiceImpl.java`
+
+### 4.7 Capability Extension
 
 #### Adding a New Built-in Tool
 

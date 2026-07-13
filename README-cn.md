@@ -12,6 +12,7 @@
 </p>
 
 <p align="center"><b><a href="http://as.buukle.top" target="_blank">🔗 线上预览 / Live Demo → as.buukle.top</a></b></p>
+<p align="center"><b>👤 演示账户 / Demo Account: <code>demo001</code> / <code>demo001</code></b></p>
 
 本项目是一个面向 AI Agent 编排平台。它通过 LLM 驱动的决策引擎，结合能力（内置工具、MCP 协议、CLI 执行、浏览器操作等），实现从**感知→规划→执行→反馈**的初级闭环。
 
@@ -366,7 +367,32 @@ npm run dev
 | **compaction 游标** | `compactedUptoRunId` 标记已压缩的 run | HistoryLoader 跳过已压 run，只加载之后的 |
 | **压缩保护循环** | 最多 3 次重试 | 防止网络波动导致压缩失败时无限循环 |
 
-### 4.6 能力扩展
+### 4.6 性能优化
+
+#### 4.6.1 虚拟线程并发
+
+将 `runtimeAsyncExecutor` 从固定线程池（8 个核心线程）改为每次请求创建虚拟线程。之前线程池瓶颈限制并发聊天会话数为 8 — 所有池线程都在等待 LLM 流式响应，导致后续请求排队或被拒绝。虚拟线程在 I/O 等待时会被 carrier thread 卸载，允许数百个并发 LLM 流式会话而不消耗 OS 线程资源。
+
+涉及文件：`AsyncConfig.java`
+
+#### 4.6.2 LLM 流超时修复
+
+重构 `KernelLlmService.stream()` 方法，使 `CountDownLatch.await(timeout)` 独立于阻塞的 `modelProviderSpi.stream()` 调用运行。之前如果 HTTP 流挂起，超时永远不会触发，因为 latch wait 放在阻塞调用之后。
+
+修复方案：流式调用在独立的虚拟线程上运行，当前线程等待 latch 并应用配置的 `stream-timeout`。超时时 `CompletableFuture` 立即异常完成，释放调用方。
+
+涉及文件：`KernelLlmService.java`
+
+#### 4.6.3 HTTP 流读取超时
+
+在 `ModelProviderServiceImpl.streamEvents()` 中增加读取超时机制：
+- 从同步 `httpClient.send()` 改为 `sendAsync().orTimeout()` 用于初始响应超时
+- 增加定时 `Thread.interrupt()` 用于流式 body 读取循环
+- 两者都使用 `stream-read-timeout`（默认 120s）配置值
+
+涉及文件：`ModelProviderServiceImpl.java`
+
+### 4.7 能力扩展
 
 #### 添加新的内置工具
 
