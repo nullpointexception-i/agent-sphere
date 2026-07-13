@@ -114,7 +114,7 @@ export default function AdminPermissions() {
       width: 140,
       render: (_: any, record: any) => (
         <Space>
-          <Can code="admin:role:assign">
+          <Can code="admin:permission:update">
             <Button
               type="link"
               size="small"
@@ -126,7 +126,7 @@ export default function AdminPermissions() {
               })}
             </Button>
           </Can>
-          <Can code="admin:role:assign">
+          <Can code="admin:permission:delete">
             <Button
               type="link"
               size="small"
@@ -165,12 +165,14 @@ export default function AdminPermissions() {
   return (
     <>
       <div style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={() => handleOpenEdit()}>
-          {intl.formatMessage({
-            id: 'pages.admin.permissions.create',
-            defaultMessage: '新建权限',
-          })}
-        </Button>
+        <Can code="admin:permission:create">
+          <Button type="primary" onClick={() => handleOpenEdit()}>
+            {intl.formatMessage({
+              id: 'pages.admin.permissions.create',
+              defaultMessage: '新建权限',
+            })}
+          </Button>
+        </Can>
       </div>
       <Table
         rowKey="id"

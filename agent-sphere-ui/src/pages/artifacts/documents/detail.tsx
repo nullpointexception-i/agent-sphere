@@ -123,7 +123,15 @@ export default function DocumentDetail() {
 
   const jumpToHeading = (item: TocItem) => {
     const el = document.getElementById(item.id);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const orig = el.style.background;
+    el.style.transition = 'background 1s';
+    el.style.background = '#ffe58f';
+    setTimeout(() => {
+      el.style.background = 'transparent';
+      setTimeout(() => { el.style.transition = ''; }, 100);
+    }, 1000);
   };
 
   return (
