@@ -3,6 +3,7 @@ package com.buukle.agent.capability.builtin.tool.webread.util;
 import com.buukle.agent.capability.builtin.tool.webread.dtvo.dto.JinaReaderResponseDto;
 import com.buukle.agent.capability.builtin.tool.webread.dtvo.vo.WebReadResultVO;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -77,7 +78,7 @@ public class JinaReader {
             timeoutSeconds = readTimeout;
         }
 
-        String apiKey = systemConfigSpi.get("web-read.jina-api-key", "");
+        String apiKey = systemConfigSpi.get(SystemConfigKeys.JINA_API_KEY, "");
 
         try {
             String jsonBody = JsonUtils.toJson(Map.of(FIELD_URL, url));

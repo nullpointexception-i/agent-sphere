@@ -1,5 +1,6 @@
 package com.buukle.agent.common.security;
 
+import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,7 @@ public class CryptoService {
 
     @PostConstruct
     public void init() {
-        String base64Key = systemConfigSpi.get("crypto.aes-key");
+        String base64Key = systemConfigSpi.get(SystemConfigKeys.AES_KEY);
         if (base64Key == null || base64Key.isBlank()) {
             log.warn("crypto.aes-key not found in system config. Using auto-generated dev key.");
             byte[] keyBytes = new byte[32];

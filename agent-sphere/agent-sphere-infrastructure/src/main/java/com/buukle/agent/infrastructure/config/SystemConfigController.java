@@ -1,12 +1,16 @@
 package com.buukle.agent.infrastructure.config;
 
+import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.ErrorResponse;
 import com.buukle.agent.common.security.CryptoService;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.repository.ApiKeyMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +30,7 @@ public class SystemConfigController extends BaseController {
     @GetMapping
     public ResponseEntity<?> listConfigs() {
         if (!AuthContext.isSuperAdmin()) {
-            return ResponseEntity.status(403).body(Map.of("code", "A0300", "message", "仅管理员可操作"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.of(CommonErrorCode.FORBIDDEN));
         }
         var configs = systemConfigService.listAll().stream()
                 .map(c -> {
@@ -46,7 +50,7 @@ public class SystemConfigController extends BaseController {
     @PutMapping("/{key}")
     public ResponseEntity<?> updateConfig(@PathVariable String key, @RequestBody Map<String, String> body) {
         if (!AuthContext.isSuperAdmin()) {
-            return ResponseEntity.status(403).body(Map.of("code", "A0300", "message", "仅管理员可操作"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.of(CommonErrorCode.FORBIDDEN));
         }
         String value = body.get("value");
         systemConfigSpi.set(key, value);
@@ -57,10 +61,9 @@ public class SystemConfigController extends BaseController {
     @PostMapping("/crypto.aes-key/regenerate")
     public ResponseEntity<?> regenerateAesKey() {
         if (!AuthContext.isSuperAdmin()) {
-            return ResponseEntity.status(403).body(Map.of("code", "A0300", "message", "仅管理员可操作"));
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorResponse.of(CommonErrorCode.FORBIDDEN));
         }
-        // 1. Get old key
-        String oldBase64Key = systemConfigSpi.get("crypto.aes-key");
+        String oldBase64Key = systemConfigSpi.get(SystemConfigKeys.AES_KEY);
 
         // 2. Generate new key
         java.security.SecureRandom secureRandom = new java.security.SecureRandom();
@@ -97,9 +100,8 @@ public class SystemConfigController extends BaseController {
             }
         }
 
-        // 4. Persist new key
-        systemConfigSpi.set("crypto.aes-key", newBase64Key);
-        systemConfigService.invalidateCache("crypto.aes-key");
+        systemConfigSpi.set(SystemConfigKeys.AES_KEY, newBase64Key);
+        systemConfigService.invalidateCache(SystemConfigKeys.AES_KEY);
 
         // 5. Set new key in crypto service
         cryptoService.setKey(newBase64Key);

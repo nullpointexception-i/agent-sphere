@@ -1,5 +1,6 @@
 package com.buukle.agent.infrastructure.config;
 
+import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.infrastructure.persistence.SystemConfig;
 import com.buukle.agent.infrastructure.persistence.SystemConfigMapper;
@@ -19,8 +20,6 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 public class SystemConfigServiceImpl implements SystemConfigSpi {
-
-    private static final String KEY_AES = "crypto.aes-key";
 
     private final SystemConfigMapper systemConfigMapper;
 
@@ -50,8 +49,7 @@ public class SystemConfigServiceImpl implements SystemConfigSpi {
         if (value == null) {
             value = "";
         }
-        // Auto-bootstrap AES key
-        if (KEY_AES.equals(key) && (value == null || value.isBlank())) {
+        if (SystemConfigKeys.AES_KEY.equals(key) && (value == null || value.isBlank())) {
             value = generateAesKey();
             config.setConfigValue(value);
             systemConfigMapper.updateById(config);
@@ -90,7 +88,6 @@ public class SystemConfigServiceImpl implements SystemConfigSpi {
 
     @PostConstruct
     public void init() {
-        // Warm up: ensure AES key exists
-        get(KEY_AES);
+        get(SystemConfigKeys.AES_KEY);
     }
 }

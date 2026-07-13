@@ -10,8 +10,6 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
-
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -48,11 +46,5 @@ public class GlobalExceptionHandler {
         log.error("unexpected error", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), CommonErrorCode.INTERNAL_ERROR.getUserTip()));
-    }
-
-    public record ErrorResponse(String errorCode, String errorMessage, String userTip, LocalDateTime timestamp) {
-        public ErrorResponse(String errorCode, String errorMessage, String userTip) {
-            this(errorCode, errorMessage, userTip, LocalDateTime.now());
-        }
     }
 }

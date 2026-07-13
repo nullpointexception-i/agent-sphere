@@ -1,6 +1,9 @@
 package com.buukle.agent.infrastructure.config;
 
+import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
+import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -30,8 +33,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         }
 
         String ip = getClientIp(request);
-        int maxAttempts = Integer.parseInt(systemConfigSpi.get("rate-limit.login-max-attempts", "5"));
-        int windowMinutes = Integer.parseInt(systemConfigSpi.get("rate-limit.login-window-minutes", "1"));
+        int maxAttempts = Integer.parseInt(systemConfigSpi.get(SystemConfigKeys.LOGIN_MAX_ATTEMPTS, "5"));
+        int windowMinutes = Integer.parseInt(systemConfigSpi.get(SystemConfigKeys.LOGIN_WINDOW_MINUTES, "1"));
         RRateLimiter limiter = redissonClient.getRateLimiter("rate:login:" + ip);
         limiter.trySetRate(RateType.OVERALL, maxAttempts, windowMinutes, RateIntervalUnit.MINUTES);
 
@@ -39,7 +42,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             log.warn("Login rate limited for IP: {}", ip);
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":\"A0400\",\"message\":\"请求频率限制\",\"userTip\":\"请稍后重试\"}");
+            response.getWriter().write(ErrorResponse.of(CommonErrorCode.RATE_LIMITED).toJson());
             return false;
         }
 

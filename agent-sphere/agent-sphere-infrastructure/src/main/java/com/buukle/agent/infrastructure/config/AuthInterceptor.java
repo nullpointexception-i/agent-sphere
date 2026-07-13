@@ -3,6 +3,8 @@ package com.buukle.agent.infrastructure.config;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.ErrorResponse;
 import com.buukle.agent.infrastructure.persistence.CacheService;
 import com.buukle.agent.instance.domain.AgentUser;
 import com.buukle.agent.instance.dtvo.enums.UserEnum;
@@ -73,7 +75,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     private void writeUnauthorized(HttpServletResponse response) throws IOException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write("{\"code\":\"A0200\",\"message\":\"未授权\",\"userTip\":\"请先登录\"}");
+        response.getWriter().write(ErrorResponse.of(CommonErrorCode.UNAUTHORIZED).toJson());
     }
 
     @Override

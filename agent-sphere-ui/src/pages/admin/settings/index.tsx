@@ -188,7 +188,11 @@ export default function AdminSettings() {
         confirmLoading={submitting}
       >
         <Form layout="vertical">
-          <Form.Item label={intl.formatMessage({ id: 'pages.admin.settings.edit.label' })}>
+          <Form.Item
+            label={intl.formatMessage({
+              id: 'pages.admin.settings.edit.label',
+            })}
+          >
             <Input
               placeholder={
                 editingConfig?.isSecret

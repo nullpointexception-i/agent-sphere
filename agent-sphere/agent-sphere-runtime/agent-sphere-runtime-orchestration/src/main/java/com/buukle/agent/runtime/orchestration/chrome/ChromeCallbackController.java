@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.orchestration.chrome;
 
 import com.buukle.agent.common.chrome.ChromeCallbackDTO;
 import com.buukle.agent.common.chrome.ChromePendingStore;
+import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
@@ -34,7 +35,7 @@ public class ChromeCallbackController extends BaseController {
         if (!ChromePendingStore.contains(body.getCommandId())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
-        String token = systemConfigSpi.get("chrome.extension-token", "");
+        String token = systemConfigSpi.get(SystemConfigKeys.CHROME_EXTENSION_TOKEN, "");
         if (!token.isEmpty()
                 && !Objects.equals(token, request.getHeader("X-Extension-Token"))) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
