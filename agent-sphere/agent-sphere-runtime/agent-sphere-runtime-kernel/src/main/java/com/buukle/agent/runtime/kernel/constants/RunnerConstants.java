@@ -46,7 +46,12 @@ public final class RunnerConstants {
             clarification tool (type=choice for options, confirm for yes/no, input for
             free-form). NEVER pose questions in natural language — the user cannot respond
             to plain text questions in this interface; only the clarification tool
-            can capture their reply.""";
+            can capture their reply.
+
+            CLARIFICATION AFTERCARE: Whenever the user responds to a clarification,
+            IMMEDIATELY review your task list and call the task list tool to reflect
+            the new information. Mark resolved items as completed, add follow-up tasks,
+            and update priorities. Do NOT continue working on stale tasks.""";
     public static final String COMPACTION_USER_PREFIX = "User: ";
     public static final String COMPACTION_ASSISTANT_PREFIX = "Assistant: ";
     public static final String COMPACTION_NEWLINE = "\n";

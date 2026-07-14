@@ -10,12 +10,18 @@ import java.util.function.Consumer;
 public class FiberSet implements AutoCloseable {
 
     private static final ExecutorService SHARED_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
+    private static final long POLL_INTERVAL_NANOS = 500_000_000L; // 500ms
 
     private final Semaphore semaphore;
     private final ConcurrentLinkedQueue<CompletableFuture<FiberResult>> futures = new ConcurrentLinkedQueue<>();
     private final long submitTimeoutSeconds;
     private final long executionTimeoutSeconds;
     private Consumer<SingleResult> onResult;
+
+    @FunctionalInterface
+    public interface CancellationChecker {
+        boolean isCancelled();
+    }
 
     public FiberSet(int maxParallel, Duration submitTimeout, Duration executionTimeout) {
         this.semaphore = new Semaphore(maxParallel);
@@ -54,9 +60,29 @@ public class FiberSet implements AutoCloseable {
     }
 
     public ConcurrentHashMap<String, String> awaitAll() {
+        return awaitAll(null);
+    }
+
+    public ConcurrentHashMap<String, String> awaitAll(CancellationChecker checker) {
         CompletableFuture<?>[] arr = futures.toArray(new CompletableFuture[0]);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(executionTimeoutSeconds);
         try {
-            CompletableFuture.allOf(arr).get(executionTimeoutSeconds, TimeUnit.SECONDS);
+            while (true) {
+                if (checker != null && checker.isCancelled()) {
+                    for (var f : futures) f.cancel(true);
+                    break;
+                }
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) throw new TimeoutException();
+                try {
+                    CompletableFuture.allOf(arr).get(
+                            Math.min(remaining, POLL_INTERVAL_NANOS), TimeUnit.NANOSECONDS);
+                    break;
+                } catch (TimeoutException e) {
+                    // Check cancellation at next poll interval or propagate real timeout
+                    if (remaining <= POLL_INTERVAL_NANOS) throw e;
+                }
+            }
         } catch (TimeoutException e) {
             for (var f : futures) f.cancel(true);
             log.warn("Fiber batch timed out after {}s", executionTimeoutSeconds);

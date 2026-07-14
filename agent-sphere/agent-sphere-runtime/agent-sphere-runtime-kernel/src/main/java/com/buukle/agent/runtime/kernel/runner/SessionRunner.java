@@ -325,17 +325,32 @@ public class SessionRunner {
                                 .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
             });
 
+            // Check for cancellation before ANY tool submission
+            if (CANCELLED_RUNS.contains(currentRunId)) {
+                break;
+            }
+
             for (int i = 0; i < turn.toolCalls().size(); i++) {
                 int fi = i;
                 fibers.submit(turn.toolCalls().get(fi).id(),
                         () -> toolExecutor.execute(turn.toolCalls().get(fi), sid, rid, tl));
             }
-            // Check for cancellation before tool execution
-            if (CANCELLED_RUNS.contains(currentRunId)) {
-                fibers.close();
+            var results = fibers.awaitAll(() -> CANCELLED_RUNS.contains(rid));
+
+            // If cancelled during tool execution, publish FAILED events and exit
+            if (CANCELLED_RUNS.remove(currentRunId)) {
+                for (TurnToolCall tc : turn.toolCalls()) {
+                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setToolName(tc.name())
+                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id())));
+                }
                 break;
             }
-            var results = fibers.awaitAll();
 
             // Detect clarification (awaiting_user) — pause run instead of looping back to LLM
             boolean awaitingUser = false;
@@ -354,22 +369,6 @@ public class SessionRunner {
                                 .setSessionId(sessionId)
                                 .setRunId(currentRunId)
                                 .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
-                break;
-            }
-
-            // Detect cancellation during tool execution
-            if (CANCELLED_RUNS.remove(currentRunId)) {
-                fibers.close();
-                for (TurnToolCall tc : turn.toolCalls()) {
-                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setToolName(tc.name())
-                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id())));
-                }
                 break;
             }
 

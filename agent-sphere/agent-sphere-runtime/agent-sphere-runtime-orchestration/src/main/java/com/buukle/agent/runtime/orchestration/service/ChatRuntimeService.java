@@ -16,6 +16,7 @@ import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
+import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
@@ -42,6 +43,7 @@ public class ChatRuntimeService {
     private final SessionSpi sessionSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final AgentPendingClarificationMapper clarificationMapper;
+    private final SessionInputManager inputManager;
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
@@ -105,6 +107,13 @@ public class ChatRuntimeService {
                         .setResponse(response)));
 
         sessionSpi.touchSession(sessionId);
+
+        // Push a re-plan system instruction so the LLM revisits its task list
+        if (!ChatClarification.CLARIFICATION_RESPONSE_DISMISSED.equals(response)) {
+            inputManager.steer(sessionId,
+                    "[System]: The user responded to your clarification. Re-evaluate your task list and update it via the task list tool before continuing.",
+                    null);
+        }
 
         // Try to resume the original run; fall back to forking a new run.
         RunVO originalRun = runSpi.getRun(runId);
