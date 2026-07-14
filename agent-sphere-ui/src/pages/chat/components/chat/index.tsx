@@ -23,6 +23,7 @@ interface ChatMainProps {
   sending: boolean;
   onSendMessage: () => void;
   onCancelSend: () => void;
+  onCancelClarification?: (clarification: any) => void;
   onExpandOpen: () => void;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
@@ -45,6 +46,7 @@ export default function ChatMain({
   sending,
   onSendMessage,
   onCancelSend,
+  onCancelClarification,
   onExpandOpen,
   sessionPanelOpen,
   onTogglePanel,
@@ -57,6 +59,22 @@ export default function ChatMain({
   const hasMessages = messages.some(
     (m: any) => m.content && m.content !== '{}',
   );
+
+  const hasPendingClarifications = messages.some((m: any) =>
+    m.clarifications?.some((c: any) => c.status === 'pending'),
+  );
+
+  const footerProps = {
+    inputValue,
+    onInputValueChange,
+    sending,
+    hasPendingClarifications,
+    onSendMessage,
+    onCancel: onCancelSend,
+    onExpandOpen,
+    sessionKey,
+    sessionId: currentSession?.id,
+  };
 
   return (
     <>
@@ -86,34 +104,17 @@ export default function ChatMain({
             messages={messages}
             collapsedKeys={collapsedKeys}
             onCollapsedKeysChange={onCollapsedKeysChange}
+            onCancelClarification={onCancelClarification}
           />
         </div>
       ) : (
         <div className={styles.footerCenter}>
-          <Footer
-            inputValue={inputValue}
-            onInputValueChange={onInputValueChange}
-            sending={sending}
-            onSendMessage={onSendMessage}
-            onCancel={onCancelSend}
-            onExpandOpen={onExpandOpen}
-            sessionKey={sessionKey}
-            sessionId={currentSession?.id}
-          />
+          <Footer {...footerProps} />
         </div>
       )}
       {hasMessages && (
         <div className={styles.footer}>
-          <Footer
-            inputValue={inputValue}
-            onInputValueChange={onInputValueChange}
-            sending={sending}
-            onSendMessage={onSendMessage}
-            onCancel={onCancelSend}
-            onExpandOpen={onExpandOpen}
-            sessionKey={sessionKey}
-            sessionId={currentSession?.id}
-          />
+          <Footer {...footerProps} />
         </div>
       )}
     </>

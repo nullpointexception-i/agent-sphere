@@ -14,11 +14,13 @@ import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
+import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
+import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.orchestrator.RuntimeOrchestrator;
@@ -28,6 +30,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -139,6 +142,42 @@ public class ChatRuntimeService {
         result.setRunId(run.getId());
         result.setStatus(ChatConstant.RESPONSE_STATUS_PROCESSING);
         return result;
+    }
+
+    public void stopRun(Long sessionId, Long runId) {
+        assertSessionOwnership(sessionId);
+        RunVO run = runSpi.getRun(runId);
+        if (run == null) return;
+
+        if (RunStatus.AWAITING_USER.name().equals(run.getStatus())) {
+            run.setStatus(RunStatus.CANCELLED.name());
+            runSpi.updateRun(run);
+
+            List<AgentPendingClarification> pendingList = clarificationMapper.selectList(
+                    new LambdaQueryWrapper<AgentPendingClarification>()
+                            .eq(AgentPendingClarification::getRunId, runId)
+                            .isNull(AgentPendingClarification::getUserResponse));
+            for (AgentPendingClarification pending : pendingList) {
+                pending.setUserResponse(ChatClarification.CLARIFICATION_RESPONSE_DISMISSED);
+                clarificationMapper.updateById(pending);
+                eventPublisher.publishEvent(new RuntimeEventVO(
+                        ClarificationStatus.DISMISSED,
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(runId)
+                                .setClarificationId(pending.getClarificationId())));
+            }
+
+            eventPublisher.publishEvent(new RuntimeEventVO(
+                    RunStatus.CANCELLED,
+                    new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(runId)
+                            .setAssistantReply(RunnerConstants.CANCEL_MSG)
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
+        } else {
+            SessionRunner.cancelRun(runId);
+        }
     }
 
     private void assertSessionOwnership(Long sessionId) {

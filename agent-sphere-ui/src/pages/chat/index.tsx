@@ -153,8 +153,11 @@ export default function Chat() {
           });
         }
         const hasAssistantContent =
-          r.assistantReply && r.assistantReply !== '{}' && r.assistantReply.trim();
-        const hasClarifications = !!r.clarifications && r.clarifications.length > 0;
+          r.assistantReply &&
+          r.assistantReply !== '{}' &&
+          r.assistantReply.trim();
+        const hasClarifications =
+          !!r.clarifications && r.clarifications.length > 0;
         if (hasAssistantContent || hasClarifications) {
           if (hasAssistantContent) seenReplyRunIdsRef.current.add(r.id);
           const clarifications = r.clarifications
@@ -165,7 +168,13 @@ export default function Chat() {
                 title: c.title,
                 type: c.type,
                 options: c.options
-                  ? (() => { try { return JSON.parse(c.options); } catch { return []; } })()
+                  ? (() => {
+                      try {
+                        return JSON.parse(c.options);
+                      } catch {
+                        return [];
+                      }
+                    })()
                   : [],
                 status: c.status,
                 userResponse: c.userResponse,
@@ -551,7 +560,15 @@ export default function Chat() {
             }
             if (evtType.startsWith('clarification_')) {
               if (evtType === 'clarification_pending' && d?.runId) {
-                const opts = d.argumentsJson ? (() => { try { return JSON.parse(d.argumentsJson); } catch { return []; } })() : [];
+                const opts = d.argumentsJson
+                  ? (() => {
+                      try {
+                        return JSON.parse(d.argumentsJson);
+                      } catch {
+                        return [];
+                      }
+                    })()
+                  : [];
                 const clarificationObj = {
                   clarificationId: d.clarificationId,
                   runId: d.runId,
@@ -562,14 +579,19 @@ export default function Chat() {
                   status: 'pending' as const,
                 };
                 setMessages((prev) => {
-                  const idx = prev.findIndex((m: any) => m.role === 'ai' && m.runId === d.runId);
+                  const idx = prev.findIndex(
+                    (m: any) => m.role === 'ai' && m.runId === d.runId,
+                  );
                   if (idx >= 0) {
                     return prev.map((m, i) =>
                       i === idx
                         ? {
                             ...m,
                             clarifications: [
-                              ...((m as any).clarifications || []).filter((c: any) => c.clarificationId !== d.clarificationId),
+                              ...((m as any).clarifications || []).filter(
+                                (c: any) =>
+                                  c.clarificationId !== d.clarificationId,
+                              ),
                               clarificationObj,
                             ],
                             _pending: false,
@@ -579,7 +601,14 @@ export default function Chat() {
                   }
                   return [
                     ...prev,
-                    { role: 'ai', content: '', runId: d.runId, ts: Date.now(), clarifications: [clarificationObj], _pending: false },
+                    {
+                      role: 'ai',
+                      content: '',
+                      runId: d.runId,
+                      ts: Date.now(),
+                      clarifications: [clarificationObj],
+                      _pending: false,
+                    },
                   ];
                 });
               }
@@ -589,8 +618,15 @@ export default function Chat() {
                     (m as any).runId === d?.runId
                       ? {
                           ...m,
-                          clarifications: ((m as any).clarifications || []).map((c: any) =>
-                            c.clarificationId === d.clarificationId ? { ...c, status: 'responded', userResponse: d.response } : c,
+                          clarifications: ((m as any).clarifications || []).map(
+                            (c: any) =>
+                              c.clarificationId === d.clarificationId
+                                ? {
+                                    ...c,
+                                    status: 'responded',
+                                    userResponse: d.response,
+                                  }
+                                : c,
                           ),
                         }
                       : m,
@@ -603,8 +639,11 @@ export default function Chat() {
                     (m as any).runId === d?.runId
                       ? {
                           ...m,
-                          clarifications: ((m as any).clarifications || []).map((c: any) =>
-                            c.clarificationId === d.clarificationId ? { ...c, status: 'expired' } : c,
+                          clarifications: ((m as any).clarifications || []).map(
+                            (c: any) =>
+                              c.clarificationId === d.clarificationId
+                                ? { ...c, status: 'expired' }
+                                : c,
                           ),
                         }
                       : m,
@@ -803,8 +842,43 @@ export default function Chat() {
     loadHistory(Number(sessionId), historyPageRef.current);
   };
 
+  const handleCancelClarification = useCallback(
+    (clarification: any) => {
+      agentApi.sessions
+        .clarify(
+          clarification.sessionId,
+          clarification.runId,
+          '__cancel__',
+          clarification.clarificationId,
+        )
+        .catch(() => {});
+      if (currentSession?.id && clarification.runId) {
+        agentApi.runs
+          .stop(currentSession.id, clarification.runId)
+          .catch(() => {});
+        setSending(false);
+      }
+    },
+    [currentSession],
+  );
+
   const sendMessage = async () => {
     if (!inputValue.trim() || !currentSession || sending) return;
+
+    // Auto-cancel any pending clarifications before sending a new message
+    for (const m of messages) {
+      const clarifications = (m as any).clarifications;
+      if (clarifications) {
+        for (const c of clarifications) {
+          if (c.status === 'pending') {
+            agentApi.sessions
+              .clarify(c.sessionId, c.runId, '__cancel__', c.clarificationId)
+              .catch(() => {});
+          }
+        }
+      }
+    }
+
     setMessages((prev) => [
       ...prev,
       { role: 'user', content: inputValue, ts: Date.now() },
@@ -978,15 +1052,34 @@ export default function Chat() {
               onInputValueChange={setInputValue}
               sending={sending}
               onSendMessage={sendMessage}
-              onCancelSend={async () => {
+              onCancelSend={() => {
                 setSending(false);
+                // Cancel any pending clarifications
+                for (const m of messages) {
+                  const clarifications = (m as any).clarifications;
+                  if (clarifications) {
+                    for (const c of clarifications) {
+                      if (c.status === 'pending') {
+                        agentApi.sessions
+                          .clarify(
+                            c.sessionId,
+                            c.runId,
+                            '__cancel__',
+                            c.clarificationId,
+                          )
+                          .catch(() => {});
+                      }
+                    }
+                  }
+                }
                 if (currentRunIdRef.current && currentSession?.id) {
-                  await agentApi.runs
+                  agentApi.runs
                     .stop(currentSession.id, currentRunIdRef.current)
                     .catch(() => {});
                 }
                 currentRunIdRef.current = null;
               }}
+              onCancelClarification={handleCancelClarification}
               onExpandOpen={() => {
                 setExpandText(inputValue);
                 setExpandOpen(true);

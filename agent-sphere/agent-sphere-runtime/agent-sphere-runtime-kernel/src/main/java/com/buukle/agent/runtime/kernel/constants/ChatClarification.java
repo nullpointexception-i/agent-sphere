@@ -18,6 +18,7 @@ public final class ChatClarification {
     public static final String CLARIFYING_STATUS_AWAITING_USER = "awaiting_user";
     public static final String CLARIFYING_JSON_STATUS = "status";
     public static final String CLARIFYING_JSON_CLARIFICATION_ID = "clarification_id";
+    public static final String CLARIFICATION_RESPONSE_DISMISSED = "__dismissed__";
     public static final String CLARIFICATION_TOOL_NAME = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.ASK_CLARIFICATION.getId();
 
     private ChatClarification() {

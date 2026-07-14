@@ -53,5 +53,9 @@
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-admin-spi</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-runtime-kernel</artifactId>
+        </dependency>
     </dependencies>
 </project>

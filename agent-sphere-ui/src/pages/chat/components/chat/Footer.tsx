@@ -11,6 +11,7 @@ interface FooterProps {
   inputValue: string;
   onInputValueChange: (v: string) => void;
   sending: boolean;
+  hasPendingClarifications?: boolean;
   onSendMessage: () => void;
   onCancel: () => void;
   onExpandOpen: () => void;
@@ -22,6 +23,7 @@ export default function Footer({
   inputValue,
   onInputValueChange,
   sending,
+  hasPendingClarifications,
   onSendMessage,
   onCancel,
   onExpandOpen,
@@ -159,7 +161,7 @@ export default function Footer({
         ref={senderRef}
         value={inputValue}
         onChange={onInputValueChange}
-        loading={sending}
+        loading={sending || hasPendingClarifications}
         submitType="enter"
         onSubmit={onSendMessage}
         onCancel={onCancel}

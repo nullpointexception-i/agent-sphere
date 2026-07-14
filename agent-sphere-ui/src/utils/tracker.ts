@@ -73,12 +73,15 @@ class UserTracker {
         const target = e.target as HTMLElement;
 
         const elPath = target.closest('[data-track]')
-          ? (target.closest('[data-track]') as HTMLElement).getAttribute('data-track') || ''
+          ? (target.closest('[data-track]') as HTMLElement).getAttribute(
+              'data-track',
+            ) || ''
           : this.buildCssPath(target);
 
         const clickKey = `${e.clientX},${e.clientY}|${elPath}`;
         const now = Date.now();
-        if (clickKey === this.lastClickKey && now - this.lastClickTime < 500) return;
+        if (clickKey === this.lastClickKey && now - this.lastClickTime < 500)
+          return;
         this.lastClickKey = clickKey;
         this.lastClickTime = now;
 

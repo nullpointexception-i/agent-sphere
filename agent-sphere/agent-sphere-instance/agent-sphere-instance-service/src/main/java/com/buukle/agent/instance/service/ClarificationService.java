@@ -1,13 +1,13 @@
 package com.buukle.agent.instance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.dtvo.vo.ClarificationVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.ClarificationSpi;
+import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -76,7 +76,9 @@ public class ClarificationService implements ClarificationSpi {
             vo.setUserResponse(p.getUserResponse());
             vo.setExpiresAt(p.getExpiresAt() != null ? p.getExpiresAt().format(DTF) : null);
             String status;
-            if (p.getUserResponse() != null) {
+            if (ChatClarification.CLARIFICATION_RESPONSE_DISMISSED.equals(p.getUserResponse())) {
+                status = "dismissed";
+            } else if (p.getUserResponse() != null) {
                 status = "responded";
             } else if (p.getExpiresAt() != null && p.getExpiresAt().isBefore(LocalDateTime.now())) {
                 status = "expired";

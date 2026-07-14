@@ -10,7 +10,16 @@ import {
 import { Bubble } from '@ant-design/x';
 import type { BubbleItemType } from '@ant-design/x/es/bubble/interface';
 import XMarkdown from '@ant-design/x-markdown';
-import { Avatar, Button, Card, Input, Radio, Space, Tag, Typography } from 'antd';
+import {
+  Avatar,
+  Button,
+  Card,
+  Input,
+  Radio,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 
 import hljs from 'highlight.js';
@@ -24,6 +33,7 @@ interface MessageListProps {
   messages: any[];
   collapsedKeys: Set<string>;
   onCollapsedKeysChange: (keys: Set<string>) => void;
+  onCancelClarification?: (clarification: any) => void;
 }
 
 const COLLAPSE_THRESHOLD = 300;
@@ -35,6 +45,7 @@ export default function MessageList({
   messages,
   collapsedKeys,
   onCollapsedKeysChange,
+  onCancelClarification,
 }: MessageListProps) {
   const intl = useIntl();
   const { styles } = useStyles();
@@ -265,7 +276,9 @@ export default function MessageList({
 
   const bubbleItems = useMemo<BubbleItemType[]>(() => {
     const visible = messages.filter(
-      (m: any) => (m.content && m.content !== '{}') || (m.clarifications && m.clarifications.length > 0),
+      (m: any) =>
+        (m.content && m.content !== '{}') ||
+        (m.clarifications && m.clarifications.length > 0),
     );
     const visibleItems = visible
       .map((m: any, idx: number) => {
@@ -408,7 +421,10 @@ export default function MessageList({
             <div>
               {_content && (
                 <div className={styles.markdown}>
-                  <XMarkdown streaming={STREAMING_IDLE} components={markdownComponents}>
+                  <XMarkdown
+                    streaming={STREAMING_IDLE}
+                    components={markdownComponents}
+                  >
                     {_content}
                   </XMarkdown>
                 </div>
@@ -418,8 +434,11 @@ export default function MessageList({
                   key={c.clarificationId || `${c.runId}-${c.title}`}
                   clarification={c}
                   onRespond={(resp) => {
-                    agentApi.sessions.clarify(c.sessionId, c.runId, resp, c.clarificationId).catch(() => {});
+                    agentApi.sessions
+                      .clarify(c.sessionId, c.runId, resp, c.clarificationId)
+                      .catch(() => {});
                   }}
+                  onCancelClarification={onCancelClarification}
                 />
               ))}
             </div>
@@ -447,21 +466,33 @@ export default function MessageList({
 function ClarificationCard({
   clarification,
   onRespond,
+  onCancelClarification,
 }: {
   clarification: any;
   onRespond: (response: string) => void;
+  onCancelClarification?: (clarification: any) => void;
 }) {
   const [optimisticValue, setOptimisticValue] = useState<string | null>(null);
   const [inputVal, setInputVal] = useState('');
   const intl = useIntl();
 
   const isExpired = clarification.status === 'expired';
-  const isResolved = clarification.status === 'responded' || optimisticValue !== null;
+  const isResolved =
+    clarification.status === 'responded' || optimisticValue !== null;
   const userValue = optimisticValue ?? clarification.userResponse;
 
   // Derive display label for the responded value
   const resolvedLabel = useMemo(() => {
     if (!userValue) return '';
+    if (userValue === '__cancel__') {
+      return (
+        '❌ ' +
+        intl.formatMessage({
+          id: 'pages.chat.clarify.cancelled',
+          defaultMessage: 'Cancelled',
+        })
+      );
+    }
     if (clarification.type === 'choice' && clarification.options?.length) {
       const opt = clarification.options.find(
         (o: any) => o.value === userValue || o.label === userValue,
@@ -470,8 +501,16 @@ function ClarificationCard({
     }
     if (clarification.type === 'confirm') {
       return userValue === 'confirmed'
-        ? '✅ ' + intl.formatMessage({ id: 'pages.chat.clarify.confirmed', defaultMessage: 'Confirmed' })
-        : '❌ ' + intl.formatMessage({ id: 'pages.chat.clarify.cancelled', defaultMessage: 'Cancelled' });
+        ? '✅ ' +
+            intl.formatMessage({
+              id: 'pages.chat.clarify.confirmed',
+              defaultMessage: 'Confirmed',
+            })
+        : '❌ ' +
+            intl.formatMessage({
+              id: 'pages.chat.clarify.cancelled',
+              defaultMessage: 'Cancelled',
+            });
     }
     return userValue;
   }, [userValue, clarification.type, clarification.options, intl]);
@@ -481,7 +520,12 @@ function ClarificationCard({
       <Card size="small" style={{ margin: '8px 0', opacity: 0.5 }}>
         <Typography.Text type="secondary">
           {clarification.title || 'Clarification request'} —{' '}
-          <Tag color="default">{intl.formatMessage({ id: 'pages.chat.clarify.expired', defaultMessage: 'Expired' })}</Tag>
+          <Tag color="default">
+            {intl.formatMessage({
+              id: 'pages.chat.clarify.expired',
+              defaultMessage: 'Expired',
+            })}
+          </Tag>
         </Typography.Text>
       </Card>
     );
@@ -489,7 +533,14 @@ function ClarificationCard({
 
   if (isResolved) {
     return (
-      <Card size="small" style={{ margin: '8px 0', background: '#f6ffed', borderLeft: '3px solid #52c41a' }}>
+      <Card
+        size="small"
+        style={{
+          margin: '8px 0',
+          background: '#f6ffed',
+          borderLeft: '3px solid #52c41a',
+        }}
+      >
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
@@ -510,6 +561,11 @@ function ClarificationCard({
     onRespond(value);
   };
 
+  const handleCancel = () => {
+    setOptimisticValue('__cancel__');
+    onCancelClarification?.(clarification);
+  };
+
   if (clarification.type === 'choice' && clarification.options?.length) {
     return (
       <Card
@@ -517,20 +573,45 @@ function ClarificationCard({
         title={clarification.title}
         style={{ margin: '8px 0', borderLeft: '3px solid #1677ff' }}
       >
-        <Radio.Group onChange={(e) => handleAction(e.target.value)} value={undefined}>
+        <Radio.Group
+          onChange={(e) => handleAction(e.target.value)}
+          value={undefined}
+        >
           <Space direction="vertical" style={{ width: '100%' }}>
             {clarification.options.map((opt: any, i: number) => (
-              <Radio.Button key={i} value={opt.value || opt.label} style={{ width: '100%', textAlign: 'left', height: 'auto', whiteSpace: 'normal', padding: '8px 16px' }}>
+              <Radio.Button
+                key={i}
+                value={opt.value || opt.label}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  height: 'auto',
+                  whiteSpace: 'normal',
+                  padding: '8px 16px',
+                }}
+              >
                 <div>
                   <div style={{ fontWeight: 500 }}>{opt.label}</div>
                   {opt.description && (
-                    <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>{opt.description}</div>
+                    <div
+                      style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}
+                    >
+                      {opt.description}
+                    </div>
                   )}
                 </div>
               </Radio.Button>
             ))}
           </Space>
         </Radio.Group>
+        <div style={{ marginTop: 8 }}>
+          <Button danger icon={<CloseCircleOutlined />} onClick={handleCancel}>
+            {intl.formatMessage({
+              id: 'pages.chat.clarify.cancel',
+              defaultMessage: 'Cancel',
+            })}
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -546,8 +627,13 @@ function ClarificationCard({
           <Input
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
-            placeholder={intl.formatMessage({ id: 'pages.chat.clarify.inputPlaceholder', defaultMessage: 'Type your response...' })}
-            onPressEnter={() => inputVal.trim() && handleAction(inputVal.trim())}
+            placeholder={intl.formatMessage({
+              id: 'pages.chat.clarify.inputPlaceholder',
+              defaultMessage: 'Type your response...',
+            })}
+            onPressEnter={() =>
+              inputVal.trim() && handleAction(inputVal.trim())
+            }
           />
           <Button
             type="primary"
@@ -555,6 +641,12 @@ function ClarificationCard({
             onClick={() => inputVal.trim() && handleAction(inputVal.trim())}
           >
             {intl.formatMessage({ id: 'pages.save', defaultMessage: 'Submit' })}
+          </Button>
+          <Button danger icon={<CloseCircleOutlined />} onClick={handleCancel}>
+            {intl.formatMessage({
+              id: 'pages.chat.clarify.cancel',
+              defaultMessage: 'Cancel',
+            })}
           </Button>
         </Space.Compact>
       </Card>
@@ -568,11 +660,21 @@ function ClarificationCard({
       style={{ margin: '8px 0', borderLeft: '3px solid #1677ff' }}
     >
       <Space>
-        <Button type="primary" icon={<CheckCircleOutlined />} onClick={() => handleAction('confirmed')}>
-          {intl.formatMessage({ id: 'pages.chat.clarify.confirm', defaultMessage: 'Confirm' })}
+        <Button
+          type="primary"
+          icon={<CheckCircleOutlined />}
+          onClick={() => handleAction('confirmed')}
+        >
+          {intl.formatMessage({
+            id: 'pages.chat.clarify.confirm',
+            defaultMessage: 'Confirm',
+          })}
         </Button>
-        <Button danger icon={<CloseCircleOutlined />} onClick={() => handleAction('cancelled')}>
-          {intl.formatMessage({ id: 'pages.chat.clarify.cancel', defaultMessage: 'Cancel' })}
+        <Button danger icon={<CloseCircleOutlined />} onClick={handleCancel}>
+          {intl.formatMessage({
+            id: 'pages.chat.clarify.cancel',
+            defaultMessage: 'Cancel',
+          })}
         </Button>
       </Space>
     </Card>

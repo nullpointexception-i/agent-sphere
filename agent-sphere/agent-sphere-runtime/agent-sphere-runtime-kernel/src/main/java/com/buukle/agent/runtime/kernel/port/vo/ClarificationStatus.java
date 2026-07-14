@@ -5,7 +5,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 public enum ClarificationStatus implements EventType {
     PENDING("clarification_pending"),
     RESPONDED("clarification_responded"),
-    EXPIRED("clarification_expired");
+    EXPIRED("clarification_expired"),
+    DISMISSED("clarification_dismissed");
 
     private final String value;
 
