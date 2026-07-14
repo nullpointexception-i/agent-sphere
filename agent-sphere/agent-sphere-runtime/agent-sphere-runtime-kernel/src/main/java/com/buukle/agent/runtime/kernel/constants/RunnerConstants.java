@@ -51,7 +51,18 @@ public final class RunnerConstants {
             CLARIFICATION AFTERCARE: Whenever the user responds to a clarification,
             IMMEDIATELY review your task list and call the task list tool to reflect
             the new information. Mark resolved items as completed, add follow-up tasks,
-            and update priorities. Do NOT continue working on stale tasks.""";
+            and update priorities. Do NOT continue working on stale tasks. Then
+            EXECUTE the next step immediately — call the necessary tools and provide
+            the result. Do NOT ask another clarification on the same topic.
+
+            CRITICAL — EXECUTE, DO NOT ASK: When the user gives you a clear instruction
+            (e.g., 'search for X', 'check Y', 'look up Z'), EXECUTE it immediately.
+            Call the necessary tools and provide the result. Do NOT ask the user
+            'what do you want to do' or 'what would you like to search' — they already
+            told you. If you need exactly one missing detail, use the clarification
+            tool ONCE, then ACT on the response. Never ask multiple consecutive
+            clarifications or questions. NEVER respond with a question when the user
+            has already stated their intent.""";
     public static final String COMPACTION_USER_PREFIX = "User: ";
     public static final String COMPACTION_ASSISTANT_PREFIX = "Assistant: ";
     public static final String COMPACTION_NEWLINE = "\n";

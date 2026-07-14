@@ -8,7 +8,7 @@ public final class ChatClarification {
     public static final String INTERNAL_NAME = "ask_clarification";
     public static final String DISPLAY_NAME = "Ask Clarification";
     public static final String DISPLAY_NAME_CN = "请求澄清";
-    public static final String DESCRIPTION = "CRITICAL: Whenever you need the user's input, decision, or confirmation (e.g., choose between options, confirm an action, or provide missing information), you MUST call this tool. NEVER ask questions in plain text — the user can only respond through this tool. Use type=choice for options, confirm for yes/no, input for free-form answer. AFTER receiving the user's response, immediately re-evaluate your task list and call the task list tool (todowrite) to update it — mark answered items as completed, add new steps based on the response, and adjust priorities accordingly.";
+    public static final String DESCRIPTION = "CRITICAL: Whenever you need the user's input, decision, or confirmation (e.g., choose between options, confirm an action, or provide missing information), you MUST call this tool. NEVER ask questions in plain text — the user can only respond through this tool. Use type=choice for options, confirm for yes/no, input for free-form answer. AFTER receiving the user's response, IMMEDIATELY execute the next step — call the necessary tools and provide the result. Do NOT ask another clarification or question unless it is about a completely different missing piece of information. Never ask the user 'what do you want to do'.";
 
     public static final String CLARIFYING_ERROR_NOT_FOUND = "No pending clarification found for this run";
     public static final String CLARIFYING_ERROR_EXPIRED = "Clarification request has expired";

@@ -8,6 +8,7 @@ import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
+import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
@@ -43,6 +44,26 @@ public class HistoryLoader {
                 ? latestCompact.getCompactedUptoRunId() : 0L;
 
         List<RunVO> runs = runSpi.listRunsBySessionAfterId(sessionId, afterRunId);
+
+        // Detect if any previous run was cancelled — inject a context hint
+        boolean hasCancelledRun = runs.stream().anyMatch(
+                r -> RunStatus.CANCELLED.name().equals(r.getStatus())
+                        && (excludeRunId == null || !excludeRunId.equals(r.getId())));
+        if (hasCancelledRun) {
+            String originalUserMessage = runs.stream()
+                    .filter(r -> RunStatus.CANCELLED.name().equals(r.getStatus())
+                            && (excludeRunId == null || !excludeRunId.equals(r.getId())))
+                    .map(RunVO::getUserMessage)
+                    .filter(msg -> msg != null && !msg.isBlank())
+                    .findFirst().orElse("");
+            messages.add(new ChatMessageDTO()
+                    .setRole(LlmApiConstant.ROLE_SYSTEM)
+                    .setContent("[The previous run was cancelled. "
+                            + (originalUserMessage.isBlank()
+                                ? "The user may be continuing their original request."
+                                : "The user's original request was: \"" + originalUserMessage + "\". Read history carefully and continue.")
+                            + " Do NOT ask 'what do you want to do' — execute the task.]"));
+        }
 
         // Collect all tool call records per run
         Map<Long, List<AgentToolCallRecordVO>> callsByRun = new LinkedHashMap<>();
