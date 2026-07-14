@@ -4,7 +4,7 @@ import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 
 public final class ChatClarification {
-    public static final String CLARIFICATION_RESUME_PREFIX = "[User Response to Clarification]: ";
+    public static final String CLARIFICATION_RESUME_PREFIX = "[User Response to Clarification — execute the next step now, do NOT ask another question]: ";
     public static final String INTERNAL_NAME = "ask_clarification";
     public static final String DISPLAY_NAME = "Ask Clarification";
     public static final String DISPLAY_NAME_CN = "请求澄清";

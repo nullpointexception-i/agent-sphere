@@ -175,7 +175,7 @@ public class SessionRunner {
                     if (systemPrompt != null && !systemPrompt.isBlank()) {
                         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                     }
-                    messages.addAll(historyLoader.load(sessionId, currentRunId));
+                    messages.addAll(historyLoader.load(sessionId, currentRunId, input.isClarificationResume()));
                 }
                 messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(input.text()));
             }

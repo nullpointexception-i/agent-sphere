@@ -30,6 +30,10 @@ public class HistoryLoader {
     private final AgentToolCallRecordSpi toolCallRecordSpi;
 
     public List<ChatMessageDTO> load(Long sessionId, Long excludeRunId) {
+        return load(sessionId, excludeRunId, false);
+    }
+
+    public List<ChatMessageDTO> load(Long sessionId, Long excludeRunId, boolean includeCurrentIfNoReply) {
         List<ChatMessageDTO> messages = new ArrayList<>();
 
         AgentCompactRecordVO latestCompact = compactRecordSpi.getLatestCompleted(sessionId);
@@ -68,7 +72,11 @@ public class HistoryLoader {
         // Collect all tool call records per run
         Map<Long, List<AgentToolCallRecordVO>> callsByRun = new LinkedHashMap<>();
         for (RunVO run : runs) {
-            if (excludeRunId != null && excludeRunId.equals(run.getId())) continue;
+            if (excludeRunId != null && excludeRunId.equals(run.getId())
+                    && !(includeCurrentIfNoReply
+                        && (run.getAssistantReply() == null || run.getAssistantReply().isBlank()))) {
+                continue;
+            }
             List<AgentToolCallRecordVO> calls = new ArrayList<>(toolCallRecordSpi.listBySessionId(sessionId, run.getId()));
             Collections.reverse(calls);
             if (!calls.isEmpty()) callsByRun.put(run.getId(), calls);
@@ -94,7 +102,11 @@ public class HistoryLoader {
 
         // Build messages chronologically
         for (RunVO run : runs) {
-            if (excludeRunId != null && excludeRunId.equals(run.getId())) continue;
+            if (excludeRunId != null && excludeRunId.equals(run.getId())
+                    && !(includeCurrentIfNoReply
+                        && (run.getAssistantReply() == null || run.getAssistantReply().isBlank()))) {
+                continue;
+            }
 
             if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
                 messages.add(new ChatMessageDTO()

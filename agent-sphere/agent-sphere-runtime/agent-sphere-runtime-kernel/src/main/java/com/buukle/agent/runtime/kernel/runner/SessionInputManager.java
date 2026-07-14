@@ -16,13 +16,21 @@ public class SessionInputManager {
     private final ConcurrentHashMap<Long, BlockingQueue<InputMessage>> queues = new ConcurrentHashMap<>();
 
     public void steer(Long sessionId, String text, Long modelRouteId) {
-        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis());
+        steer(sessionId, text, modelRouteId, false);
+    }
+
+    public void steer(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume) {
+        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(), isClarificationResume);
         steerSlots.computeIfAbsent(sessionId, k -> new AtomicReference<>()).set(msg);
         log.debug("Steer input set for session {}", sessionId);
     }
 
     public void queue(Long sessionId, String text, Long modelRouteId) {
-        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis());
+        queue(sessionId, text, modelRouteId, false);
+    }
+
+    public void queue(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume) {
+        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(), isClarificationResume);
         queues.computeIfAbsent(sessionId, k -> new LinkedBlockingQueue<>()).add(msg);
         log.debug("Queued input for session {}", sessionId);
     }
@@ -61,6 +69,6 @@ public class SessionInputManager {
         queues.remove(sessionId);
     }
 
-    public record InputMessage(String text, Long modelRouteId, long timestamp) {
+    public record InputMessage(String text, Long modelRouteId, long timestamp, boolean isClarificationResume) {
     }
 }

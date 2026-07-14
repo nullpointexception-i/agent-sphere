@@ -30,6 +30,11 @@ public class RuntimeOrchestrator {
 
     @Async("runtimeAsyncExecutor")
     public void asyncHandleUserMessage(RunVO run, Long sessionId, String message, Long overrideRouteId) {
+        asyncHandleUserMessage(run, sessionId, message, overrideRouteId, false);
+    }
+
+    @Async("runtimeAsyncExecutor")
+    public void asyncHandleUserMessage(RunVO run, Long sessionId, String message, Long overrideRouteId, boolean isClarificationResume) {
         log.info("Async execution start: runId={}, sessionId={}", run.getId(), sessionId);
         try {
             ValidationResult validated = validator.validate(sessionId, overrideRouteId);
@@ -40,9 +45,9 @@ public class RuntimeOrchestrator {
             log.info("Context prepared, starting runner: runId={}", run.getId());
 
             if (run.getDelivery() != null && "queue".equals(run.getDelivery())) {
-                inputManager.queue(sessionId, message, overrideRouteId);
+                inputManager.queue(sessionId, message, overrideRouteId, isClarificationResume);
             } else {
-                inputManager.steer(sessionId, message, overrideRouteId);
+                inputManager.steer(sessionId, message, overrideRouteId, isClarificationResume);
             }
 
             coordinator.wake(sessionId, ctx, run.getId());
