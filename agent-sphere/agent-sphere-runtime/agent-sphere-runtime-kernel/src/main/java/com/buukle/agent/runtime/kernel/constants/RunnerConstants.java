@@ -52,6 +52,11 @@ public final class RunnerConstants {
     public static final String COMPACTION_NEWLINE = "\n";
     public static final String HISTORY_SUMMARY_PREFIX = "[Conversation summary]\n";
 
+    // ---- SessionRunner magic strings ----
+    public static final String JSON_ERROR_TOOL_LOST = "{\"error\":\"Tool execution lost\"}";
+    public static final String FALLBACK_COMPLETE_MSG = "Task completed. Please check the results above.";
+    public static final String CANCEL_MSG = "⏹️ Run cancelled by user";
+
     private RunnerConstants() {
     }
 }

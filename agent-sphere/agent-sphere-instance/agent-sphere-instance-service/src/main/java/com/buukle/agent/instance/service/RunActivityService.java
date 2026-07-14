@@ -1,7 +1,7 @@
 package com.buukle.agent.instance.service;
 
-import java.util.Map;
+import com.buukle.agent.instance.domain.vo.RunActivityListVO;
 
 public interface RunActivityService {
-    Map<String, Object> listByRun(Long runId, Long sessionId, int offset, int limit);
+    RunActivityListVO listByRun(Long runId, Long sessionId, int offset, int limit);
 }

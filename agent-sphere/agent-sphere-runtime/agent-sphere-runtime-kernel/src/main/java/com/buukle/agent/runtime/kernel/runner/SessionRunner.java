@@ -375,7 +375,7 @@ public class SessionRunner {
 
             for (TurnToolCall tc : turn.toolCalls()) {
                 String toolResult = results.getOrDefault(tc.id(),
-                        "{\"error\":\"Tool execution lost\"}");
+                        RunnerConstants.JSON_ERROR_TOOL_LOST);
                 String toolMessage = toolResult;
                 if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId())) {
                     toolMessage = toolResult + "\n\n**Reminder: If you completed a task, update its status to 'completed' by calling " + InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId() + " again.**";
@@ -408,7 +408,7 @@ public class SessionRunner {
             if (isLastLoop) {
                 String fallback = allContent.length() > 0
                         ? allContent.toString()
-                        : "Task completed. Please check the results above.";
+                        : RunnerConstants.FALLBACK_COMPLETE_MSG;
                 currentRun.setAssistantReply(fallback);
                 currentRun.setStatus(RunStatus.COMPLETED.name());
                 runSpi.updateRun(currentRun);
@@ -433,7 +433,7 @@ public class SessionRunner {
                     new RuntimeEventDataVO()
                             .setSessionId(sessionId)
                             .setRunId(currentRunId)
-                            .setAssistantReply("⏹️ Run cancelled by user")
+                            .setAssistantReply(RunnerConstants.CANCEL_MSG)
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
         }
 

@@ -10,6 +10,7 @@ import com.buukle.agent.instance.spi.SessionTodoSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
+import com.buukle.agent.runtime.kernel.contract.CliExecutionBinding;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
@@ -88,7 +89,7 @@ public class ToolExecutor {
                     clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType, optionsJson, clarificationId);
                     return JSON.writeValueAsString(Map.of(
                             ChatClarification.CLARIFYING_JSON_STATUS, ChatClarification.CLARIFYING_STATUS_AWAITING_USER,
-                            "clarification_id", clarificationId
+                            ChatClarification.CLARIFYING_JSON_CLARIFICATION_ID, clarificationId
                     ));
                 } catch (Exception e) {
                     log.warn("Failed to process ask_clarification", e);
@@ -106,7 +107,10 @@ public class ToolExecutor {
                 return result;
             }
             if (CAPABILITY_TYPE_CLI.equals(type)) {
-                return cliExecutorService.execute(binding, args);
+                CliExecutionBinding cliBinding = new CliExecutionBinding(
+                        (String) binding.get(ExecBindingKeys.CLI_COMMAND_TEMPLATE),
+                        (String) binding.get(ExecBindingKeys.CLI_WORKING_DIR));
+                return cliExecutorService.execute(cliBinding, args);
             }
             if (CAPABILITY_TYPE_SKILL.equals(type)) {
                 return JSON_INFO_SKILL_DELEGATED;

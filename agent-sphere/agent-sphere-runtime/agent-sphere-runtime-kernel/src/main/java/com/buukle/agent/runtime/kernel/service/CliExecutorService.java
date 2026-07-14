@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.service;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.runtime.kernel.contract.CliExecutionBinding;
 import com.buukle.agent.runtime.kernel.exception.KernelErrorCode;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,14 +46,9 @@ public class CliExecutorService {
                 .replace("\t", "\\t") + "\"";
     }
 
-    private static String getString(Map<String, Object> map, String key) {
-        Object v = map.get(key);
-        return v instanceof String ? (String) v : null;
-    }
-
-    public String execute(Map<String, Object> binding, String argumentsJson) {
-        String commandTemplate = getString(binding, "commandTemplate");
-        String workingDir = getString(binding, "workingDir");
+    public String execute(CliExecutionBinding binding, String argumentsJson) {
+        String commandTemplate = binding.commandTemplate();
+        String workingDir = binding.workingDir();
 
         Map<String, String> args = parseArguments(argumentsJson);
         String resolvedCommand = renderTemplate(commandTemplate, args);
