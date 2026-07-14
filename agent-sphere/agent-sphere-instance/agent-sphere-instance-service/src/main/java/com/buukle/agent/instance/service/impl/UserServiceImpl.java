@@ -59,6 +59,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         vo.setAvatar(user.getAvatar());
         vo.setToken(user.getToken());
         vo.setStatus(user.getStatus());
+        vo.setLastLoginAt(user.getLastLoginAt());
         vo.setSuperAdmin(user.getSuperAdmin());
         vo.setRoles(roleSpi.listByUserId(user.getId()).stream().map(r -> r.getCode()).toList());
         boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
@@ -82,6 +83,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
 
         String token = generateToken();
         user.setToken(token);
+        updateById(user);
+
+        user.setLastLoginAt(java.time.LocalDateTime.now());
+        user.setLastLoginIp(dto.getLoginIp());
+        user.setLastLoginUa(dto.getUserAgent());
         updateById(user);
 
         AuthContext.setToken(token);
@@ -174,6 +180,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         // Auto-login
         String token = generateToken();
         user.setToken(token);
+        user.setLastLoginAt(java.time.LocalDateTime.now());
+        user.setLastLoginIp(dto.getLoginIp());
+        user.setLastLoginUa(dto.getUserAgent());
         updateById(user);
         AuthContext.setToken(token);
         AuthContext.setUserId(user.getId());

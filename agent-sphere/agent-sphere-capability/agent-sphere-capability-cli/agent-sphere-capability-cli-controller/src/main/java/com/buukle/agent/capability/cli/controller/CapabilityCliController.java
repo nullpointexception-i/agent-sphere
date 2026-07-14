@@ -2,6 +2,7 @@ package com.buukle.agent.capability.cli.controller;
 
 import com.buukle.agent.capability.cli.dtvo.dto.CreateCliDTO;
 import com.buukle.agent.capability.cli.service.CapabilityCliService;
+import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 public class CapabilityCliController extends BaseController {
     private final CapabilityCliService capabilityCliService;
 
+    @AuditLog(action = "CREATE", resourceType = "Capability", resourceId = "#result?.body?.id")
     @RequirePermission("capability:cli:create")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateCliDTO dto) {
@@ -41,12 +43,14 @@ public class CapabilityCliController extends BaseController {
         return ok(capabilityCliService.pageClis(page, size, keyword, startTime, endTime));
     }
 
+    @AuditLog(action = "UPDATE", resourceType = "Capability", resourceId = "#id")
     @RequirePermission("capability:cli:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateCliDTO dto) {
         return ok(capabilityCliService.updateCli(id, dto));
     }
 
+    @AuditLog(action = "DELETE", resourceType = "Capability", resourceId = "#id")
     @RequirePermission("capability:cli:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
@@ -54,6 +58,7 @@ public class CapabilityCliController extends BaseController {
         return ok();
     }
 
+    @AuditLog(action = "BATCH_DELETE", resourceType = "Capability", resourceId = "#ids?.toString()")
     @RequirePermission("capability:cli:delete")
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody java.util.List<Long> ids) {

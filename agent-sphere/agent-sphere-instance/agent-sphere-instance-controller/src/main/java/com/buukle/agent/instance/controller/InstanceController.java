@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.controller;
 
+import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -22,6 +23,7 @@ import java.util.List;
 public class InstanceController extends BaseController {
     private final InstanceService instanceService;
 
+    @AuditLog(action = "CREATE", resourceType = "Instance", resourceId = "#result?.body?.id")
     @RequirePermission("instance:create")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateInstanceDTO dto) {
@@ -53,18 +55,21 @@ public class InstanceController extends BaseController {
         return ok(instanceService.getInstance(id));
     }
 
+    @AuditLog(action = "UPDATE", resourceType = "Instance", resourceId = "#id")
     @RequirePermission("instance:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateInstanceDTO dto) {
         return ok(instanceService.updateInstance(id, dto));
     }
 
+    @AuditLog(action = "SET_MODEL_ROUTE", resourceType = "Instance", resourceId = "#id")
     @RequirePermission("instance:bind-model")
     @PutMapping("/{id}/model-route")
     public ResponseEntity<?> setModelRoute(@PathVariable Long id, @RequestBody SetModelRouteDTO dto) {
         return ok(instanceService.setModelRoute(id, dto.getModelRouteId()));
     }
 
+    @AuditLog(action = "DELETE", resourceType = "Instance", resourceId = "#id")
     @RequirePermission("instance:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
@@ -72,6 +77,7 @@ public class InstanceController extends BaseController {
         return ok();
     }
 
+    @AuditLog(action = "BATCH_DELETE", resourceType = "Instance", resourceId = "#ids?.toString()")
     @RequirePermission("instance:delete")
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody List<Long> ids) {

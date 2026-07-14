@@ -172,3 +172,11 @@ buukle:
       capability:
         wait-time: 5s                              # 获取锁等待超时 / Lock acquire wait timeout
         lease-time: 10s                            # 锁持有时间 / Lock lease duration
+
+    # ============================================================
+    # 审计日志配置 / Audit Config
+    # ============================================================
+    audit:
+      frontend-retention-days: 7                    # 前端事件保留天数 / Frontend event retention days
+      backend-retention-days: 90                    # 后端事件保留天数 / Backend event retention days
+      cleanup-cron: "0 0 3 * * ?"                   # 清理定时任务cron / Cleanup cron expression

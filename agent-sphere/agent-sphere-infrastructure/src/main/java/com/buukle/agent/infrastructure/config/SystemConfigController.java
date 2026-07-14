@@ -1,5 +1,6 @@
 package com.buukle.agent.infrastructure.config;
 
+import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
@@ -42,6 +43,7 @@ public class SystemConfigController extends BaseController {
         return ok(configs);
     }
 
+    @AuditLog(action = "UPDATE", resourceType = "Settings", resourceId = "#key")
     @RequirePermission("admin:settings:update")
     @PutMapping("/{key}")
     public ResponseEntity<?> updateConfig(@PathVariable String key, @RequestBody Map<String, String> body) {
@@ -51,6 +53,7 @@ public class SystemConfigController extends BaseController {
         return ok(Map.of("message", "已更新"));
     }
 
+    @AuditLog(action = "REGENERATE", resourceType = "Settings", resourceId = "'aes-key'")
     @RequirePermission("admin:settings:regenerate-aes")
     @PostMapping("/crypto.aes-key/regenerate")
     public ResponseEntity<?> regenerateAesKey() {

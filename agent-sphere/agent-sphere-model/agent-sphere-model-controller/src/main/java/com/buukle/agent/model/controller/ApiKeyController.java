@@ -1,5 +1,6 @@
 package com.buukle.agent.model.controller;
 
+import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 public class ApiKeyController extends BaseController {
     private final ApiKeyService apiKeyService;
 
+    @AuditLog(action = "CREATE", resourceType = "ApiKey", resourceId = "#result?.body?.id")
     @RequirePermission("model:apikey:create")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateApiKeyDTO dto) {
@@ -34,12 +36,14 @@ public class ApiKeyController extends BaseController {
         return ok(apiKeyService.listApiKeysByProvider(providerId, keyword));
     }
 
+    @AuditLog(action = "UPDATE", resourceType = "ApiKey", resourceId = "#id")
     @RequirePermission("model:apikey:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateApiKeyDTO dto) {
         return ok(apiKeyService.updateApiKey(id, dto));
     }
 
+    @AuditLog(action = "DELETE", resourceType = "ApiKey", resourceId = "#id")
     @RequirePermission("model:apikey:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {

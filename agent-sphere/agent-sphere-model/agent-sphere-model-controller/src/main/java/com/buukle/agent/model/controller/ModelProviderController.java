@@ -1,5 +1,6 @@
 package com.buukle.agent.model.controller;
 
+import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -21,6 +22,7 @@ import java.util.List;
 public class ModelProviderController extends BaseController {
     private final ModelProviderService modelProviderService;
 
+    @AuditLog(action = "CREATE", resourceType = "ModelProvider", resourceId = "#result?.body?.id")
     @RequirePermission("model:provider:create")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateModelProviderDTO dto) {
@@ -48,12 +50,14 @@ public class ModelProviderController extends BaseController {
         return ok(List.of(ModelProviderCompany.values()));
     }
 
+    @AuditLog(action = "UPDATE", resourceType = "ModelProvider", resourceId = "#id")
     @RequirePermission("model:provider:update")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateModelProviderDTO dto) {
         return ok(modelProviderService.updateProvider(id, dto));
     }
 
+    @AuditLog(action = "DELETE", resourceType = "ModelProvider", resourceId = "#id")
     @RequirePermission("model:provider:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
@@ -61,6 +65,7 @@ public class ModelProviderController extends BaseController {
         return ok();
     }
 
+    @AuditLog(action = "SET_ACTIVE_KEY", resourceType = "ModelProvider", resourceId = "#id")
     @RequirePermission("model:apikey:set-active")
     @PutMapping("/{id}/active-key")
     public ResponseEntity<?> setActiveKey(@PathVariable Long id, @RequestBody SetActiveKeyDTO dto) {

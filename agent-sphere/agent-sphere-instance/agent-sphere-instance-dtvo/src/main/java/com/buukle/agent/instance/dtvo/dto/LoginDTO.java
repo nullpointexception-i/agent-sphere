@@ -14,4 +14,6 @@ public class LoginDTO implements Serializable {
     @NotBlank
     @Size(min = 6, max = 32)
     private String password;
+    private String loginIp;
+    private String userAgent;
 }

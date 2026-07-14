@@ -5,6 +5,7 @@ import com.buukle.agent.admin.dtvo.dto.AssignPermissionDTO;
 import com.buukle.agent.admin.dtvo.dto.AssignRoleDTO;
 import com.buukle.agent.admin.dtvo.vo.SysRoleVO;
 import com.buukle.agent.admin.spi.RoleSpi;
+import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
 import jakarta.validation.Valid;
@@ -46,18 +47,21 @@ public class RoleController extends BaseController {
         return ok(roleSpi.listByUserId(userId));
     }
 
+    @AuditLog(action = "CREATE", resourceType = "Role", resourceId = "#result?.body?.id")
     @RequirePermission("admin:role:create")
     @PostMapping
     public ResponseEntity<SysRoleVO> create(@RequestBody SysRoleVO vo) {
         return ok(roleSpi.create(vo));
     }
 
+    @AuditLog(action = "UPDATE", resourceType = "Role", resourceId = "#id")
     @RequirePermission("admin:role:update")
     @PutMapping("/{id}")
     public ResponseEntity<SysRoleVO> update(@PathVariable Long id, @RequestBody SysRoleVO vo) {
         return ok(roleSpi.update(id, vo));
     }
 
+    @AuditLog(action = "DELETE", resourceType = "Role", resourceId = "#id")
     @RequirePermission("admin:role:delete")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
@@ -65,6 +69,7 @@ public class RoleController extends BaseController {
         return ok();
     }
 
+    @AuditLog(action = "ASSIGN_PERMISSION", resourceType = "Role", resourceId = "#dto.roleId")
     @RequirePermission("admin:role:assign")
     @PostMapping("/assign-permissions")
     public ResponseEntity<?> assignPermissions(@Valid @RequestBody AssignPermissionDTO dto) {
@@ -72,6 +77,7 @@ public class RoleController extends BaseController {
         return ok();
     }
 
+    @AuditLog(action = "ASSIGN_ROLE", resourceType = "User", resourceId = "#dto.userId")
     @RequirePermission("admin:role:assign")
     @PostMapping("/assign-user")
     public ResponseEntity<?> assignUser(@Valid @RequestBody AssignRoleDTO dto) {

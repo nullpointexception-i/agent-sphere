@@ -9,7 +9,7 @@ import {
 } from '@umijs/max';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import React from 'react';
+import React, { useEffect } from 'react';
 
 dayjs.extend(relativeTime);
 
@@ -22,6 +22,7 @@ import {
 } from '@/components';
 import MessageInitializer from '@/components/MessageInitializer';
 import { clearStoredUser, getStoredUser, toProCurrentUser } from '@/utils/auth';
+import { tracker } from '@/utils/tracker';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 
@@ -200,7 +201,16 @@ export function rootContainer(container: React.ReactNode) {
     <App>
       <MessageInitializer />
       <OfflineBanner />
+      <TrackerInit />
       <ErrorBoundary>{container}</ErrorBoundary>
     </App>
   );
+}
+
+function TrackerInit() {
+  useEffect(() => {
+    tracker.init();
+    return undefined;
+  }, []);
+  return null;
 }

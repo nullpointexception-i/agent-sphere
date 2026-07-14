@@ -19,4 +19,6 @@ public class RegisterDTO implements Serializable {
     @NotBlank
     @Size(min = 6, max = 32)
     private String repeatPassword;
+    private String loginIp;
+    private String userAgent;
 }

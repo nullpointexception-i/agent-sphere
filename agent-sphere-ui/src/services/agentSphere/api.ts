@@ -276,6 +276,17 @@ export const agentApi = {
       update: (id: number, data: any) => request<any>(`${BASE}/admin/permissions/${id}`, { method: 'PUT', data }),
       delete: (id: number) => request<void>(`${BASE}/admin/permissions/${id}`, { method: 'DELETE' }),
     },
+    auditLogs: {
+      list: (params: {
+        page?: number;
+        size?: number;
+        username?: string;
+        action?: string;
+        resourceType?: string;
+        startDate?: string;
+        endDate?: string;
+      }) => request<any>(`${BASE}/admin/audit-logs`, { params }),
+    },
   },
 
   instanceCapabilities: {

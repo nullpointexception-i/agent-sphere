@@ -1,15 +1,18 @@
 package com.buukle.agent.instance.controller;
 
+import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.BaseController;
+import com.buukle.agent.common.util.RequestUtils;
 import com.buukle.agent.instance.dtvo.dto.LoginDTO;
 import com.buukle.agent.instance.dtvo.dto.RegisterDTO;
 import com.buukle.agent.instance.dtvo.dto.UpdatePasswordDTO;
 import com.buukle.agent.instance.dtvo.dto.UpdateProfileDTO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -27,13 +30,19 @@ public class AuthController extends BaseController {
         return user.getId();
     }
 
+    @AuditLog(action = "LOGIN", resourceType = "User", resourceId = "#result?.body?.id")
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginDTO dto) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginDTO dto, HttpServletRequest request) {
+        dto.setLoginIp(RequestUtils.resolveClientIp(request));
+        dto.setUserAgent(RequestUtils.resolveUserAgent(request));
         return ok(userService.login(dto));
     }
 
+    @AuditLog(action = "REGISTER", resourceType = "User", resourceId = "#result?.body?.id")
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterDTO dto) {
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterDTO dto, HttpServletRequest request) {
+        dto.setLoginIp(RequestUtils.resolveClientIp(request));
+        dto.setUserAgent(RequestUtils.resolveUserAgent(request));
         return ok(userService.register(dto));
     }
 
@@ -48,12 +57,14 @@ public class AuthController extends BaseController {
         return ok(user);
     }
 
+    @AuditLog(action = "LOGOUT", resourceType = "User")
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
         userService.logout();
         return ok();
     }
 
+    @AuditLog(action = "UPDATE_PROFILE", resourceType = "User")
     @RequirePermission("user:profile:update")
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(@Valid @RequestBody UpdateProfileDTO dto) {
@@ -61,6 +72,7 @@ public class AuthController extends BaseController {
         return ok();
     }
 
+    @AuditLog(action = "UPDATE_PASSWORD", resourceType = "User")
     @RequirePermission("user:password:update")
     @PutMapping("/password")
     public ResponseEntity<?> updatePassword(@Valid @RequestBody UpdatePasswordDTO dto) {

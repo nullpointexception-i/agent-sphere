@@ -25,6 +25,9 @@ public class AgentUser {
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;
+    private LocalDateTime lastLoginAt;
+    private String lastLoginIp;
+    private String lastLoginUa;
     private String createdBy;
     private String updatedBy;
     private LocalDateTime createdAt;

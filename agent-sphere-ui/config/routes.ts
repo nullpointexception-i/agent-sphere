@@ -149,6 +149,7 @@ export default [
           { path: 'roles', component: './admin/roles' },
           { path: 'permissions', component: './admin/permissions' },
           { path: 'settings', component: './admin/settings' },
+          { path: 'audit-logs', component: './admin/audit-logs' },
           { path: '', redirect: '/admin/users' },
         ],
       },
