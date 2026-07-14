@@ -11,17 +11,22 @@ import com.buukle.agent.instance.dtvo.vo.MessageHistoryVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.RunMapper;
+import com.buukle.agent.instance.dtvo.vo.ClarificationVO;
+import com.buukle.agent.instance.service.ClarificationService;
 import com.buukle.agent.instance.service.RunService;
 import com.buukle.agent.instance.service.converter.RunConverter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements RunService {
     private final RunConverter runConverter;
+    private final ClarificationService clarificationService;
 
     @Override
     public RunVO createRun(CreateRunDTO dto) {
@@ -59,7 +64,17 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .like(keyword != null && !keyword.isBlank(), AgentRun::getUserMessage, keyword)
                 .orderByDesc(AgentRun::getCreatedAt)
                 .page(new Page<>(page, size));
-        return p.convert(runConverter::toVO);
+        IPage<RunVO> voPage = p.convert(runConverter::toVO);
+        // Attach clarification data to each run
+        List<Long> runIds = voPage.getRecords().stream().map(RunVO::getId).collect(Collectors.toList());
+        if (!runIds.isEmpty()) {
+            Map<Long, List<ClarificationVO>> clarificationMap = clarificationService.mapByRunIdList(runIds);
+            for (RunVO runVO : voPage.getRecords()) {
+                List<ClarificationVO> cvs = clarificationMap.get(runVO.getId());
+                if (cvs != null && !cvs.isEmpty()) runVO.setClarifications(cvs);
+            }
+        }
+        return voPage;
     }
 
     @Override

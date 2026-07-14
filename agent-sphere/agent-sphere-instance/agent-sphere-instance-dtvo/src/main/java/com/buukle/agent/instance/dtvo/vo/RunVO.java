@@ -3,6 +3,7 @@ package com.buukle.agent.instance.dtvo.vo;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 public class RunVO implements Serializable {
@@ -16,4 +17,5 @@ public class RunVO implements Serializable {
     private String delivery;
     private String createdBy;
     private String createdAt;
+    private List<ClarificationVO> clarifications;
 }

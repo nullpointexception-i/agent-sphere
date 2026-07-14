@@ -3,14 +3,16 @@ package com.buukle.agent.instance.controller;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
+import com.buukle.agent.instance.dtvo.dto.UpdateDocumentDTO;
+import com.buukle.agent.instance.dtvo.vo.DocumentShareVO;
 import com.buukle.agent.instance.dtvo.vo.DocumentVO;
 import com.buukle.agent.instance.spi.DocumentSpi;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/artifacts/documents")
@@ -39,10 +41,10 @@ public class DocumentController extends BaseController {
 
     @RequirePermission("document:share")
     @PostMapping("/{id}/share")
-    public ResponseEntity<Map<String, String>> createShare(@PathVariable Long id) {
+    public ResponseEntity<?> createShare(@PathVariable Long id) {
         String token = documentSpi.createShareToken(id);
         if (token == null) return ResponseEntity.notFound().build();
-        return ok(Map.of("shareToken", token));
+        return ok(new DocumentShareVO(token));
     }
 
     @GetMapping("/shared/{token}")
@@ -53,8 +55,8 @@ public class DocumentController extends BaseController {
 
     @RequirePermission("document:update")
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, String> body) {
-        documentSpi.update(id, body.getOrDefault("title", ""), body.getOrDefault("content", ""));
+    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UpdateDocumentDTO dto) {
+        documentSpi.update(id, dto.getTitle() != null ? dto.getTitle() : "", dto.getContent() != null ? dto.getContent() : "");
         return ok();
     }
 

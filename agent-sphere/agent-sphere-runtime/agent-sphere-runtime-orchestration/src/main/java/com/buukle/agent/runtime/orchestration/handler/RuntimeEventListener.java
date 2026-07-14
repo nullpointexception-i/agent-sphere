@@ -12,6 +12,7 @@ import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.runtime.orchestration.sse.SseManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
@@ -65,6 +66,7 @@ public class RuntimeEventListener {
             case COMPLETED -> RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_COMPLETED;
             case FAILED -> RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_FAILED;
             case CANCELLED -> RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_CANCELLED;
+            case AWAITING_USER -> RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_AWAITING_USER;
         };
     }
 
@@ -102,6 +104,7 @@ public class RuntimeEventListener {
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_COMPLETED -> "✅ Run completed";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_FAILED -> "❌ Run failed";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_CANCELLED -> "⏹️ Run cancelled";
+            case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_AWAITING_USER -> "⏸️ Awaiting user clarification";
             default -> "";
         };
         dst.setResponse(text);
@@ -127,6 +130,7 @@ public class RuntimeEventListener {
             }
             case ChromeCommandEventType s -> {
             }
+            case ClarificationStatus s -> { /* handled via SSE passthrough */ }
         }
 
         Long sessionId = data != null ? data.getSessionId() : null;
@@ -152,6 +156,10 @@ public class RuntimeEventListener {
                 runSpi.updateRun(run);
             }
             case FAILED -> {
+                run.setStatus(status.value());
+                runSpi.updateRun(run);
+            }
+            case AWAITING_USER -> {
                 run.setStatus(status.value());
                 runSpi.updateRun(run);
             }

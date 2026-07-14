@@ -29,4 +29,5 @@ public class RuntimeEventDataVO {
     private String reasoningSubType;
     private String publishId;
     private String screenshot;
+    private String clarificationId;
 }

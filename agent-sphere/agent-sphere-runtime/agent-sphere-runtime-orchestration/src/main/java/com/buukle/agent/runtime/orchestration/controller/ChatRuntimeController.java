@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.orchestration.controller;
 
 import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.instance.dtvo.dto.ClarifyDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
@@ -20,7 +21,7 @@ public class ChatRuntimeController {
 
     @PostMapping("/{sessionId}/chat")
     public ResponseEntity<ChatMessageResponseVO> chat(@PathVariable Long sessionId,
-                                                      @Valid @RequestBody SendMessageDTO dto) {
+                                                       @Valid @RequestBody SendMessageDTO dto) {
         ChatMessageResponseVO response = chatRuntimeService.chat(sessionId, dto);
         return ResponseEntity.ok(response);
     }
@@ -30,5 +31,13 @@ public class ChatRuntimeController {
                                      @PathVariable Long runId) {
         SessionRunner.cancelRun(runId);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{sessionId}/run/{runId}/clarify")
+    public ResponseEntity<?> clarify(@PathVariable Long sessionId,
+                                      @PathVariable Long runId,
+                                      @Valid @RequestBody ClarifyDTO dto) {
+        ChatMessageResponseVO result = chatRuntimeService.resumeFromClarification(sessionId, runId, dto.getResponse(), dto.getClarificationId());
+        return ResponseEntity.ok(result);
     }
 }

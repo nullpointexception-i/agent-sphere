@@ -4,10 +4,14 @@ import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
+import com.buukle.agent.common.config.UpdateConfigDTO;
 import com.buukle.agent.common.security.CryptoService;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.repository.ApiKeyMapper;
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -46,17 +50,16 @@ public class SystemConfigController extends BaseController {
     @AuditLog(action = "UPDATE", resourceType = "Settings", resourceId = "#key")
     @RequirePermission("admin:settings:update")
     @PutMapping("/{key}")
-    public ResponseEntity<?> updateConfig(@PathVariable String key, @RequestBody Map<String, String> body) {
-        String value = body.get("value");
-        systemConfigSpi.set(key, value);
+    public ResponseEntity<?> updateConfig(@PathVariable String key, @Valid @RequestBody UpdateConfigDTO dto) {
+        systemConfigSpi.set(key, dto.getValue());
         systemConfigService.invalidateCache(key);
-        return ok(Map.of("message", "已更新"));
+        return ok(new ConfigUpdateResult("已更新"));
     }
 
     @AuditLog(action = "REGENERATE", resourceType = "Settings", resourceId = "'aes-key'")
     @RequirePermission("admin:settings:regenerate-aes")
     @PostMapping("/crypto.aes-key/regenerate")
-    public ResponseEntity<?> regenerateAesKey() {
+    public ResponseEntity<ConfigUpdateResult> regenerateAesKey() {
         String oldBase64Key = systemConfigSpi.get(SystemConfigKeys.AES_KEY);
 
         // 2. Generate new key
@@ -102,8 +105,14 @@ public class SystemConfigController extends BaseController {
 
         log.info("AES key regenerated, re-encrypted {} API key(s)", reEncrypted);
 
-        return ok(Map.of("message", "AES 密钥已重新生成，已重新加密 " + reEncrypted + " 个 API Key"));
+        return ok(new ConfigUpdateResult("AES 密钥已重新生成，已重新加密 " + reEncrypted + " 个 API Key"));
     }
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SystemConfigController.class);
+}
+
+@Data
+@AllArgsConstructor
+class ConfigUpdateResult {
+    private String message;
 }

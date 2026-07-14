@@ -17,6 +17,7 @@ public final class RuntimeEventTypeConstant {
     public static final String REASONING_SUB_TYPE_RUN_COMPLETED = "run_completed";
     public static final String REASONING_SUB_TYPE_RUN_FAILED = "run_failed";
     public static final String REASONING_SUB_TYPE_RUN_CANCELLED = "run_cancelled";
+    public static final String REASONING_SUB_TYPE_RUN_AWAITING_USER = "run_awaiting_user";
 
     public static final String REASONING_SUB_TYPE_COMPACTION_RUNNING = "compaction_running";
     public static final String REASONING_SUB_TYPE_COMPACTION_COMPLETED = "compaction_completed";

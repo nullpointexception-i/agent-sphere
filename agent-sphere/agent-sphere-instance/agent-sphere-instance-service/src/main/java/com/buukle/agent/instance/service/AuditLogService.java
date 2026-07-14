@@ -23,6 +23,9 @@ public class AuditLogService {
 
     private static final int MAX_FE_PER_WINDOW = 50;
     private static final int FE_WINDOW_SECONDS = 10;
+    private static final String FE_RATE_KEY_PREFIX = "fe:";
+    private static final String RESOURCE_TYPE_FRONTEND = "Frontend";
+    private static final String FRONTEND_DETAIL_FORMAT = "%s | %s | pos=%s,%s | text=%s";
 
     private final ConcurrentHashMap<String, int[]> frontendRateMap = new ConcurrentHashMap<>();
 
@@ -65,7 +68,7 @@ public class AuditLogService {
 
         Long userId = AuthContext.getUserId();
         if (userId != null) {
-            String key = "fe:" + userId;
+            String key = FE_RATE_KEY_PREFIX + userId;
             int now = (int) (System.currentTimeMillis() / 1000);
             int window = now / FE_WINDOW_SECONDS;
             int[] state = frontendRateMap.get(key);
@@ -93,9 +96,9 @@ public class AuditLogService {
             entity.setUserId(AuthContext.getUserId());
             entity.setUsername(AuthContext.getUsername());
             entity.setAction(event.getEventType());
-            entity.setResourceType("Frontend");
+            entity.setResourceType(RESOURCE_TYPE_FRONTEND);
             entity.setResourceId(event.getPage());
-            entity.setDetail("%s | %s | pos=%s,%s | text=%s".formatted(
+            entity.setDetail(FRONTEND_DETAIL_FORMAT.formatted(
                     event.getElementPath() != null ? event.getElementPath() : "",
                     event.getElementTag() != null ? event.getElementTag() : "",
                     event.getPositionX() != null ? event.getPositionX() : "",

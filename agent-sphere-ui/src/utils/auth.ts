@@ -7,6 +7,7 @@ export interface UserVO {
   avatar: string;
   token: string;
   status: string;
+  demo?: boolean;
   roles?: string[];
   permissions?: string[];
 }
@@ -40,5 +41,6 @@ export function toProCurrentUser(user: UserVO): API.CurrentUser {
     userid: String(user.id),
     email: user.email,
     access: user.username === 'admin' ? 'admin' : 'user',
+    demo: user.demo === true,
   };
 }

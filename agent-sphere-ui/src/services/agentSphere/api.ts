@@ -84,6 +84,10 @@ export const agentApi = {
       request<any>(`${BASE}/instance/sessions/${id}/toolcalls/latest`),
     getDocuments: (id: number, page = 1, size = 20) =>
       request<any>(`${BASE}/artifacts/documents?sessionId=${id}&page=${page}&size=${size}`),
+    clarify: (sessionId: number, runId: number, response: string, clarificationId?: string) =>
+      request<any>(`${BASE}/runtime/${sessionId}/run/${runId}/clarify`, {
+        method: 'POST', data: { response, clarificationId },
+      }),
   },
 
   runs: {

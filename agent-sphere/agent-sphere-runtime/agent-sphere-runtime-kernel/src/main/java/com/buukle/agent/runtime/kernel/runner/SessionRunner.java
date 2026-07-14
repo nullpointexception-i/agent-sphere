@@ -17,6 +17,7 @@ import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.async.FiberSet;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
+import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
@@ -335,6 +336,26 @@ public class SessionRunner {
                 break;
             }
             var results = fibers.awaitAll();
+
+            // Detect clarification (awaiting_user) — pause run instead of looping back to LLM
+            boolean awaitingUser = false;
+            for (TurnToolCall tc : turn.toolCalls()) {
+                String toolResult = results.getOrDefault(tc.id(), "");
+                if (ChatClarification.CLARIFICATION_TOOL_NAME.equals(tc.name()) && toolResult.contains("\"status\":\"awaiting_user\"")) {
+                    awaitingUser = true;
+                    break;
+                }
+            }
+            if (awaitingUser) {
+                currentRun.setStatus(RunStatus.AWAITING_USER.name());
+                runSpi.updateRun(currentRun);
+                eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.AWAITING_USER,
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(currentRunId)
+                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                break;
+            }
 
             // Detect cancellation during tool execution
             if (CANCELLED_RUNS.remove(currentRunId)) {

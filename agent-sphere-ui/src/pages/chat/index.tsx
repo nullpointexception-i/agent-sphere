@@ -152,17 +152,31 @@ export default function Chat() {
             ts: new Date(r.createdAt).getTime(),
           });
         }
-        if (
-          r.assistantReply &&
-          r.assistantReply !== '{}' &&
-          r.assistantReply.trim()
-        ) {
-          seenReplyRunIdsRef.current.add(r.id);
+        const hasAssistantContent =
+          r.assistantReply && r.assistantReply !== '{}' && r.assistantReply.trim();
+        const hasClarifications = !!r.clarifications && r.clarifications.length > 0;
+        if (hasAssistantContent || hasClarifications) {
+          if (hasAssistantContent) seenReplyRunIdsRef.current.add(r.id);
+          const clarifications = r.clarifications
+            ? r.clarifications.map((c: any) => ({
+                clarificationId: c.clarificationId,
+                runId: c.runId,
+                sessionId: c.sessionId,
+                title: c.title,
+                type: c.type,
+                options: c.options
+                  ? (() => { try { return JSON.parse(c.options); } catch { return []; } })()
+                  : [],
+                status: c.status,
+                userResponse: c.userResponse,
+              }))
+            : [];
           historyMsgs.push({
             role: 'ai',
-            content: r.assistantReply,
+            content: r.assistantReply || '',
             runId: r.id,
             ts: new Date(r.createdAt).getTime(),
+            clarifications,
           });
           historyKeys.push(`run-${r.id}`);
         }
@@ -401,7 +415,8 @@ export default function Chat() {
               if (
                 subType === 'run_completed' ||
                 subType === 'run_failed' ||
-                subType === 'run_cancelled'
+                subType === 'run_cancelled' ||
+                subType === 'run_awaiting_user'
               ) {
                 setSending(false);
                 const runId = d?.runId;
@@ -530,6 +545,70 @@ export default function Chat() {
                 setLatestScreenshot(d.screenshot);
                 setLatestArtifact(
                   JSON.stringify({ data: { url: d?.response || '' } }),
+                );
+              }
+              return;
+            }
+            if (evtType.startsWith('clarification_')) {
+              if (evtType === 'clarification_pending' && d?.runId) {
+                const opts = d.argumentsJson ? (() => { try { return JSON.parse(d.argumentsJson); } catch { return []; } })() : [];
+                const clarificationObj = {
+                  clarificationId: d.clarificationId,
+                  runId: d.runId,
+                  sessionId: d.sessionId,
+                  title: d.prompt || '',
+                  type: d.type || 'confirm',
+                  options: opts,
+                  status: 'pending' as const,
+                };
+                setMessages((prev) => {
+                  const idx = prev.findIndex((m: any) => m.role === 'ai' && m.runId === d.runId);
+                  if (idx >= 0) {
+                    return prev.map((m, i) =>
+                      i === idx
+                        ? {
+                            ...m,
+                            clarifications: [
+                              ...((m as any).clarifications || []).filter((c: any) => c.clarificationId !== d.clarificationId),
+                              clarificationObj,
+                            ],
+                            _pending: false,
+                          }
+                        : m,
+                    );
+                  }
+                  return [
+                    ...prev,
+                    { role: 'ai', content: '', runId: d.runId, ts: Date.now(), clarifications: [clarificationObj], _pending: false },
+                  ];
+                });
+              }
+              if (evtType === 'clarification_responded') {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    (m as any).runId === d?.runId
+                      ? {
+                          ...m,
+                          clarifications: ((m as any).clarifications || []).map((c: any) =>
+                            c.clarificationId === d.clarificationId ? { ...c, status: 'responded', userResponse: d.response } : c,
+                          ),
+                        }
+                      : m,
+                  ),
+                );
+              }
+              if (evtType === 'clarification_expired') {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    (m as any).runId === d?.runId
+                      ? {
+                          ...m,
+                          clarifications: ((m as any).clarifications || []).map((c: any) =>
+                            c.clarificationId === d.clarificationId ? { ...c, status: 'expired' } : c,
+                          ),
+                        }
+                      : m,
+                  ),
                 );
               }
               return;

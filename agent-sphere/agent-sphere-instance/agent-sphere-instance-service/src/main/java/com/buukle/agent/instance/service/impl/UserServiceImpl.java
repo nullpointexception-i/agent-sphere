@@ -61,7 +61,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         vo.setStatus(user.getStatus());
         vo.setLastLoginAt(user.getLastLoginAt());
         vo.setSuperAdmin(user.getSuperAdmin());
-        vo.setRoles(roleSpi.listByUserId(user.getId()).stream().map(r -> r.getCode()).toList());
+        var roles = roleSpi.listByUserId(user.getId());
+        vo.setRoles(roles.stream().map(r -> r.getCode()).toList());
+        vo.setDemo(roles.stream().anyMatch(r -> "DEMO".equals(r.getCode())));
         boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
         vo.setPermissions(isSuperAdmin ? permissionSpi.listAllCodes() : permissionSpi.listCodesByUserId(user.getId()));
         return vo;

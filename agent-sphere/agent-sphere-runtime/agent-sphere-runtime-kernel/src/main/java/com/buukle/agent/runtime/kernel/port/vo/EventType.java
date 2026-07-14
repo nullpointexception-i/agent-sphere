@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 public sealed interface EventType
         permits RunStatus, ToolCallStatus, CompactionStatus,
         UserInLoopRecordStatus, FlowEventType, SessionStatus,
-        ScreenshotEventType, ChromeCommandEventType {
+        ScreenshotEventType, ChromeCommandEventType, ClarificationStatus {
     @JsonValue
     String value();
 }

@@ -53,5 +53,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-instance-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-instance-repository</artifactId>
+        </dependency>
     </dependencies>
 </project>

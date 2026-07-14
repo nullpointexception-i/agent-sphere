@@ -140,11 +140,10 @@ export const layout: RunTimeLayoutConfig = ({
     ErrorBoundary,
     menuHeaderRender: false,
     childrenRender: (children) => {
-      const storedUser = getStoredUser();
-      const isDemo001 = storedUser?.username === 'demo001';
+      const isDemo = initialState?.currentUser?.demo === true;
       return (
         <>
-          {isDemo001 && (
+          {isDemo && (
             <Alert
               message={<FormattedMessage id="pages.demo.banner" />}
               type="info"

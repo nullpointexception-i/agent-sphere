@@ -39,7 +39,14 @@ public final class RunnerConstants {
             CRITICAL: When you need to call a tool, you MUST use the function calling API
             (respond with tool_calls in the API format). Do NOT describe or plan tool calls
             as JSON or text in your reply — invoke the tool directly through the available
-            function definitions.""";
+            function definitions.
+
+            CLARIFICATION RULE: If you ever need the user to confirm an action, choose
+            between options, or provide additional information, you MUST call the
+            clarification tool (type=choice for options, confirm for yes/no, input for
+            free-form). NEVER pose questions in natural language — the user cannot respond
+            to plain text questions in this interface; only the clarification tool
+            can capture their reply.""";
     public static final String COMPACTION_USER_PREFIX = "User: ";
     public static final String COMPACTION_ASSISTANT_PREFIX = "Assistant: ";
     public static final String COMPACTION_NEWLINE = "\n";

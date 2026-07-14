@@ -1,7 +1,9 @@
 package com.buukle.agent.runtime.orchestration.pipeline;
 
+import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.capability.builtin.dtvo.vo.BuiltinToolVO;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
+import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
 import com.buukle.agent.capability.cli.spi.CapabilityCliSpi;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpToolInfoVO;
@@ -39,6 +41,7 @@ public class ContextPreparer {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String DEFAULT_EMPTY_SCHEMA = "{\"type\":\"object\",\"properties\":{}}";
+    private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (be clear and friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"Type of clarification needed: confirm for yes/no, choice for multiple options, input for free-form answer\"},\"options\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"}},\"description\":\"Choices for the user (required when type=choice)\"}},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"}},\"required\":[\"title\",\"type\"]}";
 
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
@@ -184,6 +187,21 @@ public class ContextPreparer {
                     .parametersSchemaJson(tool.getParamSchema())
                     .execBinding(binding).build());
         }
+        // Always register ask_clarification
+        long clarificationId = BuiltinToolEnum.ASK_CLARIFICATION.getId();
+        String clarificationLlmName = LLM_PREFIX_BUILTIN + clarificationId;
+        Map<String, Object> clarificationBinding = new HashMap<>();
+        clarificationBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ChatClarification.INTERNAL_NAME);
+        result.add(RuntimeTool.builder()
+                .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                .capabilityId(clarificationId)
+                .llmToolName(clarificationLlmName)
+                .displayName(ChatClarification.DISPLAY_NAME)
+                .displayNameCn(ChatClarification.DISPLAY_NAME_CN)
+                .displayNameEn(ChatClarification.DISPLAY_NAME)
+                .description(ChatClarification.DESCRIPTION)
+                .parametersSchemaJson(CLARIFICATION_PARAM_SCHEMA)
+                .execBinding(clarificationBinding).build());
         Set<String> seen = new HashSet<>();
         List<RuntimeTool> deduped = new ArrayList<>();
         for (RuntimeTool t : result) {
