@@ -477,15 +477,15 @@ The permission check is enforced at the controller layer via `@WithTenant` and `
 
 #### User Management
 
-![User Management](agent-sphere-readme/ui-admin-user.png)
+![User Management](agent-sphere-readme/ui-admin-user-en.png)
 
 #### Role Configuration
 
-![Role Configuration](agent-sphere-readme/ui-admin-role.png)
+![Role Configuration](agent-sphere-readme/ui-admin-role-en.png)
 
 #### Permission Assignment
 
-![Permission Assignment](agent-sphere-readme/ui-admin-permission.png)
+![Permission Assignment](agent-sphere-readme/ui-admin-permission-en.png)
 
 ### 4.9 Audit Log
 
@@ -504,7 +504,7 @@ AgentSphere records all user operations as audit logs for security review and tr
 
 #### Audit Log UI
 
-![Audit Log UI](agent-sphere-readme/ui-admin-auditlog.png)
+![Audit Log UI](agent-sphere-readme/ui-admin-auditlog-en.png)
 
 ---
 
