@@ -130,7 +130,9 @@ export default function DocumentDetail() {
     el.style.background = '#ffe58f';
     setTimeout(() => {
       el.style.background = 'transparent';
-      setTimeout(() => { el.style.transition = ''; }, 100);
+      setTimeout(() => {
+        el.style.transition = '';
+      }, 100);
     }, 1000);
   };
 

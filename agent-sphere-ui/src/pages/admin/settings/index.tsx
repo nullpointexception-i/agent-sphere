@@ -104,7 +104,10 @@ export default function AdminSettings() {
             {config.configKey}
             {config.isSecret && (
               <Tag color="red" style={{ marginLeft: 8 }}>
-                Secret
+                {intl.formatMessage({
+                  id: 'pages.admin.settings.secret',
+                  defaultMessage: 'Secret',
+                })}
               </Tag>
             )}
           </div>
@@ -113,11 +116,20 @@ export default function AdminSettings() {
         <div className={styles.configValue}>
           {config.configKey === 'crypto.aes-key' ? (
             <span style={{ color: 'rgba(0,0,0,0.25)' }}>
-              {config.configValue || '(未设置)'}
+              {config.configValue ||
+                intl.formatMessage({
+                  id: 'pages.admin.settings.notSet',
+                  defaultMessage: '(未设置)',
+                })}
             </span>
           ) : (
             config.configValue || (
-              <span style={{ color: 'rgba(0,0,0,0.25)' }}>(empty)</span>
+              <span style={{ color: 'rgba(0,0,0,0.25)' }}>
+                {intl.formatMessage({
+                  id: 'pages.admin.settings.empty',
+                  defaultMessage: '(空)',
+                })}
+              </span>
             )
           )}
         </div>

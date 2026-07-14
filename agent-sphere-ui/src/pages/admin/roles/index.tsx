@@ -11,8 +11,8 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useState } from 'react';
-import { agentApi } from '@/services/agentSphere/api';
 import { Can } from '@/components/Can';
+import { agentApi } from '@/services/agentSphere/api';
 
 export default function AdminRoles() {
   const intl = useIntl();
@@ -128,7 +128,14 @@ export default function AdminRoles() {
       dataIndex: 'name',
       key: 'name',
     },
-    { title: '编码', dataIndex: 'code', key: 'code' },
+    {
+      title: intl.formatMessage({
+        id: 'pages.table.code',
+        defaultMessage: 'Code',
+      }),
+      dataIndex: 'code',
+      key: 'code',
+    },
     {
       title: intl.formatMessage({
         id: 'pages.table.description',
@@ -213,12 +220,19 @@ export default function AdminRoles() {
             checked={checkedPermIds.includes(node.id)}
             onChange={(e) => {
               setCheckedPermIds((prev) =>
-                e.target.checked ? [...prev, node.id] : prev.filter((k) => k !== node.id),
+                e.target.checked
+                  ? [...prev, node.id]
+                  : prev.filter((k) => k !== node.id),
               );
             }}
           >
             {node.name}
-            <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>{node.code}</Typography.Text>
+            <Typography.Text
+              type="secondary"
+              style={{ fontSize: 11, marginLeft: 4 }}
+            >
+              {node.code}
+            </Typography.Text>
           </Checkbox>
         </div>
       );
@@ -232,7 +246,10 @@ export default function AdminRoles() {
       if (childRendered.length === 0) return null;
       return (
         <div key={node.id} style={{ marginBottom: 16 }}>
-          <Typography.Text strong style={{ fontSize: 14, display: 'block', marginBottom: 8 }}>
+          <Typography.Text
+            strong
+            style={{ fontSize: 14, display: 'block', marginBottom: 8 }}
+          >
             {node.name}
           </Typography.Text>
           {childRendered}
@@ -242,7 +259,10 @@ export default function AdminRoles() {
 
     return (
       <div key={node.id} style={{ marginBottom: 10, marginLeft: 16 }}>
-        <Typography.Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+        <Typography.Text
+          strong
+          style={{ fontSize: 13, display: 'block', marginBottom: 4 }}
+        >
           {node.name}
         </Typography.Text>
         {childRendered}
@@ -305,12 +325,18 @@ export default function AdminRoles() {
           </Form.Item>
           <Form.Item
             name="code"
-            label="编码"
+            label={intl.formatMessage({
+              id: 'pages.form.code',
+              defaultMessage: 'Code',
+            })}
             rules={[
               {
                 required: true,
                 pattern: /^[A-Z_]+$/,
-                message: '仅允许大写字母和下划线',
+                message: intl.formatMessage({
+                  id: 'pages.admin.roles.codePattern',
+                  defaultMessage: 'Uppercase letters and underscores only',
+                }),
               },
             ]}
           >

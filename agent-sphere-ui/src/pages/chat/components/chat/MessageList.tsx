@@ -295,9 +295,7 @@ export default function MessageList({
               ),
             };
           }
-          const elapsed = m.ts
-            ? Math.floor((Date.now() - m.ts) / 1000)
-            : 0;
+          const elapsed = m.ts ? Math.floor((Date.now() - m.ts) / 1000) : 0;
           return {
             key,
             role: 'reasoning',

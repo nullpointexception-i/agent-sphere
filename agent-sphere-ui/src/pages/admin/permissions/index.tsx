@@ -11,8 +11,8 @@ import {
   Table,
 } from 'antd';
 import { useEffect, useState } from 'react';
-import { agentApi } from '@/services/agentSphere/api';
 import { Can } from '@/components/Can';
+import { agentApi } from '@/services/agentSphere/api';
 
 const PERM_TYPES = ['MENU', 'BUTTON'];
 
@@ -93,7 +93,12 @@ export default function AdminPermissions() {
   };
 
   const columns = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
+    {
+      title: intl.formatMessage({ id: 'pages.table.id', defaultMessage: 'ID' }),
+      dataIndex: 'id',
+      key: 'id',
+      width: 60,
+    },
     {
       title: intl.formatMessage({
         id: 'pages.form.name',
@@ -102,9 +107,32 @@ export default function AdminPermissions() {
       dataIndex: 'name',
       key: 'name',
     },
-    { title: '编码', dataIndex: 'code', key: 'code' },
-    { title: '类型', dataIndex: 'type', key: 'type', width: 80 },
-    { title: '排序', dataIndex: 'sort', key: 'sort', width: 60 },
+    {
+      title: intl.formatMessage({
+        id: 'pages.table.code',
+        defaultMessage: '编码',
+      }),
+      dataIndex: 'code',
+      key: 'code',
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.table.type',
+        defaultMessage: '类型',
+      }),
+      dataIndex: 'type',
+      key: 'type',
+      width: 80,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.table.sort',
+        defaultMessage: '排序',
+      }),
+      dataIndex: 'sort',
+      key: 'sort',
+      width: 60,
+    },
     {
       title: intl.formatMessage({
         id: 'pages.table.actions',
@@ -224,28 +252,59 @@ export default function AdminPermissions() {
           </Form.Item>
           <Form.Item
             name="code"
-            label="编码"
+            label={intl.formatMessage({
+              id: 'pages.form.code',
+              defaultMessage: '编码',
+            })}
             rules={[
               { required: true },
-              { pattern: /^[a-z][a-z0-9:*]*$/, message: '格式: module:action' },
+              {
+                pattern: /^[a-z][a-z0-9:*]*$/,
+                message: intl.formatMessage({
+                  id: 'pages.admin.permissions.codePattern',
+                  defaultMessage: '格式: module:action',
+                }),
+              },
             ]}
           >
             <Input maxLength={100} disabled={!!editing} />
           </Form.Item>
-          <Form.Item name="type" label="类型" rules={[{ required: true }]}>
+          <Form.Item
+            name="type"
+            label={intl.formatMessage({
+              id: 'pages.form.type',
+              defaultMessage: '类型',
+            })}
+            rules={[{ required: true }]}
+          >
             <Select options={PERM_TYPES.map((t) => ({ label: t, value: t }))} />
           </Form.Item>
-          <Form.Item name="parentId" label="父级">
+          <Form.Item
+            name="parentId"
+            label={intl.formatMessage({
+              id: 'pages.admin.permissions.parent',
+              defaultMessage: '父级',
+            })}
+          >
             <Select
               allowClear
-              placeholder="无（一级菜单）"
+              placeholder={intl.formatMessage({
+                id: 'pages.admin.permissions.parentPlaceholder',
+                defaultMessage: '无（一级菜单）',
+              })}
               options={allParents.map((p: any) => ({
                 label: `${p.name} (${p.code})`,
                 value: p.id,
               }))}
             />
           </Form.Item>
-          <Form.Item name="sort" label="排序">
+          <Form.Item
+            name="sort"
+            label={intl.formatMessage({
+              id: 'pages.form.sort',
+              defaultMessage: '排序',
+            })}
+          >
             <InputNumber min={0} max={999} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item

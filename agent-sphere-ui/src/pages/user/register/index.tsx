@@ -66,7 +66,7 @@ const Register: React.FC = () => {
       startTransition(() =>
         setInitialState((s: any) => ({ ...s, currentUser: userInfo })),
       );
-      history.push('/account/profile');
+      history.push('/chat');
     } catch (error: any) {
       setErrorMessage(
         error?.data?.userTip ||

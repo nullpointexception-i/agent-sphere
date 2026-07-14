@@ -354,9 +354,11 @@ export default {
   'pages.document.shareTitle': 'Share Document',
   'pages.document.shareFailed': 'Share failed',
   'pages.document.shareHint': 'Scan QR code or copy link to share',
-  'pages.document.sharedDocNotFound': 'Document not found or sharing has been cancelled',
+  'pages.document.sharedDocNotFound':
+    'Document not found or sharing has been cancelled',
   'pages.document.sharedDocCreated': 'Created',
-  'pages.demo.banner': 'Demo account — all models are free. For complex tasks, use DeepSeek V4 Flash+ or OpenAI 5.1+ for better results.',
+  'pages.demo.banner':
+    'Demo account — all models are free. For complex tasks, use DeepSeek V4 Flash+ or OpenAI 5.1+ for better results.',
   'pages.demo.bannerAction': 'Configure',
   'pages.demo.bannerRegister': 'Register & Configure',
   'pages.admin.settings.title': 'System Settings',
@@ -380,4 +382,17 @@ export default {
   'pages.admin.settings.edit.label': 'Configuration Value',
   'pages.admin.settings.edit.secret.placeholder':
     'Leave empty to keep current value',
+  'pages.admin.users.roles': 'Roles',
+  'pages.table.code': 'Code',
+  'pages.table.sort': 'Sort',
+  'pages.form.code': 'Code',
+  'pages.form.type': 'Type',
+  'pages.form.sort': 'Sort',
+  'pages.admin.permissions.parent': 'Parent',
+  'pages.admin.permissions.parentPlaceholder': 'None (top-level)',
+  'pages.admin.permissions.codePattern': 'Format: module:action',
+  'pages.admin.roles.codePattern': 'Uppercase letters and underscores only',
+  'pages.admin.settings.secret': 'Secret',
+  'pages.admin.settings.notSet': '(not set)',
+  'pages.admin.settings.empty': '(empty)',
 };

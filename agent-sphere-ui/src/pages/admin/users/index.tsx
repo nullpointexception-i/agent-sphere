@@ -1,8 +1,8 @@
 import { useIntl } from '@umijs/max';
 import { App, Button, Checkbox, Modal, Space, Table, Tag } from 'antd';
 import { useEffect, useState } from 'react';
-import { agentApi } from '@/services/agentSphere/api';
 import { Can } from '@/components/Can';
+import { agentApi } from '@/services/agentSphere/api';
 
 interface UserItem {
   id: number;
@@ -83,7 +83,12 @@ export default function AdminUsers() {
   };
 
   const columns = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
+    {
+      title: intl.formatMessage({ id: 'pages.table.id', defaultMessage: 'ID' }),
+      dataIndex: 'id',
+      key: 'id',
+      width: 80,
+    },
     {
       title: intl.formatMessage({
         id: 'pages.register.subtitle',
@@ -107,6 +112,16 @@ export default function AdminUsers() {
       }),
       dataIndex: 'englishName',
       key: 'englishName',
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.admin.users.roles',
+        defaultMessage: 'Roles',
+      }),
+      dataIndex: 'roles',
+      key: 'roles',
+      render: (roles: string[]) =>
+        roles?.length ? roles.map((r) => <Tag key={r}>{r}</Tag>) : '-',
     },
     {
       title: intl.formatMessage({

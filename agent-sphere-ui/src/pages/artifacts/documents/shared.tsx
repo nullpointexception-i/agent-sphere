@@ -116,7 +116,9 @@ export default function SharedDocument() {
     el.style.background = '#ffe58f';
     setTimeout(() => {
       el.style.background = 'transparent';
-      setTimeout(() => { el.style.transition = ''; }, 100);
+      setTimeout(() => {
+        el.style.transition = '';
+      }, 100);
     }, 1000);
   };
 
@@ -143,14 +145,21 @@ export default function SharedDocument() {
   }
 
   return (
-    <div ref={containerRef} className={styles.containerDetail} style={{ height: containerHeight }}>
+    <div
+      ref={containerRef}
+      className={styles.containerDetail}
+      style={{ height: containerHeight }}
+    >
       <div className={styles.headerBarDetail}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Typography.Title level={3} style={{ margin: 0 }}>
             {doc.title || '-'}
           </Typography.Title>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {intl.formatMessage({ id: 'pages.document.sharedDocCreated', defaultMessage: 'Created' })}
+            {intl.formatMessage({
+              id: 'pages.document.sharedDocCreated',
+              defaultMessage: 'Created',
+            })}
             : {doc.createdAt ? new Date(doc.createdAt).toLocaleString() : '-'}
           </Typography.Text>
         </div>
@@ -160,13 +169,18 @@ export default function SharedDocument() {
           size="small"
           onClick={() => setTocOpen(!tocOpen)}
         >
-          {intl.formatMessage({ id: 'pages.document.outline', defaultMessage: 'Outline' })}
+          {intl.formatMessage({
+            id: 'pages.document.outline',
+            defaultMessage: 'Outline',
+          })}
         </Button>
       </div>
       <div className={styles.contentFlex}>
         <div className={`markdown-body ${styles.contentCard}`}>
           <div className={styles.markdownScroll}>
-            <XMarkdown components={headingComponents}>{doc.content || ''}</XMarkdown>
+            <XMarkdown components={headingComponents}>
+              {doc.content || ''}
+            </XMarkdown>
           </div>
         </div>
         <TocPanel
