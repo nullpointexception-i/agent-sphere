@@ -29,6 +29,8 @@
 
 ![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
 
+![ui-chat-clarification.png](agent-sphere-readme/ui-chat-clarification.png)
+
 ▶ [点击观看视频演示](https://www.bilibili.com/video/BV1WqTT62Efq/)
 
 [![视频预览](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1WqTT62Efq/)
@@ -228,6 +230,40 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 ![会话跟随 Session Following](agent-sphere-readme/session-following.png)
 
+### 3.8 用户澄清（Human-in-the-Loop）
+
+AgentSphere 支持 **用户澄清（User Clarification）** 机制，使 LLM 在遇到模糊或需要用户决策的情况时暂停执行并向用户明确提问，实现 Human-in-the-Loop 模式。
+
+#### 工作流程
+
+1. **LLM 调用**：在执行过程中，当 LLM 需要用户输入（如选择选项、确认操作、补充信息）时，调用内置工具 `ask_clarification`。
+2. **暂停并通知**：Run 暂停并进入 `AWAITING_USER` 状态。前端收到 `clarification_pending` SSE 事件，展示澄清卡片（包含 type、title、options）。
+3. **用户回应**：用户通过聊天界面中的澄清卡片进行回应：
+   - **confirm** — 确认/取消二选一
+   - **choice** — 多项选择
+   - **input** — 自由文本输入
+4. **恢复执行**：系统接收回应后恢复 Run，将 `"[User Response to Clarification]: ..."` 注入 LLM 上下文。如果原始 Run 已结束，则 Fork 新 Run 继续执行。
+
+#### 澄清卡片（UI）
+
+![澄清卡片 UI](agent-sphere-readme/ui-chat-clarification.png)
+
+#### 取消机制
+
+用户可随时取消待处理的澄清：
+- **卡片取消**：每张澄清卡片都有取消按钮，点击后发送取消信号并停止当前 Run。
+- **输入框取消**：存在待处理澄清时，聊天输入框显示停止按钮；点击后取消所有待处理澄清并停止当前 Run。
+- **新消息自动取消**：存在待处理澄清时发送新消息，系统自动先取消所有待处理澄清。
+
+#### SSE 事件
+
+| 事件 | 触发时机 | 效果 |
+|------|---------|------|
+| `clarification_pending` | LLM 调用 `ask_clarification` 工具 | 出现澄清卡片 |
+| `clarification_responded` | 用户提交回应 | 卡片显示 ✓，run 继续 |
+| `clarification_expired` | 30 分钟 TTL 到期 | 卡片变灰 |
+| `clarification_dismissed` | 等待时 run 被取消 | 卡片显示已撤销 |
+
 ---
 
 ## 4. Administration — 运维与管理
@@ -279,6 +315,10 @@ reasoning_token   → "🤔 用户问天气，我需要打开天气网站"
 | `tool_call_failed` | 工具失败 | ❌ 图标 |
 | `compaction_running` | 压缩开始 | 推理面板 |
 | `compaction_completed` | 压缩完成 | 推理面板 |
+| `clarification_pending` | LLM 请求用户输入 | 澄清卡片（confirm/choice/input） |
+| `clarification_responded` | 用户做出回应 | 卡片显示 ✓，run 继续 |
+| `clarification_expired` | 澄清 TTL 到期 | 卡片显示已过期 |
+| `clarification_dismissed` | Run 被取消（等待用户时） | 卡片显示已撤销 |
 
 #### 4.2.2 Run Activity API
 
@@ -420,6 +460,51 @@ public class CapabilityBuiltinToolMyTool implements CapabilityBuiltinToolSpi {
     }
 }
 ```
+
+### 4.8 RBAC（基于角色的权限控制）
+
+AgentSphere 提供完整的 RBAC 权限体系，支持多用户管理和 API 级别的细粒度权限控制。
+
+#### 权限模型
+
+| 组件 | 说明 |
+|------|------|
+| **用户（User）** | 系统用户，每个用户可分配一个或多个角色 |
+| **角色（Role）** | 权限的命名集合，如 "管理员"、"运维"、"观察者" |
+| **权限（Permission）** | 单个 API 操作，编码为 `domain:action`（如 `admin:user:read`、`instance:run:write`） |
+
+权限校验在 Controller 层通过 `@WithTenant` 和 `AuthContext` 执行，确保多租户数据隔离。
+
+#### 用户管理
+
+![用户管理](agent-sphere-readme/ui-admin-user.png)
+
+#### 角色配置
+
+![角色配置](agent-sphere-readme/ui-admin-role.png)
+
+#### 权限分配
+
+![权限分配](agent-sphere-readme/ui-admin-permission.png)
+
+### 4.9 审计日志（Audit Log）
+
+AgentSphere 记录所有用户操作到审计日志，用于安全审查和故障排查。
+
+#### 记录的操作
+
+| 分类 | 操作 |
+|------|------|
+| **用户管理** | 登录、登出、修改密码、更新资料 |
+| **角色/权限** | 角色增删改、权限分配 |
+| **实例** | Agent 实例增删改 |
+| **模型供应商** | 供应商增删改、API Key 管理 |
+| **能力** | MCP/Skill/CLI 能力增删改 |
+| **会话** | 会话创建删除、消息发送 |
+
+#### 审计日志界面
+
+![审计日志界面](agent-sphere-readme/ui-admin-auditlog.png)
 
 ---
 

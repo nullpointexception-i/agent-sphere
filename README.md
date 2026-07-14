@@ -29,6 +29,8 @@ Screenshots
 
 ![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
 
+![ui-chat-clarification.png](agent-sphere-readme/ui-chat-clarification.png)
+
 ▶ [Click to watch the video demo](https://www.bilibili.com/video/BV1WqTT62Efq/)
 
 [![Video preview](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1WqTT62Efq/)
@@ -228,6 +230,40 @@ Dynamic adjustment:
 
 ![Session Following](agent-sphere-readme/session-following.png)
 
+### 3.8 User Clarification (Human-in-the-Loop)
+
+AgentSphere supports a **User Clarification** mechanism that enables the LLM to pause and explicitly ask the user for input when encountering ambiguous or decision-dependent situations, implementing a Human-in-the-Loop pattern.
+
+#### Workflow
+
+1. **LLM invocation**: During execution, when the LLM needs user input (e.g., choosing between options, confirming actions, filling in missing info), it calls the built-in tool `ask_clarification`.
+2. **Pause and notify**: The run pauses and enters `AWAITING_USER` status. A `clarification_pending` SSE event is pushed to the frontend along with the clarification card (type, title, options).
+3. **User response**: The user can respond through the clarification card in the chat UI:
+   - **confirm** — Confirm/Cancel binary choice
+   - **choice** — Multiple choice selection
+   - **input** — Free-form text input
+4. **Resume execution**: The system receives the response and resumes the run, delivering `"[User Response to Clarification]: ..."` to the LLM context. If the original run has ended, a new run is forked to continue.
+
+#### Clarification Card (UI)
+
+![Clarification Card UI](agent-sphere-readme/ui-chat-clarification.png)
+
+#### Cancellation
+
+Users can cancel a pending clarification at any time:
+- **Cancel via card**: Each clarification card has a Cancel button that sends a cancel signal and stops the run.
+- **Cancel via sender**: When there are pending clarifications, the chat input shows a stop button; clicking it cancels all pending clarifications and stops the current run.
+- **Auto-cancel on new message**: Sending a new message while clarifications are pending automatically cancels them first.
+
+#### SSE Events
+
+| Event | Trigger | Effect |
+|-------|---------|--------|
+| `clarification_pending` | LLM calls `ask_clarification` tool | Clarification card appears |
+| `clarification_responded` | User submits response | Card shows ✓, run resumes |
+| `clarification_expired` | 30-minute TTL reached | Card grays out |
+| `clarification_dismissed` | Run cancelled while awaiting | Card shows dismissed |
+
 ---
 
 ## 4. Administration — Operations and Management
@@ -279,6 +315,10 @@ reasoning_token   → "🤔 The user is asking about weather, I need to open a w
 | `tool_call_failed` | Tool fails | ❌ icon |
 | `compaction_running` | Compaction starts | Reasoning panel |
 | `compaction_completed` | Compaction completes | Reasoning panel |
+| `clarification_pending` | LLM asks for user input | Clarification card (confirm/choice/input) |
+| `clarification_responded` | User responds | Card shows ✓, run resumes |
+| `clarification_expired` | Clarification TTL expires | Card shows expired |
+| `clarification_dismissed` | Run cancelled while waiting | Card shows dismissed |
 
 #### 4.2.2 Run Activity API
 
@@ -420,6 +460,51 @@ public class CapabilityBuiltinToolMyTool implements CapabilityBuiltinToolSpi {
     }
 }
 ```
+
+### 4.8 RBAC (Role-Based Access Control)
+
+AgentSphere provides a complete RBAC permission system for multi-user management, supporting fine-grained permission control at the API level.
+
+#### Permission Model
+
+| Component | Description |
+|-----------|-------------|
+| **User** | System users, each assigned one or more roles |
+| **Role** | A named collection of permissions, e.g., "Admin", "Operator", "Viewer" |
+| **Permission** | Single API operation, encoded as `domain:action` (e.g., `admin:user:read`, `instance:run:write`) |
+
+The permission check is enforced at the controller layer via `@WithTenant` and `AuthContext` to ensure multi-tenant data isolation.
+
+#### User Management
+
+![User Management](agent-sphere-readme/ui-admin-user.png)
+
+#### Role Configuration
+
+![Role Configuration](agent-sphere-readme/ui-admin-role.png)
+
+#### Permission Assignment
+
+![Permission Assignment](agent-sphere-readme/ui-admin-permission.png)
+
+### 4.9 Audit Log
+
+AgentSphere records all user operations as audit logs for security review and troubleshooting.
+
+#### Recorded Operations
+
+| Category | Operations |
+|----------|------------|
+| **User Management** | Login, logout, password change, profile update |
+| **Role/Permission** | Role create/update/delete, permission assignment |
+| **Instance** | Create/update/delete agent instances |
+| **Model Provider** | Provider create/update/delete, API key management |
+| **Capability** | MCP/Skill/CLI capability create/update/delete |
+| **Session** | Session create/delete, message sending |
+
+#### Audit Log UI
+
+![Audit Log UI](agent-sphere-readme/ui-admin-auditlog.png)
 
 ---
 
