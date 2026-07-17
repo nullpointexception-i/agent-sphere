@@ -11,8 +11,6 @@ import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -21,7 +19,6 @@ import java.util.stream.Collectors;
 public class ClarificationService implements ClarificationSpi {
 
     private final AgentPendingClarificationMapper clarificationMapper;
-    private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
     public Long createPending(Long sessionId, Long runId, Long messageId, String title, String type, String optionsJson, String clarificationId) {
@@ -33,7 +30,6 @@ public class ClarificationService implements ClarificationSpi {
         entity.setTitle(title);
         entity.setType(type);
         entity.setOptions(optionsJson);
-        entity.setExpiresAt(LocalDateTime.now().plusMinutes(30));
         clarificationMapper.insert(entity);
         return entity.getId();
     }
@@ -47,9 +43,6 @@ public class ClarificationService implements ClarificationSpi {
                         .last("LIMIT 1"));
         if (pending == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "No pending clarification found for this run");
-        }
-        if (pending.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "Clarification request has expired");
         }
         pending.setUserResponse(response);
         clarificationMapper.updateById(pending);
@@ -74,14 +67,11 @@ public class ClarificationService implements ClarificationSpi {
             vo.setType(p.getType());
             vo.setOptions(p.getOptions());
             vo.setUserResponse(p.getUserResponse());
-            vo.setExpiresAt(p.getExpiresAt() != null ? p.getExpiresAt().format(DTF) : null);
             String status;
             if (ChatClarification.CLARIFICATION_RESPONSE_DISMISSED.equals(p.getUserResponse())) {
                 status = "dismissed";
             } else if (p.getUserResponse() != null) {
                 status = "responded";
-            } else if (p.getExpiresAt() != null && p.getExpiresAt().isBefore(LocalDateTime.now())) {
-                status = "expired";
             } else {
                 status = "pending";
             }

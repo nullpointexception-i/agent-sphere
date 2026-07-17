@@ -633,23 +633,6 @@ export default function Chat() {
                   ),
                 );
               }
-              if (evtType === 'clarification_expired') {
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    (m as any).runId === d?.runId
-                      ? {
-                          ...m,
-                          clarifications: ((m as any).clarifications || []).map(
-                            (c: any) =>
-                              c.clarificationId === d.clarificationId
-                                ? { ...c, status: 'expired' }
-                                : c,
-                          ),
-                        }
-                      : m,
-                  ),
-                );
-              }
               return;
             }
             if (evtType === 'content_token') {

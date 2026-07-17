@@ -23,7 +23,6 @@ public class AgentPendingClarification {
     private String type;
     private String options;
     private String userResponse;
-    private LocalDateTime expiresAt;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT)

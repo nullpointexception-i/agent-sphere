@@ -476,7 +476,6 @@ function ClarificationCard({
   const [inputVal, setInputVal] = useState('');
   const intl = useIntl();
 
-  const isExpired = clarification.status === 'expired';
   const isResolved =
     clarification.status === 'responded' || optimisticValue !== null;
   const userValue = optimisticValue ?? clarification.userResponse;
@@ -514,22 +513,6 @@ function ClarificationCard({
     }
     return userValue;
   }, [userValue, clarification.type, clarification.options, intl]);
-
-  if (isExpired) {
-    return (
-      <Card size="small" style={{ margin: '8px 0', opacity: 0.5 }}>
-        <Typography.Text type="secondary">
-          {clarification.title || 'Clarification request'} —{' '}
-          <Tag color="default">
-            {intl.formatMessage({
-              id: 'pages.chat.clarify.expired',
-              defaultMessage: 'Expired',
-            })}
-          </Tag>
-        </Typography.Text>
-      </Card>
-    );
-  }
 
   if (isResolved) {
     return (

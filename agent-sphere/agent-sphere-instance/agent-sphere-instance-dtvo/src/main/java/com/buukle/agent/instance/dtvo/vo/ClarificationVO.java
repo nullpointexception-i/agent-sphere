@@ -19,5 +19,4 @@ public class ClarificationVO implements Serializable {
     private String options;
     private String userResponse;
     private String status;
-    private String expiresAt;
 }

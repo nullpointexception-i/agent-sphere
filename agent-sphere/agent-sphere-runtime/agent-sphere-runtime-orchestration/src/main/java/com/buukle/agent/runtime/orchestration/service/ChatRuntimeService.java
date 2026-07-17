@@ -29,7 +29,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
@@ -88,9 +87,6 @@ public class ChatRuntimeService {
                 query.last(ChatClarification.CLARIFYING_SQL_LIMIT));
         if (pending == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, ChatClarification.CLARIFYING_ERROR_NOT_FOUND);
-        }
-        if (pending.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, ChatClarification.CLARIFYING_ERROR_EXPIRED);
         }
         pending.setUserResponse(response);
         clarificationMapper.updateById(pending);

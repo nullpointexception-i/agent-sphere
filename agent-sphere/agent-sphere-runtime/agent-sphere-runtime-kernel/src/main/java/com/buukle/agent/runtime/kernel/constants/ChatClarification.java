@@ -11,7 +11,6 @@ public final class ChatClarification {
     public static final String DESCRIPTION = "CRITICAL: Whenever you need the user's input, decision, or confirmation (e.g., choose between options, confirm an action, or provide missing information), you MUST call this tool. NEVER ask questions in plain text — the user can only respond through this tool. Use type=choice for options, confirm for yes/no, input for free-form answer. AFTER receiving the user's response, IMMEDIATELY execute the next step — call the necessary tools and provide the result. Do NOT ask another clarification or question unless it is about a completely different missing piece of information. Never ask the user 'what do you want to do'.";
 
     public static final String CLARIFYING_ERROR_NOT_FOUND = "No pending clarification found for this run";
-    public static final String CLARIFYING_ERROR_EXPIRED = "Clarification request has expired";
     public static final String CLARIFYING_SQL_LIMIT = "LIMIT 1";
     public static final String CLARIFYING_DEFAULT_TYPE = "confirm";
 
