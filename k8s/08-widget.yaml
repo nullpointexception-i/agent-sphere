@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: widget
+  namespace: agent-sphere
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: widget
+  template:
+    metadata:
+      labels:
+        app: widget
+    spec:
+      containers:
+      - name: widget
+        image: crpi-2jeh8zb0taelsoax.cn-wulanchabu.personal.cr.aliyuncs.com/nullpointexception/agent-sphere-widget:sha-b6de26d
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          tcpSocket:
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 32Mi
+            cpu: 25m
+          limits:
+            memory: 128Mi
+            cpu: 200m
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: widget
+  namespace: agent-sphere
+spec:
+  selector:
+    app: widget
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: widget
+  namespace: agent-sphere
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: as-widget.buukle.top
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: widget
+            port:
+              number: 80

@@ -87,7 +87,7 @@ public class AguiEventTranslator {
                 }
                 case CANCELLED -> {
                     closeOpenMessages(out, state, runId);
-                    out.add(ev(AguiEventType.RUN_ERROR, runError(threadId, runId, "Run cancelled")));
+                    out.add(ev(AguiEventType.RUN_ERROR, runError(threadId, runId, AguiConstants.ERROR_MESSAGE_RUN_CANCELLED)));
                 }
                 case AWAITING_USER -> {
                     closeOpenMessages(out, state, runId);
@@ -120,7 +120,7 @@ public class AguiEventTranslator {
             return out;
         }
         if (type instanceof ToolCallStatus tool) {
-            String toolCallId = data.getPublishId() != null ? data.getPublishId() : "tool-" + runId;
+            String toolCallId = data.getPublishId() != null ? data.getPublishId() : AguiConstants.TOOL_CALL_ID_FALLBACK_PREFIX + runId;
             switch (tool) {
                 case PENDING -> out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, data.getToolName())));
                 case RUNNING -> out.add(ev(AguiEventType.TOOL_CALL_ARGS, toolArgs(toolCallId, data.getArgumentsJson())));
@@ -165,104 +165,101 @@ public class AguiEventTranslator {
 
     private static Map<String, Object> payload(String type) {
         Map<String, Object> map = new LinkedHashMap<>();
-        map.put("type", type);
+        map.put(AguiConstants.FIELD_TYPE, type);
         return map;
     }
 
     private static Map<String, Object> runStarted(String threadId, String runId) {
         Map<String, Object> map = payload(AguiEventType.RUN_STARTED.getValue());
-        map.put("threadId", threadId);
-        map.put("runId", runId);
+        map.put(AguiConstants.FIELD_THREAD_ID, threadId);
+        map.put(AguiConstants.FIELD_RUN_ID, runId);
         return map;
     }
 
     private static Map<String, Object> runFinished(String threadId, String runId) {
         Map<String, Object> map = payload(AguiEventType.RUN_FINISHED.getValue());
-        map.put("threadId", threadId);
-        map.put("runId", runId);
+        map.put(AguiConstants.FIELD_THREAD_ID, threadId);
+        map.put(AguiConstants.FIELD_RUN_ID, runId);
         Map<String, Object> outcome = new LinkedHashMap<>();
-        outcome.put("type", "success");
-        map.put("outcome", outcome);
+        outcome.put(AguiConstants.FIELD_TYPE, AguiConstants.OUTCOME_TYPE_SUCCESS);
+        map.put(AguiConstants.FIELD_OUTCOME, outcome);
         return map;
     }
 
     private static Map<String, Object> runError(String threadId, String runId, String message) {
         Map<String, Object> map = payload(AguiEventType.RUN_ERROR.getValue());
-        map.put("threadId", threadId);
-        map.put("runId", runId);
-        map.put("message", message == null ? "Run failed" : message);
+        map.put(AguiConstants.FIELD_THREAD_ID, threadId);
+        map.put(AguiConstants.FIELD_RUN_ID, runId);
+        map.put(AguiConstants.FIELD_MESSAGE, message == null ? AguiConstants.ERROR_MESSAGE_RUN_FAILED : message);
         return map;
     }
 
     private static Map<String, Object> textStart(String runId) {
         Map<String, Object> map = payload(AguiEventType.TEXT_MESSAGE_START.getValue());
-        map.put("messageId", TEXT_MESSAGE_ID_PREFIX + runId);
-        map.put("role", "assistant");
+        map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.TEXT_MESSAGE_ID_PREFIX + runId);
+        map.put(AguiConstants.FIELD_ROLE, AguiConstants.ROLE_ASSISTANT);
         return map;
     }
 
     private static Map<String, Object> textContent(String runId, String delta) {
         Map<String, Object> map = payload(AguiEventType.TEXT_MESSAGE_CONTENT.getValue());
-        map.put("messageId", TEXT_MESSAGE_ID_PREFIX + runId);
-        map.put("delta", delta == null ? "" : delta);
+        map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.TEXT_MESSAGE_ID_PREFIX + runId);
+        map.put(AguiConstants.FIELD_DELTA, delta == null ? "" : delta);
         return map;
     }
 
     private static Map<String, Object> textEnd(String runId) {
         Map<String, Object> map = payload(AguiEventType.TEXT_MESSAGE_END.getValue());
-        map.put("messageId", TEXT_MESSAGE_ID_PREFIX + runId);
+        map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.TEXT_MESSAGE_ID_PREFIX + runId);
         return map;
     }
 
     private static Map<String, Object> reasoningStart(String runId) {
         Map<String, Object> map = payload(AguiEventType.REASONING_MESSAGE_START.getValue());
-        map.put("messageId", REASONING_MESSAGE_ID_PREFIX + runId);
-        map.put("role", "assistant");
+        map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.REASONING_MESSAGE_ID_PREFIX + runId);
+        map.put(AguiConstants.FIELD_ROLE, AguiConstants.ROLE_ASSISTANT);
         return map;
     }
 
     private static Map<String, Object> reasoningContent(String runId, String delta) {
         Map<String, Object> map = payload(AguiEventType.REASONING_MESSAGE_CONTENT.getValue());
-        map.put("messageId", REASONING_MESSAGE_ID_PREFIX + runId);
-        map.put("delta", delta == null ? "" : delta);
+        map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.REASONING_MESSAGE_ID_PREFIX + runId);
+        map.put(AguiConstants.FIELD_DELTA, delta == null ? "" : delta);
         return map;
     }
 
     private static Map<String, Object> reasoningEnd(String runId) {
         Map<String, Object> map = payload(AguiEventType.REASONING_MESSAGE_END.getValue());
-        map.put("messageId", REASONING_MESSAGE_ID_PREFIX + runId);
+        map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.REASONING_MESSAGE_ID_PREFIX + runId);
         return map;
     }
 
     private static Map<String, Object> toolStart(String toolCallId, String toolName) {
         Map<String, Object> map = payload(AguiEventType.TOOL_CALL_START.getValue());
-        map.put("toolCallId", toolCallId);
-        map.put("toolCallName", toolName == null ? "unknown" : toolName);
+        map.put(AguiConstants.FIELD_TOOL_CALL_ID, toolCallId);
+        map.put(AguiConstants.FIELD_TOOL_CALL_NAME, toolName == null ? AguiConstants.DEFAULT_TOOL_NAME : toolName);
         return map;
     }
 
     private static Map<String, Object> toolArgs(String toolCallId, String delta) {
         Map<String, Object> map = payload(AguiEventType.TOOL_CALL_ARGS.getValue());
-        map.put("toolCallId", toolCallId);
-        map.put("delta", delta == null ? "" : delta);
+        map.put(AguiConstants.FIELD_TOOL_CALL_ID, toolCallId);
+        map.put(AguiConstants.FIELD_DELTA, delta == null ? "" : delta);
         return map;
     }
 
     private static Map<String, Object> toolEnd(String toolCallId) {
         Map<String, Object> map = payload(AguiEventType.TOOL_CALL_END.getValue());
-        map.put("toolCallId", toolCallId);
+        map.put(AguiConstants.FIELD_TOOL_CALL_ID, toolCallId);
         return map;
     }
 
     private static Map<String, Object> toolResult(String toolCallId, String content) {
         Map<String, Object> map = payload(AguiEventType.TOOL_CALL_RESULT.getValue());
-        map.put("toolCallId", toolCallId);
-        map.put("content", content == null ? "" : content);
+        map.put(AguiConstants.FIELD_TOOL_CALL_ID, toolCallId);
+        map.put(AguiConstants.FIELD_CONTENT, content == null ? "" : content);
         return map;
     }
-
-    private static final String TEXT_MESSAGE_ID_PREFIX = "msg-";
-    private static final String REASONING_MESSAGE_ID_PREFIX = "reasoning-";
 
     private static final class RunStreamState {
         private String runId;

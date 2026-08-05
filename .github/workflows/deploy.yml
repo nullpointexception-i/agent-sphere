@@ -49,18 +49,28 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+    - name: Build & push widget
+      uses: docker/build-push-action@v6
+      with:
+        context: agent-sphere-copilot-widget
+        push: true
+        tags: ${{ vars.ACR_REGISTRY }}/agent-sphere-widget:${{ steps.tag.outputs.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
     - name: Update k8s manifests with new image tags
       run: |
         TAG="${{ steps.tag.outputs.sha }}"
         REGISTRY="${{ vars.ACR_REGISTRY }}"
         sed -i "s|image: .*/agent-sphere-backend:.*|image: ${REGISTRY}/agent-sphere-backend:${TAG}|" k8s/05-backend.yaml
         sed -i "s|image: .*/agent-sphere-frontend:.*|image: ${REGISTRY}/agent-sphere-frontend:${TAG}|" k8s/06-frontend.yaml
+        sed -i "s|image: .*/agent-sphere-widget:.*|image: ${REGISTRY}/agent-sphere-widget:${TAG}|" k8s/08-widget.yaml
 
     - name: Commit & push to trigger Fleet
       run: |
         git config user.name "AgentSphere Bot"
         git config user.email "bot@agentsphere.dev"
-        git add k8s/05-backend.yaml k8s/06-frontend.yaml
+        git add k8s/05-backend.yaml k8s/06-frontend.yaml k8s/08-widget.yaml
         if git diff --cached --quiet; then
           echo "No changes to commit"
         else

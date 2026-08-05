@@ -12,3 +12,4 @@ data:
   REDIS_PORT: "6379"
   ENABLE_VIRTUAL_THREADS: "true"
   TZ: Asia/Shanghai
+  BUUKLE_AGENT_SSO_BASEURL: "https://as.buukle.top"
