@@ -21,7 +21,12 @@ import {
   OfflineBanner,
 } from '@/components';
 import MessageInitializer from '@/components/MessageInitializer';
-import { clearStoredUser, getStoredUser, toProCurrentUser } from '@/utils/auth';
+import {
+  clearStoredUser,
+  getStoredUser,
+  setStoredUser,
+  toProCurrentUser,
+} from '@/utils/auth';
 import { tracker } from '@/utils/tracker';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
@@ -48,6 +53,9 @@ export async function getInitialState(): Promise<{
         clearStoredUser();
         return undefined;
       }
+      // 用 /auth/me 的新鲜数据（含 permissions/roles）回写本地存储，
+      // 使权限变更在下次启动时立即生效，无需重新登录。
+      setStoredUser({ ...stored, ...user });
       return toProCurrentUser(user);
     } catch (_error) {
       clearStoredUser();
@@ -58,22 +66,24 @@ export async function getInitialState(): Promise<{
     }
     return undefined;
   };
+  const { location } = history;
+  if (location.pathname !== loginPath) {
+    const currentUser = await fetchUserInfo();
+    // permissions 取 /auth/me 刷新后的新鲜值，而非登录时快照
+    const fresh = getStoredUser();
+    return {
+      fetchUserInfo,
+      currentUser,
+      permissions: fresh?.permissions,
+      settings: defaultSettings as Partial<LayoutSettings>,
+      settingDrawerOpen: false,
+    };
+  }
   let permissions: string[] | undefined;
   try {
     const stored = getStoredUser();
     permissions = stored?.permissions;
   } catch {}
-  const { location } = history;
-  if (location.pathname !== loginPath) {
-    const currentUser = await fetchUserInfo();
-    return {
-      fetchUserInfo,
-      currentUser,
-      permissions,
-      settings: defaultSettings as Partial<LayoutSettings>,
-      settingDrawerOpen: false,
-    };
-  }
   return {
     fetchUserInfo,
     permissions,
