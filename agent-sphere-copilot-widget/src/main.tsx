@@ -35,6 +35,15 @@ function defaultContainer(): HTMLDivElement {
   return container;
 }
 
+function hostedContainer(mountTo: HTMLElement): HTMLDivElement {
+  const container = document.createElement('div');
+  container.id = 'agent-sphere-widget-root';
+  container.style.cssText =
+    'position:relative;width:100%;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;';
+  mountTo.appendChild(container);
+  return container;
+}
+
 let activeRoot: ReactRoot | null = null;
 let activeContainer: HTMLDivElement | null = null;
 
@@ -48,7 +57,7 @@ function mountWidget(options: WidgetConfig = {}): WidgetHandle {
     activeRoot = null;
   }
   const config = resolveConfig(options);
-  activeContainer = defaultContainer();
+  activeContainer = config.mountTo ? hostedContainer(config.mountTo) : defaultContainer();
   const shadow = activeContainer.attachShadow({ mode: 'open' });
 
   const link = document.createElement('link');
@@ -62,8 +71,14 @@ function mountWidget(options: WidgetConfig = {}): WidgetHandle {
   shadow.appendChild(style);
 
   const host = document.createElement('div');
-  host.style.cssText =
-    'position:fixed;bottom:0;right:0;width:min(90vw,420px);max-height:min(92vh,720px);pointer-events:auto;isolation:isolate;';
+  if (config.mountTo) {
+    host.className = 'aw-hosted';
+    host.style.cssText =
+      'position:relative;width:100%;height:100%;pointer-events:auto;isolation:isolate;';
+  } else {
+    host.style.cssText =
+      'position:fixed;bottom:0;right:0;width:min(90vw,420px);max-height:min(92vh,720px);pointer-events:auto;isolation:isolate;';
+  }
   shadow.appendChild(host);
 
   activeRoot = createRoot(host);

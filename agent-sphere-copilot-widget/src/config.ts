@@ -15,6 +15,12 @@ export interface WidgetConfig {
   autoLogin?: boolean;
   /** Widget title shown in the header. */
   title?: string;
+  /**
+   * Optional DOM element to mount the widget into. When provided the widget
+   * fills the container (position static) instead of rendering a fixed
+   * bottom-right floating bubble. Default undefined (floating bubble).
+   */
+  mountTo?: HTMLElement;
 }
 
 export const DEFAULT_CONFIG: Required<Pick<WidgetConfig, 'apiBase' | 'provider' | 'autoLogin' | 'title'>> = {

@@ -4,6 +4,16 @@
   all: initial;
 }
 
+/* Mounted into a provided container (e.g. a host-app drawer): fill it, no card chrome. */
+.aw-hosted .aw-view,
+.aw-hosted .aw-login {
+  max-height: none;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .aw-view {
   display: flex;
   flex-direction: column;
