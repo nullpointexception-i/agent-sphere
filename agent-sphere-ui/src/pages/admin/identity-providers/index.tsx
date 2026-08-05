@@ -138,6 +138,8 @@ export default function AdminIdentityProviders() {
     {
       title: t('pages.admin.identityProviders.name', '名称'),
       key: 'name',
+      width: 180,
+      ellipsis: true,
       render: (_: any, record: any) => (
         <Space size={4} orientation="vertical">
           <span>{record.name}</span>
@@ -158,6 +160,7 @@ export default function AdminIdentityProviders() {
       title: t('pages.admin.identityProviders.issuer', 'Issuer'),
       dataIndex: 'issuer',
       key: 'issuer',
+      width: 260,
       ellipsis: true,
     },
     {
@@ -252,6 +255,7 @@ export default function AdminIdentityProviders() {
         columns={columns}
         loading={loading}
         pagination={false}
+        scroll={{ x: 1010 }}
         size="small"
       />
       <Modal
