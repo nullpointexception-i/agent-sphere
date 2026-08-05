@@ -13,6 +13,7 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.service.InstanceService;
 import com.buukle.agent.instance.service.SessionService;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.model.controller.RouteController;
 import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
@@ -57,6 +58,8 @@ class AgentConversationWorkflowTest {
     SessionService sessionService;
     @Mock
     ChatRuntimeService chatRuntimeService;
+    @Mock
+    RunSpi runSpi;
 
     @BeforeEach
     void setUp() {
@@ -64,7 +67,7 @@ class AgentConversationWorkflowTest {
                 new RouteController(routeService),
                 new CapabilityMcpController(capabilityMcpService),
                 new InstanceController(instanceService),
-                new SessionController(sessionService),
+                new SessionController(sessionService, runSpi),
                 new ChatRuntimeController(chatRuntimeService)
         ).build();
     }

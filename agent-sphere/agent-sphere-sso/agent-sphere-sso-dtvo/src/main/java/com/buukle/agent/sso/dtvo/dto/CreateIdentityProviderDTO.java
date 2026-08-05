@@ -1,0 +1,43 @@
+package com.buukle.agent.sso.dtvo.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
+
+import java.io.Serializable;
+
+@Data
+public class CreateIdentityProviderDTO implements Serializable {
+    @NotBlank(message = "code can't be blank")
+    @Size(min = 1, max = 64)
+    private String code;
+    @NotBlank(message = "name can't be blank")
+    @Size(min = 1, max = 128)
+    private String name;
+    @NotBlank(message = "issuer can't be blank")
+    @Size(min = 1, max = 512)
+    private String issuer;
+    @NotBlank(message = "clientId can't be blank")
+    @Size(min = 1, max = 256)
+    private String clientId;
+    @NotBlank(message = "clientSecret can't be blank")
+    @Size(min = 1, max = 1024)
+    private String clientSecret;
+    @NotBlank(message = "authorizationEndpoint can't be blank")
+    @Size(min = 1, max = 512)
+    private String authorizationEndpoint;
+    @NotBlank(message = "tokenEndpoint can't be blank")
+    @Size(min = 1, max = 512)
+    private String tokenEndpoint;
+    @NotBlank(message = "jwksUrl can't be blank")
+    @Size(min = 1, max = 512)
+    private String jwksUrl;
+    @Size(max = 512)
+    private String scopes;
+    @Size(max = 5000)
+    private String claimMappings;
+    private Long defaultRoleId;
+    private Boolean enabled;
+    @Size(max = 500)
+    private String remark;
+}

@@ -1,5 +1,7 @@
 import {
   EyeOutlined,
+  HomeOutlined,
+  IdcardOutlined,
   KeyOutlined,
   LogoutOutlined,
   SafetyOutlined,
@@ -16,8 +18,9 @@ import {
   useModel,
 } from '@umijs/max';
 import type { MenuProps } from 'antd';
-import { Avatar, Dropdown, Layout, Menu, Typography } from 'antd';
+import { Avatar, Button, Dropdown, Layout, Menu, Space } from 'antd';
 import { startTransition } from 'react';
+import { LangDropdown } from '@/components/RightContent';
 import { useCan } from '@/hooks/usePermission';
 import { clearStoredUser } from '@/utils/auth';
 
@@ -54,6 +57,12 @@ const SIDEBAR_ITEMS = [
     locale: 'pages.admin.auditLogs.title',
     perm: 'admin:audit-log:read',
   },
+  {
+    key: '/admin/identity-providers',
+    icon: <IdcardOutlined />,
+    locale: 'pages.admin.identityProviders.title',
+    perm: 'admin:identity-provider:read',
+  },
 ];
 
 export default function AdminLayout() {
@@ -67,10 +76,13 @@ export default function AdminLayout() {
   const canPerm = useCan('admin:permission:read');
   const canSettings = useCan('admin:settings:read');
   const canAuditLog = useCan('admin:audit-log:read');
+  const canIdentityProvider = useCan('admin:identity-provider:read');
   const visibleItems = SIDEBAR_ITEMS.filter((item) => {
     if (item.perm === 'admin:role:read') return canRole;
     if (item.perm === 'admin:settings:read') return canSettings;
     if (item.perm === 'admin:audit-log:read') return canAuditLog;
+    if (item.perm === 'admin:identity-provider:read')
+      return canIdentityProvider;
     return true;
   });
 
@@ -89,15 +101,6 @@ export default function AdminLayout() {
       label: intl.formatMessage({
         id: 'pages.settings.password',
         defaultMessage: 'Change Password',
-      }),
-    },
-    { type: 'divider' },
-    {
-      key: 'back',
-      icon: <SettingOutlined />,
-      label: intl.formatMessage({
-        id: 'pages.admin.backToMain',
-        defaultMessage: '返回主站',
       }),
     },
     { type: 'divider' },
@@ -122,10 +125,6 @@ export default function AdminLayout() {
       history.push('/user/login');
       return;
     }
-    if (key === 'back') {
-      history.push('/dashboard');
-      return;
-    }
     history.push(`/account/${key}`);
   };
 
@@ -145,28 +144,41 @@ export default function AdminLayout() {
           <img src="/logo.svg" alt="logo" style={{ height: 28, width: 28 }} />
           <span style={{ fontSize: 16, fontWeight: 600 }}>AS Admin</span>
         </div>
-        <Dropdown
-          menu={{ items: menuItems, onClick: onMenuClick }}
-          placement="bottomRight"
-          arrow
-        >
-          <div
-            style={{
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
+        <Space size={8} align="center">
+          <Button
+            type="text"
+            icon={<HomeOutlined />}
+            onClick={() => history.push('/dashboard')}
           >
-            <Avatar
-              src={currentUser?.avatar}
-              icon={!currentUser?.avatar ? <UserOutlined /> : undefined}
-            />
-            <span>
-              {currentUser?.name || currentUser?.englishName || 'User'}
-            </span>
-          </div>
-        </Dropdown>
+            {intl.formatMessage({
+              id: 'pages.admin.backToMain',
+              defaultMessage: '返回主站',
+            })}
+          </Button>
+          <LangDropdown />
+          <Dropdown
+            menu={{ items: menuItems, onClick: onMenuClick }}
+            placement="bottomRight"
+            arrow
+          >
+            <div
+              style={{
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Avatar
+                src={currentUser?.avatar}
+                icon={!currentUser?.avatar ? <UserOutlined /> : undefined}
+              />
+              <span>
+                {currentUser?.name || currentUser?.englishName || 'User'}
+              </span>
+            </div>
+          </Dropdown>
+        </Space>
       </Layout.Header>
       <Layout>
         <Sider

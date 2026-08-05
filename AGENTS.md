@@ -1,8 +1,9 @@
 # AgentSphere — monorepo
 
-Git root holds two **independent** projects (no shared root build/lockfile/CI):
+Git root holds three **independent** projects (no shared root build/lockfile/CI):
 - `agent-sphere/` — Java 21 / Spring Boot backend. **See `agent-sphere/AGENTS.md`** for module layout, Maven commands, Flyway, MyBatis-Plus, and code-style rules.
 - `agent-sphere-ui/` — React 19 / UmiJS Max frontend (Ant Design Pro base).
+- `agent-sphere-copilot-widget/` — embeddable chat widget (Vite lib IIFE + CopilotKit/AG-UI), see below.
 
 GitHub flow off `main`. **No CI** — run each project's tests before pushing.
 
@@ -17,6 +18,62 @@ GitHub flow off `main`. **No CI** — run each project's tests before pushing.
 - Postgres + Redis via `agent-sphere/agent-docker-middleware/docker-compose.yml` (note: under `agent-sphere/`, **not** the repo root). Volume paths are hardcoded to macOS (`/Users/elvin/Desktop/...`) — override or remove on other machines.
 - Postgres DB name is `buukle_agent_2026061101` (set in `application.yml` and the compose file). Env overrides: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`.
 - Backend JVM/Jackson timezone `Asia/Shanghai`; virtual threads on by default.
+
+## agent-sphere-copilot-widget (chat widget)
+
+Independent package — install/build only from inside `agent-sphere-copilot-widget/`. Stack: Vite 6 (lib mode, IIFE `AgentSphereWidget`), React 19, TypeScript (strict), CopilotKit `@copilotkit/react-core@1.66.2` (**import from `/v2` entry**, e.g. `@copilotkit/react-core/v2`), AG-UI `@ag-ui/client@0.0.57`, zod.
+
+Commands (run inside `agent-sphere-copilot-widget/`):
+```bash
+npm run dev        # vite dev on :5173, proxies /api -> http://localhost:8080
+npm run build      # tsc --noEmit && vite build (lib IIFE -> dist/agent-sphere-widget.js)
+npm run typecheck  # tsc --noEmit
+```
+
+How it works:
+- `AgentSphereWidget.init({ apiBase?, provider?, autoLogin?, title? })` mounts into a **shadow DOM** root; CSS inlined via Vite `?inline` (`src/styles.css` + CopilotKit v2 styles).
+- OIDC SSO: consumes `?otc=` → `POST /auth/sso/exchange` → token in `sessionStorage` (`agent-sphere-widget:agent-user`); `autoLogin` does a one-shot silent probe (`prompt=none`); `?otc=`/`?error=` stripped after handling.
+- AG-UI wire: one `HttpAgent` per agent, `url = {apiBase}/copilot/agent/{id}/services/chat/run`, `Authorization: Bearer` header; requests do **not** go through the CopilotKit runtime (self-managed auth). Backend returns SSE `data:` lines of AG-UI JSON events (`type` uppercase, aligned with `@ag-ui/core` `EventType`).
+- Vite proxy strips `Accept-Encoding` for `/services/chat/` routes and sets `Cache-Control: no-transform` — SSE breaks without this. Preserve it.
+- Bundling: `@segment/analytics-node` (telemetry from `@copilotkit/shared`) is aliased to `src/stubs/segment-analytics.ts` and `process.env` defined to `{}` in `vite.config.ts` — do not remove.
+
+Gotchas:
+- **Never copy `node_modules` / `package-lock.json` across machines.** rollup 4 declares platform binaries as optionalDependencies (`@rollup/rollup-darwin-x64`, `-linux-x64-gnu`, …). Reusing a `node_modules`/lockfile generated on another OS/arch (e.g. Linux container) on macOS makes npm skip the current platform's binary → `npm run dev` fails with `Cannot find module @rollup/rollup-darwin-x64` (npm/cli#4828). Fix on the target machine: `rm -rf node_modules package-lock.json && npm i`. `package-lock.json` is gitignored — keep it machine-local.
+- `message.content` on the AG-UI wire is a plain string for normal text input; the backend `AguiMessageVO.content` is `String` — don't switch to content-part arrays unless the backend DTO is updated to match.
+- `threadId` passed to `CopilotChat` is the session id (`String(session.id)`); the backend `resolveSessionId` maps it to a session (creating one if needed).
+
+## Backend conventions (apply when touching `agent-sphere/`)
+
+### 数据库表通用字段 (common columns)
+
+Every new table adds the shared status/audit columns, aligned with the `sys_*` tables (reference entities: `SysRole`, `IdentityProvider`, `SsoIdentity`):
+
+```sql
+status      VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',   -- sys_* default
+remark      VARCHAR(500) NULL,
+delete_flag -- logical delete, never hard-delete
+created_by  VARCHAR(100) NULL,
+updated_by  VARCHAR(100) NULL,
+created_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+updated_at  TIMESTAMP    NOT NULL DEFAULT NOW()
+```
+
+Entity mapping (MyBatis-Plus `AuditMetaObjectHandler` fills these automatically):
+
+```java
+private String status;
+private String remark;
+@TableField(fill = FieldFill.INSERT)        private String createdBy;
+@TableField(fill = FieldFill.INSERT_UPDATE) private String updatedBy;
+@TableField(fill = FieldFill.INSERT)        private LocalDateTime createdAt;
+@TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updatedAt;
+// when the table has delete_flag:
+@TableLogic private Boolean deleteFlag;
+```
+
+### 魔法值禁用 (no magic values)
+
+Never inline raw strings/numbers in business logic. Reuse existing constants/enums by scope before declaring new ones: method-local → `private static final` on the class → module-wide constants class / `enum` (e.g. `SsoConstants`, `SsoProviderType`, `AguiEventType`, `AguiConstants`).
 
 ## agent-sphere-ui (frontend)
 

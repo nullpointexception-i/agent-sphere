@@ -19,6 +19,7 @@ public class AgentRuntimeProperties {
     private McpConfig mcp = new McpConfig();
     private LockConfig lock = new LockConfig();
     private AsyncConfig async = new AsyncConfig();
+    private SsoConfig sso = new SsoConfig();
 
     @Data
     public static class SessionConfig {
@@ -140,5 +141,12 @@ public class AgentRuntimeProperties {
     @Data
     public static class AsyncConfig {
         private Duration awaitTermination = Duration.ofSeconds(30);
+    }
+
+    @Data
+    public static class SsoConfig {
+        private String baseUrl = "http://localhost:8080";
+        private Duration stateTtl = Duration.ofMinutes(5);
+        private Duration otcTtl = Duration.ofSeconds(30);
     }
 }

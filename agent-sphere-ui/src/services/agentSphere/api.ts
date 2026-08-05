@@ -291,6 +291,24 @@ export const agentApi = {
         endDate?: string;
       }) => request<any>(`${BASE}/admin/audit-logs`, { params }),
     },
+    identityProviders: {
+      list: (keyword?: string) =>
+        request<any[]>(`${BASE}/admin/identity-providers`, { params: { keyword } }),
+      get: (id: number) => request<any>(`${BASE}/admin/identity-providers/${id}`),
+      create: (data: any) =>
+        request<any>(`${BASE}/admin/identity-providers`, { method: 'POST', data }),
+      update: (id: number, data: any) =>
+        request<any>(`${BASE}/admin/identity-providers/${id}`, { method: 'PUT', data }),
+      delete: (id: number) =>
+        request<void>(`${BASE}/admin/identity-providers/${id}`, { method: 'DELETE' }),
+      setEnabled: (id: number, enabled: boolean) =>
+        request<void>(`${BASE}/admin/identity-providers/${id}/enabled`, {
+          method: 'PUT',
+          data: { enabled },
+        }),
+      testConnection: (id: number) =>
+        request<void>(`${BASE}/admin/identity-providers/${id}/test`, { method: 'POST' }),
+    },
   },
 
   instanceCapabilities: {

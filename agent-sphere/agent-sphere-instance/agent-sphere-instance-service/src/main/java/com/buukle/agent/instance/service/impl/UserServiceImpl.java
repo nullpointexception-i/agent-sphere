@@ -152,6 +152,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     }
 
     @Override
+    public UserVO loginByUserId(Long userId) {
+        AgentUser user = getById(userId);
+        if (user == null) throw new BizException(InstanceErrorCode.USER_NOT_FOUND);
+        String token = generateToken();
+        user.setToken(token);
+        user.setLastLoginAt(java.time.LocalDateTime.now());
+        updateById(user);
+        AuthContext.setToken(token);
+        AuthContext.setUserId(user.getId());
+        AuthContext.setUsername(user.getUsername());
+        AuthContext.setDisplayName(user.getDisplayName());
+        AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
+        return toVO(user);
+    }
+
+    @Override
     public UserVO register(RegisterDTO dto) {
         if (!dto.getPassword().equals(dto.getRepeatPassword())) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Passwords do not match");

@@ -150,6 +150,10 @@ export default [
           { path: 'permissions', component: './admin/permissions' },
           { path: 'settings', component: './admin/settings' },
           { path: 'audit-logs', component: './admin/audit-logs' },
+          {
+            path: 'identity-providers',
+            component: './admin/identity-providers',
+          },
           { path: '', redirect: '/admin/users' },
         ],
       },

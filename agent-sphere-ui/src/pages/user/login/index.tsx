@@ -13,12 +13,19 @@ import {
   useIntl,
   useModel,
 } from '@umijs/max';
-import { Alert, App } from 'antd';
-import React, { startTransition, useState } from 'react';
-import { setStoredUser } from '@/utils/auth';
+import { Alert, App, Button, Divider } from 'antd';
+import React, { startTransition, useEffect, useState } from 'react';
+import { setStoredUser, type UserVO } from '@/utils/auth';
 import { labelWithRule } from '@/utils/labelWithRule';
 import Settings from '../../../../config/defaultSettings';
 import { useStyles } from './style';
+
+const SSO_PROVIDER = 'business';
+const SSO_AUTHORIZE_PATH = '/api/v1/auth/sso/authorize';
+const SSO_EXCHANGE_PATH = '/api/v1/auth/sso/exchange';
+const SSO_QUERY_PARAM_OTC = 'otc';
+const SSO_QUERY_PARAM_ERROR = 'error';
+const SSO_REDIRECT_PATH = '/user/login';
 
 const Lang = () => {
   const { styles } = useStyles();
@@ -76,6 +83,74 @@ const Login: React.FC = () => {
     }
   };
 
+  const completeLogin = async (user: UserVO) => {
+    setStoredUser(user);
+    const defaultLoginSuccessMessage = intl.formatMessage({
+      id: 'pages.login.success',
+      defaultMessage: '登录成功！',
+    });
+    message.success(defaultLoginSuccessMessage);
+    await fetchUserInfo();
+    const urlParams = new URL(window.location.href).searchParams;
+    const redirectUrl = getSafeRedirectUrl(urlParams.get('redirect'));
+    window.location.href = redirectUrl;
+  };
+
+  const handleSsoCallback = async () => {
+    const urlParams = new URL(window.location.href).searchParams;
+    const ssoError = urlParams.get(SSO_QUERY_PARAM_ERROR);
+    if (ssoError) {
+      setErrorMessage(ssoError);
+      return;
+    }
+    const otc = urlParams.get(SSO_QUERY_PARAM_OTC);
+    if (!otc) return;
+    try {
+      setErrorMessage('');
+      const user = await umiRequest(SSO_EXCHANGE_PATH, {
+        method: 'POST',
+        data: { otc },
+      });
+      const cleanUrl = `${window.location.origin}${SSO_REDIRECT_PATH}`;
+      window.history.replaceState({}, '', cleanUrl);
+      await completeLogin(user);
+    } catch (error: any) {
+      const msg =
+        error?.data?.userTip ||
+        error?.data?.errorMessage ||
+        error?.data?.message ||
+        error?.message ||
+        '登录失败，请重试！';
+      setErrorMessage(msg);
+    }
+  };
+
+  useEffect(() => {
+    void handleSsoCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSsoAuthorize = async () => {
+    try {
+      const { authorizeUrl } = await umiRequest(SSO_AUTHORIZE_PATH, {
+        method: 'GET',
+        params: {
+          provider: SSO_PROVIDER,
+          redirect_uri: `${window.location.origin}${SSO_REDIRECT_PATH}`,
+        },
+      });
+      window.location.href = authorizeUrl;
+    } catch (error: any) {
+      const msg =
+        error?.data?.userTip ||
+        error?.data?.errorMessage ||
+        error?.data?.message ||
+        error?.message ||
+        '企业登录发起失败，请重试！';
+      setErrorMessage(msg);
+    }
+  };
+
   const handleSubmit = async (values: any) => {
     try {
       setErrorMessage('');
@@ -83,16 +158,7 @@ const Login: React.FC = () => {
         method: 'POST',
         data: { username: values.username, password: values.password },
       });
-      setStoredUser(user);
-      const defaultLoginSuccessMessage = intl.formatMessage({
-        id: 'pages.login.success',
-        defaultMessage: '登录成功！',
-      });
-      message.success(defaultLoginSuccessMessage);
-      await fetchUserInfo();
-      const urlParams = new URL(window.location.href).searchParams;
-      const redirectUrl = getSafeRedirectUrl(urlParams.get('redirect'));
-      window.location.href = redirectUrl;
+      await completeLogin(user);
     } catch (error: any) {
       const msg =
         error?.data?.userTip ||
@@ -242,6 +308,18 @@ const Login: React.FC = () => {
               />
             </a>
           </div>
+          <Divider plain>
+            <FormattedMessage
+              id="pages.login.sso.divider"
+              defaultMessage="其他登录方式"
+            />
+          </Divider>
+          <Button block size="large" onClick={handleSsoAuthorize}>
+            <FormattedMessage
+              id="pages.login.sso"
+              defaultMessage="企业账号登录"
+            />
+          </Button>
         </LoginForm>
       </div>
     </div>

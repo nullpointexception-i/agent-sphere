@@ -21,5 +21,7 @@ public interface UserSpi {
 
     UserVO register(RegisterDTO dto);
 
+    UserVO loginByUserId(Long userId);
+
     com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO> listPage(int page, int size);
 }

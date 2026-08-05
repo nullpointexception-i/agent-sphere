@@ -22,6 +22,8 @@
         <module>agent-sphere-runtime</module>
         <module>agent-sphere-infrastructure</module>
         <module>agent-sphere-admin</module>
+        <module>agent-sphere-sso</module>
+        <module>agent-sphere-agui</module>
         <module>agent-sphere-bootstrap</module>
     </modules>
     <properties>
@@ -327,6 +329,51 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-sso-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-sso-exception</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-sso-dtvo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-sso-repository</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-sso-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-sso-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-agui-dtvo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-agui-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-agui-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
@@ -360,6 +407,11 @@
                 <groupId>com.github.ben-manes.caffeine</groupId>
                 <artifactId>caffeine</artifactId>
                 <version>${caffeine.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>9.40</version>
             </dependency>
             <dependency>
                 <groupId>cn.hutool</groupId>

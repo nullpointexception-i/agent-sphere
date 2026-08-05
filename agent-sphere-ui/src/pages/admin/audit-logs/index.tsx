@@ -19,6 +19,11 @@ const ACTION_OPTIONS = [
   'UPDATE_PROFILE',
   'UPDATE_PASSWORD',
   'REGENERATE',
+  'PAGE_VIEW',
+  'PAGE_EXIT',
+  'CLICK',
+  'SELECT',
+  'DWELL',
 ];
 
 interface AuditLogItem {

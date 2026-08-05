@@ -1,0 +1,148 @@
+/* AgentSphere copilot widget styles — scoped classes, injected into the shadow host. */
+
+:host {
+  all: initial;
+}
+
+.aw-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 100%;
+  max-height: min(92vh, 720px);
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+.aw-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font-size: 13px;
+}
+
+.aw-session-picker {
+  width: 100%;
+}
+
+.aw-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.aw-button:hover {
+  background: #1d4ed8;
+}
+
+.aw-button-ghost {
+  background: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.aw-button-ghost:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.aw-chat {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.aw-error {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.aw-loading,
+.aw-empty {
+  padding: 16px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.aw-login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 100%;
+  max-height: min(92vh, 720px);
+  box-sizing: border-box;
+  padding: 32px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  color: #111827;
+  text-align: center;
+}
+
+.aw-login-brand {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.aw-login-hint {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.aw-login-error {
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.aw-login-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.aw-login-button:hover {
+  background: #1d4ed8;
+}
+
+.aw-booting {
+  font-size: 14px;
+  color: #6b7280;
+}

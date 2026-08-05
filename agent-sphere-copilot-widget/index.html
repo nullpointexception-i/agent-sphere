@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentSphere Copilot Widget — dev</title>
+  </head>
+  <body>
+    <h1>AgentSphere Copilot Widget</h1>
+    <p>打开 widget 下方按钮挂载。</p>
+    <button id="mount">挂载 widget</button>
+    <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      const api = window.AgentSphereWidget;
+      document.getElementById('mount').addEventListener('click', () => {
+        api.init({ apiBase: '/api/v1', provider: 'business', autoLogin: false });
+      });
+    </script>
+  </body>
+</html>
