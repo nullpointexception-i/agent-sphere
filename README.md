@@ -506,6 +506,86 @@ AgentSphere records all user operations as audit logs for security review and tr
 
 ![Audit Log UI](agent-sphere-readme/ui-admin-auditlog-en.png)
 
+### 4.10 Multi Authentication Sources (OIDC SSO)
+
+AgentSphere supports **multiple OIDC identity providers** so third-party business systems can sign users in without managing passwords locally. Each provider maps to an independent local user (`provider_code + subject`); no cross-provider merging is performed.
+
+#### SSO Login Flow
+
+1. User clicks sign-in → `GET /api/v1/auth/sso/authorize?provider=<code>&redirect_uri=...`
+2. Backend validates the provider is enabled, generates PKCE (`S256`) + `state` + `nonce`, and redirects to the IdP.
+3. IdP authenticates → redirects back to the backend callback (`/api/v1/auth/sso/callback`).
+4. Backend exchanges the code, verifies the id_token (issuer / audience / RS256 signature via JWKS), JIT-provisions the user, and redirects with a one-time `otc`.
+5. `POST /api/v1/auth/sso/exchange` swaps `otc` for a local token.
+
+#### Managing Identity Providers
+
+Open **System Admin → Identity Providers** to manage providers from the UI (no SQL):
+
+| Field | Description |
+|-------|-------------|
+| Code | Unique provider identifier — must match the `provider` passed to `authorize` (e.g. `business`) |
+| Name | Display name |
+| Issuer | OIDC issuer URL |
+| Client ID / Client Secret | Confidential-client credentials; the secret is **encrypted at rest** (AES-GCM) and only a masked value is ever returned |
+| Authorization / Token Endpoint | IdP endpoints |
+| JWKS URL | Public key set used to verify id_token signatures |
+| Scopes | e.g. `openid email profile` |
+| Enabled | Toggle login for this source on/off |
+
+Each provider can be **connection-tested** (`POST /api/v1/admin/identity-providers/{id}/test`): it fetches the JWKS and hits the token endpoint with an intentionally-invalid grant — any 4xx means reachable, network errors/5xx fail.
+
+Permissions: `admin:identity-provider:read/create/update/delete` (seeded to ADMIN and USER roles).
+
+#### IdP Requirements
+
+- OIDC **authorization code** flow with a **confidential client** (client secret).
+- PKCE (`S256`) and `nonce` support.
+- id_token signed with **RS256**, verifiable via the public JWKS URL.
+- Redirect URI registered at the IdP: `<backend-origin>/api/v1/auth/sso/callback`.
+
+### 4.11 Embeddable Chat Widget
+
+`agent-sphere-copilot-widget` is a **standalone embeddable chat widget** that third-party business sites can drop into any page. It bundles CopilotKit + AG-UI into a single IIFE script, mounts into a **shadow DOM**, and authenticates through the OIDC SSO above — no CopilotKit cloud/runtime required (auth is self-managed).
+
+#### Embed
+
+```html
+<script src="https://as-widget.buukle.top/agent-sphere-widget.js"></script>
+<script>
+  window.AgentSphereWidget.init({
+    apiBase: 'https://as.buukle.top/api/v1', // AgentSphere backend
+    provider: 'business',                    // identity provider code
+    autoLogin: true,                         // silent OIDC probe on load
+    title: 'Agent Sphere 助手',
+  });
+</script>
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `apiBase` | `/api/v1` | Backend API base (use an absolute URL when cross-origin) |
+| `provider` | `business` | OIDC provider code from the Identity Providers page |
+| `autoLogin` | `true` | Attempt silent sign-in (`prompt=none`) on load |
+| `title` | `Agent Sphere 助手` | Widget header title |
+
+#### How It Works
+
+- **OIDC SSO**: consumes `?otc=` → exchanges for a token → stores it in `sessionStorage` (`agent-sphere-widget:agent-user`); `?otc=`/`?error=` are stripped from the URL after handling.
+- **Agent list & sessions**: loaded from `/instance/instances/all` and `/instance/sessions` (CRUD).
+- **Chat (AG-UI)**: one `HttpAgent` per agent posts to `{apiBase}/copilot/agent/{id}/services/chat/run`; the backend streams SSE `data:` lines of AG-UI events (`TEXT_MESSAGE_*`, `REASONING_MESSAGE_*`, `TOOL_CALL_*`, `RUN_*`). Requests carry `Authorization: Bearer` and never go through the CopilotKit runtime.
+
+#### Development
+
+```bash
+cd agent-sphere-copilot-widget
+npm install
+npm run dev        # vite dev on :5173, proxies /api -> localhost:8080
+npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
+```
+
+> Gotcha: rollup 4 ships platform-specific binaries as optional dependencies. Never copy `node_modules`/`package-lock.json` across machines — if `Cannot find module @rollup/rollup-*` appears, run `rm -rf node_modules package-lock.json && npm i` on the target machine.
+
 ---
 
 ## 5. Project Structure

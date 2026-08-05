@@ -199,7 +199,7 @@ export default function AdminUsers() {
           value={userRoleIds}
           onChange={(vals) => setUserRoleIds(vals as number[])}
         >
-          <Space direction="vertical">
+          <Space orientation="vertical">
             {allRoles.map((r: any) => (
               <Checkbox key={r.id} value={r.id}>
                 {r.name}

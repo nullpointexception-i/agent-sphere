@@ -139,7 +139,7 @@ export default function AdminIdentityProviders() {
       title: t('pages.admin.identityProviders.name', '名称'),
       key: 'name',
       render: (_: any, record: any) => (
-        <Space size={4} direction="vertical">
+        <Space size={4} orientation="vertical">
           <span>{record.name}</span>
           <span style={{ color: 'rgba(0,0,0,0.45)', fontSize: 12 }}>
             {record.code}

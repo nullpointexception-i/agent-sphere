@@ -524,7 +524,7 @@ function ClarificationCard({
           borderLeft: '3px solid #52c41a',
         }}
       >
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <Space>
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
             <Typography.Text strong>{clarification.title}</Typography.Text>
@@ -560,7 +560,7 @@ function ClarificationCard({
           onChange={(e) => handleAction(e.target.value)}
           value={undefined}
         >
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space orientation="vertical" style={{ width: '100%' }}>
             {clarification.options.map((opt: any, i: number) => (
               <Radio.Button
                 key={i}

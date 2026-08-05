@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentSphere Copilot Widget</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: #f5f5f7;
+        color: #111827;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+          sans-serif;
+        text-align: center;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0;
+      }
+      p {
+        font-size: 14px;
+        color: #6b7280;
+        margin: 0;
+      }
+      code {
+        display: inline-block;
+        margin-top: 16px;
+        padding: 10px 14px;
+        background: #1f2937;
+        color: #e5e7eb;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.6;
+        text-align: left;
+      }
+      a {
+        color: #2563eb;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AgentSphere Copilot Widget</h1>
+    <p>可嵌入的 AgentSphere 对话组件静态资源服务</p>
+    <p>Embeddable chat widget static asset host</p>
+    <code>
+      &lt;script src="https://as-widget.buukle.top/agent-sphere-widget.js"&gt;&lt;/script&gt;<br />
+      &lt;script&gt;window.AgentSphereWidget.init({ apiBase: 'https://as.buukle.top/api/v1' })&lt;/script&gt;
+    </code>
+    <p><a href="/agent-sphere-widget.js">agent-sphere-widget.js</a></p>
+  </body>
+</html>

@@ -506,6 +506,86 @@ AgentSphere 记录所有用户操作到审计日志，用于安全审查和故�
 
 ![审计日志界面](agent-sphere-readme/ui-admin-auditlog.png)
 
+### 4.10 多认证源（OIDC SSO）
+
+AgentSphere 支持**多个 OIDC 身份认证源**，让第三方业务系统无需本地管理密码即可完成用户登录。每个认证源映射到独立的本地用户（`provider_code + subject`），**不做跨认证源归并**。
+
+#### SSO 登录流程
+
+1. 用户点击登录 → `GET /api/v1/auth/sso/authorize?provider=<code>&redirect_uri=...`
+2. 后端校验认证源已启用，生成 PKCE（`S256`）+ `state` + `nonce`，重定向到 IdP。
+3. IdP 完成认证 → 回跳到后端回调（`/api/v1/auth/sso/callback`）。
+4. 后端用 code 换 token，校验 id_token（issuer / audience / RS256 签名，通过 JWKS），JIT 开通本地用户，并带一次性 `otc` 重定向回去。
+5. `POST /api/v1/auth/sso/exchange` 用 `otc` 换取本地登录 token。
+
+#### 管理认证源
+
+打开 **系统管理 → 身份源管理** 即可在界面上配置（无需写 SQL）：
+
+| 字段 | 说明 |
+|------|------|
+| 标识 Code | 唯一认证源标识 —— 必须与 `authorize` 传入的 `provider` 一致（如 `business`） |
+| 名称 | 显示名称 |
+| Issuer | OIDC issuer 地址 |
+| Client ID / Client Secret | 机密客户端凭据；secret **加密存储**（AES-GCM），接口只返回脱敏值 |
+| Authorization / Token Endpoint | IdP 端点 |
+| JWKS URL | 用于校验 id_token 签名的公钥集 |
+| Scopes | 如 `openid email profile` |
+| 启用 | 控制该认证源是否允许登录 |
+
+每个认证源可**测试连接**（`POST /api/v1/admin/identity-providers/{id}/test`）：拉取 JWKS 并用无效 grant 请求 token 端点 —— 任意 4xx 视为可达，网络错误/5xx 判定失败。
+
+权限：`admin:identity-provider:read/create/update/delete`（迁移已授权给 ADMIN 与 USER 角色）。
+
+#### IdP 侧要求
+
+- OIDC **authorization code** 流程，且为**机密客户端**（有 client_secret）。
+- 支持 PKCE（`S256`）与 `nonce`。
+- id_token 使用 **RS256** 签名，可通过 JWKS 公钥校验。
+- 在 IdP 注册的回调地址：`<后端公网地址>/api/v1/auth/sso/callback`。
+
+### 4.11 嵌入聊天 Widget
+
+`agent-sphere-copilot-widget` 是一个**独立可嵌入的聊天组件**，第三方业务系统只需一行脚本即可接入。它把 CopilotKit + AG-UI 打包成单个 IIFE 脚本，挂载进 **shadow DOM**，并通过上述 OIDC SSO 完成认证 —— 不依赖 CopilotKit 云服务/运行时（认证完全自管）。
+
+#### 嵌入方式
+
+```html
+<script src="https://as-widget.buukle.top/agent-sphere-widget.js"></script>
+<script>
+  window.AgentSphereWidget.init({
+    apiBase: 'https://as.buukle.top/api/v1', // AgentSphere 后端地址
+    provider: 'business',                    // 认证源标识
+    autoLogin: true,                         // 加载时静默探测登录
+    title: 'Agent Sphere 助手',
+  });
+</script>
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `apiBase` | `/api/v1` | 后端 API 前缀（跨域时填绝对地址） |
+| `provider` | `business` | 身份源管理页配置的认证源标识 |
+| `autoLogin` | `true` | 加载时尝试静默登录（`prompt=none`） |
+| `title` | `Agent Sphere 助手` | Widget 头部标题 |
+
+#### 工作原理
+
+- **OIDC SSO**：消费 `?otc=` → 换取 token → 存入 `sessionStorage`（`agent-sphere-widget:agent-user`）；处理完成后从 URL 移除 `?otc=`/`?error=`。
+- **Agent 列表与会话**：来自 `/instance/instances/all` 与 `/instance/sessions`（增删改查）。
+- **对话（AG-UI）**：每个 Agent 对应一个 `HttpAgent`，请求 `{apiBase}/copilot/agent/{id}/services/chat/run`；后端以 SSE `data:` 行推送 AG-UI 事件（`TEXT_MESSAGE_*`、`REASONING_MESSAGE_*`、`TOOL_CALL_*`、`RUN_*`）。请求携带 `Authorization: Bearer`，不经过 CopilotKit 运行时。
+
+#### 开发调试
+
+```bash
+cd agent-sphere-copilot-widget
+npm install
+npm run dev        # vite dev on :5173，/api 代理到 localhost:8080
+npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
+```
+
+> 注意：rollup 4 将各平台二进制声明为可选依赖。**切勿跨机器复制 `node_modules`/`package-lock.json`** —— 若报 `Cannot find module @rollup/rollup-*`，在目标机器上执行 `rm -rf node_modules package-lock.json && npm i`。
+
 ---
 
 ## 5. 项目结构
