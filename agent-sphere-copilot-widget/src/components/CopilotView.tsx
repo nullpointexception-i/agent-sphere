@@ -36,7 +36,7 @@ export function CopilotView({ config, user, onLogout }: CopilotViewProps) {
         if (cancelled) {
           return;
         }
-        const active = list.filter((i) => i.status === 'ACTIVE');
+        const active = list.filter((i) => i.status === 'ENABLED');
         setInstances(active);
         if (active.length > 0) {
           setSelectedAgentId((prev) => prev ?? active[0].id);

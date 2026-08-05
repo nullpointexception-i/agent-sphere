@@ -1,4 +1,6 @@
 FROM node:20-alpine AS build
+ARG COMMIT_HASH
+ENV COMMIT_HASH=$COMMIT_HASH
 WORKDIR /app
 COPY .npmrc ./
 COPY package.json ./

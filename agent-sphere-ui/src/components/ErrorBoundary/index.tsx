@@ -102,12 +102,36 @@ export default class ErrorBoundary extends React.Component<
   componentDidMount() {
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
+    window.addEventListener(
+      'unhandledrejection',
+      this.handleUnhandledRejection,
+    );
   }
 
   componentWillUnmount() {
     window.removeEventListener('online', this.handleOnline);
     window.removeEventListener('offline', this.handleOffline);
+    window.removeEventListener(
+      'unhandledrejection',
+      this.handleUnhandledRejection,
+    );
   }
+
+  handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+    if (!isChunkLoadError(event.reason)) return;
+    // 路由预加载的 chunk 失败是异步错误，React ErrorBoundary 捕获不到。
+    // 首次由 app.tsx 的 unhandledrejection 自动刷新（带版本号换新）；
+    // 若已自动刷新过一次仍失败，则由这里渲染 fallback，避免白屏。
+    let alreadyReloaded = false;
+    try {
+      alreadyReloaded =
+        sessionStorage.getItem('agent-sphere-ui:chunk-reloaded') === '1';
+    } catch {
+      return;
+    }
+    if (!alreadyReloaded) return;
+    this.setState({ hasError: true, error: event.reason as Error });
+  };
 
   handleOnline = () => {
     this.setState({ isOnline: true });

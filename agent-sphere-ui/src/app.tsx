@@ -34,6 +34,58 @@ import { errorConfig } from './requestErrorConfig';
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
 
+const CHUNK_RELOAD_KEY = 'agent-sphere-ui:chunk-reloaded';
+const VERSION_PARAM = '_v';
+
+function isChunkLoadError(reason: unknown): boolean {
+  const error = reason as Error | undefined;
+  if (!error) return false;
+  return (
+    error.name === 'ChunkLoadError' ||
+    /(?:loading|failed to load) (?:css )?chunk/i.test(error.message || '') ||
+    /Failed to fetch dynamically imported module/i.test(error.message || '')
+  );
+}
+
+/**
+ * 前端重新部署后，旧会话/缓存可能仍引用旧 chunk（旧 index.html 的 manifest）。
+ * 异步动态加载失败是 unhandledrejection，React ErrorBoundary 捕获不到。
+ * 此处监听并带版本号（_v）强制重取最新 index.html，自动刷新一次，避免手动刷新。
+ */
+function installChunkErrorAutoReload() {
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+    return;
+  }
+  window.addEventListener('unhandledrejection', (event) => {
+    if (!isChunkLoadError(event.reason)) return;
+    try {
+      if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return;
+      sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+    } catch {
+      return;
+    }
+    const version =
+      process.env.COMMIT_HASH || Math.random().toString(36).slice(2);
+    const sep = window.location.search ? '&' : '?';
+    window.location.replace(
+      `${window.location.pathname}${window.location.search}${sep}${VERSION_PARAM}=${encodeURIComponent(version)}`,
+    );
+  });
+}
+
+function stripVersionParam() {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has(VERSION_PARAM)) return;
+  params.delete(VERSION_PARAM);
+  const qs = params.toString();
+  window.history.replaceState(
+    null,
+    '',
+    `${window.location.pathname}${qs ? `?${qs}` : ''}`,
+  );
+}
+
 export async function getInitialState(): Promise<{
   settings?: Partial<LayoutSettings>;
   currentUser?: API.CurrentUser;
@@ -42,6 +94,7 @@ export async function getInitialState(): Promise<{
   settingDrawerOpen?: boolean;
   permissions?: string[];
 }> {
+  stripVersionParam();
   const fetchUserInfo = async () => {
     try {
       const stored = getStoredUser();
@@ -206,6 +259,7 @@ export const request: RequestConfig = {
 };
 
 export function rootContainer(container: React.ReactNode) {
+  installChunkErrorAutoReload();
   return (
     <App>
       <MessageInitializer />
