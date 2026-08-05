@@ -10,6 +10,8 @@ import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.sso.domain.IdentityProvider;
 import com.buukle.agent.sso.domain.SsoProviderType;
 import com.buukle.agent.sso.dtvo.SsoAuthorizeVO;
+import com.buukle.agent.sso.dtvo.enums.SsoProviderEnum;
+import com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO;
 import com.buukle.agent.sso.exception.SsoErrorCode;
 import com.buukle.agent.sso.repository.IdentityProviderMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 
 import static com.buukle.agent.sso.service.SsoConstants.CALLBACK_PATH;
 import static com.buukle.agent.sso.service.SsoConstants.CODE_CHALLENGE_METHOD_S256;
@@ -69,6 +72,21 @@ public class SsoServiceImpl implements SsoService {
 
     private String ssoBaseUrl() {
         return systemConfigSpi.get(SystemConfigKeys.SSO_BASE_URL, properties.getSso().getBaseUrl());
+    }
+
+    @Override
+    public List<SsoProviderOptionVO> listEnabledProviders() {
+        List<IdentityProvider> providers = identityProviderMapper.selectList(
+                new LambdaQueryWrapper<IdentityProvider>()
+                        .eq(IdentityProvider::getEnabled, Boolean.TRUE)
+                        .eq(IdentityProvider::getStatus, SsoProviderEnum.STATUS_ACTIVE)
+                        .orderByAsc(IdentityProvider::getCreatedAt));
+        return providers.stream().map(p -> {
+            SsoProviderOptionVO vo = new SsoProviderOptionVO();
+            vo.setCode(p.getCode());
+            vo.setName(p.getName());
+            return vo;
+        }).toList();
     }
 
     @Override

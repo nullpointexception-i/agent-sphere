@@ -90,4 +90,20 @@ class SsoAuthControllerTest {
 
         verify(ssoService).exchange("otc-1");
     }
+
+    @Test
+    void providers_shouldReturnEnabledProviderOptions() throws Exception {
+        com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO vo =
+                new com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO();
+        vo.setCode("bole");
+        vo.setName("业务系统");
+        given(ssoService.listEnabledProviders())
+                .willReturn(java.util.List.of(vo));
+
+        mockMvc.perform(get("/api/v1/auth/sso/providers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].code").value("bole"))
+                .andExpect(jsonPath("$[0].name").value("业务系统"));
+        verify(ssoService).listEnabledProviders();
+    }
 }

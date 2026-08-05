@@ -1,4 +1,4 @@
-import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import { GlobalOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
 import {
   LoginForm,
   ProFormCheckbox,
@@ -13,14 +13,14 @@ import {
   useIntl,
   useModel,
 } from '@umijs/max';
-import { Alert, App, Button, Divider } from 'antd';
+import { Alert, App, Button, Card, Col, Dropdown, Row } from 'antd';
 import React, { startTransition, useEffect, useState } from 'react';
+import { agentApi } from '@/services/agentSphere/api';
 import { setStoredUser, type UserVO } from '@/utils/auth';
 import { labelWithRule } from '@/utils/labelWithRule';
 import Settings from '../../../../config/defaultSettings';
 import { useStyles } from './style';
 
-const SSO_PROVIDER = 'business';
 const SSO_AUTHORIZE_PATH = '/api/v1/auth/sso/authorize';
 const SSO_EXCHANGE_PATH = '/api/v1/auth/sso/exchange';
 const SSO_QUERY_PARAM_OTC = 'otc';
@@ -54,6 +54,9 @@ const LoginMessage: React.FC<{
 
 const Login: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [ssoProviders, setSsoProviders] = useState<
+    { code: string; name: string }[]
+  >([]);
   const { initialState, setInitialState } = useModel('@@initialState');
   const { styles } = useStyles();
   const { message } = App.useApp();
@@ -115,10 +118,11 @@ const Login: React.FC = () => {
       window.history.replaceState({}, '', cleanUrl);
       await completeLogin(user);
     } catch (error: any) {
+      const body = error?.response?.data ?? error?.data ?? {};
       const msg =
-        error?.data?.userTip ||
-        error?.data?.errorMessage ||
-        error?.data?.message ||
+        body?.userTip ||
+        body?.errorMessage ||
+        body?.message ||
         error?.message ||
         '登录失败，请重试！';
       setErrorMessage(msg);
@@ -127,27 +131,34 @@ const Login: React.FC = () => {
 
   useEffect(() => {
     void handleSsoCallback();
+    agentApi.sso
+      .providers()
+      .then((list: { code: string; name: string }[]) =>
+        setSsoProviders(list || []),
+      )
+      .catch(() => setSsoProviders([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSsoAuthorize = async () => {
+  const handleSsoAuthorize = async (provider: string) => {
     try {
       const { authorizeUrl } = await umiRequest(SSO_AUTHORIZE_PATH, {
         method: 'GET',
         params: {
-          provider: SSO_PROVIDER,
+          provider,
           redirect_uri: `${window.location.origin}${SSO_REDIRECT_PATH}`,
         },
       });
       window.location.href = authorizeUrl;
     } catch (error: any) {
+      const body = error?.response?.data ?? error?.data ?? {};
       const msg =
-        error?.data?.userTip ||
-        error?.data?.errorMessage ||
-        error?.data?.message ||
+        body?.userTip ||
+        body?.errorMessage ||
+        body?.message ||
         error?.message ||
         '企业登录发起失败，请重试！';
-      setErrorMessage(msg);
+      message.error(msg);
     }
   };
 
@@ -160,10 +171,11 @@ const Login: React.FC = () => {
       });
       await completeLogin(user);
     } catch (error: any) {
+      const body = error?.response?.data ?? error?.data ?? {};
       const msg =
-        error?.data?.userTip ||
-        error?.data?.errorMessage ||
-        error?.data?.message ||
+        body?.userTip ||
+        body?.errorMessage ||
+        body?.message ||
         error?.message ||
         '登录失败，请重试！';
       setErrorMessage(msg);
@@ -184,143 +196,239 @@ const Login: React.FC = () => {
       <Lang />
       <style>{`.ant-pro-form-login-header { flex-direction: column !important; align-items: center !important; gap: 4px; margin-bottom: 38px; }`}</style>
       <div className={styles.wrapper}>
-        <LoginForm
-          contentStyle={{
-            minWidth: 280,
-            maxWidth: '75vw',
-          }}
-          logo={
-            <img alt="logo" src="/logo.svg" style={{ width: 64, height: 64 }} />
-          }
-          title={<span>Agent Sphere</span>}
-          subTitle={intl.formatMessage({
-            id: 'pages.login.subtitle',
-            defaultMessage: 'Intelligent Agent Management & AI Orchestration',
-          })}
-          initialValues={{ autoLogin: true }}
-          onFinish={async (values) => {
-            await handleSubmit(values);
-          }}
+        <Row
+          gutter={24}
+          justify="center"
+          align="stretch"
+          style={{ width: '100%', maxWidth: 960 }}
         >
-          {errorMessage && <LoginMessage content={errorMessage} />}
-          <ProFormText
-            name="username"
-            label={labelWithRule(
-              intl.formatMessage({
-                id: 'pages.login.username.placeholder',
-                defaultMessage: '用户名',
-              }),
-              intl.formatMessage({ id: 'pages.hint.username' }),
-            )}
-            fieldProps={{
-              size: 'large',
-              prefix: <UserOutlined />,
-              maxLength: 32,
-            }}
-            placeholder={intl.formatMessage({
-              id: 'pages.login.username.placeholder',
-              defaultMessage: '用户名',
-            })}
-            rules={[
-              {
-                required: true,
-                message: (
-                  <FormattedMessage
-                    id="pages.login.username.required"
-                    defaultMessage="请输入用户名!"
-                  />
-                ),
-              },
-              {
-                min: 5,
-                message: intl.formatMessage(
+          <Col xs={24} md={12}>
+            <LoginForm
+              contentStyle={{
+                minWidth: 280,
+                maxWidth: '75vw',
+              }}
+              logo={
+                <img
+                  alt="logo"
+                  src="/logo.svg"
+                  style={{ width: 64, height: 64 }}
+                />
+              }
+              title={<span>Agent Sphere</span>}
+              subTitle={intl.formatMessage({
+                id: 'pages.login.subtitle',
+                defaultMessage:
+                  'Intelligent Agent Management & AI Orchestration',
+              })}
+              initialValues={{ autoLogin: true }}
+              onFinish={async (values) => {
+                await handleSubmit(values);
+              }}
+            >
+              {errorMessage && <LoginMessage content={errorMessage} />}
+              <ProFormText
+                name="username"
+                label={labelWithRule(
+                  intl.formatMessage({
+                    id: 'pages.login.username.placeholder',
+                    defaultMessage: '用户名',
+                  }),
+                  intl.formatMessage({ id: 'pages.hint.username' }),
+                )}
+                fieldProps={{
+                  size: 'large',
+                  prefix: <UserOutlined />,
+                  maxLength: 32,
+                }}
+                placeholder={intl.formatMessage({
+                  id: 'pages.login.username.placeholder',
+                  defaultMessage: '用户名',
+                })}
+                rules={[
                   {
-                    id: 'pages.form.minLength',
-                    defaultMessage: 'Min {min} characters',
+                    required: true,
+                    message: (
+                      <FormattedMessage
+                        id="pages.login.username.required"
+                        defaultMessage="请输入用户名!"
+                      />
+                    ),
                   },
-                  { min: 5 },
-                ),
-              },
-            ]}
-          />
-          <ProFormText.Password
-            name="password"
-            label={labelWithRule(
-              intl.formatMessage({
-                id: 'pages.login.password.placeholder',
-                defaultMessage: '密码',
-              }),
-              intl.formatMessage({ id: 'pages.hint.password' }),
-            )}
-            fieldProps={{
-              size: 'large',
-              prefix: <LockOutlined />,
-              maxLength: 32,
-            }}
-            placeholder={intl.formatMessage({
-              id: 'pages.login.password.placeholder',
-              defaultMessage: '密码',
-            })}
-            rules={[
-              {
-                required: true,
-                message: (
-                  <FormattedMessage
-                    id="pages.login.password.required"
-                    defaultMessage="请输入密码！"
-                  />
-                ),
-              },
-              {
-                min: 5,
-                message: intl.formatMessage(
                   {
-                    id: 'pages.form.minLength',
-                    defaultMessage: 'Min {min} characters',
+                    min: 5,
+                    message: intl.formatMessage(
+                      {
+                        id: 'pages.form.minLength',
+                        defaultMessage: 'Min {min} characters',
+                      },
+                      { min: 5 },
+                    ),
                   },
-                  { min: 5 },
-                ),
-              },
-            ]}
-          />
-          <div
-            style={{
-              marginBottom: 24,
-            }}
-          >
-            <ProFormCheckbox noStyle name="autoLogin">
-              <FormattedMessage
-                id="pages.login.rememberMe"
-                defaultMessage="自动登录"
+                ]}
               />
-            </ProFormCheckbox>
-          </div>
-          <div
-            style={{
-              marginBottom: 24,
-              textAlign: 'center',
-            }}
-          >
-            <a onClick={() => history.push('/user/register')}>
-              <FormattedMessage
-                id="pages.login.register"
-                defaultMessage="去注册"
+              <ProFormText.Password
+                name="password"
+                label={labelWithRule(
+                  intl.formatMessage({
+                    id: 'pages.login.password.placeholder',
+                    defaultMessage: '密码',
+                  }),
+                  intl.formatMessage({ id: 'pages.hint.password' }),
+                )}
+                fieldProps={{
+                  size: 'large',
+                  prefix: <LockOutlined />,
+                  maxLength: 32,
+                }}
+                placeholder={intl.formatMessage({
+                  id: 'pages.login.password.placeholder',
+                  defaultMessage: '密码',
+                })}
+                rules={[
+                  {
+                    required: true,
+                    message: (
+                      <FormattedMessage
+                        id="pages.login.password.required"
+                        defaultMessage="请输入密码！"
+                      />
+                    ),
+                  },
+                  {
+                    min: 5,
+                    message: intl.formatMessage(
+                      {
+                        id: 'pages.form.minLength',
+                        defaultMessage: 'Min {min} characters',
+                      },
+                      { min: 5 },
+                    ),
+                  },
+                ]}
               />
-            </a>
-          </div>
-          <Divider plain>
-            <FormattedMessage
-              id="pages.login.sso.divider"
-              defaultMessage="其他登录方式"
-            />
-          </Divider>
-          <Button block size="large" onClick={handleSsoAuthorize}>
-            <FormattedMessage
-              id="pages.login.sso"
-              defaultMessage="企业账号登录"
-            />
-          </Button>
-        </LoginForm>
+              <div
+                style={{
+                  marginBottom: 24,
+                }}
+              >
+                <ProFormCheckbox noStyle name="autoLogin">
+                  <FormattedMessage
+                    id="pages.login.rememberMe"
+                    defaultMessage="自动登录"
+                  />
+                </ProFormCheckbox>
+              </div>
+              <div
+                style={{
+                  marginBottom: 24,
+                  textAlign: 'center',
+                }}
+              >
+                <a onClick={() => history.push('/user/register')}>
+                  <FormattedMessage
+                    id="pages.login.register"
+                    defaultMessage="去注册"
+                  />
+                </a>
+              </div>
+            </LoginForm>
+          </Col>
+          {ssoProviders.length > 0 && (
+            <Col xs={24} md={12}>
+              <Card
+                style={{
+                  height: '100%',
+                  borderColor: '#e6f0ff',
+                  borderRadius: 12,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: '100%',
+                    minHeight: 280,
+                    padding: '32px 24px',
+                    textAlign: 'center',
+                    borderRadius: 8,
+                    background:
+                      'linear-gradient(180deg, #f5f9ff 0%, #ffffff 100%)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: '#2563eb',
+                      color: '#fff',
+                      fontSize: 30,
+                      marginBottom: 16,
+                      boxShadow: '0 8px 20px rgba(37,99,235,0.25)',
+                    }}
+                  >
+                    <GlobalOutlined />
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 600,
+                      color: '#1f2937',
+                    }}
+                  >
+                    {intl.formatMessage({
+                      id: 'pages.login.sso.title',
+                      defaultMessage: 'SSO 统一认证登录',
+                    })}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: '#6b7280',
+                      margin: '8px 0 20px',
+                      maxWidth: 260,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {intl.formatMessage({
+                      id: 'pages.login.sso.desc',
+                      defaultMessage: '使用企业身份源一键登录，无需注册账号',
+                    })}
+                  </div>
+                  <Dropdown
+                    menu={{
+                      items: ssoProviders.map((p) => ({
+                        key: p.code,
+                        label: p.name || p.code,
+                      })),
+                      onClick: ({ key }) => handleSsoAuthorize(key),
+                      style: { textAlign: 'center', minWidth: 180 },
+                    }}
+                    placement="bottom"
+                  >
+                    <Button
+                      type="primary"
+                      size="large"
+                      icon={<GlobalOutlined />}
+                      style={{ paddingInline: 36 }}
+                    >
+                      {intl.formatMessage({
+                        id: 'pages.login.sso.choose',
+                        defaultMessage: '选择认证源',
+                      })}
+                    </Button>
+                  </Dropdown>
+                </div>
+              </Card>
+            </Col>
+          )}
+        </Row>
       </div>
     </div>
   );

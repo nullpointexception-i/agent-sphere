@@ -1,4 +1,3 @@
-import { request } from '@umijs/max';
 import { getToken } from '@/utils/auth';
 
 interface FrontendEvent {
@@ -165,10 +164,16 @@ class UserTracker {
       this.flushTimer = null;
     }
     const batch = this.buffer.splice(0);
+    const token = getToken();
     try {
-      await request('/api/v1/track/frontend', {
+      // 用原生 fetch 而非全局 request：埋点失败/401 不应触发全局错误处理（避免登录页整页刷新）
+      await fetch('/api/v1/track/frontend', {
         method: 'POST',
-        data: batch,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(batch),
       });
     } catch {}
   }

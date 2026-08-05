@@ -218,7 +218,10 @@ export function rootContainer(container: React.ReactNode) {
 
 function TrackerInit() {
   useEffect(() => {
-    tracker.init();
+    // 未登录不启动埋点，避免登录页无意义流量与 401 刷新
+    if (getStoredUser()?.token) {
+      tracker.init();
+    }
     return undefined;
   }, []);
   return null;

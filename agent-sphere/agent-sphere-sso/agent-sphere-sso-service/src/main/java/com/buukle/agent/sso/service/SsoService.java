@@ -2,6 +2,9 @@ package com.buukle.agent.sso.service;
 
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.sso.dtvo.SsoAuthorizeVO;
+import com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO;
+
+import java.util.List;
 
 public interface SsoService {
 
@@ -10,4 +13,6 @@ public interface SsoService {
     String callback(String code, String state, String iss, String error);
 
     UserVO exchange(String otc);
+
+    List<SsoProviderOptionVO> listEnabledProviders();
 }

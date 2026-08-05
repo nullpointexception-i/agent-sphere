@@ -68,10 +68,11 @@ const Register: React.FC = () => {
       );
       history.push('/chat');
     } catch (error: any) {
+      const body = error?.response?.data ?? error?.data ?? {};
       setErrorMessage(
-        error?.data?.userTip ||
-          error?.data?.errorMessage ||
-          error?.data?.message ||
+        body?.userTip ||
+          body?.errorMessage ||
+          body?.message ||
           error?.message ||
           'Registration failed',
       );

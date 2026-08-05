@@ -4,6 +4,7 @@ import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.sso.dtvo.SsoAuthorizeVO;
 import com.buukle.agent.sso.dtvo.SsoExchangeDTO;
+import com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO;
 import com.buukle.agent.sso.service.SsoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/auth/sso")
@@ -24,6 +26,11 @@ import java.net.URI;
 public class SsoAuthController extends BaseController {
 
     private final SsoService ssoService;
+
+    @GetMapping("/providers")
+    public ResponseEntity<List<SsoProviderOptionVO>> providers() {
+        return ok(ssoService.listEnabledProviders());
+    }
 
     @GetMapping("/authorize")
     public ResponseEntity<SsoAuthorizeVO> authorize(@RequestParam String provider,

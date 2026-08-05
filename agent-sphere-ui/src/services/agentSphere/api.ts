@@ -3,6 +3,10 @@ import { request } from '@umijs/max';
 const BASE = '/api/v1';
 
 export const agentApi = {
+  sso: {
+    providers: () =>
+      request<{ code: string; name: string }[]>(`${BASE}/auth/sso/providers`),
+  },
   instances: {
     listAll: () =>
       request<any[]>(`${BASE}/instance/instances/all`),

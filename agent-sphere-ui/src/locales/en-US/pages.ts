@@ -268,8 +268,10 @@ export default {
   'pages.theme': 'Theme Settings',
   'pages.logout': 'Logout',
   'pages.login.register': 'Register',
-  'pages.login.sso': 'Sign in with enterprise account',
-  'pages.login.sso.divider': 'Other sign-in methods',
+  'pages.login.sso.title': 'Enterprise SSO Sign-in',
+  'pages.login.sso.desc':
+    'Sign in with your enterprise identity provider. No registration needed.',
+  'pages.login.sso.choose': 'Choose a provider',
   'pages.register.subtitle': 'Create your account',
   'pages.register.success': 'Registration successful!',
   'pages.register.repeatPassword': 'Repeat password',
