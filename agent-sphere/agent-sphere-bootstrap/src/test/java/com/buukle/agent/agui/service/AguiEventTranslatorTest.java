@@ -57,6 +57,25 @@ class AguiEventTranslatorTest {
     }
 
     @Test
+    void reasoningTokens_shouldEmitReasoningRole() throws Exception {
+        RuntimeEventDataVO first = data(1L, 10L).setResponse("think");
+        RuntimeEventDataVO second = data(1L, 10L).setResponse("ing");
+
+        List<AguiEventVO> events = translator.translate(
+                new RuntimeEventVO(FlowEventType.REASONING_TOKEN, first));
+        events.addAll(translator.translate(
+                new RuntimeEventVO(FlowEventType.REASONING_TOKEN, second)));
+
+        assertThat(events).extracting(AguiEventVO::getName).containsExactly(
+                "REASONING_MESSAGE_START", "REASONING_MESSAGE_CONTENT", "REASONING_MESSAGE_CONTENT");
+        JsonNode start = read(events.get(0));
+        assertThat(start.get("type").asText()).isEqualTo("REASONING_MESSAGE_START");
+        assertThat(start.get("role").asText()).isEqualTo("reasoning");
+        assertThat(read(events.get(1)).get("delta").asText()).isEqualTo("think");
+        assertThat(read(events.get(2)).get("delta").asText()).isEqualTo("ing");
+    }
+
+    @Test
     void completed_shouldEmitEndAndRunFinished() throws Exception {
         translator.translate(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
                 data(1L, 10L).setResponse("ok")));

@@ -217,7 +217,7 @@ public class AguiEventTranslator {
     private static Map<String, Object> reasoningStart(String runId) {
         Map<String, Object> map = payload(AguiEventType.REASONING_MESSAGE_START.getValue());
         map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.REASONING_MESSAGE_ID_PREFIX + runId);
-        map.put(AguiConstants.FIELD_ROLE, AguiConstants.ROLE_ASSISTANT);
+        map.put(AguiConstants.FIELD_ROLE, AguiConstants.ROLE_REASONING);
         return map;
     }
 

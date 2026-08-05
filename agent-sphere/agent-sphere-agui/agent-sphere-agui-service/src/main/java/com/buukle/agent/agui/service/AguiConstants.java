@@ -28,6 +28,7 @@ public final class AguiConstants {
     // AG-UI 事件值字面量
     public static final String OUTCOME_TYPE_SUCCESS = "success";
     public static final String ROLE_ASSISTANT = "assistant";
+    public static final String ROLE_REASONING = "reasoning";
     public static final String ERROR_MESSAGE_RUN_FAILED = "Run failed";
     public static final String ERROR_MESSAGE_RUN_CANCELLED = "Run cancelled";
     public static final String DEFAULT_TOOL_NAME = "unknown";
