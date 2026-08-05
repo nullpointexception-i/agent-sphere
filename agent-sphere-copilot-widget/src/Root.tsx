@@ -39,6 +39,7 @@ function stripQueryParams(names: string[]): void {
 }
 
 const AUTO_LOGIN_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
+const LOGOUT_EVENT = 'agent-sphere:logout';
 
 export function Root({ config }: RootProps) {
   const [phase, setPhase] = useState<Phase>('booting');
@@ -116,6 +117,18 @@ export function Root({ config }: RootProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleExternalLogout = () => {
+      clearUser();
+      sessionStorage.removeItem(AUTO_LOGIN_TRIED_KEY);
+      setUserState(null);
+      setAuthError(null);
+      setPhase('login');
+    };
+    window.addEventListener(LOGOUT_EVENT, handleExternalLogout);
+    return () => window.removeEventListener(LOGOUT_EVENT, handleExternalLogout);
   }, []);
 
   const handleLogin = useCallback(
