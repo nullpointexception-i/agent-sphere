@@ -3,6 +3,12 @@
  */
 (function () {
 
+  // Idempotency guard: multiple injection triggers (tabs.onUpdated / onActivated /
+  // webNavigation / startup sweep) may call executeScript more than once. Running
+  // the script twice would duplicate listeners/polls and execute actions twice.
+  if (window.__asContentLoaded) return;
+  window.__asContentLoaded = true;
+
   // --- Inject MAIN-world script to intercept window.open ---
   // (content script ISOLATED world cannot override page methods)
   // Use chrome-extension:// file reference instead of inline <script> to avoid CSP
@@ -36,34 +42,69 @@
     }).catch(() => {});
   }
 
+  // 解析当前页面的会话（主站 localStorage + /chat/<id>，或 widget sessionStorage 桥），不去重
+  async function resolveSession() {
+    try {
+      const settings = await getSettings();
+      const baseUrl = settings.backendUrl || 'http://localhost:8080';
+
+      // widget：抽屉/第三方站点嵌入（sessionStorage 桥）
+      const widgetSession = sessionStorage.getItem('agent-sphere-widget:active-session');
+      if (widgetSession) {
+        const sid = Number(widgetSession);
+        const widgetRaw = sessionStorage.getItem('agent-sphere-widget:agent-user');
+        const widgetUser = widgetRaw ? JSON.parse(widgetRaw) : null;
+        if (sid && widgetUser && widgetUser.token) {
+          return {
+            token: widgetUser.token,
+            sessionId: sid,
+            displayName: widgetUser.displayName || '',
+            baseUrl,
+          };
+        }
+        return null;
+      }
+
+      // 主站：localStorage['agent-user'] + /chat/<id>
+      const raw = localStorage.getItem('agent-user');
+      if (raw) {
+        const user = JSON.parse(raw);
+        const m = location.pathname.match(/\/chat\/(\d+)/);
+        if (user && user.token && m) {
+          return {
+            token: user.token,
+            sessionId: Number(m[1]),
+            displayName: user.displayName || '',
+            baseUrl,
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      if (e.message?.includes('Extension context invalidated')) return null;
+      console.warn('[AgentSphere] resolveSession error:', e);
+      return null;
+    }
+  }
+
   async function checkAuth() {
     try {
-      const raw = localStorage.getItem('agent-user');
-      if (!raw) return;
-      const user = JSON.parse(raw);
-      if (!user || !user.token) return;
-      const m = location.pathname.match(/\/chat\/(\d+)/);
-      if (!m) return;
-
-      const sid = Number(m[1]);
-      if (sid === lastSessionId) return;
+      const info = await resolveSession();
+      if (!info || info.sessionId === lastSessionId) return;
       const prevSessionId = lastSessionId;
-      lastSessionId = sid;
+      lastSessionId = info.sessionId;
 
       // Mark that a session switch happened and show toast once SSE is connected
       if (prevSessionId !== null) {
         pendingSessionToast = true;
       }
 
-      const settings = await getSettings();
-      const baseUrl = settings.backendUrl || 'http://localhost:8080';
-
       chrome.runtime.sendMessage(chrome.runtime.id, {
         type: 'auth',
-        token: user.token,
-        displayName: user.displayName || '',
-        sessionId: sid,
-        baseUrl,
+        token: info.token,
+        displayName: info.displayName,
+        sessionId: info.sessionId,
+        baseUrl: info.baseUrl,
       }).catch(() => {});
     } catch (e) {
       if (e.message?.includes('Extension context invalidated')) return;
@@ -285,6 +326,11 @@
 
   // --- Listen for browser operation commands from background ---
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'query_session') {
+      // tab 激活时 background 查询当前页会话（不做去重，让 background 决定是否重连）
+      resolveSession().then((info) => sendResponse(info || null));
+      return true;
+    }
     if (msg.type === 'browser_operation') {
       execute(msg.action, msg.params).then(sendResponse);
       return true;

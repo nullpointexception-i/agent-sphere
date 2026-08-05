@@ -33,13 +33,66 @@ function startSSE() {
 
 startSSE();
 
+// --- Configured URLs (popup Settings): widget hosts (frontendUrls[]) + main site (mainUrl) ---
+let frontendUrls = [];
+let mainUrl = '';
+function loadConfiguredUrls() {
+  chrome.storage.local.get(['settings'], (data) => {
+    const s = data.settings || {};
+    frontendUrls = Array.isArray(s.frontendUrls)
+      ? s.frontendUrls.filter(Boolean)
+      : s.frontendUrl
+        ? [s.frontendUrl]
+        : [];
+    mainUrl = s.mainUrl || '';
+    // 启动时对已打开的匹配页面补注入（如扩展刚重载）
+    injectMatchingTabs();
+  });
+}
+loadConfiguredUrls();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.settings) {
+    const s = changes.settings.newValue || {};
+    frontendUrls = Array.isArray(s.frontendUrls)
+      ? s.frontendUrls.filter(Boolean)
+      : s.frontendUrl
+        ? [s.frontendUrl]
+        : [];
+    mainUrl = s.mainUrl || '';
+  }
+});
+
+function shouldInject(url) {
+  if (!url) return false;
+  if (/\/chat\/\d+/.test(url)) return true;
+  if (mainUrl && url.startsWith(mainUrl)) return true;
+  for (const u of frontendUrls) {
+    if (u && url.startsWith(u)) return true;
+  }
+  return false;
+}
+
+function injectMatchingTabs() {
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) {
+      if (tab.id != null && shouldInject(tab.url || '')) {
+        injectContentScript(tab.id);
+      }
+    }
+  });
+}
+
 // --- Detect session changes from tab URL (works even without content script) ---
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!changeInfo.url) return;
-  const m = changeInfo.url.match(/\/chat\/(\d+)/);
+  const url = changeInfo.url;
+  // 注入：主站聊天页或配置的前端站点（widget 宿主）
+  if (shouldInject(url)) injectContentScript(tabId);
+
+  // 会话跟随：仅主站 /chat/<id>
+  const m = url.match(/\/chat\/(\d+)/);
   if (!m) return;
   const newSessionId = Number(m[1]);
-  injectContentScript(tabId);
 
   if (newSessionId === sessionId) return;
   chrome.storage.local.get(['token', 'baseUrl'], (data) => {
@@ -57,10 +110,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // --- Detect SPA route changes (pushState/replaceState) for session following ---
 chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
   if (!details.url) return;
+  if (shouldInject(details.url)) injectContentScript(details.tabId);
+
   const m = details.url.match(/\/chat\/(\d+)/);
   if (!m) return;
   const newSessionId = Number(m[1]);
-  injectContentScript(details.tabId);
 
   if (newSessionId === sessionId) return;
   chrome.storage.local.get(['token', 'baseUrl'], (data) => {
@@ -208,13 +262,38 @@ async function sendMessageWithRetry(tabId, msg, maxRetries = 5) {
 async function injectContentScript(tabId) {
   try {
     await chrome.scripting.executeScript({
-      target: { tabId },
+      target: { tabId, allFrames: true },
       files: ['content.js'],
     });
   } catch (e) {
     // 已存在或注入失败，静默忽略
   }
 }
+
+// --- 切到已打开的匹配 tab 时补注入 + 查询其会话并自动跟随 ---
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.tabs.get(activeInfo.tabId, (tab) => {
+    if (!tab || tab.id == null || !shouldInject(tab.url || '')) return;
+    injectContentScript(tab.id).then(() => {
+      chrome.tabs.sendMessage(tab.id, { type: 'query_session' }, (resp) => {
+        if (chrome.runtime.lastError || !resp || !resp.sessionId || !resp.token) return;
+        const sid = Number(resp.sessionId);
+        if (sid === sessionId) return;
+        token = resp.token;
+        baseUrl = resp.baseUrl;
+        sessionId = sid;
+        chrome.storage.local.set({
+          token,
+          sessionId,
+          displayName: resp.displayName || '',
+          baseUrl: resp.baseUrl,
+        }).catch(() => {});
+        console.log('[AgentSphere] Tab activated, following session', sid);
+        connectSSE();
+      });
+    });
+  });
+});
 
 // --- Execute command in the appropriate tab ---
 let controlledTabId = null;
@@ -483,7 +562,7 @@ async function sendCallbackSafe(commandId, result, captureTabId) {
 // --- Send screenshot directly to the frontend chat tab, bypassing backend ---
 async function sendScreenshotToFrontend(screenshot, action, url) {
   const { settings } = await chrome.storage.local.get(['settings']);
-  const baseUrl = settings?.frontendUrl || 'http://localhost:8000';
+  const baseUrl = settings?.mainUrl || settings?.frontendUrl || settings?.frontendUrls?.[0] || 'http://localhost:8000';
   const tabs = await chrome.tabs.query({});
   const chatTab = tabs.find(t => {
     const u = t.url || t.pendingUrl || '';

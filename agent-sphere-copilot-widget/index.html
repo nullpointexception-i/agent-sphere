@@ -3,12 +3,131 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AgentSphere Copilot Widget — dev</title>
+    <title>AgentSphere Copilot Widget — 业务系统模拟</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+          sans-serif;
+        color: #111827;
+      }
+      .biz-header {
+        height: 56px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        background: #fff;
+      }
+      .biz-main {
+        padding: 32px 24px;
+        color: #6b7280;
+        font-size: 14px;
+        line-height: 1.7;
+      }
+      .biz-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+        z-index: 999;
+      }
+      .biz-mask.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .biz-drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: min(92vw, 480px);
+        height: 100%;
+        background: #fff;
+        box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+      }
+      .biz-drawer.open {
+        transform: translateX(0);
+      }
+      .biz-drawer-header {
+        height: 48px;
+        flex-shrink: 0;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        font-weight: 600;
+      }
+      .biz-drawer-body {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      #widget-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        display: flex;
+      }
+      .biz-fab {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 998;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border: none;
+        border-radius: 24px;
+        background: #2563eb;
+        color: #fff;
+        font-size: 14px;
+        cursor: pointer;
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
+      }
+      button {
+        font-family: inherit;
+      }
+    </style>
   </head>
   <body>
-    <h1>AgentSphere Copilot Widget</h1>
-    <p>打开 widget 下方按钮挂载。</p>
-    <button id="mount">挂载 widget</button>
+    <header class="biz-header">
+      <strong>业务系统模拟（抽屉挂载）</strong>
+      <button id="assistant-btn">AI 助手</button>
+    </header>
+    <main class="biz-main">
+      <p>
+        模拟第三方业务系统（如 Human Resource Intermediary）以「右侧抽屉」方式内嵌 AgentSphere
+        widget。
+      </p>
+      <p>
+        点击右上角「AI 助手」或右下角悬浮按钮 → 打开抽屉并 <code>mountTo</code> 挂载 widget；
+        关闭抽屉会 <code>unmount</code>。带 <code>?otc=</code>/<code>?error=</code> 时自动打开。
+      </p>
+      <p>dev 配置：<code>provider: bole</code>、<code>autoLogin: true</code>（mock IdP :9000）。</p>
+    </main>
+    <button class="biz-fab" id="assistant-fab">🤖 AI 助手</button>
+
+    <div class="biz-mask" id="drawer-mask"></div>
+    <div class="biz-drawer" id="biz-drawer">
+      <div class="biz-drawer-header">
+        <span>Agent Sphere 助手</span>
+        <button id="drawer-close">关闭</button>
+      </div>
+      <div class="biz-drawer-body">
+        <div id="widget-container"></div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
     <script type="module" src="/src/dev-init.ts"></script>
   </body>

@@ -4,7 +4,7 @@ import {
   SSO_EXCHANGE_PATH,
   type WidgetConfig,
 } from './config';
-import type { InstanceVO, SessionVO, UserVO } from './types';
+import type { InstanceVO, RunVO, SessionVO, UserVO } from './types';
 
 export interface ErrorBody {
   errorCode?: string;
@@ -128,6 +128,17 @@ export function closeSession(base: string, id: number): Promise<void> {
   return request(base, `/instance/sessions/${id}`, { method: 'DELETE' });
 }
 
+export function listRuns(
+  base: string,
+  sessionId: number,
+  page = 1,
+  size = 3,
+): Promise<{ records: RunVO[]; total: number }> {
+  return request(base, '/instance/runs', {
+    params: { sessionId: String(sessionId), page: String(page), size: String(size) },
+  });
+}
+
 export interface ApiClient {
   ssoAuthorize: (provider: string, redirectUri: string, prompt?: string) => Promise<string>;
   ssoExchange: (otc: string) => Promise<UserVO>;
@@ -136,6 +147,11 @@ export interface ApiClient {
   createSession: (agentInstanceId: number, title: string) => Promise<SessionVO>;
   renameSession: (id: number, title: string) => Promise<SessionVO>;
   closeSession: (id: number) => Promise<void>;
+  listRuns: (
+    sessionId: number,
+    page?: number,
+    size?: number,
+  ) => Promise<{ records: RunVO[]; total: number }>;
 }
 
 export function createApi(config: WidgetConfig): ApiClient {
@@ -149,5 +165,6 @@ export function createApi(config: WidgetConfig): ApiClient {
     createSession: (agentInstanceId, title) => createSession(base, agentInstanceId, title),
     renameSession: (id, title) => renameSession(base, id, title),
     closeSession: (id) => closeSession(base, id),
+    listRuns: (sessionId, page, size) => listRuns(base, sessionId, page, size),
   };
 }

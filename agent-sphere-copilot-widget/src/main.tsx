@@ -77,7 +77,7 @@ function mountWidget(options: WidgetConfig = {}): WidgetHandle {
       'position:relative;width:100%;height:100%;display:flex;flex-direction:column;pointer-events:auto;isolation:isolate;';
   } else {
     host.style.cssText =
-      'position:fixed;bottom:0;right:0;width:min(90vw,420px);max-height:min(92vh,720px);pointer-events:auto;isolation:isolate;';
+      'position:fixed;bottom:0;right:0;width:min(90vw,420px);height:min(92vh,720px);pointer-events:auto;isolation:isolate;';
   }
   shadow.appendChild(host);
 

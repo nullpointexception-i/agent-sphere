@@ -37,4 +37,5 @@ public final class AguiConstants {
     public static final String TEXT_MESSAGE_ID_PREFIX = "msg-";
     public static final String REASONING_MESSAGE_ID_PREFIX = "reasoning-";
     public static final String TOOL_CALL_ID_FALLBACK_PREFIX = "tool-";
+    public static final String TOOL_RESULT_MESSAGE_ID_PREFIX = "tool-result-";
 }

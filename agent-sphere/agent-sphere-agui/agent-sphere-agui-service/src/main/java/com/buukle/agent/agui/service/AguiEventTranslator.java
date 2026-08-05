@@ -64,13 +64,14 @@ public class AguiEventTranslator {
         String runId = data.getRunId() == null ? String.valueOf(sessionId) : String.valueOf(data.getRunId());
 
         RunStreamState state = states.computeIfAbsent(sessionId, k -> new RunStreamState());
+        List<AguiEventVO> out = new ArrayList<>();
         if (!runId.equals(state.runId)) {
+            closeOpenMessages(out, state, state.runId);
             state.runId = runId;
             state.textOpen = false;
             state.reasoningOpen = false;
+            state.toolCallId = null;
         }
-
-        List<AguiEventVO> out = new ArrayList<>();
         if (type instanceof RunStatus runStatus) {
             switch (runStatus) {
                 case PENDING -> out.add(ev(AguiEventType.RUN_STARTED, runStarted(threadId, runId)));
@@ -122,15 +123,21 @@ public class AguiEventTranslator {
         if (type instanceof ToolCallStatus tool) {
             String toolCallId = data.getPublishId() != null ? data.getPublishId() : AguiConstants.TOOL_CALL_ID_FALLBACK_PREFIX + runId;
             switch (tool) {
-                case PENDING -> out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, data.getToolName())));
+                case PENDING -> {
+                    closeOpenToolCall(out, state);
+                    state.toolCallId = toolCallId;
+                    out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, data.getToolName())));
+                }
                 case RUNNING -> out.add(ev(AguiEventType.TOOL_CALL_ARGS, toolArgs(toolCallId, data.getArgumentsJson())));
                 case SUCCEEDED -> {
                     out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(toolCallId, data.getArtifact())));
                     out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(toolCallId)));
+                    state.toolCallId = null;
                 }
                 case FAILED -> {
                     out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(toolCallId, data.getErrorMessage())));
                     out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(toolCallId)));
+                    state.toolCallId = null;
                 }
                 default -> {
                 }
@@ -156,6 +163,14 @@ public class AguiEventTranslator {
         if (state.textOpen) {
             state.textOpen = false;
             out.add(ev(AguiEventType.TEXT_MESSAGE_END, textEnd(runId)));
+        }
+        closeOpenToolCall(out, state);
+    }
+
+    private static void closeOpenToolCall(List<AguiEventVO> out, RunStreamState state) {
+        if (state.toolCallId != null) {
+            out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(state.toolCallId)));
+            state.toolCallId = null;
         }
     }
 
@@ -256,6 +271,7 @@ public class AguiEventTranslator {
 
     private static Map<String, Object> toolResult(String toolCallId, String content) {
         Map<String, Object> map = payload(AguiEventType.TOOL_CALL_RESULT.getValue());
+        map.put(AguiConstants.FIELD_MESSAGE_ID, AguiConstants.TOOL_RESULT_MESSAGE_ID_PREFIX + toolCallId);
         map.put(AguiConstants.FIELD_TOOL_CALL_ID, toolCallId);
         map.put(AguiConstants.FIELD_CONTENT, content == null ? "" : content);
         return map;
@@ -265,5 +281,6 @@ public class AguiEventTranslator {
         private String runId;
         private boolean textOpen;
         private boolean reasoningOpen;
+        private String toolCallId;
     }
 }

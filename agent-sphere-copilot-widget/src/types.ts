@@ -28,3 +28,11 @@ export interface SessionVO {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface RunVO {
+  id: number;
+  sessionId: number;
+  userMessage: string;
+  assistantReply: string;
+  createdAt: string;
+}

@@ -1,5 +1,15 @@
 (function () {
-  const DEFAULT_SETTINGS = { frontendUrl: 'http://localhost:8000', backendUrl: 'http://localhost:8080' };
+  const DEFAULT_SETTINGS = { frontendUrls: ['http://bole.buukle.top'], mainUrl: 'http://as.buukle.top', backendUrl: 'http://as.buukle.top' };
+
+  function getFrontendUrls(settings) {
+    if (settings && Array.isArray(settings.frontendUrls)) {
+      return settings.frontendUrls.filter(Boolean);
+    }
+    if (settings && settings.frontendUrl) {
+      return [settings.frontendUrl];
+    }
+    return [];
+  }
 
   // --- Tab switching ---
   document.querySelectorAll('.tab').forEach(tab => {
@@ -11,10 +21,43 @@
     });
   });
 
+  // --- Frontend URL rows (动态多行) ---
+  function createFrontendRow(value) {
+    const row = document.createElement('div');
+    row.className = 'frontend-row';
+    const input = document.createElement('input');
+    input.type = 'url';
+    input.className = 'input-frontend';
+    input.placeholder = 'http://bole.buukle.top';
+    input.value = value || '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-remove';
+    btn.textContent = '✕';
+    btn.addEventListener('click', () => row.remove());
+    row.appendChild(input);
+    row.appendChild(btn);
+    return row;
+  }
+
+  function renderFrontendRows(urls) {
+    const list = document.getElementById('frontendUrlList');
+    list.innerHTML = '';
+    for (const u of urls) list.appendChild(createFrontendRow(u));
+  }
+
+  document.getElementById('btnAddFrontend').addEventListener('click', () => {
+    document.getElementById('frontendUrlList').appendChild(createFrontendRow(''));
+  });
+
   // --- Save settings ---
   document.getElementById('btnSave').addEventListener('click', () => {
+    const urls = Array.from(document.querySelectorAll('.input-frontend'))
+      .map(i => i.value.trim())
+      .filter(Boolean);
     const settings = {
-      frontendUrl: document.getElementById('inputFrontend').value.trim() || DEFAULT_SETTINGS.frontendUrl,
+      frontendUrls: urls.length ? urls : DEFAULT_SETTINGS.frontendUrls,
+      mainUrl: document.getElementById('inputMain').value.trim() || DEFAULT_SETTINGS.mainUrl,
       backendUrl: document.getElementById('inputBackend').value.trim() || DEFAULT_SETTINGS.backendUrl,
     };
     chrome.storage.local.set({ settings }).catch(() => {});
@@ -33,6 +76,7 @@
   function render(data) {
     const connected = data.connected;
     const settings = data.settings || DEFAULT_SETTINGS;
+    const frontendUrls = getFrontendUrls(settings);
 
     // Status badge
     const badge = document.getElementById('statusBadge');
@@ -43,12 +87,18 @@
     document.getElementById('infoUser').textContent = data.displayName || (data.token ? 'Logged in' : '-');
     document.getElementById('infoSession').textContent = data.sessionId ? '#' + data.sessionId : '-';
     document.getElementById('infoBackend').textContent = settings.backendUrl || data.baseUrl || '-';
-    document.getElementById('infoFrontend').textContent = settings.frontendUrl || '-';
+    document.getElementById('infoFrontend').textContent = frontendUrls.length ? frontendUrls.join(' , ') : '-';
 
-    // Settings inputs (only set value if not focused)
-    const fe = document.getElementById('inputFrontend');
+    // Settings inputs (only set value if not focused / not mid-editing)
+    const editing = document.activeElement && (
+      document.activeElement.classList?.contains('input-frontend') ||
+      document.activeElement.id === 'btnAddFrontend'
+    );
+    if (!editing) renderFrontendRows(frontendUrls);
+
+    const me = document.getElementById('inputMain');
     const be = document.getElementById('inputBackend');
-    if (fe !== document.activeElement) fe.value = settings.frontendUrl || '';
+    if (me !== document.activeElement) me.value = settings.mainUrl || '';
     if (be !== document.activeElement) be.value = settings.backendUrl || '';
 
     // Logs

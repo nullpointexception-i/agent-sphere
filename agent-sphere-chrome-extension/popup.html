@@ -49,6 +49,12 @@
     .btn-danger:hover { opacity: .85; }
     .btn-danger:active { opacity: .7; }
     .btn-saved { background: #dafbe1; color: #116329; pointer-events: none; }
+    .btn-ghost { background: transparent; color: #0a84ff; border: 1px dashed #0a84ff; margin-top: 4px; font-size: 13px; }
+    .btn-ghost:hover { background: rgba(10,132,255,.08); }
+    .frontend-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .frontend-row input { flex: 1; }
+    .btn-remove { flex-shrink: 0; width: 30px; height: 30px; padding: 0; border: 1px solid #d1d1d6; border-radius: 8px; background: transparent; color: #8e8e93; font-size: 14px; cursor: pointer; }
+    .btn-remove:hover { border-color: #ff3b30; color: #ff3b30; }
     .help-text { margin-top: 8px; font-size: 11px; color: #8e8e93; line-height: 1.5; }
     .log-list { max-height: 200px; overflow-y: auto; }
     .log-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 12px; border-bottom: 1px solid #e8e8ed; }
@@ -87,15 +93,20 @@
     <div id="panelSettings" class="panel">
       <div class="card">
         <div class="field">
-          <label>Frontend URL</label>
-          <input id="inputFrontend" type="url" placeholder="http://localhost:8000">
+          <label>Frontend URLs（widget 宿主页，可多个）</label>
+          <div id="frontendUrlList"></div>
+          <button id="btnAddFrontend" class="btn btn-ghost">+ 添加</button>
+        </div>
+        <div class="field">
+          <label>Main URL（主站）</label>
+          <input id="inputMain" type="url" placeholder="http://as.buukle.top">
         </div>
         <div class="field">
           <label>Backend URL</label>
-          <input id="inputBackend" type="url" placeholder="http://localhost:8080">
+          <input id="inputBackend" type="url" placeholder="http://as.buukle.top">
         </div>
         <button id="btnSave" class="btn btn-primary">Save Settings</button>
-        <div class="help-text">Changes take effect on the next session switch or page refresh.</div>
+        <div class="help-text">在此列表或主站 /chat/&lt;id&gt; 页打开时自动注入并跟随会话；切 tab 自动切换会话。</div>
       </div>
     </div>
 

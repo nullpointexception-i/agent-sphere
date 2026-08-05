@@ -114,6 +114,10 @@ class AguiEventTranslatorTest {
         JsonNode start = read(events.get(0));
         assertThat(start.get("toolCallId").asText()).isEqualTo("tool_1");
         assertThat(start.get("toolCallName").asText()).isEqualTo("search_web");
+        JsonNode result = read(events.get(1));
+        assertThat(result.get("toolCallId").asText()).isEqualTo("tool_1");
+        assertThat(result.get("content").asText()).isEqualTo("{}");
+        assertThat(result.get("messageId").asText()).isEqualTo("tool-result-tool_1");
     }
 
     @Test
@@ -126,6 +130,61 @@ class AguiEventTranslatorTest {
         assertThat(started.get("type").asText()).isEqualTo("RUN_STARTED");
         assertThat(started.get("threadId").asText()).isEqualTo("1");
         assertThat(started.get("runId").asText()).isEqualTo("10");
+    }
+
+    @Test
+    void runIdChange_shouldCloseOpenTextMessageBeforeNewStart() throws Exception {
+        translator.translate(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
+                data(1L, 10L).setResponse("old")));
+
+        List<AguiEventVO> events = translator.translate(new RuntimeEventVO(
+                FlowEventType.CONTENT_TOKEN, data(1L, 11L).setResponse("new")));
+
+        assertThat(events).extracting(AguiEventVO::getName).containsExactly(
+                "TEXT_MESSAGE_END", "TEXT_MESSAGE_START", "TEXT_MESSAGE_CONTENT");
+        assertThat(read(events.get(0)).get("messageId").asText()).isEqualTo("msg-10");
+        assertThat(read(events.get(1)).get("messageId").asText()).isEqualTo("msg-11");
+    }
+
+    @Test
+    void runIdChange_shouldCloseOpenReasoningMessage() throws Exception {
+        translator.translate(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                data(1L, 10L).setResponse("think")));
+
+        List<AguiEventVO> events = translator.translate(new RuntimeEventVO(
+                FlowEventType.REASONING_TOKEN, data(1L, 11L).setResponse("more")));
+
+        assertThat(events).extracting(AguiEventVO::getName).containsExactly(
+                "REASONING_MESSAGE_END", "REASONING_MESSAGE_START", "REASONING_MESSAGE_CONTENT");
+        assertThat(read(events.get(0)).get("messageId").asText()).isEqualTo("reasoning-10");
+        assertThat(read(events.get(1)).get("messageId").asText()).isEqualTo("reasoning-11");
+    }
+
+    @Test
+    void completedWithOpenToolCall_shouldEmitToolCallEndBeforeRunFinished() throws Exception {
+        translator.translate(new RuntimeEventVO(
+                ToolCallStatus.PENDING, data(1L, 10L).setToolName("search_web").setPublishId("tool_1")));
+
+        List<AguiEventVO> events = translator.translate(new RuntimeEventVO(
+                RunStatus.COMPLETED, data(1L, 10L)));
+
+        assertThat(events).extracting(AguiEventVO::getName).containsExactly(
+                "TOOL_CALL_END", "RUN_FINISHED");
+        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1");
+    }
+
+    @Test
+    void toolCallPendingTwice_shouldClosePreviousBeforeNewStart() throws Exception {
+        translator.translate(new RuntimeEventVO(
+                ToolCallStatus.PENDING, data(1L, 10L).setToolName("a").setPublishId("tool_1")));
+
+        List<AguiEventVO> events = translator.translate(new RuntimeEventVO(
+                ToolCallStatus.PENDING, data(1L, 10L).setToolName("b").setPublishId("tool_2")));
+
+        assertThat(events).extracting(AguiEventVO::getName).containsExactly(
+                "TOOL_CALL_END", "TOOL_CALL_START");
+        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1");
+        assertThat(read(events.get(1)).get("toolCallId").asText()).isEqualTo("tool_2");
     }
 
     private JsonNode read(AguiEventVO event) throws Exception {
