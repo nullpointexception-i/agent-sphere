@@ -2,6 +2,8 @@ package com.buukle.agent.sso.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.config.SystemConfigKeys;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -63,6 +65,11 @@ public class SsoServiceImpl implements SsoService {
     private final UserSpi userSpi;
     private final RedissonClient redissonClient;
     private final AgentRuntimeProperties properties;
+    private final SystemConfigSpi systemConfigSpi;
+
+    private String ssoBaseUrl() {
+        return systemConfigSpi.get(SystemConfigKeys.SSO_BASE_URL, properties.getSso().getBaseUrl());
+    }
 
     @Override
     public SsoAuthorizeVO authorize(String provider, String redirectUri, String prompt) {
@@ -76,7 +83,7 @@ public class SsoServiceImpl implements SsoService {
                 provider, redirectUri == null ? "" : redirectUri, codeVerifier, nonce);
         set(stateKey(state), stateValue, properties.getSso().getStateTtl());
 
-        String callbackUrl = properties.getSso().getBaseUrl() + CALLBACK_PATH;
+        String callbackUrl = ssoBaseUrl() + CALLBACK_PATH;
         UriComponentsBuilder url = UriComponentsBuilder.fromUriString(identityProvider.getAuthorizationEndpoint())
                 .queryParam(PARAM_RESPONSE_TYPE, RESPONSE_TYPE_CODE)
                 .queryParam(PARAM_CLIENT_ID, identityProvider.getClientId())
@@ -116,7 +123,7 @@ public class SsoServiceImpl implements SsoService {
         }
 
         IdentityProvider identityProvider = requireEnabledProvider(providerCode);
-        String callbackUrl = properties.getSso().getBaseUrl() + CALLBACK_PATH;
+        String callbackUrl = ssoBaseUrl() + CALLBACK_PATH;
         SsoOidcClient.IdTokenClaims claims = ssoOidcClient.exchangeAndVerify(
                 identityProvider, code, callbackUrl, codeVerifier, nonce);
 
