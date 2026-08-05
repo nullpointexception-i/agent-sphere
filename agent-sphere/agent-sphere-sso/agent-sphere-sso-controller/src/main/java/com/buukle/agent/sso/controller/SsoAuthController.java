@@ -27,7 +27,7 @@ public class SsoAuthController extends BaseController {
 
     @GetMapping("/authorize")
     public ResponseEntity<SsoAuthorizeVO> authorize(@RequestParam String provider,
-                                                    @RequestParam(required = false) String redirectUri,
+                                                    @RequestParam(value = "redirect_uri", required = false) String redirectUri,
                                                     @RequestParam(required = false) String prompt) {
         return ok(ssoService.authorize(provider, redirectUri, prompt));
     }
