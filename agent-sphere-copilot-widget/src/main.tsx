@@ -74,7 +74,7 @@ function mountWidget(options: WidgetConfig = {}): WidgetHandle {
   if (config.mountTo) {
     host.className = 'aw-hosted';
     host.style.cssText =
-      'position:relative;width:100%;height:100%;pointer-events:auto;isolation:isolate;';
+      'position:relative;width:100%;height:100%;display:flex;flex-direction:column;pointer-events:auto;isolation:isolate;';
   } else {
     host.style.cssText =
       'position:fixed;bottom:0;right:0;width:min(90vw,420px);max-height:min(92vh,720px);pointer-events:auto;isolation:isolate;';

@@ -12,6 +12,19 @@
   border: none;
   border-radius: 0;
   box-shadow: none;
+  padding: 0;
+}
+
+.aw-hosted .aw-chat {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #ffffff;
+}
+
+.aw-hosted .aw-header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .aw-view {
