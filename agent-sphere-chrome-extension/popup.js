@@ -88,6 +88,7 @@
     document.getElementById('infoSession').textContent = data.sessionId ? '#' + data.sessionId : '-';
     document.getElementById('infoBackend').textContent = settings.backendUrl || data.baseUrl || '-';
     document.getElementById('infoFrontend').textContent = frontendUrls.length ? frontendUrls.join(' , ') : '-';
+    document.getElementById('infoMain').textContent = settings.mainUrl || '-';
 
     // Settings inputs (only set value if not focused / not mid-editing)
     const editing = document.activeElement && (
