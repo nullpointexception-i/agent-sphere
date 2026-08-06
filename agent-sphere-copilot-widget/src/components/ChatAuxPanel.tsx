@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useAgent } from '@copilotkit/react-core/v2';
 import type { SessionTodoVO } from '../types';
 
@@ -20,6 +21,13 @@ interface AgentLike {
   messages?: unknown[];
 }
 
+interface HoverTip {
+  text: string;
+  x: number;
+  y: number;
+  maxWidth: number;
+}
+
 function extractToolCalls(messages: unknown[]): ToolCallItem[] {
   const list = messages as {
     role?: string;
@@ -32,7 +40,8 @@ function extractToolCalls(messages: unknown[]): ToolCallItem[] {
     if (m?.role === 'assistant' && Array.isArray(m.toolCalls)) {
       for (const tc of m.toolCalls) {
         const toolMsg = list.find((x) => x?.role === 'tool' && x?.toolCallId === tc.id);
-        const result = typeof toolMsg?.content === 'string' ? toolMsg.content.slice(0, 120) : undefined;
+        const result =
+          typeof toolMsg?.content === 'string' ? toolMsg.content : undefined;
         out.push({
           id: String(tc.id ?? ''),
           name: tc.function?.name ?? 'unknown',
@@ -47,6 +56,9 @@ function extractToolCalls(messages: unknown[]): ToolCallItem[] {
 
 export function ChatAuxPanel({ agentId, initialTodos }: ChatAuxPanelProps) {
   const { agent } = useAgent({ agentId });
+  const [tip, setTip] = useState<HoverTip | null>(null);
+  const auxRef = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement | null>(null);
 
   const stateTodos = (agent as AgentLike | undefined)?.state?.todos as
     | SessionTodoVO[]
@@ -59,11 +71,53 @@ export function ChatAuxPanel({ agentId, initialTodos }: ChatAuxPanelProps) {
     [(agent as AgentLike | undefined)?.messages],
   );
 
+  if (todos.length === 0 && toolCalls.length === 0) {
+    return null;
+  }
+
+  /** 悬浮弹层挂到 shadow root 顶层（相对于该 layer 定位，transform 祖先无关） */
+  const ensureLayer = (): HTMLDivElement | null => {
+    if (layerRef.current) {
+      return layerRef.current;
+    }
+    const root = auxRef.current?.getRootNode();
+    if (root instanceof ShadowRoot) {
+      const div = document.createElement('div');
+      div.className = 'aw-tooltip-layer';
+      root.appendChild(div);
+      layerRef.current = div;
+    }
+    return layerRef.current;
+  };
+
+  const showTip = (el: HTMLElement, text: string) => {
+    const card = auxRef.current;
+    const layer = ensureLayer();
+    if (!card || !layer) {
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const layerRect = layer.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const maxWidth = Math.max(
+      120,
+      Math.min(320, cardRect.right - rect.left - 8),
+    );
+    setTip({
+      text,
+      x: rect.left - layerRect.left,
+      y: rect.top - layerRect.top - 8,
+      maxWidth,
+    });
+  };
+
   return (
-    <>
-      {todos.length > 0 && (
-        <div className="aw-aux aw-todos">
-          <div className="aw-aux-title">任务清单</div>
+    <div className="aw-aux" ref={auxRef}>
+      <div className="aw-aux-cols">
+        <div className="aw-aux-col">
+          <div className="aw-aux-col-title">
+            任务清单{todos.length > 0 ? `（${todos.length}）` : ''}
+          </div>
           <div className="aw-aux-body">
             {todos.map((t, i) => (
               <div
@@ -71,6 +125,15 @@ export function ChatAuxPanel({ agentId, initialTodos }: ChatAuxPanelProps) {
                 className={
                   t.status === 'completed' ? 'aw-todo aw-todo-done' : 'aw-todo'
                 }
+                onMouseEnter={(e) => {
+                  const el = e.currentTarget.querySelector(
+                    '.aw-todo-content',
+                  ) as HTMLElement | null;
+                  if (el) {
+                    showTip(el, t.content);
+                  }
+                }}
+                onMouseLeave={() => setTip(null)}
               >
                 <span className="aw-todo-content">{t.content}</span>
                 {t.priority ? (
@@ -80,13 +143,27 @@ export function ChatAuxPanel({ agentId, initialTodos }: ChatAuxPanelProps) {
             ))}
           </div>
         </div>
-      )}
-      {toolCalls.length > 0 && (
-        <div className="aw-aux aw-toolcalls">
-          <div className="aw-aux-title">工具调用</div>
+        <div className="aw-aux-col">
+          <div className="aw-aux-col-title">
+            工具调用{toolCalls.length > 0 ? `（${toolCalls.length}）` : ''}
+          </div>
           <div className="aw-aux-body">
             {toolCalls.map((tc) => (
-              <div key={tc.id} className="aw-toolcall">
+              <div
+                key={tc.id}
+                className="aw-toolcall"
+                onMouseEnter={(e) => {
+                  const row = e.currentTarget;
+                  const nameEl = row.querySelector(
+                    '.aw-tool-name',
+                  ) as HTMLElement | null;
+                  if (nameEl) {
+                    const full = tc.result ? `${tc.name}：${tc.result}` : tc.name;
+                    showTip(nameEl, full);
+                  }
+                }}
+                onMouseLeave={() => setTip(null)}
+              >
                 <span
                   className={`aw-tool-status aw-tool-status-${tc.status}`}
                 />
@@ -98,7 +175,18 @@ export function ChatAuxPanel({ agentId, initialTodos }: ChatAuxPanelProps) {
             ))}
           </div>
         </div>
-      )}
-    </>
+      </div>
+      {tip && layerRef.current
+        ? createPortal(
+            <div
+              className="aw-tooltip"
+              style={{ left: tip.x, top: tip.y, maxWidth: tip.maxWidth }}
+            >
+              {tip.text}
+            </div>,
+            layerRef.current,
+          )
+        : null}
+    </div>
   );
 }

@@ -15,6 +15,11 @@
   padding: 0;
 }
 
+/* 全宽（drawer/hosted）下聊天区右侧留边，与左侧 sidebar 间距对称，不再贴浏览器/抽屉边缘 */
+.aw-hosted .aw-view {
+  padding-right: 10px;
+}
+
 .aw-hosted .aw-chat {
   border: none;
   border-radius: 0;
@@ -281,16 +286,34 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  height: 120px;
+  height: 110px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #ffffff;
   overflow: hidden;
+  position: relative;
 }
 
-.aw-aux-title {
+.aw-aux-cols {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.aw-aux-col {
+  flex: 1 1 50%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.aw-aux-col + .aw-aux-col {
+  border-left: 1px solid #f0f0f0;
+}
+
+.aw-aux-col-title {
   flex-shrink: 0;
-  padding: 6px 10px;
+  padding: 5px 10px;
   font-size: 12px;
   font-weight: 600;
   color: #6b7280;
@@ -393,6 +416,10 @@
 
 .aw-tool-name {
   flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 500;
 }
 
@@ -404,6 +431,34 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 悬浮弹层：展示任务/工具明细完整内容（浅色、自适应宽度、不超出卡片） */
+.aw-tooltip-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.aw-tooltip {
+  position: absolute;
+  transform: translateY(-100%);
+  width: max-content;
+  max-width: 320px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  z-index: 9999;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .aw-chat-body {
@@ -437,6 +492,21 @@
 .aw-chat-body ::-webkit-scrollbar-thumb {
   background: #d1d5db;
   border-radius: 3px;
+}
+
+/* 聊天输入框瘦身：收矮文本域容器、收紧上下内边距、缩小字号行高 */
+[data-testid='copilot-chat-textarea'] {
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+
+.cpk\:min-h-\[50px\] {
+  min-height: 36px;
+}
+
+[data-layout] > .cpk\:grid {
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .aw-load-more {
