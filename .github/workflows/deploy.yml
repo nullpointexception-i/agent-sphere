@@ -86,7 +86,8 @@ jobs:
         mkdir -p output
         cd agent-sphere-chrome-extension
         zip -r ../output/agent-sphere-chrome-extension-${{ github.ref_name }}.zip \
-          manifest.json background.js content.js page-script.js popup.html popup.js icon-128.png
+          manifest.json background.js content.js page-script.js popup.html popup.js \
+          icon-16.png icon-32.png icon-48.png icon-128.png
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
