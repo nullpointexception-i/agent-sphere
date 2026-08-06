@@ -1,6 +1,7 @@
 name: Build & Deploy to k3s
 
 on:
+  workflow_dispatch: {}
   push:
     tags: ['v*']
 
