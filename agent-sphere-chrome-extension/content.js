@@ -23,6 +23,29 @@
   let lastSessionId = null;
   let lastConnected = null;
   let pendingSessionToast = false;
+  let sessionMissingLogged = false;
+
+  // widget 会话缓存：由 page-script.js（MAIN world）经 postMessage 转发，
+  // 因为 content script 在 ISOLATED world，无法读取页面的 sessionStorage
+  let widgetSessionCache = null;
+
+  window.addEventListener('message', (event) => {
+    if (event.data?.type !== 'agent-sphere:session-data') return;
+    const sessionId = event.data.sessionId;
+    const userRaw = event.data.user;
+    widgetSessionCache = null;
+    if (sessionId && userRaw) {
+      try {
+        const parsed = JSON.parse(userRaw);
+        if (parsed && parsed.token) {
+          widgetSessionCache = { sessionId: Number(sessionId), user: parsed };
+        }
+      } catch (e) {
+        widgetSessionCache = null;
+      }
+    }
+    checkAuth().catch(() => {});
+  });
 
   async function getSettings() {
     return new Promise((resolve) => {
@@ -48,21 +71,14 @@
       const settings = await getSettings();
       const baseUrl = settings.backendUrl || 'http://localhost:8080';
 
-      // widget：抽屉/第三方站点嵌入（sessionStorage 桥）
-      const widgetSession = sessionStorage.getItem('agent-sphere-widget:active-session');
-      if (widgetSession) {
-        const sid = Number(widgetSession);
-        const widgetRaw = sessionStorage.getItem('agent-sphere-widget:agent-user');
-        const widgetUser = widgetRaw ? JSON.parse(widgetRaw) : null;
-        if (sid && widgetUser && widgetUser.token) {
-          return {
-            token: widgetUser.token,
-            sessionId: sid,
-            displayName: widgetUser.displayName || '',
-            baseUrl,
-          };
-        }
-        return null;
+      // widget：抽屉/第三方站点嵌入（sessionStorage 桥，由 page-script.js 转发缓存）
+      if (widgetSessionCache) {
+        return {
+          token: widgetSessionCache.user.token,
+          sessionId: widgetSessionCache.sessionId,
+          displayName: widgetSessionCache.user.displayName || '',
+          baseUrl,
+        };
       }
 
       // 主站：localStorage['agent-user'] + /chat/<id>
@@ -90,7 +106,17 @@
   async function checkAuth() {
     try {
       const info = await resolveSession();
-      if (!info || info.sessionId === lastSessionId) return;
+      if (!info) {
+        if (!sessionMissingLogged) {
+          sessionMissingLogged = true;
+          console.warn(
+            '[AgentSphere] No session/token on this page — 请确认 widget 已登录并选中会话',
+            location.href,
+          );
+        }
+        return;
+      }
+      if (info.sessionId === lastSessionId) return;
       const prevSessionId = lastSessionId;
       lastSessionId = info.sessionId;
 

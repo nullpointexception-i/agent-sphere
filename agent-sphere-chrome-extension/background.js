@@ -8,16 +8,45 @@ let baseUrl = '';
 let abortController = null;
 let reconnectTimer = null;
 
-// --- Keep SW alive: check connection every minute ---
-chrome.alarms.create('sse-keepalive', { periodInMinutes: 1 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'sse-keepalive') {
-    if (!abortController || abortController.signal.aborted) {
-      console.log('[AgentSphere] Keepalive: reconnecting SSE');
-      connectSSE();
+// --- Keep SW alive & 僵尸连接检测：优先 chrome.alarms（能唤醒休眠的 SW），
+// alarms 不可用（如扩展旧注册未授予权限）时降级为 setInterval，避免 SW 启动崩溃 ---
+let keepaliveTimer = null;
+
+function checkConnection() {
+  // 尚无凭据/会话（扩展刚重载、还没从页面拉到 auth）——静默等待，
+  // 由启动查询 / 页面推送 / tab 激活负责拉取，不刷误导性的重连日志
+  if (!sessionId || !token || !baseUrl) return;
+  // 1) 完全没连接 → 直接连（SW 重启 / 流关闭后的兜底）
+  if (!abortController || abortController.signal.aborted) {
+    console.log('[AgentSphere] Keepalive: reconnecting SSE');
+    connectSSE();
+    return;
+  }
+  // 2) 僵尸连接检测：后端每 15s 发心跳，长时间无任何 data → 判定挂起，主动重连
+  if (lastDataAt && Date.now() - lastDataAt > ZOMBIE_STALE_MS) {
+    console.warn('[AgentSphere] Keepalive: no SSE data for a while, reconnecting');
+    abortController.abort();
+    abortController = null;
+    activeConnectionKey = '';
+    connectSSE();
+  }
+}
+
+function startKeepalive() {
+  if (chrome.alarms && typeof chrome.alarms.create === 'function') {
+    try {
+      chrome.alarms.create('sse-keepalive', { periodInMinutes: 1 });
+      chrome.alarms.onAlarm.addListener((alarm) => {
+        if (alarm.name === 'sse-keepalive') checkConnection();
+      });
+      return;
+    } catch (e) {
+      console.warn('[AgentSphere] chrome.alarms unavailable, using setInterval', e);
     }
   }
-});
+  keepaliveTimer = setInterval(checkConnection, 30000);
+}
+startKeepalive();
 
 // --- Start SSE on startup ---
 function startSSE() {
@@ -28,6 +57,8 @@ function startSSE() {
       baseUrl = data.baseUrl;
       connectSSE();
     }
+    // SW 重启/扩展重载后自愈：等配置就绪后主动向当前激活的匹配 tab 拉取会话
+    loadConfiguredUrls(() => queryActiveTabSession());
   });
 }
 
@@ -36,7 +67,7 @@ startSSE();
 // --- Configured URLs (popup Settings): widget hosts (frontendUrls[]) + main site (mainUrl) ---
 let frontendUrls = [];
 let mainUrl = '';
-function loadConfiguredUrls() {
+function loadConfiguredUrls(done) {
   chrome.storage.local.get(['settings'], (data) => {
     const s = data.settings || {};
     frontendUrls = Array.isArray(s.frontendUrls)
@@ -45,11 +76,53 @@ function loadConfiguredUrls() {
         ? [s.frontendUrl]
         : [];
     mainUrl = s.mainUrl || '';
+    console.log('[AgentSphere] Config:', JSON.stringify({ frontendUrls, mainUrl }));
     // 启动时对已打开的匹配页面补注入（如扩展刚重载）
     injectMatchingTabs();
+    if (typeof done === 'function') done();
   });
 }
-loadConfiguredUrls();
+
+// --- 主动向匹配 tab 查询会话（SW 重启 / 扩展重载后自愈连接） ---
+function queryActiveTabSession() {
+  chrome.tabs.query({}, (tabs) => {
+    const matching = (tabs || []).filter(
+      (t) => t.id != null && shouldInject(t.url || ''),
+    );
+    const tab = matching.find((t) => t.active) || matching[0];
+    if (!tab) {
+      console.log(
+        '[AgentSphere] Startup: no matching tab found — 请打开 frontendUrls/mainUrl 下的页面',
+      );
+      return;
+    }
+    injectContentScript(tab.id).then(() => {
+      chrome.tabs.sendMessage(tab.id, { type: 'query_session' }, (resp) => {
+        if (chrome.runtime.lastError || !resp || !resp.sessionId || !resp.token) {
+          console.log(
+            '[AgentSphere] Startup: no session/token on tab',
+            tab.url,
+            '— 请确认 widget 已登录并选中了会话',
+          );
+          return;
+        }
+        const sid = Number(resp.sessionId);
+        if (sid === sessionId) return;
+        token = resp.token;
+        baseUrl = resp.baseUrl;
+        sessionId = sid;
+        chrome.storage.local.set({
+          token,
+          sessionId,
+          displayName: resp.displayName || '',
+          baseUrl: resp.baseUrl,
+        }).catch(() => {});
+        console.log('[AgentSphere] Startup: following session', sid);
+        connectSSE();
+      });
+    });
+  });
+}
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.settings) {
     const s = changes.settings.newValue || {};
@@ -59,6 +132,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
         ? [s.frontendUrl]
         : [];
     mainUrl = s.mainUrl || '';
+    console.log('[AgentSphere] Settings changed:', JSON.stringify({ frontendUrls, mainUrl }));
+    // 首次保存默认配置后立即补注入 + 拉取当前页会话（无需等 SW 重启）
+    injectMatchingTabs();
+    queryActiveTabSession();
   }
 });
 
@@ -74,11 +151,14 @@ function shouldInject(url) {
 
 function injectMatchingTabs() {
   chrome.tabs.query({}, (tabs) => {
+    let count = 0;
     for (const tab of tabs) {
       if (tab.id != null && shouldInject(tab.url || '')) {
         injectContentScript(tab.id);
+        count++;
       }
     }
+    console.log('[AgentSphere] Injected into', count, 'matching tab(s)');
   });
 }
 
@@ -182,20 +262,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // --- SSE Connection via fetch + ReadableStream (supports Authorization header) ---
 let activeConnectionKey = ''; // coalesce: 同一会话/凭据不重复重启连接
+let lastDataAt = 0;           // 最近收到任意 SSE data 的时间（僵尸连接检测）
+let reconnectAttempt = 0;     // 连续重连次数（指数退避）
+const RECONNECT_BASE_MS = 5000;
+const RECONNECT_MAX_MS = 30000;
+const ZOMBIE_STALE_MS = 75000; // 后端每 15s 发心跳，超过该时长无任何 data → 判定僵尸连接
+
+function scheduleReconnect() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  const delay = Math.min(RECONNECT_BASE_MS * Math.pow(2, reconnectAttempt), RECONNECT_MAX_MS);
+  reconnectAttempt++;
+  console.log(`[AgentSphere] SSE reconnect in ${delay}ms (attempt ${reconnectAttempt})`);
+  reconnectTimer = setTimeout(() => { reconnectTimer = null; connectSSE(); }, delay);
+}
 
 async function connectSSE() {
-  if (abortController) { abortController.abort(); abortController = null; }
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (!sessionId || !token || !baseUrl) return;
 
   const connectionKey = `${baseUrl}|${sessionId}|${token}`;
-  if (connectionKey === activeConnectionKey) return; // 已在连接/已连接同一目标
+  // 同一目标且已连接/连接中：直接忽略，绝不误杀现有连接
+  if (connectionKey === activeConnectionKey) return;
   activeConnectionKey = connectionKey;
+
+  if (abortController) { abortController.abort(); abortController = null; }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 
   const url = `${baseUrl}/api/v1/runtime/${sessionId}/stream`;
   console.log('[AgentSphere] Connecting SSE:', url);
 
   abortController = new AbortController();
+  lastDataAt = Date.now();
 
   try {
     const response = await fetch(url, {
@@ -215,6 +311,7 @@ async function connectSSE() {
     }
 
     console.log('[AgentSphere] SSE connected');
+    reconnectAttempt = 0;
     updatePopupStatus(true);
 
     const reader = response.body.getReader();
@@ -231,32 +328,39 @@ async function connectSSE() {
 
       for (const part of parts) {
         const dataLine = part.startsWith('data:') ? part.slice(5).trim() : '';
-        if (dataLine) {
-          try {
-            const msg = JSON.parse(dataLine);
-            console.log('[AgentSphere] SSE msg:', msg.eventType, msg.action, msg.url?.slice(0,30));
-            if (msg.eventType === 'browser_operation') {
-              const cmd = msg.command || msg;
-              const params = { url: cmd.url, selector: cmd.selector, text: cmd.text, code: cmd.code, mode: cmd.mode, tabId: cmd.tabId, append: cmd.append };
-              Object.keys(params).forEach(k => { if (params[k] == null) delete params[k]; });
-              console.log('[AgentSphere] Calling executeInPage:', cmd.commandId?.slice(0,8), cmd.action, Object.keys(params));
-              await executeInPage(cmd.commandId, cmd.action, params);
-            }
-          } catch (e) {
-            console.error('[AgentSphere] Parse error:', e);
+        if (!dataLine) continue;
+        lastDataAt = Date.now();
+        // 后端心跳（每 15s data:ping）不是 JSON：静默跳过并作为存活信号
+        if (!dataLine.startsWith('{')) continue;
+        try {
+          const msg = JSON.parse(dataLine);
+          console.log('[AgentSphere] SSE msg:', msg.eventType, msg.action, msg.url?.slice(0,30));
+          if (msg.eventType === 'browser_operation') {
+            const cmd = msg.command || msg;
+            const params = { url: cmd.url, selector: cmd.selector, text: cmd.text, code: cmd.code, mode: cmd.mode, tabId: cmd.tabId, append: cmd.append };
+            Object.keys(params).forEach(k => { if (params[k] == null) delete params[k]; });
+            console.log('[AgentSphere] Calling executeInPage:', cmd.commandId?.slice(0,8), cmd.action, Object.keys(params));
+            await executeInPage(cmd.commandId, cmd.action, params);
           }
+        } catch (e) {
+          console.warn('[AgentSphere] SSE parse error:', e);
         }
       }
     }
-    // 流正常关闭：允许后续对同一会话重连
+
+    // 流正常关闭（后端重启/超时等）：主动重连，带退避
+    console.warn('[AgentSphere] SSE stream closed, reconnecting');
     activeConnectionKey = '';
+    abortController = null;
     updatePopupStatus(false);
+    scheduleReconnect();
   } catch (e) {
-    if (e.name === 'AbortError') return;
-    console.warn('[AgentSphere] SSE error, reconnecting in 5s:', e.message);
+    if (e.name === 'AbortError') return; // 由更新的连接主动中止，状态归新连接所有
+    console.warn('[AgentSphere] SSE error, reconnecting:', e.message);
     updatePopupStatus(false);
     activeConnectionKey = '';
-    reconnectTimer = setTimeout(connectSSE, 5000);
+    abortController = null;
+    scheduleReconnect();
   }
 }
 

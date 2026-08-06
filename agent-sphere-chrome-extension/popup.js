@@ -115,6 +115,13 @@
     }
   }
 
+  // Auto-save defaults on first run so background/content always see a valid config
+  chrome.storage.local.get(['settings'], (data) => {
+    if (!data.settings) {
+      chrome.storage.local.set({ settings: DEFAULT_SETTINGS }).catch(() => {});
+    }
+  });
+
   // Initial load
   chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'settings', 'logs'], render);
 
