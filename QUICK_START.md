@@ -19,7 +19,7 @@ git clone https://github.com/nullpointexception-i/agent-sphere
 cd agent-sphere
 ```
 
-The project contains three submodules:
+The  project contains three submodules:
 - `agent-sphere/` — Backend (Java 21, Spring Boot, Maven multi-module)
 - `agent-sphere-ui/` — Frontend (React 19, UmiJS Max, Ant Design Pro)
 - `agent-sphere-chrome-extension/` — Chrome Extension (Manifest V3)
