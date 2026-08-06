@@ -103,7 +103,6 @@ npm run dev
 
 1. 浏览器打开 `http://localhost:8000/user/register`
 2. 输入用户名、密码、显示名，点击注册
-   ![ui-register.png](agent-sphere-readme/ui-register.png)
 3. 注册成功后跳转到登录页，用相同凭证登录
    ![ui-login.png](agent-sphere-readme/ui-login.png)
 4. 登录成功进入 Dashboard

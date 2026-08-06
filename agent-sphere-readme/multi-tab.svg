@@ -30,16 +30,16 @@
 
   <rect width="1150" height="560" fill="url(#bg)"/>
 
-  <text x="575" y="58" class="title" text-anchor="middle">多标签页管理</text>
-  <text x="575" y="86" class="small" text-anchor="middle">LLM 通过 tabId 分别操作多个标签页</text>
+  <text x="575" y="58" class="title" text-anchor="middle">Multi-Tab Management</text>
+  <text x="575" y="86" class="small" text-anchor="middle">The LLM operates on multiple tabs via tabId</text>
 
   <rect x="465" y="108" width="220" height="44" rx="22" fill="#334155"/>
-  <text x="575" y="136" class="pill" text-anchor="middle">LLM 操作两个页面</text>
+  <text x="575" y="136" class="pill" text-anchor="middle">LLM operates on two tabs</text>
 
   <path d="M575 152 L575 184" class="line"/>
 
   <rect x="70" y="184" width="500" height="252" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="320" y="220" class="layer-title" text-anchor="middle">标签页 1644814353 → GitHub</text>
+  <text x="320" y="220" class="layer-title" text-anchor="middle">Tab 1644814353 → GitHub</text>
 
   <rect x="95" y="238" width="450" height="74" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
   <text x="320" y="266" class="box-title" text-anchor="middle">navigate</text>
@@ -49,10 +49,10 @@
 
   <rect x="95" y="334" width="450" height="84" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
   <text x="320" y="362" class="box-title" text-anchor="middle">getContent(tabId: 1644814353)</text>
-  <text x="320" y="395" class="box-text" text-anchor="middle">→ 返回 GitHub 页面内容</text>
+  <text x="320" y="395" class="box-text" text-anchor="middle">→ returns GitHub page content</text>
 
   <rect x="610" y="184" width="500" height="252" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="860" y="220" class="layer-title" text-anchor="middle">标签页 1644814350 → Zhihu</text>
+  <text x="860" y="220" class="layer-title" text-anchor="middle">Tab 1644814350 → Zhihu</text>
 
   <rect x="635" y="238" width="450" height="74" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
   <text x="860" y="266" class="box-title" text-anchor="middle">navigate</text>
@@ -62,10 +62,10 @@
 
   <rect x="635" y="334" width="450" height="84" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
   <text x="860" y="362" class="box-title" text-anchor="middle">getContent(tabId: 1644814350)</text>
-  <text x="860" y="395" class="box-text" text-anchor="middle">→ 返回 Zhihu 页面内容</text>
+  <text x="860" y="395" class="box-text" text-anchor="middle">→ returns Zhihu page content</text>
 
   <path d="M575 436 L575 468" class="dash"/>
 
   <rect x="315" y="468" width="520" height="44" rx="22" fill="#475569"/>
-  <text x="575" y="496" class="pill" text-anchor="middle">无 tabId 时 → 操作最后导航的标签页 controlledTabId</text>
+  <text x="575" y="496" class="pill" text-anchor="middle">when no tabId → operate on the last navigated tab, controlledTabId</text>
 </svg>

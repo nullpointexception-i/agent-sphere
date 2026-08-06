@@ -26,7 +26,7 @@
     </marker>
   </defs>
   <rect width="1250" height="1000" fill="url(#bg)"/>
-  <text x="50" y="80" class="title">Fallback 执行流程</text>
+  <text x="50" y="80" class="title">Fallback Execution Flow</text>
 
   <!-- SessionRunner.runTurn -->
   <rect x="425" y="110" width="400" height="46" rx="23" fill="#334155"/>
@@ -38,11 +38,11 @@
   <rect x="175" y="186" width="900" height="120" rx="16" fill="#ffffff" filter="url(#shadow)"/>
   <rect x="175" y="186" width="900" height="44" rx="16" fill="#e8f1ff"/>
   <rect x="175" y="202" width="900" height="28" fill="#e8f1ff"/>
-  <text x="200" y="217" class="box-title">resolveRoutes() → 构建路由列表</text>
+  <text x="200" y="217" class="box-title">resolveRoutes() → build route list</text>
 
-  <text x="215" y="255" class="box-text">从 KernelContext 获取（直接指定）</text>
-  <text x="215" y="285" class="box-text">从 Instance 获取（管理后台配置）</text>
-  <text x="255" y="285" class="small">主路由 primary / Fallback 路由 fallbackIds</text>
+  <text x="215" y="255" class="box-text">From KernelContext (directly specified)</text>
+  <text x="215" y="285" class="box-text">From Instance (admin console config)</text>
+  <text x="255" y="285" class="small">Primary route / Fallback route fallbackIds</text>
 
   <path d="M625 306 L625 336" class="line"/>
 
@@ -61,11 +61,11 @@
 
   <!-- Success -->
   <rect x="200" y="450" width="400" height="36" rx="18" fill="#75bd88"/>
-  <text x="400" y="474" class="pill" text-anchor="middle">success → LLM 流 ✅</text>
+  <text x="400" y="474" class="pill" text-anchor="middle">success → LLM stream ✅</text>
 
   <!-- Exception -->
   <rect x="650" y="450" width="400" height="36" rx="18" fill="#f0ad4e"/>
-  <text x="850" y="474" class="pill" text-anchor="middle">exception → log.warn → 自动切换</text>
+  <text x="850" y="474" class="pill" text-anchor="middle">exception → log.warn → auto switch</text>
 
   <!-- Attempt 2 -->
   <rect x="200" y="500" width="850" height="36" rx="10" fill="#fff4e6" stroke="#f0ad4e"/>
@@ -85,12 +85,12 @@
   <rect x="175" y="632" width="900" height="28" fill="#edf7f6"/>
   <text x="200" y="647" class="box-title">compactionService.shouldCompact()</text>
 
-  <text x="215" y="690" class="box-text">使用实际 route 的 maxInputTokens 计算 budget</text>
-  <text x="215" y="720" class="box-text">在 execute 回调内检测（确保和 LLM 调用同源）</text>
+  <text x="215" y="690" class="box-text">Compute budget using the actual route's maxInputTokens</text>
+  <text x="215" y="720" class="box-text">Detected inside the execute callback (same source as the LLM call)</text>
 
   <path d="M625 746 L625 776" class="line"/>
 
   <!-- End -->
   <rect x="425" y="776" width="400" height="46" rx="23" fill="#334155"/>
-  <text x="625" y="805" class="pill" text-anchor="middle">runTurn 继续执行</text>
+  <text x="625" y="805" class="pill" text-anchor="middle">runTurn continues execution</text>
 </svg>

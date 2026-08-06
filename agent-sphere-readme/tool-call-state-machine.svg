@@ -30,26 +30,26 @@
 
   <rect width="1100" height="600" fill="url(#bg)"/>
 
-  <text x="95" y="72" class="title">工具调用记录状态机</text>
-  <text x="95" y="100" class="box-text">ToolCallRecord Lifecycle · 状态流转</text>
+  <text x="95" y="72" class="title">Tool Call Record State Machine</text>
+  <text x="95" y="100" class="box-text">ToolCallRecord Lifecycle · state transitions</text>
 
   <circle cx="550" cy="140" r="9" fill="#475569"/>
   <path d="M550 149 L550 180" class="line"/>
-  <text x="560" y="167" class="small">LLM 返回 tool_calls</text>
+  <text x="560" y="167" class="small">LLM returns tool_calls</text>
 
   <rect x="470" y="180" width="160" height="64" rx="32" fill="#f8fafc" stroke="#cbd5e1"/>
   <text x="550" y="220" class="box-title" text-anchor="middle">PENDING</text>
 
   <path d="M550 244 L550 310" class="line"/>
-  <text x="560" y="282" class="small">FiberSet 执行</text>
+  <text x="560" y="282" class="small">FiberSet executes</text>
 
   <rect x="470" y="310" width="160" height="64" rx="32" fill="#eef2ff" stroke="#818cf8"/>
   <text x="550" y="350" class="box-title" text-anchor="middle">RUNNING</text>
 
   <path d="M550 374 L550 430 L320 430 L320 480" class="line"/>
   <path d="M550 374 L550 430 L780 430 L780 480" class="line"/>
-  <text x="435" y="422" class="small" text-anchor="middle">成功</text>
-  <text x="665" y="422" class="small" text-anchor="middle">失败</text>
+  <text x="435" y="422" class="small" text-anchor="middle">Succeeded</text>
+  <text x="665" y="422" class="small" text-anchor="middle">Failed</text>
 
   <rect x="230" y="480" width="180" height="64" rx="32" fill="#e9f8ef" stroke="#75bd88"/>
   <text x="320" y="520" class="box-title" text-anchor="middle">SUCCEEDED</text>

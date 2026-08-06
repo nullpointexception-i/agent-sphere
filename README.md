@@ -21,19 +21,32 @@ It supports configuring different model providers: OpenAI, DeepSeek, QuickRouter
 
 Screenshots
 
-![ui-register.png](agent-sphere-readme/ui-register.png)
-
 ![ui-chat.png](agent-sphere-readme/ui-chat.png)
-
-![ui-chat-toolcalls.png](agent-sphere-readme/ui-chat-toolcalls.png)
 
 ![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
 
-![ui-chat-clarification.png](agent-sphere-readme/ui-chat-clarification.png)
+Embeddable chat widget (shadow DOM, OIDC SSO, AG-UI streaming):
+
+![widget-sso-login.png](agent-sphere-readme/widget-sso-login.png)
+
+![widget-embed-custom-system-chat.png](agent-sphere-readme/widget-embed-custom-system-chat.png)
+
+![widget-multi-identity-provider.png](agent-sphere-readme/widget-multi-identity-provider.png)
 
 ▶ [Click to watch the video demo](https://www.bilibili.com/video/BV1WqTT62Efq/)
 
 [![Video preview](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1WqTT62Efq/)
+
+## Features
+
+- **LLM ReAct orchestration** — `SessionRunner` runs a `Plan → Act → Observe → Learn` loop with per-turn timeout, cancellation, and automatic context compaction.
+- **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations, with primary + fallback route chains and graceful degradation.
+- **Unified capability layer** — MCP servers, built-in SPI tools, CLI execution, browser automation, and composite skills, dispatched through a single `ToolExecutor`.
+- **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / screenshot / executeJS) with real-time visual feedback.
+- **Multi-level memory** — persistent runs, tool-call records with write-time JSON compression, and token-budget based context compaction.
+- **Human-in-the-loop clarification** — the LLM pauses with a `ask_clarification` tool and resumes via AG-UI interrupt/resume (`confirm` / `choice` / `input`).
+- **OIDC multi-provider SSO** — PKCE + JWKS-verified logins from any IdP, JIT user provisioning, plus full RBAC and audit logging.
+- **Embeddable chat widget** — a single IIFE script that mounts into a shadow DOM, talks AG-UI over SSE with self-managed Bearer auth (no CopilotKit runtime), and can be embedded in any third-party page.
 
 ## 1. Quick Start for Development
 
@@ -43,7 +56,7 @@ See: [QUICK_START.md](QUICK_START.md)
 
 ### 2.1 Overall Structure
 
-![agentsphere-architecture.png](agent-sphere-readme/agentsphere-architecture.png)
+![agentsphere-architecture-v2.png](agent-sphere-readme/agentsphere-architecture-v2.png)
 
 ### 2.2 Core Components
 
@@ -475,17 +488,15 @@ AgentSphere provides a complete RBAC permission system for multi-user management
 
 The permission check is enforced at the controller layer via `@WithTenant` and `AuthContext` to ensure multi-tenant data isolation.
 
-#### User Management
+#### Administration UI
 
-![User Management](agent-sphere-readme/ui-admin-user-en.png)
+RBAC, system configuration, and OIDC identity providers are all managed from a single System Admin console (users, roles, permissions, identity providers / SSO, system config):
 
-#### Role Configuration
+![RBAC, System Config & SSO](agent-sphere-readme/rbac-and-system-config-and-sso.png)
 
-![Role Configuration](agent-sphere-readme/ui-admin-role-en.png)
-
-#### Permission Assignment
-
-![Permission Assignment](agent-sphere-readme/ui-admin-permission-en.png)
+- **User Management** — create/view users and assign roles
+- **Role Configuration** — create roles and bundle permissions
+- **Permission Assignment** — grant/revoke `domain:action` permissions per role
 
 ### 4.9 Audit Log
 
@@ -520,7 +531,7 @@ AgentSphere supports **multiple OIDC identity providers** so third-party busines
 
 #### Managing Identity Providers
 
-Open **System Admin → Identity Providers** to manage providers from the UI (no SQL):
+Open **System Admin → Identity Providers** to manage providers from the UI (no SQL) — the same admin console shown in [§4.8](#48-rbac-role-based-access-control):
 
 | Field | Description |
 |-------|-------------|
@@ -568,12 +579,30 @@ Permissions: `admin:identity-provider:read/create/update/delete` (seeded to ADMI
 | `provider` | `business` | OIDC provider code from the Identity Providers page |
 | `autoLogin` | `true` | Attempt silent sign-in (`prompt=none`) on load |
 | `title` | `Agent Sphere 助手` | Widget header title |
+| `mountTo` | `undefined` | Optional DOM element. When set, the widget fills the container (static); otherwise it renders a fixed bottom-right floating bubble |
+
+#### Screenshots
+
+SSO login screen (select an identity provider):
+
+![widget-sso-login.png](agent-sphere-readme/widget-sso-login.png)
+
+Multiple identity providers configured:
+
+![widget-multi-identity-provider.png](agent-sphere-readme/widget-multi-identity-provider.png)
+
+Embedded into a third-party system page (`mountTo`):
+
+![widget-embed-custom-system-chat.png](agent-sphere-readme/widget-embed-custom-system-chat.png)
 
 #### How It Works
 
-- **OIDC SSO**: consumes `?otc=` → exchanges for a token → stores it in `sessionStorage` (`agent-sphere-widget:agent-user`); `?otc=`/`?error=` are stripped from the URL after handling.
-- **Agent list & sessions**: loaded from `/instance/instances/all` and `/instance/sessions` (CRUD).
+- **OIDC SSO**: consumes `?otc=` → exchanges for a token → stores it in `sessionStorage` (`agent-sphere-widget:agent-user`); `?otc=`/`?error=` are stripped from the URL after handling. `autoLogin` performs a one-shot silent probe (`prompt=none`); the login screen lets the user pick an enabled identity provider.
+- **Agent list & sessions**: loaded from `/instance/instances/all` and `/instance/sessions` (CRUD). Sessions support create, inline rename (✓/✕), and archive (two-step inline confirm), all with infinite-scroll pagination.
 - **Chat (AG-UI)**: one `HttpAgent` per agent posts to `{apiBase}/copilot/agent/{id}/services/chat/run`; the backend streams SSE `data:` lines of AG-UI events (`TEXT_MESSAGE_*`, `REASONING_MESSAGE_*`, `TOOL_CALL_*`, `RUN_*`). Requests carry `Authorization: Bearer` and never go through the CopilotKit runtime.
+- **Clarification (human-in-the-loop)**: when the agent pauses with an interrupt, a clarification card appears inline (confirm / choice / input). Responding or cancelling resumes the run via AG-UI `resume` (`resolved` / `cancelled`); answered cards are also rendered from session history.
+- **Live updates**: session titles sync in real time via the `session_title_updated` custom event; the auxiliary panel shows the current task list (`STATE_SNAPSHOT` todos) and tool-call activity with hover details.
+- **Hosted mode**: passing `mountTo` renders the widget statically inside your layout (e.g. inside a drawer or a section) instead of a floating bubble.
 
 #### Development
 
@@ -600,7 +629,9 @@ npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
 | **Database** | PostgreSQL, Flyway migrations |
 | **Cache/Distributed Lock** | Redis (Redisson) |
 | **Frontend** | React, UmiJS, Ant Design Pro |
+| **Chat Widget** | CopilotKit (self-managed) + AG-UI, shadow DOM, single IIFE script |
 | **Chrome Extension** | Manifest V3, Service Worker, Content Script |
+| **Auth** | OIDC multi-provider SSO (PKCE / JWKS), RBAC, audit log |
 | **Real-time Communication** | SSE (Server-Sent Events), multi-emitter broadcast |
 | **Tool Protocol** | MCP (Model Context Protocol, Streamable HTTP) |
 | **API Security** | Bearer Token, @WithTenant multi-tenancy |
@@ -628,14 +659,6 @@ curl -X POST /api/v1/instance/instance-capabilities \
 ```
 
 ![MCP Configuration UI](agent-sphere-readme/ui-new-mcp.png)
-
-<a href="https://star-history.com/#nullpointexception-i/agent-sphere&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" width="500" />
-  </picture>
-</a>
 
 ## 8. License
 

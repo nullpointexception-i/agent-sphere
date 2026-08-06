@@ -103,7 +103,6 @@ The frontend dev server will start at `http://localhost:8000`. `npm run dev` aut
 
 1. Open `http://localhost:8000/user/register` in your browser
 2. Enter username, password, and display name, then click Register
-   ![ui-register.png](agent-sphere-readme/ui-register.png)
 3. After successful registration, you'll be redirected to the login page. Log in with the same credentials
    ![ui-login.png](agent-sphere-readme/ui-login.png)
 4. After successful login, you'll enter the Dashboard

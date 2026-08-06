@@ -30,8 +30,8 @@
 
   <rect width="1350" height="940" fill="url(#bg)"/>
 
-  <text x="675" y="52" class="title" text-anchor="middle">超时与取消链</text>
-  <text x="675" y="80" class="small" text-anchor="middle">tool / turn / loop 三层超时 + 用户主动取消</text>
+  <text x="675" y="52" class="title" text-anchor="middle">Timeout &amp; Cancel Chain</text>
+  <text x="675" y="80" class="small" text-anchor="middle">tool / turn / loop three-layer timeouts + manual user cancel</text>
 
   <rect x="560" y="104" width="230" height="46" rx="23" fill="#334155"/>
   <text x="675" y="133" class="pill" text-anchor="middle">SessionRunner.run()</text>
@@ -41,7 +41,7 @@
   <rect x="70" y="186" width="400" height="474" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <text x="95" y="222" class="box-title">tool.execution-timeout</text>
   <rect x="360" y="196" width="90" height="36" rx="18" fill="#475569"/>
-  <text x="405" y="220" class="pill" text-anchor="middle">60 秒</text>
+  <text x="405" y="220" class="pill" text-anchor="middle">60s</text>
 
   <rect x="90" y="255" width="360" height="50" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
   <text x="270" y="287" class="mono" text-anchor="middle">FiberSet.awaitAll()</text>
@@ -50,10 +50,10 @@
   <text x="270" y="357" class="mono" text-anchor="middle">future.cancel(true)</text>
   <path d="M270 375 L270 395" class="line"/>
   <rect x="90" y="395" width="360" height="50" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="270" y="427" class="box-text" text-anchor="middle">→ 中断虚拟线程</text>
+  <text x="270" y="427" class="box-text" text-anchor="middle">→ interrupt virtual thread</text>
   <path d="M270 445 L270 465" class="line"/>
   <rect x="90" y="465" width="360" height="175" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="270" y="498" class="box-title" text-anchor="middle">工具中断效果</text>
+  <text x="270" y="498" class="box-title" text-anchor="middle">Tool interrupt effects</text>
   <text x="270" y="532" class="mono" text-anchor="middle">Chrome → CancellationException</text>
   <text x="270" y="557" class="mono" text-anchor="middle">WebFetch → InterruptedIOException</text>
   <text x="270" y="582" class="mono" text-anchor="middle">CLI → Process.destroyForcibly()</text>
@@ -61,7 +61,7 @@
   <rect x="505" y="186" width="400" height="474" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <text x="530" y="222" class="box-title">turn-timeout</text>
   <rect x="795" y="196" width="100" height="36" rx="18" fill="#475569"/>
-  <text x="845" y="220" class="pill" text-anchor="middle">180 秒</text>
+  <text x="845" y="220" class="pill" text-anchor="middle">180s</text>
 
   <rect x="525" y="255" width="360" height="50" rx="14" fill="#eef2ff" stroke="#818cf8"/>
   <text x="705" y="287" class="mono" text-anchor="middle">CountDownLatch.await()</text>
@@ -70,50 +70,50 @@
   <text x="705" y="357" class="mono" text-anchor="middle">llmFuture.cancel(true)</text>
   <path d="M705 375 L705 395" class="line"/>
   <rect x="525" y="395" width="360" height="50" rx="14" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="705" y="427" class="box-text" text-anchor="middle">→ 中断 LLM 流</text>
+  <text x="705" y="427" class="box-text" text-anchor="middle">→ interrupt LLM stream</text>
   <path d="M705 445 L705 465" class="line"/>
   <rect x="525" y="465" width="360" height="175" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="705" y="498" class="box-title" text-anchor="middle">效果</text>
+  <text x="705" y="498" class="box-title" text-anchor="middle">Effects</text>
   <text x="705" y="532" class="mono" text-anchor="middle">KernelLlmService</text>
-  <text x="705" y="557" class="mono" text-anchor="middle">→ 检测 isCancelled</text>
-  <text x="705" y="582" class="mono" text-anchor="middle">→ 虚拟线程退出</text>
+  <text x="705" y="557" class="mono" text-anchor="middle">→ detect isCancelled</text>
+  <text x="705" y="582" class="mono" text-anchor="middle">→ virtual thread exits</text>
 
   <rect x="940" y="186" width="400" height="474" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <text x="965" y="222" class="box-title">maxLoopCount</text>
   <rect x="1230" y="196" width="100" height="36" rx="18" fill="#475569"/>
-  <text x="1280" y="220" class="pill" text-anchor="middle">128 轮</text>
+  <text x="1280" y="220" class="pill" text-anchor="middle">128 rounds</text>
 
   <rect x="960" y="255" width="360" height="50" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="1140" y="287" class="box-text" text-anchor="middle">while 循环上限</text>
+  <text x="1140" y="287" class="box-text" text-anchor="middle">while loop cap</text>
   <path d="M1140 305 L1140 325" class="line"/>
   <rect x="960" y="325" width="360" height="50" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="1140" y="357" class="box-text" text-anchor="middle">达到 128 轮</text>
+  <text x="1140" y="357" class="box-text" text-anchor="middle">Reached 128 rounds</text>
   <path d="M1140 375 L1140 395" class="line"/>
   <rect x="960" y="395" width="360" height="50" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="1140" y="427" class="box-text" text-anchor="middle">最后 1 轮</text>
+  <text x="1140" y="427" class="box-text" text-anchor="middle">Final round</text>
   <path d="M1140 445 L1140 465" class="line"/>
   <rect x="960" y="465" width="360" height="175" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="1140" y="498" class="box-title" text-anchor="middle">兜底策略</text>
-  <text x="1140" y="532" class="box-text" text-anchor="middle">注入强制总结指令</text>
-  <text x="1140" y="557" class="box-text" text-anchor="middle">避免无限循环</text>
-  <text x="1140" y="582" class="box-text" text-anchor="middle">输出最终结论</text>
+  <text x="1140" y="498" class="box-title" text-anchor="middle">Fallback strategy</text>
+  <text x="1140" y="532" class="box-text" text-anchor="middle">Inject force-summary instruction</text>
+  <text x="1140" y="557" class="box-text" text-anchor="middle">Avoid infinite loops</text>
+  <text x="1140" y="582" class="box-text" text-anchor="middle">Output final conclusion</text>
 
   <path d="M675 660 L675 700" class="line"/>
 
   <rect x="40" y="700" width="1270" height="180" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="70" y="738" class="layer-title">用户取消</text>
-  <text x="70" y="762" class="small">用户主动触发，独立于超时机制</text>
+  <text x="70" y="738" class="layer-title">User cancel</text>
+  <text x="70" y="762" class="small">User-triggered, independent of the timeout mechanism</text>
 
   <rect x="42" y="795" width="448" height="60" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
   <text x="266" y="830" class="mono" text-anchor="middle">POST /api/v1/runtime/{sessionId}/run/{runId}/stop</text>
   <rect x="501" y="795" width="180" height="60" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
   <text x="591" y="830" class="mono" text-anchor="middle">cancelRun(runId)</text>
   <rect x="692" y="795" width="210" height="60" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
-  <text x="797" y="830" class="box-text" text-anchor="middle">CANCELLED_RUNS 标记</text>
+  <text x="797" y="830" class="box-text" text-anchor="middle">CANCELLED_RUNS marker</text>
   <rect x="913" y="795" width="185" height="60" rx="14" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="1005" y="830" class="box-text" text-anchor="middle">循环检测 → break</text>
+  <text x="1005" y="830" class="box-text" text-anchor="middle">Loop detects → break</text>
   <rect x="1109" y="795" width="200" height="60" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="1209" y="830" class="box-text" text-anchor="middle">发布 CANCELLED 事件</text>
+  <text x="1209" y="830" class="box-text" text-anchor="middle">Publish CANCELLED event</text>
 
   <path d="M490 825 L501 825" class="line"/>
   <path d="M681 825 L692 825" class="line"/>

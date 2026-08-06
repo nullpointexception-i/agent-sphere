@@ -30,27 +30,27 @@
 
   <rect width="1150" height="540" fill="url(#bg)"/>
 
-  <text x="575" y="55" class="title" text-anchor="middle">工具结果写时压缩流程</text>
-  <text x="575" y="85" class="small" text-anchor="middle">工具执行成功后压缩 artifact，HistoryLoader 直接复用压缩结果</text>
+  <text x="575" y="55" class="title" text-anchor="middle">Tool Result Write-Time Compression Flow</text>
+  <text x="575" y="85" class="small" text-anchor="middle">After the tool executes successfully, compress the artifact; HistoryLoader directly reuses the compressed result</text>
 
   <rect x="40" y="110" width="1070" height="390" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="75" y="155" class="layer-title">写时压缩 · 读时复用</text>
+  <text x="75" y="155" class="layer-title">Write-Time Compression · Reused on Read</text>
 
-  <text x="110" y="190" class="small">① 写入时（Runtime 事件）</text>
+  <text x="110" y="190" class="small">① At write time (Runtime events)</text>
 
   <!-- Stage 1 -->
   <rect x="80" y="200" width="990" height="120" rx="14" fill="#eef2ff" stroke="#818cf8"/>
   <text x="110" y="240" class="box-title">RuntimeEventListener.SUCCEEDED</text>
-  <text x="110" y="270" class="box-text">→ <tspan class="mono">artifact</tspan>（原始） → 写入 <tspan class="mono">agent_tool_call_record.artifact</tspan></text>
+  <text x="110" y="270" class="box-text">→ <tspan class="mono">artifact</tspan> (raw) → written to <tspan class="mono">agent_tool_call_record.artifact</tspan></text>
   <text x="110" y="295" class="box-text">→ <tspan class="mono">jsonCompress(artifact, 2000)</tspan> → <tspan class="mono">.compressed_artifact</tspan></text>
 
   <path d="M575 320 L575 385" class="line"/>
-  <text x="595" y="356" class="small">压缩落库</text>
+  <text x="595" y="356" class="small">compressed and persisted</text>
 
-  <text x="110" y="375" class="small">② 读取时（HistoryLoader 加载）</text>
+  <text x="110" y="375" class="small">② On read (HistoryLoader load)</text>
 
   <!-- Stage 2 -->
   <rect x="80" y="385" width="990" height="95" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
-  <text x="110" y="425" class="box-title">HistoryLoader 读取压缩结果</text>
-  <text x="110" y="455" class="box-text">→ 读 <tspan class="mono">.compressed_artifact</tspan> → 直接用于 <tspan class="mono">messages</tspan>（不再重新压缩）</text>
+  <text x="110" y="425" class="box-title">HistoryLoader reads the compressed result</text>
+  <text x="110" y="455" class="box-text">→ reads <tspan class="mono">.compressed_artifact</tspan> → used directly in <tspan class="mono">messages</tspan> (no re-compression)</text>
 </svg>

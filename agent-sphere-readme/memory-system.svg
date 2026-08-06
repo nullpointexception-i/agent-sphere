@@ -30,63 +30,63 @@
 
   <rect width="1200" height="1610" fill="url(#bg)"/>
 
-  <text x="60" y="72" class="title">多级记忆体系 Memory System</text>
-  <text x="60" y="100" class="box-text">Memory Level · L1 至 L6 六级存储</text>
+  <text x="60" y="72" class="title">Multi-level Memory System</text>
+  <text x="60" y="100" class="box-text">Memory Level · six levels of storage, L1 to L6</text>
 
   <rect x="40" y="125" width="1120" height="1443" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="75" y="172" class="layer-title">记忆层级 Memory Level</text>
+  <text x="75" y="172" class="layer-title">Memory Level Hierarchy</text>
 
   <rect x="75" y="195" width="1050" height="166" rx="14" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="105" y="229" class="box-title">L1: 运行时上下文 (KernelContext)</text>
-  <text x="105" y="259" class="box-text">· 当前 session 的 KernelContext（TTL: 30min）</text>
-  <text x="105" y="285" class="box-text">· 包含 tools, modelRoute, fallbackRoutes</text>
-  <text x="105" y="311" class="box-text">· 存储在 SessionRunner.contexts 的 ConcurrentHashMap</text>
-  <text x="105" y="337" class="box-text">· run() 结束后自动移除</text>
+  <text x="105" y="229" class="box-title">L1: Runtime Context (KernelContext)</text>
+  <text x="105" y="259" class="box-text">· KernelContext of current session (TTL: 30min)</text>
+  <text x="105" y="285" class="box-text">· Contains tools, modelRoute, fallbackRoutes</text>
+  <text x="105" y="311" class="box-text">· Stored in SessionRunner.contexts ConcurrentHashMap</text>
+  <text x="105" y="337" class="box-text">· Removed automatically after run() ends</text>
 
   <path d="M600 366 L600 416" class="line"/>
 
   <rect x="75" y="421" width="1050" height="166" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
-  <text x="105" y="455" class="box-title">L2: 对话消息 (Messages)</text>
-  <text x="105" y="485" class="box-text">· 当前 run 的 messages ArrayList（LLM 所见即所得）</text>
-  <text x="105" y="511" class="box-text">· 包含 system + user + assistant(tool_calls) + tool(result)</text>
-  <text x="105" y="537" class="box-text">· 每次 runTurn() 时发送给 LLM</text>
-  <text x="105" y="563" class="box-text">· Loop 之间积累，compaction 后部分被摘要替代</text>
+  <text x="105" y="455" class="box-title">L2: Conversation Messages</text>
+  <text x="105" y="485" class="box-text">· Current run's messages ArrayList (LLM sees exactly what's included)</text>
+  <text x="105" y="511" class="box-text">· Contains system + user + assistant(tool_calls) + tool(result)</text>
+  <text x="105" y="537" class="box-text">· Sent to LLM on each runTurn()</text>
+  <text x="105" y="563" class="box-text">· Accumulates between loops; partially replaced by summary after compaction</text>
 
   <path d="M600 592 L600 642" class="line"/>
 
   <rect x="75" y="647" width="1050" height="166" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="105" y="681" class="box-title">L3: LLM 交互记录 (agent_llm_interaction_record)</text>
-  <text x="105" y="711" class="box-text">· 每次 LLM 调用的完整记录（请求体、响应、耗时、状态）</text>
-  <text x="105" y="737" class="box-text">· 类型: CHAT_REPLY / COMPACTION / TITLE_GENERATION</text>
-  <text x="105" y="763" class="box-text">· 保留原始 request body 和 response body</text>
-  <text x="105" y="789" class="box-text">· 用于调试、审计、性能分析</text>
+  <text x="105" y="681" class="box-title">L3: LLM Interaction Record (agent_llm_interaction_record)</text>
+  <text x="105" y="711" class="box-text">· Full record of each LLM call (request body, response, latency, status)</text>
+  <text x="105" y="737" class="box-text">· Types: CHAT_REPLY / COMPACTION / TITLE_GENERATION</text>
+  <text x="105" y="763" class="box-text">· Keeps original request and response bodies</text>
+  <text x="105" y="789" class="box-text">· For debugging, auditing, performance analysis</text>
 
   <path d="M600 818 L600 868" class="line"/>
 
   <rect x="75" y="873" width="1050" height="218" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
-  <text x="105" y="907" class="box-title">L4: 工具调用记录 (agent_tool_call_record)</text>
-  <text x="105" y="937" class="box-text">· 每次工具调用的完整记录</text>
-  <text x="105" y="963" class="box-text">· 字段: callId, stepId, toolName, argumentsJson,</text>
+  <text x="105" y="907" class="box-title">L4: Tool Call Record (agent_tool_call_record)</text>
+  <text x="105" y="937" class="box-text">· Full record of each tool call</text>
+  <text x="105" y="963" class="box-text">· Fields: callId, stepId, toolName, argumentsJson,</text>
   <text x="125" y="989" class="box-text">compressedArguments, artifact, compressedArtifact, status</text>
-  <text x="105" y="1015" class="box-text">· 生命周期: PENDING → RUNNING → SUCCEEDED / FAILED</text>
-  <text x="105" y="1041" class="box-text">· 结果写时压缩 (jsonCompress, 2000 char limit)</text>
-  <text x="105" y="1067" class="box-text">· 用于 HistoryLoader 回放、观测面板展示</text>
+  <text x="105" y="1015" class="box-text">· Lifecycle: PENDING → RUNNING → SUCCEEDED / FAILED</text>
+  <text x="105" y="1041" class="box-text">· Result compressed at write time (jsonCompress, 2000 char limit)</text>
+  <text x="105" y="1067" class="box-text">· For HistoryLoader replay, observation panel display</text>
 
   <path d="M600 1096 L600 1146" class="line"/>
 
   <rect x="75" y="1151" width="1050" height="192" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="105" y="1185" class="box-title">L5: 压缩摘要 (agent_compact_record)</text>
-  <text x="105" y="1215" class="box-text">· 当上下文 token 超过 budget 时触发</text>
-  <text x="105" y="1241" class="box-text">· 由专区 summarizer 模型生成结构化摘要</text>
-  <text x="105" y="1267" class="box-text">· 字段: compactedUptoRunId, summaryBefore, summaryAfter</text>
-  <text x="105" y="1293" class="box-text">· 游标: compactedUptoRunId 标记已压缩的 run</text>
-  <text x="105" y="1319" class="box-text">· 后续 HistoryLoader 跳过已压缩的 run</text>
+  <text x="105" y="1185" class="box-title">L5: Compact Summary (agent_compact_record)</text>
+  <text x="105" y="1215" class="box-text">· Triggered when context tokens exceed budget</text>
+  <text x="105" y="1241" class="box-text">· Structured summary generated by the dedicated summarizer model</text>
+  <text x="105" y="1267" class="box-text">· Fields: compactedUptoRunId, summaryBefore, summaryAfter</text>
+  <text x="105" y="1293" class="box-text">· Cursor: compactedUptoRunId marks compacted runs</text>
+  <text x="105" y="1319" class="box-text">· HistoryLoader later skips compacted runs</text>
 
   <path d="M600 1348 L600 1398" class="line"/>
 
   <rect x="75" y="1403" width="1050" height="140" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
-  <text x="105" y="1437" class="box-title">L6: 会话持久化 (agent_session)</text>
-  <text x="105" y="1467" class="box-text">· 一次用户会话的元数据（title, summary, status）</text>
-  <text x="105" y="1493" class="box-text">· 包含会话级别摘要（compaction 后更新）</text>
-  <text x="105" y="1519" class="box-text">· 用于会话列表展示、run 历史关联</text>
+  <text x="105" y="1437" class="box-title">L6: Session Persistence (agent_session)</text>
+  <text x="105" y="1467" class="box-text">· Metadata for one user session (title, summary, status)</text>
+  <text x="105" y="1493" class="box-text">· Includes session-level summary (updated after compaction)</text>
+  <text x="105" y="1519" class="box-text">· For session list display, run history linking</text>
 </svg>

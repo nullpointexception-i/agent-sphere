@@ -23,25 +23,25 @@
     </marker>
   </defs>
   <rect width="1280" height="760" fill="url(#bg)"/>
-  <text x="50" y="80" class="title">Chrome Extension 浏览器桥接结构</text>
+  <text x="50" y="80" class="title">Chrome Extension Browser Bridge Structure</text>
 
-  <!-- Card 1: Content Script (页面上下文) -->
+  <!-- Card 1: Content Script (page context) -->
   <rect x="50" y="120" width="380" height="520" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <rect x="50" y="120" width="380" height="48" rx="22" fill="#4db6ac"/>
   <rect x="50" y="138" width="380" height="30" fill="#4db6ac"/>
-  <text x="240" y="150" class="layer-title" text-anchor="middle" fill="#fff">Content Script（页面上下文）</text>
+  <text x="240" y="150" class="layer-title" text-anchor="middle" fill="#fff">Content Script (page context)</text>
 
   <rect x="75" y="190" width="330" height="42" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="212" class="box-text" text-anchor="middle">checkAuth() → localStorage 读取 token</text>
+  <text x="240" y="212" class="box-text" text-anchor="middle">checkAuth() → read token from localStorage</text>
 
   <rect x="75" y="246" width="330" height="42" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="268" class="box-text" text-anchor="middle">SSE 状态 Toast → 浮动提示</text>
+  <text x="240" y="268" class="box-text" text-anchor="middle">SSE status Toast → floating hint</text>
 
   <rect x="75" y="302" width="330" height="42" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="324" class="box-text" text-anchor="middle">domToJSON() → DOM → 结构化 JSON</text>
+  <text x="240" y="324" class="box-text" text-anchor="middle">domToJSON() → DOM → structured JSON</text>
 
   <rect x="75" y="358" width="330" height="72" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="382" class="box-text" text-anchor="middle">执行 click / type</text>
+  <text x="240" y="382" class="box-text" text-anchor="middle">Execute click / type</text>
   <text x="240" y="402" class="box-text" text-anchor="middle">getContent / executeJS</text>
 
   <!-- Connect arrow -->
@@ -53,42 +53,42 @@
   <text x="460" y="465" class="small" text-anchor="middle">▼</text>
   <text x="460" y="465" class="small" text-anchor="middle" dy="12">sendMessage</text>
 
-  <!-- Card 2: Service Worker (后台) -->
+  <!-- Card 2: Service Worker (background) -->
   <rect x="500" y="120" width="370" height="520" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <rect x="500" y="120" width="370" height="48" rx="22" fill="#818cf8"/>
   <rect x="500" y="138" width="370" height="30" fill="#818cf8"/>
-  <text x="685" y="150" class="layer-title" text-anchor="middle" fill="#fff">Service Worker（后台）</text>
+  <text x="685" y="150" class="layer-title" text-anchor="middle" fill="#fff">Service Worker (background)</text>
 
   <rect x="525" y="190" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="214" class="box-text" text-anchor="middle">SSE 连接</text>
+  <text x="685" y="214" class="box-text" text-anchor="middle">SSE connection</text>
   <text x="685" y="234" class="box-text" text-anchor="middle">fetch + ReadableStream</text>
 
   <rect x="525" y="260" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="284" class="box-text" text-anchor="middle">会话跟随</text>
-  <text x="685" y="304" class="box-text" text-anchor="middle">URL 变化自动重建 SSE</text>
+  <text x="685" y="284" class="box-text" text-anchor="middle">Session follow</text>
+  <text x="685" y="304" class="box-text" text-anchor="middle">URL change auto-rebuilds SSE</text>
 
   <rect x="525" y="330" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="354" class="box-text" text-anchor="middle">标签页管理</text>
-  <text x="685" y="374" class="box-text" text-anchor="middle">受控标签页追踪 + tabId 透传</text>
+  <text x="685" y="354" class="box-text" text-anchor="middle">Tab management</text>
+  <text x="685" y="374" class="box-text" text-anchor="middle">Controlled tab tracking + tabId passthrough</text>
 
   <rect x="525" y="400" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="424" class="box-text" text-anchor="middle">操作回调</text>
+  <text x="685" y="424" class="box-text" text-anchor="middle">Action callback</text>
   <text x="685" y="444" class="mono" text-anchor="middle">POST /chrome/callback</text>
 
-  <!-- Card 3: Popup (状态面板) -->
+  <!-- Card 3: Popup (status panel) -->
   <rect x="920" y="120" width="310" height="320" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <rect x="920" y="120" width="310" height="48" rx="22" fill="#475569"/>
   <rect x="920" y="138" width="310" height="30" fill="#475569"/>
-  <text x="1075" y="150" class="layer-title" text-anchor="middle" fill="#fff">Popup（状态面板）</text>
+  <text x="1075" y="150" class="layer-title" text-anchor="middle" fill="#fff">Popup (status panel)</text>
 
   <rect x="945" y="190" width="260" height="50" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="1075" y="217" class="box-text" text-anchor="middle">连接状态显示</text>
+  <text x="1075" y="217" class="box-text" text-anchor="middle">Connection status display</text>
 
   <rect x="945" y="254" width="260" height="50" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="1075" y="281" class="box-text" text-anchor="middle">URL 配置</text>
+  <text x="1075" y="281" class="box-text" text-anchor="middle">URL config</text>
 
   <rect x="945" y="318" width="260" height="50" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="1075" y="345" class="box-text" text-anchor="middle">操作日志</text>
+  <text x="1075" y="345" class="box-text" text-anchor="middle">Action logs</text>
 
   <!-- Arrow from Service Worker to Popup -->
   <path d="M870 475 L910 475" class="dash"/>

@@ -30,11 +30,11 @@
 
   <rect width="1250" height="780" fill="url(#bg)"/>
 
-  <text x="40" y="58" class="title">会话跟随 Session Following</text>
-  <text x="40" y="86" class="small">Content Script 轮询鉴权 · 路径变化触发 SSE 重连 · 新标签页透传 tabId</text>
+  <text x="40" y="58" class="title">Session Following</text>
+  <text x="40" y="86" class="small">Content Script polls auth · path change triggers SSE reconnect · new tabs forward tabId</text>
 
   <rect x="485" y="110" width="280" height="48" rx="24" fill="#334155"/>
-  <text x="625" y="140" class="pill" text-anchor="middle">Content Script → checkAuth 轮询</text>
+  <text x="625" y="140" class="pill" text-anchor="middle">Content Script → checkAuth polling</text>
 
   <path d="M625,158 L625,188" class="branch"/>
   <path d="M320,188 L930,188" class="branch"/>
@@ -42,44 +42,44 @@
   <path d="M930,188 L930,210" class="branch"/>
 
   <rect x="40" y="210" width="560" height="510" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="70" y="255" class="layer-title">路径跟随 · Path Following</text>
+  <text x="70" y="255" class="layer-title">Path Following</text>
 
   <rect x="70" y="280" width="500" height="92" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
-  <text x="95" y="314" class="box-title">读取 location.pathname</text>
+  <text x="95" y="314" class="box-title">Read location.pathname</text>
   <text x="95" y="345" class="mono">/chat/{sessionId}</text>
 
   <path d="M320,374 L320,396" class="line"/>
 
   <rect x="70" y="398" width="500" height="72" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
-  <text x="95" y="430" class="box-title">检测到路径变化</text>
+  <text x="95" y="430" class="box-title">Path change detected</text>
   <text x="95" y="456" class="mono">chrome.runtime.sendMessage({ type: 'auth' })</text>
 
   <path d="M320,472 L320,496" class="line"/>
 
   <rect x="70" y="496" width="500" height="92" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
   <text x="95" y="530" class="box-title">Service Worker → connectSSE()</text>
-  <text x="95" y="560" class="box-text">→ 建立 SSE 连接 · 新 session</text>
+  <text x="95" y="560" class="box-text">→ Open SSE connection · new session</text>
 
-  <text x="70" y="625" class="small">Content Script 监听 URL 变化，触发鉴权与 SSE 重连</text>
+  <text x="70" y="625" class="small">Content Script watches URL changes, triggering auth &amp; SSE reconnect</text>
 
   <rect x="650" y="210" width="560" height="510" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="680" y="255" class="layer-title">新标签页 · New Tab</text>
+  <text x="680" y="255" class="layer-title">New Tab</text>
 
   <rect x="680" y="280" width="500" height="92" rx="14" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="705" y="314" class="box-title">新标签页创建</text>
+  <text x="705" y="314" class="box-title">Create new tab</text>
   <text x="705" y="345" class="mono">chrome.tabs.create({ url, active:false })</text>
 
   <path d="M930,374 L930,396" class="line"/>
 
   <rect x="680" y="398" width="500" height="72" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="705" y="430" class="box-title">controlledTabId 记录</text>
-  <text x="705" y="456" class="box-text">扩展记住受控标签页 ID</text>
+  <text x="705" y="430" class="box-title">controlledTabId tracking</text>
+  <text x="705" y="456" class="box-text">Extension remembers the controlled tab ID</text>
 
   <path d="M930,472 L930,496" class="line"/>
 
   <rect x="680" y="496" width="500" height="92" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
-  <text x="705" y="530" class="box-title">tabId 透传</text>
-  <text x="705" y="560" class="box-text">LLM 可指定 tabId 操作多个标签页</text>
+  <text x="705" y="530" class="box-title">tabId pass-through</text>
+  <text x="705" y="560" class="box-text">LLM can target tabId to control multiple tabs</text>
 
-  <text x="680" y="625" class="small">支持 LLM 在多标签页间切换操作</text>
+  <text x="680" y="625" class="small">Allows the LLM to switch between multiple tabs</text>
 </svg>

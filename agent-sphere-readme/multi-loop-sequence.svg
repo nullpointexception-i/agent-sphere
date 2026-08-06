@@ -30,8 +30,8 @@
 
   <rect width="1200" height="680" fill="url(#bg)"/>
 
-  <text x="40" y="58" class="title">多轮工具调用示例</text>
-  <text x="40" y="86" class="small">天气查询场景：4 轮 ReAct 循环 · 计划 → 导航 → 读取 → 解析 → 更新 → 完成</text>
+  <text x="40" y="58" class="title">Multi-Turn Tool Call Example</text>
+  <text x="40" y="86" class="small">Weather lookup: 4 ReAct loops · plan → navigate → read → parse → update → done</text>
 
   <rect x="241" y="120" width="718" height="100" rx="18" fill="#ffffff" filter="url(#shadow)"/>
   <rect x="265" y="150" width="90" height="40" rx="20" fill="#334155"/>
@@ -41,13 +41,13 @@
   <text x="415" y="176" class="pill" text-anchor="middle">LLM</text>
   <path d="M445,170 L475,170" class="line"/>
   <rect x="475" y="150" width="175" height="40" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="562" y="176" class="mono" text-anchor="middle">todowrite(创建计划)</text>
+  <text x="562" y="176" class="mono" text-anchor="middle">todowrite(create plan)</text>
   <path d="M650,170 L680,170" class="line"/>
   <rect x="680" y="150" width="60" height="40" rx="12" fill="#818cf8"/>
   <text x="710" y="176" class="pill" text-anchor="middle">LLM</text>
   <path d="M740,170 L770,170" class="line"/>
   <rect x="770" y="150" width="165" height="40" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="852" y="176" class="mono" text-anchor="middle">navigate(天气网站)</text>
+  <text x="852" y="176" class="mono" text-anchor="middle">navigate(weather site)</text>
 
   <path d="M600,222 L600,248" class="line"/>
 
@@ -59,7 +59,7 @@
   <text x="540" y="306" class="pill" text-anchor="middle">LLM</text>
   <path d="M570,300 L600,300" class="line"/>
   <rect x="600" y="280" width="210" height="40" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="705" y="306" class="mono" text-anchor="middle">getContent(提取页面结构)</text>
+  <text x="705" y="306" class="mono" text-anchor="middle">getContent(extract page structure)</text>
 
   <path d="M600,352 L600,378" class="line"/>
 
@@ -71,7 +71,7 @@
   <text x="543" y="436" class="pill" text-anchor="middle">LLM</text>
   <path d="M573,430 L603,430" class="line"/>
   <rect x="603" y="410" width="205" height="40" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="705" y="436" class="mono" text-anchor="middle">executeJS(解析具体数据)</text>
+  <text x="705" y="436" class="mono" text-anchor="middle">executeJS(parse data)</text>
 
   <path d="M600,482 L600,508" class="line"/>
 
@@ -83,11 +83,11 @@
   <text x="388" y="566" class="pill" text-anchor="middle">LLM</text>
   <path d="M418,560 L448,560" class="line"/>
   <rect x="448" y="540" width="175" height="40" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="535" y="566" class="mono" text-anchor="middle">todowrite(更新状态)</text>
+  <text x="535" y="566" class="mono" text-anchor="middle">todowrite(update status)</text>
   <path d="M623,560 L653,560" class="line"/>
   <rect x="653" y="540" width="60" height="40" rx="12" fill="#818cf8"/>
   <text x="683" y="566" class="pill" text-anchor="middle">LLM</text>
   <path d="M713,560 L743,560" class="line"/>
   <rect x="743" y="540" width="220" height="40" rx="12" fill="#e9f8ef" stroke="#75bd88"/>
-  <text x="853" y="566" class="mono" text-anchor="middle">stop(输出结果) ✅ 完成</text>
+  <text x="853" y="566" class="mono" text-anchor="middle">stop(output result) ✅ done</text>
 </svg>

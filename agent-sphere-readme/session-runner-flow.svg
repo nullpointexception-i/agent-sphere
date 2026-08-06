@@ -30,8 +30,8 @@
 
   <rect width="1200" height="1580" fill="url(#bg)"/>
 
-  <text x="40" y="72" class="title">SessionRunner.run 执行生命周期</text>
-  <text x="40" y="104" class="small">Plan → Act → Observe → Learn 循环：消息组装、流式调用、工具并行、回调写入与终止条件</text>
+  <text x="40" y="72" class="title">SessionRunner.run Execution Lifecycle</text>
+  <text x="40" y="104" class="small">Plan → Act → Observe → Learn loop: message assembly, streaming calls, parallel tools, callback writes, and termination conditions</text>
 
   <rect x="40" y="150" width="200" height="52" rx="26" fill="#334155"/>
   <text x="140" y="182" class="pill" text-anchor="middle">run(sessionId)</text>
@@ -48,32 +48,32 @@
   <text x="120" y="286" class="code">shouldCompact(messages, route)→ compact → reassemble</text>
 
   <rect x="96" y="318" width="380" height="60" rx="14" fill="#edf7f6" stroke="#4db6ac" stroke-width="1.5"/>
-  <text x="120" y="356" class="box-title">[Act]    runTurn() → LLM 流式调用</text>
+  <text x="120" y="356" class="box-title">[Act]    runTurn() → LLM streaming call</text>
   <path d="M124,378 L124,692" class="branch"/>
   <path d="M124,420 L152,420" class="branch"/>
   <path d="M124,490 L152,490" class="branch"/>
   <path d="M124,692 L152,692" class="branch"/>
 
   <rect x="152" y="392" width="440" height="56" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="426" class="box-text">LLM 返回 text → allContent.append → 继续</text>
+  <text x="176" y="426" class="box-text">LLM returns text → allContent.append → continue</text>
 
   <rect x="152" y="462" width="320" height="56" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="496" class="box-text">LLM 返回 tool_calls → 执行工具</text>
+  <text x="176" y="496" class="box-text">LLM returns tool_calls → execute tools</text>
   <path d="M180,518 L180,624" class="branch"/>
   <path d="M180,558 L208,558" class="branch"/>
   <path d="M180,624 L208,624" class="branch"/>
 
   <rect x="208" y="532" width="380" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="232" y="564" class="code">FiberSet.submit(tool1, tool2, ...)  ← 并行</text>
+  <text x="232" y="564" class="code">FiberSet.submit(tool1, tool2, ...)  ← parallel</text>
 
   <rect x="208" y="598" width="340" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="232" y="630" class="code">FiberSet.awaitAll() → 收集结果</text>
+  <text x="232" y="630" class="code">FiberSet.awaitAll() → collect results</text>
 
   <rect x="152" y="664" width="380" height="56" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="698" class="box-text">工具结果 → append tool-role messages</text>
+  <text x="176" y="698" class="box-text">Tool results → append tool-role messages</text>
 
   <rect x="96" y="734" width="440" height="60" rx="14" fill="#e9f8ef" stroke="#75bd88" stroke-width="1.5"/>
-  <text x="120" y="772" class="box-title">[Observe] 工具回调 → 结果写入 messages</text>
+  <text x="120" y="772" class="box-title">[Observe] tool callback → results written to messages</text>
   <path d="M124,794 L124,966" class="branch"/>
   <path d="M124,834 L152,834" class="branch"/>
   <path d="M124,900 L152,900" class="branch"/>
@@ -89,19 +89,19 @@
   <text x="176" y="972" class="code">CLI → stdout / exit code</text>
 
   <rect x="96" y="1006" width="380" height="60" rx="14" fill="#fff4e6" stroke="#f0ad4e" stroke-width="1.5"/>
-  <text x="120" y="1044" class="box-title">[Learn]  下一轮循环（loopCount++）</text>
+  <text x="120" y="1044" class="box-title">[Learn]  next loop iteration (loopCount++)</text>
   <path d="M124,1066 L124,1172" class="branch"/>
   <path d="M124,1106 L152,1106" class="branch"/>
   <path d="M124,1172 L152,1172" class="branch"/>
 
   <rect x="152" y="1080" width="360" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="1112" class="code">hasToolCalls = true → 跳过 promoteInput</text>
+  <text x="176" y="1112" class="code">hasToolCalls = true → skip promoteInput</text>
 
   <rect x="152" y="1146" width="260" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="1178" class="box-text">带着工具结果再次调用 LLM</text>
+  <text x="176" y="1178" class="box-text">Call LLM again with tool results</text>
 
   <rect x="96" y="1212" width="200" height="60" rx="14" fill="#fdf2f8" stroke="#ec4899" stroke-width="1.5"/>
-  <text x="120" y="1250" class="box-title">终止条件</text>
+  <text x="120" y="1250" class="box-title">Termination conditions</text>
   <path d="M124,1272 L124,1510" class="branch"/>
   <path d="M124,1312 L152,1312" class="branch"/>
   <path d="M124,1378 L152,1378" class="branch"/>
@@ -109,43 +109,43 @@
   <path d="M124,1510 L152,1510" class="branch"/>
 
   <rect x="152" y="1286" width="400" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="1318" class="code">LLM 返回 stop 且无 tool_calls → COMPLETED</text>
+  <text x="176" y="1318" class="code">LLM returns stop with no tool_calls → COMPLETED</text>
 
   <rect x="152" y="1352" width="330" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="1384" class="box-text">maxLoopCount 耗尽 → 强制总结</text>
+  <text x="176" y="1384" class="box-text">maxLoopCount exhausted → force summary</text>
 
   <rect x="152" y="1418" width="270" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="1450" class="box-text">用户取消 → CANCELLED</text>
+  <text x="176" y="1450" class="box-text">User cancels → CANCELLED</text>
 
   <rect x="152" y="1484" width="220" height="52" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
-  <text x="176" y="1516" class="code">无更多输入 → break</text>
+  <text x="176" y="1516" class="code">No more input → break</text>
 
   <rect x="680" y="150" width="480" height="710" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="704" y="200" class="layer-title">阶段说明 · Phase Legend</text>
-  <text x="704" y="228" class="small">五种阶段颜色对应左侧树中的卡片</text>
+  <text x="704" y="200" class="layer-title">Phase Legend</text>
+  <text x="704" y="228" class="small">Five phase colors map to the cards in the left tree</text>
 
   <rect x="704" y="268" width="36" height="36" rx="10" fill="#eef2ff" stroke="#818cf8" stroke-width="1.5"/>
-  <text x="752" y="294" class="box-title">Plan · 规划</text>
-  <text x="752" y="322" class="box-text">组装 messages：system + history + user</text>
+  <text x="752" y="294" class="box-title">Plan · Planning</text>
+  <text x="752" y="322" class="box-text">Assemble messages: system + history + user</text>
   <text x="752" y="344" class="box-text">shouldCompact → compact → reassemble</text>
 
   <rect x="704" y="388" width="36" height="36" rx="10" fill="#edf7f6" stroke="#4db6ac" stroke-width="1.5"/>
-  <text x="752" y="414" class="box-title">Act · 行动</text>
-  <text x="752" y="442" class="box-text">runTurn() 调用 LLM，流式产出 text 或 tool_calls</text>
-  <text x="752" y="464" class="box-text">FiberSet 并行执行工具并收集结果</text>
+  <text x="752" y="414" class="box-title">Act · Acting</text>
+  <text x="752" y="442" class="box-text">runTurn() calls the LLM, streaming text or tool_calls</text>
+  <text x="752" y="464" class="box-text">FiberSet runs tools in parallel and collects results</text>
 
   <rect x="704" y="508" width="36" height="36" rx="10" fill="#e9f8ef" stroke="#75bd88" stroke-width="1.5"/>
-  <text x="752" y="534" class="box-title">Observe · 观察</text>
-  <text x="752" y="562" class="box-text">工具回调写入 tool-role messages</text>
-  <text x="752" y="584" class="box-text">Chrome / WebFetch / CLI 各自回流</text>
+  <text x="752" y="534" class="box-title">Observe · Observing</text>
+  <text x="752" y="562" class="box-text">Tool callbacks write tool-role messages</text>
+  <text x="752" y="584" class="box-text">Chrome / WebFetch / CLI each flow back</text>
 
   <rect x="704" y="628" width="36" height="36" rx="10" fill="#fff4e6" stroke="#f0ad4e" stroke-width="1.5"/>
-  <text x="752" y="654" class="box-title">Learn · 学习</text>
-  <text x="752" y="682" class="box-text">loopCount++，携带工具结果再次调用 LLM</text>
-  <text x="752" y="704" class="box-text">hasToolCalls 时跳过 promoteInput</text>
+  <text x="752" y="654" class="box-title">Learn · Learning</text>
+  <text x="752" y="682" class="box-text">loopCount++, call LLM again with tool results</text>
+  <text x="752" y="704" class="box-text">Skip promoteInput when hasToolCalls</text>
 
   <rect x="704" y="748" width="36" height="36" rx="10" fill="#fdf2f8" stroke="#ec4899" stroke-width="1.5"/>
-  <text x="752" y="774" class="box-title">终止条件 · Termination</text>
-  <text x="752" y="802" class="box-text">stop 无 tool_calls / maxLoopCount / 取消 / 无输入</text>
-  <text x="752" y="824" class="box-text">→ COMPLETED 或强制总结 / CANCELLED / break</text>
+  <text x="752" y="774" class="box-title">Termination</text>
+  <text x="752" y="802" class="box-text">stop without tool_calls / maxLoopCount / cancel / no input</text>
+  <text x="752" y="824" class="box-text">→ COMPLETED or force summary / CANCELLED / break</text>
 </svg>

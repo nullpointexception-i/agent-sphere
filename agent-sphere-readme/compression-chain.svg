@@ -27,36 +27,36 @@
     </marker>
   </defs>
   <rect width="1250" height="1100" fill="url(#bg)"/>
-  <text x="50" y="80" class="title">压缩链完整流程</text>
+  <text x="50" y="80" class="title">Full Compression Chain Flow</text>
 
   <!-- Header pill -->
   <rect x="425" y="110" width="400" height="40" rx="20" fill="#334155"/>
-  <text x="625" y="137" class="pill" text-anchor="middle">每次 LLM 调用前</text>
+  <text x="625" y="137" class="pill" text-anchor="middle">Before each LLM call</text>
 
   <path d="M625 150 L625 180" class="line"/>
 
-  <!-- Stage 1: 查历史 -->
+  <!-- Stage 1: load history -->
   <rect x="75" y="180" width="1100" height="130" rx="16" fill="#ffffff" filter="url(#shadow)"/>
   <rect x="75" y="180" width="1100" height="44" rx="16" fill="#e8f1ff"/>
   <rect x="75" y="194" width="1100" height="30" fill="#e8f1ff"/>
-  <text x="100" y="209" class="box-title">1. 查历史 → HistoryLoader.load()</text>
+  <text x="100" y="209" class="box-title">1. Load history → HistoryLoader.load()</text>
 
-  <text x="115" y="247" class="box-text">跳过 compactedUptoRunId 之前的 run</text>
-  <text x="115" y="274" class="box-text">回放之后的 run（含工具记录）</text>
-  <text x="115" y="301" class="box-text">超过 TOOL_RESULT_HISTORY_CHARS_BUDGET 的截断</text>
+  <text x="115" y="247" class="box-text">Skip runs before compactedUptoRunId</text>
+  <text x="115" y="274" class="box-text">Replay subsequent runs (including tool records)</text>
+  <text x="115" y="301" class="box-text">Truncate results exceeding TOOL_RESULT_HISTORY_CHARS_BUDGET</text>
 
   <path d="M625 310 L625 340" class="line"/>
 
-  <!-- Stage 2: 组消息 -->
+  <!-- Stage 2: assemble messages -->
   <rect x="75" y="340" width="1100" height="160" rx="16" fill="#ffffff" filter="url(#shadow)"/>
   <rect x="75" y="340" width="1100" height="44" rx="16" fill="#edf7f6"/>
   <rect x="75" y="354" width="1100" height="30" fill="#edf7f6"/>
-  <text x="100" y="369" class="box-title">2. 组消息</text>
+  <text x="100" y="369" class="box-title">2. Assemble messages</text>
 
-  <text x="115" y="405" class="mono">[system] 压缩摘要（如果有）</text>
+  <text x="115" y="405" class="mono">[system] compaction summary (if any)</text>
   <text x="115" y="427" class="mono">[user] + [assistant(tool_calls)] + [tool(results)] + [assistant(text)]</text>
-  <text x="135" y="449" class="small">（每个未压缩的 run）</text>
-  <text x="115" y="475" class="mono">[user] 当前输入</text>
+  <text x="135" y="449" class="small">(per uncompressed run)</text>
+  <text x="115" y="475" class="mono">[user] current input</text>
 
   <path d="M625 500 L625 530" class="line"/>
 
@@ -66,8 +66,8 @@
   <rect x="75" y="544" width="1100" height="30" fill="#fff4e6"/>
   <text x="100" y="559" class="box-title">3. shouldCompact()</text>
 
-  <text x="115" y="598" class="box-text">估算 messages 的 token</text>
-  <text x="115" y="625" class="box-text">比较 budget = maxInputTokens × budget-ratio</text>
+  <text x="115" y="598" class="box-text">Estimate the token count of messages</text>
+  <text x="115" y="625" class="box-text">Compare against budget = maxInputTokens × budget-ratio</text>
 
   <!-- Fork -->
   <path d="M335 647 L335 665" class="branch"/>
@@ -75,19 +75,19 @@
   <path d="M335 665 L625 665" class="branch"/>
   <path d="M335 665 L335 652" class="branch"/>
 
-  <!-- Left branch: 未超 -->
+  <!-- Left branch: under budget -->
   <rect x="160" y="680" width="340" height="42" rx="21" fill="#75bd88"/>
-  <text x="330" y="707" class="pill" text-anchor="middle">未超 → 直接发 LLM ✅</text>
+  <text x="330" y="707" class="pill" text-anchor="middle">Under budget → send directly to LLM ✅</text>
 
-  <!-- Right branch: 超出 -->
+  <!-- Right branch: over budget -->
   <rect x="560" y="680" width="570" height="42" rx="10" fill="#fff4e6" stroke="#f0ad4e"/>
-  <text x="615" y="695" class="box-title">超出 → 触发 compaction</text>
+  <text x="615" y="695" class="box-title">Over budget → trigger compaction</text>
 
   <rect x="575" y="730" width="540" height="36" rx="10" fill="#fff4e6" stroke="#f0ad4e"/>
-  <text x="845" y="754" class="box-text" text-anchor="middle">写入 compact record → clear + 重新组装</text>
+  <text x="845" y="754" class="box-text" text-anchor="middle">Write compact record → clear + reassemble</text>
 
   <rect x="575" y="772" width="540" height="36" rx="10" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="845" y="796" class="box-text" text-anchor="middle">重试（最多 3 次）</text>
+  <text x="845" y="796" class="box-text" text-anchor="middle">Retry (up to 3 times)</text>
 
   <!-- Arrow down from both branches -->
   <path d="M330 722 L625 830" class="line"/>
@@ -102,5 +102,5 @@
 
   <!-- End pill -->
   <rect x="475" y="920" width="300" height="42" rx="21" fill="#334155"/>
-  <text x="625" y="947" class="pill" text-anchor="middle">LLM 流式返回</text>
+  <text x="625" y="947" class="pill" text-anchor="middle">LLM streams the response</text>
 </svg>

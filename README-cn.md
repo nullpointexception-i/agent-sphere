@@ -21,19 +21,32 @@
 
 截图效果
 
-![ui-register.png](agent-sphere-readme/ui-register.png)
-
 ![ui-chat.png](agent-sphere-readme/ui-chat.png)
-
-![ui-chat-toolcalls.png](agent-sphere-readme/ui-chat-toolcalls.png)
 
 ![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
 
-![ui-chat-clarification.png](agent-sphere-readme/ui-chat-clarification.png)
+可嵌入聊天 Widget（shadow DOM、OIDC SSO、AG-UI 实时流）：
+
+![widget-sso-login.png](agent-sphere-readme/widget-sso-login.png)
+
+![widget-embed-custom-system-chat.png](agent-sphere-readme/widget-embed-custom-system-chat.png)
+
+![widget-multi-identity-provider.png](agent-sphere-readme/widget-multi-identity-provider.png)
 
 ▶ [点击观看视频演示](https://www.bilibili.com/video/BV1WqTT62Efq/)
 
 [![视频预览](agent-sphere-readme/ui-preview.gif)](https://www.bilibili.com/video/BV1WqTT62Efq/)
+
+## 功能特性
+
+- **LLM ReAct 编排** — `SessionRunner` 执行 `Plan → Act → Observe → Learn` 循环，支持单轮超时、取消、自动上下文压缩。
+- **多供应商模型路由** — 支持 OpenAI / DeepSeek / 智谱（BigModel）/ 中转站，主路由 + fallback 路由链自动降级。
+- **统一能力层** — MCP Server、内置 SPI 工具、CLI 执行、浏览器自动化、复合技能，通过 `ToolExecutor` 统一分发。
+- **真实浏览器自动化** — Manifest V3 Chrome 扩展桥接，执行 DOM 操作（导航 / 点击 / 输入 / 截图 / executeJS）并实时视觉反馈。
+- **多级记忆** — 持久化 run、工具调用记录（写时 JSON 压缩）、基于 token 预算的上下文压缩。
+- **人工介入澄清（Human-in-the-loop）** — LLM 通过 `ask_clarification` 工具暂停提问，AG-UI interrupt/resume 恢复执行（`confirm` / `choice` / `input`）。
+- **OIDC 多认证源 SSO** — PKCE + JWKS 验签，任意 IdP 登录、JIT 开通本地用户，配合完整 RBAC 与审计日志。
+- **可嵌入聊天 Widget** — 单个 IIFE 脚本挂载进 shadow DOM，通过 AG-UI + SSE 自管 Bearer 鉴权对话（不依赖 CopilotKit 运行时），可嵌入任意第三方页面。
 
 ## 1. 开发quick start
 
@@ -43,7 +56,7 @@
 
 ### 2.1 整体结构
 
-![agentsphere-architecture.png](agent-sphere-readme/agentsphere-architecture.png)
+![agentsphere-architecture-v2.png](agent-sphere-readme/agentsphere-architecture-v2.png)
 
 ### 2.2 核心组件
 
@@ -475,17 +488,15 @@ AgentSphere 提供完整的 RBAC 权限体系，支持多用户管理和 API 级
 
 权限校验在 Controller 层通过 `@WithTenant` 和 `AuthContext` 执行，确保多租户数据隔离。
 
-#### 用户管理
+#### 管理后台界面
 
-![用户管理](agent-sphere-readme/ui-admin-user.png)
+RBAC、系统配置与 OIDC 身份源统一在「系统管理」后台中完成（用户、角色、权限、身份源 / SSO、系统配置）：
 
-#### 角色配置
+![RBAC、系统配置与 SSO](agent-sphere-readme/rbac-and-system-config-and-sso.png)
 
-![角色配置](agent-sphere-readme/ui-admin-role.png)
-
-#### 权限分配
-
-![权限分配](agent-sphere-readme/ui-admin-permission.png)
+- **用户管理** — 创建/查看用户并分配角色
+- **角色配置** — 创建角色并聚合权限
+- **权限分配** — 按角色授予/回收 `domain:action` 权限
 
 ### 4.9 审计日志（Audit Log）
 
@@ -520,7 +531,7 @@ AgentSphere 支持**多个 OIDC 身份认证源**，让第三方业务系统无�
 
 #### 管理认证源
 
-打开 **系统管理 → 身份源管理** 即可在界面上配置（无需写 SQL）：
+打开 **系统管理 → 身份源管理** 即可在界面上配置（无需写 SQL）—— 即 [4.8](#48-rbac基于角色的权限控制) 中展示的同一管理后台：
 
 | 字段 | 说明 |
 |------|------|
@@ -568,12 +579,30 @@ AgentSphere 支持**多个 OIDC 身份认证源**，让第三方业务系统无�
 | `provider` | `business` | 身份源管理页配置的认证源标识 |
 | `autoLogin` | `true` | 加载时尝试静默登录（`prompt=none`） |
 | `title` | `Agent Sphere 助手` | Widget 头部标题 |
+| `mountTo` | `undefined` | 可选 DOM 元素。传入后 Widget 静态填充该容器（不做悬浮）；否则渲染为右下角悬浮气泡 |
+
+#### 截图
+
+SSO 登录页（选择身份源）：
+
+![widget-sso-login.png](agent-sphere-readme/widget-sso-login.png)
+
+配置多个身份源：
+
+![widget-multi-identity-provider.png](agent-sphere-readme/widget-multi-identity-provider.png)
+
+嵌入第三方业务系统页面（`mountTo` 宿主模式）：
+
+![widget-embed-custom-system-chat.png](agent-sphere-readme/widget-embed-custom-system-chat.png)
 
 #### 工作原理
 
-- **OIDC SSO**：消费 `?otc=` → 换取 token → 存入 `sessionStorage`（`agent-sphere-widget:agent-user`）；处理完成后从 URL 移除 `?otc=`/`?error=`。
-- **Agent 列表与会话**：来自 `/instance/instances/all` 与 `/instance/sessions`（增删改查）。
+- **OIDC SSO**：消费 `?otc=` → 换取 token → 存入 `sessionStorage`（`agent-sphere-widget:agent-user`）；处理完成后从 URL 移除 `?otc=`/`?error=`。`autoLogin` 做一次性静默探测（`prompt=none`）；登录页可让用户选择已启用的身份源。
+- **Agent 列表与会话**：来自 `/instance/instances/all` 与 `/instance/sessions`（增删改查）。会话支持新建、行内重命名（✓/✕）、归档（行内两步确认），并带无限滚动分页。
 - **对话（AG-UI）**：每个 Agent 对应一个 `HttpAgent`，请求 `{apiBase}/copilot/agent/{id}/services/chat/run`；后端以 SSE `data:` 行推送 AG-UI 事件（`TEXT_MESSAGE_*`、`REASONING_MESSAGE_*`、`TOOL_CALL_*`、`RUN_*`）。请求携带 `Authorization: Bearer`，不经过 CopilotKit 运行时。
+- **澄清（人工介入）**：Agent 中断暂停时，聊天内即时出现澄清卡片（confirm / choice / input）。回复或取消通过 AG-UI `resume` 恢复执行（`resolved` / `cancelled`）；已答复的卡片也会从会话历史中渲染。
+- **实时更新**：会话标题通过 `session_title_updated` 自定义事件实时同步；辅助面板展示当前任务清单（`STATE_SNAPSHOT` todos）与工具调用动态（悬浮查看详情）。
+- **宿主模式**：传入 `mountTo` 后 Widget 静态渲染在你的布局中（如抽屉或区域块），而不是悬浮气泡。
 
 #### 开发调试
 
@@ -600,7 +629,9 @@ npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
 | **数据库** | PostgreSQL, Flyway 迁移 |
 | **缓存/分布式锁** | Redis (Redisson) |
 | **前端** | React, UmiJS, Ant Design Pro |
+| **聊天 Widget** | CopilotKit（自管）+ AG-UI, shadow DOM, 单文件 IIFE |
 | **Chrome 扩展** | Manifest V3, Service Worker, Content Script |
+| **认证** | OIDC 多认证源 SSO（PKCE / JWKS）, RBAC, 审计日志 |
 | **实时通信** | SSE (Server-Sent Events), 多 emitter 广播 |
 | **工具协议** | MCP (Model Context Protocol, Streamable HTTP) |
 | **API 安全** | Bearer Token, @WithTenant 多租户 |
@@ -628,14 +659,6 @@ curl -X POST /api/v1/instance/instance-capabilities \
 ```
 
 ![MCP 配置界面](agent-sphere-readme/ui-new-mcp.png)
-
-<a href="https://star-history.com/#nullpointexception-i/agent-sphere&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=nullpointexception-i/agent-sphere&type=Date" width="500" />
-  </picture>
-</a>
 
 ## 8. License
 

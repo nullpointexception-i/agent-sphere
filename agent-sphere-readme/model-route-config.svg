@@ -18,7 +18,7 @@
     </style>
   </defs>
   <rect width="1250" height="560" fill="url(#bg)"/>
-  <text x="50" y="80" class="title">模型路由配置</text>
+  <text x="50" y="80" class="title">Model Route Config</text>
 
   <rect x="50" y="120" width="1150" height="400" rx="22" fill="#ffffff" filter="url(#shadow)"/>
 
@@ -26,32 +26,32 @@
   <rect x="80" y="140" width="500" height="360" rx="16" fill="#eef2ff" stroke="#818cf8"/>
   <rect x="80" y="140" width="500" height="46" rx="16" fill="#818cf8"/>
   <rect x="80" y="158" width="500" height="28" fill="#818cf8"/>
-  <text x="330" y="169" class="layer-title" text-anchor="middle">ModelRoute（主路由）</text>
+  <text x="330" y="169" class="layer-title" text-anchor="middle">ModelRoute (Primary Route)</text>
 
   <!-- Field 1 -->
   <rect x="105" y="206" width="150" height="34" rx="17" fill="#6366f1"/>
   <text x="180" y="228" class="tag" text-anchor="middle">provider_id</text>
-  <text x="275" y="229" class="box-text">→ 供应商 (DeepSeek / OpenAI / 自定义)</text>
+  <text x="275" y="229" class="box-text">→ provider (DeepSeek / OpenAI / Custom)</text>
 
   <!-- Field 2 -->
   <rect x="105" y="256" width="150" height="34" rx="17" fill="#6366f1"/>
   <text x="180" y="278" class="tag" text-anchor="middle">model_name</text>
-  <text x="275" y="279" class="box-text">→ 模型 (deepseek-v4-flash / gpt-4o)</text>
+  <text x="275" y="279" class="box-text">→ model (deepseek-v4-flash / gpt-4o)</text>
 
   <!-- Field 3 -->
   <rect x="105" y="306" width="150" height="34" rx="17" fill="#6366f1"/>
   <text x="180" y="328" class="tag" text-anchor="middle">maxInputTokens</text>
-  <text x="275" y="329" class="box-text">→ 输入上限（驱动压缩预算计算）</text>
+  <text x="275" y="329" class="box-text">→ input limit (drives compaction budget)</text>
 
   <!-- Field 4 -->
   <rect x="105" y="356" width="150" height="34" rx="17" fill="#6366f1"/>
   <text x="180" y="378" class="tag" text-anchor="middle">maxOutputTokens</text>
-  <text x="275" y="379" class="box-text">→ 输出上限</text>
+  <text x="275" y="379" class="box-text">→ output limit</text>
 
   <!-- Field 5 -->
   <rect x="105" y="406" width="150" height="34" rx="17" fill="#6366f1"/>
   <text x="180" y="428" class="tag" text-anchor="middle">fallback_ids</text>
-  <text x="275" y="429" class="box-text">→ 备选路由列表</text>
+  <text x="275" y="429" class="box-text">→ fallback route list</text>
 
   <!-- Divider -->
   <path d="M625 150 L625 500" stroke="#e2e8f0" stroke-width="2"/>
@@ -60,20 +60,20 @@
   <rect x="670" y="140" width="500" height="240" rx="16" fill="#edf7f6" stroke="#4db6ac"/>
   <rect x="670" y="140" width="500" height="46" rx="16" fill="#4db6ac"/>
   <rect x="670" y="158" width="500" height="28" fill="#4db6ac"/>
-  <text x="920" y="169" class="layer-title" text-anchor="middle">ModelProvider（供应商）</text>
+  <text x="920" y="169" class="layer-title" text-anchor="middle">ModelProvider (Provider)</text>
 
   <!-- Field 1 -->
   <rect x="695" y="206" width="130" height="34" rx="17" fill="#4db6ac"/>
   <text x="760" y="228" class="tag" text-anchor="middle">base_url</text>
-  <text x="845" y="229" class="box-text">→ API 地址</text>
+  <text x="845" y="229" class="box-text">→ API endpoint</text>
 
   <!-- Field 2 -->
   <rect x="695" y="256" width="130" height="34" rx="17" fill="#4db6ac"/>
   <text x="760" y="278" class="tag" text-anchor="middle">api_key_id</text>
-  <text x="845" y="279" class="box-text">→ 密钥引用</text>
+  <text x="845" y="279" class="box-text">→ secret reference</text>
 
   <!-- Field 3 -->
   <rect x="695" y="306" width="130" height="34" rx="17" fill="#4db6ac"/>
   <text x="760" y="328" class="tag" text-anchor="middle">config</text>
-  <text x="845" y="329" class="box-text">→ 供应商配置 (JSON)</text>
+  <text x="845" y="329" class="box-text">→ provider config (JSON)</text>
 </svg>

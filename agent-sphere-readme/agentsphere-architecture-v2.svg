@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2100" viewBox="0 0 1600 2100">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="9" stdDeviation="13" flood-color="#1f2937" flood-opacity="0.13"/>
+    </filter>
+    <style>
+      .title { font: 700 52px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .subtitle { font: 400 24px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif; fill:#536273; }
+      .layer-title { font: 700 26px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .box-title { font: 700 21px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif; fill:#172033; }
+      .box-text { font: 400 17px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif; fill:#536273; }
+      .small { font: 500 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif; fill:#64748b; }
+      .pill { font: 700 16px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="2100" fill="url(#bg)"/>
+
+  <text x="95" y="120" class="title">AgentSphere Architecture</text>
+  <text x="95" y="168" class="subtitle">LLM decision-making · ReAct loop · unified tool dispatch · browser bridging · memory compaction · model failover · OIDC SSO · AG-UI real-time chat</text>
+
+  <!-- ============ 1. User / Client Layer ============ -->
+  <rect x="90" y="205" width="1420" height="180" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="125" y="252" class="layer-title">1. User / Client Layer — Web UI · Chrome Extension · Embeddable Widget</text>
+  <rect x="135" y="278" width="380" height="60" rx="13" fill="#e8f1ff" stroke="#7aa7e8"/>
+  <text x="160" y="316" class="box-title">AgentSphere Web UI</text>
+  <rect x="585" y="278" width="410" height="60" rx="13" fill="#e9f8ef" stroke="#75bd88"/>
+  <text x="610" y="316" class="box-title">Chrome Extension</text>
+  <rect x="1065" y="278" width="390" height="60" rx="13" fill="#fdf2f8" stroke="#ec4899"/>
+  <text x="1090" y="316" class="box-title">Embeddable Widget</text>
+  <text x="145" y="360" class="small">Chat, sessions, instances, model / capability / permission management, audit</text>
+  <text x="610" y="360" class="small">Page following, browser actions, SSE bridge, action logs</text>
+  <text x="1090" y="360" class="small">shadow DOM · CopilotKit self-managed · IIFE single file</text>
+
+  <path d="M800 386 L800 452" class="line"/>
+
+  <!-- ============ 2. Access & Auth Layer ============ -->
+  <rect x="90" y="452" width="1420" height="228" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="125" y="499" class="layer-title">2. Access &amp; Auth — OIDC multi IdP · RBAC · Audit</text>
+  <rect x="135" y="532" width="370" height="96" rx="14" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="165" y="566" class="box-title">OIDC SSO</text>
+  <text x="165" y="592" class="box-text">authorize → IdP → callback → otc → exchange</text>
+  <text x="165" y="614" class="box-text">PKCE(S256) · nonce · JWKS signature verification</text>
+  <rect x="555" y="532" width="280" height="96" rx="14" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="585" y="566" class="box-title">Identity Providers</text>
+  <text x="585" y="592" class="box-text">Manage multiple identity sources</text>
+  <text x="585" y="614" class="box-text">Connection test / enable-disable / masking</text>
+  <rect x="885" y="532" width="280" height="96" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
+  <text x="915" y="566" class="box-title">RBAC</text>
+  <text x="915" y="592" class="box-text">User → Role → Permission</text>
+  <text x="915" y="614" class="box-text">@RequirePermission fine-grained</text>
+  <rect x="1215" y="532" width="250" height="96" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
+  <text x="1245" y="566" class="box-title">Audit Log</text>
+  <text x="1245" y="592" class="box-text">Login / config / instances / sessions</text>
+  <text x="1245" y="614" class="box-text">Full operation trace</text>
+  <text x="145" y="660" class="small">Bearer Token issued at login; @WithTenant multi-tenant isolation</text>
+
+  <path d="M800 681 L800 747" class="line"/>
+
+  <!-- ============ 3. AG-UI Copilot Runtime Layer ============ -->
+  <rect x="90" y="747" width="1420" height="248" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="125" y="794" class="layer-title">3. AG-UI Copilot Runtime — real-time chat protocol stream</text>
+  <rect x="135" y="825" width="300" height="104" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
+  <text x="165" y="858" class="box-title">CopilotRuntimeService</text>
+  <text x="165" y="885" class="box-text">run / resume / connect</text>
+  <text x="165" y="908" class="box-text">Clarification response forks &amp; resumes</text>
+  <rect x="485" y="825" width="300" height="104" rx="14" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="515" y="858" class="box-title">AguiEventTranslator</text>
+  <text x="515" y="885" class="box-text">AG-UI event translation · unique toolCallId</text>
+  <text x="515" y="908" class="box-text">interrupt / resume · clarification</text>
+  <rect x="835" y="825" width="300" height="104" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
+  <text x="865" y="858" class="box-title">AguiStreamManager</text>
+  <text x="865" y="885" class="box-text">Per-session SSE emitter</text>
+  <text x="865" y="908" class="box-text">15s heartbeat · completion cleanup</text>
+  <rect x="1185" y="825" width="300" height="104" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
+  <text x="1215" y="858" class="box-title">Chat Run API</text>
+  <text x="1215" y="885" class="box-text">{apiBase}/copilot/agent/{id}</text>
+  <text x="1215" y="908" class="box-text">/services/chat/run</text>
+  <path d="M435 877 L485 877" class="line"/>
+  <path d="M785 877 L835 877" class="line"/>
+  <path d="M1135 877 L1185 877" class="line"/>
+  <text x="145" y="968" class="small">SSE data: lines push TEXT / REASONING / TOOL_CALL / RUN events; frontend HttpAgent manages Bearer auth itself, bypassing the CopilotKit runtime</text>
+
+  <path d="M800 996 L800 1062" class="line"/>
+
+  <!-- ============ 4. Runtime Kernel Layer ============ -->
+  <rect x="90" y="1062" width="1420" height="248" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="125" y="1109" class="layer-title">4. Runtime Kernel — ReAct loop &amp; orchestration</text>
+  <rect x="135" y="1140" width="300" height="104" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
+  <text x="165" y="1173" class="box-title">SessionRunner</text>
+  <text x="165" y="1200" class="box-text">Plan → Act → Observe → Learn</text>
+  <text x="165" y="1223" class="box-text">Looping, cancel, timeout, compaction &amp; reassembly</text>
+  <rect x="485" y="1140" width="300" height="104" rx="14" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="515" y="1173" class="box-title">KernelLlmService</text>
+  <text x="515" y="1200" class="box-text">Streaming text / reasoning</text>
+  <text x="515" y="1223" class="box-text">Detects tool_calls and records interactions</text>
+  <rect x="835" y="1140" width="300" height="104" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
+  <text x="865" y="1173" class="box-title">FiberSet</text>
+  <text x="865" y="1200" class="box-text">Runs multiple tool calls concurrently</text>
+  <text x="865" y="1223" class="box-text">submit / awaitAll / cancel</text>
+  <rect x="1185" y="1140" width="300" height="104" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
+  <text x="1215" y="1173" class="box-title">Runtime Events</text>
+  <text x="1215" y="1200" class="box-text">PENDING / RUNNING / DONE</text>
+  <text x="1215" y="1223" class="box-text">Real-time display &amp; audit on the frontend</text>
+  <path d="M435 1192 L485 1192" class="line"/>
+  <path d="M785 1192 L835 1192" class="line"/>
+  <path d="M1135 1192 L1185 1192" class="dash"/>
+  <text x="145" y="1283" class="small">Source: SessionRunner.run / runTurn, FiberSet, RuntimeEventListener, SseManager</text>
+
+  <path d="M800 1311 L800 1377" class="line"/>
+
+  <!-- ============ 5. Capability Layer ============ -->
+  <rect x="90" y="1377" width="1420" height="228" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="125" y="1424" class="layer-title">5. Capability Layer — ToolExecutor unified dispatch</text>
+  <rect x="135" y="1455" width="280" height="92" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
+  <text x="165" y="1493" class="box-title">MCP</text>
+  <text x="165" y="1524" class="box-text">Jira / GitHub / DB / Cloud</text>
+  <rect x="465" y="1455" width="280" height="92" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
+  <text x="495" y="1493" class="box-title">Builtin SPI</text>
+  <text x="495" y="1524" class="box-text">WebFetch / Chrome / Todo</text>
+  <rect x="795" y="1455" width="280" height="92" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
+  <text x="825" y="1493" class="box-title">CLI</text>
+  <text x="825" y="1524" class="box-text">ProcessBuilder executes commands</text>
+  <rect x="1125" y="1455" width="280" height="92" rx="14" fill="#eef2ff" stroke="#818cf8"/>
+  <text x="1155" y="1493" class="box-title">Skill</text>
+  <text x="1155" y="1524" class="box-text">Multi-step tasks &amp; cross-system flows</text>
+  <rect x="500" y="1570" width="700" height="36" rx="18" fill="#334155"/>
+  <text x="850" y="1594" class="pill" text-anchor="middle">ToolExecutor routes to MCP / Builtin / CLI / Skill by capabilityType</text>
+
+  <path d="M800 1606 L800 1672" class="line"/>
+
+  <!-- ============ 6. Chrome Bridge Layer ============ -->
+  <rect x="90" y="1672" width="1420" height="178" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="125" y="1719" class="layer-title">6. Chrome Bridge — from tool calls to real browser actions</text>
+  <rect x="135" y="1748" width="330" height="62" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="165" y="1788" class="box-title">ChromeCommandDTO</text>
+  <rect x="635" y="1748" width="330" height="62" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="665" y="1788" class="box-title">Chrome Extension</text>
+  <rect x="1135" y="1748" width="330" height="62" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="1165" y="1788" class="box-title">ChromeCallbackDTO</text>
+  <path d="M465 1779 L635 1779" class="line"/>
+  <path d="M965 1779 L1135 1779" class="line"/>
+  <text x="145" y="1835" class="small">navigate / getContent / click / type / executeJS; ChromePendingStore awaits callbacks and handles 30s timeout</text>
+
+  <path d="M800 1851 L800 1917" class="line"/>
+
+  <!-- ============ 7. Data/Memory + Model Layer ============ -->
+  <rect x="90" y="1917" width="670" height="158" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="125" y="1964" class="layer-title">7. Data / Memory Layer</text>
+  <text x="145" y="2000" class="box-text">HistoryLoader replays user / assistant / tool messages</text>
+  <text x="145" y="2030" class="box-text">ToolCallRecord stores callId, args, artifact, status</text>
+  <text x="145" y="2060" class="box-text">Compaction writes a summary when over budget, then reassembles context</text>
+
+  <rect x="840" y="1917" width="670" height="158" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="875" y="1964" class="layer-title">8. Model Layer</text>
+  <text x="895" y="2000" class="box-text">RouteListBuilder parses primary + fallback model chain</text>
+  <text x="895" y="2030" class="box-text">FallbackRouteExecutor auto-switches when the primary route fails</text>
+  <text x="895" y="2060" class="box-text">Provider SPI supports OpenAI / DeepSeek / Zhipu / relay gateway</text>
+</svg>

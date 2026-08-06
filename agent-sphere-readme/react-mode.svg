@@ -20,28 +20,28 @@
     </marker>
   </defs>
   <rect width="1100" height="620" fill="url(#bg)"/>
-  <text x="50" y="80" class="title">ReAct 模式对齐</text>
+  <text x="50" y="80" class="title">ReAct Pattern Alignment</text>
 
   <rect x="50" y="120" width="1000" height="460" rx="22" fill="#ffffff" filter="url(#shadow)"/>
 
   <!-- Left column header -->
   <rect x="85" y="140" width="280" height="40" rx="20" fill="#818cf8"/>
-  <text x="225" y="167" class="pill" text-anchor="middle">ReAct 经典模式</text>
+  <text x="225" y="167" class="pill" text-anchor="middle">ReAct Classic Pattern</text>
 
   <!-- Right column header -->
   <rect x="735" y="140" width="280" height="40" rx="20" fill="#4db6ac"/>
-  <text x="875" y="167" class="pill" text-anchor="middle">AgentSphere 实现</text>
+  <text x="875" y="167" class="pill" text-anchor="middle">AgentSphere Implementation</text>
 
   <!-- Row 1: Thought -->
   <rect x="85" y="200" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="225" y="231" class="box-title" text-anchor="middle">Thought（思考）</text>
+  <text x="225" y="231" class="box-title" text-anchor="middle">Thought</text>
   <rect x="735" y="200" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="875" y="231" class="box-text" text-anchor="middle">LLM 推理 + tool_calls 决策</text>
+  <text x="875" y="231" class="box-text" text-anchor="middle">LLM reasoning + tool_calls decision</text>
   <path d="M365 225 L725 225" class="dash"/>
 
   <!-- Row 2: Action -->
   <rect x="85" y="270" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="225" y="301" class="box-title" text-anchor="middle">Action（行动）</text>
+  <text x="225" y="301" class="box-title" text-anchor="middle">Action</text>
   <rect x="735" y="270" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
   <text x="875" y="299" class="box-text" text-anchor="middle">executeJS / navigate</text>
   <text x="875" y="316" class="box-text" text-anchor="middle">click / type</text>
@@ -49,17 +49,17 @@
 
   <!-- Row 3: Observation -->
   <rect x="85" y="340" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="225" y="371" class="box-title" text-anchor="middle">Observation（观察）</text>
+  <text x="225" y="371" class="box-title" text-anchor="middle">Observation</text>
   <rect x="735" y="340" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="875" y="371" class="box-text" text-anchor="middle">tool 返回结果写入 messages</text>
+  <text x="875" y="371" class="box-text" text-anchor="middle">tool result written to messages</text>
   <path d="M365 365 L725 365" class="dash"/>
 
   <!-- Row 4: Final Answer -->
   <rect x="85" y="410" width="280" height="50" rx="12" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="225" y="441" class="box-title" text-anchor="middle">Final Answer（最终回答）</text>
+  <text x="225" y="441" class="box-title" text-anchor="middle">Final Answer</text>
   <rect x="735" y="410" width="280" height="50" rx="12" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="875" y="441" class="box-text" text-anchor="middle">LLM 返回 stop，无 tool_calls</text>
+  <text x="875" y="441" class="box-text" text-anchor="middle">LLM returns stop, no tool_calls</text>
   <path d="M365 435 L725 435" class="dash"/>
 
-  <text x="550" y="550" class="box-text" text-anchor="middle" fill="#94a3b8">ReAct 经典模式与 AgentSphere 实现对应关系</text>
+  <text x="550" y="550" class="box-text" text-anchor="middle" fill="#94a3b8">Mapping between ReAct Classic Pattern and AgentSphere Implementation</text>
 </svg>
