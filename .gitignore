@@ -3,6 +3,8 @@
 node_modules
 /dist
 /local-config
+# Chrome extension packaged artifact (build output, not committed)
+/agent-sphere-chrome-extension/agent-sphere-extension.zip
 # local env files
 .env.local
 .env.*.local

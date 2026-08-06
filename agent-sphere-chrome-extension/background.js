@@ -8,21 +8,21 @@ let baseUrl = '';
 let abortController = null;
 let reconnectTimer = null;
 
-// --- Keep SW alive & 僵尸连接检测：优先 chrome.alarms（能唤醒休眠的 SW），
-// alarms 不可用（如扩展旧注册未授予权限）时降级为 setInterval，避免 SW 启动崩溃 ---
+// --- Keep SW alive & zombie-connection detection: prefer chrome.alarms (can wake a suspended SW);
+// fall back to setInterval when alarms are unavailable (e.g. legacy registration without the permission) ---
 let keepaliveTimer = null;
 
 function checkConnection() {
-  // 尚无凭据/会话（扩展刚重载、还没从页面拉到 auth）——静默等待，
-  // 由启动查询 / 页面推送 / tab 激活负责拉取，不刷误导性的重连日志
+  // No credentials/session yet (extension just reloaded, auth not pulled from the page) — wait quietly;
+  // startup query / page push / tab activation fetch it, avoid misleading reconnect logs
   if (!sessionId || !token || !baseUrl) return;
-  // 1) 完全没连接 → 直接连（SW 重启 / 流关闭后的兜底）
+  // 1) Not connected at all → connect directly (fallback after SW restart / stream close)
   if (!abortController || abortController.signal.aborted) {
     console.log('[AgentSphere] Keepalive: reconnecting SSE');
     connectSSE();
     return;
   }
-  // 2) 僵尸连接检测：后端每 15s 发心跳，长时间无任何 data → 判定挂起，主动重连
+  // 2) Zombie-connection detection: backend heartbeats every 15s; no data for too long → treat as stalled, reconnect
   if (lastDataAt && Date.now() - lastDataAt > ZOMBIE_STALE_MS) {
     console.warn('[AgentSphere] Keepalive: no SSE data for a while, reconnecting');
     abortController.abort();
@@ -57,7 +57,7 @@ function startSSE() {
       baseUrl = data.baseUrl;
       connectSSE();
     }
-    // SW 重启/扩展重载后自愈：等配置就绪后主动向当前激活的匹配 tab 拉取会话
+    // Self-heal after SW restart / extension reload: once config is ready, proactively pull the session from the active matching tab
     loadConfiguredUrls(() => queryActiveTabSession());
   });
 }
@@ -77,13 +77,13 @@ function loadConfiguredUrls(done) {
         : [];
     mainUrl = s.mainUrl || '';
     console.log('[AgentSphere] Config:', JSON.stringify({ frontendUrls, mainUrl }));
-    // 启动时对已打开的匹配页面补注入（如扩展刚重载）
+    // Re-inject into already-open matching tabs on startup (e.g. right after reload)
     injectMatchingTabs();
     if (typeof done === 'function') done();
   });
 }
 
-// --- 主动向匹配 tab 查询会话（SW 重启 / 扩展重载后自愈连接） ---
+// --- Proactively query the matching tab for a session (self-heal after SW restart / reload) ---
 function queryActiveTabSession() {
   chrome.tabs.query({}, (tabs) => {
     const matching = (tabs || []).filter(
@@ -92,7 +92,7 @@ function queryActiveTabSession() {
     const tab = matching.find((t) => t.active) || matching[0];
     if (!tab) {
       console.log(
-        '[AgentSphere] Startup: no matching tab found — 请打开 frontendUrls/mainUrl 下的页面',
+        '[AgentSphere] Startup: no matching tab found — open a page under frontendUrls/mainUrl',
       );
       return;
     }
@@ -102,7 +102,7 @@ function queryActiveTabSession() {
           console.log(
             '[AgentSphere] Startup: no session/token on tab',
             tab.url,
-            '— 请确认 widget 已登录并选中了会话',
+            '— make sure the widget is logged in and a session is selected',
           );
           return;
         }
@@ -133,7 +133,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
         : [];
     mainUrl = s.mainUrl || '';
     console.log('[AgentSphere] Settings changed:', JSON.stringify({ frontendUrls, mainUrl }));
-    // 首次保存默认配置后立即补注入 + 拉取当前页会话（无需等 SW 重启）
+    // After first saving default config, immediately re-inject + pull the current-page session (no SW restart needed)
     injectMatchingTabs();
     queryActiveTabSession();
   }
@@ -166,10 +166,10 @@ function injectMatchingTabs() {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!changeInfo.url) return;
   const url = changeInfo.url;
-  // 注入：主站聊天页或配置的前端站点（widget 宿主）
+  // Inject into: main-site chat page or configured frontend sites (widget hosts)
   if (shouldInject(url)) injectContentScript(tabId);
 
-  // 会话跟随：仅主站 /chat/<id>
+  // Session following: only main-site /chat/<id>
   const m = url.match(/\/chat\/(\d+)/);
   if (!m) return;
   const newSessionId = Number(m[1]);
@@ -211,6 +211,12 @@ chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
 
 // --- Listen for auth info from content script ---
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // After the user grants a site host permission from the popup, re-inject matching tabs and pull the session (self-heal)
+  if (msg.type === 'permissions-granted') {
+    console.log('[AgentSphere] site host permission granted, re-injecting and querying session');
+    loadConfiguredUrls(() => queryActiveTabSession());
+    return;
+  }
   if (msg.type === 'auth' && msg.token && msg.sessionId) {
     token = msg.token;
     sessionId = msg.sessionId;
@@ -229,7 +235,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return;
   }
-  // content.js 委托 executeJS → 走 chrome.debugger.Runtime.evaluate（绕过 CSP）
+  // content.js delegates executeJS → uses chrome.debugger.Runtime.evaluate (bypasses CSP)
   if (msg.type === 'execute_js') {
     (async () => {
       try {
@@ -256,17 +262,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ success: false, error: e.message });
       }
     })();
-    return true; // 异步回复
+    return true; // async reply
   }
 });
 
 // --- SSE Connection via fetch + ReadableStream (supports Authorization header) ---
-let activeConnectionKey = ''; // coalesce: 同一会话/凭据不重复重启连接
-let lastDataAt = 0;           // 最近收到任意 SSE data 的时间（僵尸连接检测）
-let reconnectAttempt = 0;     // 连续重连次数（指数退避）
+let activeConnectionKey = ''; // coalesce: do not restart the same session/credentials connection
+let lastDataAt = 0;           // time of last SSE data received (zombie-connection detection)
+let reconnectAttempt = 0;     // consecutive reconnect count (exponential backoff)
 const RECONNECT_BASE_MS = 5000;
 const RECONNECT_MAX_MS = 30000;
-const ZOMBIE_STALE_MS = 75000; // 后端每 15s 发心跳，超过该时长无任何 data → 判定僵尸连接
+const ZOMBIE_STALE_MS = 75000; // backend heartbeats every 15s; no data past this → treat as a zombie connection
 
 function scheduleReconnect() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -280,7 +286,7 @@ async function connectSSE() {
   if (!sessionId || !token || !baseUrl) return;
 
   const connectionKey = `${baseUrl}|${sessionId}|${token}`;
-  // 同一目标且已连接/连接中：直接忽略，绝不误杀现有连接
+  // Same target and already connected/connecting: ignore, never kill an existing connection
   if (connectionKey === activeConnectionKey) return;
   activeConnectionKey = connectionKey;
 
@@ -300,7 +306,7 @@ async function connectSSE() {
     });
 
     if (!response.ok) {
-      // 4xx = 会话/token 无效（如归属其他用户、会话不存在）—— 停止重试，等待下一次 auth/query_session 再连
+      // 4xx = invalid session/token (e.g. owned by another user, session missing) — stop retrying, wait for the next auth/query_session
       if (response.status >= 400 && response.status < 500) {
         console.warn('[AgentSphere] SSE rejected', response.status, '- waiting for a valid session');
         activeConnectionKey = '';
@@ -330,7 +336,7 @@ async function connectSSE() {
         const dataLine = part.startsWith('data:') ? part.slice(5).trim() : '';
         if (!dataLine) continue;
         lastDataAt = Date.now();
-        // 后端心跳（每 15s data:ping）不是 JSON：静默跳过并作为存活信号
+        // Backend heartbeat (data:ping every 15s) is not JSON: skip silently and treat as an aliveness signal
         if (!dataLine.startsWith('{')) continue;
         try {
           const msg = JSON.parse(dataLine);
@@ -348,14 +354,14 @@ async function connectSSE() {
       }
     }
 
-    // 流正常关闭（后端重启/超时等）：主动重连，带退避
+    // Stream closed normally (backend restart/timeout etc.): reconnect actively with backoff
     console.warn('[AgentSphere] SSE stream closed, reconnecting');
     activeConnectionKey = '';
     abortController = null;
     updatePopupStatus(false);
     scheduleReconnect();
   } catch (e) {
-    if (e.name === 'AbortError') return; // 由更新的连接主动中止，状态归新连接所有
+    if (e.name === 'AbortError') return; // aborted by a newer connection; state belongs to the new connection
     console.warn('[AgentSphere] SSE error, reconnecting:', e.message);
     updatePopupStatus(false);
     activeConnectionKey = '';
@@ -379,6 +385,14 @@ async function sendMessageWithRetry(tabId, msg, maxRetries = 5) {
   }
 }
 
+// --- Self-heal after a per-site optional host permission is granted: re-inject + pull session ---
+if (chrome.permissions && typeof chrome.permissions.onAdded === 'function') {
+  chrome.permissions.onAdded.addListener(() => {
+    console.log('[AgentSphere] host permission granted (onAdded), re-injecting');
+    loadConfiguredUrls(() => queryActiveTabSession());
+  });
+}
+
 // --- Inject content script into a tab on demand ---
 async function injectContentScript(tabId) {
   try {
@@ -387,11 +401,15 @@ async function injectContentScript(tabId) {
       files: ['content.js'],
     });
   } catch (e) {
-    // 已存在或注入失败，静默忽略
+    // Already exists or injection failed; if due to missing host permission, warn once
+    if (e?.message && /host permission|Cannot access|permission/i.test(e.message)) {
+      console.warn('[AgentSphere] Content script injection blocked for tab', tabId,
+        '— grant access to the current page in the extension popup', e.message);
+    }
   }
 }
 
-// --- 切到已打开的匹配 tab 时补注入 + 查询其会话并自动跟随 ---
+// --- When switching to an already-open matching tab: inject + query its session and follow it ---
 chrome.tabs.onActivated.addListener((activeInfo) => {
   chrome.tabs.get(activeInfo.tabId, (tab) => {
     if (!tab || tab.id == null || !shouldInject(tab.url || '')) return;

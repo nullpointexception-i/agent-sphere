@@ -1,0 +1,32 @@
+# Chrome Web Store — Permission Justifications (en)
+
+Below are the justifications for each permission (each < 1000 characters, ready to paste into the store submission form).
+
+## tabs
+When the user asks the AgentSphere AI agent (running at as.buukle.top) to complete an automated task, the agent must be able to operate on the user's target tab. This permission lets the extension enumerate open tabs, identify the tab the user is currently viewing, follow tab switching, and keep track of the tab being controlled (open/close/URL changes) so browser commands are always routed to the correct page.
+
+## scripting
+The AI agent performs real operations on the pages the user chooses (click, type, extract content, fill forms). This requires the extension to inject its content script into the active or controlled tab on demand. In Manifest V3, programmatic injection must go through the chrome.scripting API, which is the only supported way to run the extension's logic inside the target page. Injection happens only when a browser operation is requested by the agent.
+
+## storage
+The extension needs to persist small, non-sensitive settings locally: the backend and frontend URLs the user configures in the popup, the current connection state, the active session id, and a short operation log. All data is kept in chrome.storage.local on the user's own machine; nothing is uploaded to any third party.
+
+## activeTab
+Provides one-shot access to the currently active tab when the user actively interacts with the extension (e.g. opens the popup or requests an operation). It ensures commands act on the tab the user is actually viewing while limiting broad access when the extension is idle.
+
+## alarms
+The extension maintains a persistent SSE bridge to the AgentSphere backend. In Manifest V3, the background service worker can be suspended when idle, so the extension uses chrome.alarms to periodically wake it up and run keep-alive checks: reconnect a dropped SSE stream, and detect a zombie connection when no heartbeat is received. This keeps the bridge reliable without keeping the worker awake constantly.
+
+## debugger
+The AI agent may ask the extension to execute JavaScript on the target page (e.g. to extract dynamic data) and to capture screenshots for real-time visual feedback. The chrome.debugger API (Runtime.evaluate and Page.captureScreenshot) is used solely for these agent-requested operations. It is the reliable way to evaluate JS in the page context in Manifest V3. The debugger is only attached while an operation is running and is detached afterwards.
+
+## webNavigation
+The agent needs to know the current page at all times so it can operate on the right content. This permission detects URL changes, single-page-application (SPA) route changes, and new-tab navigation events, letting the extension keep the agent's session in sync with the page the user is browsing and re-inject the content script when needed.
+
+## host permissions (需请求主机权限的理由 / 843 chars)
+The extension does NOT request access to all websites (<all_urls>) — neither at install nor as an optional permission. It requests host access only to the specific sites it needs: http(s)://as.buukle.top (the AgentSphere main site and backend, which the service worker connects to over SSE/API to drive automation), http(s)://bole.buukle.top (an integrated host page), and http://localhost and http://127.0.0.1 (local development). No other site is granted at install. For the page the user is currently viewing, activeTab provides temporary access when the user opens the popup. Any additional site the agent must operate on is requested individually at runtime via chrome.permissions.request from the popup ("Grant access to current page"), each approved through Chrome's permission dialog. Nothing is accessed without explicit user consent.
+
+## Remote Code
+
+English:
+Yes. The AgentSphere AI agent (the user's own backend service) can instruct the extension to execute JavaScript on the page the user has chosen, via the executeJS browser operation using chrome.debugger Runtime.evaluate, so it can read dynamic content or interact with the page. This only happens when the user actively asks the agent to complete an automated task on a page; code runs in the page context only while an operation is in progress. The extension itself (service worker / popup) never loads third-party scripts, and there is no background or idle-time execution.

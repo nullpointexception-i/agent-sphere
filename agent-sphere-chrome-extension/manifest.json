@@ -1,17 +1,29 @@
 {
   "manifest_version": 3,
   "name": "AgentSphere",
-  "version": "1.0",
+  "version": "1.0.0",
   "description": "Bridges AgentSphere AI with your browser for automated operations",
+  "homepage_url": "https://github.com/nullpointexception-i/agent-sphere",
   "permissions": ["tabs", "scripting", "storage", "activeTab", "alarms", "debugger", "webNavigation"],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "http://as.buukle.top/*",
+    "https://as.buukle.top/*",
+    "http://bole.buukle.top/*",
+    "https://bole.buukle.top/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
+    "default_title": "AgentSphere",
     "default_popup": "popup.html"
   },
   "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
     "128": "icon-128.png"
   },
   "web_accessible_resources": [{

@@ -88,18 +88,23 @@
         <div class="info-row"><span class="label">Main</span><span class="value" id="infoMain">-</span></div>
         <div class="info-row"><span class="label">Backend</span><span class="value" id="infoBackend">-</span></div>
       </div>
+      <div id="permNotice" class="card" style="margin-top:10px;background:#fff4e6;display:none">
+        <div style="font-weight:600;color:#8a5a00;margin-bottom:4px">Access to this page is required</div>
+        <div class="help-text" style="color:#8a5a00">To let the AI agent operate on the current page, please grant access to this site below (one site at a time).</div>
+        <button id="btnEnablePerm" class="btn btn-primary" style="margin-top:8px">Grant access to current page</button>
+      </div>
     </div>
 
     <!-- Settings Panel -->
     <div id="panelSettings" class="panel">
       <div class="card">
         <div class="field">
-          <label>Frontend URLs（widget 宿主页，可多个）</label>
+          <label>Frontend URLs (widget host pages, multiple allowed)</label>
           <div id="frontendUrlList"></div>
-          <button id="btnAddFrontend" class="btn btn-ghost">+ 添加</button>
+          <button id="btnAddFrontend" class="btn btn-ghost">+ Add</button>
         </div>
         <div class="field">
-          <label>Main URL（主站）</label>
+          <label>Main URL (main site)</label>
           <input id="inputMain" type="url" placeholder="http://as.buukle.top">
         </div>
         <div class="field">
@@ -107,7 +112,7 @@
           <input id="inputBackend" type="url" placeholder="http://as.buukle.top">
         </div>
         <button id="btnSave" class="btn btn-primary">Save Settings</button>
-        <div class="help-text">在此列表或主站 /chat/&lt;id&gt; 页打开时自动注入并跟随会话；切 tab 自动切换会话。</div>
+        <div class="help-text">Auto-injects and follows the session when a page in this list or the main site /chat/&lt;id&gt; page is open; switching tabs switches the session automatically.</div>
       </div>
     </div>
 

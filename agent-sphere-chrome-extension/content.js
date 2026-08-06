@@ -25,8 +25,8 @@
   let pendingSessionToast = false;
   let sessionMissingLogged = false;
 
-  // widget 会话缓存：由 page-script.js（MAIN world）经 postMessage 转发，
-  // 因为 content script 在 ISOLATED world，无法读取页面的 sessionStorage
+  // widget session cache: forwarded by page-script.js (MAIN world) via postMessage,
+  // because the content script runs in an ISOLATED world and cannot read the page's sessionStorage
   let widgetSessionCache = null;
 
   window.addEventListener('message', (event) => {
@@ -65,13 +65,13 @@
     }).catch(() => {});
   }
 
-  // 解析当前页面的会话（主站 localStorage + /chat/<id>，或 widget sessionStorage 桥），不去重
+  // Resolve the current page's session (main-site localStorage + /chat/<id>, or the widget sessionStorage bridge); no dedup
   async function resolveSession() {
     try {
       const settings = await getSettings();
       const baseUrl = settings.backendUrl || 'http://localhost:8080';
 
-      // widget：抽屉/第三方站点嵌入（sessionStorage 桥，由 page-script.js 转发缓存）
+      // widget: drawer / third-party site embedding (sessionStorage bridge, cached from page-script.js)
       if (widgetSessionCache) {
         return {
           token: widgetSessionCache.user.token,
@@ -81,7 +81,7 @@
         };
       }
 
-      // 主站：localStorage['agent-user'] + /chat/<id>
+      // Main site: localStorage['agent-user'] + /chat/<id>
       const raw = localStorage.getItem('agent-user');
       if (raw) {
         const user = JSON.parse(raw);
@@ -110,7 +110,7 @@
         if (!sessionMissingLogged) {
           sessionMissingLogged = true;
           console.warn(
-            '[AgentSphere] No session/token on this page — 请确认 widget 已登录并选中会话',
+            '[AgentSphere] No session/token on this page — make sure the widget is logged in and a session is selected',
             location.href,
           );
         }
@@ -142,7 +142,7 @@
   checkAuth().catch(() => {});
   setInterval(() => { checkAuth().catch(() => {}); }, 1000);
 
-  // widget 会话切换即时事件（sessionStorage 桥的即时补充，不等 1s 轮询）
+  // Immediate event for widget session switches (instant complement to the sessionStorage bridge, no 1s polling wait)
   window.addEventListener('agent-sphere:session-change', () => {
     checkAuth().catch(() => {});
   });
@@ -246,7 +246,7 @@
     const currentText = el.textContent || '';
     const finalText = isAppend ? currentText + text : text;
 
-    // Strategy 1: Paste 模拟（触发 Draft.js handlePastedText → React state 更新）
+    // Strategy 1: Paste simulation (triggers Draft.js handlePastedText → React state update)
     const dt = new DataTransfer();
     dt.setData('text/plain', finalText);
     dt.setData('text/html', `<p>${finalText.replace(/\n/g, '</p><p>')}</p>`);
@@ -255,13 +255,13 @@
     }));
     dt.clearData();
 
-    // 验证：等 React batch update 后检查文本是否写入
+    // Verify: after React's batch update, check whether the text was written
     await new Promise(r => setTimeout(r, 50));
     if ((el.textContent || '').includes(finalText.slice(0, 20))) {
       return { success: true, method: 'draft-paste' };
     }
 
-    // Strategy 2: execCommand 兜底（Draft.js 部分版本响应 insertText）
+    // Strategy 2: execCommand fallback (some Draft.js versions respond to insertText)
     const sel = window.getSelection();
     sel.collapse(el, el.childNodes.length);
     document.execCommand('insertText', false, finalText);
@@ -358,7 +358,7 @@
   // --- Listen for browser operation commands from background ---
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'query_session') {
-      // tab 激活时 background 查询当前页会话（不做去重，让 background 决定是否重连）
+      // When the tab is activated, background queries the current page's session (no dedup; background decides whether to reconnect)
       resolveSession().then((info) => sendResponse(info || null));
       return true;
     }
@@ -412,7 +412,7 @@
           }
           if (!el && params.text) el = document.querySelector(`[aria-label="${params.text}"]`);
           if (!el) return { success: false, error: 'Element not found: ' + (params.selector || params.text) };
-          // 表单提交类元素 → 提取 action URL，不依赖 click()
+          // Form submit elements → extract the action URL instead of relying on click()
           const isSubmitBtn = (el.tagName === 'BUTTON' && el.type === 'submit')
             || (el.tagName === 'INPUT' && el.type === 'submit');
           if (isSubmitBtn && el.form) {
@@ -423,7 +423,7 @@
             }
             return { success: true, data: { _submitUrl: url.href, tag: 'form', text: el.textContent?.trim().slice(0, 100) } };
           }
-          // <form> 元素本身 → 提取 action + 第一输入项
+          // <form> element itself → extract action + first input
           if (el.tagName === 'FORM') {
             const formData = new FormData(el);
             const url = new URL(el.action || location.href);
@@ -453,7 +453,7 @@
           let el = document.querySelector(params.selector);
           if (!el) return { success: false, error: 'Input not found: ' + params.selector };
 
-          // 如果选中的是非编辑 DIV，向内找 contenteditable 子元素
+          // If the selected element is a non-editable DIV, look for a contenteditable child inside
           if (el.tagName === 'DIV' && !el.isContentEditable) {
             const inner = el.querySelector('[contenteditable="true"]');
             if (inner) el = inner;
@@ -476,7 +476,7 @@
             case 'input':
               return typeInInput(el, params.text, isAppend);
             default:
-              // 未知类型 — 尝试降级链
+              // Unknown type — try the fallback chain
               if (el.isContentEditable) {
                 return typeInContentEditable(el, params.text, isAppend);
               }

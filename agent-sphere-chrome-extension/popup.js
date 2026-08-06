@@ -21,7 +21,49 @@
     });
   });
 
-  // --- Frontend URL rows (动态多行) ---
+  // --- Per-site optional host permissions: <all_urls> is not declared; specific sites are granted at runtime ---
+  function getActiveOrigin() {
+    return new Promise((resolve) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const url = tabs && tabs[0] && tabs[0].url;
+        if (!url) return resolve(null);
+        try {
+          const u = new URL(url);
+          if (u.protocol === 'http:' || u.protocol === 'https:') resolve(u.origin);
+          else resolve(null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  async function refreshPermission() {
+    const origin = await getActiveOrigin();
+    const el = document.getElementById('permNotice');
+    if (!el) return;
+    if (!origin) {
+      el.style.display = 'none';
+      return;
+    }
+    chrome.permissions.contains({ origins: [origin + '/*'] }, (has) => {
+      el.style.display = has ? 'none' : 'block';
+    });
+  }
+
+  document.getElementById('btnEnablePerm').addEventListener('click', async () => {
+    const origin = await getActiveOrigin();
+    if (!origin) return;
+    chrome.permissions.request({ origins: [origin + '/*'] }, (granted) => {
+      if (granted) {
+        refreshPermission();
+        // Notify background: permission is ready, re-inject and query the session
+        chrome.runtime.sendMessage({ type: 'permissions-granted' }).catch(() => {});
+      }
+    });
+  });
+
+  // --- Frontend URL rows (dynamic multi-row) ---
   function createFrontendRow(value) {
     const row = document.createElement('div');
     row.className = 'frontend-row';
@@ -124,9 +166,11 @@
 
   // Initial load
   chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'settings', 'logs'], render);
+  refreshPermission();
 
   // Listen for changes
   chrome.storage.onChanged.addListener(() => {
     chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'settings', 'logs'], render);
   });
+  chrome.permissions.onRemoved.addListener(refreshPermission);
 })();
