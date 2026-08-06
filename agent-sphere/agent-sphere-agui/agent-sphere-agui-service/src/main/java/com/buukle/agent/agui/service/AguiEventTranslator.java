@@ -131,38 +131,38 @@ public class AguiEventTranslator {
             return out;
         }
         if (type instanceof ToolCallStatus tool) {
-            String toolCallId = data.getPublishId() != null ? data.getPublishId() : AguiConstants.TOOL_CALL_ID_FALLBACK_PREFIX + runId;
+            // 底层 publishId（模型侧工具调用 id）可能在同会话内被复用（ReAct 重调/resume/模型复用），
+            // 直接作为 AG-UI toolCallId 会导致前端出现重复 id → React duplicate-key 警告。
+            // 打开时统一替换为 <base>-<runId>-<seq> 唯一 id，START/ARGS/RESULT/END 全程用唯一 id 关联。
+            String toolCallBaseId = data.getPublishId() != null
+                    ? data.getPublishId() : AguiConstants.TOOL_CALL_ID_FALLBACK_PREFIX + runId;
             switch (tool) {
                 case PENDING -> {
                     closeOpenToolCall(out, state);
-                    state.toolCallId = toolCallId;
-                    state.toolRunId = runId;
-                    out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, displayName(data))));
+                    openToolCall(out, state, toolCallBaseId, runId, displayName(data));
                 }
                 case RUNNING -> {
-                    if (!isOpenToolCall(state, toolCallId, runId)) {
-                        openToolCall(out, state, toolCallId, runId, displayName(data));
+                    if (!isOpenToolCall(state, toolCallBaseId, runId)) {
+                        openToolCall(out, state, toolCallBaseId, runId, displayName(data));
                     }
-                    out.add(ev(AguiEventType.TOOL_CALL_ARGS, toolArgs(toolCallId, data.getArgumentsJson())));
+                    out.add(ev(AguiEventType.TOOL_CALL_ARGS, toolArgs(state.toolCallId, data.getArgumentsJson())));
                 }
                 case SUCCEEDED -> {
-                    if (!isOpenToolCall(state, toolCallId, runId)) {
-                        openToolCall(out, state, toolCallId, runId, displayName(data));
+                    if (!isOpenToolCall(state, toolCallBaseId, runId)) {
+                        openToolCall(out, state, toolCallBaseId, runId, displayName(data));
                     }
-                    out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(toolCallId, data.getArtifact())));
-                    out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(toolCallId)));
-                    state.toolCallId = null;
-                    state.toolRunId = null;
+                    out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(state.toolCallId, data.getArtifact())));
+                    out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(state.toolCallId)));
+                    closeToolCallState(state);
                     maybeEmitTodosSnapshot(out, data.getArtifact());
                 }
                 case FAILED -> {
-                    if (!isOpenToolCall(state, toolCallId, runId)) {
-                        openToolCall(out, state, toolCallId, runId, displayName(data));
+                    if (!isOpenToolCall(state, toolCallBaseId, runId)) {
+                        openToolCall(out, state, toolCallBaseId, runId, displayName(data));
                     }
-                    out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(toolCallId, data.getErrorMessage())));
-                    out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(toolCallId)));
-                    state.toolCallId = null;
-                    state.toolRunId = null;
+                    out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(state.toolCallId, data.getErrorMessage())));
+                    out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(state.toolCallId)));
+                    closeToolCallState(state);
                 }
                 default -> {
                 }
@@ -286,10 +286,30 @@ public class AguiEventTranslator {
         return map;
     }
 
-    private static boolean isOpenToolCall(RunStreamState state, String toolCallId, String runId) {
-        return state.toolCallId != null
-                && state.toolCallId.equals(toolCallId)
+    private static boolean isOpenToolCall(RunStreamState state, String toolCallBaseId, String runId) {
+        return state.toolCallBaseId != null
+                && state.toolCallBaseId.equals(toolCallBaseId)
                 && Objects.equals(state.toolRunId, runId);
+    }
+
+    /**
+     * 打开一次工具调用：为当前 (publishId, runId, seq) 分配 AG-UI 唯一 toolCallId。
+     * 同 run 内重复出现同一 base id 时 seq 递增，跨 run 时 runId 不同 → 全局唯一。
+     */
+    private static void openToolCall(List<AguiEventVO> out, RunStreamState state,
+                                     String toolCallBaseId, String runId, String toolName) {
+        if (state.lastToolCallBaseId != null && state.lastToolCallBaseId.equals(toolCallBaseId)) {
+            log.warn("AG-UI translator: toolCallId '{}' repeated in run {}, assigning unique id", toolCallBaseId, runId);
+        }
+        closeOpenToolCall(out, state);
+        state.toolCallBaseId = toolCallBaseId;
+        state.toolCallId = uniqueToolCallId(toolCallBaseId, runId, ++state.toolCallSeq);
+        state.toolRunId = runId;
+        out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(state.toolCallId, toolName)));
+    }
+
+    private static String uniqueToolCallId(String toolCallBaseId, String runId, int seq) {
+        return toolCallBaseId + "-" + runId + "-" + seq;
     }
 
     /**
@@ -304,14 +324,6 @@ public class AguiEventTranslator {
             return data.getDisplayNameEn();
         }
         return data.getToolName();
-    }
-
-    private static void openToolCall(List<AguiEventVO> out, RunStreamState state,
-                                     String toolCallId, String runId, String toolName) {
-        closeOpenToolCall(out, state);
-        state.toolCallId = toolCallId;
-        state.toolRunId = runId;
-        out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, toolName)));
     }
 
     private static boolean isTerminal(EventType type) {
@@ -347,9 +359,15 @@ public class AguiEventTranslator {
     private static void closeOpenToolCall(List<AguiEventVO> out, RunStreamState state) {
         if (state.toolCallId != null) {
             out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(state.toolCallId)));
-            state.toolCallId = null;
-            state.toolRunId = null;
+            closeToolCallState(state);
         }
+    }
+
+    private static void closeToolCallState(RunStreamState state) {
+        state.lastToolCallBaseId = state.toolCallBaseId;
+        state.toolCallBaseId = null;
+        state.toolCallId = null;
+        state.toolRunId = null;
     }
 
     /**
@@ -496,8 +514,11 @@ public class AguiEventTranslator {
         private String textRunId;
         private boolean reasoningOpen;
         private String reasoningRunId;
+        private String toolCallBaseId;
         private String toolCallId;
         private String toolRunId;
+        private int toolCallSeq;
+        private String lastToolCallBaseId;
         private PendingClarification pendingClarification;
     }
 

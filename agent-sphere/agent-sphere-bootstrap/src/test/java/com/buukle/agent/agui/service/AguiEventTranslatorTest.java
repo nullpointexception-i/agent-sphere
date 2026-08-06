@@ -124,12 +124,12 @@ class AguiEventTranslatorTest {
         assertThat(events).extracting(AguiEventVO::getName).containsExactly(
                 "TOOL_CALL_START", "TOOL_CALL_RESULT", "TOOL_CALL_END");
         JsonNode start = read(events.get(0));
-        assertThat(start.get("toolCallId").asText()).isEqualTo("tool_1");
+        assertThat(start.get("toolCallId").asText()).isEqualTo("tool_1-10-1");
         assertThat(start.get("toolCallName").asText()).isEqualTo("search_web");
         JsonNode result = read(events.get(1));
-        assertThat(result.get("toolCallId").asText()).isEqualTo("tool_1");
+        assertThat(result.get("toolCallId").asText()).isEqualTo("tool_1-10-1");
         assertThat(result.get("content").asText()).isEqualTo("{}");
-        assertThat(result.get("messageId").asText()).isEqualTo("tool-result-tool_1");
+        assertThat(result.get("messageId").asText()).isEqualTo("tool-result-tool_1-10-1");
     }
 
     @Test
@@ -185,7 +185,7 @@ class AguiEventTranslatorTest {
 
         assertThat(events).extracting(AguiEventVO::getName).containsExactly(
                 "TOOL_CALL_END", "RUN_FINISHED");
-        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1");
+        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1-10-1");
     }
 
     @Test
@@ -198,8 +198,24 @@ class AguiEventTranslatorTest {
 
         assertThat(events).extracting(AguiEventVO::getName).containsExactly(
                 "TOOL_CALL_END", "TOOL_CALL_START");
-        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1");
-        assertThat(read(events.get(1)).get("toolCallId").asText()).isEqualTo("tool_2");
+        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1-10-1");
+        assertThat(read(events.get(1)).get("toolCallId").asText()).isEqualTo("tool_2-10-2");
+    }
+
+    @Test
+    void sameToolCallIdRepeated_shouldAssignDistinctUniqueIds() throws Exception {
+        translator.translate(new RuntimeEventVO(
+                ToolCallStatus.PENDING, data(1L, 10L).setToolName("a").setPublishId("tool_1")));
+        translator.translate(new RuntimeEventVO(
+                ToolCallStatus.SUCCEEDED, data(1L, 10L).setToolName("a").setPublishId("tool_1").setArtifact("{}")));
+
+        // 同一 run 内复用同一 publishId（模型 ReAct 重调）→ 必须分配不同 toolCallId，
+        // 否则前端出现重复 id 触发 React duplicate-key 警告
+        List<AguiEventVO> events = translator.translate(new RuntimeEventVO(
+                ToolCallStatus.PENDING, data(1L, 10L).setToolName("a").setPublishId("tool_1")));
+
+        assertThat(events).extracting(AguiEventVO::getName).containsExactly("TOOL_CALL_START");
+        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1-10-2");
     }
 
     @Test
@@ -213,9 +229,9 @@ class AguiEventTranslatorTest {
 
         assertThat(events).extracting(AguiEventVO::getName).containsExactly(
                 "TOOL_CALL_END", "TOOL_CALL_START", "TOOL_CALL_ARGS");
-        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1");
-        assertThat(read(events.get(1)).get("toolCallId").asText()).isEqualTo("tool_2");
-        assertThat(read(events.get(2)).get("toolCallId").asText()).isEqualTo("tool_2");
+        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1-10-1");
+        assertThat(read(events.get(1)).get("toolCallId").asText()).isEqualTo("tool_2-10-2");
+        assertThat(read(events.get(2)).get("toolCallId").asText()).isEqualTo("tool_2-10-2");
     }
 
     @Test
@@ -230,7 +246,7 @@ class AguiEventTranslatorTest {
 
         assertThat(events).extracting(AguiEventVO::getName).containsExactly(
                 "TOOL_CALL_START", "TOOL_CALL_ARGS");
-        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1");
+        assertThat(read(events.get(0)).get("toolCallId").asText()).isEqualTo("tool_1-11-1");
     }
 
     @Test
