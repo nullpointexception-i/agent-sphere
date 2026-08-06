@@ -144,12 +144,6 @@ export function Root({ config }: RootProps) {
     [config],
   );
 
-  const handleLogout = useCallback(() => {
-    clearUser();
-    setUserState(null);
-    setPhase('login');
-  }, []);
-
   if (phase === 'booting') {
     return <div className="aw-booting">加载中…</div>;
   }
@@ -164,5 +158,5 @@ export function Root({ config }: RootProps) {
     );
   }
 
-  return <CopilotView config={config} user={user} onLogout={handleLogout} />;
+  return <CopilotView config={config} user={user} />;
 }

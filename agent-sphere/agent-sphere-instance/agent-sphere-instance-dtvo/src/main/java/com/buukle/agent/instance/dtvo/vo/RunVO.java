@@ -17,5 +17,7 @@ public class RunVO implements Serializable {
     private String delivery;
     private String createdBy;
     private String createdAt;
+    /** 该 run 是否为澄清应答（userMessage 携带澄清恢复前缀），展示层据此跳过独立用户气泡 */
+    private boolean clarificationResponse;
     private List<ClarificationVO> clarifications;
 }

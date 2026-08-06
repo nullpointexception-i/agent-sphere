@@ -20,6 +20,13 @@ export interface InstanceVO {
   updatedAt: string;
 }
 
+export interface InstancePageVO {
+  records: InstanceVO[];
+  total: number;
+  current: number;
+  pages: number;
+}
+
 export interface SessionVO {
   id: number;
   title: string;
@@ -29,10 +36,34 @@ export interface SessionVO {
   updatedAt: string;
 }
 
+export interface ClarificationVO {
+  clarificationId: string;
+  runId: number;
+  sessionId: number;
+  messageId: number;
+  title: string;
+  type: string;
+  options: string;
+  userResponse: string;
+  status: string;
+}
+
 export interface RunVO {
   id: number;
   sessionId: number;
   userMessage: string;
   assistantReply: string;
   createdAt: string;
+  clarificationResponse?: boolean;
+  clarifications?: ClarificationVO[];
+}
+
+export interface SessionTodoVO {
+  id: number;
+  sessionId: number;
+  runId: number;
+  content: string;
+  status: string;
+  priority: string;
+  sortOrder: number;
 }

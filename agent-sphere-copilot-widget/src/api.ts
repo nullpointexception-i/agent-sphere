@@ -1,10 +1,10 @@
-import { getToken } from './auth';
+import { clearUser, getToken } from './auth';
 import {
   SSO_AUTHORIZE_PATH,
   SSO_EXCHANGE_PATH,
   type WidgetConfig,
 } from './config';
-import type { InstanceVO, RunVO, SessionVO, UserVO } from './types';
+import type { InstancePageVO, InstanceVO, RunVO, SessionTodoVO, SessionVO, UserVO } from './types';
 
 export interface ErrorBody {
   errorCode?: string;
@@ -54,6 +54,10 @@ async function request<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
   const response = await fetch(buildUrl(base, path, params), { ...init, headers });
+  if (response.status === 401) {
+    clearUser();
+    window.dispatchEvent(new CustomEvent('agent-sphere:logout'));
+  }
   if (!response.ok) {
     let body: ErrorBody = {};
     try {
@@ -91,6 +95,20 @@ export function ssoExchange(base: string, otc: string): Promise<UserVO> {
 
 export function listInstances(base: string): Promise<InstanceVO[]> {
   return request(base, '/instance/instances/all');
+}
+
+export function listInstancesPage(
+  base: string,
+  page = 1,
+  size = 20,
+): Promise<InstancePageVO> {
+  return request(base, '/instance/instances', {
+    params: { page: String(page), size: String(size) },
+  });
+}
+
+export function getTodos(base: string, sessionId: number): Promise<SessionTodoVO[]> {
+  return request(base, `/instance/sessions/${sessionId}/todos`);
 }
 
 export function listSessions(
@@ -143,7 +161,7 @@ export interface ApiClient {
   ssoAuthorize: (provider: string, redirectUri: string, prompt?: string) => Promise<string>;
   ssoExchange: (otc: string) => Promise<UserVO>;
   listInstances: () => Promise<InstanceVO[]>;
-  listSessions: () => Promise<SessionVO[]>;
+  listSessions: (offset?: number, limit?: number, keyword?: string) => Promise<SessionVO[]>;
   createSession: (agentInstanceId: number, title: string) => Promise<SessionVO>;
   renameSession: (id: number, title: string) => Promise<SessionVO>;
   closeSession: (id: number) => Promise<void>;
@@ -152,6 +170,8 @@ export interface ApiClient {
     page?: number,
     size?: number,
   ) => Promise<{ records: RunVO[]; total: number }>;
+  listInstancesPage: (page?: number, size?: number) => Promise<InstancePageVO>;
+  getTodos: (sessionId: number) => Promise<SessionTodoVO[]>;
 }
 
 export function createApi(config: WidgetConfig): ApiClient {
@@ -161,10 +181,12 @@ export function createApi(config: WidgetConfig): ApiClient {
       ssoAuthorize(base, provider, redirectUri, prompt).then((v) => v.authorizeUrl),
     ssoExchange: (otc) => ssoExchange(base, otc),
     listInstances: () => listInstances(base),
-    listSessions: () => listSessions(base),
+    listSessions: (offset, limit, keyword) => listSessions(base, offset, limit, keyword),
     createSession: (agentInstanceId, title) => createSession(base, agentInstanceId, title),
     renameSession: (id, title) => renameSession(base, id, title),
     closeSession: (id) => closeSession(base, id),
     listRuns: (sessionId, page, size) => listRuns(base, sessionId, page, size),
+    listInstancesPage: (page, size) => listInstancesPage(base, page, size),
+    getTodos: (sessionId) => getTodos(base, sessionId),
   };
 }

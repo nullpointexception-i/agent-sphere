@@ -160,7 +160,7 @@ public class SessionRunner {
 
             if (!hasToolCalls) {
                 if (messages.isEmpty()) {
-                    titleService.generateIfNeeded(ctx, input.text(), sessionId);
+                    titleService.generateIfNeeded(ctx, input.text(), sessionId, currentRunId);
                     String todolistText = null;
                     try {
                         AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
@@ -209,7 +209,7 @@ public class SessionRunner {
                         log.info("Compaction triggered, reassembling messages (attempt {})", compactionRetries);
                         String userText = input != null ? input.text() : "";
                         messages.clear();
-                        titleService.generateIfNeeded(ctx, userText, sessionId);
+                        titleService.generateIfNeeded(ctx, userText, sessionId, currentRunId);
                         String todolistText = null;
                         try {
                             AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(

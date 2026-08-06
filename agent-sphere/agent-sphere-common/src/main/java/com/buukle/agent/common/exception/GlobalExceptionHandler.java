@@ -17,7 +17,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BizException.class)
     public ResponseEntity<ErrorResponse> handleBizException(BizException e) {
         log.warn("BizException: code={}, message={}", e.getErrorCode(), e.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        HttpStatus status = CommonErrorCode.FORBIDDEN.getCode().equals(e.getErrorCode())
+                ? HttpStatus.FORBIDDEN
+                : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
                 .body(new ErrorResponse(e.getErrorCode(), e.getMessage(), e.getUserTip()));
     }
 

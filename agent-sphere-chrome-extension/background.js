@@ -181,10 +181,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // --- SSE Connection via fetch + ReadableStream (supports Authorization header) ---
+let activeConnectionKey = ''; // coalesce: 同一会话/凭据不重复重启连接
+
 async function connectSSE() {
   if (abortController) { abortController.abort(); abortController = null; }
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (!sessionId || !token || !baseUrl) return;
+
+  const connectionKey = `${baseUrl}|${sessionId}|${token}`;
+  if (connectionKey === activeConnectionKey) return; // 已在连接/已连接同一目标
+  activeConnectionKey = connectionKey;
 
   const url = `${baseUrl}/api/v1/runtime/${sessionId}/stream`;
   console.log('[AgentSphere] Connecting SSE:', url);
@@ -198,6 +204,13 @@ async function connectSSE() {
     });
 
     if (!response.ok) {
+      // 4xx = 会话/token 无效（如归属其他用户、会话不存在）—— 停止重试，等待下一次 auth/query_session 再连
+      if (response.status >= 400 && response.status < 500) {
+        console.warn('[AgentSphere] SSE rejected', response.status, '- waiting for a valid session');
+        activeConnectionKey = '';
+        updatePopupStatus(false);
+        return;
+      }
       throw new Error(`SSE connection failed: ${response.status}`);
     }
 
@@ -235,10 +248,14 @@ async function connectSSE() {
         }
       }
     }
+    // 流正常关闭：允许后续对同一会话重连
+    activeConnectionKey = '';
+    updatePopupStatus(false);
   } catch (e) {
     if (e.name === 'AbortError') return;
     console.warn('[AgentSphere] SSE error, reconnecting in 5s:', e.message);
     updatePopupStatus(false);
+    activeConnectionKey = '';
     reconnectTimer = setTimeout(connectSSE, 5000);
   }
 }

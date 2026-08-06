@@ -29,8 +29,8 @@
 
 .aw-view {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  gap: 10px;
   box-sizing: border-box;
   height: 100%;
   max-height: min(92vh, 720px);
@@ -45,10 +45,190 @@
   overflow: hidden;
 }
 
+.aw-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fbfcfe;
+}
+
+.aw-sidebar {
+  width: 210px;
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid #e5e7eb;
+  padding: 10px 8px 10px 0;
+  background: #fbfcfe;
+}
+
+.aw-sidebar-title {
+  flex-shrink: 0;
+  padding: 4px 8px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+}
+
+.aw-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.aw-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.aw-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.aw-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.aw-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.aw-agent-list {
+  flex: 0 1 auto;
+  max-height: 220px;
+  min-height: 42px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.aw-session-list {
+  flex: 1 1 auto;
+  min-height: 100px;
+}
+
+.aw-item {
+  margin: 2px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aw-item-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aw-item-edit {
+  flex-shrink: 0;
+  display: none;
+  color: #9ca3af;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 1px 3px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.aw-item-edit:hover {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.aw-item-archive:hover {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.aw-item:hover .aw-item-edit {
+  display: inline-block;
+}
+
+.aw-item:hover {
+  background: #f3f4f6;
+}
+
+.aw-item-active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+  border-color: #dbeafe;
+}
+
+.aw-item-hint {
+  padding: 6px 10px;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.aw-item-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.aw-item-ok {
+  color: #16a34a;
+}
+
+.aw-item-ok:hover {
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
+.aw-item-cancel {
+  color: #9ca3af;
+}
+
+.aw-item-cancel:hover {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.aw-archive-hint {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+.aw-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .aw-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  min-height: 42px;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .aw-select {
@@ -67,30 +247,22 @@
   flex: 0 0 auto;
 }
 
-.aw-button {
-  padding: 6px 12px;
-  border: none;
+.aw-new-session {
+  flex-shrink: 0;
+  margin: 4px 8px 2px 10px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
   border-radius: 8px;
-  background: #2563eb;
-  color: #fff;
+  background: #fff;
+  color: #2563eb;
   font-size: 13px;
   cursor: pointer;
-  white-space: nowrap;
+  text-align: center;
 }
 
-.aw-button:hover {
-  background: #1d4ed8;
-}
-
-.aw-button-ghost {
-  background: transparent;
-  color: #6b7280;
-  border: 1px solid #d1d5db;
-}
-
-.aw-button-ghost:hover {
-  background: #f3f4f6;
-  color: #111827;
+.aw-new-session:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
 }
 
 .aw-chat {
@@ -102,12 +274,169 @@
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #fafafa;
+  font-size: 13px;
+}
+
+.aw-aux {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 120px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.aw-aux-title {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.aw-aux-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+}
+
+.aw-aux-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.aw-aux-body::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.aw-todo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.aw-todo-done .aw-todo-content {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+
+.aw-todo-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aw-pri {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.aw-pri-high {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.aw-pri-medium {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.aw-pri-low {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.aw-toolcall {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.aw-tool-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.aw-tool-status-executing {
+  background: #f59e0b;
+  animation: aw-pulse 1s infinite;
+}
+
+.aw-tool-status-complete {
+  background: #22c55e;
+}
+
+@keyframes aw-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.aw-tool-name {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.aw-tool-result {
+  flex: 1;
+  min-width: 0;
+  color: #6b7280;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .aw-chat-body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  font-size: 13px;
+}
+
+/* 压缩 CopilotChat 助手消息的行距与段落间距 */
+.aw-chat-body * {
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+}
+
+.aw-chat-body p,
+.aw-chat-body li,
+.aw-chat-body blockquote {
+  margin: 4px 0 !important;
+}
+
+.aw-chat-body pre,
+.aw-chat-body code {
+  line-height: 1.4 !important;
+}
+
+.aw-chat-body ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.aw-chat-body ::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
 }
 
 .aw-load-more {
@@ -193,4 +522,80 @@
 .aw-booting {
   font-size: 14px;
   color: #6b7280;
+}
+
+/* 澄清卡片（ask_clarification interrupt） */
+.aw-clarification {
+  flex-shrink: 0;
+  margin: 8px 12px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f0f7ff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aw-clarification-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.aw-clarification-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aw-clarification-option {
+  padding: 6px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #fff;
+  color: #2563eb;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.aw-clarification-option:hover:not(:disabled) {
+  background: #eff6ff;
+}
+
+.aw-clarification-option:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.aw-clarification-text {
+  display: flex;
+  gap: 8px;
+}
+
+.aw-clarification-text input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+}
+
+.aw-clarification-text input:focus {
+  border-color: #2563eb;
+}
+
+.aw-clarification-cancel {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.aw-clarification-cancel:hover {
+  color: #b91c1c;
 }

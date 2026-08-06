@@ -116,6 +116,11 @@
   checkAuth().catch(() => {});
   setInterval(() => { checkAuth().catch(() => {}); }, 1000);
 
+  // widget 会话切换即时事件（sessionStorage 桥的即时补充，不等 1s 轮询）
+  window.addEventListener('agent-sphere:session-change', () => {
+    checkAuth().catch(() => {});
+  });
+
   // --- SSE status toast + session switch notification ---
   setInterval(() => {
     if (!chrome.runtime?.id) return;

@@ -145,7 +145,13 @@ export default function Chat() {
       const historyKeys: string[] = [];
       for (const r of runs) {
         if (r.assistantReply && seenReplyRunIdsRef.current.has(r.id)) continue;
-        if (r.userMessage && r.userMessage !== '{}' && r.userMessage.trim()) {
+        // 澄清应答 run：回复已展示在澄清卡片里，跳过独立用户气泡
+        if (
+          !r.clarificationResponse &&
+          r.userMessage &&
+          r.userMessage !== '{}' &&
+          r.userMessage.trim()
+        ) {
           historyMsgs.push({
             role: 'user',
             content: r.userMessage,

@@ -15,6 +15,7 @@ import com.buukle.agent.instance.dtvo.vo.ClarificationVO;
 import com.buukle.agent.instance.service.ClarificationService;
 import com.buukle.agent.instance.service.RunService;
 import com.buukle.agent.instance.service.converter.RunConverter;
+import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -65,16 +66,25 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .orderByDesc(AgentRun::getCreatedAt)
                 .page(new Page<>(page, size));
         IPage<RunVO> voPage = p.convert(runConverter::toVO);
-        // Attach clarification data to each run
+        // Attach clarification data to each run; 澄清应答 run 的 userMessage 携带前缀，展示层去掉
         List<Long> runIds = voPage.getRecords().stream().map(RunVO::getId).collect(Collectors.toList());
         if (!runIds.isEmpty()) {
             Map<Long, List<ClarificationVO>> clarificationMap = clarificationService.mapByRunIdList(runIds);
             for (RunVO runVO : voPage.getRecords()) {
+                stripClarificationPrefix(runVO);
                 List<ClarificationVO> cvs = clarificationMap.get(runVO.getId());
                 if (cvs != null && !cvs.isEmpty()) runVO.setClarifications(cvs);
             }
         }
         return voPage;
+    }
+
+    private static void stripClarificationPrefix(RunVO runVO) {
+        String userMessage = runVO.getUserMessage();
+        if (userMessage != null && userMessage.startsWith(ChatClarification.CLARIFICATION_RESUME_PREFIX)) {
+            runVO.setClarificationResponse(true);
+            runVO.setUserMessage(userMessage.substring(ChatClarification.CLARIFICATION_RESUME_PREFIX.length()));
+        }
     }
 
     @Override

@@ -29,6 +29,34 @@ import { useEffect, useMemo, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
 
+/** 归一化澄清选项：兼容字符串数组与 {label,value} 对象数组，过滤空项与重复项 */
+function normalizeClarificationOptions(
+  raw: any,
+): { label: string; value: string; description?: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: { label: string; value: string; description?: string }[] = [];
+  for (const item of raw) {
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const label = String(item.label ?? item.value ?? '').trim();
+      const value = String(item.value ?? item.label ?? '').trim();
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      out.push({
+        label,
+        value: value || label,
+        description: item.description ? String(item.description) : undefined,
+      });
+    } else if (typeof item === 'string' && item.trim()) {
+      const text = item.trim();
+      if (seen.has(text)) continue;
+      seen.add(text);
+      out.push({ label: text, value: text });
+    }
+  }
+  return out;
+}
+
 interface MessageListProps {
   messages: any[];
   collapsedKeys: Set<string>;
@@ -476,6 +504,11 @@ function ClarificationCard({
   const [inputVal, setInputVal] = useState('');
   const intl = useIntl();
 
+  const options = useMemo(
+    () => normalizeClarificationOptions(clarification.options),
+    [clarification.options],
+  );
+
   const isResolved =
     clarification.status === 'responded' || optimisticValue !== null;
   const userValue = optimisticValue ?? clarification.userResponse;
@@ -492,9 +525,9 @@ function ClarificationCard({
         })
       );
     }
-    if (clarification.type === 'choice' && clarification.options?.length) {
-      const opt = clarification.options.find(
-        (o: any) => o.value === userValue || o.label === userValue,
+    if (clarification.type === 'choice' && options.length) {
+      const opt = options.find(
+        (o) => o.value === userValue || o.label === userValue,
       );
       return opt?.label || userValue;
     }
@@ -549,7 +582,7 @@ function ClarificationCard({
     onCancelClarification?.(clarification);
   };
 
-  if (clarification.type === 'choice' && clarification.options?.length) {
+  if (clarification.type === 'choice' && options.length) {
     return (
       <Card
         size="small"
@@ -561,10 +594,10 @@ function ClarificationCard({
           value={undefined}
         >
           <Space orientation="vertical" style={{ width: '100%' }}>
-            {clarification.options.map((opt: any, i: number) => (
+            {options.map((opt, i) => (
               <Radio.Button
-                key={i}
-                value={opt.value || opt.label}
+                key={`${opt.value}-${i}`}
+                value={opt.value}
                 style={{
                   width: '100%',
                   textAlign: 'left',

@@ -2,13 +2,16 @@ package com.buukle.agent.agui.service;
 
 import com.buukle.agent.agui.dtvo.AguiEventType;
 import com.buukle.agent.agui.dtvo.AguiEventVO;
+import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.EventType;
 import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
+import com.buukle.agent.runtime.kernel.port.vo.SessionStatus;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.util.json.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -18,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -31,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AguiEventTranslator {
 
     private final AguiStreamManager streamManager;
-    private final Map<Long, RunStreamState> states = new ConcurrentHashMap<>();
+    private final Map<String, RunStreamState> states = new ConcurrentHashMap<>();
 
     @EventListener
     public void onRuntimeEvent(RuntimeEventVO event) {
@@ -43,16 +47,21 @@ public class AguiEventTranslator {
         if (sessionId == null) {
             return;
         }
-        List<AguiEventVO> aguiEvents = translate(event);
-        if (aguiEvents == null) {
-            return;
-        }
-        for (AguiEventVO agui : aguiEvents) {
-            streamManager.send(sessionId, agui);
-        }
-        if (isTerminal(event.getEventType())) {
-            streamManager.complete(sessionId);
-            states.remove(sessionId);
+        Long runId = data.getRunId();
+        String stateKey = stateKey(sessionId, runId);
+        RunStreamState state = states.computeIfAbsent(stateKey, k -> new RunStreamState());
+        synchronized (state) {
+            List<AguiEventVO> aguiEvents = translate(event);
+            if (aguiEvents == null) {
+                return;
+            }
+            for (AguiEventVO agui : aguiEvents) {
+                streamManager.send(sessionId, runId, agui);
+            }
+            if (isTerminal(event.getEventType())) {
+                streamManager.complete(sessionId, runId);
+                states.remove(stateKey);
+            }
         }
     }
 
@@ -63,36 +72,29 @@ public class AguiEventTranslator {
         String threadId = String.valueOf(sessionId);
         String runId = data.getRunId() == null ? String.valueOf(sessionId) : String.valueOf(data.getRunId());
 
-        RunStreamState state = states.computeIfAbsent(sessionId, k -> new RunStreamState());
+        RunStreamState state = states.computeIfAbsent(stateKey(sessionId, data.getRunId()), k -> new RunStreamState());
         List<AguiEventVO> out = new ArrayList<>();
-        if (!runId.equals(state.runId)) {
-            closeOpenMessages(out, state, state.runId);
-            state.runId = runId;
-            state.textOpen = false;
-            state.reasoningOpen = false;
-            state.toolCallId = null;
-        }
         if (type instanceof RunStatus runStatus) {
             switch (runStatus) {
                 case PENDING -> out.add(ev(AguiEventType.RUN_STARTED, runStarted(threadId, runId)));
                 case RUNNING -> {
                 }
                 case COMPLETED -> {
-                    closeOpenMessages(out, state, runId);
+                    closeOpenMessages(out, state);
                     out.add(ev(AguiEventType.RUN_FINISHED, runFinished(threadId, runId)));
                 }
                 case FAILED -> {
-                    closeOpenMessages(out, state, runId);
+                    closeOpenMessages(out, state);
                     out.add(ev(AguiEventType.RUN_ERROR,
                             runError(threadId, runId, data.getErrorMessage())));
                 }
                 case CANCELLED -> {
-                    closeOpenMessages(out, state, runId);
+                    closeOpenMessages(out, state);
                     out.add(ev(AguiEventType.RUN_ERROR, runError(threadId, runId, AguiConstants.ERROR_MESSAGE_RUN_CANCELLED)));
                 }
                 case AWAITING_USER -> {
-                    closeOpenMessages(out, state, runId);
-                    out.add(ev(AguiEventType.RUN_FINISHED, runFinished(threadId, runId)));
+                    closeOpenMessages(out, state);
+                    out.add(ev(AguiEventType.RUN_FINISHED, runFinishedInterrupt(threadId, runId, state)));
                 }
                 default -> {
                 }
@@ -102,15 +104,23 @@ public class AguiEventTranslator {
         if (type instanceof FlowEventType flow) {
             switch (flow) {
                 case CONTENT_TOKEN -> {
+                    if (state.textOpen && !Objects.equals(state.textRunId, runId)) {
+                        closeOpenText(out, state);
+                    }
                     if (!state.textOpen) {
                         state.textOpen = true;
+                        state.textRunId = runId;
                         out.add(ev(AguiEventType.TEXT_MESSAGE_START, textStart(runId)));
                     }
                     out.add(ev(AguiEventType.TEXT_MESSAGE_CONTENT, textContent(runId, data.getResponse())));
                 }
                 case REASONING_TOKEN -> {
+                    if (state.reasoningOpen && !Objects.equals(state.reasoningRunId, runId)) {
+                        closeOpenReasoning(out, state);
+                    }
                     if (!state.reasoningOpen) {
                         state.reasoningOpen = true;
+                        state.reasoningRunId = runId;
                         out.add(ev(AguiEventType.REASONING_MESSAGE_START, reasoningStart(runId)));
                     }
                     out.add(ev(AguiEventType.REASONING_MESSAGE_CONTENT, reasoningContent(runId, data.getResponse())));
@@ -126,25 +136,182 @@ public class AguiEventTranslator {
                 case PENDING -> {
                     closeOpenToolCall(out, state);
                     state.toolCallId = toolCallId;
-                    out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, data.getToolName())));
+                    state.toolRunId = runId;
+                    out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, displayName(data))));
                 }
-                case RUNNING -> out.add(ev(AguiEventType.TOOL_CALL_ARGS, toolArgs(toolCallId, data.getArgumentsJson())));
+                case RUNNING -> {
+                    if (!isOpenToolCall(state, toolCallId, runId)) {
+                        openToolCall(out, state, toolCallId, runId, displayName(data));
+                    }
+                    out.add(ev(AguiEventType.TOOL_CALL_ARGS, toolArgs(toolCallId, data.getArgumentsJson())));
+                }
                 case SUCCEEDED -> {
+                    if (!isOpenToolCall(state, toolCallId, runId)) {
+                        openToolCall(out, state, toolCallId, runId, displayName(data));
+                    }
                     out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(toolCallId, data.getArtifact())));
                     out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(toolCallId)));
                     state.toolCallId = null;
+                    state.toolRunId = null;
+                    maybeEmitTodosSnapshot(out, data.getArtifact());
                 }
                 case FAILED -> {
+                    if (!isOpenToolCall(state, toolCallId, runId)) {
+                        openToolCall(out, state, toolCallId, runId, displayName(data));
+                    }
                     out.add(ev(AguiEventType.TOOL_CALL_RESULT, toolResult(toolCallId, data.getErrorMessage())));
                     out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(toolCallId)));
                     state.toolCallId = null;
+                    state.toolRunId = null;
                 }
                 default -> {
                 }
             }
             return out;
         }
+        if (type instanceof SessionStatus sessionStatus) {
+            switch (sessionStatus) {
+                case TITLE_UPDATED -> out.add(ev(AguiEventType.CUSTOM,
+                        sessionTitleUpdated(sessionId, data.getAssistantReply())));
+                default -> {
+                }
+            }
+            return out;
+        }
+        if (type instanceof ClarificationStatus clarificationStatus) {
+            switch (clarificationStatus) {
+                case PENDING -> state.pendingClarification = pendingClarification(
+                        data.getClarificationId(), data.getPrompt(), data.getType(), data.getArgumentsJson());
+                default -> {
+                }
+            }
+            return out;
+        }
         return null;
+    }
+
+    /**
+     * 澄清（ask_clarification）工具暂停 run 时缓存其信息，供 AWAITING_USER 生成 interrupt 载荷。
+     */
+    private static PendingClarification pendingClarification(String clarificationId, String prompt,
+                                                             String type, String optionsJson) {
+        PendingClarification pc = new PendingClarification();
+        pc.id = clarificationId == null || clarificationId.isBlank()
+                ? AguiConstants.INTERRUPT_ID_FALLBACK : clarificationId;
+        pc.reason = prompt == null ? "" : prompt;
+        pc.type = type == null ? AguiConstants.CLARIFICATION_TYPE_CONFIRM : type;
+        pc.options = parseOptions(optionsJson);
+        return pc;
+    }
+
+    /**
+     * 解析澄清 options：支持字符串数组或对象数组 {@code [{label,value,description}]}，
+     * 统一规整为 {@code {label, value}}，避免对象选项在前端显示为空。
+     */
+    private static List<Map<String, String>> parseOptions(String optionsJson) {
+        List<Map<String, String>> options = new ArrayList<>();
+        if (optionsJson == null || optionsJson.isBlank()) {
+            return options;
+        }
+        try {
+            JsonNode node = JsonUtils.parse(optionsJson, JsonNode.class);
+            if (node != null && node.isArray()) {
+                for (JsonNode item : node) {
+                    Map<String, String> option = new LinkedHashMap<>();
+                    if (item.isObject()) {
+                        String label = item.path(AguiConstants.FIELD_LABEL).asText("");
+                        String value = item.path(AguiConstants.FIELD_VALUE).asText("");
+                        if (label.isBlank() && value.isBlank()) {
+                            continue;
+                        }
+                        option.put(AguiConstants.FIELD_LABEL,
+                                label.isBlank() ? value : label);
+                        option.put(AguiConstants.FIELD_VALUE,
+                                value.isBlank() ? label : value);
+                    } else {
+                        String text = item.asText("");
+                        if (text.isBlank()) {
+                            continue;
+                        }
+                        option.put(AguiConstants.FIELD_LABEL, text);
+                        option.put(AguiConstants.FIELD_VALUE, text);
+                    }
+                    options.add(option);
+                }
+            }
+        } catch (Exception e) {
+            // 非数组 options，忽略
+        }
+        return options;
+    }
+
+    /**
+     * 澄清中断：RUN_FINISHED 的 outcome 为 interrupt（AG-UI 协议），携带澄清 id/reason/metadata。
+     */
+    private static Map<String, Object> runFinishedInterrupt(String threadId, String runId, RunStreamState state) {
+        Map<String, Object> map = payload(AguiEventType.RUN_FINISHED.getValue());
+        map.put(AguiConstants.FIELD_THREAD_ID, threadId);
+        map.put(AguiConstants.FIELD_RUN_ID, runId);
+        Map<String, Object> outcome = new LinkedHashMap<>();
+        outcome.put(AguiConstants.FIELD_TYPE, AguiConstants.OUTCOME_TYPE_INTERRUPT);
+        PendingClarification pc = state.pendingClarification != null
+                ? state.pendingClarification : new PendingClarification();
+        List<Map<String, Object>> interrupts = new ArrayList<>();
+        Map<String, Object> interrupt = new LinkedHashMap<>();
+        interrupt.put(AguiConstants.FIELD_ID, pc.id != null ? pc.id : AguiConstants.INTERRUPT_ID_FALLBACK);
+        interrupt.put(AguiConstants.FIELD_REASON, pc.reason);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put(AguiConstants.FIELD_TYPE, pc.type);
+        metadata.put(AguiConstants.FIELD_OPTIONS, pc.options);
+        metadata.put(AguiConstants.FIELD_SESSION_ID, threadId);
+        metadata.put(AguiConstants.FIELD_RUN_ID, runId);
+        interrupt.put(AguiConstants.FIELD_METADATA, metadata);
+        interrupts.add(interrupt);
+        outcome.put(AguiConstants.FIELD_INTERRUPTS, interrupts);
+        map.put(AguiConstants.FIELD_OUTCOME, outcome);
+        return map;
+    }
+
+    /**
+     * 会话标题更新（自动生成/手动重命名）以 AG-UI CUSTOM 事件推给前端，
+     * widget 据此实时刷新会话列表标题。{@code value} 携带 sessionId 与 title。
+     */
+    private static Map<String, Object> sessionTitleUpdated(Long sessionId, String title) {
+        Map<String, Object> map = payload(AguiEventType.CUSTOM.getValue());
+        map.put(AguiConstants.FIELD_NAME, AguiConstants.CUSTOM_EVENT_SESSION_TITLE_UPDATED);
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put(AguiConstants.FIELD_SESSION_ID, sessionId);
+        value.put(AguiConstants.FIELD_TITLE, title == null ? "" : title);
+        map.put(AguiConstants.FIELD_VALUE, value);
+        return map;
+    }
+
+    private static boolean isOpenToolCall(RunStreamState state, String toolCallId, String runId) {
+        return state.toolCallId != null
+                && state.toolCallId.equals(toolCallId)
+                && Objects.equals(state.toolRunId, runId);
+    }
+
+    /**
+     * 工具展示名：优先中文业务名（displayNameCn），其次英文业务名（displayNameEn），
+     * 兜底内部 LLM 工具名（如 builtin_3）。避免前端展示 builtin_ 之类的内部名。
+     */
+    private static String displayName(RuntimeEventDataVO data) {
+        if (data.getDisplayNameCn() != null && !data.getDisplayNameCn().isBlank()) {
+            return data.getDisplayNameCn();
+        }
+        if (data.getDisplayNameEn() != null && !data.getDisplayNameEn().isBlank()) {
+            return data.getDisplayNameEn();
+        }
+        return data.getToolName();
+    }
+
+    private static void openToolCall(List<AguiEventVO> out, RunStreamState state,
+                                     String toolCallId, String runId, String toolName) {
+        closeOpenToolCall(out, state);
+        state.toolCallId = toolCallId;
+        state.toolRunId = runId;
+        out.add(ev(AguiEventType.TOOL_CALL_START, toolStart(toolCallId, toolName)));
     }
 
     private static boolean isTerminal(EventType type) {
@@ -155,22 +322,65 @@ public class AguiEventTranslator {
                 || runStatus == RunStatus.AWAITING_USER);
     }
 
-    private static void closeOpenMessages(List<AguiEventVO> out, RunStreamState state, String runId) {
-        if (state.reasoningOpen) {
-            state.reasoningOpen = false;
-            out.add(ev(AguiEventType.REASONING_MESSAGE_END, reasoningEnd(runId)));
-        }
-        if (state.textOpen) {
-            state.textOpen = false;
-            out.add(ev(AguiEventType.TEXT_MESSAGE_END, textEnd(runId)));
-        }
+    private static void closeOpenMessages(List<AguiEventVO> out, RunStreamState state) {
+        closeOpenReasoning(out, state);
+        closeOpenText(out, state);
         closeOpenToolCall(out, state);
+    }
+
+    private static void closeOpenText(List<AguiEventVO> out, RunStreamState state) {
+        if (state.textOpen) {
+            out.add(ev(AguiEventType.TEXT_MESSAGE_END, textEnd(state.textRunId)));
+            state.textOpen = false;
+            state.textRunId = null;
+        }
+    }
+
+    private static void closeOpenReasoning(List<AguiEventVO> out, RunStreamState state) {
+        if (state.reasoningOpen) {
+            out.add(ev(AguiEventType.REASONING_MESSAGE_END, reasoningEnd(state.reasoningRunId)));
+            state.reasoningOpen = false;
+            state.reasoningRunId = null;
+        }
     }
 
     private static void closeOpenToolCall(List<AguiEventVO> out, RunStreamState state) {
         if (state.toolCallId != null) {
             out.add(ev(AguiEventType.TOOL_CALL_END, toolEnd(state.toolCallId)));
             state.toolCallId = null;
+            state.toolRunId = null;
+        }
+    }
+
+    /**
+     * todowrite 工具成功时，把产物 {@code {"todos":[{content,status,priority}]}} 以
+     * AG-UI STATE_SNAPSHOT 事件推给前端（widget 据此渲染任务清单块）。非 todos 产物忽略。
+     */
+    private static void maybeEmitTodosSnapshot(List<AguiEventVO> out, String artifact) {
+        if (artifact == null || artifact.isBlank()) {
+            return;
+        }
+        try {
+            JsonNode node = JsonUtils.parse(artifact, JsonNode.class);
+            JsonNode todos = node != null ? node.get(AguiConstants.FIELD_TODOS) : null;
+            if (todos == null || !todos.isArray()) {
+                return;
+            }
+            List<Object> list = new ArrayList<>();
+            for (JsonNode item : todos) {
+                Map<String, Object> todo = new LinkedHashMap<>();
+                todo.put(AguiConstants.FIELD_CONTENT, item.path(AguiConstants.FIELD_CONTENT).asText());
+                todo.put(AguiConstants.FIELD_STATUS, item.path(AguiConstants.FIELD_STATUS).asText());
+                todo.put(AguiConstants.FIELD_PRIORITY, item.path(AguiConstants.FIELD_PRIORITY).asText());
+                list.add(todo);
+            }
+            Map<String, Object> snapshot = new LinkedHashMap<>();
+            snapshot.put(AguiConstants.FIELD_TODOS, list);
+            Map<String, Object> payload = payload(AguiEventType.STATE_SNAPSHOT.getValue());
+            payload.put(AguiConstants.FIELD_SNAPSHOT, snapshot);
+            out.add(ev(AguiEventType.STATE_SNAPSHOT, payload));
+        } catch (Exception e) {
+            // 非 todos 产物，静默忽略
         }
     }
 
@@ -277,10 +487,24 @@ public class AguiEventTranslator {
         return map;
     }
 
+    private static String stateKey(Long sessionId, Long runId) {
+        return runId == null ? String.valueOf(sessionId) : sessionId + ":" + runId;
+    }
+
     private static final class RunStreamState {
-        private String runId;
         private boolean textOpen;
+        private String textRunId;
         private boolean reasoningOpen;
+        private String reasoningRunId;
         private String toolCallId;
+        private String toolRunId;
+        private PendingClarification pendingClarification;
+    }
+
+    private static final class PendingClarification {
+        private String id;
+        private String reason;
+        private String type;
+        private List<Map<String, String>> options = new ArrayList<>();
     }
 }

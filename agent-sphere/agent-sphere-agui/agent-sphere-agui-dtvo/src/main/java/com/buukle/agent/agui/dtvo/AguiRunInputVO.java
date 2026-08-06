@@ -21,4 +21,5 @@ public class AguiRunInputVO implements Serializable {
     private List<String> tools = new ArrayList<>();
     private List<Map<String, Object>> context = new ArrayList<>();
     private Map<String, Object> forwardedProps = new LinkedHashMap<>();
+    private List<AguiResumeEntryVO> resume = new ArrayList<>();
 }

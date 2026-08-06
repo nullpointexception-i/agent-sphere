@@ -50,6 +50,23 @@ public class ClarificationService implements ClarificationSpi {
     }
 
     @Override
+    public boolean respondToClarificationByClarificationId(Long sessionId, String clarificationId, String response) {
+        AgentPendingClarification pending = clarificationMapper.selectOne(
+                new LambdaQueryWrapper<AgentPendingClarification>()
+                        .eq(AgentPendingClarification::getSessionId, sessionId)
+                        .eq(AgentPendingClarification::getClarificationId, clarificationId)
+                        .isNull(AgentPendingClarification::getUserResponse)
+                        .orderByDesc(AgentPendingClarification::getCreatedAt)
+                        .last("LIMIT 1"));
+        if (pending == null) {
+            return false;
+        }
+        pending.setUserResponse(response);
+        clarificationMapper.updateById(pending);
+        return true;
+    }
+
+    @Override
     public Map<Long, List<ClarificationVO>> mapByRunIdList(Collection<Long> runIds) {
         if (runIds == null || runIds.isEmpty()) return Collections.emptyMap();
 

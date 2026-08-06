@@ -45,6 +45,19 @@ public class ChatRuntimeService {
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
 
+        RunVO run = createRun(sessionId, dto);
+        startRun(run, sessionId, dto, false);
+
+        ChatMessageResponseVO response = new ChatMessageResponseVO();
+        response.setRunId(run.getId());
+        response.setStatus(ChatConstant.RESPONSE_STATUS_PROCESSING);
+        return response;
+    }
+
+    /**
+     * 创建 run（含交付方式/会话归属校验），不发事件；由调用方拿到 runId 完成流注册后再 {@link #startRun}。
+     */
+    public RunVO createRun(Long sessionId, SendMessageDTO dto) {
         assertSessionOwnership(sessionId);
         sessionSpi.touchSession(sessionId);
         CreateRunDTO createRunDTO = new CreateRunDTO();
@@ -56,7 +69,13 @@ public class ChatRuntimeService {
             run.setDelivery(dto.getDelivery());
         }
         log.info("Run created: runId={}, type={}", run.getId(), run.getType());
+        return run;
+    }
 
+    /**
+     * 发布 RUN_STARTED（PENDING）并异步启动 runner。
+     */
+    public void startRun(RunVO run, Long sessionId, SendMessageDTO dto, boolean isClarificationResume) {
         eventPublisher.publishEvent(new RuntimeEventVO(
                 RunStatus.PENDING,
                 new RuntimeEventDataVO()
@@ -64,13 +83,8 @@ public class ChatRuntimeService {
                         .setRunId(run.getId())
                         .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
 
-        orchestrator.asyncHandleUserMessage(run, sessionId, dto.getMessage(), dto.getModelRouteId(), false);
+        orchestrator.asyncHandleUserMessage(run, sessionId, dto.getMessage(), dto.getModelRouteId(), isClarificationResume);
         log.info("Async execution started for runId={}", run.getId());
-
-        ChatMessageResponseVO response = new ChatMessageResponseVO();
-        response.setRunId(run.getId());
-        response.setStatus(ChatConstant.RESPONSE_STATUS_PROCESSING);
-        return response;
     }
 
     public ChatMessageResponseVO resumeFromClarification(Long sessionId, Long runId, String response, String clarificationId) {
