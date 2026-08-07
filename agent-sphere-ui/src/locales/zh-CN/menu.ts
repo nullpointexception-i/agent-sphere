@@ -5,6 +5,8 @@ export default {
   'menu.chat': '对话',
   'menu.instances': '实例管理',
   'menu.models': '模型提供商',
+  'menu.completions': '提示工程',
+  'menu.tasks': '任务管理',
   'menu.capabilities': '能力',
   'menu.capabilities.mcp': 'MCP',
   'menu.capabilities.skill': '技能',

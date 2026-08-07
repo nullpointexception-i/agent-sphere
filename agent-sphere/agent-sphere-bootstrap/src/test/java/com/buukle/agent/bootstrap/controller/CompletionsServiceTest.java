@@ -72,6 +72,7 @@ class CompletionsServiceTest {
         c.setStatus("ACTIVE");
         c.setModelRouteId(10L);
         c.setActivePromptId(20L);
+        c.setCreatedBy("admin-a");
         given(completionsMapper.selectById(1L)).willReturn(c);
 
         AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
@@ -110,6 +111,44 @@ class CompletionsServiceTest {
         assertEquals(1L, call.getCompletionsId());
         assertEquals("好的，已处理", call.getOutput());
         assertEquals("SUCCESS", call.getStatus());
+        assertEquals("admin-a", call.getCaller());
+    }
+
+    @Test
+    void execute_withoutCreator_shouldUseAnonymousCaller() {
+        AgentCompletions c = new AgentCompletions();
+        c.setId(1L);
+        c.setStatus("ACTIVE");
+        c.setModelRouteId(10L);
+        c.setActivePromptId(20L);
+        given(completionsMapper.selectById(1L)).willReturn(c);
+
+        AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
+        prompt.setId(20L);
+        prompt.setPromptUser("{{input}}");
+        given(promptMapper.selectById(20L)).willReturn(prompt);
+
+        ModelRouteFullVO route = new ModelRouteFullVO();
+        route.setId(10L);
+        route.setApiKeyId(99L);
+        route.setCompany("openai");
+        route.setBaseUrl("https://api.openai.com/v1");
+        route.setModelName("gpt-4o");
+        given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(route));
+
+        given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
+
+        KernelLlmService.InvokeResult result = new KernelLlmService.InvokeResult();
+        result.setSuccess(true);
+        result.setContent("ok");
+        given(llmService.invokeSync(anyString(), anyString(), anyString(), anyString(),
+                any(), any(LlmInteractionMeta.class), anyLong())).willReturn(result);
+
+        completionsService.execute(1L, CompletionsInput.of(Map.of()));
+
+        ArgumentCaptor<AgentCompletionsCall> callCaptor = ArgumentCaptor.forClass(AgentCompletionsCall.class);
+        verify(completionsCallService).record(callCaptor.capture());
+        assertEquals("anonymous", callCaptor.getValue().getCaller());
     }
 
     @Test

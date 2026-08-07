@@ -15,6 +15,7 @@ import com.buukle.agent.completions.service.CompletionsPromptService;
 import com.buukle.agent.completions.service.CompletionsService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -44,9 +46,11 @@ public class AdminCompletionsController extends BaseController {
     @GetMapping
     public ResponseEntity<Page<CompletionsVO>> list(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ok(completionsService.list(keyword, page, size));
+        return ok(completionsService.list(keyword, startTime, endTime, page, size));
     }
 
     @AuditLog(action = "CREATE", resourceType = "Completions", resourceId = "#result?.body?.id")

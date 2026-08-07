@@ -73,11 +73,11 @@ prompt 支持字段占位：`{{input}}`（整体 JSON）与 `{{field}}`（input 
 ### 3.2 免 token 服务调用
 
 - `CompletionsController` / `TasksController` 需接受 **Bole 后端直连**（无 `Authorization` 头）。
-- 请求体带 `userId`（Long，Bole 用户 id），as 用于 `agent_completions_call.caller` 审计。
+- 接口**不含 `userId`**：caller 审计由 as 侧按资源创建者反查（completions → `agent_completions.created_by`；tasks → 入参 `instanceId` 对应 `agent_instance.created_by`）。
 - **实现方式（as 自选）**：
   - a) 将该来源 IP/域名加入鉴权白名单（推荐，`AuthInterceptor` 扩展）
   - b) 或 as 侧约定共享签名头（Bole 未实现，需双方新增约定——当前按 a 落地）
-- `userId` 反查：如需关联 as 用户，按 `agent_sso_identity`（provider_code='bole'）的 `subject` 反查（前提：Bole IdP 签发 token 的 `sub` = Bole userId，需 as 侧确认该映射）。
+- 当前落地：`/api/v1/api/*` 全量豁免（待接口验签）。
 
 ### 3.3 模型路由 seed
 
@@ -92,8 +92,10 @@ prompt 支持字段占位：`{{input}}`（整体 JSON）与 `{{field}}`（input 
 **请求**：
 ```json
 POST /api/v1/api/completions
-{ "completionsId": 1, "userId": 1001, "input": { "candidateId": 5, "name": "张三" } }
+{ "completionsId": 1, "input": { "candidateId": 5, "name": "张三" } }
 ```
+
+> 注：as 接口不含 `userId`（Jackson 忽略未知字段，Bole 侧已发送的 `userId` 不影响）。
 
 **响应**：
 ```json
@@ -138,6 +140,49 @@ POST /api/v1/api/completions
 ## 五、as 侧验收要点
 
 1. 7 个 completions seed 应用后，`agent_completions` 的 id 为 1-7（显式），且均绑定有效 `model_route_id` + 激活 prompt。
-2. Bole 后端直连 `POST /api/v1/api/completions`（带 `completionsId`+`userId`，无 Authorization 头）能返回 `content`。
+2. Bole 后端直连 `POST /api/v1/api/completions`（带 `completionsId`，无 Authorization 头）能返回 `content`。
 3. Bole 直连 `POST /api/v1/api/tasks`（含 `callbackUrl`）能创建任务；终态后 Bole 回调端点收到 `{asTaskId, status, resultJson}`。
-4. `agent_completions_call.caller` 记录 Bole userId（或 `bole:<userId>`）。
+4. `agent_completions_call.caller` 记录该 completions 的创建者（`agent_completions.created_by`）。
+
+---
+
+## 六、as 侧落地记录（2026-08-07 升级）
+
+### 决策
+
+| 项 | 决策 |
+|---|---|
+| 免 token | `/api/v1/api/*` **全量豁免**（AuthInterceptor），设中性伪用户 `external-service`（审计/会话归属自洽）；**TODO 接口验签（后续版本）** |
+| 模型路由 | **手动配置**，不 seed；completions seed 的 `model_route_id` 置 NULL，运维阶段绑定 |
+| input/output schema | seed 中为 7 个业务各写**详细 JSON Schema**（仅存储不校验） |
+| 回调重试 | **3 次退避**（2s/4s/8s）+ WARN 日志，失败依赖 Bole 5min 轮询兜底 |
+| 库现状 | 全新库，seed 显式 id 1-7 无冲突 |
+| caller 归属 | 接口不含 `userId`；completions → `agent_completions.created_by`；tasks → 入参 `instanceId` 对应 `agent_instance.created_by` |
+
+### 实现清单
+
+- **迁移**
+  - `V34__seed_bole_completions.sql`：7 个 completions（**显式 id 1-7**，`ON CONFLICT(id) DO NOTHING`）+ 7 个 prompt（显式 id 1-7，`version=1`）+ 回填 `active_prompt_id`；`model_route_id=NULL`。
+  - `V35__add_task_callback_url.sql`：`agent_task.callback_url VARCHAR(500)`。
+- **免 token**：`AuthInterceptor` 对 `/api/v1/api` 前缀直接放行并设中性伪用户 `external-service`（空权限、非超管）。
+- **caller 审计（资源反查）**：接口不含 `userId`。completions 的 `agent_completions_call.caller` = `agent_completions.created_by`（空则 `anonymous`）；task 的 `created_by` = 入参 `instanceId` 反查 `agent_instance.created_by`。
+- **tasks 回调**：`CreateTaskDTO.callbackUrl`；`AgentTask.callbackUrl`；新增 `TaskCallbackService`（`java.net.http.HttpClient`，虚拟线程异步 POST `TaskCallbackBody{asTaskId,status,resultJson,remark}`，3 次退避）；终态统一收口 `transitionToTerminal`（防重复回调）接入 `markTerminal`/`markTaskFailed`/`stop`。
+- **配置**：`hri-ai.tasks.callback.max-attempts:3` / `initial-delay:2s`（application.yml）。
+- 测试 60 例全绿（caller 资源反查、callbackUrl 落库、stop 触发回调、AuthInterceptor 豁免）。
+
+### 运维步骤（上线后）
+
+1. 超级管理员在 UI 创建 **DeepSeek** provider（`base_url=https://api.deepseek.com`）+ 有效 API Key + model route（`company=deepseek`, `model=deepseek-chat`）。
+2. 绑定 completions 到路由（二选一）：
+   ```sql
+   UPDATE agent_completions SET model_route_id = <routeId> WHERE id IN (1,2,3,4,5,6,7);
+   ```
+   或管理接口逐条 `PUT /api/v1/admin/completions/{id}`（body: `{name, modelRouteId, ...}`）。
+3. 冒烟：直连 `POST /api/v1/api/completions`（无 Authorization）返回 `content`；`POST /api/v1/api/tasks` 终态后 Bole 回调端点收到回调。
+
+### 风险与边界
+
+- **豁免风险**：接口验签上线前，任何可访问 `/api/v1/api/*` 的外部调用方均可调用 completions/tasks（消耗 LLM 预算），属临时接受。
+- `input_schema`/`output_schema` 仅存储不校验（契约约定）。
+- Bole 侧 `stop` 未在契约内；`assertSessionOwnership` 借助中性伪用户 `external-service` 自洽，无匿名 NPE。
+- 回调失败不阻塞任务收尾，仅 WARN 日志。

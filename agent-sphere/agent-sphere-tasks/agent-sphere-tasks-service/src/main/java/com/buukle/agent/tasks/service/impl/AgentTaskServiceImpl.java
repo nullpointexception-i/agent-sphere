@@ -1,5 +1,7 @@
 package com.buukle.agent.tasks.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
@@ -19,14 +21,17 @@ import com.buukle.agent.tasks.dtvo.TaskVO;
 import com.buukle.agent.tasks.dtvo.enums.TaskEnum;
 import com.buukle.agent.tasks.repository.AgentTaskMapper;
 import com.buukle.agent.tasks.service.AgentTaskService;
+import com.buukle.agent.tasks.service.TaskCallbackService;
 import com.buukle.agent.util.json.JsonUtils;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -47,6 +52,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private final SessionSpi sessionSpi;
     private final RunSpi runSpi;
     private final ChatRuntimeService chatRuntimeService;
+    private final TaskCallbackService taskCallbackService;
 
     @Value("${hri-ai.tasks.poll-interval:2s}")
     private Duration pollInterval;
@@ -56,18 +62,21 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     @Override
     public TaskVO submit(CreateTaskDTO dto) {
+        InstanceVO instance = resolveInstance(dto.getInstanceId());
         AgentTask task = new AgentTask();
         task.setGoal(dto.getGoal());
         task.setContextJson(dto.getContext() == null ? null : JsonUtils.toJson(dto.getContext()));
         task.setExpectedOutputJson(dto.getExpectedOutput() == null ? null : JsonUtils.toJson(dto.getExpectedOutput()));
         task.setConfig(dto.getConfig() == null ? null : JsonUtils.toJson(dto.getConfig()));
+        task.setCallbackUrl(dto.getCallbackUrl());
+        task.setCreatedBy(instance.getCreatedBy());
+        task.setInstanceId(instance.getId());
         task.setStatus(TaskEnum.STATUS_QUEUED);
         taskMapper.insert(task);
 
         try {
-            Long instanceId = resolveInstanceId(dto.getInstanceId());
             CreateSessionDTO sessionDTO = new CreateSessionDTO();
-            sessionDTO.setAgentInstanceId(instanceId);
+            sessionDTO.setAgentInstanceId(instance.getId());
             sessionDTO.setTitle(titleOf(dto.getGoal()));
             SessionVO session = sessionSpi.createSession(sessionDTO);
 
@@ -75,7 +84,6 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             message.setMessage(dto.getGoal());
             ChatMessageResponseVO resp = chatRuntimeService.chat(session.getId(), message);
 
-            task.setInstanceId(instanceId);
             task.setSessionId(session.getId());
             task.setRunId(resp.getRunId());
             task.setStatus(TaskEnum.STATUS_RUNNING);
@@ -97,6 +105,20 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
+    public Page<TaskVO> page(String keyword, String status, LocalDateTime startTime, LocalDateTime endTime, int page, int size) {
+        LambdaQueryWrapper<AgentTask> wrapper = new LambdaQueryWrapper<AgentTask>()
+                .like(StringUtils.hasText(keyword), AgentTask::getGoal, keyword)
+                .eq(StringUtils.hasText(status), AgentTask::getStatus, status)
+                .ge(startTime != null, AgentTask::getCreatedAt, startTime)
+                .le(endTime != null, AgentTask::getCreatedAt, endTime)
+                .orderByDesc(AgentTask::getId);
+        var mpPage = taskMapper.selectPage(new Page<>(page, size), wrapper);
+        var voPage = new Page<TaskVO>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
+        voPage.setRecords(mpPage.getRecords().stream().map(this::toVO).toList());
+        return voPage;
+    }
+
+    @Override
     public void stop(Long id) {
         AgentTask task = requireTask(id);
         if (!TaskEnum.STATUS_RUNNING.equals(task.getStatus()) && !TaskEnum.STATUS_QUEUED.equals(task.getStatus())) {
@@ -113,22 +135,20 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (poll != null) {
             poll.cancel(false);
         }
-        task.setStatus(TaskEnum.STATUS_CANCELLED);
-        taskMapper.updateById(task);
+        transitionToTerminal(task, TaskEnum.STATUS_CANCELLED, task.getResultJson());
     }
 
-    private Long resolveInstanceId(Long callerProvided) {
+    private InstanceVO resolveInstance(Long callerProvided) {
         if (callerProvided != null) {
             InstanceVO instance = instanceSpi.getInstance(callerProvided);
             if (instance == null) {
                 throw new BizException(CommonErrorCode.PARAM_INVALID, "指定的 instanceId 不存在: " + callerProvided);
             }
-            return callerProvided;
+            return instance;
         }
         return instanceSpi.listInstances(null, null, null).stream()
                 .filter(i -> InstanceEnum.STATUS_ENABLED.equals(i.getStatus()))
                 .findFirst()
-                .map(InstanceVO::getId)
                 .orElseThrow(() -> new BizException(CommonErrorCode.RESOURCE_NOT_FOUND,
                         "未找到可用的 Agent 实例，请指定 instanceId"));
     }
@@ -182,9 +202,8 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (task == null) {
             return;
         }
-        task.setStatus(TaskEnum.STATUS_FAILED);
-        task.setResultJson(JsonUtils.toJson(Map.of("error", error == null ? "" : error)));
-        taskMapper.updateById(task);
+        transitionToTerminal(task, TaskEnum.STATUS_FAILED,
+                JsonUtils.toJson(Map.of("error", error == null ? "" : error)));
     }
 
     private void markTerminal(Long taskId, String status, String resultJson) {
@@ -192,12 +211,23 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (task == null) {
             return;
         }
-        if (TaskEnum.STATUS_CANCELLED.equals(task.getStatus())) {
+        transitionToTerminal(task, status, resultJson);
+    }
+
+    private void transitionToTerminal(AgentTask task, String status, String resultJson) {
+        if (isTerminal(task.getStatus())) {
             return;
         }
         task.setStatus(status);
         task.setResultJson(resultJson);
         taskMapper.updateById(task);
+        taskCallbackService.notifyTerminal(task);
+    }
+
+    private boolean isTerminal(String status) {
+        return TaskEnum.STATUS_COMPLETED.equals(status)
+                || TaskEnum.STATUS_FAILED.equals(status)
+                || TaskEnum.STATUS_CANCELLED.equals(status);
     }
 
     private String replyJson(RunVO run) {
@@ -226,8 +256,12 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         vo.setInstanceId(t.getInstanceId());
         vo.setSessionId(t.getSessionId());
         vo.setRunId(t.getRunId());
+        vo.setContextJson(t.getContextJson());
+        vo.setExpectedOutputJson(t.getExpectedOutputJson());
+        vo.setConfig(t.getConfig());
         vo.setResultJson(t.getResultJson());
         vo.setRemark(t.getRemark());
+        vo.setCallbackUrl(t.getCallbackUrl());
         vo.setCreatedAt(t.getCreatedAt() == null ? null : t.getCreatedAt().toString());
         vo.setUpdatedAt(t.getUpdatedAt() == null ? null : t.getUpdatedAt().toString());
         return vo;

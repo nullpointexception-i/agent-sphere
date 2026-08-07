@@ -5,6 +5,8 @@ export default {
   'menu.chat': 'Chat',
   'menu.instances': 'Instances',
   'menu.models': 'Model Providers',
+  'menu.completions': 'Completions',
+  'menu.tasks': 'Tasks',
   'menu.capabilities': 'Capabilities',
   'menu.capabilities.mcp': 'MCP',
   'menu.capabilities.skill': 'Skills',

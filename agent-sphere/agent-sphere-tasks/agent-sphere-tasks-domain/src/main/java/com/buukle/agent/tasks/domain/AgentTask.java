@@ -25,6 +25,7 @@ public class AgentTask {
     private String status;
     private String resultJson;
     private String remark;
+    private String callbackUrl;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

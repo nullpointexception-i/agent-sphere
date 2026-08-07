@@ -16,4 +16,6 @@ public class CreateTaskDTO implements Serializable {
     private Map<String, Object> expectedOutput;
     private Map<String, Object> config;
     private Long instanceId;
+    @Size(max = 500)
+    private String callbackUrl;
 }

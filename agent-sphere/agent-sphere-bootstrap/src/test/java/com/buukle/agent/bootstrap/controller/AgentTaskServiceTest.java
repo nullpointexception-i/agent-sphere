@@ -14,6 +14,7 @@ import com.buukle.agent.tasks.domain.AgentTask;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
 import com.buukle.agent.tasks.repository.AgentTaskMapper;
+import com.buukle.agent.tasks.service.TaskCallbackService;
 import com.buukle.agent.tasks.service.impl.AgentTaskServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,8 @@ class AgentTaskServiceTest {
     RunSpi runSpi;
     @Mock
     ChatRuntimeService chatRuntimeService;
+    @Mock
+    TaskCallbackService taskCallbackService;
 
     @InjectMocks
     AgentTaskServiceImpl taskService;
@@ -144,6 +147,42 @@ class AgentTaskServiceTest {
         verify(taskMapper).updateById(captor.capture());
         assertEquals("CANCELLED", captor.getValue().getStatus());
         verify(chatRuntimeService).stopRun(11L, 22L);
+        verify(taskCallbackService).notifyTerminal(any(AgentTask.class));
+    }
+
+    @Test
+    void submit_shouldResolveCallerFromInstanceAndPersistCallbackUrl() {
+        CreateTaskDTO dto = new CreateTaskDTO();
+        dto.setGoal("寻访任务");
+        dto.setInstanceId(2L);
+        dto.setCallbackUrl("https://callback.example/api/v1/tasks/callback");
+
+        InstanceVO instance = new InstanceVO();
+        instance.setId(2L);
+        instance.setStatus("ENABLED");
+        instance.setCreatedBy("creator-a");
+        given(instanceSpi.getInstance(2L)).willReturn(instance);
+
+        SessionVO session = new SessionVO();
+        session.setId(11L);
+        given(sessionSpi.createSession(any(CreateSessionDTO.class))).willReturn(session);
+
+        ChatMessageResponseVO chatResp = new ChatMessageResponseVO();
+        chatResp.setRunId(22L);
+        given(chatRuntimeService.chat(anyLong(), any(SendMessageDTO.class))).willReturn(chatResp);
+
+        given(taskMapper.insert(any(AgentTask.class))).willAnswer(inv -> {
+            inv.<AgentTask>getArgument(0).setId(1L);
+            return 1;
+        });
+
+        taskService.submit(dto);
+
+        ArgumentCaptor<AgentTask> insertCaptor = ArgumentCaptor.forClass(AgentTask.class);
+        verify(taskMapper).insert(insertCaptor.capture());
+        AgentTask inserted = insertCaptor.getValue();
+        assertEquals("creator-a", inserted.getCreatedBy());
+        assertEquals("https://callback.example/api/v1/tasks/callback", inserted.getCallbackUrl());
     }
 
     @Test

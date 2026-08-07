@@ -78,6 +78,20 @@ export default [
     component: './model-providers',
   },
   {
+    path: '/completions',
+    name: 'completions',
+    icon: 'thunderbolt',
+    access: 'canManageCompletions',
+    component: './completions',
+  },
+  {
+    path: '/tasks',
+    name: 'tasks',
+    icon: 'carryOut',
+    access: 'canManageTasks',
+    component: './tasks',
+  },
+  {
     path: '/instances',
     name: 'instances',
     icon: 'robot',

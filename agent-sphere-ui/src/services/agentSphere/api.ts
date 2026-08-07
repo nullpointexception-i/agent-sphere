@@ -313,6 +313,48 @@ export const agentApi = {
       testConnection: (id: number) =>
         request<void>(`${BASE}/admin/identity-providers/${id}/test`, { method: 'POST' }),
     },
+    completions: {
+      list: (params: {
+        keyword?: string;
+        startTime?: string;
+        endTime?: string;
+        page?: number;
+        size?: number;
+      }) => request<any>(`${BASE}/admin/completions`, { params }),
+      get: (id: number) => request<any>(`${BASE}/admin/completions/${id}`),
+      create: (data: any) =>
+        request<any>(`${BASE}/admin/completions`, { method: 'POST', data }),
+      update: (id: number, data: any) =>
+        request<any>(`${BASE}/admin/completions/${id}`, { method: 'PUT', data }),
+      delete: (id: number) =>
+        request<void>(`${BASE}/admin/completions/${id}`, { method: 'DELETE' }),
+      addPrompt: (id: number, data: any) =>
+        request<any>(`${BASE}/admin/completions/${id}/prompts`, { method: 'POST', data }),
+      listPrompts: (id: number) =>
+        request<any[]>(`${BASE}/admin/completions/${id}/prompts`),
+      activate: (id: number, promptId: number) =>
+        request<void>(`${BASE}/admin/completions/${id}/activate`, {
+          method: 'PUT',
+          data: { promptId },
+        }),
+      listCalls: (id: number, page = 1, size = 10) =>
+        request<any>(`${BASE}/admin/completions/${id}/calls`, { params: { page, size } }),
+    },
+    tasks: {
+      create: (data: any) =>
+        request<any>(`${BASE}/admin/tasks`, { method: 'POST', data }),
+      list: (params: {
+        keyword?: string;
+        status?: string;
+        startTime?: string;
+        endTime?: string;
+        page?: number;
+        size?: number;
+      }) => request<any>(`${BASE}/admin/tasks`, { params }),
+      get: (id: number) => request<any>(`${BASE}/admin/tasks/${id}`),
+      stop: (id: number) =>
+        request<void>(`${BASE}/admin/tasks/${id}/stop`, { method: 'POST' }),
+    },
   },
 
   instanceCapabilities: {

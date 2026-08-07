@@ -17,4 +17,6 @@ public class CreateCompletionsDTO implements Serializable {
     private String inputSchema;
     private String outputSchema;
     private String config;
+    @Size(max = 500)
+    private String remark;
 }

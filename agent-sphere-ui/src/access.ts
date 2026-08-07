@@ -17,5 +17,7 @@ export default function access(
     canManageCli: perms.includes('capability:cli:read'),
     canManageBuiltin: perms.includes('capability:builtin:read'),
     canViewDocuments: perms.includes('document:read'),
+    canManageCompletions: perms.includes('admin:completions:read'),
+    canManageTasks: perms.includes('admin:tasks:read'),
   };
 }

@@ -2,7 +2,6 @@ package com.buukle.agent.completions.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.completions.domain.AgentCompletions;
 import com.buukle.agent.completions.domain.AgentCompletionsCall;
@@ -36,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -135,8 +135,8 @@ public class CompletionsServiceImpl implements CompletionsService {
         call.setModel(model);
         call.setUsage(usage == null ? null : JsonUtils.toJson(usage));
         call.setStatus(CompletionsEnum.CALL_STATUS_SUCCESS);
-        call.setCaller(AuthContext.getUsername() == null
-                ? CompletionsEnum.CALLER_ANONYMOUS : AuthContext.getUsername());
+        call.setCaller(StringUtils.hasText(c.getCreatedBy())
+                ? c.getCreatedBy() : CompletionsEnum.CALLER_ANONYMOUS);
         completionsCallService.record(call);
 
         ChatCompletionsResp resp = new ChatCompletionsResp();
@@ -156,6 +156,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         c.setInputSchema(dto.getInputSchema());
         c.setOutputSchema(dto.getOutputSchema());
         c.setConfig(dto.getConfig());
+        c.setRemark(dto.getRemark());
         c.setStatus(CompletionsEnum.STATUS_ACTIVE);
         completionsMapper.insert(c);
         return toVO(c, List.of());
@@ -186,6 +187,9 @@ public class CompletionsServiceImpl implements CompletionsService {
         if (dto.getConfig() != null) {
             c.setConfig(dto.getConfig());
         }
+        if (dto.getRemark() != null) {
+            c.setRemark(dto.getRemark());
+        }
         completionsMapper.updateById(c);
         return toVO(c, completionsPromptService.listByCompletions(id));
     }
@@ -201,9 +205,11 @@ public class CompletionsServiceImpl implements CompletionsService {
     }
 
     @Override
-    public Page<CompletionsVO> list(String keyword, int page, int size) {
+    public Page<CompletionsVO> list(String keyword, LocalDateTime startTime, LocalDateTime endTime, int page, int size) {
         LambdaQueryWrapper<AgentCompletions> qw = new LambdaQueryWrapper<AgentCompletions>()
                 .like(StringUtils.hasText(keyword), AgentCompletions::getName, keyword)
+                .ge(startTime != null, AgentCompletions::getCreatedAt, startTime)
+                .le(endTime != null, AgentCompletions::getCreatedAt, endTime)
                 .orderByDesc(AgentCompletions::getId);
         var mpPage = completionsMapper.selectPage(new Page<>(page, size), qw);
         var voPage = new Page<CompletionsVO>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
