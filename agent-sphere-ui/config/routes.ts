@@ -85,18 +85,18 @@ export default [
     component: './completions',
   },
   {
-    path: '/tasks',
-    name: 'tasks',
-    icon: 'carryOut',
-    access: 'canManageTasks',
-    component: './tasks',
-  },
-  {
     path: '/instances',
     name: 'instances',
     icon: 'robot',
     access: 'canManageInstances',
     component: './instances',
+  },
+  {
+    path: '/tasks',
+    name: 'tasks',
+    icon: 'carryOut',
+    access: 'canManageTasks',
+    component: './tasks',
   },
   {
     path: '/chat',
