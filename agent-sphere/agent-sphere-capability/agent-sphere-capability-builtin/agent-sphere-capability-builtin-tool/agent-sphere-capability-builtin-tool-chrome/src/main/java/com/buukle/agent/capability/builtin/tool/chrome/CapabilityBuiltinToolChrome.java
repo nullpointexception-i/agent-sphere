@@ -124,6 +124,12 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
                     ? ChromeResultVO.ok(cb.getData())
                     : ChromeResultVO.fail(cb.getError());
 
+        } catch (InterruptedException e) {
+            // run 被取消时 FiberSet 会 interrupt 本线程：立即返回，不再等待浏览器回调
+            Thread.currentThread().interrupt();
+            ChromePendingStore.remove(commandId);
+            log.warn("Chrome command interrupted: {} (commandId={})", action, commandId);
+            return ChromeResultVO.fail("Chrome operation cancelled");
         } catch (java.util.concurrent.TimeoutException e) {
             ChromePendingStore.remove(commandId);
             log.warn("Chrome command timed out: {} (commandId={})", action, commandId);

@@ -116,18 +116,25 @@
 
   // --- Render ---
   function render(data) {
-    const connected = data.connected;
+    const sessionConnected = !!data.connected;
+    const taskConnected = !!data.taskConnected;
     const settings = data.settings || DEFAULT_SETTINGS;
     const frontendUrls = getFrontendUrls(settings);
 
-    // Status badge
-    const badge = document.getElementById('statusBadge');
-    badge.className = 'status-badge ' + (connected ? 'on' : 'off');
-    document.getElementById('statusText').textContent = connected ? 'On' : 'Off';
+    // Status badges: session vs task connection
+    const sessionBadge = document.getElementById('statusBadge');
+    sessionBadge.className = 'status-badge ' + (sessionConnected ? 'on' : 'off');
+    document.getElementById('statusText').textContent = sessionConnected ? 'Session On' : 'Session Off';
+
+    const taskBadge = document.getElementById('taskStatusBadge');
+    taskBadge.className = 'status-badge ' + (taskConnected ? 'on' : 'off');
+    document.getElementById('taskStatusText').textContent = taskConnected ? 'Task On' : 'Task Off';
 
     // Info panel
     document.getElementById('infoUser').textContent = data.displayName || (data.token ? 'Logged in' : '-');
     document.getElementById('infoSession').textContent = data.sessionId ? '#' + data.sessionId : '-';
+    document.getElementById('infoSessionConn').textContent = sessionConnected ? 'On' : 'Off';
+    document.getElementById('infoTaskConn').textContent = taskConnected ? 'On' : 'Off';
     document.getElementById('infoBackend').textContent = settings.backendUrl || data.baseUrl || '-';
     document.getElementById('infoFrontend').textContent = frontendUrls.length ? frontendUrls.join(' , ') : '-';
     document.getElementById('infoMain').textContent = settings.mainUrl || '-';
@@ -165,12 +172,12 @@
   });
 
   // Initial load
-  chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'settings', 'logs'], render);
+  chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'taskConnected', 'settings', 'logs'], render);
   refreshPermission();
 
   // Listen for changes
   chrome.storage.onChanged.addListener(() => {
-    chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'settings', 'logs'], render);
+    chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'taskConnected', 'settings', 'logs'], render);
   });
   chrome.permissions.onRemoved.addListener(refreshPermission);
 })();

@@ -387,7 +387,7 @@ async function connectTaskSSE() {
   if (taskAbortController) { taskAbortController.abort(); taskAbortController = null; }
   if (taskReconnectTimer) { clearTimeout(taskReconnectTimer); taskReconnectTimer = null; }
 
-  const url = `${baseUrl}/api/v1/user/task/stream`;
+  const url = `${baseUrl}/api/v1/runtime/user/task/stream`;
   console.log('[AgentSphere] Connecting task SSE:', url);
 
   taskAbortController = new AbortController();
@@ -399,11 +399,12 @@ async function connectTaskSSE() {
     if (!response.ok) {
       console.warn('[AgentSphere] Task SSE rejected', response.status, '- will retry');
       taskAbortController = null;
+      setTaskConnected(false);
       scheduleTaskReconnect();
       return;
     }
     console.log('[AgentSphere] Task SSE connected');
-    taskConnected = true;
+    setTaskConnected(true);
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -423,11 +424,13 @@ async function connectTaskSSE() {
     }
     console.warn('[AgentSphere] Task SSE stream closed, reconnecting');
     taskAbortController = null;
+    setTaskConnected(false);
     scheduleTaskReconnect();
   } catch (e) {
-    if (e.name === 'AbortError') return;
+    if (e.name === 'AbortError') return; // aborted by a newer connection; its state will be reported separately
     console.warn('[AgentSphere] Task SSE error:', e.message);
     taskAbortController = null;
+    setTaskConnected(false);
     scheduleTaskReconnect();
   }
 }
@@ -435,6 +438,11 @@ async function connectTaskSSE() {
 function scheduleTaskReconnect() {
   if (taskReconnectTimer) clearTimeout(taskReconnectTimer);
   taskReconnectTimer = setTimeout(() => { taskReconnectTimer = null; connectTaskSSE(); }, RECONNECT_BASE_MS);
+}
+
+function setTaskConnected(status) {
+  taskConnected = status;
+  chrome.storage.local.set({ taskConnected: status }).catch(() => {});
 }
 
 // (Re)establish the user-level task connection whenever credentials are available

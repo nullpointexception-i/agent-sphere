@@ -337,8 +337,10 @@ public class SessionRunner {
             }
             var results = fibers.awaitAll(() -> CANCELLED_RUNS.contains(rid));
 
-            // If cancelled during tool execution, publish FAILED events and exit
-            if (CANCELLED_RUNS.remove(currentRunId)) {
+            // If cancelled during tool execution, publish FAILED events and exit.
+            // 不要在此消费 CANCELLED_RUNS：终态（run=CANCELLED + 终态事件）统一由循环后的收口处理，
+            // 否则 run 会一直停留在 RUNNING 且前端收不到 run_cancelled/run_failed。
+            if (CANCELLED_RUNS.contains(currentRunId)) {
                 for (TurnToolCall tc : turn.toolCalls()) {
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                             new RuntimeEventDataVO()

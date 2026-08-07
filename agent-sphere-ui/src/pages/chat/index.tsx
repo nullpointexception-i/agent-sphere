@@ -73,6 +73,7 @@ export default function Chat() {
   const reasoningSectionIdRef = useRef(0);
   const runUserMessageRef = useRef<Map<number, string>>(new Map());
   const currentRunIdRef = useRef<number | null>(null);
+  const stopFallbackRef = useRef<number | null>(null);
   const pendingMsgConsumedRef = useRef(false);
 
   const loadSessions = useCallback(async (offset: number) => {
@@ -234,6 +235,12 @@ export default function Chat() {
             const parsed = JSON.parse(payload);
             const evtType = parsed.eventType || parsed.type || '';
             const d = parsed.data || parsed;
+
+            // 始终跟踪当前 runId（含任务系统发起的 run），保证停止能命中正确 run
+            const msgRunId = Number(d?.runId);
+            if (Number.isFinite(msgRunId)) {
+              currentRunIdRef.current = msgRunId;
+            }
 
             if (evtType === 'reasoning_token') {
               const raw = d?.response || '';
@@ -434,6 +441,10 @@ export default function Chat() {
                 subType === 'run_awaiting_user'
               ) {
                 setSending(false);
+                if (stopFallbackRef.current) {
+                  clearTimeout(stopFallbackRef.current);
+                  stopFallbackRef.current = null;
+                }
                 const runId = d?.runId;
 
                 // 展示 LLM 错误消息（429/502/其他）
@@ -1042,7 +1053,15 @@ export default function Chat() {
               sending={sending}
               onSendMessage={sendMessage}
               onCancelSend={() => {
-                setSending(false);
+                // 不乐观解锁：保持 sending=true（按钮维持停止态），等待该 run 的终态事件再恢复；
+                // 8s 兜底强制恢复，避免后端未发布终态事件时卡死
+                if (stopFallbackRef.current) {
+                  clearTimeout(stopFallbackRef.current);
+                }
+                stopFallbackRef.current = window.setTimeout(() => {
+                  stopFallbackRef.current = null;
+                  setSending(false);
+                }, 8000);
                 // Cancel any pending clarifications
                 for (const m of messages) {
                   const clarifications = (m as any).clarifications;
@@ -1061,9 +1080,10 @@ export default function Chat() {
                     }
                   }
                 }
-                if (currentRunIdRef.current && currentSession?.id) {
+                const stopRunId = currentRunIdRef.current;
+                if (stopRunId && currentSession?.id) {
                   agentApi.runs
-                    .stop(currentSession.id, currentRunIdRef.current)
+                    .stop(currentSession.id, stopRunId)
                     .catch(() => {});
                 }
                 currentRunIdRef.current = null;

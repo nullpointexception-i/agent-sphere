@@ -3,17 +3,18 @@ package com.buukle.agent.runtime.kernel.async;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 
 @Slf4j
 public class FiberSet implements AutoCloseable {
 
-    private static final ExecutorService SHARED_EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
     private static final long POLL_INTERVAL_NANOS = 500_000_000L; // 500ms
 
     private final Semaphore semaphore;
     private final ConcurrentLinkedQueue<CompletableFuture<FiberResult>> futures = new ConcurrentLinkedQueue<>();
+    private final ConcurrentHashMap<CompletableFuture<FiberResult>, Thread> runningThreads = new ConcurrentHashMap<>();
     private final long submitTimeoutSeconds;
     private final long executionTimeoutSeconds;
     private Consumer<SingleResult> onResult;
@@ -45,18 +46,24 @@ public class FiberSet implements AutoCloseable {
             Thread.currentThread().interrupt();
             return;
         }
-        futures.add(CompletableFuture.supplyAsync(() -> {
+        CompletableFuture<FiberResult> future = new CompletableFuture<>();
+        // 虚拟线程 + 线程映射：取消时既能 cancel future，也能 interrupt 正在执行的线程
+        // （CompletableFuture.cancel(true) 不会中断已在运行的任务）
+        Thread worker = Thread.ofVirtual().start(() -> {
             try {
                 String result = task.get();
                 if (onResult != null) onResult.accept(new SingleResult(callId, result, null));
-                return new FiberResult(callId, result, null);
+                future.complete(new FiberResult(callId, result, null));
             } catch (Exception e) {
                 if (onResult != null) onResult.accept(new SingleResult(callId, null, e.getMessage()));
-                return new FiberResult(callId, null, e.getMessage());
+                future.complete(new FiberResult(callId, null, e.getMessage()));
             } finally {
+                runningThreads.remove(future);
                 semaphore.release();
             }
-        }, SHARED_EXECUTOR));
+        });
+        runningThreads.put(future, worker);
+        futures.add(future);
     }
 
     public ConcurrentHashMap<String, String> awaitAll() {
@@ -69,6 +76,7 @@ public class FiberSet implements AutoCloseable {
         try {
             while (true) {
                 if (checker != null && checker.isCancelled()) {
+                    interruptRunning();
                     for (var f : futures) f.cancel(true);
                     break;
                 }
@@ -84,6 +92,7 @@ public class FiberSet implements AutoCloseable {
                 }
             }
         } catch (TimeoutException e) {
+            interruptRunning();
             for (var f : futures) f.cancel(true);
             log.warn("Fiber batch timed out after {}s", executionTimeoutSeconds);
         } catch (Exception e) {
@@ -107,8 +116,18 @@ public class FiberSet implements AutoCloseable {
         return results;
     }
 
+    private void interruptRunning() {
+        for (Map.Entry<CompletableFuture<FiberResult>, Thread> entry : runningThreads.entrySet()) {
+            Thread t = entry.getValue();
+            if (t != null && !entry.getKey().isDone()) {
+                t.interrupt();
+            }
+        }
+    }
+
     @Override
     public void close() {
+        interruptRunning();
         for (CompletableFuture<FiberResult> f : futures) {
             f.cancel(true);
         }
