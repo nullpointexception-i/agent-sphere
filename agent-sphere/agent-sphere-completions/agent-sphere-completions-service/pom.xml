@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.buukle.agent</groupId>
+        <artifactId>agent-sphere-completions</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>agent-sphere-completions-service</artifactId>
+    <dependencies>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-completions-repository</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-completions-spi</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-completions-domain</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-completions-dtvo</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-completions-exception</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-common</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-util</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-model-spi</artifactId>
+        </dependency>        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-runtime-kernel</artifactId>
+        </dependency>
+    </dependencies>
+</project>

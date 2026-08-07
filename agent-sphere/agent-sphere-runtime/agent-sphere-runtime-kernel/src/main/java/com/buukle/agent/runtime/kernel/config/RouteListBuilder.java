@@ -46,7 +46,7 @@ public class RouteListBuilder {
         return routes;
     }
 
-    private List<ModelRouteFullVO> fromRouteId(Long modelRouteId) {
+    public List<ModelRouteFullVO> fromRouteId(Long modelRouteId) {
         List<ModelRouteFullVO> routes = new ArrayList<>();
         ModelRouteVO primary = routeSpi.getRoute(modelRouteId);
         if (primary != null) {

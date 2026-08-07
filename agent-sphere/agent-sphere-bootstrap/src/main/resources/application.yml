@@ -180,3 +180,12 @@ buukle:
       frontend-retention-days: 7                    # 前端事件保留天数 / Frontend event retention days
       backend-retention-days: 90                    # 后端事件保留天数 / Backend event retention days
       cleanup-cron: "0 0 3 * * ?"                   # 清理定时任务cron / Cleanup cron expression
+
+# ============================================================
+# 能力开放层配置 / Capability Open Platform
+# ============================================================
+hri-ai:
+  completions:
+    call-timeout: 60s                              # 单次 completions 调用超时 / Completions call timeout
+  tasks:
+    poll-interval: 2s                              # task 状态轮询间隔 / Task poll interval

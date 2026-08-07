@@ -9,5 +9,6 @@ public enum LlmInteractionType {
     SKILL_EXECUTION,
     COMPACTION,
     TITLE_GENERATION,
-    CONTRACT_REPAIR
+    CONTRACT_REPAIR,
+    COMPLETIONS
 }

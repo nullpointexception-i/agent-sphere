@@ -24,6 +24,8 @@
         <module>agent-sphere-admin</module>
         <module>agent-sphere-sso</module>
         <module>agent-sphere-agui</module>
+        <module>agent-sphere-completions</module>
+        <module>agent-sphere-tasks</module>
         <module>agent-sphere-bootstrap</module>
     </modules>
     <properties>
@@ -371,6 +373,66 @@
             <dependency>
                 <groupId>com.buukle.agent</groupId>
                 <artifactId>agent-sphere-agui-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-completions-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-completions-exception</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-completions-dtvo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-completions-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-completions-repository</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-completions-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-completions-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-tasks-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-tasks-dtvo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-tasks-repository</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-tasks-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-tasks-controller</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
