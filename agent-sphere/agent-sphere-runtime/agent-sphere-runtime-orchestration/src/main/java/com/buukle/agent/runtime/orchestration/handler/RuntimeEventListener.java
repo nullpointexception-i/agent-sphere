@@ -3,13 +3,16 @@ package com.buukle.agent.runtime.orchestration.handler;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentUserInLoopRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.AgentUserInLoopRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
+import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
+import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEvent;
 import com.buukle.agent.runtime.orchestration.sse.SseManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +26,7 @@ public class RuntimeEventListener {
     private final RunSpi runSpi;
     private final AgentUserInLoopRecordSpi hitlRecordSpi;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
+    private final SessionSpi sessionSpi;
 
     private static RuntimeEventVO transformForFrontend(RuntimeEventVO event) {
         EventType type = event.getEventType();
@@ -128,14 +132,32 @@ public class RuntimeEventListener {
             }
             case ScreenshotEventType s -> {
             }
-            case ChromeCommandEventType s -> {
-            }
+            case ChromeCommandEventType s -> handleChromeCommand(event, data);
             case ClarificationStatus s -> { /* handled via SSE passthrough */ }
         }
 
         Long sessionId = data != null ? data.getSessionId() : null;
         if (sessionId != null) {
             sseManager.sendBySession(sessionId, transformForFrontend(event));
+        }
+    }
+
+    /** 浏览器指令：除按 session 投递前端外，额外按 session 归属用户投递到用户级 task 连接（浏览器插件）。 */
+    private void handleChromeCommand(RuntimeEventVO event, RuntimeEventDataVO data) {
+        if (!(event instanceof ChromeCommandEvent chromeEvent)) {
+            return;
+        }
+        Long sessionId = chromeEvent.getCommand() != null ? chromeEvent.getCommand().getSessionId() : null;
+        if (sessionId == null) {
+            return;
+        }
+        try {
+            SessionVO session = sessionSpi.getSession(sessionId);
+            if (session != null && session.getCreatedBy() != null && !session.getCreatedBy().isBlank()) {
+                sseManager.sendByUser(session.getCreatedBy(), chromeEvent.getCommand());
+            }
+        } catch (Exception e) {
+            // session 不存在/无归属：仅按 session 投递前端，忽略
         }
     }
 

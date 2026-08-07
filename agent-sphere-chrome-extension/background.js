@@ -56,6 +56,7 @@ function startSSE() {
       sessionId = data.sessionId;
       baseUrl = data.baseUrl;
       connectSSE();
+      ensureTaskSSE();
     }
     // Self-heal after SW restart / extension reload: once config is ready, proactively pull the session from the active matching tab
     loadConfiguredUrls(() => queryActiveTabSession());
@@ -225,6 +226,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       token, sessionId, displayName: msg.displayName || '', baseUrl: msg.baseUrl,
     }).catch(() => {});
     connectSSE();
+    ensureTaskSSE();
   }
   if (msg.type === 'log') {
     chrome.storage.local.get(['logs'], (data) => {
@@ -282,6 +284,25 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(() => { reconnectTimer = null; connectSSE(); }, delay);
 }
 
+// --- Shared handler for SSE data lines (session stream + user task stream) ---
+async function handleSseData(dataLine) {
+  // Backend heartbeat (data:ping every 15s) is not JSON: skip silently
+  if (!dataLine || !dataLine.startsWith('{')) return;
+  try {
+    const msg = JSON.parse(dataLine);
+    console.log('[AgentSphere] SSE msg:', msg.eventType, msg.action, msg.url?.slice(0,30));
+    if (msg.eventType === 'browser_operation') {
+      const cmd = msg.command || msg;
+      const params = { url: cmd.url, selector: cmd.selector, text: cmd.text, code: cmd.code, mode: cmd.mode, tabId: cmd.tabId, append: cmd.append };
+      Object.keys(params).forEach(k => { if (params[k] == null) delete params[k]; });
+      console.log('[AgentSphere] Calling executeInPage:', cmd.commandId?.slice(0,8), cmd.action, Object.keys(params));
+      await executeInPage(cmd.commandId, cmd.action, params);
+    }
+  } catch (e) {
+    console.warn('[AgentSphere] SSE parse error:', e);
+  }
+}
+
 async function connectSSE() {
   if (!sessionId || !token || !baseUrl) return;
 
@@ -336,21 +357,7 @@ async function connectSSE() {
         const dataLine = part.startsWith('data:') ? part.slice(5).trim() : '';
         if (!dataLine) continue;
         lastDataAt = Date.now();
-        // Backend heartbeat (data:ping every 15s) is not JSON: skip silently and treat as an aliveness signal
-        if (!dataLine.startsWith('{')) continue;
-        try {
-          const msg = JSON.parse(dataLine);
-          console.log('[AgentSphere] SSE msg:', msg.eventType, msg.action, msg.url?.slice(0,30));
-          if (msg.eventType === 'browser_operation') {
-            const cmd = msg.command || msg;
-            const params = { url: cmd.url, selector: cmd.selector, text: cmd.text, code: cmd.code, mode: cmd.mode, tabId: cmd.tabId, append: cmd.append };
-            Object.keys(params).forEach(k => { if (params[k] == null) delete params[k]; });
-            console.log('[AgentSphere] Calling executeInPage:', cmd.commandId?.slice(0,8), cmd.action, Object.keys(params));
-            await executeInPage(cmd.commandId, cmd.action, params);
-          }
-        } catch (e) {
-          console.warn('[AgentSphere] SSE parse error:', e);
-        }
+        await handleSseData(dataLine);
       }
     }
 
@@ -368,6 +375,71 @@ async function connectSSE() {
     abortController = null;
     scheduleReconnect();
   }
+}
+
+// --- User-level task SSE: permanent connection for task-mode browser commands (no session dependency) ---
+let taskAbortController = null;
+let taskReconnectTimer = null;
+let taskConnected = false;
+
+async function connectTaskSSE() {
+  if (!token || !baseUrl) return;
+  if (taskAbortController) { taskAbortController.abort(); taskAbortController = null; }
+  if (taskReconnectTimer) { clearTimeout(taskReconnectTimer); taskReconnectTimer = null; }
+
+  const url = `${baseUrl}/api/v1/user/task/stream`;
+  console.log('[AgentSphere] Connecting task SSE:', url);
+
+  taskAbortController = new AbortController();
+  try {
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: taskAbortController.signal,
+    });
+    if (!response.ok) {
+      console.warn('[AgentSphere] Task SSE rejected', response.status, '- will retry');
+      taskAbortController = null;
+      scheduleTaskReconnect();
+      return;
+    }
+    console.log('[AgentSphere] Task SSE connected');
+    taskConnected = true;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      for (const part of parts) {
+        const dataLine = part.startsWith('data:') ? part.slice(5).trim() : '';
+        if (!dataLine) continue;
+        lastDataAt = Date.now();
+        await handleSseData(dataLine);
+      }
+    }
+    console.warn('[AgentSphere] Task SSE stream closed, reconnecting');
+    taskAbortController = null;
+    scheduleTaskReconnect();
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    console.warn('[AgentSphere] Task SSE error:', e.message);
+    taskAbortController = null;
+    scheduleTaskReconnect();
+  }
+}
+
+function scheduleTaskReconnect() {
+  if (taskReconnectTimer) clearTimeout(taskReconnectTimer);
+  taskReconnectTimer = setTimeout(() => { taskReconnectTimer = null; connectTaskSSE(); }, RECONNECT_BASE_MS);
+}
+
+// (Re)establish the user-level task connection whenever credentials are available
+function ensureTaskSSE() {
+  if (token && baseUrl) connectTaskSSE();
 }
 
 // --- Send message to content script with retry ---

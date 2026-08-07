@@ -21,4 +21,10 @@ public class SseRuntimeController {
     public SseEmitter stream(@PathVariable Long sessionId) {
         return sseRuntimeService.stream(sessionId);
     }
+
+    /** 用户级 task 指令流（浏览器插件永久连接）。 */
+    @GetMapping("/user/task/stream")
+    public SseEmitter streamUser() {
+        return sseRuntimeService.streamUser();
+    }
 }

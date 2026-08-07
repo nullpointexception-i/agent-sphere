@@ -22,6 +22,15 @@ public class SseRuntimeService {
         return sseManager.register(sessionId);
     }
 
+    /** 用户级 task 指令流（浏览器插件永久连接，不依赖 session）。 */
+    public SseEmitter streamUser() {
+        String username = AuthContext.getUsername();
+        if (username == null || username.isBlank()) {
+            throw new BizException(CommonErrorCode.UNAUTHORIZED);
+        }
+        return sseManager.registerUser(username);
+    }
+
     private void assertSessionOwnership(Long sessionId) {
         if (AuthContext.isSuperAdmin()) return;
         SessionVO session = sessionSpi.getSession(sessionId);

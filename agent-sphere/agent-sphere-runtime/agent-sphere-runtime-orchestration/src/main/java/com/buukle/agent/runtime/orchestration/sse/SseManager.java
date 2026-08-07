@@ -21,6 +21,8 @@ public class SseManager {
 
     private final ConcurrentHashMap<Long, List<SseEmitter>> sessionEmitters = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, ConcurrentLinkedQueue<CachedEvent>> eventCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConcurrentLinkedQueue<CachedEvent>> userEventCache = new ConcurrentHashMap<>();
     private final Duration cacheTtl;
     private final ScheduledExecutorService heartbeats;
 
@@ -51,6 +53,22 @@ public class SseManager {
                 if (!dead.isEmpty()) {
                     emitters.removeAll(dead);
                     if (emitters.isEmpty()) sessionEmitters.remove(sid, emitters);
+                }
+            }
+            for (Map.Entry<String, List<SseEmitter>> entry : userEmitters.entrySet()) {
+                String username = entry.getKey();
+                List<SseEmitter> emitters = entry.getValue();
+                List<SseEmitter> dead = new ArrayList<>();
+                for (SseEmitter emitter : emitters) {
+                    try {
+                        emitter.send(SseEmitter.event().name("heartbeat").data("ping"));
+                    } catch (Exception e) {
+                        dead.add(emitter);
+                    }
+                }
+                if (!dead.isEmpty()) {
+                    emitters.removeAll(dead);
+                    if (emitters.isEmpty()) userEmitters.remove(username, emitters);
                 }
             }
         } catch (Exception ignored) {
@@ -118,6 +136,95 @@ public class SseManager {
             if (emitters.isEmpty()) {
                 sessionEmitters.remove(sessionId);
             }
+        }
+    }
+
+    // ---------- 用户级连接（task 指令投递，不依赖 session） ----------
+
+    /** 注册用户级 SSE 连接（key=username）。 */
+    public SseEmitter registerUser(String username) {
+        SseEmitter emitter = new SseEmitter(0L);
+        userEmitters.computeIfAbsent(username, k -> new CopyOnWriteArrayList<>()).add(emitter);
+
+        Runnable cleanup = () -> removeUserEmitter(username, emitter);
+        emitter.onCompletion(cleanup);
+        emitter.onTimeout(cleanup);
+        emitter.onError(e -> cleanup.run());
+
+        flushUserCache(username, emitter);
+        return emitter;
+    }
+
+    /** 向用户所有用户级连接推送事件（无连接时缓存）。 */
+    public void sendByUser(String username, Object event) {
+        List<SseEmitter> emitters = userEmitters.get(username);
+        if (emitters == null || emitters.isEmpty()) {
+            cacheUserEvent(username, event);
+            return;
+        }
+        List<SseEmitter> failed = new ArrayList<>();
+        for (SseEmitter emitter : emitters) {
+            try {
+                emitter.send(SseEmitter.event().data(event));
+            } catch (Exception e) {
+                failed.add(emitter);
+            }
+        }
+        if (!failed.isEmpty()) {
+            List<SseEmitter> remaining = userEmitters.get(username);
+            if (remaining != null) remaining.removeAll(failed);
+            cacheUserEvent(username, event);
+        }
+    }
+
+    private void removeUserEmitter(String username, SseEmitter emitter) {
+        List<SseEmitter> emitters = userEmitters.get(username);
+        if (emitters != null) {
+            emitters.remove(emitter);
+            if (emitters.isEmpty()) {
+                userEmitters.remove(username);
+            }
+        }
+    }
+
+    private void cacheUserEvent(String username, Object event) {
+        ConcurrentLinkedQueue<CachedEvent> queue = userEventCache.computeIfAbsent(username, k -> new ConcurrentLinkedQueue<>());
+        queue.add(new CachedEvent(event, Instant.now()));
+        while (queue.size() > MAX_CACHE_PER_SESSION) queue.poll();
+        evictExpiredUser(username, queue);
+    }
+
+    private void flushUserCache(String username, SseEmitter emitter) {
+        ConcurrentLinkedQueue<CachedEvent> queue = userEventCache.get(username);
+        if (queue == null || queue.isEmpty()) return;
+        List<CachedEvent> remaining = new ArrayList<>();
+        while (!queue.isEmpty()) {
+            CachedEvent cached = queue.poll();
+            if (cached != null && Duration.between(cached.timestamp, Instant.now()).compareTo(cacheTtl) <= 0) {
+                try {
+                    emitter.send(SseEmitter.event().data(cached.event));
+                } catch (Exception e) {
+                    remaining.add(cached);
+                }
+            }
+        }
+        if (!remaining.isEmpty()) {
+            queue.addAll(remaining);
+        }
+        if (queue.isEmpty()) {
+            userEventCache.remove(username);
+        }
+    }
+
+    private void evictExpiredUser(String username, ConcurrentLinkedQueue<CachedEvent> queue) {
+        Iterator<CachedEvent> it = queue.iterator();
+        while (it.hasNext()) {
+            if (Duration.between(it.next().timestamp, Instant.now()).compareTo(cacheTtl) > 0) {
+                it.remove();
+            }
+        }
+        if (queue.isEmpty()) {
+            userEventCache.remove(username);
         }
     }
 
