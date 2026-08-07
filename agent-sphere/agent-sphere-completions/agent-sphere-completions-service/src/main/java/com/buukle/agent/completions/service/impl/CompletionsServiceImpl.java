@@ -50,6 +50,8 @@ public class CompletionsServiceImpl implements CompletionsService {
     private static final String INPUT_HOLDER = "{{input}}";
     private static final String ROLE_SYSTEM = "system";
     private static final String ROLE_USER = "user";
+    private static final String OUTPUT_SCHEMA_HINT = "\n\n请严格按照以下 JSON Schema 输出最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
+    private static final String RESPONSE_FORMAT_TYPE_JSON_SCHEMA = "json_schema";
 
     private final CompletionsMapper completionsMapper;
     private final CompletionsPromptMapper promptMapper;
@@ -80,7 +82,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         }
 
         Map<String, Object> inputMap = input == null ? Map.of() : input.getValues();
-        List<ChatMessageDTO> messages = renderPrompt(prompt, inputMap);
+        List<ChatMessageDTO> messages = renderPrompt(prompt, inputMap, c.getOutputSchema());
         List<ModelRouteFullVO> routes = routeListBuilder.fromRouteId(c.getModelRouteId());
         if (routes.isEmpty()) {
             throw new BizException(CompletionsErrorCode.NO_MODEL_ROUTE);
@@ -103,6 +105,7 @@ public class CompletionsServiceImpl implements CompletionsService {
             ChatCompletionRequestDTO request = new ChatCompletionRequestDTO();
             request.setModel(route.getModelName());
             request.setMessages(messages);
+            applyResponseFormat(request, c.getOutputSchema());
             KernelLlmService.InvokeResult result;
             try {
                 result = llmService.invokeSync(
@@ -231,10 +234,14 @@ public class CompletionsServiceImpl implements CompletionsService {
         return completionsCallService.pageByCompletions(id, page, size);
     }
 
-    private List<ChatMessageDTO> renderPrompt(AgentCompletionsPrompt prompt, Map<String, Object> input) {
+    private List<ChatMessageDTO> renderPrompt(AgentCompletionsPrompt prompt, Map<String, Object> input, String outputSchema) {
         List<ChatMessageDTO> messages = new ArrayList<>();
-        if (StringUtils.hasText(prompt.getPromptSystem())) {
-            messages.add(new ChatMessageDTO().setRole(ROLE_SYSTEM).setContent(prompt.getPromptSystem()));
+        String system = prompt.getPromptSystem() == null ? "" : prompt.getPromptSystem();
+        if (StringUtils.hasText(outputSchema)) {
+            system += OUTPUT_SCHEMA_HINT + outputSchema;
+        }
+        if (StringUtils.hasText(system)) {
+            messages.add(new ChatMessageDTO().setRole(ROLE_SYSTEM).setContent(system));
         }
         String user = prompt.getPromptUser() == null ? "" : prompt.getPromptUser();
         if (user.contains(INPUT_HOLDER)) {
@@ -243,6 +250,26 @@ public class CompletionsServiceImpl implements CompletionsService {
         user = renderFieldPlaceholders(user, input);
         messages.add(new ChatMessageDTO().setRole(ROLE_USER).setContent(user));
         return messages;
+    }
+
+    /** 若配置了 outputSchema，设置 response_format=json_schema（模型不支持时 LLM 层仍会按 prompt 提示输出）。 */
+    private void applyResponseFormat(ChatCompletionRequestDTO request, String outputSchema) {
+        if (!StringUtils.hasText(outputSchema)) {
+            return;
+        }
+        try {
+            com.buukle.agent.model.dtvo.dto.complete.ResponseFormatDTO responseFormat =
+                    new com.buukle.agent.model.dtvo.dto.complete.ResponseFormatDTO();
+            responseFormat.setType(RESPONSE_FORMAT_TYPE_JSON_SCHEMA);
+            com.buukle.agent.model.dtvo.dto.complete.JsonSchemaDTO jsonSchema =
+                    new com.buukle.agent.model.dtvo.dto.complete.JsonSchemaDTO();
+            jsonSchema.setName("output");
+            jsonSchema.setSchema(JsonUtils.getMapper().readTree(outputSchema));
+            responseFormat.setJson_schema(jsonSchema);
+            request.setResponseFormat(responseFormat);
+        } catch (Exception e) {
+            // schema 解析失败：忽略 response_format，仅靠 prompt 提示
+        }
     }
 
     private String renderFieldPlaceholders(String text, Map<String, Object> input) {
