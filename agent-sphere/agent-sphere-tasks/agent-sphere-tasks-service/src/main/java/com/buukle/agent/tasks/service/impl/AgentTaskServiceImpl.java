@@ -46,6 +46,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     private static final long MAX_POLL_SECONDS = 30 * 60; // 30 分钟兜底
     private static final int MAX_TITLE_LENGTH = 60;
+    private static final String MSG_TASK_CONFIG_HEADER = "\n\n【任务配置】请严格依据以下配置执行寻访任务：\n";
+    private static final String MSG_EXPECTED_OUTPUT_HEADER = "\n\n【期望输出】请严格按以下 JSON Schema 返回最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
+    private static final String MSG_STRICT_RETURN = "\n\n请务必按上述配置完成寻访，并将已收藏候选人汇总为符合【期望输出】schema 的 JSON 返回。";
 
     private final AgentTaskMapper taskMapper;
     private final InstanceSpi instanceSpi;
@@ -81,7 +84,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             SessionVO session = sessionSpi.createSession(sessionDTO);
 
             SendMessageDTO message = new SendMessageDTO();
-            message.setMessage(dto.getGoal());
+            message.setMessage(buildPrompt(dto));
             ChatMessageResponseVO resp = chatRuntimeService.chat(session.getId(), message);
 
             task.setSessionId(session.getId());
@@ -238,6 +241,22 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private String titleOf(String goal) {
         String title = goal == null ? "" : goal.trim();
         return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
+    }
+
+    /** 组装任务 prompt：goal + 寻访配置 + 期望输出 schema，要求严格按 schema 返回结构化结果。 */
+    private String buildPrompt(CreateTaskDTO dto) {
+        StringBuilder sb = new StringBuilder();
+        if (dto.getGoal() != null) {
+            sb.append(dto.getGoal());
+        }
+        if (dto.getConfig() != null && !dto.getConfig().isEmpty()) {
+            sb.append(MSG_TASK_CONFIG_HEADER).append(JsonUtils.toJson(dto.getConfig()));
+        }
+        if (dto.getExpectedOutput() != null && !dto.getExpectedOutput().isEmpty()) {
+            sb.append(MSG_EXPECTED_OUTPUT_HEADER).append(JsonUtils.toJson(dto.getExpectedOutput()));
+        }
+        sb.append(MSG_STRICT_RETURN);
+        return sb.toString();
     }
 
     private AgentTask requireTask(Long id) {
