@@ -46,6 +46,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     private static final long MAX_POLL_SECONDS = 30 * 60; // 30 分钟兜底
     private static final int MAX_TITLE_LENGTH = 60;
+    private static final String MSG_AUTONOMOUS_HEADER = "\n【自主任务模式】这是一个后台自动执行的任务：禁止向用户提问、请求澄清或确认任何内容；信息不足时基于已有上下文做合理假设并继续完成。\n";
     private static final String MSG_TASK_CONFIG_HEADER = "\n\n【任务配置】请严格依据以下配置执行寻访任务：\n";
     private static final String MSG_EXPECTED_OUTPUT_HEADER = "\n\n【期望输出】请严格按以下 JSON Schema 返回最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
     private static final String MSG_STRICT_RETURN = "\n\n请务必按上述配置完成寻访，并将已收藏候选人汇总为符合【期望输出】schema 的 JSON 返回。";
@@ -85,6 +86,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
             SendMessageDTO message = new SendMessageDTO();
             message.setMessage(buildPrompt(dto));
+            message.setNoClarification(true);
             ChatMessageResponseVO resp = chatRuntimeService.chat(session.getId(), message);
 
             task.setSessionId(session.getId());
@@ -243,9 +245,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
     }
 
-    /** 组装任务 prompt：goal + 寻访配置 + 期望输出 schema，要求严格按 schema 返回结构化结果。 */
+    /** 组装任务 prompt：自主模式指令 + goal + 寻访配置 + 期望输出 schema，禁止提问并要求严格按 schema 返回结构化结果。 */
     private String buildPrompt(CreateTaskDTO dto) {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder(MSG_AUTONOMOUS_HEADER);
         if (dto.getGoal() != null) {
             sb.append(dto.getGoal());
         }

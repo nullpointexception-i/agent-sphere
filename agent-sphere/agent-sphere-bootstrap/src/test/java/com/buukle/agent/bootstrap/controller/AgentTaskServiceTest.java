@@ -151,6 +151,40 @@ class AgentTaskServiceTest {
     }
 
     @Test
+    void submit_shouldSendAutonomousMessageWithoutClarification() {
+        CreateTaskDTO dto = new CreateTaskDTO();
+        dto.setGoal("整理月报");
+        dto.setInstanceId(2L);
+
+        InstanceVO instance = new InstanceVO();
+        instance.setId(2L);
+        instance.setStatus("ENABLED");
+        given(instanceSpi.getInstance(2L)).willReturn(instance);
+
+        SessionVO session = new SessionVO();
+        session.setId(11L);
+        given(sessionSpi.createSession(any(CreateSessionDTO.class))).willReturn(session);
+
+        ChatMessageResponseVO chatResp = new ChatMessageResponseVO();
+        chatResp.setRunId(22L);
+        given(chatRuntimeService.chat(anyLong(), any(SendMessageDTO.class))).willReturn(chatResp);
+
+        given(taskMapper.insert(any(AgentTask.class))).willAnswer(inv -> {
+            inv.<AgentTask>getArgument(0).setId(1L);
+            return 1;
+        });
+
+        taskService.submit(dto);
+
+        ArgumentCaptor<SendMessageDTO> messageCaptor = ArgumentCaptor.forClass(SendMessageDTO.class);
+        verify(chatRuntimeService).chat(anyLong(), messageCaptor.capture());
+        SendMessageDTO sent = messageCaptor.getValue();
+        assertEquals(Boolean.TRUE, sent.getNoClarification());
+        org.junit.jupiter.api.Assertions.assertTrue(sent.getMessage().contains("整理月报"));
+        org.junit.jupiter.api.Assertions.assertTrue(sent.getMessage().contains("禁止向用户提问"));
+    }
+
+    @Test
     void submit_shouldResolveCallerFromInstanceAndPersistCallbackUrl() {
         CreateTaskDTO dto = new CreateTaskDTO();
         dto.setGoal("寻访任务");

@@ -98,7 +98,8 @@ public class ContextPreparer {
         List<CapabilityVO> capabilities = capabilitySpi.getCapabilitiesByInstance(
                 validated.getAgentInstance().getId());
         List<CapabilityFullVO> fullCapabilities = resolveFullCapabilities(capabilities);
-        List<RuntimeTool> tools = resolveTools(capabilities, validated);
+        List<RuntimeTool> tools = resolveTools(capabilities, validated,
+                Boolean.TRUE.equals(run.getNoClarification()));
 
         return KernelContext.builder()
                 .agentInstance(validated.getAgentInstance())
@@ -148,7 +149,7 @@ public class ContextPreparer {
     }
 
     // ---- New RuntimeTool resolution ----
-    private List<RuntimeTool> resolveTools(List<CapabilityVO> capabilities, ValidationResult validated) {
+    private List<RuntimeTool> resolveTools(List<CapabilityVO> capabilities, ValidationResult validated, boolean noClarification) {
         List<RuntimeTool> result = new ArrayList<>();
         for (CapabilityVO cap : capabilities) {
             if (!STATUS_ENABLED.equals(cap.getStatus())) continue;
@@ -187,21 +188,23 @@ public class ContextPreparer {
                     .parametersSchemaJson(tool.getParamSchema())
                     .execBinding(binding).build());
         }
-        // Always register ask_clarification
-        long clarificationId = BuiltinToolEnum.ASK_CLARIFICATION.getId();
-        String clarificationLlmName = LLM_PREFIX_BUILTIN + clarificationId;
-        Map<String, Object> clarificationBinding = new HashMap<>();
-        clarificationBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ChatClarification.INTERNAL_NAME);
-        result.add(RuntimeTool.builder()
-                .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                .capabilityId(clarificationId)
-                .llmToolName(clarificationLlmName)
-                .displayName(ChatClarification.DISPLAY_NAME)
-                .displayNameCn(ChatClarification.DISPLAY_NAME_CN)
-                .displayNameEn(ChatClarification.DISPLAY_NAME)
-                .description(ChatClarification.DESCRIPTION)
-                .parametersSchemaJson(CLARIFICATION_PARAM_SCHEMA)
-                .execBinding(clarificationBinding).build());
+        // 默认注册 ask_clarification；自主任务（noClarification）场景剔除，禁止模型向用户提问
+        if (!noClarification) {
+            long clarificationId = BuiltinToolEnum.ASK_CLARIFICATION.getId();
+            String clarificationLlmName = LLM_PREFIX_BUILTIN + clarificationId;
+            Map<String, Object> clarificationBinding = new HashMap<>();
+            clarificationBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ChatClarification.INTERNAL_NAME);
+            result.add(RuntimeTool.builder()
+                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                    .capabilityId(clarificationId)
+                    .llmToolName(clarificationLlmName)
+                    .displayName(ChatClarification.DISPLAY_NAME)
+                    .displayNameCn(ChatClarification.DISPLAY_NAME_CN)
+                    .displayNameEn(ChatClarification.DISPLAY_NAME)
+                    .description(ChatClarification.DESCRIPTION)
+                    .parametersSchemaJson(CLARIFICATION_PARAM_SCHEMA)
+                    .execBinding(clarificationBinding).build());
+        }
         Set<String> seen = new HashSet<>();
         List<RuntimeTool> deduped = new ArrayList<>();
         for (RuntimeTool t : result) {

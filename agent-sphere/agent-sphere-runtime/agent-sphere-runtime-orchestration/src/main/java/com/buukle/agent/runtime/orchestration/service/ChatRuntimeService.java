@@ -64,6 +64,7 @@ public class ChatRuntimeService {
         createRunDTO.setSessionId(sessionId);
         createRunDTO.setUserMessage(dto.getMessage());
         createRunDTO.setType(RunEnum.TYPE_AUTO);
+        createRunDTO.setNoClarification(dto.getNoClarification());
         RunVO run = runSpi.createRun(createRunDTO);
         if (dto.getDelivery() != null) {
             run.setDelivery(dto.getDelivery());

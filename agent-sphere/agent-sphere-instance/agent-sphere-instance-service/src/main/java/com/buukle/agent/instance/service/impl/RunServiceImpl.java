@@ -33,7 +33,9 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     public RunVO createRun(CreateRunDTO dto) {
         AgentRun run = runConverter.toDO(dto);
         save(run);
-        return runConverter.toVO(run);
+        RunVO vo = runConverter.toVO(run);
+        vo.setNoClarification(dto.getNoClarification());
+        return vo;
     }
 
     @Override

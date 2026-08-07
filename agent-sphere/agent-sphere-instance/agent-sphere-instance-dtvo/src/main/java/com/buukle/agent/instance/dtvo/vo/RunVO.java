@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.dtvo.vo;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -20,4 +21,7 @@ public class RunVO implements Serializable {
     /** 该 run 是否为澄清应答（userMessage 携带澄清恢复前缀），展示层据此跳过独立用户气泡 */
     private boolean clarificationResponse;
     private List<ClarificationVO> clarifications;
+    /** 瞬态标记：为 true 时该 run 的 kernel context 不注册 ask_clarification 工具（不落库，不对外序列化） */
+    @JsonIgnore
+    private Boolean noClarification;
 }

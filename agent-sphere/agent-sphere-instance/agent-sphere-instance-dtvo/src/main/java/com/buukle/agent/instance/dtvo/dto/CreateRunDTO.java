@@ -17,4 +17,5 @@ public class CreateRunDTO implements Serializable {
     @NotBlank(message = "userMessage can't be blank")
     @Size(min = 1, max = 5000)
     private String userMessage;
+    private Boolean noClarification;
 }

@@ -13,4 +13,5 @@ public class SendMessageDTO implements Serializable {
     private String message;
     private Long modelRouteId;
     private String delivery;
+    private Boolean noClarification;
 }
