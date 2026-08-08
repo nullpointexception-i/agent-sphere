@@ -21,48 +21,6 @@
     });
   });
 
-  // --- Per-site optional host permissions: <all_urls> is not declared; specific sites are granted at runtime ---
-  function getActiveOrigin() {
-    return new Promise((resolve) => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const url = tabs && tabs[0] && tabs[0].url;
-        if (!url) return resolve(null);
-        try {
-          const u = new URL(url);
-          if (u.protocol === 'http:' || u.protocol === 'https:') resolve(u.origin);
-          else resolve(null);
-        } catch {
-          resolve(null);
-        }
-      });
-    });
-  }
-
-  async function refreshPermission() {
-    const origin = await getActiveOrigin();
-    const el = document.getElementById('permNotice');
-    if (!el) return;
-    if (!origin) {
-      el.style.display = 'none';
-      return;
-    }
-    chrome.permissions.contains({ origins: [origin + '/*'] }, (has) => {
-      el.style.display = has ? 'none' : 'block';
-    });
-  }
-
-  document.getElementById('btnEnablePerm').addEventListener('click', async () => {
-    const origin = await getActiveOrigin();
-    if (!origin) return;
-    chrome.permissions.request({ origins: [origin + '/*'] }, (granted) => {
-      if (granted) {
-        refreshPermission();
-        // Notify background: permission is ready, re-inject and query the session
-        chrome.runtime.sendMessage({ type: 'permissions-granted' }).catch(() => {});
-      }
-    });
-  });
-
   // --- Frontend URL rows (dynamic multi-row) ---
   function createFrontendRow(value) {
     const row = document.createElement('div');
@@ -116,24 +74,17 @@
 
   // --- Render ---
   function render(data) {
-    const sessionConnected = !!data.connected;
     const taskConnected = !!data.taskConnected;
     const settings = data.settings || DEFAULT_SETTINGS;
     const frontendUrls = getFrontendUrls(settings);
 
-    // Status badges: session vs task connection
-    const sessionBadge = document.getElementById('statusBadge');
-    sessionBadge.className = 'status-badge ' + (sessionConnected ? 'on' : 'off');
-    document.getElementById('statusText').textContent = sessionConnected ? 'Session On' : 'Session Off';
-
+    // Status badge: user-level task connection
     const taskBadge = document.getElementById('taskStatusBadge');
     taskBadge.className = 'status-badge ' + (taskConnected ? 'on' : 'off');
     document.getElementById('taskStatusText').textContent = taskConnected ? 'Task On' : 'Task Off';
 
     // Info panel
     document.getElementById('infoUser').textContent = data.displayName || (data.token ? 'Logged in' : '-');
-    document.getElementById('infoSession').textContent = data.sessionId ? '#' + data.sessionId : '-';
-    document.getElementById('infoSessionConn').textContent = sessionConnected ? 'On' : 'Off';
     document.getElementById('infoTaskConn').textContent = taskConnected ? 'On' : 'Off';
     document.getElementById('infoBackend').textContent = settings.backendUrl || data.baseUrl || '-';
     document.getElementById('infoFrontend').textContent = frontendUrls.length ? frontendUrls.join(' , ') : '-';
@@ -172,12 +123,10 @@
   });
 
   // Initial load
-  chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'taskConnected', 'settings', 'logs'], render);
-  refreshPermission();
+  chrome.storage.local.get(['token', 'displayName', 'baseUrl', 'taskConnected', 'settings', 'logs'], render);
 
   // Listen for changes
   chrome.storage.onChanged.addListener(() => {
-    chrome.storage.local.get(['token', 'sessionId', 'displayName', 'baseUrl', 'connected', 'taskConnected', 'settings', 'logs'], render);
+    chrome.storage.local.get(['token', 'displayName', 'baseUrl', 'taskConnected', 'settings', 'logs'], render);
   });
-  chrome.permissions.onRemoved.addListener(refreshPermission);
 })();

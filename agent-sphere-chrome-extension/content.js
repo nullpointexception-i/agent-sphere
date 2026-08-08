@@ -20,23 +20,31 @@
   } catch (e) { /* fallback to target="_blank" detection only */ }
 
   // --- Read auth and session info ---
-  let lastSessionId = null;
   let lastConnected = null;
-  let pendingSessionToast = false;
   let sessionMissingLogged = false;
 
-  // widget session cache: forwarded by page-script.js (MAIN world) via postMessage,
-  // because the content script runs in an ISOLATED world and cannot read the page's sessionStorage
-  let widgetSessionCache = null;
-  // widget 用户 token（仅登录态，可能未选会话）：用于登录即连用户级 task 流
+  // widget 用户 token：page-script.js（MAIN world）经 postMessage 转发（content script 无法读页面 sessionStorage）
   let widgetUserToken = null;
-  let lastAuthTokenReported = null;
+  let widgetDisplayName = '';
+  let lastReportedToken = null;
+
+  // --- 用户维度 token 上报（去重），建立用户级 task 连接 ---
+  function reportAuthToken(token, displayName) {
+    if (!token || token === lastReportedToken) return;
+    lastReportedToken = token;
+    getSettings().then((settings) => {
+      chrome.runtime.sendMessage(chrome.runtime.id, {
+        type: 'auth_token',
+        token,
+        displayName: displayName || '',
+        baseUrl: settings.backendUrl || 'http://localhost:8080',
+      }).catch(() => {});
+    });
+  }
 
   window.addEventListener('message', (event) => {
     if (event.data?.type !== 'agent-sphere:session-data') return;
-    const sessionId = event.data.sessionId;
     const userRaw = event.data.user;
-    widgetSessionCache = null;
     let parsedUser = null;
     if (userRaw) {
       try {
@@ -45,24 +53,13 @@
         parsedUser = null;
       }
     }
-    if (sessionId && parsedUser && parsedUser.token) {
-      widgetSessionCache = { sessionId: Number(sessionId), user: parsedUser };
+    if (parsedUser && parsedUser.token) {
       widgetUserToken = parsedUser.token;
-    } else if (parsedUser && parsedUser.token) {
-      widgetUserToken = parsedUser.token;
+      widgetDisplayName = parsedUser.displayName || '';
+      // 登录即连：用户维度 task 流（不依赖是否选中会话）
+      reportAuthToken(widgetUserToken, widgetDisplayName);
     } else {
       widgetUserToken = null;
-    }
-    // 登录即连：已登录但未选会话时，上报 auth_token 建立用户级 task 流（不依赖 session，去重）
-    if (widgetUserToken && !sessionId && widgetUserToken !== lastAuthTokenReported) {
-      lastAuthTokenReported = widgetUserToken;
-      getSettings().then((settings) => {
-        chrome.runtime.sendMessage(chrome.runtime.id, {
-          type: 'auth_token',
-          token: widgetUserToken,
-          baseUrl: settings.backendUrl || 'http://localhost:8080',
-        }).catch(() => {});
-      });
     }
     checkAuth().catch(() => {});
   });
@@ -85,31 +82,28 @@
     }).catch(() => {});
   }
 
-  // Resolve the current page's session (main-site localStorage + /chat/<id>, or the widget sessionStorage bridge); no dedup
-  async function resolveSession() {
+  // Resolve the current page's user token (widget sessionStorage bridge, or main-site localStorage); 不依赖会话
+  async function resolveUser() {
     try {
       const settings = await getSettings();
       const baseUrl = settings.backendUrl || 'http://localhost:8080';
 
       // widget: drawer / third-party site embedding (sessionStorage bridge, cached from page-script.js)
-      if (widgetSessionCache) {
+      if (widgetUserToken) {
         return {
-          token: widgetSessionCache.user.token,
-          sessionId: widgetSessionCache.sessionId,
-          displayName: widgetSessionCache.user.displayName || '',
+          token: widgetUserToken,
+          displayName: widgetDisplayName || '',
           baseUrl,
         };
       }
 
-      // Main site: localStorage['agent-user'] + /chat/<id>
+      // Main site: localStorage['agent-user']（登录即可，无需进入 /chat/<id>）
       const raw = localStorage.getItem('agent-user');
       if (raw) {
         const user = JSON.parse(raw);
-        const m = location.pathname.match(/\/chat\/(\d+)/);
-        if (user && user.token && m) {
+        if (user && user.token) {
           return {
             token: user.token,
-            sessionId: Number(m[1]),
             displayName: user.displayName || '',
             baseUrl,
           };
@@ -118,40 +112,26 @@
       return null;
     } catch (e) {
       if (e.message?.includes('Extension context invalidated')) return null;
-      console.warn('[AgentSphere] resolveSession error:', e);
+      console.warn('[AgentSphere] resolveUser error:', e);
       return null;
     }
   }
 
   async function checkAuth() {
     try {
-      const info = await resolveSession();
+      const info = await resolveUser();
       if (!info) {
         if (!sessionMissingLogged) {
           sessionMissingLogged = true;
-          console.warn(
-            '[AgentSphere] No session/token on this page — make sure the widget is logged in and a session is selected',
+          console.log(
+            '[AgentSphere] No user token on this page yet — make sure the widget/main site is logged in',
             location.href,
           );
         }
         return;
       }
-      if (info.sessionId === lastSessionId) return;
-      const prevSessionId = lastSessionId;
-      lastSessionId = info.sessionId;
-
-      // Mark that a session switch happened and show toast once SSE is connected
-      if (prevSessionId !== null) {
-        pendingSessionToast = true;
-      }
-
-      chrome.runtime.sendMessage(chrome.runtime.id, {
-        type: 'auth',
-        token: info.token,
-        displayName: info.displayName,
-        sessionId: info.sessionId,
-        baseUrl: info.baseUrl,
-      }).catch(() => {});
+      // 登录即连：按 token 去重上报，建立用户级 task 连接
+      reportAuthToken(info.token, info.displayName);
     } catch (e) {
       if (e.message?.includes('Extension context invalidated')) return;
       console.warn('[AgentSphere] Failed to read auth:', e);
@@ -167,18 +147,11 @@
     checkAuth().catch(() => {});
   });
 
-  // --- SSE status toast + session switch notification ---
+  // --- Task connection status toast (user-level task 流) ---
   setInterval(() => {
     if (!chrome.runtime?.id) return;
-    chrome.storage.local.get(['connected', 'sessionId'], (data) => {
-      const connected = !!data.connected;
-
-      // Show toast on session switch once SSE is connected
-      if (pendingSessionToast && connected) {
-        pendingSessionToast = false;
-        showToast(true, '🔗 Bridge ready — Session #' + (data.sessionId || ''));
-        return;
-      }
+    chrome.storage.local.get(['taskConnected'], (data) => {
+      const connected = !!data.taskConnected;
 
       // Show/hide toast on connection status change
       if (connected === lastConnected) return;
@@ -377,11 +350,6 @@
 
   // --- Listen for browser operation commands from background ---
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === 'query_session') {
-      // When the tab is activated, background queries the current page's session (no dedup; background decides whether to reconnect)
-      resolveSession().then((info) => sendResponse(info || null));
-      return true;
-    }
     if (msg.type === 'browser_operation') {
       execute(msg.action, msg.params).then(sendResponse);
       return true;

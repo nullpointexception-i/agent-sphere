@@ -70,8 +70,7 @@
     <div class="header">
       <span style="font-size:20px">🤖</span>
       <h3>AgentSphere</h3>
-      <span id="statusBadge" class="status-badge off" style="margin-left:auto"><span class="dot"></span><span id="statusText">Session Off</span></span>
-      <span id="taskStatusBadge" class="status-badge off"><span class="dot"></span><span id="taskStatusText">Task Off</span></span>
+      <span id="taskStatusBadge" class="status-badge off" style="margin-left:auto"><span class="dot"></span><span id="taskStatusText">Task Off</span></span>
     </div>
 
     <div class="tabs">
@@ -84,17 +83,10 @@
     <div id="panelInfo" class="panel active">
       <div class="card">
         <div class="info-row"><span class="label">User</span><span class="value" id="infoUser">-</span></div>
-        <div class="info-row"><span class="label">Session</span><span class="value" id="infoSession">-</span></div>
-        <div class="info-row"><span class="label">Session Conn</span><span class="value" id="infoSessionConn">-</span></div>
         <div class="info-row"><span class="label">Task Conn</span><span class="value" id="infoTaskConn">-</span></div>
         <div class="info-row"><span class="label">Frontend</span><span class="value" id="infoFrontend">-</span></div>
         <div class="info-row"><span class="label">Main</span><span class="value" id="infoMain">-</span></div>
         <div class="info-row"><span class="label">Backend</span><span class="value" id="infoBackend">-</span></div>
-      </div>
-      <div id="permNotice" class="card" style="margin-top:10px;background:#fff4e6;display:none">
-        <div style="font-weight:600;color:#8a5a00;margin-bottom:4px">Access to this page is required</div>
-        <div class="help-text" style="color:#8a5a00">To let the AI agent operate on the current page, please grant access to this site below (one site at a time).</div>
-        <button id="btnEnablePerm" class="btn btn-primary" style="margin-top:8px">Grant access to current page</button>
       </div>
     </div>
 
@@ -115,7 +107,7 @@
           <input id="inputBackend" type="url" placeholder="http://as.buukle.top">
         </div>
         <button id="btnSave" class="btn btn-primary">Save Settings</button>
-        <div class="help-text">Auto-injects and follows the session when a page in this list or the main site /chat/&lt;id&gt; page is open; switching tabs switches the session automatically.</div>
+        <div class="help-text">Auto-injects on pages in this list or the main site. Login on any of these sites establishes the user-level Task connection (no session selection needed).</div>
       </div>
     </div>
 
