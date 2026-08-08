@@ -1,6 +1,7 @@
 export default {
   'menu.login': 'Login',
   'menu.register': 'Register',
+  'menu.workbench': 'Workbench',
   'menu.dashboard': 'Dashboard',
   'menu.chat': 'Chat',
   'menu.instances': 'Instances',
@@ -8,6 +9,7 @@ export default {
   'menu.completions': 'Completions',
   'menu.tasks': 'Tasks',
   'menu.capabilities': 'Capabilities',
+  'menu.agents': 'Agents',
   'menu.capabilities.mcp': 'MCP',
   'menu.capabilities.skill': 'Skills',
   'menu.capabilities.cli': 'CLI Tools',

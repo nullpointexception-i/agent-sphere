@@ -1,6 +1,7 @@
 export default {
   'menu.login': '登录',
   'menu.register': '注册',
+  'menu.workbench': '工作台',
   'menu.dashboard': '仪表盘',
   'menu.chat': '对话',
   'menu.instances': '实例管理',
@@ -8,6 +9,7 @@ export default {
   'menu.completions': '提示工程',
   'menu.tasks': '任务管理',
   'menu.capabilities': '能力',
+  'menu.agents': '智能体',
   'menu.capabilities.mcp': 'MCP',
   'menu.capabilities.skill': '技能',
   'menu.capabilities.cli': 'CLI 工具',

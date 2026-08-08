@@ -150,6 +150,10 @@ export const layout: RunTimeLayoutConfig = ({
   setInitialState,
 }) => {
   return {
+    menu: {
+      locale: true,
+      type: 'group',
+    },
     menuItemRender: (item, dom) => {
       if (item.path) {
         return (
