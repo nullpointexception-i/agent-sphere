@@ -12,6 +12,7 @@ import {
   App,
   Button,
   DatePicker,
+  Drawer,
   Form,
   Input,
   Modal,
@@ -51,6 +52,8 @@ export default function CompletionsList() {
   const [callsTotal, setCallsTotal] = useState(0);
   const [callsPage, setCallsPage] = useState(1);
   const [promptOpen, setPromptOpen] = useState(false);
+  const [promptDetail, setPromptDetail] = useState<any>(null);
+  const [callDetail, setCallDetail] = useState<any>(null);
   const [promptForm] = Form.useForm();
   const [promptSubmitting, setPromptSubmitting] = useState(false);
   const [activatingId, setActivatingId] = useState<number | null>(null);
@@ -115,12 +118,12 @@ export default function CompletionsList() {
     {
       title: t('pages.admin.completions.modelRoute', '模型路由'),
       key: 'modelRouteId',
-      width: 180,
+      width: 160,
       render: (_: any, record: any) =>
         record.modelRouteId ? (
-          <Tag>
+          <span style={{ fontSize: 12 }}>
             {routeMap.get(record.modelRouteId) || `#${record.modelRouteId}`}
-          </Tag>
+          </span>
         ) : (
           <Tag color="orange">
             {t('pages.admin.completions.noRoute', '未绑定')}
@@ -383,24 +386,34 @@ export default function CompletionsList() {
     {
       title: intl.formatMessage({ id: 'pages.table.actions' }),
       key: 'actions',
-      width: 110,
-      render: (_: any, record: any) =>
-        viewRecord?.activePromptId === record.id ? (
-          <Tag color="green">
-            {t('pages.admin.completions.active', '当前生效')}
-          </Tag>
-        ) : (
-          <Can code="admin:completions:update">
-            <Button
-              type="link"
-              size="small"
-              loading={activatingId === record.id}
-              onClick={() => handleActivate(record.id)}
-            >
-              {t('pages.admin.completions.activate', '激活')}
-            </Button>
-          </Can>
-        ),
+      width: 170,
+      render: (_: any, record: any) => (
+        <Space size={4}>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => setPromptDetail(record)}
+          >
+            {t('pages.table.detail', '详情')}
+          </Button>
+          {viewRecord?.activePromptId === record.id ? (
+            <Tag color="green">
+              {t('pages.admin.completions.active', '当前生效')}
+            </Tag>
+          ) : (
+            <Can code="admin:completions:update">
+              <Button
+                type="link"
+                size="small"
+                loading={activatingId === record.id}
+                onClick={() => handleActivate(record.id)}
+              >
+                {t('pages.admin.completions.activate', '激活')}
+              </Button>
+            </Can>
+          )}
+        </Space>
+      ),
     },
   ];
 
@@ -444,6 +457,16 @@ export default function CompletionsList() {
       key: 'createdAt',
       width: 150,
       render: (v: any) => formatTime(v),
+    },
+    {
+      title: intl.formatMessage({ id: 'pages.table.actions' }),
+      key: 'actions',
+      width: 80,
+      render: (_: any, record: any) => (
+        <Button type="link" size="small" onClick={() => setCallDetail(record)}>
+          {t('pages.table.detail', '详情')}
+        </Button>
+      ),
     },
   ];
 
@@ -723,12 +746,11 @@ export default function CompletionsList() {
         </Form>
       </Modal>
 
-      <Modal
+      <Drawer
         title={viewRecord?.name}
+        size={980}
         open={!!viewRecord}
-        onCancel={() => setViewRecord(null)}
-        footer={null}
-        width={820}
+        onClose={() => setViewRecord(null)}
         destroyOnHidden
       >
         <Tabs
@@ -830,6 +852,158 @@ export default function CompletionsList() {
             },
           ]}
         />
+      </Drawer>
+
+      <Modal
+        title={t('pages.admin.completions.promptDetail', 'Prompt 版本详情')}
+        open={!!promptDetail}
+        onCancel={() => setPromptDetail(null)}
+        footer={null}
+        width={760}
+        zIndex={1200}
+      >
+        <div style={{ maxHeight: '62vh', overflow: 'auto', margin: '-8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              {[
+                {
+                  label: t('pages.admin.completions.promptVersion', '版本'),
+                  value: promptDetail?.version,
+                },
+                {
+                  label: t(
+                    'pages.admin.completions.promptSystem',
+                    'System Prompt',
+                  ),
+                  value: promptDetail?.promptSystem || '-',
+                },
+                {
+                  label: t('pages.admin.completions.promptUser', 'User Prompt'),
+                  value: promptDetail?.promptUser || '-',
+                },
+                {
+                  label: t('pages.admin.completions.remark', '备注'),
+                  value: promptDetail?.remark || '-',
+                },
+                {
+                  label: intl.formatMessage({ id: 'pages.table.created' }),
+                  value: formatTime(promptDetail?.createdAt),
+                },
+                {
+                  label: intl.formatMessage({
+                    id: 'pages.table.updatedAt',
+                    defaultMessage: 'Updated At',
+                  }),
+                  value: formatTime(promptDetail?.updatedAt),
+                },
+              ].map((row) => (
+                <tr key={row.label}>
+                  <td
+                    style={{
+                      padding: '10px 12px',
+                      fontWeight: 500,
+                      color: '#8c8c8c',
+                      borderBottom: '1px solid #f0f0f0',
+                      width: 140,
+                      verticalAlign: 'top',
+                    }}
+                  >
+                    {row.label}
+                  </td>
+                  <td
+                    style={{
+                      padding: '10px 12px',
+                      borderBottom: '1px solid #f0f0f0',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                      fontFamily:
+                        "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {row.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Modal>
+
+      <Modal
+        title={t('pages.admin.completions.callDetail', '调用记录详情')}
+        open={!!callDetail}
+        onCancel={() => setCallDetail(null)}
+        footer={null}
+        width={820}
+        zIndex={1200}
+      >
+        <div style={{ maxHeight: '62vh', overflow: 'auto', margin: '-8px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              {[
+                {
+                  label: intl.formatMessage({ id: 'pages.table.id' }),
+                  value: callDetail?.id,
+                },
+                {
+                  label: t('pages.admin.completions.calls.model', '模型'),
+                  value: callDetail?.model || '-',
+                },
+                {
+                  label: t('pages.admin.completions.calls.caller', '调用方'),
+                  value: callDetail?.caller || '-',
+                },
+                {
+                  label: t('pages.admin.completions.calls.usage', 'Usage'),
+                  value: callDetail?.usage || '-',
+                },
+                {
+                  label: t('pages.admin.completions.calls.input', '入参'),
+                  value: callDetail?.input || '-',
+                },
+                {
+                  label: t('pages.admin.completions.calls.output', '输出'),
+                  value: callDetail?.output || '-',
+                },
+                {
+                  label: intl.formatMessage({ id: 'pages.table.created' }),
+                  value: formatTime(callDetail?.createdAt),
+                },
+              ].map((row) => (
+                <tr key={row.label}>
+                  <td
+                    style={{
+                      padding: '10px 12px',
+                      fontWeight: 500,
+                      color: '#8c8c8c',
+                      borderBottom: '1px solid #f0f0f0',
+                      width: 120,
+                      verticalAlign: 'top',
+                    }}
+                  >
+                    {row.label}
+                  </td>
+                  <td
+                    style={{
+                      padding: '10px 12px',
+                      borderBottom: '1px solid #f0f0f0',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                      fontFamily:
+                        "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
+                      fontSize: 12,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {row.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Modal>
 
       <Modal
