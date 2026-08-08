@@ -27,6 +27,16 @@ public class ChatCompletionRequestDTO implements Serializable {
     private ThinkingDTO thinking;
     @JsonProperty("tool_stream")
     private Boolean toolStream;
+    private Double temperature;
+    @JsonProperty("max_tokens")
+    private Integer maxTokens;
+    @JsonProperty("top_p")
+    private Double topP;
+    @JsonProperty("presence_penalty")
+    private Double presencePenalty;
+    @JsonProperty("frequency_penalty")
+    private Double frequencyPenalty;
+    private List<String> stop;
 
     @JsonProperty("tool_choice")
     public Object getToolChoice() {

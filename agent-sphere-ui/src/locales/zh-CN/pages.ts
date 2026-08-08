@@ -462,6 +462,8 @@ export default {
   'pages.admin.completions.inputSchema': 'Input Schema (JSON)',
   'pages.admin.completions.outputSchema': 'Output Schema (JSON)',
   'pages.admin.completions.config': 'Config (JSON)',
+  'pages.admin.completions.config.help':
+    '支持参数（可选）：\ntemperature: 数字，如 0.1\nmax_tokens: 数字\ntop_p: 数字\npresence_penalty / frequency_penalty: 数字\nstop: 字符串数组，如 ["END"]\nthinking / reasoning: false=关闭思考, true=开启, 或 "disabled"/"enabled"\n示例: temperature=0.1, thinking=false, max_tokens=1024',
   'pages.admin.completions.invalidJson': '无效 JSON',
   'pages.admin.completions.search.placeholder': '搜索名称',
   'pages.admin.completions.prompts': 'Prompt 版本',
@@ -469,8 +471,7 @@ export default {
   'pages.admin.completions.promptVersion': '版本',
   'pages.admin.completions.promptSystem': 'System Prompt',
   'pages.admin.completions.promptUser': 'User Prompt',
-  'pages.admin.completions.promptPlaceholder':
-    '支持 input 与 field 占位符',
+  'pages.admin.completions.promptPlaceholder': '支持 input 与 field 占位符',
   'pages.admin.completions.active': '当前生效',
   'pages.admin.completions.activate': '激活',
   'pages.admin.completions.activatePromptConfirm': '确认激活该版本？',

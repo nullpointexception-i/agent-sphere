@@ -4,6 +4,7 @@ import {
   EditOutlined,
   EyeOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
@@ -15,9 +16,11 @@ import {
   Input,
   Modal,
   Select,
+  Space,
   Table,
   Tabs,
   Tag,
+  Tooltip,
 } from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -678,10 +681,27 @@ export default function CompletionsList() {
           </Form.Item>
           <Form.Item
             name="config"
-            label={t('pages.admin.completions.config', 'Config (JSON)')}
+            label={
+              <Space size={4}>
+                {t('pages.admin.completions.config', 'Config (JSON)')}
+                <Tooltip
+                  title={t(
+                    'pages.admin.completions.config.help',
+                    '支持参数（可选）：\ntemperature: 数字，如 0.1\nmax_tokens: 数字\ntop_p: 数字\npresence_penalty / frequency_penalty: 数字\nstop: 字符串数组，如 ["END"]\nthinking / reasoning: false=关闭思考, true=开启, 或 "disabled"/"enabled"\n示例: temperature=0.1, thinking=false, max_tokens=1024',
+                  )}
+                >
+                  <QuestionCircleOutlined
+                    style={{ color: '#999', cursor: 'pointer' }}
+                  />
+                </Tooltip>
+              </Space>
+            }
             rules={[jsonRule]}
           >
-            <Input.TextArea rows={2} placeholder='{"temperature":0.1}' />
+            <Input.TextArea
+              rows={2}
+              placeholder='{"temperature":0.1,"thinking":false}'
+            />
           </Form.Item>
           <Form.Item
             name="remark"

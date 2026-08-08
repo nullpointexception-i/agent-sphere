@@ -12,6 +12,7 @@ import com.buukle.agent.completions.repository.CompletionsPromptMapper;
 import com.buukle.agent.completions.service.CompletionsCallService;
 import com.buukle.agent.completions.service.CompletionsPromptService;
 import com.buukle.agent.completions.service.impl.CompletionsServiceImpl;
+import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
@@ -248,5 +249,46 @@ class CompletionsServiceTest {
 
         assertEquals("second route ok", resp.getContent());
         assertEquals("claude-3-5", resp.getModel());
+    }
+
+    @Test
+    void execute_configShouldMapToRequestParams() {
+        AgentCompletions c = new AgentCompletions();
+        c.setId(1L);
+        c.setStatus("ACTIVE");
+        c.setModelRouteId(10L);
+        c.setActivePromptId(20L);
+        c.setConfig("{\"temperature\":0.3,\"thinking\":false,\"max_tokens\":1024}");
+        given(completionsMapper.selectById(1L)).willReturn(c);
+
+        AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
+        prompt.setId(20L);
+        prompt.setPromptUser("{{input}}");
+        given(promptMapper.selectById(20L)).willReturn(prompt);
+
+        ModelRouteFullVO route = new ModelRouteFullVO();
+        route.setId(10L);
+        route.setApiKeyId(99L);
+        route.setCompany("openai");
+        route.setBaseUrl("https://api.openai.com/v1");
+        route.setModelName("gpt-4o");
+        given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(route));
+        given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
+
+        KernelLlmService.InvokeResult result = new KernelLlmService.InvokeResult();
+        result.setSuccess(true);
+        result.setContent("ok");
+        given(llmService.invokeSync(anyString(), anyString(), anyString(), anyString(),
+                any(), any(LlmInteractionMeta.class), anyLong())).willReturn(result);
+
+        completionsService.execute(1L, CompletionsInput.of(Map.of()));
+
+        ArgumentCaptor<ChatCompletionRequestDTO> reqCaptor = ArgumentCaptor.forClass(ChatCompletionRequestDTO.class);
+        verify(llmService).invokeSync(anyString(), anyString(), anyString(), anyString(),
+                reqCaptor.capture(), any(LlmInteractionMeta.class), anyLong());
+        ChatCompletionRequestDTO req = reqCaptor.getValue();
+        assertEquals(0.3, req.getTemperature());
+        assertEquals(1024, req.getMaxTokens());
+        assertEquals("disabled", req.getThinking().getType());
     }
 }

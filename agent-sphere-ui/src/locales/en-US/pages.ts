@@ -481,6 +481,8 @@ export default {
   'pages.admin.completions.inputSchema': 'Input Schema (JSON)',
   'pages.admin.completions.outputSchema': 'Output Schema (JSON)',
   'pages.admin.completions.config': 'Config (JSON)',
+  'pages.admin.completions.config.help':
+    'Supported (optional):\ntemperature: number, e.g. 0.1\nmax_tokens: number\ntop_p: number\npresence_penalty / frequency_penalty: number\nstop: string array, e.g. ["END"]\nthinking / reasoning: false=disable thinking, true=enable, or "disabled"/"enabled"\nExample: temperature=0.1, thinking=false, max_tokens=1024',
   'pages.admin.completions.invalidJson': 'Invalid JSON',
   'pages.admin.completions.search.placeholder': 'Search by name',
   'pages.admin.completions.prompts': 'Prompt Versions',
