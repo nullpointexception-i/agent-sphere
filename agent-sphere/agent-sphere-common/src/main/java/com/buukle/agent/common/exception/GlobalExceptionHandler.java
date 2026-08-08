@@ -6,6 +6,7 @@ import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -38,6 +39,14 @@ public class GlobalExceptionHandler {
                                 .map(f -> f.getField() + ": " + f.getDefaultMessage())
                                 .reduce((a, b) -> a + "; " + b)
                                 .orElse(CommonErrorCode.PARAM_INVALID.getMessage())));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("Request body not readable: {}", e.getMessage());
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(),
+                        CommonErrorCode.PARAM_INVALID.getMessage(), "请求体格式错误，请检查字段类型"));
     }
 
     @ExceptionHandler(Exception.class)

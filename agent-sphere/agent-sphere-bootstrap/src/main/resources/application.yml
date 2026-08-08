@@ -43,6 +43,10 @@ logging:
     com.buukle.agent.instance.repository: WARN      # SQL 日志级别（生产建议 WARN）/ SQL log level
     com.buukle.agent.model.repository: WARN         # Model SQL 日志级别 / Model SQL log level
     com.buukle.agent.capability: WARN               # 能力组件日志级别 / Capability log level
+    com.buukle.agent.tasks.repository: WARN         # tasks SQL 日志级别 / Tasks SQL log level
+    com.buukle.agent.completions.repository: WARN   # completions SQL 日志级别 / Completions SQL log level
+    com.buukle.agent.sso.repository: WARN           # SSO SQL 日志级别 / SSO SQL log level
+    com.buukle.agent.admin.repository: WARN         # Admin SQL 日志级别 / Admin SQL log level
     org.springframework: INFO                       # Spring 框架日志 / Spring framework log
 
 buukle:
@@ -140,6 +144,7 @@ buukle:
     controller-log:
       max-param-length: 200                         # 请求参数日志截断长度 / Request param log truncation
       max-result-length: 300                        # 响应结果日志截断长度 / Response result log truncation
+      full-prefixes: /api/v1/api                    # 命中这些前缀的请求，参数与结果不打全（不截断），逗号分隔 / Path prefixes logged in full (no truncation), comma separated
 
     # ============================================================
     # MCP 协议配置 / MCP Config

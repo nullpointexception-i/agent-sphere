@@ -30,6 +30,9 @@ public class ControllerLogAspect {
     @Value("${buukle.agent.controller-log.max-result-length:300}")
     private int maxResultLength;
 
+    @Value("${buukle.agent.controller-log.full-prefixes:}")
+    private String fullPrefixes;
+
     private static String resolveHttpMethod(MethodSignature sig) {
         for (Annotation a : sig.getMethod().getDeclaredAnnotations()) {
             if (a instanceof GetMapping) return "GET";
@@ -66,8 +69,9 @@ public class ControllerLogAspect {
         String path = resolvePath(sig, pjp.getArgs());
         String user = AuthContext.getUsername();
         String userInfo = user != null ? " [" + user + "]" : "";
+        boolean full = isFullLogPath(path);
 
-        String params = argsToJson(sig.getParameterNames(), pjp.getArgs());
+        String params = argsToJson(sig.getParameterNames(), pjp.getArgs(), full);
 
         log.info("→ {} {}.{} {} {} params={}", httpMethod, className, methodName, path, userInfo, params);
 
@@ -80,12 +84,25 @@ public class ControllerLogAspect {
             throw e;
         }
         long elapsed = System.currentTimeMillis() - start;
-        String resultStr = resultToJson(result);
+        String resultStr = resultToJson(result, full);
         log.info("← {} {}.{} {} {} {}ms result={}", httpMethod, className, methodName, path, userInfo, elapsed, resultStr);
         return result;
     }
 
-    private String argsToJson(String[] names, Object[] args) {
+    private boolean isFullLogPath(String path) {
+        if (path == null || fullPrefixes == null || fullPrefixes.isBlank()) {
+            return false;
+        }
+        for (String prefix : fullPrefixes.split(",")) {
+            String trimmed = prefix.trim();
+            if (!trimmed.isEmpty() && path.startsWith(trimmed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String argsToJson(String[] names, Object[] args, boolean full) {
         if (args == null || args.length == 0) return "";
         try {
             var sb = new StringBuilder();
@@ -96,7 +113,7 @@ public class ControllerLogAspect {
                         continue;
                     if (sb.length() > 0) sb.append(", ");
                     String val = args[i] instanceof String s ? s : mapper.writeValueAsString(args[i]);
-                    if (val.length() > maxParamLength) val = val.substring(0, maxParamLength) + "...";
+                    if (!full && val.length() > maxParamLength) val = val.substring(0, maxParamLength) + "...";
                     sb.append(names != null && i < names.length ? names[i] : "arg" + i).append("=").append(val);
                 }
             }
@@ -106,16 +123,16 @@ public class ControllerLogAspect {
         }
     }
 
-    private String resultToJson(Object result) {
+    private String resultToJson(Object result, boolean full) {
         if (result == null) return "null";
         try {
             Object target = (result instanceof ResponseEntity<?> re) ? re.getBody() : result;
             if (target == null) return "null";
             String json = mapper.writeValueAsString(target);
-            return json.length() > maxResultLength ? json.substring(0, maxResultLength) + "..." : json;
+            return (!full && json.length() > maxResultLength) ? json.substring(0, maxResultLength) + "..." : json;
         } catch (Exception e) {
             String fallback = result.toString();
-            return fallback.length() > maxResultLength ? fallback.substring(0, maxResultLength) + "..." : fallback;
+            return (!full && fallback.length() > maxResultLength) ? fallback.substring(0, maxResultLength) + "..." : fallback;
         }
     }
 }
