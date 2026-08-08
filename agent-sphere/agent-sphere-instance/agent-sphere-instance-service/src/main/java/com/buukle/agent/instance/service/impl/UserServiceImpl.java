@@ -49,6 +49,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    private static final String DEFAULT_USER_ROLE_CODE = "USER";
+
+    /** 解析新用户初始角色：指定 defaultRoleId 则替换默认 USER 角色（SSO 开通场景）。 */
+    public static List<Long> resolveInitialRoleIds(RoleSpi roleSpi, Long defaultRoleId) {
+        if (defaultRoleId != null) {
+            return List.of(defaultRoleId);
+        }
+        return roleSpi.listAll().stream()
+                .filter(r -> DEFAULT_USER_ROLE_CODE.equals(r.getCode()))
+                .findFirst()
+                .map(r -> List.of(r.getId()))
+                .orElseGet(List::of);
+    }
+
     private UserVO toVO(AgentUser user) {
         UserVO vo = new UserVO();
         vo.setId(user.getId());
@@ -175,6 +189,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
 
     @Override
     public UserVO register(RegisterDTO dto) {
+        return register(dto, null);
+    }
+
+    @Override
+    public UserVO register(RegisterDTO dto, Long defaultRoleId) {
         if (!dto.getPassword().equals(dto.getRepeatPassword())) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Passwords do not match");
         }
@@ -196,11 +215,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             }
             throw new BizException(InstanceErrorCode.REGISTER_FAILED);
         }
-        // Assign USER role
-        roleSpi.listAll().stream()
-                .filter(r -> "USER".equals(r.getCode()))
-                .findFirst()
-                .ifPresent(r -> roleSpi.assignRoles(user.getId(), List.of(r.getId())));
+        // 角色：指定 defaultRoleId 则替换默认 USER 角色（SSO 开通场景）
+        List<Long> initialRoleIds = resolveInitialRoleIds(roleSpi, defaultRoleId);
+        if (!initialRoleIds.isEmpty()) {
+            roleSpi.assignRoles(user.getId(), initialRoleIds);
+        }
         // Auto-login
         String token = generateToken();
         user.setToken(token);

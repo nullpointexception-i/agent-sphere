@@ -41,6 +41,7 @@ public class IdentityProviderConverter {
         vo.setScopes(provider.getScopes());
         vo.setClaimMappings(provider.getClaimMappings());
         vo.setDefaultRoleId(provider.getDefaultRoleId());
+        vo.setResourceTemplate(provider.getResourceTemplate());
         vo.setEnabled(provider.getEnabled());
         vo.setStatus(provider.getStatus());
         vo.setRemark(provider.getRemark());
@@ -65,6 +66,7 @@ public class IdentityProviderConverter {
         provider.setScopes(dto.getScopes());
         provider.setClaimMappings(dto.getClaimMappings());
         provider.setDefaultRoleId(dto.getDefaultRoleId());
+        provider.setResourceTemplate(dto.getResourceTemplate());
         provider.setEnabled(dto.getEnabled() == null ? Boolean.TRUE : dto.getEnabled());
         provider.setStatus(SsoProviderEnum.STATUS_ACTIVE);
         provider.setRemark(dto.getRemark());
@@ -81,6 +83,7 @@ public class IdentityProviderConverter {
         existing.setScopes(dto.getScopes());
         existing.setClaimMappings(dto.getClaimMappings());
         existing.setDefaultRoleId(dto.getDefaultRoleId());
+        existing.setResourceTemplate(dto.getResourceTemplate());
         existing.setRemark(dto.getRemark());
         if (dto.getClientSecret() != null && !dto.getClientSecret().isBlank()) {
             existing.setClientSecret(cryptoService.encrypt(dto.getClientSecret()));

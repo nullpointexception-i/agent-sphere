@@ -37,6 +37,8 @@ public class CreateIdentityProviderDTO implements Serializable {
     @Size(max = 5000)
     private String claimMappings;
     private Long defaultRoleId;
+    @Size(max = 20000)
+    private String resourceTemplate;
     private Boolean enabled;
     @Size(max = 500)
     private String remark;

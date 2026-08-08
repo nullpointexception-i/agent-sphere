@@ -2,10 +2,12 @@ package com.buukle.agent.sso.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.resource.template.ResourceTemplates;
 import com.buukle.agent.sso.domain.IdentityProvider;
 import com.buukle.agent.sso.dtvo.dto.CreateIdentityProviderDTO;
 import com.buukle.agent.sso.dtvo.dto.UpdateIdentityProviderDTO;
 import com.buukle.agent.sso.dtvo.vo.IdentityProviderVO;
+import com.buukle.agent.sso.dtvo.vo.ResourceTemplateVO;
 import com.buukle.agent.sso.exception.SsoErrorCode;
 import com.buukle.agent.sso.repository.IdentityProviderMapper;
 import com.buukle.agent.sso.service.IdentityProviderService;
@@ -25,7 +27,6 @@ public class IdentityProviderServiceImpl extends ServiceImpl<IdentityProviderMap
 
     private final IdentityProviderConverter identityProviderConverter;
     private final SsoOidcClient ssoOidcClient;
-
     @Override
     public IdentityProviderVO createProvider(CreateIdentityProviderDTO dto) {
         long count = lambdaQuery().eq(IdentityProvider::getCode, dto.getCode()).count();
@@ -40,6 +41,11 @@ public class IdentityProviderServiceImpl extends ServiceImpl<IdentityProviderMap
     @Override
     public IdentityProviderVO getProvider(Long id) {
         return identityProviderConverter.toVO(requireProvider(id));
+    }
+
+    @Override
+    public ResourceTemplateVO getDefaultResourceTemplate() {
+        return new ResourceTemplateVO(ResourceTemplates.DEFAULT);
     }
 
     @Override

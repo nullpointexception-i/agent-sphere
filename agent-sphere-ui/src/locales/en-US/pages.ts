@@ -459,6 +459,21 @@ export default {
   'pages.admin.identityProviders.testConnection.failed':
     'Connection test failed',
   'pages.admin.identityProviders.search.placeholder': 'Search name or code',
+  'pages.admin.identityProviders.defaultRole': 'Default Role',
+  'pages.admin.identityProviders.defaultRole.extra':
+    'Granted to new SSO users (replaces default USER role)',
+  'pages.admin.identityProviders.defaultRole.placeholder':
+    'Select default role',
+  'pages.admin.identityProviders.resourceTemplate': 'Resource Template (JSON)',
+  'pages.admin.identityProviders.resourceTemplate.extra':
+    'Empty uses the default template; each user gets their own resource copy on first login',
+  'pages.admin.identityProviders.viewSample': 'View sample',
+  'pages.admin.identityProviders.sample.title':
+    'Default Resource Template Sample',
+  'pages.admin.identityProviders.copy': 'Copy JSON',
+  'pages.admin.copy.success': 'Copied',
+  'pages.table.close': 'Close',
+  'pages.admin.loading': 'Loading…',
   'pages.table.total': 'Total {n} items',
   'pages.table.detail': 'Detail',
   'pages.table.updated': 'Updated At',

@@ -8,6 +8,8 @@ import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
+import com.buukle.agent.resource.template.ResourceInitResult;
+import com.buukle.agent.resource.template.UserResourceProvisioner;
 import com.buukle.agent.sso.domain.IdentityProvider;
 import com.buukle.agent.sso.domain.SsoIdentity;
 import com.buukle.agent.sso.domain.SsoProviderType;
@@ -24,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -72,6 +75,9 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
     private final SsoIdentityMapper ssoIdentityMapper;
     private final SsoOidcClient ssoOidcClient;
     private final SsoProvisioningService provisioningService;
+    // ObjectProvider 延迟解析：UserResourceProvisioner -> Coordinator -> CompletionsService -> SsoIdentitySpi(SsoServiceImpl)
+    // 若直接注入会在构造期形成循环依赖，运行时才解析可避免。
+    private final ObjectProvider<UserResourceProvisioner> userResourceProvisionerProvider;
     private final UserSpi userSpi;
     private final RedissonClient redissonClient;
     private final AgentRuntimeProperties properties;
@@ -193,12 +199,40 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
         SsoOidcClient.IdTokenClaims claims = ssoOidcClient.exchangeAndVerify(
                 identityProvider, code, callbackUrl, codeVerifier, nonce);
 
-        Long userId = provisioningService.provisionOrGet(
-                providerCode, claims.subject(), claims.email(), claims.name(), claims.preferredUsername());
+        SsoProvisioningService.ProvisionResult provision = provisioningService.provisionOrGet(
+                providerCode, claims.subject(), claims.email(), claims.name(), claims.preferredUsername(),
+                identityProvider.getDefaultRoleId());
+
+        if (provision.created()) {
+            // 首次开通：按身份源资源模板为用户生成私有资源副本（失败不影响登录，仅记录）
+            provisionResourcesForNewUser(identityProvider, provision);
+        }
 
         String otc = randomToken(OTC_TOKEN_BYTES);
-        set(otcKey(otc), String.valueOf(userId), properties.getSso().getOtcTtl());
+        set(otcKey(otc), String.valueOf(provision.userId()), properties.getSso().getOtcTtl());
         return withQueryParam(redirectUri, PARAM_OTC, otc);
+    }
+
+    private void provisionResourcesForNewUser(IdentityProvider identityProvider,
+                                              SsoProvisioningService.ProvisionResult provision) {
+        UserResourceProvisioner provisioner = userResourceProvisionerProvider.getIfAvailable();
+        if (provisioner == null) {
+            log.warn("User resource provisioner unavailable, skip provisioning: user={}, provider={}",
+                    provision.username(), identityProvider.getCode());
+            return;
+        }
+        try {
+            ResourceInitResult result = provisioner.provision(
+                    provision.userId(), identityProvider.getCode(), identityProvider.getName(),
+                    identityProvider.getResourceTemplate());
+            if (!result.getFailedDetails().isEmpty()) {
+                log.warn("User resource provisioning partial failure: user={}, provider={}, failed={}",
+                        provision.username(), identityProvider.getCode(), result.getFailedDetails());
+            }
+        } catch (Exception e) {
+            log.error("User resource provisioning failed: user={}, provider={}",
+                    provision.username(), identityProvider.getCode(), e);
+        }
     }
 
     @Override

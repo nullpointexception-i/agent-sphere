@@ -44,6 +44,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
 
     @Override
     public InstanceVO updateInstance(Long id, CreateInstanceDTO dto) {
+        requireOwnership(id);
         if (dto.getImage() != null && !dto.getImage().isBlank()) {
             byte[] decoded = java.util.Base64.getDecoder().decode(dto.getImage().contains(",") ? dto.getImage().split(",")[1] : dto.getImage());
             if (decoded.length > 2 * 1024 * 1024) {
@@ -53,18 +54,37 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
         AgentInstance instance = instanceConverter.toDO(dto);
         instance.setId(id);
         updateById(instance);
-        return instanceConverter.toVO(instance);
+        AgentInstance saved = getById(id);
+        return instanceConverter.toVO(saved);
     }
 
     @Override
     public void deleteInstance(Long id) {
+        requireOwnership(id);
         removeById(id);
     }
 
     @Override
     public void batchDeleteInstances(List<Long> ids) {
         if (ids == null || ids.isEmpty()) return;
+        for (Long id : ids) {
+            requireOwnership(id);
+        }
         removeByIds(ids);
+    }
+
+    private void requireOwnership(Long id) {
+        if (com.buukle.agent.common.context.AuthContext.isSuperAdmin()) {
+            return;
+        }
+        AgentInstance existing = getById(id);
+        if (existing == null) {
+            throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
+        }
+        String owner = com.buukle.agent.common.context.AuthContext.getUsername();
+        if (!java.util.Objects.equals(owner, existing.getCreatedBy())) {
+            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.FORBIDDEN, "无权操作他人实例");
+        }
     }
 
     @Override

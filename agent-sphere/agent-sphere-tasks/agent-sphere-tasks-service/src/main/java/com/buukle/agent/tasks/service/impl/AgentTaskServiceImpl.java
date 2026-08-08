@@ -73,7 +73,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     @Override
     public TaskVO submit(CreateTaskDTO dto, CallerAuth auth) {
         ResolvedIdentityVO identity = resolveIdentity(auth);
-        InstanceVO instance = resolveInstanceByBusinessType(auth.businessType());
+        InstanceVO instance = resolveInstanceByBusinessType(auth.businessType(), identity.getUsername());
         // 用解析出的调用方身份初始化当前上下文：task 关联的 session/run 归属为该用户，
         // 使浏览器插件按用户名建立的任务连接能收到执行过程中的指令投递（而非 external-service）。
         AuthContext.setUsername(identity.getUsername());
@@ -157,13 +157,14 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         transitionToTerminal(task, TaskEnum.STATUS_CANCELLED, task.getResultJson());
     }
 
-    private InstanceVO resolveInstanceByBusinessType(String businessType) {
+    private InstanceVO resolveInstanceByBusinessType(String businessType, String ownerUsername) {
         if (!StringUtils.hasText(businessType)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "businessType 不能为空");
         }
         return instanceSpi.listInstances(null, null, null).stream()
                 .filter(i -> InstanceEnum.STATUS_ENABLED.equals(i.getStatus()))
                 .filter(i -> businessType.equals(i.getBusinessType()))
+                .filter(i -> ownerUsername == null || ownerUsername.equals(i.getCreatedBy()))
                 .findFirst()
                 .orElseThrow(() -> new BizException(CommonErrorCode.FORBIDDEN, "businessType 无可用实例"));
     }

@@ -5,12 +5,13 @@ import {
   Form,
   Input,
   Modal,
+  Select,
   Space,
   Switch,
   Table,
   Tag,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
 
@@ -25,9 +26,47 @@ export default function AdminIdentityProviders() {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
   const [testingId, setTestingId] = useState<number | null>(null);
+  const [roles, setRoles] = useState<any[]>([]);
+  const [defaultTemplate, setDefaultTemplate] = useState<string | null>(null);
+  const [sampleOpen, setSampleOpen] = useState(false);
 
   const t = (id: string, defaultMessage?: string) =>
     intl.formatMessage({ id, defaultMessage });
+
+  const sampleJson = useMemo(() => {
+    if (!defaultTemplate) return '';
+    try {
+      return JSON.stringify(JSON.parse(defaultTemplate), null, 2);
+    } catch {
+      return defaultTemplate;
+    }
+  }, [defaultTemplate]);
+
+  const handleCopySample = async () => {
+    const text = sampleJson || defaultTemplate || '';
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    message.success(t('pages.admin.copy.success', '已复制'));
+  };
+
+  useEffect(() => {
+    agentApi.admin.roles
+      .listAll()
+      .then(setRoles)
+      .catch(() => {});
+    agentApi.admin.identityProviders
+      .getDefaultResourceTemplate()
+      .then((res: any) => setDefaultTemplate(res?.template ?? null))
+      .catch(() => setDefaultTemplate(null));
+  }, []);
 
   const loadItems = async (kw = keyword) => {
     setLoading(true);
@@ -375,7 +414,99 @@ export default function AdminIdentityProviders() {
           >
             <Input.TextArea maxLength={500} />
           </Form.Item>
+          <Form.Item
+            name="defaultRoleId"
+            label={t('pages.admin.identityProviders.defaultRole', '默认角色')}
+            extra={t(
+              'pages.admin.identityProviders.defaultRole.extra',
+              'SSO 新用户授予该角色（替换默认 USER 角色）',
+            )}
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              placeholder={t(
+                'pages.admin.identityProviders.defaultRole.placeholder',
+                '选择默认角色',
+              )}
+              options={roles.map((r) => ({
+                value: r.id,
+                label: r.name ? `${r.name} (${r.code})` : `#${r.id}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="resourceTemplate"
+            label={
+              <Space size={4}>
+                <span>
+                  {t(
+                    'pages.admin.identityProviders.resourceTemplate',
+                    '资源模板 (JSON)',
+                  )}
+                </span>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ padding: 0, height: 'auto' }}
+                  onClick={() => setSampleOpen(true)}
+                >
+                  {t('pages.admin.identityProviders.viewSample', '查看样例')}
+                </Button>
+              </Space>
+            }
+            extra={t(
+              'pages.admin.identityProviders.resourceTemplate.extra',
+              '留空则使用默认模板；用户首次登录时按此 JSON 生成自己的资源副本',
+            )}
+          >
+            <Input.TextArea
+              rows={6}
+              maxLength={20000}
+              placeholder='[{"type":"model_provider","name":"DeepSeek",...}]'
+            />
+          </Form.Item>
         </Form>
+      </Modal>
+      <Modal
+        title={t(
+          'pages.admin.identityProviders.sample.title',
+          '默认资源模板样例',
+        )}
+        open={sampleOpen}
+        onCancel={() => setSampleOpen(false)}
+        width="90vw"
+        footer={
+          <Space>
+            <Button onClick={() => setSampleOpen(false)}>
+              {t('pages.table.close', '关闭')}
+            </Button>
+            <Button type="primary" onClick={handleCopySample}>
+              {t('pages.admin.identityProviders.copy', '复制 JSON')}
+            </Button>
+          </Space>
+        }
+        styles={{
+          body: {
+            maxHeight: 'calc(100vh - 200px)',
+            overflow: 'auto',
+          },
+        }}
+      >
+        <pre
+          style={{
+            margin: 0,
+            fontSize: 12,
+            lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+          }}
+        >
+          {defaultTemplate === null
+            ? t('pages.admin.loading', '加载中…')
+            : sampleJson}
+        </pre>
       </Modal>
     </>
   );

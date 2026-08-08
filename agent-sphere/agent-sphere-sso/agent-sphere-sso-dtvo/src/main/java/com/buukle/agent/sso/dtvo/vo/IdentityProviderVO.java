@@ -20,6 +20,7 @@ public class IdentityProviderVO implements Serializable {
     private String scopes;
     private String claimMappings;
     private Long defaultRoleId;
+    private String resourceTemplate;
     private Boolean enabled;
     private String status;
     private String remark;

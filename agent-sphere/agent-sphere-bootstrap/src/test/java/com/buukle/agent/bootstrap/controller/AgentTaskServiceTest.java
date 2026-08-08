@@ -79,6 +79,7 @@ class AgentTaskServiceTest {
         instance.setId(id);
         instance.setStatus("ENABLED");
         instance.setBusinessType("sourcing");
+        instance.setCreatedBy("elvin");
         return instance;
     }
 

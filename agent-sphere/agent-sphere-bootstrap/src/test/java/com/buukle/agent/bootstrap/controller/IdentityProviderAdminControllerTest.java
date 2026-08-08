@@ -1,7 +1,9 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.exception.GlobalExceptionHandler;
+import com.buukle.agent.resource.template.ResourceTemplates;
 import com.buukle.agent.sso.controller.IdentityProviderAdminController;
+import com.buukle.agent.sso.dtvo.vo.ResourceTemplateVO;
 import com.buukle.agent.sso.dtvo.vo.IdentityProviderVO;
 import com.buukle.agent.sso.service.IdentityProviderService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -155,6 +157,17 @@ class IdentityProviderAdminControllerTest {
         mockMvc.perform(post("/api/v1/admin/identity-providers/1/test"))
                 .andExpect(status().isOk());
         verify(identityProviderService).testConnection(1L);
+    }
+
+    @Test
+    void getDefaultResourceTemplate_shouldReturnSystemDefault() throws Exception {
+        given(identityProviderService.getDefaultResourceTemplate())
+                .willReturn(new ResourceTemplateVO(ResourceTemplates.DEFAULT));
+
+        mockMvc.perform(get("/api/v1/admin/identity-providers/resource-template-default"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.template").value(ResourceTemplates.DEFAULT));
+        verify(identityProviderService).getDefaultResourceTemplate();
     }
 
     @Test

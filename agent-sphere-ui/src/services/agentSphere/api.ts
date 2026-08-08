@@ -312,6 +312,8 @@ export const agentApi = {
         }),
       testConnection: (id: number) =>
         request<void>(`${BASE}/admin/identity-providers/${id}/test`, { method: 'POST' }),
+      getDefaultResourceTemplate: () =>
+        request<any>(`${BASE}/admin/identity-providers/resource-template-default`),
     },
     completions: {
       list: (params: {

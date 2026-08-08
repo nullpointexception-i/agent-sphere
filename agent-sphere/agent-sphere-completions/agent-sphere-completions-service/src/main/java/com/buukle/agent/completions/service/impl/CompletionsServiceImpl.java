@@ -82,6 +82,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         AgentCompletions c = completionsMapper.selectOne(
                 new LambdaQueryWrapper<AgentCompletions>()
                         .eq(AgentCompletions::getBusinessType, auth.businessType())
+                        .eq(AgentCompletions::getCreatedBy, identity.getUsername())
                         .eq(AgentCompletions::getStatus, CompletionsEnum.STATUS_ACTIVE)
                         .last("LIMIT 1"));
         if (c == null) {
@@ -392,6 +393,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         vo.setStatus(c.getStatus());
         vo.setRemark(c.getRemark());
         vo.setBusinessType(c.getBusinessType());
+        vo.setCreatedBy(c.getCreatedBy());
         vo.setPrompts(prompts);
         vo.setCreatedAt(c.getCreatedAt() == null ? null : c.getCreatedAt().toString());
         vo.setUpdatedAt(c.getUpdatedAt() == null ? null : c.getUpdatedAt().toString());

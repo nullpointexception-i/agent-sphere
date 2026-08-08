@@ -69,6 +69,12 @@ public class IdentityProviderAdminController extends BaseController {
         return ok();
     }
 
+    @RequirePermission("admin:identity-provider:read")
+    @GetMapping("/resource-template-default")
+    public ResponseEntity<?> getDefaultResourceTemplate() {
+        return ok(identityProviderService.getDefaultResourceTemplate());
+    }
+
     @AuditLog(action = "TEST", resourceType = "IdentityProvider", resourceId = "#id")
     @RequirePermission("admin:identity-provider:read")
     @PostMapping("/{id}/test")

@@ -3,6 +3,7 @@ package com.buukle.agent.sso.service;
 import com.buukle.agent.sso.dtvo.dto.CreateIdentityProviderDTO;
 import com.buukle.agent.sso.dtvo.dto.UpdateIdentityProviderDTO;
 import com.buukle.agent.sso.dtvo.vo.IdentityProviderVO;
+import com.buukle.agent.sso.dtvo.vo.ResourceTemplateVO;
 
 import java.util.List;
 
@@ -21,4 +22,6 @@ public interface IdentityProviderService {
     void setEnabled(Long id, Boolean enabled);
 
     void testConnection(Long id);
+
+    ResourceTemplateVO getDefaultResourceTemplate();
 }

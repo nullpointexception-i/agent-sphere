@@ -33,6 +33,6 @@ public class UpdateIdentityProviderDTO implements Serializable {
     @Size(max = 5000)
     private String claimMappings;
     private Long defaultRoleId;
-    @Size(max = 500)
+    private String resourceTemplate;
     private String remark;
 }

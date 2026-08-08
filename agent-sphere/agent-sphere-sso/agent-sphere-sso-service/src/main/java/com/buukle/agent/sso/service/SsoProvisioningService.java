@@ -31,7 +31,8 @@ public class SsoProvisioningService {
     private final UserSpi userSpi;
 
     @Transactional
-    public Long provisionOrGet(String providerCode, String subject, String email, String displayName, String preferredUsername) {
+    public ProvisionResult provisionOrGet(String providerCode, String subject, String email, String displayName,
+                                          String preferredUsername, Long defaultRoleId) {
         SsoIdentity existing = ssoIdentityMapper.selectOne(
                 new LambdaQueryWrapper<SsoIdentity>()
                         .eq(SsoIdentity::getProviderCode, providerCode)
@@ -44,7 +45,9 @@ public class SsoProvisioningService {
                 existing.setDisplaySubject(displaySubject);
                 ssoIdentityMapper.updateById(existing);
             }
-            return existing.getAgentUserId();
+            UserVO existingUser = userSpi.getByUserId(existing.getAgentUserId());
+            return ProvisionResult.of(existing.getAgentUserId(),
+                    existingUser == null ? null : existingUser.getUsername(), false);
         }
 
         RegisterDTO registerDTO = new RegisterDTO();
@@ -53,7 +56,7 @@ public class SsoProvisioningService {
         registerDTO.setRepeatPassword(registerDTO.getPassword());
         UserVO user;
         try {
-            user = userSpi.register(registerDTO);
+            user = userSpi.register(registerDTO, defaultRoleId);
         } catch (Exception e) {
             log.error("SSO provision failed: provider={}, subject={}", providerCode, subject, e);
             throw new BizException(SsoErrorCode.PROVISION_FAILED);
@@ -65,7 +68,14 @@ public class SsoProvisioningService {
         identity.setDisplaySubject(resolveDisplaySubject(preferredUsername, displayName, subject));
         identity.setAgentUserId(user.getId());
         ssoIdentityMapper.insert(identity);
-        return user.getId();
+        return ProvisionResult.of(user.getId(), user.getUsername(), true);
+    }
+
+    /** 开通结果：userId + username + 是否首次开通（首次需要生成用户资源副本）。 */
+    public record ProvisionResult(Long userId, String username, boolean created) {
+        public static ProvisionResult of(Long userId, String username, boolean created) {
+            return new ProvisionResult(userId, username, created);
+        }
     }
 
     private static String resolveDisplaySubject(String preferredUsername, String displayName, String subject) {

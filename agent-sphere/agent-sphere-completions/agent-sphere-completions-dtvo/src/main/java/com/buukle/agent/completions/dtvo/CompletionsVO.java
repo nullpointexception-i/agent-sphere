@@ -18,6 +18,7 @@ public class CompletionsVO implements Serializable {
     private String status;
     private String remark;
     private String businessType;
+    private String createdBy;
     private List<CompletionsPromptVO> prompts;
     private String createdAt;
     private String updatedAt;

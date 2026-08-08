@@ -21,6 +21,8 @@ public interface UserSpi {
 
     UserVO register(RegisterDTO dto);
 
+    UserVO register(RegisterDTO dto, Long defaultRoleId);
+
     UserVO loginByUserId(Long userId);
 
     UserVO getByUserId(Long userId);

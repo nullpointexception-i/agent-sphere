@@ -26,6 +26,7 @@
         <module>agent-sphere-agui</module>
         <module>agent-sphere-completions</module>
         <module>agent-sphere-tasks</module>
+        <module>agent-sphere-resource-template</module>
         <module>agent-sphere-bootstrap</module>
     </modules>
     <properties>
@@ -438,6 +439,11 @@
             <dependency>
                 <groupId>com.buukle.agent</groupId>
                 <artifactId>agent-sphere-tasks-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-resource-template</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
