@@ -28,21 +28,41 @@
   // widget session cache: forwarded by page-script.js (MAIN world) via postMessage,
   // because the content script runs in an ISOLATED world and cannot read the page's sessionStorage
   let widgetSessionCache = null;
+  // widget 用户 token（仅登录态，可能未选会话）：用于登录即连用户级 task 流
+  let widgetUserToken = null;
+  let lastAuthTokenReported = null;
 
   window.addEventListener('message', (event) => {
     if (event.data?.type !== 'agent-sphere:session-data') return;
     const sessionId = event.data.sessionId;
     const userRaw = event.data.user;
     widgetSessionCache = null;
-    if (sessionId && userRaw) {
+    let parsedUser = null;
+    if (userRaw) {
       try {
-        const parsed = JSON.parse(userRaw);
-        if (parsed && parsed.token) {
-          widgetSessionCache = { sessionId: Number(sessionId), user: parsed };
-        }
+        parsedUser = JSON.parse(userRaw);
       } catch (e) {
-        widgetSessionCache = null;
+        parsedUser = null;
       }
+    }
+    if (sessionId && parsedUser && parsedUser.token) {
+      widgetSessionCache = { sessionId: Number(sessionId), user: parsedUser };
+      widgetUserToken = parsedUser.token;
+    } else if (parsedUser && parsedUser.token) {
+      widgetUserToken = parsedUser.token;
+    } else {
+      widgetUserToken = null;
+    }
+    // 登录即连：已登录但未选会话时，上报 auth_token 建立用户级 task 流（不依赖 session，去重）
+    if (widgetUserToken && !sessionId && widgetUserToken !== lastAuthTokenReported) {
+      lastAuthTokenReported = widgetUserToken;
+      getSettings().then((settings) => {
+        chrome.runtime.sendMessage(chrome.runtime.id, {
+          type: 'auth_token',
+          token: widgetUserToken,
+          baseUrl: settings.backendUrl || 'http://localhost:8080',
+        }).catch(() => {});
+      });
     }
     checkAuth().catch(() => {});
   });

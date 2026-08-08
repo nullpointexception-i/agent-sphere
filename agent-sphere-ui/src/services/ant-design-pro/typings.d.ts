@@ -4,10 +4,13 @@
 declare namespace API {
   type CurrentUser = {
     name?: string;
+    englishName?: string;
     avatar?: string;
     userid?: string;
     email?: string;
     demo?: boolean;
+    ssoProviderCode?: string;
+    ssoSubject?: string;
     signature?: string;
     title?: string;
     group?: string;

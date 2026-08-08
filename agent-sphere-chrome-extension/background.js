@@ -51,12 +51,15 @@ startKeepalive();
 // --- Start SSE on startup ---
 function startSSE() {
   chrome.storage.local.get(['token', 'sessionId', 'baseUrl'], (data) => {
-    if (data.token && data.sessionId && data.baseUrl) {
+    // task 流为用户级连接，只需 token（不依赖 session）
+    if (data.token && data.baseUrl) {
       token = data.token;
-      sessionId = data.sessionId;
       baseUrl = data.baseUrl;
-      connectSSE();
       ensureTaskSSE();
+    }
+    if (data.token && data.sessionId && data.baseUrl) {
+      sessionId = data.sessionId;
+      connectSSE();
     }
     // Self-heal after SW restart / extension reload: once config is ready, proactively pull the session from the active matching tab
     loadConfiguredUrls(() => queryActiveTabSession());
@@ -120,6 +123,7 @@ function queryActiveTabSession() {
         }).catch(() => {});
         console.log('[AgentSphere] Startup: following session', sid);
         connectSSE();
+        ensureTaskSSE();
       });
     });
   });
@@ -226,6 +230,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       token, sessionId, displayName: msg.displayName || '', baseUrl: msg.baseUrl,
     }).catch(() => {});
     connectSSE();
+    ensureTaskSSE();
+  }
+  // 登录即连：仅有 token（widget 已登录但未选会话）时，建立用户级 task 流（不依赖 session）
+  if (msg.type === 'auth_token' && msg.token) {
+    token = msg.token;
+    baseUrl = msg.baseUrl || baseUrl;
+    chrome.storage.local.set({ token, baseUrl }).catch(() => {});
+    console.log('[AgentSphere] auth_token: establishing task connection (no session yet)');
     ensureTaskSSE();
   }
   if (msg.type === 'log') {
