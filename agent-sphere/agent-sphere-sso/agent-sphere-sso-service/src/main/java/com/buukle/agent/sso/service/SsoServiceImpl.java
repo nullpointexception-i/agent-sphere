@@ -4,16 +4,20 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.sso.domain.IdentityProvider;
+import com.buukle.agent.sso.domain.SsoIdentity;
 import com.buukle.agent.sso.domain.SsoProviderType;
 import com.buukle.agent.sso.dtvo.SsoAuthorizeVO;
 import com.buukle.agent.sso.dtvo.enums.SsoProviderEnum;
+import com.buukle.agent.sso.dtvo.vo.SsoIdentityVO;
 import com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO;
 import com.buukle.agent.sso.exception.SsoErrorCode;
 import com.buukle.agent.sso.repository.IdentityProviderMapper;
+import com.buukle.agent.sso.repository.SsoIdentityMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
@@ -63,6 +67,7 @@ import static com.buukle.agent.sso.service.SsoConstants.STATE_VALUE_SEPARATOR;
 public class SsoServiceImpl implements SsoService {
 
     private final IdentityProviderMapper identityProviderMapper;
+    private final SsoIdentityMapper ssoIdentityMapper;
     private final SsoOidcClient ssoOidcClient;
     private final SsoProvisioningService provisioningService;
     private final UserSpi userSpi;
@@ -87,6 +92,26 @@ public class SsoServiceImpl implements SsoService {
             vo.setName(p.getName());
             return vo;
         }).toList();
+    }
+
+    @Override
+    public SsoIdentityVO getCurrentIdentity() {
+        Long userId = AuthContext.getUserId();
+        if (userId == null) {
+            return null;
+        }
+        SsoIdentity identity = ssoIdentityMapper.selectOne(
+                new LambdaQueryWrapper<SsoIdentity>()
+                        .eq(SsoIdentity::getAgentUserId, userId)
+                        .orderByDesc(SsoIdentity::getId)
+                        .last("LIMIT 1"));
+        if (identity == null) {
+            return null;
+        }
+        SsoIdentityVO vo = new SsoIdentityVO();
+        vo.setProviderCode(identity.getProviderCode());
+        vo.setSubject(identity.getSubject());
+        return vo;
     }
 
     @Override

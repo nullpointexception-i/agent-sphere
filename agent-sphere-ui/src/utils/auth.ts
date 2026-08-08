@@ -10,6 +10,8 @@ export interface UserVO {
   demo?: boolean;
   roles?: string[];
   permissions?: string[];
+  ssoProviderCode?: string;
+  ssoSubject?: string;
 }
 
 export function getStoredUser(): UserVO | null {
@@ -42,5 +44,24 @@ export function toProCurrentUser(user: UserVO): API.CurrentUser {
     email: user.email,
     access: user.username === 'admin' ? 'admin' : 'user',
     demo: user.demo === true,
+    ssoProviderCode: user.ssoProviderCode,
+    ssoSubject: user.ssoSubject,
   };
+}
+
+/** 右上角展示名：SSO 用户显示 provider@subject（如 bole@elvin），否则回退英文名/姓名。 */
+export function ssoDisplayName(
+  user:
+    | {
+        ssoProviderCode?: string;
+        ssoSubject?: string;
+        englishName?: string;
+        name?: string;
+      }
+    | undefined,
+): string {
+  if (user?.ssoProviderCode && user?.ssoSubject) {
+    return `${user.ssoProviderCode}@${user.ssoSubject}`;
+  }
+  return user?.englishName || user?.name || 'User';
 }

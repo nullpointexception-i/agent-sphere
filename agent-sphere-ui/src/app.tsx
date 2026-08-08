@@ -25,6 +25,7 @@ import {
   clearStoredUser,
   getStoredUser,
   setStoredUser,
+  ssoDisplayName,
   toProCurrentUser,
 } from '@/utils/auth';
 import { tracker } from '@/utils/tracker';
@@ -106,6 +107,14 @@ export async function getInitialState(): Promise<{
         clearStoredUser();
         return undefined;
       }
+      // SSO 用户：初始化会话时查询第三方身份（provider_code@subject），用于右上角展示
+      const ssoIdentity = await umiRequest('/api/v1/sso/me', {
+        skipErrorHandler: true,
+      }).catch(() => null);
+      if (ssoIdentity?.providerCode && ssoIdentity?.subject) {
+        user.ssoProviderCode = ssoIdentity.providerCode;
+        user.ssoSubject = ssoIdentity.subject;
+      }
       // 用 /auth/me 的新鲜数据（含 permissions/roles）回写本地存储，
       // 使权限变更在下次启动时立即生效，无需重新登录。
       setStoredUser({ ...stored, ...user });
@@ -167,10 +176,7 @@ export const layout: RunTimeLayoutConfig = ({
     actionsRender: () => [<LangDropdown key="lang" />],
     avatarProps: {
       src: initialState?.currentUser?.avatar,
-      title:
-        initialState?.currentUser?.englishName ||
-        initialState?.currentUser?.name ||
-        'User',
+      title: ssoDisplayName(initialState?.currentUser),
       render: (_, avatarChildren) => (
         <AvatarDropdown>{avatarChildren}</AvatarDropdown>
       ),
