@@ -23,5 +23,7 @@ public interface UserSpi {
 
     UserVO loginByUserId(Long userId);
 
+    UserVO getByUserId(Long userId);
+
     com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO> listPage(int page, int size);
 }

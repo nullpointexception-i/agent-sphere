@@ -10,6 +10,9 @@ import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.service.ChatRuntimeService;
+import com.buukle.agent.sso.spi.CallerAuth;
+import com.buukle.agent.sso.spi.ResolvedIdentityVO;
+import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.tasks.domain.AgentTask;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
@@ -34,11 +37,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class AgentTaskServiceTest {
+
+    private static final CallerAuth AUTH = CallerAuth.of("bole", "elvin", "sourcing");
 
     @Mock
     AgentTaskMapper taskMapper;
@@ -52,6 +58,8 @@ class AgentTaskServiceTest {
     ChatRuntimeService chatRuntimeService;
     @Mock
     TaskCallbackService taskCallbackService;
+    @Mock
+    SsoIdentitySpi ssoIdentitySpi;
 
     @InjectMocks
     AgentTaskServiceImpl taskService;
@@ -61,17 +69,30 @@ class AgentTaskServiceTest {
         ReflectionTestUtils.setField(taskService, "pollInterval", Duration.ofDays(1));
     }
 
+    private void stubIdentity() {
+        given(ssoIdentitySpi.resolveByCodeSubject("bole", "elvin"))
+                .willReturn(ResolvedIdentityVO.of(1L, "elvin", "Elvin"));
+    }
+
+    private InstanceVO instance(long id) {
+        InstanceVO instance = new InstanceVO();
+        instance.setId(id);
+        instance.setStatus("ENABLED");
+        instance.setBusinessType("sourcing");
+        return instance;
+    }
+
     @Test
     void submit_shouldPersistResolveInstanceAndStartRun() {
+        stubIdentity();
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(instance(2L)));
+
         CreateTaskDTO dto = new CreateTaskDTO();
         dto.setGoal("整理月报");
         dto.setContext(Map.of("month", "2026-04"));
-        dto.setInstanceId(2L);
-
-        InstanceVO instance = new InstanceVO();
-        instance.setId(2L);
-        instance.setStatus("ENABLED");
-        given(instanceSpi.getInstance(2L)).willReturn(instance);
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
 
         SessionVO session = new SessionVO();
         session.setId(11L);
@@ -86,7 +107,7 @@ class AgentTaskServiceTest {
             return 1;
         });
 
-        TaskVO vo = taskService.submit(dto);
+        TaskVO vo = taskService.submit(dto, AUTH);
 
         assertNotNull(vo);
         assertEquals("RUNNING", vo.getStatus());
@@ -99,49 +120,50 @@ class AgentTaskServiceTest {
         AgentTask saved = taskCaptor.getValue();
         assertEquals("RUNNING", saved.getStatus());
         assertEquals("{\"month\":\"2026-04\"}", saved.getContextJson());
+        assertEquals("elvin", saved.getCreatedBy());
     }
 
     @Test
-    void submit_withoutInstanceId_shouldPickFirstEnabled() {
+    void submit_withoutEnabledBusinessInstance_shouldThrow() {
+        stubIdentity();
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of());
+
         CreateTaskDTO dto = new CreateTaskDTO();
         dto.setGoal("写总结");
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
 
-        InstanceVO a = new InstanceVO();
-        a.setId(1L);
-        a.setStatus("DISABLED");
-        InstanceVO b = new InstanceVO();
-        b.setId(5L);
-        b.setStatus("ENABLED");
-        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(a, b));
+        assertThrows(BizException.class, () -> taskService.submit(dto, AUTH));
+    }
 
-        SessionVO session = new SessionVO();
-        session.setId(11L);
-        given(sessionSpi.createSession(any(CreateSessionDTO.class))).willReturn(session);
+    @Test
+    void submit_invalidIdentity_shouldThrow() {
+        given(ssoIdentitySpi.resolveByCodeSubject("bole", "elvin")).willReturn(null);
 
-        ChatMessageResponseVO chatResp = new ChatMessageResponseVO();
-        chatResp.setRunId(22L);
-        given(chatRuntimeService.chat(anyLong(), any(SendMessageDTO.class))).willReturn(chatResp);
+        CreateTaskDTO dto = new CreateTaskDTO();
+        dto.setGoal("写总结");
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
 
-        given(taskMapper.insert(any(AgentTask.class))).willAnswer(inv -> {
-            inv.<AgentTask>getArgument(0).setId(1L);
-            return 1;
-        });
-
-        TaskVO vo = taskService.submit(dto);
-
-        assertEquals(5L, vo.getInstanceId());
+        assertThrows(BizException.class, () -> taskService.submit(dto, AUTH));
     }
 
     @Test
     void stop_shouldCancelRunningTask() {
+        stubIdentity();
         AgentTask task = new AgentTask();
         task.setId(7L);
         task.setStatus("RUNNING");
+        task.setCreatedBy("elvin");
+        task.setInstanceId(2L);
         task.setSessionId(11L);
         task.setRunId(22L);
         given(taskMapper.selectById(7L)).willReturn(task);
+        given(instanceSpi.getInstance(2L)).willReturn(instance(2L));
 
-        taskService.stop(7L);
+        taskService.stop(7L, AUTH);
 
         ArgumentCaptor<AgentTask> captor = ArgumentCaptor.forClass(AgentTask.class);
         verify(taskMapper).updateById(captor.capture());
@@ -151,15 +173,27 @@ class AgentTaskServiceTest {
     }
 
     @Test
+    void stop_otherUsersTask_shouldThrow() {
+        stubIdentity();
+        AgentTask task = new AgentTask();
+        task.setId(7L);
+        task.setStatus("RUNNING");
+        task.setCreatedBy("someone-else");
+        given(taskMapper.selectById(7L)).willReturn(task);
+
+        assertThrows(BizException.class, () -> taskService.stop(7L, AUTH));
+    }
+
+    @Test
     void submit_shouldSendAutonomousMessageWithoutClarification() {
+        stubIdentity();
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(instance(2L)));
+
         CreateTaskDTO dto = new CreateTaskDTO();
         dto.setGoal("整理月报");
-        dto.setInstanceId(2L);
-
-        InstanceVO instance = new InstanceVO();
-        instance.setId(2L);
-        instance.setStatus("ENABLED");
-        given(instanceSpi.getInstance(2L)).willReturn(instance);
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
 
         SessionVO session = new SessionVO();
         session.setId(11L);
@@ -174,7 +208,7 @@ class AgentTaskServiceTest {
             return 1;
         });
 
-        taskService.submit(dto);
+        taskService.submit(dto, AUTH);
 
         ArgumentCaptor<SendMessageDTO> messageCaptor = ArgumentCaptor.forClass(SendMessageDTO.class);
         verify(chatRuntimeService).chat(anyLong(), messageCaptor.capture());
@@ -185,17 +219,16 @@ class AgentTaskServiceTest {
     }
 
     @Test
-    void submit_shouldResolveCallerFromInstanceAndPersistCallbackUrl() {
+    void submit_shouldPersistCallbackUrl() {
+        stubIdentity();
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(instance(2L)));
+
         CreateTaskDTO dto = new CreateTaskDTO();
         dto.setGoal("寻访任务");
-        dto.setInstanceId(2L);
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
         dto.setCallbackUrl("https://callback.example/api/v1/tasks/callback");
-
-        InstanceVO instance = new InstanceVO();
-        instance.setId(2L);
-        instance.setStatus("ENABLED");
-        instance.setCreatedBy("creator-a");
-        given(instanceSpi.getInstance(2L)).willReturn(instance);
 
         SessionVO session = new SessionVO();
         session.setId(11L);
@@ -210,12 +243,12 @@ class AgentTaskServiceTest {
             return 1;
         });
 
-        taskService.submit(dto);
+        taskService.submit(dto, AUTH);
 
         ArgumentCaptor<AgentTask> insertCaptor = ArgumentCaptor.forClass(AgentTask.class);
         verify(taskMapper).insert(insertCaptor.capture());
         AgentTask inserted = insertCaptor.getValue();
-        assertEquals("creator-a", inserted.getCreatedBy());
+        assertEquals("elvin", inserted.getCreatedBy());
         assertEquals("https://callback.example/api/v1/tasks/callback", inserted.getCallbackUrl());
     }
 
@@ -223,19 +256,30 @@ class AgentTaskServiceTest {
     void get_notFound_shouldThrow() {
         given(taskMapper.selectById(99L)).willReturn(null);
 
-        assertThrows(BizException.class, () -> taskService.get(99L));
+        assertThrows(BizException.class, () -> taskService.get(99L, AUTH));
+    }
+
+    @Test
+    void get_notOwner_shouldThrow() {
+        stubIdentity();
+        AgentTask task = new AgentTask();
+        task.setId(7L);
+        task.setCreatedBy("someone-else");
+        given(taskMapper.selectById(7L)).willReturn(task);
+
+        assertThrows(BizException.class, () -> taskService.get(7L, AUTH));
     }
 
     @Test
     void submit_chatThrows_shouldMarkFailedAndRethrow() {
+        stubIdentity();
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(instance(2L)));
+
         CreateTaskDTO dto = new CreateTaskDTO();
         dto.setGoal("整理月报");
-        dto.setInstanceId(2L);
-
-        InstanceVO instance = new InstanceVO();
-        instance.setId(2L);
-        instance.setStatus("ENABLED");
-        given(instanceSpi.getInstance(2L)).willReturn(instance);
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
 
         SessionVO session = new SessionVO();
         session.setId(11L);
@@ -253,7 +297,7 @@ class AgentTaskServiceTest {
         persisted.setStatus("QUEUED");
         given(taskMapper.selectById(1L)).willReturn(persisted);
 
-        assertThrows(RuntimeException.class, () -> taskService.submit(dto));
+        assertThrows(RuntimeException.class, () -> taskService.submit(dto, AUTH));
 
         ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
         verify(taskMapper).updateById(taskCaptor.capture());

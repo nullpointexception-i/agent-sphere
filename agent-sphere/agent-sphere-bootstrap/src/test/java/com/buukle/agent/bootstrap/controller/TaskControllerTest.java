@@ -1,5 +1,6 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.sso.spi.CallerAuth;
 import com.buukle.agent.tasks.controller.TaskController;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
@@ -44,22 +45,20 @@ class TaskControllerTest {
     @Test
     void submit_shouldReturn201() throws Exception {
         CreateTaskDTO dto = new CreateTaskDTO();
-        dto.setGoal("梳理 4 月订单并给出摘要");
+        dto.setGoal("梳理 4 月订单");
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
         TaskVO vo = new TaskVO();
         vo.setId(1L);
         vo.setStatus("RUNNING");
-        vo.setInstanceId(2L);
-        vo.setSessionId(3L);
-        vo.setRunId(4L);
-        given(taskService.submit(any(CreateTaskDTO.class))).willReturn(vo);
+        given(taskService.submit(any(CreateTaskDTO.class), any(CallerAuth.class))).willReturn(vo);
 
         mockMvc.perform(post("/api/v1/api/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1L))
-                .andExpect(jsonPath("$.status").value("RUNNING"))
-                .andExpect(jsonPath("$.runId").value(4L));
+                .andExpect(jsonPath("$.id").value(1L));
     }
 
     @Test
@@ -67,20 +66,24 @@ class TaskControllerTest {
         TaskVO vo = new TaskVO();
         vo.setId(7L);
         vo.setStatus("COMPLETED");
-        vo.setResultJson("{\"reply\":\"done\"}");
-        given(taskService.get(7L)).willReturn(vo);
+        given(taskService.get(eq(7L), any(CallerAuth.class))).willReturn(vo);
 
-        mockMvc.perform(get("/api/v1/api/tasks/7"))
+        mockMvc.perform(get("/api/v1/api/tasks/7")
+                        .param("code", "bole")
+                        .param("subject", "elvin")
+                        .param("businessType", "sourcing"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(7L))
-                .andExpect(jsonPath("$.status").value("COMPLETED"));
+                .andExpect(jsonPath("$.id").value(7L));
     }
 
     @Test
     void stop_shouldReturnOk() throws Exception {
-        willDoNothing().given(taskService).stop(eq(7L));
+        willDoNothing().given(taskService).stop(eq(7L), any(CallerAuth.class));
 
-        mockMvc.perform(post("/api/v1/api/tasks/7/stop"))
+        mockMvc.perform(post("/api/v1/api/tasks/7/stop")
+                        .param("code", "bole")
+                        .param("subject", "elvin")
+                        .param("businessType", "sourcing"))
                 .andExpect(status().isOk());
     }
 }

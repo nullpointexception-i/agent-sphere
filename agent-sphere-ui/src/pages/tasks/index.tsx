@@ -35,7 +35,6 @@ export default function TaskList() {
     [dayjs.Dayjs | null, dayjs.Dayjs | null]
   >([null, null]);
   const [tableScrollY, setTableScrollY] = useState(400);
-  const [instances, setInstances] = useState<any[]>([]);
   const [viewRecord, setViewRecord] = useState<any>(null);
   const [_viewLoading, setViewLoading] = useState(false);
   const [stoppingId, setStoppingId] = useState<number | null>(null);
@@ -48,13 +47,6 @@ export default function TaskList() {
     calc();
     window.addEventListener('resize', calc);
     return () => window.removeEventListener('resize', calc);
-  }, []);
-
-  useEffect(() => {
-    agentApi.instances
-      .listAll()
-      .then(setInstances)
-      .catch(() => {});
   }, []);
 
   const jsonRule = {
@@ -171,7 +163,7 @@ export default function TaskList() {
       const values = await form.validateFields();
       const payload = {
         goal: values.goal,
-        instanceId: values.instanceId,
+        businessType: values.businessType,
         callbackUrl: values.callbackUrl,
         context: values.context ? JSON.parse(values.context) : undefined,
         expectedOutput: values.expectedOutput
@@ -422,27 +414,17 @@ export default function TaskList() {
             <Input.TextArea rows={3} maxLength={5000} />
           </Form.Item>
           <Form.Item
-            name="instanceId"
+            name="businessType"
             label={labelWithRule(
-              t('pages.admin.tasks.instanceId', '实例'),
-              t('pages.admin.tasks.instanceId.extra', '留空则使用首个可用实例'),
+              t('pages.admin.tasks.businessType', '业务域'),
+              t(
+                'pages.admin.tasks.businessType.extra',
+                '按业务域匹配可用实例，需与实例的 businessType 一致',
+              ),
             )}
+            rules={[{ required: true }]}
           >
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              placeholder={t(
-                'pages.admin.tasks.instanceId.placeholder',
-                '选择实例',
-              )}
-              options={instances
-                .filter((i) => i.status === 'ENABLED')
-                .map((i) => ({
-                  value: i.id,
-                  label: i.name ? `${i.name} (#${i.id})` : `#${i.id}`,
-                }))}
-            />
+            <Input maxLength={64} placeholder="sourcing" />
           </Form.Item>
           <Form.Item
             name="context"

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.tasks.controller.AdminTasksController;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
+import com.buukle.agent.sso.spi.CallerAuth;
 import com.buukle.agent.tasks.service.AgentTaskService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -73,7 +75,7 @@ class AdminTasksControllerTest {
         vo.setId(7L);
         vo.setGoal("整理月报");
         vo.setStatus("COMPLETED");
-        given(taskService.get(7L)).willReturn(vo);
+        given(taskService.get(eq(7L), any())).willReturn(vo);
 
         mockMvc.perform(get("/api/v1/admin/tasks/7"))
                 .andExpect(status().isOk())
@@ -85,10 +87,11 @@ class AdminTasksControllerTest {
     void create_shouldReturn201() throws Exception {
         CreateTaskDTO dto = new CreateTaskDTO();
         dto.setGoal("梳理 4 月订单");
+        dto.setBusinessType("sourcing");
         TaskVO vo = new TaskVO();
         vo.setId(1L);
         vo.setStatus("RUNNING");
-        given(taskService.submit(any(CreateTaskDTO.class))).willReturn(vo);
+        given(taskService.submit(any(CreateTaskDTO.class), any())).willReturn(vo);
 
         mockMvc.perform(post("/api/v1/admin/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -99,7 +102,7 @@ class AdminTasksControllerTest {
 
     @Test
     void stop_shouldReturnOk() throws Exception {
-        willDoNothing().given(taskService).stop(anyLong());
+        willDoNothing().given(taskService).stop(eq(7L), any());
 
         mockMvc.perform(post("/api/v1/admin/tasks/7/stop"))
                 .andExpect(status().isOk());

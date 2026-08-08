@@ -265,6 +265,22 @@ export default function InstanceEditDrawer({
                   >
                     <Input.TextArea rows={4} maxLength={5000} />
                   </Form.Item>
+                  <Form.Item
+                    name="businessType"
+                    label={labelWithRule(
+                      intl.formatMessage({
+                        id: 'pages.instances.businessType',
+                        defaultMessage: '业务域',
+                      }),
+                      intl.formatMessage({
+                        id: 'pages.instances.businessType.extra',
+                        defaultMessage:
+                          '任务按业务域匹配该实例，需与调用方一致',
+                      }),
+                    )}
+                  >
+                    <Input maxLength={64} placeholder="sourcing" />
+                  </Form.Item>
                 </Form>
               ),
             },

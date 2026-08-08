@@ -72,6 +72,9 @@ export default {
   'pages.hint.keyValue': '(max 2000)',
   'pages.hint.englishName': '(1-64 chars, letters/spaces)',
   'pages.instances.systemPrompt': 'System Prompt',
+  'pages.instances.businessType': 'Business Type',
+  'pages.instances.businessType.extra':
+    'Tasks match this instance by businessType; must match the caller',
   'pages.instances.defaultModelRoute': 'Default Model Route',
   'pages.instances.selectRoute': 'Select route',
   'pages.instances.refreshRoutes': 'Refresh routes',
@@ -478,6 +481,9 @@ export default {
   'pages.admin.completions.status': 'Status',
   'pages.admin.completions.statusActive': 'Active',
   'pages.admin.completions.remark': 'Remark',
+  'pages.admin.completions.businessType': 'Business Type',
+  'pages.admin.completions.businessType.extra':
+    'External API matches this capability by businessType; must match the caller',
   'pages.admin.completions.inputSchema': 'Input Schema (JSON)',
   'pages.admin.completions.outputSchema': 'Output Schema (JSON)',
   'pages.admin.completions.config': 'Config (JSON)',
@@ -512,6 +518,9 @@ export default {
   'pages.admin.tasks.statusFailed': 'Failed',
   'pages.admin.tasks.statusCancelled': 'Cancelled',
   'pages.admin.tasks.instanceId': 'Instance',
+  'pages.admin.tasks.businessType': 'Business Type',
+  'pages.admin.tasks.businessType.extra':
+    'Matching available instance by businessType; must match the instance businessType',
   'pages.admin.tasks.instanceId.extra':
     'Leave empty to use first available instance',
   'pages.admin.tasks.instanceId.placeholder': 'Select an instance',

@@ -20,4 +20,6 @@ public class CreateInstanceDTO implements Serializable {
     private String customInstructions;
     @Size(max = 3000000)
     private String image;
+    @Size(max = 64)
+    private String businessType;
 }

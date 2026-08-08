@@ -189,6 +189,7 @@ export default function CompletionsList() {
                   outputSchema: record.outputSchema,
                   config: record.config,
                   remark: record.remark,
+                  businessType: record.businessType,
                 });
                 setModalOpen(true);
               }}
@@ -708,6 +709,16 @@ export default function CompletionsList() {
             label={t('pages.admin.completions.remark', '备注')}
           >
             <Input.TextArea rows={2} maxLength={500} />
+          </Form.Item>
+          <Form.Item
+            name="businessType"
+            label={t('pages.admin.completions.businessType', '业务域')}
+            extra={t(
+              'pages.admin.completions.businessType.extra',
+              '外部 API 按 businessType 匹配该能力，需与调用方一致',
+            )}
+          >
+            <Input maxLength={64} placeholder="sourcing" />
           </Form.Item>
         </Form>
       </Modal>

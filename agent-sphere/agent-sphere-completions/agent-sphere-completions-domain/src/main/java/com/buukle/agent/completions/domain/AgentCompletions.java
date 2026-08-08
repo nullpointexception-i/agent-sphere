@@ -24,6 +24,7 @@ public class AgentCompletions {
     private String config;
     private String status;
     private String remark;
+    private String businessType;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

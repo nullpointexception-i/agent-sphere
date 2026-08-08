@@ -5,6 +5,7 @@ import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
+import com.buukle.agent.sso.spi.CallerAuth;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
 import com.buukle.agent.tasks.service.AgentTaskService;
@@ -37,7 +38,7 @@ public class AdminTasksController extends BaseController {
     @RequirePermission("admin:tasks:create")
     @PostMapping
     public ResponseEntity<TaskVO> create(@Valid @RequestBody CreateTaskDTO dto) {
-        return created(taskService.submit(dto));
+        return created(taskService.submit(dto, CallerAuth.of(null, null, dto.getBusinessType())));
     }
 
     @RequirePermission("admin:tasks:read")
@@ -55,14 +56,14 @@ public class AdminTasksController extends BaseController {
     @RequirePermission("admin:tasks:read")
     @GetMapping("/{id}")
     public ResponseEntity<TaskVO> detail(@PathVariable Long id) {
-        return ok(taskService.get(id));
+        return ok(taskService.get(id, CallerAuth.of(null, null, null)));
     }
 
     @AuditLog(action = "STOP_TASK", resourceType = "Task", resourceId = "#id")
     @RequirePermission("admin:tasks:update")
     @PostMapping("/{id}/stop")
     public ResponseEntity<?> stop(@PathVariable Long id) {
-        taskService.stop(id);
+        taskService.stop(id, CallerAuth.of(null, null, null));
         return ok();
     }
 }

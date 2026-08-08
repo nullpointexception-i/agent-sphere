@@ -16,21 +16,21 @@ class CreateTaskDtoDeserializationTest {
 
     @Test
     void configAsString_shouldDeserializeToMap() throws Exception {
-        String body = "{\"goal\":\"寻访\",\"instanceId\":3,\"config\":\"{\\\"channels\\\":[\\\"liepin\\\"]}\"}";
+        String body = "{\"goal\":\"寻访\",\"businessType\":\"sourcing\",\"config\":\"{\\\"channels\\\":[\\\"liepin\\\"]}\"}";
         CreateTaskDTO dto = MAPPER.readValue(body, CreateTaskDTO.class);
         assertEquals(Map.of("channels", List.of("liepin")), dto.getConfig());
     }
 
     @Test
     void configAsObject_shouldDeserializeToMap() throws Exception {
-        String body = "{\"goal\":\"寻访\",\"config\":{\"channels\":[\"liepin\"]}}";
+        String body = "{\"goal\":\"寻访\",\"businessType\":\"sourcing\",\"config\":{\"channels\":[\"liepin\"]}}";
         CreateTaskDTO dto = MAPPER.readValue(body, CreateTaskDTO.class);
         assertEquals(Map.of("channels", List.of("liepin")), dto.getConfig());
     }
 
     @Test
     void nullFields_shouldRemainNull() throws Exception {
-        String body = "{\"goal\":\"寻访\"}";
+        String body = "{\"goal\":\"寻访\",\"businessType\":\"sourcing\"}";
         CreateTaskDTO dto = MAPPER.readValue(body, CreateTaskDTO.class);
         assertNull(dto.getConfig());
         assertNull(dto.getContext());

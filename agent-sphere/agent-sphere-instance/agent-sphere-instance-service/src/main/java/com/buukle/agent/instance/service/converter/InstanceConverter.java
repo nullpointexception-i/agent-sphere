@@ -23,6 +23,7 @@ public class InstanceConverter {
         vo.setCustomInstructions(instance.getCustomInstructions());
         vo.setImage(instance.getImage());
         vo.setStatus(instance.getStatus());
+        vo.setBusinessType(instance.getBusinessType());
         vo.setCreatedAt(instance.getCreatedAt() != null ? instance.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(instance.getCreatedBy());
         vo.setUpdatedBy(instance.getUpdatedBy());
@@ -38,6 +39,7 @@ public class InstanceConverter {
         instance.setModelRouteId(dto.getModelRouteId());
         instance.setCustomInstructions(dto.getCustomInstructions());
         instance.setImage(dto.getImage());
+        instance.setBusinessType(dto.getBusinessType());
         instance.setStatus(InstanceEnum.STATUS_ENABLED);
         return instance;
     }

@@ -16,6 +16,9 @@ import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.service.ChatRuntimeService;
+import com.buukle.agent.sso.spi.CallerAuth;
+import com.buukle.agent.sso.spi.ResolvedIdentityVO;
+import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.tasks.domain.AgentTask;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
@@ -59,6 +62,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private final RunSpi runSpi;
     private final ChatRuntimeService chatRuntimeService;
     private final TaskCallbackService taskCallbackService;
+    private final SsoIdentitySpi ssoIdentitySpi;
 
     @Value("${hri-ai.tasks.poll-interval:2s}")
     private Duration pollInterval;
@@ -67,11 +71,12 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private final Map<Long, ScheduledFuture<?>> pollFutures = new ConcurrentHashMap<>();
 
     @Override
-    public TaskVO submit(CreateTaskDTO dto) {
-        InstanceVO instance = resolveInstance(dto.getInstanceId());
-        // 用 instance 创建者初始化当前上下文：task 关联的 session/run 归属为该真实用户，
+    public TaskVO submit(CreateTaskDTO dto, CallerAuth auth) {
+        ResolvedIdentityVO identity = resolveIdentity(auth);
+        InstanceVO instance = resolveInstanceByBusinessType(auth.businessType());
+        // 用解析出的调用方身份初始化当前上下文：task 关联的 session/run 归属为该用户，
         // 使浏览器插件按用户名建立的任务连接能收到执行过程中的指令投递（而非 external-service）。
-        AuthContext.setUsername(instance.getCreatedBy());
+        AuthContext.setUsername(identity.getUsername());
         AuthContext.setSuperAdmin(false);
         AuthContext.setPermissions(Set.of());
         AgentTask task = new AgentTask();
@@ -80,7 +85,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         task.setExpectedOutputJson(dto.getExpectedOutput() == null ? null : JsonUtils.toJson(dto.getExpectedOutput()));
         task.setConfig(dto.getConfig() == null ? null : JsonUtils.toJson(dto.getConfig()));
         task.setCallbackUrl(dto.getCallbackUrl());
-        task.setCreatedBy(instance.getCreatedBy());
+        task.setCreatedBy(identity.getUsername());
         task.setInstanceId(instance.getId());
         task.setStatus(TaskEnum.STATUS_QUEUED);
         taskMapper.insert(task);
@@ -111,8 +116,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public TaskVO get(Long id) {
+    public TaskVO get(Long id, CallerAuth auth) {
         AgentTask task = requireTask(id);
+        requireTaskAccess(task, auth);
         return toVO(task);
     }
 
@@ -131,8 +137,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public void stop(Long id) {
+    public void stop(Long id, CallerAuth auth) {
         AgentTask task = requireTask(id);
+        requireTaskAccess(task, auth);
         if (!TaskEnum.STATUS_RUNNING.equals(task.getStatus()) && !TaskEnum.STATUS_QUEUED.equals(task.getStatus())) {
             return;
         }
@@ -150,19 +157,50 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         transitionToTerminal(task, TaskEnum.STATUS_CANCELLED, task.getResultJson());
     }
 
-    private InstanceVO resolveInstance(Long callerProvided) {
-        if (callerProvided != null) {
-            InstanceVO instance = instanceSpi.getInstance(callerProvided);
-            if (instance == null) {
-                throw new BizException(CommonErrorCode.PARAM_INVALID, "指定的 instanceId 不存在: " + callerProvided);
-            }
-            return instance;
+    private InstanceVO resolveInstanceByBusinessType(String businessType) {
+        if (!StringUtils.hasText(businessType)) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "businessType 不能为空");
         }
         return instanceSpi.listInstances(null, null, null).stream()
                 .filter(i -> InstanceEnum.STATUS_ENABLED.equals(i.getStatus()))
+                .filter(i -> businessType.equals(i.getBusinessType()))
                 .findFirst()
-                .orElseThrow(() -> new BizException(CommonErrorCode.RESOURCE_NOT_FOUND,
-                        "未找到可用的 Agent 实例，请指定 instanceId"));
+                .orElseThrow(() -> new BizException(CommonErrorCode.FORBIDDEN, "businessType 无可用实例"));
+    }
+
+    /** 解析调用方身份：外部（code+subject）走 SSO 反查，内部（管理端）取 AuthContext；失败 → 401。 */
+    private ResolvedIdentityVO resolveIdentity(CallerAuth auth) {
+        if (StringUtils.hasText(auth.code()) && StringUtils.hasText(auth.subject())) {
+            ResolvedIdentityVO identity = ssoIdentitySpi.resolveByCodeSubject(auth.code(), auth.subject());
+            if (identity == null) {
+                throw new BizException(CommonErrorCode.UNAUTHORIZED);
+            }
+            return identity;
+        }
+        String username = AuthContext.getUsername();
+        if (username == null || username.isBlank()) {
+            throw new BizException(CommonErrorCode.UNAUTHORIZED);
+        }
+        return ResolvedIdentityVO.of(AuthContext.getUserId(), username, AuthContext.getDisplayName());
+    }
+
+    /** 外部调用方只能访问自己的任务，且任务所属实例的 businessType 需匹配；内部（admin）由 RBAC+租户管控。 */
+    private void requireTaskAccess(AgentTask task, CallerAuth auth) {
+        boolean external = StringUtils.hasText(auth.code());
+        if (!external) {
+            return;
+        }
+        ResolvedIdentityVO identity = resolveIdentity(auth);
+        if (!identity.getUsername().equals(task.getCreatedBy())) {
+            throw new BizException(CommonErrorCode.FORBIDDEN);
+        }
+        if (StringUtils.hasText(auth.businessType()) && task.getInstanceId() != null) {
+            InstanceVO instance = instanceSpi.getInstance(task.getInstanceId());
+            if (instance != null && StringUtils.hasText(instance.getBusinessType())
+                    && !instance.getBusinessType().equals(auth.businessType())) {
+                throw new BizException(CommonErrorCode.FORBIDDEN);
+            }
+        }
     }
 
     private void schedulePoll(AgentTask task) {

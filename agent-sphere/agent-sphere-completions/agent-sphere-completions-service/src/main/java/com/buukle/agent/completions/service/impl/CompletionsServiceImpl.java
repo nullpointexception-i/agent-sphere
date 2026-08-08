@@ -3,6 +3,7 @@ package com.buukle.agent.completions.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.completions.domain.AgentCompletions;
 import com.buukle.agent.completions.domain.AgentCompletionsCall;
 import com.buukle.agent.completions.domain.AgentCompletionsPrompt;
@@ -29,6 +30,9 @@ import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
+import com.buukle.agent.sso.spi.CallerAuth;
+import com.buukle.agent.sso.spi.ResolvedIdentityVO;
+import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -67,18 +71,21 @@ public class CompletionsServiceImpl implements CompletionsService {
     private final RouteListBuilder routeListBuilder;
     private final ApiKeySpi apiKeySpi;
     private final KernelLlmService llmService;
+    private final SsoIdentitySpi ssoIdentitySpi;
 
     @Value("${hri-ai.completions.call-timeout:60s}")
     private Duration callTimeout;
 
     @Override
-    public ChatCompletionsResp execute(Long completionsId, CompletionsInput input) {
-        AgentCompletions c = completionsMapper.selectById(completionsId);
+    public ChatCompletionsResp execute(CallerAuth auth, CompletionsInput input) {
+        ResolvedIdentityVO identity = resolveCallerIdentity(auth);
+        AgentCompletions c = completionsMapper.selectOne(
+                new LambdaQueryWrapper<AgentCompletions>()
+                        .eq(AgentCompletions::getBusinessType, auth.businessType())
+                        .eq(AgentCompletions::getStatus, CompletionsEnum.STATUS_ACTIVE)
+                        .last("LIMIT 1"));
         if (c == null) {
             throw new BizException(CompletionsErrorCode.COMPLETIONS_NOT_FOUND);
-        }
-        if (!CompletionsEnum.STATUS_ACTIVE.equals(c.getStatus())) {
-            throw new BizException(CompletionsErrorCode.COMPLETIONS_DISABLED);
         }
         if (c.getModelRouteId() == null) {
             throw new BizException(CompletionsErrorCode.NO_MODEL_ROUTE);
@@ -139,15 +146,14 @@ public class CompletionsServiceImpl implements CompletionsService {
         }
 
         AgentCompletionsCall call = new AgentCompletionsCall();
-        call.setCompletionsId(completionsId);
+        call.setCompletionsId(c.getId());
         call.setPromptId(prompt.getId());
         call.setInput(input == null ? null : JsonUtils.toJson(inputMap));
         call.setOutput(content);
         call.setModel(model);
         call.setUsage(usage == null ? null : JsonUtils.toJson(usage));
         call.setStatus(CompletionsEnum.CALL_STATUS_SUCCESS);
-        call.setCaller(StringUtils.hasText(c.getCreatedBy())
-                ? c.getCreatedBy() : CompletionsEnum.CALLER_ANONYMOUS);
+        call.setCaller(identity.getUsername());
         completionsCallService.record(call);
 
         ChatCompletionsResp resp = new ChatCompletionsResp();
@@ -168,6 +174,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         c.setOutputSchema(dto.getOutputSchema());
         c.setConfig(dto.getConfig());
         c.setRemark(dto.getRemark());
+        c.setBusinessType(dto.getBusinessType());
         c.setStatus(CompletionsEnum.STATUS_ACTIVE);
         completionsMapper.insert(c);
         return toVO(c, List.of());
@@ -200,6 +207,9 @@ public class CompletionsServiceImpl implements CompletionsService {
         }
         if (dto.getRemark() != null) {
             c.setRemark(dto.getRemark());
+        }
+        if (dto.getBusinessType() != null) {
+            c.setBusinessType(dto.getBusinessType());
         }
         completionsMapper.updateById(c);
         return toVO(c, completionsPromptService.listByCompletions(id));
@@ -240,6 +250,15 @@ public class CompletionsServiceImpl implements CompletionsService {
     @Override
     public Page<CompletionsCallVO> listCalls(Long id, int page, int size) {
         return completionsCallService.pageByCompletions(id, page, size);
+    }
+
+    /** 解析外部调用方身份：code+subject 反查 SSO identity，失败 → 401。 */
+    private ResolvedIdentityVO resolveCallerIdentity(CallerAuth auth) {
+        ResolvedIdentityVO identity = ssoIdentitySpi.resolveByCodeSubject(auth.code(), auth.subject());
+        if (identity == null) {
+            throw new BizException(CommonErrorCode.UNAUTHORIZED);
+        }
+        return identity;
     }
 
     private List<ChatMessageDTO> renderPrompt(AgentCompletionsPrompt prompt, Map<String, Object> input, String outputSchema) {
@@ -372,6 +391,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         vo.setConfig(c.getConfig());
         vo.setStatus(c.getStatus());
         vo.setRemark(c.getRemark());
+        vo.setBusinessType(c.getBusinessType());
         vo.setPrompts(prompts);
         vo.setCreatedAt(c.getCreatedAt() == null ? null : c.getCreatedAt().toString());
         vo.setUpdatedAt(c.getUpdatedAt() == null ? null : c.getUpdatedAt().toString());

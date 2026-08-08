@@ -19,7 +19,13 @@ public class CreateTaskDTO implements Serializable {
     private Map<String, Object> expectedOutput;
     @JsonDeserialize(using = LenientMapDeserializer.class)
     private Map<String, Object> config;
-    private Long instanceId;
     @Size(max = 500)
     private String callbackUrl;
+    @Size(max = 64)
+    private String code;
+    @Size(max = 512)
+    private String subject;
+    @NotBlank(message = "businessType can't be blank")
+    @Size(max = 64)
+    private String businessType;
 }

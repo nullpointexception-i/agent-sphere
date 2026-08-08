@@ -152,6 +152,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     }
 
     @Override
+    public UserVO getByUserId(Long userId) {
+        AgentUser user = getById(userId);
+        return user != null ? toVO(user) : null;
+    }
+
+    @Override
     public UserVO loginByUserId(Long userId) {
         AgentUser user = getById(userId);
         if (user == null) throw new BizException(InstanceErrorCode.USER_NOT_FOUND);

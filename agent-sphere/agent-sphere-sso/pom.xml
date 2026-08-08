@@ -10,6 +10,7 @@
     <artifactId>agent-sphere-sso</artifactId>
     <packaging>pom</packaging>
     <modules>
+        <module>agent-sphere-sso-spi</module>
         <module>agent-sphere-sso-domain</module>
         <module>agent-sphere-sso-exception</module>
         <module>agent-sphere-sso-dtvo</module>

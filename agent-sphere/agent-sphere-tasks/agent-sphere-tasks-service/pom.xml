@@ -21,6 +21,10 @@
         </dependency>        <dependency>
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-sso-spi</artifactId>
         </dependency>        <dependency>
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-instance-spi</artifactId>

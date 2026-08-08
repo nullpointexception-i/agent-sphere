@@ -14,6 +14,7 @@ public class InstanceVO implements Serializable {
     private String customInstructions;
     private String image;
     private String status;
+    private String businessType;
     private String createdAt;
     private String createdBy;
     private String updatedBy;

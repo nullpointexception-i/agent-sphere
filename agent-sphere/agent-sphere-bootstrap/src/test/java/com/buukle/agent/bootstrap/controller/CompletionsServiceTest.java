@@ -18,6 +18,9 @@ import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
+import com.buukle.agent.sso.spi.CallerAuth;
+import com.buukle.agent.sso.spi.ResolvedIdentityVO;
+import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +46,8 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class CompletionsServiceTest {
 
+    private static final CallerAuth AUTH = CallerAuth.of("bole", "elvin", "sourcing");
+
     @Mock
     CompletionsMapper completionsMapper;
     @Mock
@@ -57,6 +62,8 @@ class CompletionsServiceTest {
     ApiKeySpi apiKeySpi;
     @Mock
     KernelLlmService llmService;
+    @Mock
+    SsoIdentitySpi ssoIdentitySpi;
 
     @InjectMocks
     CompletionsServiceImpl completionsService;
@@ -64,6 +71,25 @@ class CompletionsServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(completionsService, "callTimeout", Duration.ofSeconds(60));
+        given(ssoIdentitySpi.resolveByCodeSubject("bole", "elvin"))
+                .willReturn(ResolvedIdentityVO.of(1L, "elvin", "Elvin"));
+    }
+
+    private void stubCompletions(AgentCompletions c) {
+        c.setBusinessType("sourcing");
+        given(completionsMapper.selectOne(any())).willReturn(c);
+    }
+
+    private ModelRouteFullVO route() {
+        ModelRouteFullVO route = new ModelRouteFullVO();
+        route.setId(10L);
+        route.setApiKeyId(99L);
+        route.setCompany("openai");
+        route.setBaseUrl("https://api.openai.com/v1");
+        route.setModelName("gpt-4o");
+        given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(route));
+        given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
+        return route;
     }
 
     @Test
@@ -73,8 +99,7 @@ class CompletionsServiceTest {
         c.setStatus("ACTIVE");
         c.setModelRouteId(10L);
         c.setActivePromptId(20L);
-        c.setCreatedBy("admin-a");
-        given(completionsMapper.selectById(1L)).willReturn(c);
+        stubCompletions(c);
 
         AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
         prompt.setId(20L);
@@ -82,16 +107,7 @@ class CompletionsServiceTest {
         prompt.setPromptUser("你好 {{name}}，任务：{{input}}");
         given(promptMapper.selectById(20L)).willReturn(prompt);
 
-        ModelRouteFullVO route = new ModelRouteFullVO();
-        route.setId(10L);
-        route.setApiKeyId(99L);
-        route.setCompany("openai");
-        route.setBaseUrl("https://api.openai.com/v1");
-        route.setModelName("gpt-4o");
-        given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(route));
-
-        given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
-
+        route();
         KernelLlmService.InvokeResult result = new KernelLlmService.InvokeResult();
         result.setSuccess(true);
         result.setContent("好的，已处理");
@@ -99,7 +115,7 @@ class CompletionsServiceTest {
         given(llmService.invokeSync(anyString(), anyString(), anyString(), anyString(),
                 any(), any(LlmInteractionMeta.class), anyLong())).willReturn(result);
 
-        ChatCompletionsResp resp = completionsService.execute(1L, CompletionsInput.of(Map.of("name", "张三", "input", "订单 123")));
+        ChatCompletionsResp resp = completionsService.execute(AUTH, CompletionsInput.of(Map.of("name", "张三", "input", "订单 123")));
 
         assertNotNull(resp);
         assertEquals("好的，已处理", resp.getContent());
@@ -112,53 +128,24 @@ class CompletionsServiceTest {
         assertEquals(1L, call.getCompletionsId());
         assertEquals("好的，已处理", call.getOutput());
         assertEquals("SUCCESS", call.getStatus());
-        assertEquals("admin-a", call.getCaller());
+        assertEquals("elvin", call.getCaller());
     }
 
     @Test
-    void execute_withoutCreator_shouldUseAnonymousCaller() {
-        AgentCompletions c = new AgentCompletions();
-        c.setId(1L);
-        c.setStatus("ACTIVE");
-        c.setModelRouteId(10L);
-        c.setActivePromptId(20L);
-        given(completionsMapper.selectById(1L)).willReturn(c);
-
-        AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
-        prompt.setId(20L);
-        prompt.setPromptUser("{{input}}");
-        given(promptMapper.selectById(20L)).willReturn(prompt);
-
-        ModelRouteFullVO route = new ModelRouteFullVO();
-        route.setId(10L);
-        route.setApiKeyId(99L);
-        route.setCompany("openai");
-        route.setBaseUrl("https://api.openai.com/v1");
-        route.setModelName("gpt-4o");
-        given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(route));
-
-        given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
-
-        KernelLlmService.InvokeResult result = new KernelLlmService.InvokeResult();
-        result.setSuccess(true);
-        result.setContent("ok");
-        given(llmService.invokeSync(anyString(), anyString(), anyString(), anyString(),
-                any(), any(LlmInteractionMeta.class), anyLong())).willReturn(result);
-
-        completionsService.execute(1L, CompletionsInput.of(Map.of()));
-
-        ArgumentCaptor<AgentCompletionsCall> callCaptor = ArgumentCaptor.forClass(AgentCompletionsCall.class);
-        verify(completionsCallService).record(callCaptor.capture());
-        assertEquals("anonymous", callCaptor.getValue().getCaller());
-    }
-
-    @Test
-    void execute_notFound_shouldThrow() {
-        given(completionsMapper.selectById(999L)).willReturn(null);
+    void execute_noCompletionsForBusinessType_shouldThrow() {
+        given(completionsMapper.selectOne(any())).willReturn(null);
 
         BizException ex = assertThrows(BizException.class,
-                () -> completionsService.execute(999L, CompletionsInput.of(Map.of())));
+                () -> completionsService.execute(AUTH, CompletionsInput.of(Map.of())));
         assertEquals(CompletionsErrorCode.COMPLETIONS_NOT_FOUND.getCode(), ex.getErrorCode());
+    }
+
+    @Test
+    void execute_invalidIdentity_shouldThrow() {
+        given(ssoIdentitySpi.resolveByCodeSubject("bole", "elvin")).willReturn(null);
+
+        assertThrows(BizException.class,
+                () -> completionsService.execute(AUTH, CompletionsInput.of(Map.of())));
     }
 
     @Test
@@ -168,7 +155,7 @@ class CompletionsServiceTest {
         c.setStatus("ACTIVE");
         c.setModelRouteId(10L);
         c.setActivePromptId(20L);
-        given(completionsMapper.selectById(1L)).willReturn(c);
+        stubCompletions(c);
 
         AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
         prompt.setId(20L);
@@ -188,7 +175,6 @@ class CompletionsServiceTest {
         routeB.setBaseUrl("https://b.example");
         routeB.setModelName("claude-3-5");
         given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(routeA, routeB));
-
         given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
 
         KernelLlmService.InvokeResult failed = new KernelLlmService.InvokeResult();
@@ -201,7 +187,7 @@ class CompletionsServiceTest {
         given(llmService.invokeSync(anyString(), anyString(), anyString(), anyString(),
                 any(), any(LlmInteractionMeta.class), anyLong())).willReturn(failed, ok);
 
-        ChatCompletionsResp resp = completionsService.execute(1L, CompletionsInput.of(Map.of()));
+        ChatCompletionsResp resp = completionsService.execute(AUTH, CompletionsInput.of(Map.of()));
 
         assertEquals("fallback 成功", resp.getContent());
         assertEquals("claude-3-5", resp.getModel());
@@ -214,7 +200,7 @@ class CompletionsServiceTest {
         c.setStatus("ACTIVE");
         c.setModelRouteId(10L);
         c.setActivePromptId(20L);
-        given(completionsMapper.selectById(1L)).willReturn(c);
+        stubCompletions(c);
 
         AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
         prompt.setId(20L);
@@ -234,7 +220,6 @@ class CompletionsServiceTest {
         routeB.setBaseUrl("https://b.example");
         routeB.setModelName("claude-3-5");
         given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(routeA, routeB));
-
         given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
 
         KernelLlmService.InvokeResult ok = new KernelLlmService.InvokeResult();
@@ -245,7 +230,7 @@ class CompletionsServiceTest {
                 .willThrow(new RuntimeException("connection refused"))
                 .willReturn(ok);
 
-        ChatCompletionsResp resp = completionsService.execute(1L, CompletionsInput.of(Map.of()));
+        ChatCompletionsResp resp = completionsService.execute(AUTH, CompletionsInput.of(Map.of()));
 
         assertEquals("second route ok", resp.getContent());
         assertEquals("claude-3-5", resp.getModel());
@@ -259,29 +244,21 @@ class CompletionsServiceTest {
         c.setModelRouteId(10L);
         c.setActivePromptId(20L);
         c.setConfig("{\"temperature\":0.3,\"thinking\":false,\"max_tokens\":1024}");
-        given(completionsMapper.selectById(1L)).willReturn(c);
+        stubCompletions(c);
 
         AgentCompletionsPrompt prompt = new AgentCompletionsPrompt();
         prompt.setId(20L);
         prompt.setPromptUser("{{input}}");
         given(promptMapper.selectById(20L)).willReturn(prompt);
 
-        ModelRouteFullVO route = new ModelRouteFullVO();
-        route.setId(10L);
-        route.setApiKeyId(99L);
-        route.setCompany("openai");
-        route.setBaseUrl("https://api.openai.com/v1");
-        route.setModelName("gpt-4o");
-        given(routeListBuilder.fromRouteId(10L)).willReturn(List.of(route));
-        given(apiKeySpi.getApiKeyValue(99L)).willReturn("sk-test");
-
+        route();
         KernelLlmService.InvokeResult result = new KernelLlmService.InvokeResult();
         result.setSuccess(true);
         result.setContent("ok");
         given(llmService.invokeSync(anyString(), anyString(), anyString(), anyString(),
                 any(), any(LlmInteractionMeta.class), anyLong())).willReturn(result);
 
-        completionsService.execute(1L, CompletionsInput.of(Map.of()));
+        completionsService.execute(AUTH, CompletionsInput.of(Map.of()));
 
         ArgumentCaptor<ChatCompletionRequestDTO> reqCaptor = ArgumentCaptor.forClass(ChatCompletionRequestDTO.class);
         verify(llmService).invokeSync(anyString(), anyString(), anyString(), anyString(),

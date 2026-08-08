@@ -19,4 +19,6 @@ public class CreateCompletionsDTO implements Serializable {
     private String config;
     @Size(max = 500)
     private String remark;
+    @Size(max = 64)
+    private String businessType;
 }

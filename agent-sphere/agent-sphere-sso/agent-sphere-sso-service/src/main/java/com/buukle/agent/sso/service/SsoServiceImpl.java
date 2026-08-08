@@ -18,6 +18,8 @@ import com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO;
 import com.buukle.agent.sso.exception.SsoErrorCode;
 import com.buukle.agent.sso.repository.IdentityProviderMapper;
 import com.buukle.agent.sso.repository.SsoIdentityMapper;
+import com.buukle.agent.sso.spi.ResolvedIdentityVO;
+import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
@@ -64,7 +66,7 @@ import static com.buukle.agent.sso.service.SsoConstants.STATE_VALUE_SEPARATOR;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class SsoServiceImpl implements SsoService {
+public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
 
     private final IdentityProviderMapper identityProviderMapper;
     private final SsoIdentityMapper ssoIdentityMapper;
@@ -113,6 +115,26 @@ public class SsoServiceImpl implements SsoService {
         vo.setSubject(identity.getDisplaySubject() != null && !identity.getDisplaySubject().isBlank()
                 ? identity.getDisplaySubject() : identity.getSubject());
         return vo;
+    }
+
+    @Override
+    public ResolvedIdentityVO resolveByCodeSubject(String providerCode, String subject) {
+        if (!StringUtils.hasText(providerCode) || !StringUtils.hasText(subject)) {
+            return null;
+        }
+        SsoIdentity identity = ssoIdentityMapper.selectOne(
+                new LambdaQueryWrapper<SsoIdentity>()
+                        .eq(SsoIdentity::getProviderCode, providerCode)
+                        .eq(SsoIdentity::getSubject, subject)
+                        .last("LIMIT 1"));
+        if (identity == null) {
+            return null;
+        }
+        UserVO user = userSpi.getByUserId(identity.getAgentUserId());
+        if (user == null) {
+            return null;
+        }
+        return ResolvedIdentityVO.of(user.getId(), user.getUsername(), user.getDisplayName());
     }
 
     @Override

@@ -72,6 +72,8 @@ export default {
   'pages.hint.keyValue': '(最多2000字)',
   'pages.hint.englishName': '(1-64字,仅字母空格)',
   'pages.instances.systemPrompt': '系统提示词',
+  'pages.instances.businessType': '业务域',
+  'pages.instances.businessType.extra': '任务按业务域匹配该实例，需与调用方一致',
   'pages.instances.defaultModelRoute': '默认模型路由',
   'pages.instances.selectRoute': '选择路由',
   'pages.instances.refreshRoutes': '刷新路由',
@@ -459,6 +461,9 @@ export default {
   'pages.admin.completions.status': '状态',
   'pages.admin.completions.statusActive': '启用',
   'pages.admin.completions.remark': '备注',
+  'pages.admin.completions.businessType': '业务域',
+  'pages.admin.completions.businessType.extra':
+    '外部 API 按 businessType 匹配该能力，需与调用方一致',
   'pages.admin.completions.inputSchema': 'Input Schema (JSON)',
   'pages.admin.completions.outputSchema': 'Output Schema (JSON)',
   'pages.admin.completions.config': 'Config (JSON)',
@@ -491,6 +496,9 @@ export default {
   'pages.admin.tasks.statusFailed': '失败',
   'pages.admin.tasks.statusCancelled': '已取消',
   'pages.admin.tasks.instanceId': '实例',
+  'pages.admin.tasks.businessType': '业务域',
+  'pages.admin.tasks.businessType.extra':
+    '按业务域匹配可用实例，需与实例的 businessType 一致',
   'pages.admin.tasks.instanceId.extra': '留空则使用首个可用实例',
   'pages.admin.tasks.instanceId.placeholder': '选择实例',
   'pages.admin.tasks.sessionId': '会话',

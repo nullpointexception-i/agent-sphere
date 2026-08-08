@@ -17,6 +17,7 @@ public class AgentInstance {
     private String customInstructions;
     private String image;
     private String status;
+    private String businessType;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;
