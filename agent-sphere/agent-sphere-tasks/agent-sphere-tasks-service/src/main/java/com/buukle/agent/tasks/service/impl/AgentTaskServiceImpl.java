@@ -2,6 +2,7 @@ package com.buukle.agent.tasks.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
@@ -33,6 +34,7 @@ import org.springframework.util.StringUtils;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -67,6 +69,11 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     @Override
     public TaskVO submit(CreateTaskDTO dto) {
         InstanceVO instance = resolveInstance(dto.getInstanceId());
+        // 用 instance 创建者初始化当前上下文：task 关联的 session/run 归属为该真实用户，
+        // 使浏览器插件按用户名建立的任务连接能收到执行过程中的指令投递（而非 external-service）。
+        AuthContext.setUsername(instance.getCreatedBy());
+        AuthContext.setSuperAdmin(false);
+        AuthContext.setPermissions(Set.of());
         AgentTask task = new AgentTask();
         task.setGoal(dto.getGoal());
         task.setContextJson(dto.getContext() == null ? null : JsonUtils.toJson(dto.getContext()));

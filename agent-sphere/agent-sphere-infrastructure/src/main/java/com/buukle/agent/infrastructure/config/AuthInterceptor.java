@@ -22,7 +22,6 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -30,7 +29,6 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/check-username", "/api/v1/auth/sso", "/api/v1/chrome", "/api/v1/artifacts/documents/shared");
     private static final String EXTERNAL_API_PREFIX = "/api/v1/api";
-    private static final String EXTERNAL_API_USER = "external-service";
     private static final String TOKEN_CACHE_PREFIX = "token:user:";
     private final UserMapper userMapper;
     private final CacheService cacheService;
@@ -42,11 +40,10 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (SKIP_PATHS.stream().anyMatch(path::startsWith)) return true;
 
         // 外部能力开放接口（/api/v1/api/*）：外部调用方直连免 token。
+        // 仅放行，不设置用户身份：会话/任务归属由业务层按资源创建者（如 task 的 instance 创建者）显式初始化，
+        // 避免外部调用污染为统一 service 用户而无法投递到真实用户的连接。
         // TODO 接口验签（后续版本）：校验来源签名后放行，当前阶段整体豁免。
         if (path.startsWith(EXTERNAL_API_PREFIX)) {
-            AuthContext.setUsername(EXTERNAL_API_USER);
-            AuthContext.setSuperAdmin(false);
-            AuthContext.setPermissions(Set.of());
             return true;
         }
 

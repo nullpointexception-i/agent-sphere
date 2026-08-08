@@ -14,10 +14,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Set;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -42,7 +41,7 @@ class AuthInterceptorTest {
     }
 
     @Test
-    void externalApiPath_shouldBypassBearerAndSetServiceUser() throws Exception {
+    void externalApiPath_shouldBypassBearerWithoutSettingUser() throws Exception {
         HttpServletRequest request = mock(HttpServletRequest.class);
         HttpServletResponse response = mock(HttpServletResponse.class);
         org.mockito.Mockito.when(request.getRequestURI()).thenReturn("/api/v1/api/completions");
@@ -50,9 +49,7 @@ class AuthInterceptorTest {
         boolean allowed = authInterceptor.preHandle(request, response, null);
 
         assertTrue(allowed);
-        assertEquals("external-service", AuthContext.getUsername());
-        assertEquals(false, AuthContext.isSuperAdmin());
-        assertEquals(Set.of(), AuthContext.getPermissions());
+        assertNull(AuthContext.getUsername());
         verify(userMapper, never()).selectOne(org.mockito.ArgumentMatchers.any());
     }
 
