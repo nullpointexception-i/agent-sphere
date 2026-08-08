@@ -29,11 +29,13 @@ export default [
     key: 'workbench',
     name: 'workbench',
     icon: 'home',
+    locale: 'menu.workbench',
     routes: [
       {
         path: 'dashboard',
         name: 'dashboard',
         icon: 'dashboard',
+        locale: 'menu.dashboard',
         component: './dashboard',
       },
     ],
@@ -44,6 +46,7 @@ export default [
     name: 'capabilities',
     icon: 'api',
     access: 'canManageCapabilities',
+    locale: 'menu.capabilities',
     routes: [
       {
         path: 'capabilities/mcp',
@@ -84,11 +87,13 @@ export default [
     key: 'agents',
     name: 'agents',
     icon: 'robot',
+    locale: 'menu.agents',
     routes: [
       {
         path: 'models',
         name: 'models',
         icon: 'cloud',
+        locale: 'menu.models',
         access: 'canManageModels',
         component: './model-providers',
       },
@@ -96,6 +101,7 @@ export default [
         path: 'completions',
         name: 'completions',
         icon: 'thunderbolt',
+        locale: 'menu.completions',
         access: 'canManageCompletions',
         component: './completions',
       },
@@ -103,6 +109,7 @@ export default [
         path: 'instances',
         name: 'instances',
         icon: 'robot',
+        locale: 'menu.instances',
         access: 'canManageInstances',
         component: './instances',
       },
@@ -110,6 +117,7 @@ export default [
         path: 'tasks',
         name: 'tasks',
         icon: 'carryOut',
+        locale: 'menu.tasks',
         access: 'canManageTasks',
         component: './tasks',
       },
@@ -117,12 +125,14 @@ export default [
         path: 'chat',
         name: 'chat',
         icon: 'message',
+        locale: 'menu.chat',
         component: './chat',
       },
       {
         path: 'chat/:sessionId',
         name: 'chat',
         icon: 'message',
+        locale: 'menu.chat',
         component: './chat',
         hideInMenu: true,
       },
@@ -134,11 +144,13 @@ export default [
     name: 'artifacts',
     icon: 'folderOpen',
     access: 'canViewDocuments',
+    locale: 'menu.artifacts',
     routes: [
       {
         path: 'artifacts/documents',
         name: 'documents',
         icon: 'fileText',
+        locale: 'menu.artifacts.documents',
         access: 'canViewDocuments',
         component: './artifacts/documents',
       },
