@@ -86,7 +86,8 @@ public class SsoOidcClient {
             if (nonce != null && nonce.equals(claims.getStringClaim(OidcClaim.NONCE.getValue()))) {
                 return new IdTokenClaims(claims.getSubject(),
                         claims.getStringClaim(OidcClaim.EMAIL.getValue()),
-                        claims.getStringClaim(OidcClaim.NAME.getValue()));
+                        claims.getStringClaim(OidcClaim.NAME.getValue()),
+                        claims.getStringClaim("preferred_username"));
             }
             throw new BizException(SsoErrorCode.ID_TOKEN_INVALID);
         } catch (BizException e) {
@@ -97,7 +98,7 @@ public class SsoOidcClient {
         }
     }
 
-    public record IdTokenClaims(String subject, String email, String name) {
+    public record IdTokenClaims(String subject, String email, String name, String preferredUsername) {
     }
 
     /**

@@ -51,7 +51,7 @@ public class CompletionsServiceImpl implements CompletionsService {
     private static final String ROLE_SYSTEM = "system";
     private static final String ROLE_USER = "user";
     private static final String OUTPUT_SCHEMA_HINT = "\n\n请严格按照以下 JSON Schema 输出最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
-    private static final String RESPONSE_FORMAT_TYPE_JSON_SCHEMA = "json_schema";
+    private static final String RESPONSE_FORMAT_TYPE_JSON_OBJECT = "json_object";
 
     private final CompletionsMapper completionsMapper;
     private final CompletionsPromptMapper promptMapper;
@@ -252,7 +252,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         return messages;
     }
 
-    /** 若配置了 outputSchema，设置 response_format=json_schema（模型不支持时 LLM 层仍会按 prompt 提示输出）。 */
+    /** 若配置了 outputSchema，设置 response_format=json_schema / object（模型不支持时 LLM 层仍会按 prompt 提示输出）。 */
     private void applyResponseFormat(ChatCompletionRequestDTO request, String outputSchema) {
         if (!StringUtils.hasText(outputSchema)) {
             return;
@@ -260,7 +260,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         try {
             com.buukle.agent.model.dtvo.dto.complete.ResponseFormatDTO responseFormat =
                     new com.buukle.agent.model.dtvo.dto.complete.ResponseFormatDTO();
-            responseFormat.setType(RESPONSE_FORMAT_TYPE_JSON_SCHEMA);
+            responseFormat.setType(RESPONSE_FORMAT_TYPE_JSON_OBJECT);
             com.buukle.agent.model.dtvo.dto.complete.JsonSchemaDTO jsonSchema =
                     new com.buukle.agent.model.dtvo.dto.complete.JsonSchemaDTO();
             jsonSchema.setName("output");

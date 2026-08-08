@@ -31,13 +31,19 @@ public class SsoProvisioningService {
     private final UserSpi userSpi;
 
     @Transactional
-    public Long provisionOrGet(String providerCode, String subject, String email, String displayName) {
+    public Long provisionOrGet(String providerCode, String subject, String email, String displayName, String preferredUsername) {
         SsoIdentity existing = ssoIdentityMapper.selectOne(
                 new LambdaQueryWrapper<SsoIdentity>()
                         .eq(SsoIdentity::getProviderCode, providerCode)
                         .eq(SsoIdentity::getSubject, subject)
                         .last("LIMIT 1"));
         if (existing != null) {
+            // 每次登录刷新第三方用户名（displaySubject），用户改名后下次登录自动同步
+            String displaySubject = resolveDisplaySubject(preferredUsername, displayName, subject);
+            if (!java.util.Objects.equals(existing.getDisplaySubject(), displaySubject)) {
+                existing.setDisplaySubject(displaySubject);
+                ssoIdentityMapper.updateById(existing);
+            }
             return existing.getAgentUserId();
         }
 
@@ -56,9 +62,20 @@ public class SsoProvisioningService {
         SsoIdentity identity = new SsoIdentity();
         identity.setProviderCode(providerCode);
         identity.setSubject(subject);
+        identity.setDisplaySubject(resolveDisplaySubject(preferredUsername, displayName, subject));
         identity.setAgentUserId(user.getId());
         ssoIdentityMapper.insert(identity);
         return user.getId();
+    }
+
+    private static String resolveDisplaySubject(String preferredUsername, String displayName, String subject) {
+        if (preferredUsername != null && !preferredUsername.isBlank()) {
+            return preferredUsername;
+        }
+        if (displayName != null && !displayName.isBlank()) {
+            return displayName;
+        }
+        return subject;
     }
 
     static String deriveUsername(String providerCode, String subject) {

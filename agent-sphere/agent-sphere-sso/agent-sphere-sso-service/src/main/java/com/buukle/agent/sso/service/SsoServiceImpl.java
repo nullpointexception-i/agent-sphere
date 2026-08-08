@@ -110,7 +110,8 @@ public class SsoServiceImpl implements SsoService {
         }
         SsoIdentityVO vo = new SsoIdentityVO();
         vo.setProviderCode(identity.getProviderCode());
-        vo.setSubject(identity.getSubject());
+        vo.setSubject(identity.getDisplaySubject() != null && !identity.getDisplaySubject().isBlank()
+                ? identity.getDisplaySubject() : identity.getSubject());
         return vo;
     }
 
@@ -171,7 +172,7 @@ public class SsoServiceImpl implements SsoService {
                 identityProvider, code, callbackUrl, codeVerifier, nonce);
 
         Long userId = provisioningService.provisionOrGet(
-                providerCode, claims.subject(), claims.email(), claims.name());
+                providerCode, claims.subject(), claims.email(), claims.name(), claims.preferredUsername());
 
         String otc = randomToken(OTC_TOKEN_BYTES);
         set(otcKey(otc), String.valueOf(userId), properties.getSso().getOtcTtl());
