@@ -9,5 +9,7 @@ public interface AgentLlmInteractionRecordSpi {
 
     List<AgentLlmInteractionRecordVO> listByRunId(Long runId, int offset, int limit);
 
+    long countByRunId(Long runId);
+
     AgentLlmInteractionRecordVO getById(Long id);
 }

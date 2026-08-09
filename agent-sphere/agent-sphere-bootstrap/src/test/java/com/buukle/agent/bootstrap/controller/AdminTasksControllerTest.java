@@ -21,6 +21,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -75,7 +76,7 @@ class AdminTasksControllerTest {
         vo.setId(7L);
         vo.setGoal("整理月报");
         vo.setStatus("COMPLETED");
-        given(taskService.get(eq(7L), any())).willReturn(vo);
+        given(taskService.get(eq(7L), isNull(), any(CallerAuth.class))).willReturn(vo);
 
         mockMvc.perform(get("/api/v1/admin/tasks/7"))
                 .andExpect(status().isOk())

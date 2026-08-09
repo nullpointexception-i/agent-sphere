@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 public interface AgentTaskService {
     TaskVO submit(CreateTaskDTO dto, CallerAuth auth);
 
-    TaskVO get(Long id, CallerAuth auth);
+    TaskVO get(Long id, Integer thinkingOffset, CallerAuth auth);
 
     void stop(Long id, CallerAuth auth);
 

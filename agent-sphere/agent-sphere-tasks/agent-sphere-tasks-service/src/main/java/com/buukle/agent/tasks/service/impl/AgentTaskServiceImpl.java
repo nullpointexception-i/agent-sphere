@@ -11,6 +11,8 @@ import com.buukle.agent.instance.dtvo.enums.InstanceEnum;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
+import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
+import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
@@ -22,6 +24,7 @@ import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.tasks.domain.AgentTask;
 import com.buukle.agent.tasks.domain.AgentTaskArtifact;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
+import com.buukle.agent.tasks.dtvo.TaskThinkingVO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
 import com.buukle.agent.tasks.dtvo.enums.TaskEnum;
 import com.buukle.agent.tasks.repository.AgentTaskArtifactMapper;
@@ -39,6 +42,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -76,6 +80,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private final TaskCallbackService taskCallbackService;
     private final SsoIdentitySpi ssoIdentitySpi;
     private final TaskContractValidator contractValidator;
+    private final AgentLlmInteractionRecordSpi llmInteractionRecordSpi;
 
     @Value("${hri-ai.tasks.poll-interval:2s}")
     private Duration pollInterval;
@@ -131,10 +136,53 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public TaskVO get(Long id, CallerAuth auth) {
+    public TaskVO get(Long id, Integer thinkingOffset, CallerAuth auth) {
         AgentTask task = requireTask(id);
         requireTaskAccess(task, auth);
-        return toVO(task);
+        TaskVO vo = toVO(task);
+        vo.setThinkingRecords(listThinking(task, thinkingOffset));
+        vo.setThinkingCount((int) countThinking(task));
+        return vo;
+    }
+
+    /** 增量拉取 run 的 LLM 交互记录（思考过程），最新在前。 */
+    private List<TaskThinkingVO> listThinking(AgentTask task, Integer thinkingOffset) {
+        if (task.getRunId() == null) {
+            return List.of();
+        }
+        int offset = thinkingOffset == null || thinkingOffset < 0 ? 0 : thinkingOffset;
+        try {
+            return llmInteractionRecordSpi.listByRunId(task.getRunId(), offset, 50)
+                    .stream().map(this::toThinkingVO).toList();
+        } catch (Exception e) {
+            log.warn("Resolve task thinking failed for task {}: {}", task.getId(), e.getMessage());
+            return List.of();
+        }
+    }
+
+    private TaskThinkingVO toThinkingVO(AgentLlmInteractionRecordVO r) {
+        TaskThinkingVO vo = new TaskThinkingVO();
+        vo.setId(r.getId());
+        vo.setInteractionType(r.getInteractionType());
+        vo.setModelName(r.getModelName());
+        vo.setResponseBody(r.getResponseBody());
+        vo.setSuccess(r.getSuccess());
+        vo.setErrorMessage(r.getErrorMessage());
+        vo.setCreatedAt(r.getCreatedAt());
+        return vo;
+    }
+
+    /** run 的 LLM 交互记录总条数（供调用方增量 offset 判断）。 */
+    private long countThinking(AgentTask task) {
+        if (task.getRunId() == null) {
+            return 0;
+        }
+        try {
+            return llmInteractionRecordSpi.countByRunId(task.getRunId());
+        } catch (Exception e) {
+            log.warn("Count task thinking failed for task {}: {}", task.getId(), e.getMessage());
+            return 0;
+        }
     }
 
     @Override

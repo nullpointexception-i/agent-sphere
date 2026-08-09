@@ -56,7 +56,7 @@ public class AdminTasksController extends BaseController {
     @RequirePermission("admin:tasks:read")
     @GetMapping("/{id}")
     public ResponseEntity<TaskVO> detail(@PathVariable Long id) {
-        return ok(taskService.get(id, CallerAuth.of(null, null, null)));
+        return ok(taskService.get(id, null, CallerAuth.of(null, null, null)));
     }
 
     @AuditLog(action = "STOP_TASK", resourceType = "Task", resourceId = "#id")

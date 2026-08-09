@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -66,7 +67,7 @@ class TaskControllerTest {
         TaskVO vo = new TaskVO();
         vo.setId(7L);
         vo.setStatus("COMPLETED");
-        given(taskService.get(eq(7L), any(CallerAuth.class))).willReturn(vo);
+        given(taskService.get(eq(7L), isNull(), any(CallerAuth.class))).willReturn(vo);
 
         mockMvc.perform(get("/api/v1/api/tasks/7")
                         .param("code", "bole")

@@ -49,6 +49,12 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
     }
 
     @Override
+    public long countByRunId(Long runId) {
+        return mapper.selectCount(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
+                .eq(AgentLlmInteractionRecord::getRunId, runId));
+    }
+
+    @Override
     public AgentLlmInteractionRecordVO getById(Long id) {
         AgentLlmInteractionRecord record = mapper.selectById(id);
         return record == null ? null : toVO(record);

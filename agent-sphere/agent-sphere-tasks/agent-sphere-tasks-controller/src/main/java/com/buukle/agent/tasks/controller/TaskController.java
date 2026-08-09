@@ -36,8 +36,9 @@ public class TaskController extends BaseController {
     public ResponseEntity<TaskVO> get(@PathVariable Long id,
                                       @RequestParam String code,
                                       @RequestParam String subject,
-                                      @RequestParam String businessType) {
-        return ok(taskService.get(id, CallerAuth.of(code, subject, businessType)));
+                                      @RequestParam String businessType,
+                                      @RequestParam(required = false) Integer thinkingOffset) {
+        return ok(taskService.get(id, thinkingOffset, CallerAuth.of(code, subject, businessType)));
     }
 
     @PostMapping("/{id}/stop")
