@@ -139,7 +139,7 @@ export default function InstanceList() {
     }
   }, []);
 
-  const columns = [
+  const columns: any[] = [
     {
       title: intl.formatMessage({ id: 'pages.table.id' }),
       dataIndex: 'id',
@@ -159,10 +159,16 @@ export default function InstanceList() {
       ellipsis: true,
     },
     {
-      title: intl.formatMessage({ id: 'pages.table.status' }),
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
+      title: intl.formatMessage({ id: 'pages.instances.businessType' }),
+      dataIndex: 'businessType',
+      key: 'businessType',
+      width: 120,
+      render: (v: any) =>
+        v ? (
+          <Tag>{v}</Tag>
+        ) : (
+          <span style={{ color: 'rgba(0,0,0,0.25)' }}>-</span>
+        ),
     },
     {
       title: intl.formatMessage({ id: 'pages.table.created' }),
@@ -672,6 +678,9 @@ export default function InstanceList() {
                         >
                           {item.status}
                         </Tag>
+                        {item.businessType && (
+                          <Tag color="blue">{item.businessType}</Tag>
+                        )}
                       </div>
                     }
                     description={
@@ -863,6 +872,21 @@ export default function InstanceList() {
           >
             <Input.TextArea rows={4} maxLength={5000} />
           </Form.Item>
+          <Form.Item
+            name="businessType"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.instances.businessType',
+                defaultMessage: '业务域',
+              }),
+              intl.formatMessage({
+                id: 'pages.instances.businessType.extra',
+                defaultMessage: '任务按业务域匹配该实例，需与调用方一致',
+              }),
+            )}
+          >
+            <Input maxLength={64} placeholder="sourcing" />
+          </Form.Item>
         </Form>
       </Modal>
       <SetModelRouteModal
@@ -941,6 +965,14 @@ export default function InstanceList() {
                       })}
                     >
                       {viewing?.status}
+                    </Descriptions.Item>
+                    <Descriptions.Item
+                      label={intl.formatMessage({
+                        id: 'pages.instances.businessType',
+                        defaultMessage: '业务域',
+                      })}
+                    >
+                      {viewing?.businessType || '-'}
                     </Descriptions.Item>
                     <Descriptions.Item
                       label={intl.formatMessage({

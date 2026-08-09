@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -97,7 +98,8 @@ class SsoCallbackProvisioningTest {
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> name = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> template = ArgumentCaptor.forClass(String.class);
-        verify(userResourceProvisioner).provision(userId.capture(), code.capture(), name.capture(), template.capture());
+        verify(userResourceProvisioner, timeout(3000))
+                .provision(userId.capture(), code.capture(), name.capture(), template.capture());
         assertTrue(userId.getValue() == 7L);
         assertTrue("business".equals(code.getValue()));
         assertTrue("业务身份源".equals(name.getValue()));
@@ -134,5 +136,8 @@ class SsoCallbackProvisioningTest {
 
         assertNotNull(redirect);
         assertTrue(redirect.contains("otc="));
+        // 异步开通应被触发（异常在虚拟线程内被捕获，不影响登录）
+        verify(userResourceProvisioner, timeout(3000))
+                .provision(any(), anyString(), anyString(), anyString());
     }
 }

@@ -39,6 +39,10 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-capability-builtin-spi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-completions-service</artifactId>
         </dependency>
     </dependencies>

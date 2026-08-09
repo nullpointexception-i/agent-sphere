@@ -221,18 +221,22 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
                     provision.username(), identityProvider.getCode());
             return;
         }
-        try {
-            ResourceInitResult result = provisioner.provision(
-                    provision.userId(), identityProvider.getCode(), identityProvider.getName(),
-                    identityProvider.getResourceTemplate());
-            if (!result.getFailedDetails().isEmpty()) {
-                log.warn("User resource provisioning partial failure: user={}, provider={}, failed={}",
-                        provision.username(), identityProvider.getCode(), result.getFailedDetails());
+        // 异步开通：回调立即返回并重定向，首次登录不等待资源创建；provision 内部自行管理
+        // TenantUtil（thread-local）并 try/catch，失败仅记录，不影响登录。
+        Thread.startVirtualThread(() -> {
+            try {
+                ResourceInitResult result = provisioner.provision(
+                        provision.userId(), identityProvider.getCode(), identityProvider.getName(),
+                        identityProvider.getResourceTemplate());
+                if (!result.getFailedDetails().isEmpty()) {
+                    log.warn("User resource provisioning partial failure: user={}, provider={}, failed={}",
+                            provision.username(), identityProvider.getCode(), result.getFailedDetails());
+                }
+            } catch (Exception e) {
+                log.error("User resource provisioning failed: user={}, provider={}",
+                        provision.username(), identityProvider.getCode(), e);
             }
-        } catch (Exception e) {
-            log.error("User resource provisioning failed: user={}, provider={}",
-                    provision.username(), identityProvider.getCode(), e);
-        }
+        });
     }
 
     @Override

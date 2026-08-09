@@ -501,6 +501,10 @@ export default function CompletionsList() {
           : viewRecord?.status || '-',
     },
     {
+      label: t('pages.admin.completions.businessType', '业务域'),
+      value: viewRecord?.businessType || '-',
+    },
+    {
       label: t('pages.admin.completions.remark', '备注'),
       value: viewRecord?.remark || '-',
     },
@@ -728,12 +732,6 @@ export default function CompletionsList() {
             />
           </Form.Item>
           <Form.Item
-            name="remark"
-            label={t('pages.admin.completions.remark', '备注')}
-          >
-            <Input.TextArea rows={2} maxLength={500} />
-          </Form.Item>
-          <Form.Item
             name="businessType"
             label={t('pages.admin.completions.businessType', '业务域')}
             extra={t(
@@ -742,6 +740,12 @@ export default function CompletionsList() {
             )}
           >
             <Input maxLength={64} placeholder="sourcing" />
+          </Form.Item>
+          <Form.Item
+            name="remark"
+            label={t('pages.admin.completions.remark', '备注')}
+          >
+            <Input.TextArea rows={2} maxLength={500} />
           </Form.Item>
         </Form>
       </Modal>
