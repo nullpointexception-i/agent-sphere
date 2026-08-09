@@ -32,5 +32,10 @@
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-runtime-orchestration</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>1.5.6</version>
+        </dependency>
     </dependencies>
 </project>
