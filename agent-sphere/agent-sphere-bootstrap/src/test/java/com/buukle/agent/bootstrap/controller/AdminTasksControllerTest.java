@@ -76,7 +76,7 @@ class AdminTasksControllerTest {
         vo.setId(7L);
         vo.setGoal("整理月报");
         vo.setStatus("COMPLETED");
-        given(taskService.get(eq(7L), isNull(), any(CallerAuth.class))).willReturn(vo);
+        given(taskService.get(eq(7L), isNull(), isNull(), any(CallerAuth.class))).willReturn(vo);
 
         mockMvc.perform(get("/api/v1/admin/tasks/7"))
                 .andExpect(status().isOk())

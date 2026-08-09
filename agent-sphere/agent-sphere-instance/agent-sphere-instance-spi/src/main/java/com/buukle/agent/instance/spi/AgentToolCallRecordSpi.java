@@ -19,4 +19,8 @@ public interface AgentToolCallRecordSpi {
     AgentToolCallRecordVO getLatestBySessionAndToolName(Long sessionId, String toolName);
 
     List<AgentToolCallRecordVO> listBySessionId(Long sessionId, Long runId);
+
+    List<AgentToolCallRecordVO> listByRunId(Long runId, int offset, int limit);
+
+    long countByRunId(Long runId);
 }

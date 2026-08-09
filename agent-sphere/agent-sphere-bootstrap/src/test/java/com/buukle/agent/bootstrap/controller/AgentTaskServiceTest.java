@@ -265,7 +265,7 @@ class AgentTaskServiceTest {
     void get_notFound_shouldThrow() {
         given(taskMapper.selectById(99L)).willReturn(null);
 
-        assertThrows(BizException.class, () -> taskService.get(99L, null, AUTH));
+        assertThrows(BizException.class, () -> taskService.get(99L, null, null, AUTH));
     }
 
     @Test
@@ -276,7 +276,7 @@ class AgentTaskServiceTest {
         task.setCreatedBy("someone-else");
         given(taskMapper.selectById(7L)).willReturn(task);
 
-        assertThrows(BizException.class, () -> taskService.get(7L, null, AUTH));
+        assertThrows(BizException.class, () -> taskService.get(7L, null, null, AUTH));
     }
 
     @Test

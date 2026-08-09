@@ -12,7 +12,12 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
+import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
+import com.buukle.agent.instance.dtvo.vo.InstanceVO;
+import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
+import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
@@ -24,7 +29,7 @@ import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.tasks.domain.AgentTask;
 import com.buukle.agent.tasks.domain.AgentTaskArtifact;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
-import com.buukle.agent.tasks.dtvo.TaskThinkingVO;
+import com.buukle.agent.tasks.dtvo.TaskExecutionLogVO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
 import com.buukle.agent.tasks.dtvo.enums.TaskEnum;
 import com.buukle.agent.tasks.repository.AgentTaskArtifactMapper;
@@ -42,6 +47,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -81,6 +87,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private final SsoIdentitySpi ssoIdentitySpi;
     private final TaskContractValidator contractValidator;
     private final AgentLlmInteractionRecordSpi llmInteractionRecordSpi;
+    private final AgentToolCallRecordSpi toolCallRecordSpi;
 
     @Value("${hri-ai.tasks.poll-interval:2s}")
     private Duration pollInterval;
@@ -136,51 +143,92 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public TaskVO get(Long id, Integer thinkingOffset, CallerAuth auth) {
+    public TaskVO get(Long id, Integer logOffset, Integer toolLogOffset, CallerAuth auth) {
         AgentTask task = requireTask(id);
         requireTaskAccess(task, auth);
         TaskVO vo = toVO(task);
-        vo.setThinkingRecords(listThinking(task, thinkingOffset));
-        vo.setThinkingCount((int) countThinking(task));
+        vo.setExecutionLogs(listExecutionLogs(task, logOffset, toolLogOffset));
+        vo.setExecutionLogCount((int) countLlmLogs(task));
+        vo.setToolLogCount((int) countToolLogs(task));
         return vo;
     }
 
-    /** 增量拉取 run 的 LLM 交互记录（思考过程），最新在前。 */
-    private List<TaskThinkingVO> listThinking(AgentTask task, Integer thinkingOffset) {
+    /** 增量拉取 run 的执行日志（LLM 交互 + 工具调用），按 createdAt 正序合并。 */
+    private List<TaskExecutionLogVO> listExecutionLogs(AgentTask task, Integer logOffset, Integer toolLogOffset) {
         if (task.getRunId() == null) {
             return List.of();
         }
-        int offset = thinkingOffset == null || thinkingOffset < 0 ? 0 : thinkingOffset;
+        int llmOff = logOffset == null || logOffset < 0 ? 0 : logOffset;
+        int toolOff = toolLogOffset == null || toolLogOffset < 0 ? 0 : toolLogOffset;
         try {
-            return llmInteractionRecordSpi.listByRunId(task.getRunId(), offset, 50)
-                    .stream().map(this::toThinkingVO).toList();
+            List<TaskExecutionLogVO> llm = llmInteractionRecordSpi.listByRunId(task.getRunId(), llmOff, 50)
+                    .stream().map(r -> toExecutionLogVO(r, task.getRunId())).toList();
+            List<TaskExecutionLogVO> tools = toolCallRecordSpi.listByRunId(task.getRunId(), toolOff, 50)
+                    .stream().map(r -> toExecutionLogVO(r, task.getRunId())).toList();
+            List<TaskExecutionLogVO> merged = new ArrayList<>(llm);
+            merged.addAll(tools);
+            merged.sort(java.util.Comparator
+                    .comparing(TaskExecutionLogVO::getCreatedAt,
+                            java.util.Comparator.nullsLast(String::compareTo))
+                    .thenComparingLong(TaskExecutionLogVO::getId));
+            return merged;
         } catch (Exception e) {
-            log.warn("Resolve task thinking failed for task {}: {}", task.getId(), e.getMessage());
+            log.warn("Resolve task execution logs failed for task {}: {}", task.getId(), e.getMessage());
             return List.of();
         }
     }
 
-    private TaskThinkingVO toThinkingVO(AgentLlmInteractionRecordVO r) {
-        TaskThinkingVO vo = new TaskThinkingVO();
+    private TaskExecutionLogVO toExecutionLogVO(AgentLlmInteractionRecordVO r, Long runId) {
+        TaskExecutionLogVO vo = new TaskExecutionLogVO();
         vo.setId(r.getId());
+        vo.setRunId(runId);
+        vo.setLogType(TaskExecutionLogVO.TYPE_LLM);
+        vo.setCreatedAt(r.getCreatedAt());
         vo.setInteractionType(r.getInteractionType());
         vo.setModelName(r.getModelName());
         vo.setResponseBody(r.getResponseBody());
         vo.setSuccess(r.getSuccess());
         vo.setErrorMessage(r.getErrorMessage());
+        return vo;
+    }
+
+    private TaskExecutionLogVO toExecutionLogVO(AgentToolCallRecordVO r, Long runId) {
+        TaskExecutionLogVO vo = new TaskExecutionLogVO();
+        vo.setId(r.getId());
+        vo.setRunId(runId);
+        vo.setLogType(TaskExecutionLogVO.TYPE_TOOL);
         vo.setCreatedAt(r.getCreatedAt());
+        vo.setToolName(r.getToolName());
+        vo.setDisplayNameCn(r.getDisplayNameCn());
+        vo.setArgumentsJson(r.getArgumentsJson());
+        vo.setArtifact(r.getArtifact() != null ? r.getArtifact() : r.getCompressedArtifact());
+        vo.setStatus(r.getStatus());
+        vo.setErrorMessage(r.getErrorMessage());
         return vo;
     }
 
     /** run 的 LLM 交互记录总条数（供调用方增量 offset 判断）。 */
-    private long countThinking(AgentTask task) {
+    private long countLlmLogs(AgentTask task) {
         if (task.getRunId() == null) {
             return 0;
         }
         try {
             return llmInteractionRecordSpi.countByRunId(task.getRunId());
         } catch (Exception e) {
-            log.warn("Count task thinking failed for task {}: {}", task.getId(), e.getMessage());
+            log.warn("Count task LLM logs failed for task {}: {}", task.getId(), e.getMessage());
+            return 0;
+        }
+    }
+
+    /** run 的工具调用记录总条数（供调用方增量 offset 判断）。 */
+    private long countToolLogs(AgentTask task) {
+        if (task.getRunId() == null) {
+            return 0;
+        }
+        try {
+            return toolCallRecordSpi.countByRunId(task.getRunId());
+        } catch (Exception e) {
+            log.warn("Count task tool logs failed for task {}: {}", task.getId(), e.getMessage());
             return 0;
         }
     }

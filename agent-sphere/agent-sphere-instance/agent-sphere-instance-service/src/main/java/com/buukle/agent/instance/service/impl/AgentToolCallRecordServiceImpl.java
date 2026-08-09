@@ -123,6 +123,27 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         return mapper.selectList(query).stream().map(AgentToolCallRecordServiceImpl::toVO).toList();
     }
 
+    @Override
+    public List<AgentToolCallRecordVO> listByRunId(Long runId, int offset, int limit) {
+        if (runId == null) {
+            return List.of();
+        }
+        LambdaQueryWrapper<AgentToolCallRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(AgentToolCallRecord::getRunId, runId)
+                .orderByDesc(AgentToolCallRecord::getId)
+                .last("LIMIT " + limit + " OFFSET " + offset);
+        return mapper.selectList(wrapper).stream().map(AgentToolCallRecordServiceImpl::toVO).toList();
+    }
+
+    @Override
+    public long countByRunId(Long runId) {
+        if (runId == null) {
+            return 0;
+        }
+        return mapper.selectCount(new LambdaQueryWrapper<AgentToolCallRecord>()
+                .eq(AgentToolCallRecord::getRunId, runId));
+    }
+
     private Long getLatestRunIdWithToolCalls(Long sessionId) {
         var w = new LambdaQueryWrapper<AgentToolCallRecord>()
                 .eq(AgentToolCallRecord::getSessionId, sessionId)

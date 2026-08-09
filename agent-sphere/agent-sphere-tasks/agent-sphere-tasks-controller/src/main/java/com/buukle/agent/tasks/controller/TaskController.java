@@ -37,8 +37,9 @@ public class TaskController extends BaseController {
                                       @RequestParam String code,
                                       @RequestParam String subject,
                                       @RequestParam String businessType,
-                                      @RequestParam(required = false) Integer thinkingOffset) {
-        return ok(taskService.get(id, thinkingOffset, CallerAuth.of(code, subject, businessType)));
+                                      @RequestParam(required = false) Integer logOffset,
+                                      @RequestParam(required = false) Integer toolLogOffset) {
+        return ok(taskService.get(id, logOffset, toolLogOffset, CallerAuth.of(code, subject, businessType)));
     }
 
     @PostMapping("/{id}/stop")
