@@ -104,7 +104,10 @@
         if (user && user.token) {
           return {
             token: user.token,
-            displayName: user.displayName || '',
+            displayName:
+              user.ssoProviderCode && user.ssoSubject
+                ? `${user.ssoProviderCode}@${user.ssoSubject}`
+                : user.displayName || '',
             baseUrl,
           };
         }

@@ -143,6 +143,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }).catch(() => {});
     console.log('[AgentSphere] auth: establishing task connection (user-level)');
     ensureTaskSSE();
+    fetchSsoDisplayName();
   }
   if (msg.type === 'log') {
     chrome.storage.local.get(['logs'], (data) => {
@@ -291,6 +292,25 @@ function ensureTaskSSE() {
     taskReconnectCount = 0; // 新凭证/主动触发：视为全新连接，回到快速重试窗口
     connectTaskSSE();
   }
+}
+
+// --- SSO 展示名：providerCode@subject（如 bole@elvin），按 token 去重 ---
+let ssoDisplayToken = '';
+
+function fetchSsoDisplayName() {
+  if (!token || !baseUrl || token === ssoDisplayToken) return;
+  ssoDisplayToken = token;
+  fetch(`${baseUrl}/api/v1/sso/me`, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  })
+    .then((resp) => (resp.ok ? resp.json() : null))
+    .then((body) => {
+      if (body && body.providerCode && body.subject) {
+        const displayName = `${body.providerCode}@${body.subject}`;
+        chrome.storage.local.set({ displayName }).catch(() => {});
+      }
+    })
+    .catch(() => {});
 }
 
 // --- Send message to content script with retry ---
