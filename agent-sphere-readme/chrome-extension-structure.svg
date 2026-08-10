@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="700" viewBox="0 0 1280 700">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#f7fafc"/>
@@ -8,88 +8,86 @@
       <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
     </filter>
     <style>
-      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
-      .layer-title { font: 700 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
-      .box-title { font: 700 16px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#1e293b; }
-      .box-text { font: 400 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#334155; }
+      .title { font: 700 28px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .layer-title { font: 700 18px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .box-title { font: 700 16px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#1e293b; }
+      .box-text { font: 400 14px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#334155; }
       .mono { font: 400 13px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#475569; }
-      .small { font: 500 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
-      .pill { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .small { font: 500 13px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
       .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
-      .dash { stroke:#94a3b8; stroke-width:2.5; stroke-dasharray:8 8; fill:none; }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
     </style>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
     </marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
   </defs>
-  <rect width="1280" height="760" fill="url(#bg)"/>
-  <text x="50" y="80" class="title">Chrome Extension Browser Bridge Structure</text>
+  <rect x="0" y="0" width="1280" height="700" rx="16" fill="url(#bg)"/>
+  <text x="40" y="46" class="title">Chrome Extension Structure (Single User-level Task Connection)</text>
+  <text x="40" y="72" class="small">Manifest V3 · Service Worker · &lt;all_urls&gt; host permission</text>
 
-  <!-- Card 1: Content Script (page context) -->
-  <rect x="50" y="120" width="380" height="520" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <rect x="50" y="120" width="380" height="48" rx="22" fill="#4db6ac"/>
-  <rect x="50" y="138" width="380" height="30" fill="#4db6ac"/>
-  <text x="240" y="150" class="layer-title" text-anchor="middle" fill="#fff">Content Script (page context)</text>
+  <!-- Host page -->
+  <g>
+    <rect x="40" y="110" width="300" height="470" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="56" y="138" class="box-title">Host Page</text>
+    <rect x="60" y="158" width="260" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="182" class="box-title">Widget / Main site</text>
+    <text x="76" y="204" class="box-text">OIDC SSO → token</text>
+    <text x="76" y="224" class="mono">sessionStorage / localStorage</text>
+    <rect x="60" y="294" width="260" height="140" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="318" class="box-title">content.js + page-script.js</text>
+    <text x="76" y="340" class="box-text">MAIN-world bridge: read auth state</text>
+    <text x="76" y="362" class="box-text">report auth / auth_token (dedup)</text>
+    <text x="76" y="384" class="box-text">execute browser_operation</text>
+    <text x="76" y="406" class="box-text">forward screenshot to frontend</text>
+    <rect x="60" y="450" width="260" height="90" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="474" class="box-title">popup</text>
+    <text x="76" y="496" class="box-text">Task On/Off badge</text>
+    <text x="76" y="518" class="box-text">User = provider@subject</text>
+  </g>
 
-  <rect x="75" y="190" width="330" height="42" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="212" class="box-text" text-anchor="middle">checkAuth() → read token from localStorage</text>
+  <!-- Extension SW -->
+  <g>
+    <rect x="500" y="110" width="360" height="470" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="516" y="138" class="box-title">Extension Service Worker (background.js)</text>
+    <rect x="520" y="158" width="320" height="150" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="536" y="182" class="box-title">User-level task stream (single)</text>
+    <text x="536" y="204" class="box-text">/api/v1/runtime/user/task/stream</text>
+    <text x="536" y="226" class="box-text">Bearer token · connect on login</text>
+    <text x="536" y="248" class="box-text">keepalive fallback · zombie detection</text>
+    <text x="536" y="270" class="box-text">reconnect: 1/s first 30s → every 5s</text>
+    <rect x="520" y="322" width="320" height="130" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="536" y="346" class="box-title">handleSseData → executeInPage</text>
+    <text x="536" y="368" class="box-text">browser_operation executed once</text>
+    <text x="536" y="390" class="box-text">navigate / click / type / executeJS</text>
+    <text x="536" y="412" class="box-text">executeJS via MAIN world (bypass CSP)</text>
+    <rect x="520" y="466" width="320" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="536" y="490" class="box-title">sendCallbackSafe / sendCallback</text>
+    <text x="536" y="514" class="mono">POST /api/v1/chrome/callback?sessionId=cmd.sessionId</text>
+  </g>
 
-  <rect x="75" y="246" width="330" height="42" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="268" class="box-text" text-anchor="middle">SSE status Toast → floating hint</text>
+  <!-- Backend -->
+  <g>
+    <rect x="980" y="110" width="260" height="470" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="996" y="138" class="box-title">Backend</text>
+    <rect x="1000" y="158" width="220" height="150" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1016" y="182" class="box-title">task stream endpoint</text>
+    <text x="1016" y="204" class="box-text">SseManager.registerUser</text>
+    <text x="1016" y="226" class="box-text">dispatch commands by username</text>
+    <text x="1016" y="248" class="mono">sendByUser(session.created_by)</text>
+    <rect x="1000" y="322" width="220" height="130" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1016" y="346" class="box-title">Callback</text>
+    <text x="1016" y="368" class="box-text">ChromePendingStore</text>
+    <text x="1016" y="390" class="box-text">tool future.get() returns result</text>
+    <text x="1016" y="412" class="small">X-Extension-Token check</text>
+    <rect x="1000" y="466" width="220" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1016" y="490" class="box-title">sso/me</text>
+    <text x="1016" y="514" class="box-text">providerCode@subject display</text>
+  </g>
 
-  <rect x="75" y="302" width="330" height="42" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="324" class="box-text" text-anchor="middle">domToJSON() → DOM → structured JSON</text>
-
-  <rect x="75" y="358" width="330" height="72" rx="10" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="240" y="382" class="box-text" text-anchor="middle">Execute click / type</text>
-  <text x="240" y="402" class="box-text" text-anchor="middle">getContent / executeJS</text>
-
-  <!-- Connect arrow -->
-  <rect x="75" y="454" width="330" height="42" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="240" y="479" class="mono" text-anchor="middle" fill="#818cf8">chrome.runtime.sendMessage</text>
-
-  <!-- Arrow pointing right -->
-  <path d="M430 475 L490 475" class="line" marker-end="url(#arrow)"/>
-  <text x="460" y="465" class="small" text-anchor="middle">▼</text>
-  <text x="460" y="465" class="small" text-anchor="middle" dy="12">sendMessage</text>
-
-  <!-- Card 2: Service Worker (background) -->
-  <rect x="500" y="120" width="370" height="520" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <rect x="500" y="120" width="370" height="48" rx="22" fill="#818cf8"/>
-  <rect x="500" y="138" width="370" height="30" fill="#818cf8"/>
-  <text x="685" y="150" class="layer-title" text-anchor="middle" fill="#fff">Service Worker (background)</text>
-
-  <rect x="525" y="190" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="214" class="box-text" text-anchor="middle">SSE connection</text>
-  <text x="685" y="234" class="box-text" text-anchor="middle">fetch + ReadableStream</text>
-
-  <rect x="525" y="260" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="284" class="box-text" text-anchor="middle">Session follow</text>
-  <text x="685" y="304" class="box-text" text-anchor="middle">URL change auto-rebuilds SSE</text>
-
-  <rect x="525" y="330" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="354" class="box-text" text-anchor="middle">Tab management</text>
-  <text x="685" y="374" class="box-text" text-anchor="middle">Controlled tab tracking + tabId passthrough</text>
-
-  <rect x="525" y="400" width="320" height="56" rx="10" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="685" y="424" class="box-text" text-anchor="middle">Action callback</text>
-  <text x="685" y="444" class="mono" text-anchor="middle">POST /chrome/callback</text>
-
-  <!-- Card 3: Popup (status panel) -->
-  <rect x="920" y="120" width="310" height="320" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <rect x="920" y="120" width="310" height="48" rx="22" fill="#475569"/>
-  <rect x="920" y="138" width="310" height="30" fill="#475569"/>
-  <text x="1075" y="150" class="layer-title" text-anchor="middle" fill="#fff">Popup (status panel)</text>
-
-  <rect x="945" y="190" width="260" height="50" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="1075" y="217" class="box-text" text-anchor="middle">Connection status display</text>
-
-  <rect x="945" y="254" width="260" height="50" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="1075" y="281" class="box-text" text-anchor="middle">URL config</text>
-
-  <rect x="945" y="318" width="260" height="50" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="1075" y="345" class="box-text" text-anchor="middle">Action logs</text>
-
-  <!-- Arrow from Service Worker to Popup -->
-  <path d="M870 475 L910 475" class="dash"/>
+  <line x1="340" y1="370" x2="498" y2="250" class="line"/>
+  <line x1="860" y1="230" x2="998" y2="230" class="line"/>
+  <line x1="860" y1="500" x2="998" y2="400" class="line"/>
 </svg>

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1400" viewBox="0 0 1100 1400">
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1520" viewBox="0 0 1100 1520">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#f7fafc"/>
@@ -8,88 +8,86 @@
       <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
     </filter>
     <style>
-      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
-      .layer-title { font: 700 21px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
-      .box-title { font: 700 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#172033; }
-      .box-text { font: 400 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#536273; }
-      .mono { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#334155; }
-      .small { font: 500 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
-      .pill { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
-      .code { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#1e293b; }
-      .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
-      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
-      .branch { stroke:#94a3b8; stroke-width:2.2; fill:none; }
+      .title { font: 700 32px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .layer-title { font: 700 21px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .pill { font: 700 14px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .mono { font: 400 13px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#334155; }
+      .small { font: 500 13px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
     </style>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
-    </marker>
-    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
-    </marker>
   </defs>
 
-  <rect width="1100" height="1400" fill="url(#bg)"/>
+  <rect width="1100" height="1520" fill="url(#bg)"/>
 
   <text x="40" y="58" class="title">Project Structure</text>
-  <text x="40" y="86" class="small">Three independent projects · backend / Chrome extension / Web UI</text>
+  <text x="40" y="86" class="small">Four independent projects · backend / Chrome extension / Web UI / chat widget</text>
 
-  <rect x="140" y="120" width="820" height="1224" rx="22" fill="#ffffff" filter="url(#shadow)"/>
+  <rect x="140" y="120" width="820" height="1344" rx="22" fill="#ffffff" filter="url(#shadow)"/>
   <text x="170" y="165" class="layer-title">Repository Layout · Project Structure</text>
 
-  <rect x="170" y="190" width="190" height="36" rx="18" fill="#7aa7e8"/>
-  <text x="265" y="213" class="pill" text-anchor="middle">agent-sphere/ · Backend</text>
-  <rect x="380" y="190" width="320" height="36" rx="18" fill="#f0ad4e"/>
-  <text x="540" y="213" class="pill" text-anchor="middle">agent-sphere-chrome-extension/ · Extension</text>
-  <rect x="720" y="190" width="200" height="36" rx="18" fill="#818cf8"/>
-  <text x="820" y="213" class="pill" text-anchor="middle">agent-sphere-ui/ · UI</text>
+  <rect x="170" y="190" width="170" height="36" rx="18" fill="#7aa7e8"/>
+  <text x="255" y="213" class="pill" text-anchor="middle">agent-sphere/ · Backend</text>
+  <rect x="356" y="190" width="196" height="36" rx="18" fill="#f0ad4e"/>
+  <text x="454" y="213" class="pill" text-anchor="middle">chrome-extension/</text>
+  <rect x="568" y="190" width="150" height="36" rx="18" fill="#818cf8"/>
+  <text x="643" y="213" class="pill" text-anchor="middle">agent-sphere-ui/</text>
+  <rect x="734" y="190" width="200" height="36" rx="18" fill="#22c55e"/>
+  <text x="834" y="213" class="pill" text-anchor="middle">copilot-widget/</text>
 
-  <rect x="170" y="246" width="760" height="1068" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
-  <rect x="184" y="260" width="5" height="748" rx="2.5" fill="#7aa7e8"/>
-  <rect x="184" y="1030" width="5" height="132" rx="2.5" fill="#f0ad4e"/>
-  <rect x="184" y="1184" width="5" height="110" rx="2.5" fill="#818cf8"/>
-  <text x="206" y="276" class="mono">agent-sphere/                         # Backend main project</text>
-  <text x="206" y="298" class="mono">├── agent-sphere-bootstrap/           # App bootstrap entry</text>
-  <text x="206" y="320" class="mono">├── agent-sphere-common/              # Shared library (config, exceptions, utils)</text>
-  <text x="206" y="342" class="mono">├── agent-sphere-infrastructure/      # Infrastructure (AOP, auth)</text>
-  <text x="206" y="364" class="mono">├── agent-sphere-instance/            # Instance / session management</text>
-  <text x="206" y="386" class="mono">│   ├── controller/                   #   API controllers</text>
-  <text x="206" y="408" class="mono">│   ├── service/                      #   business logic</text>
-  <text x="206" y="430" class="mono">│   ├── repository/                   #   data access</text>
-  <text x="206" y="452" class="mono">│   └── domain/                       #   domain models</text>
-  <text x="206" y="474" class="mono">├── agent-sphere-model/               # Model management</text>
-  <text x="206" y="496" class="mono">│   ├── provider/                     #   LLM providers</text>
-  <text x="206" y="518" class="mono">│   ├── route/                        #   route management</text>
-  <text x="206" y="540" class="mono">│   └── api-key/                      #   API Key</text>
-  <text x="206" y="562" class="mono">├── agent-sphere-capability/          # Capability layer (extensible)</text>
-  <text x="206" y="584" class="mono">│   ├── builtin/                      #   builtin tool SPI</text>
-  <text x="206" y="606" class="mono">│   │   ├── tool-chrome/              #     Chrome browser actions</text>
-  <text x="206" y="628" class="mono">│   │   ├── tool-webfetch/            #     HTTP web fetch</text>
-  <text x="206" y="650" class="mono">│   │   ├── tool-webread/             #     web page reading</text>
-  <text x="206" y="672" class="mono">│   │   └── tool-todowrite/           #     todo task management</text>
-  <text x="206" y="694" class="mono">│   ├── mcp/                          #   MCP protocol (Jira/GitHub/DB...)</text>
-  <text x="206" y="716" class="mono">│   ├── cli/                          #   CLI execution</text>
-  <text x="206" y="738" class="mono">│   └── skill/                        #   composite skills</text>
-  <text x="206" y="760" class="mono">├── agent-sphere-runtime/             # Runtime engine</text>
-  <text x="206" y="782" class="mono">│   ├── kernel/                       #   core execution</text>
-  <text x="206" y="804" class="mono">│   │   ├── runner/                   #     SessionRunner</text>
-  <text x="206" y="826" class="mono">│   │   ├── async/                    #     FiberSet</text>
-  <text x="206" y="848" class="mono">│   │   ├── service/                  #     CompactionService</text>
-  <text x="206" y="870" class="mono">│   │   └── tool/                     #     ToolExecutor</text>
-  <text x="206" y="892" class="mono">│   └── orchestration/                #   orchestration layer</text>
-  <text x="206" y="914" class="mono">│       ├── sse/                      #     SSE Manager</text>
-  <text x="206" y="936" class="mono">│       ├── chrome/                   #     Chrome command handler</text>
-  <text x="206" y="958" class="mono">│       └── handler/                  #     RuntimeEventListener</text>
-  <text x="206" y="980" class="mono">├── agent-sphere-util/                # Utilities</text>
-  <text x="206" y="1002" class="mono">└── pom.xml                           # Parent POM</text>
-  <text x="206" y="1046" class="mono">agent-sphere-chrome-extension/        # Chrome extension (independent project)</text>
-  <text x="206" y="1068" class="mono">├── manifest.json                     # Extension config</text>
-  <text x="206" y="1090" class="mono">├── background.js                     # Service Worker — SSE + command routing</text>
-  <text x="206" y="1112" class="mono">├── content.js                        # Content Script — DOM manipulation + Toast</text>
-  <text x="206" y="1134" class="mono">├── popup.html / popup.js             # Status panel (Info/Settings/Logs)</text>
-  <text x="206" y="1156" class="mono">└── icon-128.png                      # Icon</text>
-  <text x="206" y="1200" class="mono">agent-sphere-ui/                      # Web UI (independent project, UmiJS)</text>
-  <text x="206" y="1222" class="mono">├── src/</text>
-  <text x="206" y="1244" class="mono">│   ├── pages/chat/                   # Chat page</text>
-  <text x="206" y="1266" class="mono">│   └── services/agentSphere/         # API client</text>
-  <text x="206" y="1288" class="mono">└── package.json</text>
+  <rect x="170" y="246" width="760" height="1198" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
+  <rect x="184" y="260" width="5" height="920" rx="2.5" fill="#7aa7e8"/>
+  <rect x="184" y="1196" width="5" height="112" rx="2.5" fill="#f0ad4e"/>
+  <rect x="184" y="1324" width="5" height="56" rx="2.5" fill="#818cf8"/>
+
+  <text x="206" y="276" class="mono">agent-sphere/                         # Backend (Java 21 / Spring Boot 3)</text>
+  <text x="206" y="296" class="mono">├── agent-sphere-common/              # AuthContext, errors, chrome-bridge DTOs, events</text>
+  <text x="206" y="316" class="mono">├── agent-sphere-util/                # JsonUtils, JsonSchemaGenerator</text>
+  <text x="206" y="336" class="mono">├── agent-sphere-infrastructure/      # MyBatis-Plus, Flyway, Redis, interceptors, SSE infra</text>
+  <text x="206" y="356" class="mono">├── agent-sphere-instance/            # users / instances / sessions / runs / documents</text>
+  <text x="206" y="376" class="mono">│   └── {domain,exception,dtvo,spi,repository,service,controller}</text>
+  <text x="206" y="396" class="mono">├── agent-sphere-model/               # LLM providers / routes / API keys</text>
+  <text x="206" y="416" class="mono">│   └── {domain,exception,dtvo,spi,repository,service,controller}</text>
+  <text x="206" y="436" class="mono">├── agent-sphere-capability/          # mcp / skill / cli / builtin tools</text>
+  <text x="206" y="456" class="mono">│   └── capability-builtin/           #   tool-chrome / webfetch / webread / todowrite</text>
+  <text x="206" y="476" class="mono">├── agent-sphere-runtime/             # runtime-kernel (SessionRunner, FiberSet) + orchestration (SSE, chrome)</text>
+  <text x="206" y="496" class="mono">├── agent-sphere-admin/               # users / roles / permissions / audit / identity-providers</text>
+  <text x="206" y="516" class="mono">│   └── {domain,exception,dtvo,spi,repository,service,controller}</text>
+  <text x="206" y="536" class="mono">├── agent-sphere-sso/                 # OIDC SSO: provisioning, /sso/me, identity provider</text>
+  <text x="206" y="556" class="mono">│   └── {domain,exception,dtvo,spi,repository,service,controller}</text>
+  <text x="206" y="576" class="mono">├── agent-sphere-agui/                # AG-UI chat endpoint (copilot /agent/{id}/chat/run)</text>
+  <text x="206" y="596" class="mono">├── agent-sphere-completions/         # completions (prompt engineering): schema / config / prompts / calls</text>
+  <text x="206" y="616" class="mono">│   └── {domain,exception,dtvo,spi,repository,service,controller}</text>
+  <text x="206" y="636" class="mono">├── agent-sphere-tasks/               # tasks (one-off) + task artifacts + callbacks</text>
+  <text x="206" y="656" class="mono">│   └── {domain,dtvo,repository,service,controller}</text>
+  <text x="206" y="676" class="mono">├── agent-sphere-resource-template/   # per-user private resource provisioning</text>
+  <text x="206" y="696" class="mono">│   └── ResourceTemplateCoordinator + init/*Initializer</text>
+  <text x="206" y="716" class="mono">├── agent-sphere-bootstrap/           # runnable entry + Flyway migrations (V1..V41)</text>
+  <text x="206" y="736" class="mono">└── pom.xml                           # parent POM (14 modules)</text>
+
+  <text x="206" y="780" class="mono">agent-sphere-chrome-extension/        # independent MV3 extension</text>
+  <text x="206" y="800" class="mono">├── manifest.json                     # &lt;all_urls&gt; host permission</text>
+  <text x="206" y="820" class="mono">├── background.js                     # SW: single user-level task SSE + executeInPage</text>
+  <text x="206" y="840" class="mono">├── content.js / page-script.js       # page bridge, auth report, DOM ops</text>
+  <text x="206" y="860" class="mono">├── popup.html / popup.js             # Task badge, provider@subject, settings, logs</text>
+  <text x="206" y="880" class="mono">└── icons                             # extension icons</text>
+
+  <text x="206" y="924" class="mono">agent-sphere-ui/                      # UmiJS Max / React 19 / antd 6</text>
+  <text x="206" y="944" class="mono">├── src/pages/                        # chat, instances, completions, tasks, model-providers,</text>
+  <text x="206" y="964" class="mono">│   │                                #   capabilities/*, artifacts/*, admin/*, periodic-tasks</text>
+  <text x="206" y="984" class="mono">│   ├── services/agentSphere/api.ts  # hand-written API client (BASE = /api/v1)</text>
+  <text x="206" y="1004" class="mono">│   └── locales/                      # zh-CN / en-US</text>
+  <text x="206" y="1024" class="mono">├── config/routes.ts                  # config-based routing → menu groups</text>
+  <text x="206" y="1044" class="mono">└── package.json</text>
+
+  <text x="206" y="1088" class="mono">agent-sphere-copilot-widget/         # embeddable chat widget (shadow DOM IIFE)</text>
+  <text x="206" y="1108" class="mono">├── src/                              # CopilotKit v2 + AG-UI + zod</text>
+  <text x="206" y="1128" class="mono">│   ├── Root.tsx / auth.ts            # OIDC ?otc= exchange → sessionStorage token</text>
+  <text x="206" y="1148" class="mono">│   ├── components/CopilotView.tsx    # sessions / chat / clarification</text>
+  <text x="206" y="1168" class="mono">│   └── styles.css                    # inlined via Vite ?inline</text>
+  <text x="206" y="1188" class="mono">└── vite.config.ts                    # lib mode IIFE → dist/agent-sphere-widget.js</text>
+
+  <text x="206" y="1226" class="mono">local-dev/ (inside agent-sphere/)     # mock-oidc-server.mjs — random-identity OIDC IdP</text>
+  <text x="206" y="1246" class="mono">docs references                       # README / README-cn / QUICK_START / QUICK_START-cn</text>
+
+  <text x="206" y="1300" class="small">Cross-project: backend SSE + Chrome extension task stream → browser automation;</text>
+  <text x="206" y="1322" class="small">SSO provisioning → per-user private resource copies → external /api/v1/api/*.</text>
 </svg>

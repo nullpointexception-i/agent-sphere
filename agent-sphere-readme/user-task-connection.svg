@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="660" viewBox="0 0 1240 660">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fafc"/>
+      <stop offset="1" stop-color="#eef6f7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 28px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .layer-title { font: 700 18px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
+      .box-title { font: 700 16px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#1e293b; }
+      .box-text { font: 400 14px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#334155; }
+      .mono { font: 400 13px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#475569; }
+      .small { font: 500 13px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
+      .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1240" height="660" rx="16" fill="url(#bg)"/>
+  <text x="40" y="48" class="title">User-level Task Connection (Browser Plugin)</text>
+  <text x="40" y="74" class="small">One /api/v1/runtime/user/task/stream · connect on login · no session following</text>
+
+  <!-- Backend -->
+  <g>
+    <rect x="40" y="110" width="340" height="470" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="56" y="138" class="box-title">Backend Runtime</text>
+    <rect x="60" y="158" width="300" height="92" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="182" class="box-title">Chrome Tool / Task Execution</text>
+    <text x="76" y="204" class="box-text">browser_operation command</text>
+    <text x="76" y="224" class="mono">publishEvent(ChromeCommandDTO)</text>
+    <rect x="60" y="266" width="300" height="112" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="290" class="box-title">RuntimeEventListener</text>
+    <text x="76" y="312" class="box-text">sendByUser( session.created_by, cmd )</text>
+    <text x="76" y="332" class="box-text">fan out by session owner, once</text>
+    <text x="76" y="352" class="mono">/api/v1/runtime/user/task/stream</text>
+    <rect x="60" y="394" width="300" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="418" class="box-title">Callback /api/v1/chrome/callback</text>
+    <text x="76" y="440" class="box-text">?sessionId=&lt;cmd.sessionId&gt;</text>
+    <text x="76" y="462" class="box-text">result resolved in ChromePendingStore</text>
+    <text x="76" y="484" class="small">future: request signing</text>
+  </g>
+
+  <!-- SSE line -->
+  <line x1="380" y1="322" x2="560" y2="322" class="line"/>
+
+  <!-- Extension -->
+  <g>
+    <rect x="560" y="110" width="340" height="470" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="576" y="138" class="box-title">Chrome Extension</text>
+    <rect x="580" y="158" width="300" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="596" y="182" class="box-title">background.js · connectTaskSSE</text>
+    <text x="596" y="204" class="box-text">Authorization: Bearer &lt;token&gt;</text>
+    <text x="596" y="224" class="box-text">registered by AuthContext.getUsername()</text>
+    <text x="596" y="246" class="box-text">reconnect: 1/s first 30s → every 5s</text>
+    <rect x="580" y="294" width="300" height="100" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="596" y="318" class="box-title">handleSseData → executeInPage</text>
+    <text x="596" y="340" class="box-text">each commandId executed once</text>
+    <text x="596" y="362" class="box-text">navigate / click / type / executeJS</text>
+    <rect x="580" y="410" width="300" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="596" y="434" class="box-title">content.js / page-script.js</text>
+    <text x="596" y="456" class="box-text">&lt;all_urls&gt; host permission (at install)</text>
+    <text x="596" y="478" class="box-text">execute in target tab + screenshot</text>
+    <text x="596" y="500" class="box-text">popup: Task status · provider@subject</text>
+  </g>
+
+  <!-- line extension -> page -->
+  <line x1="900" y1="362" x2="1080" y2="362" class="line"/>
+  <rect x="1080" y="300" width="130" height="124" rx="12" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="1096" y="330" class="box-title">Target tab</text>
+  <text x="1096" y="354" class="box-text">inject content.js</text>
+  <text x="1096" y="376" class="box-text">run DOM operations</text>
+  <text x="1096" y="398" class="box-text">screenshot feedback</text>
+
+  <!-- dash: triggers -->
+  <path d="M 60 620 C 300 600, 560 600, 1080 620" class="dash"/>
+  <text x="430" y="628" class="small">triggers: login report / extension start / keepalive / reconnect</text>
+</svg>

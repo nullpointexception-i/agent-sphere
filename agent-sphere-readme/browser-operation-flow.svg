@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1030" viewBox="0 0 1400 1030">
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="620" viewBox="0 0 1260 620">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#f7fafc"/>
@@ -8,17 +8,13 @@
       <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#1f2937" flood-opacity="0.12"/>
     </filter>
     <style>
-      .title { font: 700 32px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
-      .layer-title { font: 700 21px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
-      .box-title { font: 700 18px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#172033; }
-      .box-text { font: 400 15px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#536273; }
-      .mono { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#334155; }
-      .small { font: 500 13px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
-      .pill { font: 700 14px -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#fff; }
-      .code { font: 400 14px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#1e293b; }
+      .title { font: 700 28px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#162033; }
+      .box-title { font: 700 16px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#1e293b; }
+      .box-text { font: 400 14px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#334155; }
+      .mono { font: 400 13px "SF Mono",Consolas,"Roboto Mono",monospace; fill:#475569; }
+      .small { font: 500 13px "Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; fill:#64748b; }
       .line { stroke:#64748b; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
       .dash { stroke:#94a3b8; stroke-width:2.2; stroke-dasharray:8 8; fill:none; marker-end:url(#arrow2); }
-      .branch { stroke:#94a3b8; stroke-width:2.2; fill:none; }
     </style>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
@@ -27,91 +23,59 @@
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
     </marker>
   </defs>
+  <rect x="0" y="0" width="1260" height="620" rx="16" fill="url(#bg)"/>
+  <text x="40" y="46" class="title">Browser Operation Flow (Single-stream Delivery)</text>
+  <text x="40" y="72" class="small">browser_operation delivered once on the user-level task stream; each commandId executed once</text>
 
-  <rect width="1400" height="1030" fill="url(#bg)"/>
+  <!-- Backend run -->
+  <g>
+    <rect x="40" y="120" width="300" height="400" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="56" y="148" class="box-title">Task / Dialog Run</text>
+    <rect x="60" y="168" width="260" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="192" class="box-title">Chrome Tool</text>
+    <text x="76" y="214" class="box-text">build ChromeCommandDTO</text>
+    <text x="76" y="236" class="mono">commandId = UUID</text>
+    <text x="76" y="258" class="mono">publishEvent → ChromeCommandEvent</text>
+    <rect x="60" y="304" width="260" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="76" y="328" class="box-title">RuntimeEventListener</text>
+    <text x="76" y="350" class="box-text">dispatch by session.created_by</text>
+    <text x="76" y="372" class="mono">sendByUser(username, cmd)</text>
+    <text x="76" y="394" class="small">delivered once on the user-level stream</text>
+  </g>
 
-  <text x="700" y="62" class="title" text-anchor="middle">Browser Operation Flow</text>
-  <text x="700" y="90" class="small" text-anchor="middle">Chrome tool call full chain: DTO → SSE → Extension action → callback completes</text>
+  <line x1="340" y1="360" x2="520" y2="360" class="line"/>
 
-  <rect x="540" y="116" width="320" height="46" rx="23" fill="#334155"/>
-  <text x="700" y="145" class="pill" text-anchor="middle">LLM decides it needs to operate the browser</text>
+  <!-- Extension -->
+  <g>
+    <rect x="520" y="120" width="300" height="400" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="536" y="148" class="box-title">Chrome Extension</text>
+    <rect x="540" y="168" width="260" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="556" y="192" class="box-title">task stream receive</text>
+    <text x="556" y="214" class="mono">/api/v1/runtime/user/task/stream</text>
+    <text x="556" y="236" class="box-text">handleSseData</text>
+    <text x="556" y="258" class="box-text">read cmd.commandId / cmd.sessionId</text>
+    <rect x="540" y="304" width="260" height="120" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="556" y="328" class="box-title">executeInPage</text>
+    <text x="556" y="350" class="box-text">navigate / click / type / executeJS</text>
+    <text x="556" y="372" class="box-text">inject content.js (&lt;all_urls&gt;)</text>
+    <text x="556" y="394" class="box-text">each commandId executed once</text>
+  </g>
 
-  <path d="M700 162 L700 198" class="line"/>
+  <line x1="820" y1="360" x2="1000" y2="360" class="line"/>
 
-  <rect x="510" y="198" width="380" height="46" rx="23" fill="#475569"/>
-  <text x="700" y="227" class="pill" text-anchor="middle">Call builtin_5 (Chrome Tool)</text>
+  <!-- Target page -->
+  <g>
+    <rect x="1000" y="240" width="220" height="240" rx="14" fill="#eef2f7" stroke="#cbd5e1"/>
+    <text x="1016" y="268" class="box-title">Target tab</text>
+    <rect x="1020" y="286" width="180" height="90" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1036" y="310" class="box-text">content.js runs DOM operations</text>
+    <text x="1036" y="332" class="box-text">result + screenshot</text>
+    <rect x="1020" y="392" width="180" height="60" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="1036" y="416" class="box-text">callback to backend</text>
+    <text x="1036" y="436" class="mono">callback?sessionId=</text>
+  </g>
 
-  <path d="M700 244 L700 280" class="line"/>
-
-  <rect x="40" y="280" width="1320" height="450" rx="22" fill="#ffffff" filter="url(#shadow)"/>
-  <text x="70" y="320" class="layer-title">CapabilityBuiltinToolChrome.execute()</text>
-
-  <rect x="70" y="340" width="390" height="126" rx="14" fill="#e8f1ff" stroke="#7aa7e8"/>
-  <text x="265" y="374" class="box-title" text-anchor="middle">Build ChromeCommandDTO</text>
-  <text x="265" y="407" class="mono" text-anchor="middle">(action, url, selector, text,</text>
-  <text x="265" y="430" class="mono" text-anchor="middle"> code, tabId, append)</text>
-
-  <rect x="505" y="340" width="390" height="126" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
-  <text x="700" y="374" class="box-title" text-anchor="middle">SseManager.sendBySession</text>
-  <text x="700" y="407" class="mono" text-anchor="middle">→ SSE event</text>
-  <text x="700" y="430" class="mono" text-anchor="middle">→ Extension Service Worker</text>
-
-  <rect x="940" y="340" width="390" height="126" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
-  <text x="1135" y="374" class="box-title" text-anchor="middle">CompletableFuture.get(10s)</text>
-  <text x="1135" y="407" class="mono" text-anchor="middle">← blocking wait for callback</text>
-  <text x="1135" y="430" class="mono" text-anchor="middle">Timeout after 10s</text>
-
-  <path d="M460 403 L505 403" class="line"/>
-  <path d="M895 403 L940 403" class="line"/>
-
-  <text x="700" y="506" class="small" text-anchor="middle">Extension Service Worker executes based on action:</text>
-
-  <rect x="70" y="528" width="240" height="190" rx="14" fill="#edf7f6" stroke="#4db6ac"/>
-  <text x="190" y="563" class="box-title" text-anchor="middle">navigate</text>
-  <text x="190" y="596" class="mono" text-anchor="middle">chrome.tabs.create({</text>
-  <text x="190" y="619" class="mono" text-anchor="middle">  url, active:false })</text>
-  <text x="190" y="642" class="mono" text-anchor="middle">→ requestIdleCallback</text>
-  <text x="190" y="665" class="mono" text-anchor="middle">→ callback POST</text>
-  <text x="190" y="688" class="mono" text-anchor="middle">→ {tabId, redirected}</text>
-
-  <rect x="325" y="528" width="240" height="190" rx="14" fill="#eef2ff" stroke="#818cf8"/>
-  <text x="445" y="563" class="box-title" text-anchor="middle">click</text>
-  <text x="445" y="596" class="mono" text-anchor="middle">chrome.tabs.sendMessage</text>
-  <text x="445" y="619" class="mono" text-anchor="middle">  tabId, action, params</text>
-  <text x="445" y="642" class="mono" text-anchor="middle">→ 3-phase XPath matching</text>
-  <text x="445" y="665" class="mono" text-anchor="middle">→ callback POST</text>
-
-  <rect x="580" y="528" width="240" height="190" rx="14" fill="#fdf2f8" stroke="#ec4899"/>
-  <text x="700" y="563" class="box-title" text-anchor="middle">type</text>
-  <text x="700" y="596" class="mono" text-anchor="middle">chrome.tabs.sendMessage</text>
-  <text x="700" y="619" class="mono" text-anchor="middle">  tabId, action, append</text>
-  <text x="700" y="642" class="mono" text-anchor="middle">→ input.value /</text>
-  <text x="700" y="665" class="mono" text-anchor="middle">  textContent</text>
-  <text x="700" y="688" class="mono" text-anchor="middle">→ append=true appends</text>
-
-  <rect x="835" y="528" width="240" height="190" rx="14" fill="#e9f8ef" stroke="#75bd88"/>
-  <text x="955" y="563" class="box-title" text-anchor="middle">getContent</text>
-  <text x="955" y="596" class="mono" text-anchor="middle">chrome.tabs.sendMessage</text>
-  <text x="955" y="619" class="mono" text-anchor="middle">  tabId, action, mode</text>
-  <text x="955" y="642" class="mono" text-anchor="middle">→ mode=summary: summary</text>
-  <text x="955" y="665" class="mono" text-anchor="middle">→ otherwise full DOM JSON</text>
-
-  <rect x="1090" y="528" width="240" height="190" rx="14" fill="#fff4e6" stroke="#f0ad4e"/>
-  <text x="1210" y="563" class="box-title" text-anchor="middle">executeJS</text>
-  <text x="1210" y="596" class="mono" text-anchor="middle">chrome.debugger</text>
-  <text x="1210" y="619" class="mono" text-anchor="middle">  .Runtime.evaluate</text>
-  <text x="1210" y="642" class="mono" text-anchor="middle">→ bypasses CSP</text>
-  <text x="1210" y="665" class="mono" text-anchor="middle">→ callback POST</text>
-
-  <path d="M700 730 L700 772" class="line"/>
-
-  <rect x="380" y="772" width="640" height="128" rx="14" fill="#f8fafc" stroke="#cbd5e1"/>
-  <text x="700" y="812" class="box-title" text-anchor="middle">ChromeCallbackController.receive(commandId, result)</text>
-  <text x="700" y="850" class="mono" text-anchor="middle">→ ChromePendingStore.complete(commandId, result)</text>
-  <text x="700" y="875" class="mono" text-anchor="middle">→ CompletableFuture completes → execute() returns</text>
-
-  <path d="M700 900 L700 942" class="line"/>
-
-  <rect x="540" y="942" width="320" height="46" rx="23" fill="#334155"/>
-  <text x="700" y="971" class="pill" text-anchor="middle">LLM receives operation result → continues deciding</text>
+  <!-- Callback back to backend -->
+  <path d="M 1020 420 C 700 540, 400 500, 340 430" class="dash"/>
+  <text x="600" y="560" class="small">callback → ChromePendingStore.complete(commandId) → tool future.get() returns ChromeResultVO</text>
 </svg>

@@ -214,4 +214,41 @@ Agent: → [Chrome Extension navigates to baidu.com] → [types search query] �
 | **Extensibility** | Tool SPI mechanism allows registering any type of capability |
 | **Observability** | Every tool call has log/event records for traceability |
 
+### 1.13 SSO Identity Provider & External Integration
+
+AgentSphere lets third-party business systems sign users in via **OIDC SSO** and then call capabilities over `/api/v1/api/*` with `code + subject + businessType`.
+
+#### 1.13.1 Start the local OIDC mock (optional)
+
+```bash
+node agent-sphere/local-dev/mock-oidc-server.mjs   # listens on :9000
+```
+
+Each start generates a **random mock user identity** (see the startup log); use `MOCK_IDP_SUBJECT` / `MOCK_IDP_PREFERRED_USERNAME` / `MOCK_IDP_EMAIL` / `MOCK_IDP_NAME` to pin one.
+
+#### 1.13.2 Add an identity provider
+
+Open **System Admin → Identity Providers → New**, fill in the OIDC endpoints (e.g. `issuer=http://localhost:9000`, `authorization_endpoint=/oauth2/authorize`, `token_endpoint=/oauth2/token`, `jwks_url=/jwks`), pick a **default role**, optionally paste a **resource template** JSON, and enable it.
+
+On the user's **first** login the backend provisions the local user (with the default role) and **asynchronously** creates that user's **private resource copy** from the template — including an instance auto-bound with the built-in browser tool. You'll see `provider@subject` (e.g. `bole@elvin`) in the top-right corner.
+
+#### 1.13.3 Call capabilities externally
+
+```bash
+# completions (single LLM call)
+curl -X POST http://localhost:8080/api/v1/api/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"business","subject":"elvin","businessType":"resume_parse",
+       "input":{"resumeText":"张三，6年经验..."}}'
+
+# tasks (async, with optional callback)
+curl -X POST http://localhost:8080/api/v1/api/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"business","subject":"elvin","businessType":"sourcing",
+       "goal":"整理候选人张三的公开画像","callbackUrl":"https://bole.example.com/cb"}'
+curl "http://localhost:8080/api/v1/api/tasks/1?code=business&subject=elvin&businessType=sourcing"
+```
+
+Completed tasks persist structured outputs as **task artifacts** — review them on the **产出 → 任务产物** page. See the full API contract in the main README (§5).
+
 ---

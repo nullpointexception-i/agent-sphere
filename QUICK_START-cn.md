@@ -214,4 +214,41 @@ Agent：→ [Chrome Extension 导航到 baidu.com] → [输入搜索词] → [�
 | **可扩展** | 工具 SPI 机制，可注册任意类型的能力 |
 | **可观测** | 每次工具调用都有日志/事件记录，可回溯 |
 
+### 1.13 SSO 身份源与外部接入
+
+第三方业务系统可通过 **OIDC SSO** 让用户免密登录，并用 `code + subject + businessType` 直连 `/api/v1/api/*` 调用能力。
+
+#### 1.13.1 启动本地 OIDC mock（可选）
+
+```bash
+node agent-sphere/local-dev/mock-oidc-server.mjs   # 监听 :9000
+```
+
+每次启动**随机生成一个模拟用户身份**（见启动日志）；可用 `MOCK_IDP_SUBJECT` / `MOCK_IDP_PREFERRED_USERNAME` / `MOCK_IDP_EMAIL` / `MOCK_IDP_NAME` 固定。
+
+#### 1.13.2 新增身份源
+
+打开「系统管理 → 身份源 → 新建」，填写 OIDC 端点（如 `issuer=http://localhost:9000`、`authorization_endpoint=/oauth2/authorize`、`token_endpoint=/oauth2/token`、`jwks_url=/jwks`），选择**默认角色**，可选填**资源模板** JSON，并启用。
+
+用户**首次**登录时，后端开通本地用户（授予默认角色）并**异步**按模板生成其**私有资源副本**（含自动绑定内置浏览器工具的实例）。右上角显示 `provider@subject`（如 `bole@elvin`）。
+
+#### 1.13.3 外部调用能力
+
+```bash
+# completions（单次 LLM 调用）
+curl -X POST http://localhost:8080/api/v1/api/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"business","subject":"elvin","businessType":"resume_parse",
+       "input":{"resumeText":"张三，6年经验..."}}'
+
+# tasks（异步，可选回调）
+curl -X POST http://localhost:8080/api/v1/api/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"business","subject":"elvin","businessType":"sourcing",
+       "goal":"整理候选人张三的公开画像","callbackUrl":"https://bole.example.com/cb"}'
+curl "http://localhost:8080/api/v1/api/tasks/1?code=business&subject=elvin&businessType=sourcing"
+```
+
+完成的任务会把结构化输出落为**任务产物**，可在「产出 → 任务产物」页查看。完整 API 契约见主 README §5。
+
 ---

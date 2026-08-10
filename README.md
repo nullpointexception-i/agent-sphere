@@ -46,6 +46,11 @@ Embeddable chat widget (shadow DOM, OIDC SSO, AG-UI streaming):
 - **Multi-level memory** — persistent runs, tool-call records with write-time JSON compression, and token-budget based context compaction.
 - **Human-in-the-loop clarification** — the LLM pauses with a `ask_clarification` tool and resumes via AG-UI interrupt/resume (`confirm` / `choice` / `input`).
 - **OIDC multi-provider SSO** — PKCE + JWKS-verified logins from any IdP, JIT user provisioning, plus full RBAC and audit logging.
+- **Per-user private resource copies** — each identity provider declares a `resource_template` JSON; on a user's first login the platform asynchronously provisions a **private copy** (model provider / api key / model route / completions / instance / mcp / skill / document) owned by that user, with row-level `created_by` isolation.
+- **Capability Open API** — external systems call `completions` and `tasks` over `/api/v1/api/*` with `code + subject + businessType` identity, plus `businessType`-scoped ownership checks and task callback URLs.
+- **Task artifacts** — tasks persist two-phase structured outputs as `agent_task_artifact` rows, reviewable from the **产出 → 任务产物** page (list / detail / JSON view / copy).
+- **Completions management** — 提示工程 admin page with input/output JSON Schema, runtime config (`temperature` / `max_tokens` / `top_p` / penalties / `stop` / `thinking`), prompt versioning, and call records.
+- **Single user-level browser connection** — the Chrome extension keeps one per-user task SSE stream (no per-session following), `<all_urls>` host permission, and shows the user as `provider@subject`.
 - **Embeddable chat widget** — a single IIFE script that mounts into a shadow DOM, talks AG-UI over SSE with self-managed Bearer auth (no CopilotKit runtime), and can be embedded in any third-party page.
 
 ## 1. Quick Start for Development
@@ -81,6 +86,8 @@ Manages the complete execution lifecycle of an AI session, implementing the **Pl
 | **Skill (composite skills)** | Multi-step task orchestration | LLM-driven task decomposition | Cross-system workflows |
 
 #### 2.2.3 Chrome Extension (Browser Bridge)
+
+The extension bridges the backend with the user's browser for automated operations. It keeps a **single user-level task SSE connection** (`/api/v1/runtime/user/task/stream`) that delivers `browser_operation` commands for any of the user's sessions/runs — no per-session following. It declares `<all_urls>` host permission (granted at install) so it can inject a content script into any page the agent operates on.
 
 ![Chrome Extension browser bridge structure](agent-sphere-readme/chrome-extension-structure.png)
 
@@ -231,6 +238,8 @@ Dynamic adjustment:
 
 ![Browser operation flow](agent-sphere-readme/browser-operation-flow.png)
 
+> Delivery note: `browser_operation` commands are pushed **once** on the user-level task stream (keyed by the session owner), never duplicated on a per-session stream — the extension executes each `commandId` exactly once and reports back via `/api/v1/chrome/callback?sessionId=<cmd.sessionId>`.
+
 ### 3.5 Multi-tab Management
 
 ![Multi-tab management](agent-sphere-readme/multi-tab.png)
@@ -239,9 +248,16 @@ Dynamic adjustment:
 
 ![Timeout and cancellation chain](agent-sphere-readme/timeout-cancel-chain.png)
 
-### 3.7 Session Following
+### 3.7 User-level Task Connection (Browser Plugin)
 
-![Session Following](agent-sphere-readme/session-following.png)
+The extension no longer follows sessions. Instead it maintains a **single per-user task SSE stream** (`/api/v1/runtime/user/task/stream`) that receives every `browser_operation` command for the logged-in user (the backend fans out by the session owner, `session.created_by`).
+
+- **When it connects**: on login (`auth` / `auth_token` reported by the content script), on extension/service-worker startup, on the keepalive alarm, and after a failed/closed connection.
+- **Reconnect**: the first 30 s retries once per second, then falls back to every 5 s; the count resets on success or a fresh login.
+- **Auth**: `Authorization: Bearer <token>`; the stream is registered under `AuthContext.getUsername()`, so a task's session must be owned by the same user to receive its commands.
+- **Callbacks**: command results are posted to `/api/v1/chrome/callback?sessionId=<cmd.sessionId>` (the command DTO carries its own session id).
+
+![User-level task connection](agent-sphere-readme/user-task-connection.png)
 
 ### 3.8 User Clarification (Human-in-the-Loop)
 
@@ -361,6 +377,14 @@ Response:
 }
 ```
 
+Run interactions (list view):
+
+![Run interactions](agent-sphere-readme/Interactions-of-run.png)
+
+Run interaction detail:
+
+![Run interaction detail](agent-sphere-readme/Interactions-of-run-detail.png)
+
 #### 4.2.3 Session Panel
 
 | View | Content |
@@ -398,11 +422,14 @@ npm run dev
 # 4. Load the Chrome Extension
 # Chrome → chrome://extensions → Developer mode → Load unpacked
 # Select the agent-sphere-chrome-extension directory
+# (declares <all_urls>: read & change data on all sites, granted at install)
 
 # 5. Configure URLs
 # Click the extension icon → Settings Tab
-# Frontend URL: http://localhost:8000
-# Backend URL:  http://localhost:8080
+# Frontend URLs (widget host pages, multiple allowed): http://bole.buukle.top
+# Main URL (main site):                             http://as.buukle.top
+# Backend URL:                                      http://as.buukle.top
+# The popup shows a single "Task" connection badge; the User row shows provider@subject
 ```
 
 ### 4.5 Architecture Decision Records (ADR)
@@ -488,6 +515,8 @@ AgentSphere provides a complete RBAC permission system for multi-user management
 
 The permission check is enforced at the controller layer via `@WithTenant` and `AuthContext` to ensure multi-tenant data isolation.
 
+**Row-level data isolation**: beyond RBAC, non-super-admin reads are rewritten by `DataPermissionInterceptor` to append `AND created_by = <username>` on every SELECT (except `agent_user`). This is what keeps each user's private resource copy (instances, completions, tasks, task artifacts, …) isolated.
+
 #### Administration UI
 
 RBAC, system configuration, and OIDC identity providers are all managed from a single System Admin console (users, roles, permissions, identity providers / SSO, system config):
@@ -555,6 +584,19 @@ Permissions: `admin:identity-provider:read/create/update/delete` (seeded to ADMI
 - id_token signed with **RS256**, verifiable via the public JWKS URL.
 - Redirect URI registered at the IdP: `<backend-origin>/api/v1/auth/sso/callback`.
 
+#### Default Role & Resource Template
+
+| Field | Description |
+|-------|-------------|
+| `default_role_id` | Role granted to newly provisioned SSO users (replaces the default `USER` role) |
+| `resource_template` | JSON array (see [§4.12](#412-resource-template-reference)); empty uses the built-in default |
+
+On a user's **first** login the callback provisions the local user (with the default role) and then **asynchronously** generates the user's **private resource copy** from the provider template — model provider, api key, model route, completions (with schema/prompt), instance (auto-bound with the built-in **browser tool**), MCP, skill, and document — each owned by the user (`created_by = username`). Provisioning never blocks login; a failure is logged and the user keeps their account. Row-level isolation (every SELECT is rewritten with `AND created_by = <username>`) keeps each user's copy private.
+
+#### Display Name (`provider@subject`)
+
+The identity provider's `preferred_username`/`name` is stored as `display_subject` and refreshed on every login. The UI (main site and admin console) shows the user as **`provider@subject`** (e.g. `bole@elvin`); `GET /api/v1/sso/me` returns `{providerCode, subject}`.
+
 ### 4.11 Embeddable Chat Widget
 
 `agent-sphere-copilot-widget` is a **standalone embeddable chat widget** that third-party business sites can drop into any page. It bundles CopilotKit + AG-UI into a single IIFE script, mounts into a **shadow DOM**, and authenticates through the OIDC SSO above — no CopilotKit cloud/runtime required (auth is self-managed).
@@ -615,13 +657,108 @@ npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
 
 > Gotcha: rollup 4 ships platform-specific binaries as optional dependencies. Never copy `node_modules`/`package-lock.json` across machines — if `Cannot find module @rollup/rollup-*` appears, run `rm -rf node_modules package-lock.json && npm i` on the target machine.
 
+### 4.12 Resource Template Reference
+
+Each identity provider carries a `resource_template` JSON array. On a user's first login the coordinator dispatches each entry by its `type` to the matching initializer (new types are zero-code — just add a `ResourceInitializer` bean). Entries are processed in order and may reference earlier ones by name.
+
+| `type` | Fields | Notes |
+|--------|--------|-------|
+| `model_provider` | `name`, `baseUrl` | idempotent by name |
+| `api_key` | `provider` (ref), `alias` | creates a placeholder key and sets it active; replace with a real key afterwards |
+| `model_route` | `provider` (ref), `modelName`, `company`, `weight` | |
+| `completions` | `name`, `businessType`, `route` (ref), `config`, `promptSystem`, `promptUser`, `inputSchema`, `outputSchema` | creates a prompt v1 and activates it |
+| `instance` | `name`, `businessType`, `route` (ref) | auto-binds the built-in **browser tool** |
+| `mcp` | `name`, `serverUrl`, `serverType` | |
+| `skill` | `name`, `definition` | |
+| `document` | `title`, `content` | |
+
+The built-in default template (used when the provider leaves `resource_template` empty) provisions a DeepSeek model + key + `deepseek-v4-flash` route, seven business completions (resume_parse / five_dim_match / outreach / nl_search / org_collect / recommend_reason / interview_questions), a sourcing instance, an MCP, a skill, and a usage document. It can be viewed from the Identity Provider edit form (**查看样例**).
+
+### 4.13 Local OIDC Mock (Development)
+
+`agent-sphere/local-dev/mock-oidc-server.mjs` is a zero-dependency OIDC IdP for local SSO testing. Each start it generates a **random mock user identity** (`subject`, `preferred_username`, `email`, `name`) so every boot provisions a fresh SSO user.
+
+```bash
+node agent-sphere/local-dev/mock-oidc-server.mjs      # listens on :9000
+# MOCK_IDP_PORT / MOCK_IDP_ISSUER / MOCK_IDP_CLIENT_ID / MOCK_IDP_CLIENT_SECRET
+# MOCK_IDP_SUBJECT / MOCK_IDP_PREFERRED_USERNAME / MOCK_IDP_EMAIL / MOCK_IDP_NAME  # pin a fixed identity
+```
+
+The RSA key is intentionally fixed across restarts so the backend's cached JWKS keeps verifying id_tokens (avoids `S0006`). Point the `agent_identity_provider` row at it (`code=bole`, `issuer=http://localhost:9000`, endpoints under `/oauth2/...`, `jwks_url=http://localhost:9000/jwks`, scopes `openid email profile`, enabled).
+
 ---
 
-## 5. Project Structure
+## 5. Capability Open API (External Integration)
+
+External systems (e.g. a business recruiting platform) can call AgentSphere capabilities directly over `/api/v1/api/*`. Every request authenticates the caller identity as **`code + subject + businessType`**:
+
+- `code` — identity provider code (e.g. `business`); `subject` — the SSO subject of that provider. The backend looks up the provisioned `agent_sphere` user via `/sso/me`-style resolution; unknown identities get `401`.
+- `businessType` — the resource's business key. Completions/instances are matched **by owner + `businessType`** (session-layer ownership), so a caller only sees the resources of their own user copy.
+- `Authorization` header is **not** required on these routes (the caller identity is the business layer); signing is planned for a later version.
+
+### 5.1 Completions
+
+`POST /api/v1/api/completions` runs a single LLM call against the caller's completions matching `businessType`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/api/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "code": "business",
+    "subject": "elvin",
+    "businessType": "resume_parse",
+    "input": { "resumeText": "张三，6年经验...", "candidateId": 1001 }
+  }'
+```
+
+```json
+{
+  "content": "{\"name\":\"张三\",\"summary\":\"...\"}",
+  "model": "deepseek-v4-flash",
+  "usage": { "prompt_tokens": 42, "completion_tokens": 96, "total_tokens": 138 }
+}
+```
+
+### 5.2 Tasks
+
+```bash
+# Submit a task
+curl -X POST http://localhost:8080/api/v1/api/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "code": "business",
+    "subject": "elvin",
+    "businessType": "sourcing",
+    "goal": "整理候选人张三的公开画像",
+    "context": { "company": "某互联网公司", "years": 6 },
+    "expectedOutput": { "type": "object", "required": ["summary"] },
+    "config": { "pollInterval": "2s" },
+    "callbackUrl": "https://bole.example.com/task-callback"
+  }'
+
+# Query / stop
+curl "http://localhost:8080/api/v1/api/tasks/7?code=business&subject=elvin&businessType=sourcing"
+curl -X POST "http://localhost:8080/api/v1/api/tasks/7/stop?code=business&subject=elvin&businessType=sourcing"
+```
+
+Response is a `TaskVO` (`id`, `status` `QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED`, `sessionId`, `runId`, `resultJson`, …). When `callbackUrl` is set, the backend POSTs task progress/final results there. Completed tasks persist two-phase structured outputs as **task artifacts** (see below).
+
+### 5.3 Task Artifacts (任务产物)
+
+Two-phase refined outputs are stored in `agent_task_artifact` and exposed on the admin side:
+
+- `GET /api/v1/admin/task-artifacts` — paged list (`keyword`, `taskId`, `page`, `size`), gated by `admin:tasks:read`, row-scoped by `created_by`.
+- `GET /api/v1/admin/task-artifacts/{id}` — detail with the full `content` JSON and `schemaRef`.
+
+The frontend **产出 → 任务产物** page lists them (task goal, type, schema ref, run id, status, created time) and shows the detail drawer with a formatted JSON view and one-click copy.
+
+---
+
+## 6. Project Structure
 
 ![Project structure](agent-sphere-readme/project-structure.png)
 
-## 6. Tech Stack
+## 7. Tech Stack
 
 | Domain | Technology |
 |--------|------------|
@@ -634,10 +771,10 @@ npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
 | **Auth** | OIDC multi-provider SSO (PKCE / JWKS), RBAC, audit log |
 | **Real-time Communication** | SSE (Server-Sent Events), multi-emitter broadcast |
 | **Tool Protocol** | MCP (Model Context Protocol, Streamable HTTP) |
-| **API Security** | Bearer Token, @WithTenant multi-tenancy |
+| **API Security** | Bearer Token, @WithTenant multi-tenancy, row-level `created_by` isolation |
 | **LLM Integration** | SPI provider abstraction, automatic fallback routing |
 
-## 7. MCP Integration Example
+## 8. MCP Integration Example
 
 AgentSphere supports connecting to any external service via the MCP protocol. Taking Jira as an example:
 
@@ -660,7 +797,7 @@ curl -X POST /api/v1/instance/instance-capabilities \
 
 ![MCP Configuration UI](agent-sphere-readme/ui-new-mcp.png)
 
-## 8. License
+## 9. License
 
 MIT License
 

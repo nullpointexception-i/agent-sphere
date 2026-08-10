@@ -46,6 +46,11 @@
 - **多级记忆** — 持久化 run、工具调用记录（写时 JSON 压缩）、基于 token 预算的上下文压缩。
 - **人工介入澄清（Human-in-the-loop）** — LLM 通过 `ask_clarification` 工具暂停提问，AG-UI interrupt/resume 恢复执行（`confirm` / `choice` / `input`）。
 - **OIDC 多认证源 SSO** — PKCE + JWKS 验签，任意 IdP 登录、JIT 开通本地用户，配合完整 RBAC 与审计日志。
+- **每用户私有资源副本** — 每个身份源声明 `resource_template` JSON；用户首次登录时平台**异步**为其生成一份**私有副本**（模型供应商 / API Key / 模型路由 / completions / 实例 / MCP / 技能 / 文档），归属该用户并以 `created_by` 行级隔离。
+- **能力开放 API** — 外部系统以 `code + subject + businessType` 身份直连 `/api/v1/api/*` 调用 completions 与 tasks，按 businessType 会话层归属校验，任务支持回调 URL。
+- **任务产物（Task Artifact）** — 任务两阶段提炼的结构化输出落库 `agent_task_artifact`，在「产出 → 任务产物」页查看（列表 / 详情 / JSON 格式化 / 一键复制）。
+- **Completions 能力管理** — 提示工程管理页：input/output JSON Schema、运行配置（`temperature` / `max_tokens` / `top_p` / penalties / `stop` / `thinking`）、Prompt 版本管理、调用记录。
+- **浏览器扩展单用户连接** — 扩展仅保留一条用户级 task SSE 流（不再做会话跟随），安装即声明 `<all_urls>` 全站点权限，popup 展示 Task 状态与 `provider@subject` 用户名。
 - **可嵌入聊天 Widget** — 单个 IIFE 脚本挂载进 shadow DOM，通过 AG-UI + SSE 自管 Bearer 鉴权对话（不依赖 CopilotKit 运行时），可嵌入任意第三方页面。
 
 ## 1. 开发quick start
@@ -81,6 +86,8 @@
 | **Skill (复合技能)** | 多步任务编排 | LLM 驱动的任务分解 | 跨系统工作流 |
 
 #### 2.2.3 Chrome Extension（浏览器桥接）
+
+扩展在用户浏览器中桥接后端自动化操作。它只维持**一条用户级 task SSE 连接**（`/api/v1/runtime/user/task/stream`），为该用户的所有会话/任务投递 `browser_operation` 指令（不做会话跟随）。安装时声明 `<all_urls>` 宿主权限，可在 agent 操作的任意页面注入内容脚本。
 
 ![Chrome Extension 浏览器桥接结构](agent-sphere-readme/chrome-extension-structure.png)
 
@@ -231,6 +238,8 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 ![浏览器操作流程](agent-sphere-readme/browser-operation-flow.png)
 
+> 投递说明：`browser_operation` 指令**只**在用户级 task 流上投递一次（按会话归属用户分发），不在会话流上重复——扩展对每个 `commandId` 只执行一次，并通过 `/api/v1/chrome/callback?sessionId=<cmd.sessionId>` 回报结果。
+
 ### 3.5 多标签页管理
 
 ![多标签页管理](agent-sphere-readme/multi-tab.png)
@@ -239,9 +248,16 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 ![超时与取消链](agent-sphere-readme/timeout-cancel-chain.png)
 
-### 3.7 会话跟随（Session Following）
+### 3.7 用户级 Task 连接（浏览器插件）
 
-![会话跟随 Session Following](agent-sphere-readme/session-following.png)
+扩展不再做会话跟随，而是维持**一条用户级 task SSE 流**（`/api/v1/runtime/user/task/stream`），接收该登录用户的所有 `browser_operation` 指令（后端按会话归属用户 `session.created_by` 分发）。
+
+- **连接时机**：登录上报（`auth` / `auth_token`）、扩展/Service Worker 启动、keepalive 兜底、断线后自动重连。
+- **重连策略**：断开后前 30s 每秒重试 1 次，之后回落到每 5s；成功或重新登录后计数归零。
+- **鉴权**：`Authorization: Bearer <token>`；连接按 `AuthContext.getUsername()` 注册，任务的会话必须归属同一用户才能收到其指令。
+- **回调**：指令结果 POST 到 `/api/v1/chrome/callback?sessionId=<cmd.sessionId>`（指令 DTO 自带会话 id）。
+
+![用户级 Task 连接](agent-sphere-readme/user-task-connection.png)
 
 ### 3.8 用户澄清（Human-in-the-Loop）
 
@@ -361,6 +377,14 @@ Response:
 }
 ```
 
+Run 交互（列表视图）：
+
+![Run 交互列表](agent-sphere-readme/Interactions-of-run.png)
+
+Run 交互详情：
+
+![Run 交互详情](agent-sphere-readme/Interactions-of-run-detail.png)
+
 #### 4.2.3 会话面板 (Session Panel)
 
 | 视图 | 内容 |
@@ -398,11 +422,14 @@ npm run dev
 # 4. 加载 Chrome Extension
 # Chrome → chrome://extensions → 开发者模式 → 加载已解压的扩展
 # 选择 agent-sphere-chrome-extension 目录
+#（声明 <all_urls>：读取并更改所有网站的数据，安装时授予）
 
 # 5. 配置 URL
 # 点击扩展图标 → Settings Tab
-# Frontend URL: http://localhost:8000
-# Backend URL:  http://localhost:8080
+# Frontend URLs（widget 宿主页，可多个）：http://bole.buukle.top
+# Main URL（主站）：                           http://as.buukle.top
+# Backend URL：                                http://as.buukle.top
+# popup 只显示一个「Task」连接徽章，User 行显示 provider@subject
 ```
 
 ### 4.5 架构决策记录 (ADR)
@@ -488,6 +515,8 @@ AgentSphere 提供完整的 RBAC 权限体系，支持多用户管理和 API 级
 
 权限校验在 Controller 层通过 `@WithTenant` 和 `AuthContext` 执行，确保多租户数据隔离。
 
+**行级数据隔离**：除 RBAC 外，非超管用户的查询会被 `DataPermissionInterceptor` 改写，在每条 SELECT 上追加 `AND created_by = <username>`（`agent_user` 除外）。这是每个用户私有资源副本（实例 / completions / 任务 / 任务产物等）相互隔离的底层机制。
+
 #### 管理后台界面
 
 RBAC、系统配置与 OIDC 身份源统一在「系统管理」后台中完成（用户、角色、权限、身份源 / SSO、系统配置）：
@@ -555,6 +584,19 @@ AgentSphere 支持**多个 OIDC 身份认证源**，让第三方业务系统无�
 - id_token 使用 **RS256** 签名，可通过 JWKS 公钥校验。
 - 在 IdP 注册的回调地址：`<后端公网地址>/api/v1/auth/sso/callback`。
 
+#### 默认角色与资源模板
+
+| 字段 | 说明 |
+|------|------|
+| `default_role_id` | 新开通的 SSO 用户授予该角色（替换默认 `USER` 角色） |
+| `resource_template` | JSON 数组（见 [§4.12](#412-资源模板参考)）；留空使用内置默认模板 |
+
+用户**首次**登录时，回调先开通本地用户（授予默认角色），随后**异步**按身份源模板生成该用户的**私有资源副本** —— 模型供应商、API Key、模型路由、completions（含 schema/prompt）、实例（自动绑定**内置浏览器工具**）、MCP、技能、文档，全部归属该用户（`created_by = username`）。开通不阻塞登录，失败仅记录不影响账号。行级隔离（每条 SELECT 追加 `AND created_by = <username>`）保证各用户副本互相隔离。
+
+#### 展示名（`provider@subject`）
+
+IdP 的 `preferred_username`/`name` 会作为 `display_subject` 存储并在每次登录时刷新。主站与 admin 界面以 **`provider@subject`** 展示用户（如 `bole@elvin`）；`GET /api/v1/sso/me` 返回 `{providerCode, subject}`。
+
 ### 4.11 嵌入聊天 Widget
 
 `agent-sphere-copilot-widget` 是一个**独立可嵌入的聊天组件**，第三方业务系统只需一行脚本即可接入。它把 CopilotKit + AG-UI 打包成单个 IIFE 脚本，挂载进 **shadow DOM**，并通过上述 OIDC SSO 完成认证 —— 不依赖 CopilotKit 云服务/运行时（认证完全自管）。
@@ -615,13 +657,108 @@ npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
 
 > 注意：rollup 4 将各平台二进制声明为可选依赖。**切勿跨机器复制 `node_modules`/`package-lock.json`** —— 若报 `Cannot find module @rollup/rollup-*`，在目标机器上执行 `rm -rf node_modules package-lock.json && npm i`。
 
+### 4.12 资源模板参考
+
+每个身份源携带一个 `resource_template` JSON 数组。用户首次登录时，协调器按条目的 `type` 分发给对应初始化器（新增类型零改动——只需新增一个 `ResourceInitializer` bean）。条目按顺序处理，可用 name 引用先前条目。
+
+| `type` | 字段 | 说明 |
+|--------|------|------|
+| `model_provider` | `name`, `baseUrl` | 按 name 幂等 |
+| `api_key` | `provider`（引用）, `alias` | 创建占位 Key 并设为默认；之后需替换为真实 Key |
+| `model_route` | `provider`（引用）, `modelName`, `company`, `weight` | |
+| `completions` | `name`, `businessType`, `route`（引用）, `config`, `promptSystem`, `promptUser`, `inputSchema`, `outputSchema` | 创建 Prompt v1 并激活 |
+| `instance` | `name`, `businessType`, `route`（引用） | 自动绑定**内置浏览器工具** |
+| `mcp` | `name`, `serverUrl`, `serverType` | |
+| `skill` | `name`, `definition` | |
+| `document` | `title`, `content` | |
+
+内置默认模板（身份源 `resource_template` 留空时使用）会开通：DeepSeek 模型 + Key + `deepseek-v4-flash` 路由、七个业务 completions（resume_parse / five_dim_match / outreach / nl_search / org_collect / recommend_reason / interview_questions）、一个 sourcing 实例、MCP、技能、使用说明文档。可在身份源编辑表单中「查看样例」预览。
+
+### 4.13 本地 OIDC Mock（开发）
+
+`agent-sphere/local-dev/mock-oidc-server.mjs` 是一个零依赖的 OIDC IdP，用于本地 SSO 联调。每次启动**随机生成一个模拟用户身份**（`subject`、`preferred_username`、`email`、`name`），每次重启都会开通一个全新 SSO 用户。
+
+```bash
+node agent-sphere/local-dev/mock-oidc-server.mjs      # 监听 :9000
+# MOCK_IDP_PORT / MOCK_IDP_ISSUER / MOCK_IDP_CLIENT_ID / MOCK_IDP_CLIENT_SECRET
+# MOCK_IDP_SUBJECT / MOCK_IDP_PREFERRED_USERNAME / MOCK_IDP_EMAIL / MOCK_IDP_NAME  # 固定身份
+```
+
+RSA 密钥刻意固定不变，保证后端缓存的 JWKS 每次重启仍可验签 id_token（避免 `S0006`）。把 `agent_identity_provider` 行指向它（`code=bole`、`issuer=http://localhost:9000`、端点位于 `/oauth2/...`、`jwks_url=http://localhost:9000/jwks`、scopes `openid email profile`、enabled）。
+
 ---
 
-## 5. 项目结构
+## 5. 能力开放（外部接入）
+
+外部系统（如业务招聘平台）可直接通过 `/api/v1/api/*` 调用 AgentSphere 能力。每个请求以 **`code + subject + businessType`** 认证调用方身份：
+
+- `code` —— 身份源标识（如 `business`）；`subject` —— 该身份源下的 SSO subject。后端据此反查已开通的 agent-sphere 用户，未知身份返回 `401`。
+- `businessType` —— 资源的业务键。completions/实例按 **归属用户 + `businessType`** 匹配（会话层归属校验），调用方只能命中自己私有副本里的资源。
+- 这些路由**不需要** `Authorization` 头（调用方身份由业务层解析）；接口验签计划在后续版本加入。
+
+### 5.1 Completions
+
+`POST /api/v1/api/completions` 对调用方 `businessType` 匹配到的 completions 执行一次 LLM 调用。
+
+```bash
+curl -X POST http://localhost:8080/api/v1/api/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "code": "business",
+    "subject": "elvin",
+    "businessType": "resume_parse",
+    "input": { "resumeText": "张三，6年经验...", "candidateId": 1001 }
+  }'
+```
+
+```json
+{
+  "content": "{\"name\":\"张三\",\"summary\":\"...\"}",
+  "model": "deepseek-v4-flash",
+  "usage": { "prompt_tokens": 42, "completion_tokens": 96, "total_tokens": 138 }
+}
+```
+
+### 5.2 Tasks
+
+```bash
+# 提交任务
+curl -X POST http://localhost:8080/api/v1/api/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "code": "business",
+    "subject": "elvin",
+    "businessType": "sourcing",
+    "goal": "整理候选人张三的公开画像",
+    "context": { "company": "某互联网公司", "years": 6 },
+    "expectedOutput": { "type": "object", "required": ["summary"] },
+    "config": { "pollInterval": "2s" },
+    "callbackUrl": "https://bole.example.com/task-callback"
+  }'
+
+# 查询 / 停止
+curl "http://localhost:8080/api/v1/api/tasks/7?code=business&subject=elvin&businessType=sourcing"
+curl -X POST "http://localhost:8080/api/v1/api/tasks/7/stop?code=business&subject=elvin&businessType=sourcing"
+```
+
+响应为 `TaskVO`（`id`、`status` `QUEUED/RUNNING/COMPLETED/FAILED/CANCELLED`、`sessionId`、`runId`、`resultJson` 等）。配置 `callbackUrl` 时后端会把任务进度/最终结果 POST 回去。完成的任务会把两阶段提炼的结构化输出落为**任务产物**（见下）。
+
+### 5.3 任务产物（Task Artifact）
+
+两阶段提炼结果存储于 `agent_task_artifact`，管理端接口：
+
+- `GET /api/v1/admin/task-artifacts` —— 分页列表（`keyword`、`taskId`、`page`、`size`），权限 `admin:tasks:read`，按 `created_by` 行级隔离。
+- `GET /api/v1/admin/task-artifacts/{id}` —— 详情，含完整 `content` JSON 与 `schemaRef`。
+
+前端「产出 → 任务产物」页展示列表（任务目标、类型、schema ref、run id、状态、创建时间），详情抽屉提供 JSON 格式化视图与一键复制。
+
+---
+
+## 6. 项目结构
 
 ![项目结构](agent-sphere-readme/project-structure.png)
 
-## 6. 技术栈
+## 7. 技术栈
 
 | 领域 | 技术 |
 |------|------|
@@ -634,10 +771,10 @@ npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
 | **认证** | OIDC 多认证源 SSO（PKCE / JWKS）, RBAC, 审计日志 |
 | **实时通信** | SSE (Server-Sent Events), 多 emitter 广播 |
 | **工具协议** | MCP (Model Context Protocol, Streamable HTTP) |
-| **API 安全** | Bearer Token, @WithTenant 多租户 |
+| **API 安全** | Bearer Token, @WithTenant 多租户, `created_by` 行级数据隔离 |
 | **LLM 集成** | SPI 供应商抽象, 自动 Fallback 路由 |
 
-## 7. MCP 集成示例
+## 8. MCP 集成示例
 
 AgentSphere 支持通过 MCP 协议接入任意外部服务。以 Jira 为例：
 
@@ -660,7 +797,7 @@ curl -X POST /api/v1/instance/instance-capabilities \
 
 ![MCP 配置界面](agent-sphere-readme/ui-new-mcp.png)
 
-## 8. License
+## 9. License
 
 MIT License
 
