@@ -29,6 +29,7 @@ import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.tasks.domain.AgentTask;
 import com.buukle.agent.tasks.domain.AgentTaskArtifact;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
+import com.buukle.agent.tasks.dtvo.TaskArtifactVO;
 import com.buukle.agent.tasks.dtvo.TaskExecutionLogVO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
 import com.buukle.agent.tasks.dtvo.enums.TaskEnum;
@@ -56,6 +57,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -245,6 +248,66 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         var voPage = new Page<TaskVO>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
         voPage.setRecords(mpPage.getRecords().stream().map(this::toVO).toList());
         return voPage;
+    }
+
+    @Override
+    public Page<TaskArtifactVO> pageArtifacts(String keyword, Long taskId, int page, int size) {
+        LambdaQueryWrapper<AgentTaskArtifact> wrapper = new LambdaQueryWrapper<AgentTaskArtifact>()
+                .eq(taskId != null, AgentTaskArtifact::getTaskId, taskId)
+                .and(StringUtils.hasText(keyword), w -> w
+                        .like(AgentTaskArtifact::getArtifactType, keyword)
+                        .or()
+                        .like(AgentTaskArtifact::getRemark, keyword)
+                        .or()
+                        .like(AgentTaskArtifact::getSchemaRef, keyword))
+                .orderByDesc(AgentTaskArtifact::getId);
+        var mpPage = artifactMapper.selectPage(new Page<>(page, size), wrapper);
+        Map<Long, String> taskGoals = taskGoalMap(mpPage.getRecords());
+        var voPage = new Page<TaskArtifactVO>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
+        voPage.setRecords(mpPage.getRecords().stream()
+                .map(a -> toArtifactVO(a, taskGoals.get(a.getTaskId())))
+                .toList());
+        return voPage;
+    }
+
+    @Override
+    public TaskArtifactVO getArtifact(Long id) {
+        AgentTaskArtifact artifact = artifactMapper.selectById(id);
+        if (artifact == null) {
+            throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND, "task artifact not found");
+        }
+        AgentTask task = taskMapper.selectById(artifact.getTaskId());
+        return toArtifactVO(artifact, task == null ? null : task.getGoal());
+    }
+
+    private Map<Long, String> taskGoalMap(List<AgentTaskArtifact> artifacts) {
+        List<Long> taskIds = artifacts.stream()
+                .map(AgentTaskArtifact::getTaskId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (taskIds.isEmpty()) {
+            return Map.of();
+        }
+        return taskMapper.selectBatchIds(taskIds).stream()
+                .collect(Collectors.toMap(AgentTask::getId, AgentTask::getGoal, (a, b) -> a));
+    }
+
+    private TaskArtifactVO toArtifactVO(AgentTaskArtifact a, String taskGoal) {
+        TaskArtifactVO vo = new TaskArtifactVO();
+        vo.setId(a.getId());
+        vo.setTaskId(a.getTaskId());
+        vo.setTaskGoal(taskGoal);
+        vo.setArtifactType(a.getArtifactType());
+        vo.setContent(a.getContent());
+        vo.setSchemaRef(a.getSchemaRef());
+        vo.setRunId(a.getRunId());
+        vo.setStatus(a.getStatus());
+        vo.setRemark(a.getRemark());
+        vo.setCreatedBy(a.getCreatedBy());
+        vo.setCreatedAt(a.getCreatedAt() == null ? null : a.getCreatedAt().toString());
+        vo.setUpdatedAt(a.getUpdatedAt() == null ? null : a.getUpdatedAt().toString());
+        return vo;
     }
 
     @Override

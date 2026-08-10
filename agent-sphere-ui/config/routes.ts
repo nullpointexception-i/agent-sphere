@@ -171,7 +171,7 @@ export default [
     key: 'artifacts',
     name: 'artifacts',
     icon: 'folderOpen',
-    access: 'canViewDocuments',
+    access: 'canViewArtifacts',
     locale: 'menu.artifacts',
     routes: [
       {
@@ -181,6 +181,14 @@ export default [
         locale: 'menu.artifacts.documents',
         access: 'canViewDocuments',
         component: './artifacts/documents',
+      },
+      {
+        path: 'artifacts/task-artifacts',
+        name: 'taskArtifacts',
+        icon: 'inbox',
+        locale: 'menu.artifacts.taskArtifacts',
+        access: 'canManageTasks',
+        component: './artifacts/task-artifacts',
       },
       {
         path: 'artifacts/documents/:id',

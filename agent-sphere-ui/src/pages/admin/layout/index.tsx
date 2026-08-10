@@ -22,7 +22,7 @@ import { Avatar, Button, Dropdown, Layout, Menu, Space } from 'antd';
 import { startTransition } from 'react';
 import { LangDropdown } from '@/components/RightContent';
 import { useCan } from '@/hooks/usePermission';
-import { clearStoredUser } from '@/utils/auth';
+import { clearStoredUser, ssoDisplayName } from '@/utils/auth';
 
 const { Sider, Content } = Layout;
 
@@ -173,9 +173,7 @@ export default function AdminLayout() {
                 src={currentUser?.avatar}
                 icon={!currentUser?.avatar ? <UserOutlined /> : undefined}
               />
-              <span>
-                {currentUser?.name || currentUser?.englishName || 'User'}
-              </span>
+              <span>{ssoDisplayName(currentUser)}</span>
             </div>
           </Dropdown>
         </Space>

@@ -29,7 +29,7 @@
  * (Insert the row via direct SQL — the backend falls back to plaintext client_secret.)
  */
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   createHash,
   createPrivateKey,
@@ -41,10 +41,36 @@ const PORT = Number(process.env.MOCK_IDP_PORT || 9000);
 const ISSUER = process.env.MOCK_IDP_ISSUER || `http://localhost:${PORT}`;
 const CLIENT_ID = process.env.MOCK_IDP_CLIENT_ID || 'local-client';
 const CLIENT_SECRET = process.env.MOCK_IDP_CLIENT_SECRET || 'local-secret';
-const SUBJECT = process.env.MOCK_IDP_SUBJECT || 'test-subject-001';
-const USER_EMAIL = 'bole@test.local';
-const USER_NAME = 'Bole 测试用户';
 const KID = 'test-key';
+
+// --- 每次启动随机生成一个模拟用户身份（可用环境变量固定覆盖） ---
+const PINYIN_NAMES = ['xiaoming', 'xiaohong', 'lihua', 'wangfang', 'chenyu', 'suning', 'liyang', 'zhaolei'];
+const SURNAMES = ['Zhang', 'Li', 'Wang', 'Zhao', 'Chen', 'Liu', 'Yang', 'Sun'];
+
+function randItem(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** 生成 N 位小写字母数字后缀（用于用户名/邮箱，避免与既有身份冲突）。 */
+function randSuffix(len = 6) {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let out = '';
+  const bytes = randomBytes(len);
+  for (let i = 0; i < len; i++) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+  return out;
+}
+
+const persona = randItem(PINYIN_NAMES);
+const personaNum = String(Math.floor(Math.random() * 90) + 10); // 10..99
+const SUBJECT = process.env.MOCK_IDP_SUBJECT || `user-${persona}${personaNum}`;
+const USER_PREFERRED_USERNAME =
+  process.env.MOCK_IDP_PREFERRED_USERNAME || `${persona}${personaNum}`;
+const USER_EMAIL =
+  process.env.MOCK_IDP_EMAIL || `${USER_PREFERRED_USERNAME}@test.local`;
+const USER_NAME =
+  process.env.MOCK_IDP_NAME || `${randItem(SURNAMES)} ${persona.toUpperCase()}`;
 
 /**
  * 内置固定测试 RSA-2048 密钥（仅本地开发测试用，勿用于生产）。
@@ -107,6 +133,7 @@ function issuerPayload(extra = {}) {
     exp: now + 3600,
     email: USER_EMAIL,
     name: USER_NAME,
+    preferred_username: USER_PREFERRED_USERNAME,
     ...extra,
   };
 }function readForm(req) {
@@ -212,5 +239,7 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[mock-idp] OIDC mock listening on :${PORT}`);
   console.log(`[mock-idp] issuer=${ISSUER}`);
-  console.log(`[mock-idp] client_id=${CLIENT_ID} client_secret=${CLIENT_SECRET} subject=${SUBJECT}`);
+  console.log(`[mock-idp] client_id=${CLIENT_ID} client_secret=${CLIENT_SECRET}`);
+  console.log(`[mock-idp] identity: sub=${SUBJECT} preferred_username=${USER_PREFERRED_USERNAME} email=${USER_EMAIL} name=${USER_NAME}`);
+  console.log('[mock-idp] 每次启动随机生成新用户身份（可用 MOCK_IDP_SUBJECT / MOCK_IDP_PREFERRED_USERNAME / MOCK_IDP_EMAIL / MOCK_IDP_NAME 固定覆盖）');
 });

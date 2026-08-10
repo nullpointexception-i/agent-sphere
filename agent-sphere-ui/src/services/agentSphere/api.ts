@@ -357,6 +357,15 @@ export const agentApi = {
       stop: (id: number) =>
         request<void>(`${BASE}/admin/tasks/${id}/stop`, { method: 'POST' }),
     },
+    taskArtifacts: {
+      list: (params: {
+        keyword?: string;
+        taskId?: number;
+        page?: number;
+        size?: number;
+      }) => request<any>(`${BASE}/admin/task-artifacts`, { params }),
+      get: (id: number) => request<any>(`${BASE}/admin/task-artifacts/${id}`),
+    },
   },
 
   instanceCapabilities: {
