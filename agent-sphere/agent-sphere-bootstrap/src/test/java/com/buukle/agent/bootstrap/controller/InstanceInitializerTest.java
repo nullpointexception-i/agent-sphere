@@ -87,6 +87,28 @@ class InstanceInitializerTest {
     }
 
     @Test
+    void initialize_shouldMapDescriptionAndSystemPrompt() throws Exception {
+        when(instanceSpi.listInstances(anyString(), any(), any())).thenReturn(List.of());
+        when(instanceService.createInstance(any(CreateInstanceDTO.class))).thenReturn(instanceVO(10L));
+        when(capabilityBuiltinSpi.listBuiltinTools()).thenReturn(List.of(tool((long) BuiltinToolEnum.CHROME.getId())));
+        JsonNode desc = mapper.readTree("""
+                {"type":"instance","name":"Headhunter Assist","description":"Headhunter Assist",
+                 "businessType":"task","route":"deepseek-v4-flash",
+                 "systemPrompt":"You are Headhunter Assist.\\nStrict rules:\\n- Only answer business questions."}
+                """);
+
+        initializer.initialize(desc, ctx);
+
+        ArgumentCaptor<CreateInstanceDTO> dto = ArgumentCaptor.forClass(CreateInstanceDTO.class);
+        verify(instanceService).createInstance(dto.capture());
+        assertEquals("Headhunter Assist", dto.getValue().getName());
+        assertEquals("Headhunter Assist", dto.getValue().getDescription());
+        assertEquals("task", dto.getValue().getBusinessType());
+        assertEquals("You are Headhunter Assist.\nStrict rules:\n- Only answer business questions.",
+                dto.getValue().getSystemPrompt());
+    }
+
+    @Test
     void initialize_shouldSkipBindingWhenChromeToolMissing() throws Exception {
         when(instanceSpi.listInstances(anyString(), any(), any())).thenReturn(List.of());
         when(instanceService.createInstance(any(CreateInstanceDTO.class))).thenReturn(instanceVO(10L));

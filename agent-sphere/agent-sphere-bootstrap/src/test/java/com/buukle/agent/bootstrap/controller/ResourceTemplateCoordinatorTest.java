@@ -119,6 +119,21 @@ class ResourceTemplateCoordinatorTest {
                 .map(c -> c.path("businessType").asText())
                 .collect(Collectors.toSet());
         assertEquals(7, businessTypes.size(), "7 个 completions 的 businessType 应互不重复");
+
+        JsonNode instance = null;
+        for (JsonNode node : arr) {
+            if ("instance".equals(node.path("type").asText())) {
+                instance = node;
+                break;
+            }
+        }
+        assertTrue(instance != null, "默认模板应包含一个 instance 条目");
+        assertEquals("Headhunter Assist", instance.path("name").asText());
+        assertEquals("Headhunter Assist", instance.path("description").asText());
+        assertEquals("task", instance.path("businessType").asText());
+        assertEquals("deepseek-v4-flash", instance.path("route").asText());
+        assertTrue(instance.hasNonNull("systemPrompt"));
+        assertTrue(instance.path("systemPrompt").asText().contains("Strict rules"));
     }
 
     @Test

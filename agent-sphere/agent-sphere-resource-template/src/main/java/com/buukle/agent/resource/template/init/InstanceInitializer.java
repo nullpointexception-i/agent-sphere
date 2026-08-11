@@ -49,6 +49,8 @@ public class InstanceInitializer implements ResourceInitializer {
         }
         CreateInstanceDTO dto = new CreateInstanceDTO();
         dto.setName(name);
+        dto.setDescription(descriptor.path("description").asText(null));
+        dto.setSystemPrompt(descriptor.path("systemPrompt").asText(null));
         dto.setBusinessType(descriptor.path("businessType").asText(null));
         String routeName = descriptor.path("route").asText(null);
         if (StringUtils.hasText(routeName)) {
