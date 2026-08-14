@@ -103,8 +103,10 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
         setUser(merged);
       }
       setFlag(STORAGE_TRIED_KEY, false);
+      console.log('[AgentSphereAuth] exchange ok, token stored', { pending });
       dispatchResult({ via: 'exchange', pending });
-    } catch {
+    } catch (err) {
+      console.warn('[AgentSphereAuth] exchange failed', err);
       dispatchResult({ via: 'error', pending });
     } finally {
       stripParams([SSO_QUERY_PARAM_OTC]);
@@ -114,6 +116,7 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
 
   if (errorParam) {
     setFlag(STORAGE_TRIED_KEY, true);
+    console.warn('[AgentSphereAuth] sso error param:', errorParam);
     stripParams([SSO_QUERY_PARAM_ERROR]);
     dispatchResult({ via: 'error' });
     return;
@@ -125,6 +128,7 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
   setFlag(STORAGE_TRIED_KEY, false);
 
   if (!autoLogin) {
+    console.log('[AgentSphereAuth] autoLogin disabled, skip');
     dispatchResult({ via: 'skip' });
     return;
   }
@@ -133,9 +137,11 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
   setFlag(STORAGE_PENDING_KEY, true);
   try {
     const { authorizeUrl } = await ssoAuthorize(base, provider, redirectUri, 'none');
+    console.log('[AgentSphereAuth] probe redirect ->', authorizeUrl);
     window.location.assign(authorizeUrl);
-  } catch {
+  } catch (err) {
     setFlag(STORAGE_PENDING_KEY, false);
+    console.warn('[AgentSphereAuth] authorize failed', err);
     dispatchResult({ via: 'error' });
   }
 }
@@ -151,6 +157,7 @@ const api: AgentSphereAuthApi = {
     const base = config.apiBase ?? '/api/v1';
     const provider = config.provider ?? 'business';
     const autoLogin = config.autoLogin !== false;
+    console.log('[AgentSphereAuth] init', { base, provider, autoLogin });
     void run(base, provider, autoLogin);
   },
   reset: () => {
