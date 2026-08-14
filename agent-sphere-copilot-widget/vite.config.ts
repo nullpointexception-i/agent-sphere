@@ -1,9 +1,19 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    visualizer({ filename: 'dist/analyze.html', gzipSize: true, brotliSize: true }),
+    visualizer({
+      filename: 'dist/analyze-stats.json',
+      template: 'raw-data',
+      gzipSize: true,
+      brotliSize: true,
+    }),
+  ],
   define: {
     'process.env': '{}',
   },
@@ -11,6 +21,10 @@ export default defineConfig({
     alias: {
       '@segment/analytics-node': fileURLToPath(
         new URL('./src/stubs/segment-analytics.ts', import.meta.url),
+      ),
+      // streamdown 引入 shiki+mermaid 全家桶（16MB 包的大头），stub 为基本 markdown
+      'streamdown': fileURLToPath(
+        new URL('./src/stubs/streamdown.tsx', import.meta.url),
       ),
     },
   },

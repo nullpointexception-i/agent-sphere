@@ -14,7 +14,10 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "types": ["vite/client", "node"],
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "react-markdown": ["./src/stubs/react-markdown.d.ts"]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }
