@@ -9,7 +9,7 @@
  * （与 widget auth.ts 同 shape），chrome-extension 读取同一 key 即可建立 task 连接。
  */
 import { ssoAuthorize, ssoExchange, ssoMe } from './api';
-import { clearUser, getUser, setUser } from './auth';
+import { clearUser, setUser } from './auth';
 import {
   SSO_QUERY_PARAM_ERROR,
   SSO_QUERY_PARAM_OTC,
@@ -102,6 +102,7 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
         const merged = await syncSsoIdentity(base, user);
         setUser(merged);
       }
+      setFlag(STORAGE_TRIED_KEY, false);
       dispatchResult({ via: 'exchange', pending });
     } catch {
       dispatchResult({ via: 'error', pending });
@@ -118,12 +119,12 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
     return;
   }
 
-  if (getUser()) {
-    dispatchResult({ via: 'skip' });
-    return;
-  }
+  // 直接清空本地 token，兼容切换用户：每次 init 都重新静默登录当前 Bole 用户，
+  // 旧 token 不会残留阻塞或跨用户泄漏
+  clearUser();
+  setFlag(STORAGE_TRIED_KEY, false);
 
-  if (!autoLogin || readFlag(STORAGE_TRIED_KEY)) {
+  if (!autoLogin) {
     dispatchResult({ via: 'skip' });
     return;
   }
