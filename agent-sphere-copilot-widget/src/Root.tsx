@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createApi, ApiError } from './api';
+import { createApi, ApiError, type ApiClient } from './api';
 import { clearUser, getUser, setUser } from './auth';
 import {
   SSO_QUERY_PARAM_ERROR,
@@ -41,6 +41,25 @@ function stripQueryParams(names: string[]): void {
 const AUTO_LOGIN_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
 const LOGOUT_EVENT = 'agent-sphere:logout';
 
+/** 与主站同步：登录后/每次启动拉取 /sso/me，把 providerCode@subject 并入本地用户。 */
+async function syncSsoIdentity(api: ApiClient, u: UserVO): Promise<UserVO> {
+  try {
+    const identity = await api.ssoMe();
+    if (identity && identity.providerCode && identity.subject) {
+      const merged = {
+        ...u,
+        ssoProviderCode: identity.providerCode,
+        ssoSubject: identity.subject,
+      };
+      setUser(merged);
+      return merged;
+    }
+  } catch {
+    // 非 SSO 或接口异常：忽略，保留原用户
+  }
+  return u;
+}
+
 export function Root({ config }: RootProps) {
   const [phase, setPhase] = useState<Phase>('booting');
   const [user, setUserState] = useState<UserVO | null>(() => getUser());
@@ -51,9 +70,12 @@ export function Root({ config }: RootProps) {
     const errorParam = readQueryParam(SSO_QUERY_PARAM_ERROR);
     if (otc) {
       try {
-        const exchanged = await createApi(config).ssoExchange(otc);
+        const api = createApi(config);
+        const exchanged = await api.ssoExchange(otc);
         setUser(exchanged);
         setUserState(exchanged);
+        const merged = await syncSsoIdentity(api, exchanged);
+        setUserState(merged);
         setPhase('authed');
       } catch (err) {
         setAuthError((err as ApiError).message);
@@ -84,8 +106,12 @@ export function Root({ config }: RootProps) {
       }
       const stored = getUser();
       if (stored) {
-        setUserState(stored);
-        setPhase('authed');
+        const api = createApi(config);
+        const merged = await syncSsoIdentity(api, stored);
+        if (!cancelled) {
+          setUserState(merged);
+          setPhase('authed');
+        }
         return;
       }
       const autoLogin = config.autoLogin !== false;

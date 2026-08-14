@@ -4,7 +4,7 @@ import {
   SSO_EXCHANGE_PATH,
   type WidgetConfig,
 } from './config';
-import type { InstancePageVO, InstanceVO, RunVO, SessionTodoVO, SessionVO, UserVO } from './types';
+import type { InstancePageVO, InstanceVO, RunVO, SessionTodoVO, SessionVO, SsoIdentityVO, UserVO } from './types';
 
 export interface ErrorBody {
   errorCode?: string;
@@ -93,6 +93,10 @@ export function ssoExchange(base: string, otc: string): Promise<UserVO> {
   });
 }
 
+export function ssoMe(base: string): Promise<SsoIdentityVO> {
+  return request<SsoIdentityVO>(base, '/sso/me');
+}
+
 export function listInstances(base: string): Promise<InstanceVO[]> {
   return request(base, '/instance/instances/all');
 }
@@ -160,6 +164,7 @@ export function listRuns(
 export interface ApiClient {
   ssoAuthorize: (provider: string, redirectUri: string, prompt?: string) => Promise<string>;
   ssoExchange: (otc: string) => Promise<UserVO>;
+  ssoMe: () => Promise<SsoIdentityVO>;
   listInstances: () => Promise<InstanceVO[]>;
   listSessions: (offset?: number, limit?: number, keyword?: string) => Promise<SessionVO[]>;
   createSession: (agentInstanceId: number, title: string) => Promise<SessionVO>;
@@ -180,6 +185,7 @@ export function createApi(config: WidgetConfig): ApiClient {
     ssoAuthorize: (provider, redirectUri, prompt) =>
       ssoAuthorize(base, provider, redirectUri, prompt).then((v) => v.authorizeUrl),
     ssoExchange: (otc) => ssoExchange(base, otc),
+    ssoMe: () => ssoMe(base),
     listInstances: () => listInstances(base),
     listSessions: (offset, limit, keyword) => listSessions(base, offset, limit, keyword),
     createSession: (agentInstanceId, title) => createSession(base, agentInstanceId, title),

@@ -754,7 +754,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
           {loadingSessions ? <div className="aw-item-hint">加载中…</div> : null}
         </div>
         <div className="aw-user" title={user.email || user.username}>
-          bole@{user.englishName || user.displayName || user.username}
+          {user.ssoProviderCode && user.ssoSubject
+            ? `${user.ssoProviderCode}@${user.ssoSubject}`
+            : user.englishName || user.displayName || user.username}
         </div>
         <button
           type="button"

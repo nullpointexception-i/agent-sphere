@@ -7,6 +7,14 @@ export interface UserVO {
   avatar: string;
   token: string;
   status: string;
+  ssoProviderCode?: string;
+  ssoSubject?: string;
+}
+
+/** GET /sso/me 返回的第三方身份（subject 为 displaySubject）。 */
+export interface SsoIdentityVO {
+  providerCode?: string;
+  subject?: string;
 }
 
 export interface InstanceVO {
