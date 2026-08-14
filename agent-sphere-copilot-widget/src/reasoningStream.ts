@@ -12,19 +12,30 @@ export interface ReasoningStreamOptions {
   url: string;
   token: string;
   onReasoning: (runId: string, delta: string) => void;
+  /** 任务 run 结束（run_completed/run_failed/run_cancelled）时回调，用于复位流式状态。 */
+  onRunEnded?: (runId: string) => void;
+  /** 流成功建立（拿到响应体）时回调，便于诊断。 */
+  onOpen?: () => void;
   signal: AbortSignal;
 }
 
 const REASONING_SYSTEM_TYPE = 'system';
 const I18N_PREFIX = '__i18n:';
+const RUN_ENDED_SUB_TYPES = new Set([
+  'run_completed',
+  'run_failed',
+  'run_cancelled',
+]);
 
 export async function connectReasoningStream(options: ReasoningStreamOptions): Promise<void> {
-  const { url, token, onReasoning, signal } = options;
+  const { url, token, onReasoning, onRunEnded, onOpen, signal } = options;
   try {
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'text/event-stream',
+        // 强制 identity，防止代理/服务器对 SSE 做 gzip 压缩导致字节流乱码、JSON 解析静默失败
+        'Accept-Encoding': 'identity',
         'Cache-Control': 'no-cache',
       },
       signal,
@@ -32,6 +43,7 @@ export async function connectReasoningStream(options: ReasoningStreamOptions): P
     if (!response.ok || !response.body) {
       return;
     }
+    onOpen?.();
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -48,7 +60,7 @@ export async function connectReasoningStream(options: ReasoningStreamOptions): P
         if (!dataLine) {
           continue;
         }
-        handleLine(dataLine, onReasoning);
+        handleLine(dataLine, onReasoning, onRunEnded);
       }
     }
   } catch (e) {
@@ -73,7 +85,11 @@ function extractDataLine(part: string): string {
   return data;
 }
 
-function handleLine(dataLine: string, onReasoning: (runId: string, delta: string) => void) {
+function handleLine(
+  dataLine: string,
+  onReasoning: (runId: string, delta: string) => void,
+  onRunEnded?: (runId: string) => void,
+) {
   try {
     const parsed = JSON.parse(dataLine);
     const evtType = parsed.eventType || parsed.type || '';
@@ -81,12 +97,21 @@ function handleLine(dataLine: string, onReasoning: (runId: string, delta: string
       return;
     }
     const d = parsed.data || parsed;
+    const runId = d?.runId != null ? String(d.runId) : '';
+    if (!runId) {
+      return;
+    }
+    // 任务 run 生命周期终态（system 类型）：先于 model-reasoning 过滤识别，用于复位流式状态
+    const subType: unknown = d?.reasoningSubType;
+    if (typeof subType === 'string' && RUN_ENDED_SUB_TYPES.has(subType)) {
+      onRunEnded?.(runId);
+      return;
+    }
     if (d?.reasoningType === REASONING_SYSTEM_TYPE) {
       return;
     }
-    const runId = d?.runId != null ? String(d.runId) : '';
     const response: unknown = d?.response;
-    if (!runId || typeof response !== 'string' || !response) {
+    if (typeof response !== 'string' || !response) {
       return;
     }
     if (response.startsWith(I18N_PREFIX)) {

@@ -228,6 +228,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   // widget 自己发起的 run（AG-UI RUN_STARTED 的后端 runId）——被动流里跳过，避免与
   // CopilotKit 自带渲染重复。
   const ownRunIdsRef = useRef<Set<string>>(new Set());
+  // 当前正在流式展示推理的任务 run：期间置 agent.isRunning=true，让 CopilotChat 以
+  // "Thinking…" 展开流式渲染（否则任务 run 的推理块默认折叠成一行小字，看不见内容）。
+  const streamingRunIdRef = useRef<string | null>(null);
 
   const agents = useMemo(() => {
     const record: Record<string, AbstractAgent> = {};
@@ -573,9 +576,17 @@ export function CopilotView({ config, user }: CopilotViewProps) {
       url: `${apiBase}/runtime/${selectedSessionId}/stream`,
       token: user.token,
       signal: controller.signal,
+      onOpen: () => {
+        console.log('[AgentSphere] reasoning stream connected for session', selectedSessionId);
+      },
       onReasoning: (runId, delta) => {
         if (ownRunIdsRef.current.has(runId)) {
           return;
+        }
+        // 任务 run 推理开始 → 置流式态，让 reasoning 块展开显示 "Thinking…"
+        if (!agent.isRunning || streamingRunIdRef.current !== runId) {
+          streamingRunIdRef.current = runId;
+          agent.isRunning = true;
         }
         const id = `reasoning-${runId}`;
         if (injected.has(id)) {
@@ -599,9 +610,17 @@ export function CopilotView({ config, user }: CopilotViewProps) {
         injected.add(id);
         agent.addMessage({ id, role: 'reasoning', content: delta });
       },
+      onRunEnded: (runId) => {
+        if (streamingRunIdRef.current === runId) {
+          streamingRunIdRef.current = null;
+          agent.isRunning = false;
+        }
+      },
     });
     return () => {
       controller.abort();
+      streamingRunIdRef.current = null;
+      agent.isRunning = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, selectedAgentId, apiBase, user.token]);
