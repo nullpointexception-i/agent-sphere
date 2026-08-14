@@ -39,7 +39,9 @@ jobs:
         push: true
         tags: ${{ vars.ACR_REGISTRY }}/agent-sphere-backend:${{ steps.tag.outputs.sha }}
         cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-to: type=inline
+        provenance: false
+        sbom: false
 
     - name: Build & push frontend
       uses: docker/build-push-action@v6
@@ -49,7 +51,9 @@ jobs:
         build-args: COMMIT_HASH=${{ steps.tag.outputs.sha }}
         tags: ${{ vars.ACR_REGISTRY }}/agent-sphere-frontend:${{ steps.tag.outputs.sha }}
         cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-to: type=inline
+        provenance: false
+        sbom: false
 
     - name: Build & push widget
       uses: docker/build-push-action@v6
@@ -58,7 +62,9 @@ jobs:
         push: true
         tags: ${{ vars.ACR_REGISTRY }}/agent-sphere-widget:${{ steps.tag.outputs.sha }}
         cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-to: type=inline
+        provenance: false
+        sbom: false
 
     - name: Update k8s manifests with new image tags
       run: |
