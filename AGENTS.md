@@ -1,11 +1,12 @@
 # AgentSphere — monorepo
 
-Git root holds three **independent** projects (no shared root build/lockfile/CI):
+Git root holds four **independent** projects (no shared root build/lockfile):
 - `agent-sphere/` — Java 21 / Spring Boot backend. **See `agent-sphere/AGENTS.md`** for module layout, Maven commands, Flyway, MyBatis-Plus, and code-style rules.
 - `agent-sphere-ui/` — React 19 / UmiJS Max frontend (Ant Design Pro base).
 - `agent-sphere-copilot-widget/` — embeddable chat widget (Vite lib IIFE + CopilotKit/AG-UI), see below.
+- `agent-sphere-chrome-extension/` — Manifest V3 Chrome extension (bridges backend with the browser for automated ops). **See `agent-sphere-chrome-extension/AGENTS.md`**. No build step: background is native ESM (`background.js` + `lib/*.js`), execution layer is `content.js`/`content-locator.js`/`content-editors.js`, SSE lives in `offscreen.js`, MAIN-world bridges are `page-script.js`/`inject.js`. `src/` is empty stubs and `npm run build` has no `build.js` — edit files directly and load unpacked. **No screenshots**; plugin tabs auto-group under `AgentSphere`; `chrome.debugger` is used only as the last-resort executeJS tier.
 
-GitHub flow off `main`. **No CI** — run each project's tests before pushing.
+GitHub flow off `main`. **No test CI** — run each project's tests before pushing. The only workflow is a deploy pipeline (see Deploy below).
 
 ## How the two apps connect
 
@@ -18,6 +19,12 @@ GitHub flow off `main`. **No CI** — run each project's tests before pushing.
 - Postgres + Redis via `agent-sphere/agent-docker-middleware/docker-compose.yml` (note: under `agent-sphere/`, **not** the repo root). Volume paths are hardcoded to macOS (`/Users/elvin/Desktop/...`) — override or remove on other machines.
 - Postgres DB name is `buukle_agent_2026061101` (set in `application.yml` and the compose file). Env overrides: `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`.
 - Backend JVM/Jackson timezone `Asia/Shanghai`; virtual threads on by default.
+
+## Deploy (k3s / GitOps)
+
+- `.github/workflows/deploy.yml` is the **only** workflow. Triggers on `v*` tags (or manual `workflow_dispatch`): builds & pushes backend/frontend/widget images to Aliyun ACR, rewrites image tags in `k8s/05-backend.yaml`, `06-frontend.yaml`, `08-widget.yaml`, commits them to `main` (Fleet applies them on k3s), and attaches the chrome-extension zip (packaged from the root-level extension files) to a GitHub Release. No test job — verify locally before tagging.
+- `k8s/` holds the namespace + postgres/redis/backend/frontend/widget/ingress manifests; `04-backend-config.yaml` sets backend env (DB, Redis, JWT, etc.).
+- Frontend image build takes `build-args: COMMIT_HASH` — referenced in the UI's version display.
 
 ## agent-sphere-copilot-widget (chat widget)
 

@@ -13,6 +13,7 @@ import type {
   UserVO,
 } from '../types';
 import { ChatAuxPanel } from './ChatAuxPanel';
+import { connectReasoningStream } from '../reasoningStream';
 
 const HISTORY_PAGE_SIZE = 3;
 const AGENT_PAGE_SIZE = 5;
@@ -152,6 +153,13 @@ function toChatMessages(runs: RunVO[]): ChatMessage[] {
     const block = r.clarifications?.length
       ? buildClarificationBlock(r.clarifications)
       : '';
+    if (r.reasoning && r.reasoning.trim()) {
+      messages.push({
+        id: `r-${r.id}`,
+        role: 'reasoning',
+        content: r.reasoning,
+      });
+    }
     if (r.assistantReply && r.assistantReply !== '{}' && r.assistantReply.trim()) {
       messages.push({
         id: `a-${r.id}`,
@@ -217,6 +225,10 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const [clarification, setClarification] = useState<ClarificationState | null>(null);
   const [clarificationText, setClarificationText] = useState('');
 
+  // widget 自己发起的 run（AG-UI RUN_STARTED 的后端 runId）——被动流里跳过，避免与
+  // CopilotKit 自带渲染重复。
+  const ownRunIdsRef = useRef<Set<string>>(new Set());
+
   const agents = useMemo(() => {
     const record: Record<string, AbstractAgent> = {};
     for (const inst of instances) {
@@ -234,6 +246,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 prev.map((s) => (s.id === sessionId ? { ...s, title } : s)),
               );
             }
+          }
+        },
+        onRunStartedEvent: ({ event }) => {
+          const runId = (event as { runId?: unknown })?.runId;
+          if (runId != null) {
+            ownRunIdsRef.current.add(String(runId));
           }
         },
         onRunFinishedEvent: ({ event }) => {
@@ -539,6 +557,54 @@ export function CopilotView({ config, user }: CopilotViewProps) {
       cancelled = true;
     };
   }, [selectedAgentId, selectedSessionId, api]);
+
+  // 被动 reasoning 流：任务触发（或其他非本 widget 发起）的 run 的 thinking 实时注入 chatbox
+  useEffect(() => {
+    if (selectedSessionId === null || selectedAgentId === null) {
+      return;
+    }
+    const agent = agentsRef.current[String(selectedAgentId)];
+    if (!agent) {
+      return;
+    }
+    const injected = new Set<string>();
+    const controller = new AbortController();
+    void connectReasoningStream({
+      url: `${apiBase}/runtime/${selectedSessionId}/stream`,
+      token: user.token,
+      signal: controller.signal,
+      onReasoning: (runId, delta) => {
+        if (ownRunIdsRef.current.has(runId)) {
+          return;
+        }
+        const id = `reasoning-${runId}`;
+        if (injected.has(id)) {
+          const updated = [...agent.messages];
+          const reasoningMsg = updated.find((m) => m.id === id) as
+            | { id: string; role: string; content: string }
+            | undefined;
+          if (reasoningMsg) {
+            reasoningMsg.content += delta;
+            agent.setMessages(updated);
+          } else {
+            // 历史重载清掉了进行中的消息 → 重新创建
+            agent.addMessage({ id, role: 'reasoning', content: delta });
+          }
+          return;
+        }
+        if (agent.messages.some((m) => m.id === id)) {
+          // CopilotKit 已自行渲染该 reasoning（本 widget 发起的 run）——跳过
+          return;
+        }
+        injected.add(id);
+        agent.addMessage({ id, role: 'reasoning', content: delta });
+      },
+    });
+    return () => {
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSessionId, selectedAgentId, apiBase, user.token]);
 
   const loadOlder = useCallback(async () => {
     if (loadingHistory || !hasMoreHistory) {

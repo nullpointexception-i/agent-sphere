@@ -10,7 +10,8 @@ public class ChromeCallbackDTO {
     private boolean success;
     private Object data;
     private String error;
-    private String screenshot;
+    private String errorCategory;
+    private String method;
 
     public ChromeCallbackDTO() {
     }

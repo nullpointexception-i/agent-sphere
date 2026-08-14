@@ -1,66 +1,50 @@
 /**
- * Service Worker - Maintains SSE connection, routes commands to content script.
+ * Service Worker (MV3, ESM) — message router, command dispatch, tab grouping,
+ * offscreen keepalive, and callback reporting to the backend.
+ *
+ * Long-lived task SSE lives in the offscreen document; this worker relays
+ * browser_operation commands into tabs and reports results via HTTP callback.
  */
+import { cdpClient } from './lib/cdp-client.js';
+import { tabManager } from './lib/tab-manager.js';
+import { okResult, failResult, ErrorCategory } from './lib/result.js';
+import { ensureOffscreenDocument, askOffscreen } from './lib/offscreen-bridge.js';
+
 console.log('[AgentSphere] Service Worker started', new Date().toISOString());
+
 let token = '';
 let baseUrl = '';
 
-// --- Keep SW alive & zombie-connection detection: prefer chrome.alarms (can wake a suspended SW);
-// fall back to setInterval when alarms are unavailable (e.g. legacy registration without the permission) ---
-let keepaliveTimer = null;
-
-function checkConnection() {
-  // 无凭证时不动作（扩展刚加载、认证尚未从页面拉取），避免误导性重连日志
-  if (!token || !baseUrl) return;
-  // 1) 未连接 → 直接建立用户级 task 流（SW 重启 / 流关闭后的兜底）
-  if (!taskAbortController || taskAbortController.signal.aborted) {
-    console.log('[AgentSphere] Keepalive: reconnecting task SSE');
-    connectTaskSSE();
-    return;
-  }
-  // 2) Zombie-connection detection: backend heartbeats every 15s; no data for too long → treat as stalled, reconnect
-  if (lastDataAt && Date.now() - lastDataAt > ZOMBIE_STALE_MS) {
-    console.warn('[AgentSphere] Keepalive: no task SSE data for a while, reconnecting');
-    taskAbortController.abort();
-    taskAbortController = null;
-    connectTaskSSE();
-  }
-}
-
-function startKeepalive() {
-  if (chrome.alarms && typeof chrome.alarms.create === 'function') {
-    try {
-      chrome.alarms.create('sse-keepalive', { periodInMinutes: 1 });
-      chrome.alarms.onAlarm.addListener((alarm) => {
-        if (alarm.name === 'sse-keepalive') checkConnection();
+// --- Keep the offscreen document (SSE host) alive / recreate if the browser closed it ---
+function startOffscreenKeepalive() {
+  chrome.alarms.create('offscreen-keepalive', { periodInMinutes: 1 });
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'offscreen-keepalive') {
+      ensureOffscreenDocument().then((ok) => {
+        if (!ok) console.warn('[AgentSphere] Offscreen document unavailable');
       });
-      return;
-    } catch (e) {
-      console.warn('[AgentSphere] chrome.alarms unavailable, using setInterval', e);
     }
-  }
-  keepaliveTimer = setInterval(checkConnection, 30000);
+  });
 }
-startKeepalive();
+startOffscreenKeepalive();
 
-// --- Start SSE on startup: 只建立用户级 task 连接（不依赖 session） ---
-function startSSE() {
+function startSseHost() {
   chrome.storage.local.get(['token', 'baseUrl'], (data) => {
     if (data.token && data.baseUrl) {
       token = data.token;
       baseUrl = data.baseUrl;
-      ensureTaskSSE();
     }
-    // Self-heal after SW restart / extension reload: once config is ready, re-inject into matching tabs
+    ensureOffscreenDocument();
+    // Self-heal after SW restart: re-inject into already-open matching tabs
     loadConfiguredUrls(() => injectMatchingTabs());
   });
 }
-
-startSSE();
+startSseHost();
 
 // --- Configured URLs (popup Settings): widget hosts (frontendUrls[]) + main site (mainUrl) ---
 let frontendUrls = [];
 let mainUrl = '';
+
 function loadConfiguredUrls(done) {
   chrome.storage.local.get(['settings'], (data) => {
     const s = data.settings || {};
@@ -71,13 +55,11 @@ function loadConfiguredUrls(done) {
         : [];
     mainUrl = s.mainUrl || '';
     console.log('[AgentSphere] Config:', JSON.stringify({ frontendUrls, mainUrl }));
-    // Re-inject into already-open matching tabs on startup (e.g. right after reload)
     injectMatchingTabs();
     if (typeof done === 'function') done();
   });
 }
 
-// --- Proactively query the matching tab for a session (self-heal after SW restart / reload) ---
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.settings) {
     const s = changes.settings.newValue || {};
@@ -88,7 +70,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
         : [];
     mainUrl = s.mainUrl || '';
     console.log('[AgentSphere] Settings changed:', JSON.stringify({ frontendUrls, mainUrl }));
-    // After first saving default config, immediately re-inject into matching tabs
     injectMatchingTabs();
   }
 });
@@ -105,34 +86,69 @@ function shouldInject(url) {
 
 function injectMatchingTabs() {
   chrome.tabs.query({}, (tabs) => {
-    let count = 0;
     for (const tab of tabs) {
       if (tab.id != null && shouldInject(tab.url || '')) {
-        injectContentScript(tab.id);
-        count++;
+        tabManager.injectContentScript(tab.id);
       }
     }
-    console.log('[AgentSphere] Injected into', count, 'matching tab(s)');
   });
 }
 
 // --- Detect session changes from tab URL (works even without content script) ---
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!changeInfo.url) return;
-  const url = changeInfo.url;
-  // Inject into: main-site chat page or configured frontend sites (widget hosts)
-  if (shouldInject(url)) injectContentScript(tabId);
+  if (shouldInject(changeInfo.url)) tabManager.injectContentScript(tabId);
 });
 
 // --- Detect SPA route changes (pushState/replaceState) for injection ---
 chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
   if (!details.url) return;
-  if (shouldInject(details.url)) injectContentScript(details.tabId);
+  if (shouldInject(details.url)) tabManager.injectContentScript(details.tabId);
 });
 
-// --- Listen for auth info from content script ---
+// --- When switching to an already-open matching tab: inject (ensure bridge present) ---
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  chrome.tabs.get(activeInfo.tabId, (tab) => {
+    if (!tab || tab.id == null || !shouldInject(tab.url || '')) return;
+    tabManager.injectContentScript(tab.id);
+  });
+});
+
+// --- Message router ---
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // 登录即连：仅需用户 token 即可建立用户级 task 流（不依赖 session）
+  // offscreen → background: a browser_operation command arrived on the SSE stream
+  if (msg && msg.target === 'background' && msg.action === 'task:command') {
+    const { commandId, action, params, sessionId } = msg.cmd;
+    executeInPage(commandId, action, params, sessionId).catch(() => {});
+    return false; // fire-and-forget; the result is reported via HTTP callback
+  }
+
+  // offscreen → background: pull credentials (offscreen has no chrome.storage)
+  if (msg && msg.target === 'background' && msg.action === 'task:creds') {
+    (async () => {
+      let t = token;
+      let b = baseUrl;
+      if (!t || !b) {
+        const d = await chrome.storage.local.get(['token', 'baseUrl']);
+        t = d.token || '';
+        b = d.baseUrl || '';
+        if (t && b) {
+          token = t;
+          baseUrl = b;
+        }
+      }
+      sendResponse({ token: t, baseUrl: b });
+    })();
+    return true; // async response
+  }
+
+  // offscreen → background: report task connection status (popup badge)
+  if (msg && msg.target === 'background' && msg.action === 'task:status') {
+    chrome.storage.local.set({ taskConnected: !!msg.connected }).catch(() => {});
+    return false;
+  }
+
+  // content script → background: auth
   if ((msg.type === 'auth' || msg.type === 'auth_token') && msg.token) {
     token = msg.token;
     baseUrl = msg.baseUrl || baseUrl;
@@ -141,10 +157,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       baseUrl,
       displayName: msg.displayName || '',
     }).catch(() => {});
-    console.log('[AgentSphere] auth: establishing task connection (user-level)');
-    ensureTaskSSE();
+    console.log('[AgentSphere] auth: task connection established (user-level)');
     fetchSsoDisplayName();
+    askOffscreen({ action: 'task:init' });
   }
+
   if (msg.type === 'log') {
     chrome.storage.local.get(['logs'], (data) => {
       const logs = data.logs || [];
@@ -154,145 +171,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return;
   }
-  // content.js delegates executeJS → uses chrome.debugger.Runtime.evaluate (bypasses CSP)
-  if (msg.type === 'execute_js') {
-    (async () => {
-      try {
-        const targetTabId = msg.tabId || controlledTabId || (await getActiveTabId());
-        if (!targetTabId) { sendResponse({ success: false, error: 'No target tab' }); return; }
-        if (attachedTabId !== targetTabId) {
-          if (attachedTabId) await chrome.debugger.detach({ tabId: attachedTabId }).catch(() => {});
-          await chrome.debugger.attach({ tabId: targetTabId }, "1.3");
-          attachedTabId = targetTabId;
-        }
-        const { result: evalResult } = await chrome.debugger.sendCommand(
-          { tabId: targetTabId },
-          "Runtime.evaluate",
-          { expression: msg.code, returnByValue: true }
-        );
-        const rawValue = evalResult?.value;
-        sendResponse({
-          success: !evalResult?.exceptionDetails,
-          data: rawValue !== undefined ? rawValue : '__NO_RETURN__',
-          _resultType: rawValue === undefined ? 'void' : typeof rawValue,
-          error: evalResult?.exceptionDetails?.text || null,
-        });
-      } catch (e) {
-        sendResponse({ success: false, error: e.message });
-      }
-    })();
-    return true; // async reply
-  }
+  return false;
 });
-
-// --- SSE Connection via fetch + ReadableStream (supports Authorization header) ---
-let lastDataAt = 0;           // time of last SSE data received (zombie-connection detection)
-const RECONNECT_BASE_MS = 5000;
-const ZOMBIE_STALE_MS = 75000; // backend heartbeats every 15s; no data past this → treat as a zombie connection
-const TASK_RECONNECT_FAST_INTERVAL_MS = 1000; // 断开后前 30s：每秒重试 1 次
-const TASK_RECONNECT_FAST_LIMIT = 30;         // 快速窗口 = 30 次（约 30s）
-
-// --- Shared handler for SSE data lines (user task stream) ---
-async function handleSseData(dataLine) {
-  // Backend heartbeat (data:ping every 15s) is not JSON: skip silently
-  if (!dataLine || !dataLine.startsWith('{')) return;
-  try {
-    const msg = JSON.parse(dataLine);
-    console.log('[AgentSphere] SSE msg:', msg.eventType, msg.action, msg.url?.slice(0,30));
-    if (msg.eventType === 'browser_operation') {
-      const cmd = msg.command || msg;
-      const params = { url: cmd.url, selector: cmd.selector, text: cmd.text, code: cmd.code, mode: cmd.mode, tabId: cmd.tabId, append: cmd.append };
-      Object.keys(params).forEach(k => { if (params[k] == null) delete params[k]; });
-      console.log('[AgentSphere] Calling executeInPage:', cmd.commandId?.slice(0,8), cmd.action, Object.keys(params));
-      await executeInPage(cmd.commandId, cmd.action, params, cmd.sessionId);
-    }
-  } catch (e) {
-    console.warn('[AgentSphere] SSE parse error:', e);
-  }
-}
-
-// --- User-level task SSE: permanent connection for task-mode browser commands (no session dependency) ---
-let taskAbortController = null;
-let taskReconnectTimer = null;
-let taskConnected = false;
-let taskReconnectCount = 0;
-
-async function connectTaskSSE() {
-  if (!token || !baseUrl) return;
-  if (taskAbortController) { taskAbortController.abort(); taskAbortController = null; }
-  if (taskReconnectTimer) { clearTimeout(taskReconnectTimer); taskReconnectTimer = null; }
-
-  const url = `${baseUrl}/api/v1/runtime/user/task/stream`;
-  console.log('[AgentSphere] Connecting task SSE:', url);
-
-  taskAbortController = new AbortController();
-  try {
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` },
-      signal: taskAbortController.signal,
-    });
-    if (!response.ok) {
-      console.warn('[AgentSphere] Task SSE rejected', response.status, '- will retry');
-      taskAbortController = null;
-      setTaskConnected(false);
-      scheduleTaskReconnect();
-      return;
-    }
-    console.log('[AgentSphere] Task SSE connected');
-    taskReconnectCount = 0; // 重连成功：回到快速重试窗口
-    setTaskConnected(true);
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
-      for (const part of parts) {
-        const dataLine = part.startsWith('data:') ? part.slice(5).trim() : '';
-        if (!dataLine) continue;
-        lastDataAt = Date.now();
-        await handleSseData(dataLine);
-      }
-    }
-    console.warn('[AgentSphere] Task SSE stream closed, reconnecting');
-    taskAbortController = null;
-    setTaskConnected(false);
-    scheduleTaskReconnect();
-  } catch (e) {
-    if (e.name === 'AbortError') return; // aborted by a newer connection; its state will be reported separately
-    console.warn('[AgentSphere] Task SSE error:', e.message);
-    taskAbortController = null;
-    setTaskConnected(false);
-    scheduleTaskReconnect();
-  }
-}
-
-function scheduleTaskReconnect() {
-  if (taskReconnectTimer) clearTimeout(taskReconnectTimer);
-  // 前 30s 每秒 1 次，之后回落到 5s
-  const delay = taskReconnectCount < TASK_RECONNECT_FAST_LIMIT
-    ? TASK_RECONNECT_FAST_INTERVAL_MS
-    : RECONNECT_BASE_MS;
-  taskReconnectCount++;
-  taskReconnectTimer = setTimeout(() => { taskReconnectTimer = null; connectTaskSSE(); }, delay);
-}
-
-function setTaskConnected(status) {
-  taskConnected = status;
-  chrome.storage.local.set({ taskConnected: status }).catch(() => {});
-}
-
-// (Re)establish the user-level task connection whenever credentials are available
-function ensureTaskSSE() {
-  if (token && baseUrl) {
-    taskReconnectCount = 0; // 新凭证/主动触发：视为全新连接，回到快速重试窗口
-    connectTaskSSE();
-  }
-}
 
 // --- SSO 展示名：providerCode@subject（如 bole@elvin），按 token 去重 ---
 let ssoDisplayToken = '';
@@ -313,231 +193,62 @@ function fetchSsoDisplayName() {
     .catch(() => {});
 }
 
-// --- Send message to content script with retry ---
-async function sendMessageWithRetry(tabId, msg, maxRetries = 5) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await chrome.tabs.sendMessage(tabId, msg);
-    } catch (e) {
-      if (e.message?.includes('Receiving end does not exist') && i < maxRetries - 1) {
-        await new Promise(r => setTimeout(r, 500));
-        continue;
-      }
-      throw e;
-    }
-  }
+// --- Helpers ---
+async function getActiveTabId() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab?.id;
 }
 
-// --- Inject content script into a tab on demand ---
-async function injectContentScript(tabId) {
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      files: ['content.js'],
-    });
-    return true;
-  } catch (e) {
-    // 注入失败：<all_urls> 已授权，剩余场景基本为平台不可注入页面（chrome://、商店页、PDF 等）
-    console.warn('[AgentSphere] Content script injection failed for tab', tabId, e?.message);
-    return false;
-  }
+async function waitIdle(tabId) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => new Promise((r) => requestIdleCallback(r, { timeout: 5000 })),
+  }).catch(() => {});
 }
 
-// --- When switching to an already-open matching tab: inject content script (ensure bridge present) ---
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  chrome.tabs.get(activeInfo.tabId, (tab) => {
-    if (!tab || tab.id == null || !shouldInject(tab.url || '')) return;
-    injectContentScript(tab.id);
-  });
-});
+function mapErrorCategory(e) {
+  const m = String(e?.message || e);
+  if (m.includes('No target tab')) return ErrorCategory.NO_TAB;
+  if (m.includes('Receiving end does not exist') || m.includes('Content script unavailable')) return ErrorCategory.INJECT_FAILED;
+  if (m.includes('not attached') || m.includes('already attached')) return ErrorCategory.DETACHED;
+  if (m.includes('timed out')) return ErrorCategory.TIMEOUT;
+  return ErrorCategory.UNKNOWN;
+}
 
-// --- Execute command in the appropriate tab ---
-let controlledTabId = null;
-let tabFollowPending = null;
-let tabFollowResolve = null;
-let attachedTabId = null;
-
-chrome.tabs.onCreated.addListener((tab) => {
-  if (tab.openerTabId === controlledTabId) {
-    controlledTabId = tab.id;
-    injectContentScript(tab.id);
-    tabFollowPending = { newTabId: tab.id, url: tab.pendingUrl || tab.url || '', time: Date.now() };
-    if (tabFollowResolve) { tabFollowResolve(); tabFollowResolve = null; }
-  }
-});
-
-chrome.tabs.onRemoved.addListener((tabId) => {
-  if (tabId === attachedTabId) {
-    attachedTabId = null;
-  }
-  if (tabId === controlledTabId) {
-    console.log('[AgentSphere] Controlled tab closed, resetting');
-    controlledTabId = null;
-  }
-});
-
+// --- Command execution ---
 async function executeInPage(commandId, action, params, sessionId) {
-  console.log('[AgentSphere] executeInPage:', action, params);
   try {
-    // Navigate → open new tab and wait for page load
     if (action === 'navigate') {
-      // If tabId specified, update that tab instead of creating a new one
-      if (params.tabId) {
-        try {
-          console.log('[AgentSphere] Updating existing tab:', params.tabId);
-          const tab = await chrome.tabs.update(params.tabId, { url: params.url });
-          await injectContentScript(tab.id);
-
-          await new Promise((resolve) => {
-            const listener = (tabId, info) => {
-              if (tabId === tab.id && info.status === 'complete') {
-                chrome.tabs.onUpdated.removeListener(listener);
-                resolve();
-              }
-            };
-            chrome.tabs.onUpdated.addListener(listener);
-          });
-
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: () => new Promise(r => requestIdleCallback(r, { timeout: 5000 })),
-          }).catch(() => {});
-
-          const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
-          const finalUrl = finalTab.url || params.url;
-
-          controlledTabId = tab.id;
-          sendCallbackSafe(commandId, {
-            success: true,
-            data: { tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url },
-            action: 'navigate',
-            detail: params.url,
-          }, tab.id, sessionId);
-          return;
-        } catch (e) {
-          console.log('[AgentSphere] Failed to update tab, falling back to create:', e.message);
-        }
-      }
-
-      // Reuse existing tab if same URL is already open
-      if (controlledTabId) {
-        try {
-          const existingTab = await chrome.tabs.get(controlledTabId);
-          if (existingTab?.url === params.url || existingTab?.pendingUrl === params.url) {
-            console.log('[AgentSphere] Reusing existing tab:', controlledTabId);
-            const existingUrl = existingTab.url || params.url;
-            sendCallbackSafe(commandId, {
-              success: true,
-              data: { tabId: controlledTabId, url: existingUrl, redirected: existingUrl !== params.url },
-              action: 'navigate',
-              detail: params.url,
-            }, controlledTabId, sessionId);
-            return;
-          }
-        } catch (e) {
-          // Tab no longer exists, create a new one
-          console.log('[AgentSphere] Controlled tab gone, creating new one');
-        }
-      }
-
-      console.log('[AgentSphere] Creating tab with url:', params.url);
-      const tab = await chrome.tabs.create({ url: params.url, active: false });
-      console.log('[AgentSphere] Tab created:', tab.id);
-      await injectContentScript(tab.id);
-
-      // Wait for page to finish loading (HTML + resources)
-      await new Promise((resolve) => {
-        const listener = (tabId, info) => {
-          if (tabId === tab.id && info.status === 'complete') {
-            chrome.tabs.onUpdated.removeListener(listener);
-            resolve();
-          }
-        };
-        chrome.tabs.onUpdated.addListener(listener);
-      });
-
-      // Wait for idle (async rendering / SPA scripts done)
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => new Promise(r => requestIdleCallback(r, { timeout: 5000 })),
-      }).catch(() => {});
-
-      // Get final URL (after potential redirects)
-      const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
-      const finalUrl = finalTab.url || params.url;
-
-      controlledTabId = tab.id;
-      sendCallbackSafe(commandId, {
-        success: true,
-        data: { tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url },
-        action: 'navigate',
-        detail: params.url,
-      }, tab.id, sessionId);
+      await handleNavigate(commandId, params, sessionId);
       return;
     }
 
-    // ExecuteJS → use chrome.debugger Runtime.evaluate (persistent attach, no flash)
     if (action === 'executeJS') {
-      const targetTabId = params.tabId || controlledTabId || (await getActiveTabId());
+      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
       if (!targetTabId) {
-        sendCallbackSafe(commandId, { success: false, error: 'No target tab', action }, null, sessionId);
+        sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
         return;
       }
-      try {
-        if (attachedTabId !== targetTabId) {
-          if (attachedTabId) await chrome.debugger.detach({ tabId: attachedTabId }).catch(() => {});
-          await chrome.debugger.attach({ tabId: targetTabId }, "1.3");
-          attachedTabId = targetTabId;
-        }
-        const { result: evalResult } = await chrome.debugger.sendCommand(
-          { tabId: targetTabId },
-          "Runtime.evaluate",
-          { expression: params.code, returnByValue: true }
-        );
-        const rawValue = evalResult?.value;
-        sendCallbackSafe(commandId, {
-          success: !evalResult?.exceptionDetails,
-          data: rawValue !== undefined ? rawValue : '__NO_RETURN__',
-          _resultType: rawValue === undefined ? 'void' : typeof rawValue,
-          error: evalResult?.exceptionDetails?.text || null,
-          action,
-          detail: params.code,
-        }, targetTabId, sessionId);
-      } catch (e) {
-        sendCallbackSafe(commandId, { success: false, error: e.message, action, detail: params.code }, targetTabId, sessionId);
-      }
+      const result = await executeJsOnTab(targetTabId, params.code);
+      sendCallbackSafe(commandId, result, targetTabId, sessionId);
       return;
     }
 
-    // Other actions → send to controlled tab or active tab (or use params.tabId)
-    const targetTabId = params.tabId || controlledTabId || (await getActiveTabId());
-    console.log('[AgentSphere] Target tab:', targetTabId, 'controlledTabId:', controlledTabId, 'params.tabId:', params.tabId);
+    // Other actions → content script
+    const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
     if (!targetTabId) {
-      sendCallbackSafe(commandId, { success: false, error: 'No target tab', action }, null, sessionId);
+      sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
       return;
     }
 
-    const injected = await injectContentScript(targetTabId);
-    if (!injected) {
-      const tabInfo = await chrome.tabs.get(targetTabId).catch(() => null);
-      const url = tabInfo?.url || params.url || '';
-      const err = `无法在此标签页执行操作（${url}）：该页面类型不支持注入内容脚本（如 chrome://、扩展商店、PDF 查看器）。`;
-      console.warn('[AgentSphere] Inject failed, aborting command:', err);
-      sendCallbackSafe(commandId, { success: false, error: err, action, detail: params.selector || params.url || '' }, targetTabId, sessionId);
-      return;
-    }
-    console.log('[AgentSphere] Sending to tab', targetTabId, ':', action, params);
-
-    const result = await sendMessageWithRetry(targetTabId, {
+    const result = await tabManager.askContent(targetTabId, {
       type: 'browser_operation',
       action,
       params,
     });
-    console.log('[AgentSphere] Tab result:', result);
 
     // Form submit button detected → navigate to extracted URL directly
     if (result?.data?._submitUrl) {
-      console.log('[AgentSphere] Form submit detected, navigating to:', result.data._submitUrl);
       executeInPage(commandId, 'navigate', { url: result.data._submitUrl }, sessionId);
       return;
     }
@@ -545,33 +256,20 @@ async function executeInPage(commandId, action, params, sessionId) {
     // New tab auto-follow: click opened a new tab → switch to it
     if (action === 'click' && result?.data?._newTabExpected) {
       await new Promise((resolve) => {
-        if (tabFollowPending) return resolve();
-        tabFollowResolve = resolve;
-        setTimeout(() => { tabFollowResolve = null; resolve(); }, 5000);
+        if (tabManager.tabFollowPending) return resolve();
+        tabManager.tabFollowResolve = resolve;
+        setTimeout(() => { tabManager.tabFollowResolve = null; resolve(); }, 5000);
       });
-      if (tabFollowPending) {
-        // Wait for page load complete
-        await new Promise((resolve) => {
-          const listener = (tabId, info) => {
-            if (tabId === tabFollowPending.newTabId && info.status === 'complete') {
-              chrome.tabs.onUpdated.removeListener(listener); resolve();
-            }
-          };
-          chrome.tabs.onUpdated.addListener(listener);
-          setTimeout(() => { chrome.tabs.onUpdated.removeListener(listener); resolve(); }, 10000);
-        });
-        // Wait for SPA idle rendering
-        await chrome.scripting.executeScript({
-          target: { tabId: tabFollowPending.newTabId },
-          func: () => new Promise(r => requestIdleCallback(r, { timeout: 3000 })),
-        }).catch(() => {});
-        // Get final URL (post-redirect)
-        const finalTab = await chrome.tabs.get(tabFollowPending.newTabId).catch(() => null);
-        if (finalTab) tabFollowPending.url = finalTab.url || tabFollowPending.url;
-        result.data._newTabId = tabFollowPending.newTabId;
-        result.data._newTabUrl = tabFollowPending.url;
-        sendCallbackSafe(commandId, { ...result, action, detail: params.selector || '' }, tabFollowPending.newTabId, sessionId);
-        tabFollowPending = null;
+      if (tabManager.tabFollowPending) {
+        await tabManager.waitForTabComplete(tabManager.tabFollowPending.newTabId, 10000);
+        await waitIdle(tabManager.tabFollowPending.newTabId);
+        const finalTab = await chrome.tabs.get(tabManager.tabFollowPending.newTabId).catch(() => null);
+        if (finalTab) tabManager.tabFollowPending.url = finalTab.url || tabManager.tabFollowPending.url;
+        result.data._newTabId = tabManager.tabFollowPending.newTabId;
+        result.data._newTabUrl = tabManager.tabFollowPending.url;
+        tabManager.groupTab(tabManager.tabFollowPending.newTabId);
+        sendCallbackSafe(commandId, { ...result, action, detail: params.selector || '' }, tabManager.tabFollowPending.newTabId, sessionId);
+        tabManager.tabFollowPending = null;
         return;
       }
     }
@@ -579,77 +277,157 @@ async function executeInPage(commandId, action, params, sessionId) {
     sendCallbackSafe(commandId, { ...result, action, detail: params.selector || params.url || '' }, targetTabId, sessionId);
   } catch (e) {
     console.error('[AgentSphere] executeInPage error:', e.message);
-    sendCallbackSafe(commandId, { success: false, error: e.message, action, detail: e.message }, controlledTabId, sessionId);
+    sendCallbackSafe(commandId, failResult(e.message, mapErrorCategory(e)), tabManager.getControlled(), sessionId);
   }
 }
 
-async function getActiveTabId() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab?.id;
+async function handleNavigate(commandId, params, sessionId) {
+  // If tabId specified, update that tab instead of creating a new one
+  if (params.tabId) {
+    try {
+      const tab = await chrome.tabs.update(params.tabId, { url: params.url });
+      await tabManager.injectContentScript(tab.id);
+      await tabManager.waitForTabComplete(tab.id);
+      await waitIdle(tab.id);
+      const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
+      const finalUrl = finalTab.url || params.url;
+      tabManager.setControlled(tab.id);
+      tabManager.groupTab(tab.id);
+      sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
+      return;
+    } catch (e) {
+      console.log('[AgentSphere] Failed to update tab, falling back to create:', e.message);
+    }
+  }
+
+  // Reuse existing tab if same URL is already open
+  if (tabManager.getControlled()) {
+    try {
+      const existingTab = await chrome.tabs.get(tabManager.getControlled());
+      if (existingTab?.url === params.url || existingTab?.pendingUrl === params.url) {
+        const existingUrl = existingTab.url || params.url;
+        sendCallbackSafe(commandId, okResult({ tabId: existingTab.id, url: existingUrl, redirected: existingUrl !== params.url }, 'navigate'), existingTab.id, sessionId);
+        return;
+      }
+    } catch (e) {
+      // Tab no longer exists, create a new one
+      console.log('[AgentSphere] Controlled tab gone, creating new one');
+    }
+  }
+
+  const tab = await chrome.tabs.create({ url: params.url, active: false });
+  await tabManager.injectContentScript(tab.id);
+  await tabManager.waitForTabComplete(tab.id);
+  await waitIdle(tab.id);
+  const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
+  const finalUrl = finalTab.url || params.url;
+  tabManager.setControlled(tab.id);
+  tabManager.groupTab(tab.id);
+  sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
 }
 
-// --- Capture screenshot of a tab via chrome.debugger (persistent attach) ---
-async function captureScreenshot(tabId) {
-  if (!tabId) return null;
+// --- executeJS: tiered execution, debugger only as the last resort ---
+const cspBlockedOrigins = new Set(); // origins where scripting/MAIN injection is blocked
+
+function evalInWorldFunc() {
+  // Runs inside chrome.scripting (ISOLATED or MAIN world).
+  return async (src) => {
+    const run = new Function('return (async () => { ' + src + '\n })()');
+    const result = await run();
+    return result === undefined ? '__NO_RETURN__' : result;
+  };
+}
+
+async function runIsolatedViaScripting(tabId, code) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'ISOLATED',
+    func: evalInWorldFunc(),
+    args: [code],
+  });
+  const value = results?.[0]?.result;
+  return {
+    success: true,
+    data: value,
+    method: 'isolated',
+    _resultType: value === '__NO_RETURN__' ? 'void' : typeof value,
+  };
+}
+
+async function runMainViaScripting(tabId, code) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func: evalInWorldFunc(),
+    args: [code],
+  });
+  const value = results?.[0]?.result;
+  return {
+    success: true,
+    data: value,
+    method: 'scripting-main',
+    _resultType: value === '__NO_RETURN__' ? 'void' : typeof value,
+  };
+}
+
+async function getTabOrigin(tabId) {
   try {
-    if (attachedTabId !== tabId) {
-      if (attachedTabId) await chrome.debugger.detach({ tabId: attachedTabId }).catch(() => {});
-      await chrome.debugger.attach({ tabId }, "1.3");
-      attachedTabId = tabId;
-    }
-    const { data } = await chrome.debugger.sendCommand({ tabId }, "Page.captureScreenshot", {
-      format: 'jpeg',
-      quality: 60,
-    });
-    return data;
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab?.url) return null;
+    return new URL(tab.url).origin;
   } catch (e) {
     return null;
   }
 }
 
-// --- Send result back to backend ---
-async function sendCallbackSafe(commandId, result, captureTabId, sessionId) {
+async function executeJsOnTab(tabId, code) {
+  // Tier 1: isolated world eval (chrome.scripting) — never CSP-blocked, no page globals.
   try {
-    const screenshot = await captureScreenshot(captureTabId);
-    console.log('[AgentSphere] captureScreenshot:', screenshot ? `ok ${screenshot.length}chars` : 'null', 'tabId:', captureTabId);
-    if (screenshot) {
-      sendScreenshotToFrontend(screenshot, result.action, result.detail).catch(() => {});
+    return await runIsolatedViaScripting(tabId, code);
+  } catch (e1) {
+    // Tier 2a: MAIN world via inject.js bridge (content script, Ui.Vision pattern).
+    try {
+      const res = await tabManager.askContent(tabId, {
+        type: 'browser_operation',
+        action: 'executeJS',
+        params: { code },
+      });
+      if (res?.success) return res;
+      throw new Error(res?.error || 'inject bridge failed');
+    } catch (e2) {
+      // Tier 2b: MAIN world via chrome.scripting (unless this origin already proved CSP-strict).
+      const origin = await getTabOrigin(tabId);
+      if (origin && !cspBlockedOrigins.has(origin)) {
+        try {
+          return await runMainViaScripting(tabId, code);
+        } catch (e3) {
+          if (origin) cspBlockedOrigins.add(origin);
+        }
+      }
+      // Tier 3: chrome.debugger Runtime.evaluate — bypasses CSP entirely.
+      try {
+        return await cdpClient.evaluate(tabId, code);
+      } catch (e4) {
+        const msg = String(e4.message);
+        return failResult(
+          e4.message,
+          msg.includes('already attached') ? ErrorCategory.DETACHED : ErrorCategory.CSP_BLOCKED,
+          { method: 'debugger' },
+        );
+      }
     }
-  } catch (e) {
-    console.warn('[AgentSphere] captureScreenshot error:', e.message);
   }
-  sendCallback(commandId, result, sessionId).catch(e => {
+}
+
+// --- Report result back to backend ---
+function sendCallbackSafe(commandId, result, captureTabId, sessionId) {
+  sendCallback(commandId, result, sessionId).catch((e) => {
     console.warn('[AgentSphere] sendCallback rejected:', e.message);
   });
 }
 
-// --- Send screenshot directly to the frontend chat tab, bypassing backend ---
-async function sendScreenshotToFrontend(screenshot, action, url) {
-  const { settings } = await chrome.storage.local.get(['settings']);
-  const baseUrl = settings?.mainUrl || settings?.frontendUrl || settings?.frontendUrls?.[0] || 'http://localhost:8000';
-  const tabs = await chrome.tabs.query({});
-  const chatTab = tabs.find(t => {
-    const u = t.url || t.pendingUrl || '';
-    return u.startsWith(baseUrl) && u.includes('/chat/');
-  });
-  console.log('[AgentSphere] sendScreenshot chatTab:', chatTab?.id, chatTab?.url, 'baseUrl:', baseUrl);
-  if (!chatTab) return;
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: chatTab.id },
-      func: (s, u) => {
-        window.dispatchEvent(new CustomEvent('page_screenshot', { detail: { screenshot: s, url: u } }));
-      },
-      args: [screenshot, url || ''],
-    });
-  } catch (e) {
-    console.warn('[AgentSphere] sendScreenshot executeScript failed:', e.message);
-  }
-}
-
 async function sendCallback(commandId, result, sessionId) {
   try {
-    // 回调必须携带指令所属 sessionId（后端必填参数，用于截图事件路由回会话流）
     await fetch(`${baseUrl}/api/v1/chrome/callback?sessionId=${sessionId}`, {
       method: 'POST',
       headers: {
@@ -658,8 +436,6 @@ async function sendCallback(commandId, result, sessionId) {
       },
       body: JSON.stringify({ commandId, ...result }),
     });
-
-    // Record log
     chrome.storage.local.get(['logs'], (data) => {
       const logs = data.logs || [];
       logs.push({ time: Date.now(), action: result?.action || 'callback', success: !!result?.success, detail: result?.error || '' });

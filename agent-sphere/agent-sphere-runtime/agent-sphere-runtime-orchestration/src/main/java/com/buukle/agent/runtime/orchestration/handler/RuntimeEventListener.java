@@ -19,6 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Component
 @RequiredArgsConstructor
 public class RuntimeEventListener {
@@ -27,6 +30,12 @@ public class RuntimeEventListener {
     private final AgentUserInLoopRecordSpi hitlRecordSpi;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final SessionSpi sessionSpi;
+
+    /** 推理落库的长度上限（超出截断，避免单 run 推理撑爆行宽） */
+    private static final int REASONING_MAX_CHARS = 10000;
+
+    /** 按 runId 累积的模型推理文本（终态 run 一次性写入 agent_run.reasoning） */
+    private final Map<Long, StringBuilder> reasoningBuffers = new ConcurrentHashMap<>();
 
     private static RuntimeEventVO transformForFrontend(RuntimeEventVO event) {
         EventType type = event.getEventType();
@@ -128,10 +137,7 @@ public class RuntimeEventListener {
             case CompactionStatus s -> {
             }
             case SessionStatus s -> handleSessionLifecycle(data, s);
-            case FlowEventType f -> {
-            }
-            case ScreenshotEventType s -> {
-            }
+            case FlowEventType f -> handleFlow(data, f);
             case ChromeCommandEventType s -> handleChromeCommand(event, data);
             case ClarificationStatus s -> { /* handled via SSE passthrough */ }
         }
@@ -175,10 +181,17 @@ public class RuntimeEventListener {
                 run.setStatus(status.value());
                 if (data.getType() != null) run.setType(data.getType());
                 if (data.getAssistantReply() != null) run.setAssistantReply(data.getAssistantReply());
+                flushReasoning(run);
                 runSpi.updateRun(run);
             }
             case FAILED -> {
                 run.setStatus(status.value());
+                flushReasoning(run);
+                runSpi.updateRun(run);
+            }
+            case CANCELLED -> {
+                run.setStatus(status.value());
+                flushReasoning(run);
                 runSpi.updateRun(run);
             }
             case AWAITING_USER -> {
@@ -186,6 +199,37 @@ public class RuntimeEventListener {
                 runSpi.updateRun(run);
             }
         }
+    }
+
+    /** 累积该 run 的模型推理（thinking）文本：仅 llm 类型，排除系统状态行；终态一次性写入 run。 */
+    private void handleFlow(RuntimeEventDataVO data, FlowEventType flow) {
+        if (flow != FlowEventType.REASONING_TOKEN) {
+            return;
+        }
+        Long runId = data.getRunId();
+        if (runId == null) {
+            return;
+        }
+        String response = data.getResponse();
+        if (response == null || response.isBlank()) {
+            return;
+        }
+        if (!RuntimeEventTypeConstant.REASONING_TYPE_LLM.equals(data.getReasoningType())) {
+            return;
+        }
+        reasoningBuffers.computeIfAbsent(runId, k -> new StringBuilder()).append(response);
+    }
+
+    private void flushReasoning(RunVO run) {
+        StringBuilder sb = reasoningBuffers.remove(run.getId());
+        if (sb == null || sb.length() == 0) {
+            return;
+        }
+        String reasoning = sb.toString();
+        if (reasoning.length() > REASONING_MAX_CHARS) {
+            reasoning = reasoning.substring(0, REASONING_MAX_CHARS);
+        }
+        run.setReasoning(reasoning);
     }
 
     private void handleToolCallLifecycle(RuntimeEventDataVO data, ToolCallStatus status) {

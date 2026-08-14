@@ -37,7 +37,9 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             + "6. Tab following: clicking a link that opens a new tab (target=\"_blank\" or window.open) will automatically switch control to the new tab. The result will include _newTabId and _newTabUrl.\n"
             + "The _url field in click/getContent results reflects the page URL after SPA route changes (500ms polling window).\n"
             + "Always prefer getContent to discover the page structure, and text-based click over CSS selectors for navigation elements.\n"
-            + "7. Multi-tab management: navigate returns tabId. To operate a specific tab, pass the tabId parameter to getContent/click/type/executeJS. Without tabId, operations target the last navigated tab.";
+            + "7. Multi-tab management: navigate returns tabId. To operate a specific tab, pass the tabId parameter to getContent/click/type/executeJS. Without tabId, operations target the last navigated tab."
+            + "8. Results include `errorCategory` (not_found / csp_blocked / detached / inject_failed / timeout / no_tab / unknown) and `method`. "
+            + "Do NOT blindly retry after `csp_blocked` or `detached` — re-read the page (getContent) and adjust strategy instead.";
     private static final long TIMEOUT_SECONDS = 30;
 
     private static final String ACTION_NAVIGATE = "navigate";
@@ -120,9 +122,12 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             ChromeCallbackDTO cb = future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
             ChromePendingStore.remove(commandId);
 
-            return cb.isSuccess()
+            ChromeResultVO vo = cb.isSuccess()
                     ? ChromeResultVO.ok(cb.getData())
                     : ChromeResultVO.fail(cb.getError());
+            vo.setErrorCategory(cb.getErrorCategory());
+            vo.setMethod(cb.getMethod());
+            return vo;
 
         } catch (InterruptedException e) {
             // run 被取消时 FiberSet 会 interrupt 本线程：立即返回，不再等待浏览器回调

@@ -14,6 +14,7 @@ public class AgentRun {
     private String type;
     private String userMessage;
     private String assistantReply;
+    private String reasoning;
     private String intentClassification;
     private Long taskId;
     private String status;

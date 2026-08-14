@@ -16,6 +16,7 @@ public class RunConverter {
         vo.setType(run.getType());
         vo.setUserMessage(run.getUserMessage());
         vo.setAssistantReply(run.getAssistantReply());
+        vo.setReasoning(run.getReasoning());
         vo.setIntentClassification(run.getIntentClassification());
         vo.setStatus(run.getStatus());
         vo.setCreatedBy(run.getCreatedBy());
@@ -39,6 +40,7 @@ public class RunConverter {
         run.setType(vo.getType());
         run.setUserMessage(vo.getUserMessage());
         run.setAssistantReply(vo.getAssistantReply());
+        run.setReasoning(vo.getReasoning());
         run.setIntentClassification(vo.getIntentClassification());
         run.setStatus(vo.getStatus());
         return run;

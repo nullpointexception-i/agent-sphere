@@ -17,6 +17,12 @@ public class ChromeResultVO extends ExecuteResult {
     @Schema(example = "")
     private String errorMessage;
 
+    @Schema(example = "not_found", description = "Failure category: not_found / csp_blocked / detached / inject_failed / timeout / no_tab / unknown")
+    private String errorCategory;
+
+    @Schema(example = "debugger", description = "Execution path used: isolated / inject-bridge / scripting-main / debugger / navigate / click / type / ...")
+    private String method;
+
     public static ChromeResultVO ok(Object data) {
         ChromeResultVO r = new ChromeResultVO();
         r.success = true;

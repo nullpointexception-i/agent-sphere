@@ -62,6 +62,7 @@ export interface RunVO {
   sessionId: number;
   userMessage: string;
   assistantReply: string;
+  reasoning?: string;
   createdAt: string;
   clarificationResponse?: boolean;
   clarifications?: ClarificationVO[];

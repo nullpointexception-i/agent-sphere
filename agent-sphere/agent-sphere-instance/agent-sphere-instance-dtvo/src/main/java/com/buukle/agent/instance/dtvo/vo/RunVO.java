@@ -13,6 +13,8 @@ public class RunVO implements Serializable {
     private String type;
     private String userMessage;
     private String assistantReply;
+    /** 累积的模型推理/thinking 文本（终态 run 落库，历史回看渲染用） */
+    private String reasoning;
     private String intentClassification;
     private String status;
     private String delivery;

@@ -22,7 +22,6 @@ import ChatMain from './components/chat';
 import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
 import Landing from './components/Landing';
-import PiPWindow from './components/PiPWindow';
 import SessionPanel from './components/SessionPanel';
 import Sidebar from './components/Sidebar';
 import { useStyles } from './style';
@@ -62,8 +61,6 @@ export default function Chat() {
   const [todos, setTodos] = useState<any[]>([]);
   const [toolCalls, setToolCalls] = useState<any[]>([]);
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
-  const [latestScreenshot, setLatestScreenshot] = useState<string | null>(null);
-  const [latestArtifact, setLatestArtifact] = useState<string | null>(null);
 
   const historyPageRef = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
@@ -111,20 +108,6 @@ export default function Chat() {
     loadSessions(0);
   }, [loadSessions]);
 
-  // Listen for direct page_screenshot from extension (via executeScript → CustomEvent)
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.screenshot) {
-        setLatestScreenshot(detail.screenshot);
-        setLatestArtifact(JSON.stringify({ data: { url: detail.url || '' } }));
-      }
-    };
-    window.addEventListener('page_screenshot', handler as EventListener);
-    return () =>
-      window.removeEventListener('page_screenshot', handler as EventListener);
-  }, []);
-
   useEffect(() => {
     if (!chosenInstance && instances.length > 0) {
       const firstAvailable = instances.find((i: any) => i.modelRouteId);
@@ -158,6 +141,15 @@ export default function Chat() {
             content: r.userMessage,
             ts: new Date(r.createdAt).getTime(),
           });
+        }
+        if (r.reasoning && r.reasoning.trim()) {
+          historyMsgs.push({
+            role: 'reasoning',
+            content: r.reasoning,
+            _reasoningId: r.id,
+            ts: new Date(r.createdAt).getTime(),
+          });
+          historyKeys.push(`reasoning-${r.id}`);
         }
         const hasAssistantContent =
           r.assistantReply &&
@@ -374,11 +366,6 @@ export default function Chat() {
                       }
                     } catch {}
                   }
-                  // Update PiP window with latest screenshot
-                  if (d?.screenshot) {
-                    setLatestScreenshot(d.screenshot);
-                    setLatestArtifact(d.artifact || null);
-                  }
                 }
                 return;
               }
@@ -564,15 +551,6 @@ export default function Chat() {
                   },
                 ];
               });
-              return;
-            }
-            if (evtType === 'page_screenshot') {
-              if (d?.screenshot) {
-                setLatestScreenshot(d.screenshot);
-                setLatestArtifact(
-                  JSON.stringify({ data: { url: d?.response || '' } }),
-                );
-              }
               return;
             }
             if (evtType.startsWith('clarification_')) {
@@ -1130,7 +1108,6 @@ export default function Chat() {
           runUserMessages={runUserMessageRef.current}
         />
       </div>
-      <PiPWindow screenshot={latestScreenshot} artifact={latestArtifact} />
       <ExpandModal
         open={expandOpen}
         onClose={() => setExpandOpen(false)}

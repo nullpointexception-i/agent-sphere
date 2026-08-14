@@ -5,18 +5,13 @@ import com.buukle.agent.common.chrome.ChromePendingStore;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.util.BaseController;
-import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
-import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
-import com.buukle.agent.runtime.kernel.port.vo.ScreenshotEventType;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
@@ -25,7 +20,6 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class ChromeCallbackController extends BaseController {
 
-    private final ApplicationEventPublisher eventPublisher;
     private final SystemConfigSpi systemConfigSpi;
 
     @PostMapping("/callback")
@@ -42,26 +36,9 @@ public class ChromeCallbackController extends BaseController {
         }
         ChromePendingStore.complete(body.getCommandId(), body);
 
-        if (body.getScreenshot() != null) {
-            RuntimeEventDataVO data = new RuntimeEventDataVO()
-                    .setSessionId(sessionId)
-                    .setScreenshot(body.getScreenshot())
-                    .setResponse(extractUrl(body.getData()));
-            RuntimeEventVO event = new RuntimeEventVO(ScreenshotEventType.PAGE_SCREENSHOT, data);
-            Thread.startVirtualThread(() -> eventPublisher.publishEvent(event));
-        }
-
         if (!body.isSuccess()) {
             log.warn("Chrome operation failed: commandId={}, error={}", body.getCommandId(), body.getError());
         }
         return ok("ok");
-    }
-
-    private String extractUrl(Object data) {
-        if (data instanceof Map<?, ?> map) {
-            Object url = map.get("url");
-            return url instanceof String ? (String) url : null;
-        }
-        return null;
     }
 }
