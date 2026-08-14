@@ -19,7 +19,7 @@ import type { UserVO } from './types';
 
 const STORAGE_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
 const STORAGE_PENDING_KEY = 'bole:as:auto-sso-pending';
-export const AUTH_RESULT_EVENT = 'agent-sphere:auth-result';
+const AUTH_RESULT_EVENT = 'agent-sphere:auth-result';
 
 export interface AuthResultDetail {
   via: 'exchange' | 'error' | 'skip';
