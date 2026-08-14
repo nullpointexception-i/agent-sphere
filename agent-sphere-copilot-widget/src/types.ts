@@ -2,6 +2,7 @@ export interface UserVO {
   id: number;
   username: string;
   displayName: string;
+  englishName?: string;
   email: string;
   avatar: string;
   token: string;

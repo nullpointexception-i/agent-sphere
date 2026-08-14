@@ -252,6 +252,20 @@
   flex: 0 0 auto;
 }
 
+.aw-user {
+  flex-shrink: 0;
+  margin: 2px 8px 2px 10px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+}
+
 .aw-new-session {
   flex-shrink: 0;
   margin: 4px 8px 2px 10px;

@@ -1,5 +1,6 @@
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import { DEFAULT_CONFIG, type WidgetConfig } from './config';
+import { clearUser } from './auth';
 import { Root } from './Root';
 import styles from './styles.css?inline';
 import copilotStyles from '@copilotkit/react-core/v2/styles.css?inline';
@@ -13,6 +14,8 @@ export interface AgentSphereWidget {
   init?: (options?: WidgetConfig) => WidgetHandle;
   /** Create the widget in a detached container (advanced usage). */
   mount?: (options?: WidgetConfig) => WidgetHandle;
+  /** 清除当前用户会话并重新挂载，触发静默 SSO 重新登录（用户切换时由宿主调用）。 */
+  relogin?: () => void;
 }
 
 function resolveConfig(options: WidgetConfig = {}): WidgetConfig {
@@ -46,6 +49,7 @@ function hostedContainer(mountTo: HTMLElement): HTMLDivElement {
 
 let activeRoot: ReactRoot | null = null;
 let activeContainer: HTMLDivElement | null = null;
+let lastConfig: WidgetConfig | null = null;
 
 function mountWidget(options: WidgetConfig = {}): WidgetHandle {
   if (activeContainer) {
@@ -57,6 +61,7 @@ function mountWidget(options: WidgetConfig = {}): WidgetHandle {
     activeRoot = null;
   }
   const config = resolveConfig(options);
+  lastConfig = config;
   activeContainer = config.mountTo ? hostedContainer(config.mountTo) : defaultContainer();
   const shadow = activeContainer.attachShadow({ mode: 'open' });
 
@@ -97,6 +102,15 @@ function mountWidget(options: WidgetConfig = {}): WidgetHandle {
 const api: AgentSphereWidget = {
   init: mountWidget,
   mount: mountWidget,
+  relogin: () => {
+    // 清除当前用户会话（内存缓存 + sessionStorage），重置 auto-login 标记，
+    // 重新挂载触发新的 Root autoLogin 静默 SSO（为切换后的新用户重新登录）
+    clearUser();
+    sessionStorage.removeItem('agent-sphere-widget:auto-login-tried');
+    if (lastConfig) {
+      mountWidget(lastConfig);
+    }
+  },
 };
 
 if (typeof window !== 'undefined') {
