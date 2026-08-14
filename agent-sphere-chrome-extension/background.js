@@ -159,7 +159,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }).catch(() => {});
     console.log('[AgentSphere] auth: task connection established (user-level)');
     fetchSsoDisplayName();
-    askOffscreen({ action: 'task:init' });
+    // 先确保 offscreen 文档存在再下发连接指令，避免 MV3 空闲关闭导致 task:init 丢失、
+    // 只能等 30s/1min 恢复
+    ensureOffscreenDocument().then(() => {
+      askOffscreen({ action: 'task:init' });
+    });
   }
 
   if (msg.type === 'log') {

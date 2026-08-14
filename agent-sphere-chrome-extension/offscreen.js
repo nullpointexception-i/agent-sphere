@@ -185,7 +185,23 @@ function keepAlive() {
   }
 }
 
+// 未连接（无凭据/流已断）时 5s 一查快速恢复；已连接时 30s 省电
+const KEEPALIVE_IDLE_MS = 5000;
+const KEEPALIVE_CONNECTED_MS = 30000;
+
+function isTaskDisconnected() {
+  return !token || !baseUrl || !taskAbortController || taskAbortController.signal.aborted;
+}
+
+function scheduleKeepAlive() {
+  const delay = isTaskDisconnected() ? KEEPALIVE_IDLE_MS : KEEPALIVE_CONNECTED_MS;
+  setTimeout(() => {
+    keepAlive();
+    scheduleKeepAlive();
+  }, delay);
+}
+
 requestCreds().then((ok) => {
   if (ok) connectTaskSse();
-  setInterval(keepAlive, 30000);
+  scheduleKeepAlive();
 });

@@ -89,6 +89,27 @@
       const settings = await getSettings();
       const baseUrl = settings.backendUrl || 'http://localhost:8080';
 
+      // 优先直读页面 sessionStorage（content script 与页面同源，可访问同源存储）。
+      // 认证后 ~1s 内即可拿到 token，摆脱 page-script 桥的注入时序，避免连接延迟数秒~十几秒。
+      try {
+        const widgetRaw = sessionStorage.getItem('agent-sphere-widget:agent-user');
+        if (widgetRaw) {
+          const widgetUser = JSON.parse(widgetRaw);
+          if (widgetUser && widgetUser.token) {
+            return {
+              token: widgetUser.token,
+              displayName:
+                widgetUser.ssoProviderCode && widgetUser.ssoSubject
+                  ? `${widgetUser.ssoProviderCode}@${widgetUser.ssoSubject}`
+                  : widgetUser.displayName || '',
+              baseUrl,
+            };
+          }
+        }
+      } catch (e) {
+        // storage 受限或解析失败：忽略，走其它来源
+      }
+
       if (widgetUserToken) {
         return {
           token: widgetUserToken,
