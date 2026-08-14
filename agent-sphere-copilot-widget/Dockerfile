@@ -5,7 +5,8 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-FROM nginx:alpine
+# fholzer/nginx-brotli：官方 nginx + ngx_brotli（brotli 压缩），目录结构兼容
+FROM fholzer/nginx-brotli:latest
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY --from=build /app/public/index.html /usr/share/nginx/html/index.html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
