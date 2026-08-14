@@ -6,7 +6,7 @@
   "description": "Embeddable chat widget that connects to the AgentSphere backend via OIDC SSO + AG-UI (CopilotKit chatbox).",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --config vite.auth.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },
