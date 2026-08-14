@@ -46,6 +46,20 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     }
 
     @Override
+    public RunVO findActiveRun(Long sessionId) {
+        AgentRun run = lambdaQuery()
+                .eq(AgentRun::getSessionId, sessionId)
+                .in(AgentRun::getStatus, List.of(
+                        RunEnum.STATUS_PENDING,
+                        RunEnum.STATUS_RUNNING,
+                        RunEnum.STATUS_AWAITING_USER))
+                .orderByDesc(AgentRun::getId)
+                .last("LIMIT 1")
+                .one();
+        return run == null ? null : runConverter.toVO(run);
+    }
+
+    @Override
     public void updateRun(RunVO run) {
         AgentRun entity = runConverter.toDO(run);
         updateById(entity);

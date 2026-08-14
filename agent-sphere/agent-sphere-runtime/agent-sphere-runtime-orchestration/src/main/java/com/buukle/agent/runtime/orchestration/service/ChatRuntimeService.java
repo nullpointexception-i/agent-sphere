@@ -155,6 +155,26 @@ public class ChatRuntimeService {
         return result;
     }
 
+    /**
+     * session 级停止：不依赖 runId。运行中的 run 由 SessionRunner 循环按 CANCELLED_SESSIONS
+     * 直接终止；停车态（AWAITING_USER）与无活动 run 的边界在此处理。
+     */
+    public void stopSession(Long sessionId) {
+        assertSessionOwnership(sessionId);
+        SessionRunner.cancelSession(sessionId);
+
+        RunVO active = runSpi.findActiveRun(sessionId);
+        if (active == null) {
+            // 无活动 run：清除标志，避免误杀之后新发起的 run
+            SessionRunner.clearSessionCancelled(sessionId);
+        } else if (RunStatus.AWAITING_USER.name().equals(active.getStatus())) {
+            // 停车态：loop 已退出，标志不会生效 → 复用 stopRun 的澄清取消逻辑后清除标志
+            stopRun(sessionId, active.getId());
+            SessionRunner.clearSessionCancelled(sessionId);
+        }
+        // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止，收口处消费标志并发布终态
+    }
+
     public void stopRun(Long sessionId, Long runId) {
         assertSessionOwnership(sessionId);
         RunVO run = runSpi.getRun(runId);

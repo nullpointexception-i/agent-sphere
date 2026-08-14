@@ -12,6 +12,9 @@ public interface RunSpi {
 
     RunVO getRun(Long id);
 
+    /** 该 session 当前最新活动 run（status ∈ PENDING/RUNNING/AWAITING_USER），无则 null。 */
+    RunVO findActiveRun(Long sessionId);
+
     void updateRun(RunVO run);
 
     List<RunVO> listRunsBySessionAfterId(Long sessionId, Long afterRunId);

@@ -7,6 +7,8 @@ public final class RunEnum {
     public static final String STATUS_RUNNING = "RUNNING";
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_CANCELLED = "CANCELLED";
+    public static final String STATUS_AWAITING_USER = "AWAITING_USER";
     public static final String DIRECTION_PREV = "prev";
     public static final String DIRECTION_NEXT = "next";
     private RunEnum() {

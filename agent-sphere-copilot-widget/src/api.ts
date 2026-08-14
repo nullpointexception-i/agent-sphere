@@ -161,6 +161,11 @@ export function listRuns(
   });
 }
 
+/** session 级停止：停止该 session 当前运行中的 run（不依赖 runId）。 */
+export function stopSession(base: string, sessionId: number): Promise<void> {
+  return request(base, `/runtime/${sessionId}/stop`, { method: 'POST' });
+}
+
 export interface ApiClient {
   ssoAuthorize: (provider: string, redirectUri: string, prompt?: string) => Promise<string>;
   ssoExchange: (otc: string) => Promise<UserVO>;
@@ -175,6 +180,7 @@ export interface ApiClient {
     page?: number,
     size?: number,
   ) => Promise<{ records: RunVO[]; total: number }>;
+  stopSession: (sessionId: number) => Promise<void>;
   listInstancesPage: (page?: number, size?: number) => Promise<InstancePageVO>;
   getTodos: (sessionId: number) => Promise<SessionTodoVO[]>;
 }
@@ -192,6 +198,7 @@ export function createApi(config: WidgetConfig): ApiClient {
     renameSession: (id, title) => renameSession(base, id, title),
     closeSession: (id) => closeSession(base, id),
     listRuns: (sessionId, page, size) => listRuns(base, sessionId, page, size),
+    stopSession: (sessionId) => stopSession(base, sessionId),
     listInstancesPage: (page, size) => listInstancesPage(base, page, size),
     getTodos: (sessionId) => getTodos(base, sessionId),
   };

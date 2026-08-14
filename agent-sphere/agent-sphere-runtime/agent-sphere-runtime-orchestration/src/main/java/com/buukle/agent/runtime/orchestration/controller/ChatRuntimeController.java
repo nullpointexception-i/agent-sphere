@@ -25,6 +25,12 @@ public class ChatRuntimeController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{sessionId}/stop")
+    public ResponseEntity<?> stopSession(@PathVariable Long sessionId) {
+        chatRuntimeService.stopSession(sessionId);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/{sessionId}/run/{runId}/stop")
     public ResponseEntity<?> stopRun(@PathVariable Long sessionId,
                                       @PathVariable Long runId) {

@@ -104,6 +104,8 @@ export const agentApi = {
       ),
     stop: (sessionId: number, runId: number) =>
       request<void>(`${BASE}/runtime/${sessionId}/run/${runId}/stop`, { method: 'POST' }),
+    sessionStop: (sessionId: number) =>
+      request<void>(`${BASE}/runtime/${sessionId}/stop`, { method: 'POST' }),
   },
 
   interactions: {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import { HttpAgent, type AbstractAgent } from '@ag-ui/client';
 import { CopilotChat, CopilotKit } from '@copilotkit/react-core/v2';
-import { ApiError, createApi } from '../api';
+import { ApiError, createApi, stopSession } from '../api';
 import type { WidgetConfig } from '../config';
 import type {
   ClarificationVO,
@@ -498,6 +498,23 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     }
   };
 
+  // 停止：中止本地流 + session 级后端停止（不依赖 runId）
+  const handleStop = async () => {
+    const agent = agentsRef.current[String(selectedAgentId)];
+    try {
+      agent?.abortRun();
+    } catch (e) {
+      // ignore local abort errors
+    }
+    if (selectedSessionId != null) {
+      try {
+        await stopSession(apiBase, selectedSessionId);
+      } catch (e) {
+        console.warn('[AgentSphere] stop session failed:', e);
+      }
+    }
+  };
+
   // 通知 chrome-extension 当前会话（sessionStorage 桥 + 即时事件）
   useEffect(() => {
     if (selectedSessionId !== null) {
@@ -883,6 +900,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   key={String(selectedSession.id)}
                   agentId={String(selectedAgentId)}
                   threadId={String(selectedSession.id)}
+                  onStop={handleStop}
                 />
               </div>
             </CopilotKit>

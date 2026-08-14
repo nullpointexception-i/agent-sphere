@@ -1058,13 +1058,11 @@ export default function Chat() {
                     }
                   }
                 }
-                const stopRunId = currentRunIdRef.current;
-                if (stopRunId && currentSession?.id) {
+                if (currentSession?.id) {
                   agentApi.runs
-                    .stop(currentSession.id, stopRunId)
-                    .catch(() => {});
+                    .sessionStop(currentSession.id)
+                    .catch(() => console.warn('session stop failed'));
                 }
-                currentRunIdRef.current = null;
               }}
               onCancelClarification={handleCancelClarification}
               onExpandOpen={() => {
