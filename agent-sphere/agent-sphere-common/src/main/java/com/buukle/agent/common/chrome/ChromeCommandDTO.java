@@ -15,6 +15,8 @@ public class ChromeCommandDTO {
     private String mode;
     private Integer tabId;
     private Boolean append;
+    private Integer index;
+    private Integer occurrence;
 
     public ChromeCommandDTO() {
     }
@@ -57,6 +59,16 @@ public class ChromeCommandDTO {
 
     public ChromeCommandDTO withAppend(Boolean append) {
         this.append = append;
+        return this;
+    }
+
+    public ChromeCommandDTO withIndex(Integer index) {
+        this.index = index;
+        return this;
+    }
+
+    public ChromeCommandDTO withOccurrence(Integer occurrence) {
+        this.occurrence = occurrence;
         return this;
     }
 }

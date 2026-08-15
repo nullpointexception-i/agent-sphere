@@ -23,6 +23,17 @@ export function noReturn(method) {
   };
 }
 
+// Success with a warning (e.g. execution may have been blocked / result not serializable).
+export function okWarning(method, warning, data, resultType) {
+  return {
+    success: true,
+    data: data === undefined ? null : data,
+    _resultType: resultType || (data === undefined ? 'void' : typeof data),
+    ...(method ? { method } : {}),
+    warning,
+  };
+}
+
 export function failResult(message, category, extra) {
   const r = { success: false, error: message, errorCategory: category || ErrorCategory.UNKNOWN };
   if (extra) Object.assign(r, extra);

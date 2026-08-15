@@ -23,6 +23,12 @@ public class ChromeResultVO extends ExecuteResult {
     @Schema(example = "debugger", description = "Execution path used: isolated / inject-bridge / scripting-main / debugger / navigate / click / type / ...")
     private String method;
 
+    @Schema(example = "string", description = "executeJS结果的JS类型（void/string/number/object等）")
+    private String resultType;
+
+    @Schema(example = "code did not return a value; may not have executed", description = "executeJS执行的可疑提示（如可能被CSP拦截、值不可序列化），agent收到后不应盲目重试")
+    private String warning;
+
     public static ChromeResultVO ok(Object data) {
         ChromeResultVO r = new ChromeResultVO();
         r.success = true;

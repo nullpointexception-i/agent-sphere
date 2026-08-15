@@ -147,6 +147,8 @@ function handleSseData(dataLine) {
       mode: cmd.mode,
       tabId: cmd.tabId,
       append: cmd.append,
+      index: cmd.index,
+      occurrence: cmd.occurrence,
     };
     Object.keys(params).forEach((k) => { if (params[k] == null) delete params[k]; });
     // Forward to the background service worker; it executes and POSTs the callback.

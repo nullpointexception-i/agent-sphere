@@ -7,7 +7,7 @@
  */
 import { cdpClient } from './lib/cdp-client.js';
 import { tabManager } from './lib/tab-manager.js';
-import { okResult, failResult, ErrorCategory } from './lib/result.js';
+import { okResult, okWarning, failResult, ErrorCategory } from './lib/result.js';
 import { ensureOffscreenDocument, askOffscreen } from './lib/offscreen-bridge.js';
 
 console.log('[AgentSphere] Service Worker started', new Date().toISOString());
@@ -330,35 +330,33 @@ async function handleNavigate(commandId, params, sessionId) {
   sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
 }
 
-// --- executeJS: tiered execution, debugger only as the last resort ---
-const cspBlockedOrigins = new Set(); // origins where scripting/MAIN injection is blocked
+// --- executeJS: two-tier execution, debugger only for strict-CSP sites ---
+// NOTE: the ISOLATED world cannot eval at all — MV3's extension CSP is
+// `script-src 'self' 'wasm-unsafe-eval' ...` which forbids eval()/new Function()
+// (see Chrome docs "Content scripts → Content Security Policy"). So there is no
+// isolated tier; we go straight to the MAIN world (page CSP applies) and fall
+// back to chrome.debugger, which bypasses CSP entirely.
+const cspBlockedOrigins = new Set(); // origins where scripting/MAIN eval is blocked by page CSP
 
 function evalInWorldFunc() {
-  // Runs inside chrome.scripting (ISOLATED or MAIN world).
+  // Runs inside chrome.scripting (MAIN world). Page CSP applies here.
   return async (src) => {
-    const run = new Function('return (async () => { ' + src + '\n })()');
-    const result = await run();
-    return result === undefined ? '__NO_RETURN__' : result;
+    let run;
+    try {
+      run = new Function('return (async () => { ' + src + '\n })()');
+    } catch (e) {
+      throw new Error('executeJS eval blocked by page CSP: ' + e.message);
+    }
+    try {
+      const result = await run();
+      return result === undefined ? '__NO_RETURN__' : result;
+    } catch (e) {
+      throw new Error('executeJS runtime error: ' + (e && e.message ? e.message : e));
+    }
   };
 }
 
-async function runIsolatedViaScripting(tabId, code) {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId },
-    world: 'ISOLATED',
-    func: evalInWorldFunc(),
-    args: [code],
-  });
-  const value = results?.[0]?.result;
-  return {
-    success: true,
-    data: value,
-    method: 'isolated',
-    _resultType: value === '__NO_RETURN__' ? 'void' : typeof value,
-  };
-}
-
-async function runMainViaScripting(tabId, code) {
+async function runScripting(tabId, code) {
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     world: 'MAIN',
@@ -366,12 +364,10 @@ async function runMainViaScripting(tabId, code) {
     args: [code],
   });
   const value = results?.[0]?.result;
-  return {
-    success: true,
-    data: value,
-    method: 'scripting-main',
-    _resultType: value === '__NO_RETURN__' ? 'void' : typeof value,
-  };
+  if (value === undefined) {
+    return okWarning('scripting-main', 'code did not return a value; may not have executed', '__NO_RETURN__');
+  }
+  return okResult(value, 'scripting-main');
 }
 
 async function getTabOrigin(tabId) {
@@ -385,41 +381,25 @@ async function getTabOrigin(tabId) {
 }
 
 async function executeJsOnTab(tabId, code) {
-  // Tier 1: isolated world eval (chrome.scripting) — never CSP-blocked, no page globals.
-  try {
-    return await runIsolatedViaScripting(tabId, code);
-  } catch (e1) {
-    // Tier 2a: MAIN world via inject.js bridge (content script, Ui.Vision pattern).
+  // Tier 1: MAIN world via chrome.scripting — page CSP applies; works on most sites.
+  const origin = await getTabOrigin(tabId);
+  if (!origin || !cspBlockedOrigins.has(origin)) {
     try {
-      const res = await tabManager.askContent(tabId, {
-        type: 'browser_operation',
-        action: 'executeJS',
-        params: { code },
-      });
-      if (res?.success) return res;
-      throw new Error(res?.error || 'inject bridge failed');
-    } catch (e2) {
-      // Tier 2b: MAIN world via chrome.scripting (unless this origin already proved CSP-strict).
-      const origin = await getTabOrigin(tabId);
-      if (origin && !cspBlockedOrigins.has(origin)) {
-        try {
-          return await runMainViaScripting(tabId, code);
-        } catch (e3) {
-          if (origin) cspBlockedOrigins.add(origin);
-        }
-      }
-      // Tier 3: chrome.debugger Runtime.evaluate — bypasses CSP entirely.
-      try {
-        return await cdpClient.evaluate(tabId, code);
-      } catch (e4) {
-        const msg = String(e4.message);
-        return failResult(
-          e4.message,
-          msg.includes('already attached') ? ErrorCategory.DETACHED : ErrorCategory.CSP_BLOCKED,
-          { method: 'debugger' },
-        );
-      }
+      return await runScripting(tabId, code);
+    } catch (e) {
+      if (origin) cspBlockedOrigins.add(origin);
     }
+  }
+  // Tier 2: chrome.debugger Runtime.evaluate — bypasses CSP entirely; strict sites land here.
+  try {
+    return await cdpClient.evaluate(tabId, code);
+  } catch (e4) {
+    const msg = String(e4.message);
+    return failResult(
+      e4.message,
+      msg.includes('already attached') ? ErrorCategory.DETACHED : ErrorCategory.CSP_BLOCKED,
+      { method: 'debugger' },
+    );
   }
 }
 

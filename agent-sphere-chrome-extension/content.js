@@ -1,8 +1,7 @@
 /**
  * Content Script — reads auth state from page, executes browser operations.
- * Primary execution layer: click/type/getContent run here (ISOLATED world).
- * executeJS runs tier 1 (isolated) in the background; this script provides the
- * tier 2a MAIN-world bridge via inject.js.
+ * Primary execution layer: click/type/getContent/hover/closeDialogs run here (ISOLATED world).
+ * executeJS is handled entirely in the background (MAIN-world scripting → chrome.debugger).
  */
 (function () {
 
@@ -210,81 +209,6 @@
     }
   }
 
-  // --- executeJS tier 2a: MAIN-world eval via inject.js bridge (Ui.Vision pattern) ---
-  let __asInjectReady = false;
-  let __asInjectAttempted = false;
-
-  function ensureInjectBridge() {
-    return new Promise((resolve, reject) => {
-      if (__asInjectReady) return resolve();
-      if (__asInjectAttempted) return reject(new Error('inject.js blocked by CSP (previous attempt failed)'));
-      __asInjectAttempted = true;
-
-      const s = document.createElement('script');
-      s.src = chrome.runtime.getURL('inject.js');
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error('inject.js load timeout (likely CSP blocked)'));
-      }, 800);
-
-      function onReady(e) {
-        if (e.source !== window || !e.data || e.data.type !== 'agent-sphere:inject-ready') return;
-        cleanup();
-        __asInjectReady = true;
-        resolve();
-      }
-
-      function cleanup() {
-        clearTimeout(timeout);
-        window.removeEventListener('message', onReady);
-      }
-
-      window.addEventListener('message', onReady);
-      s.onerror = () => {
-        cleanup();
-        reject(new Error('inject.js blocked by CSP'));
-      };
-      document.documentElement.appendChild(s);
-    });
-  }
-
-  function serializeValue(v) {
-    if (v === undefined) return '__NO_RETURN__';
-    try {
-      return JSON.parse(JSON.stringify(v));
-    } catch (e) {
-      return v == null ? null : String(v);
-    }
-  }
-
-  function evalViaInjectBridge(code) {
-    return ensureInjectBridge().then(() => {
-      const requestId = 'as_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          cleanup();
-          reject(new Error('inject eval timeout'));
-        }, 8000);
-
-        function onResponse(e) {
-          if (e.source !== window || !e.data || e.data.type !== 'agent-sphere:inject-eval-response') return;
-          if (e.data.requestId !== requestId) return;
-          cleanup();
-          if (e.data.ok) resolve(serializeValue(e.data.result));
-          else reject(new Error(e.data.result || 'inject eval error'));
-        }
-
-        function cleanup() {
-          clearTimeout(timer);
-          window.removeEventListener('message', onResponse);
-        }
-
-        window.addEventListener('message', onResponse);
-        window.postMessage({ type: 'agent-sphere:inject-eval', requestId, code }, '*');
-      });
-    });
-  }
-
   // --- Listen for browser operation commands from background ---
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'browser_operation') {
@@ -357,9 +281,43 @@
         }
 
         case 'type': {
-          const el = AS.locateBySelector(params.selector);
+          const el = AS.locateBySelector(params.selector, params.index);
           if (!el) return { success: false, error: 'Input not found: ' + params.selector, errorCategory: 'not_found' };
           return AS.typeInElement(el, params.text, params.append === true);
+        }
+
+        case 'hover': {
+          const el = AS.locate(params);
+          if (!el) return { success: false, error: 'Element not found: ' + (params.selector || params.text), errorCategory: 'not_found' };
+          try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* ignore */ }
+          el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, view: window }));
+          el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, view: window }));
+          el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, view: window }));
+          await new Promise((r) => setTimeout(r, 150));
+          return { success: true, data: { tag: el.tagName.toLowerCase(), text: el.textContent?.trim().slice(0, 100) } };
+        }
+
+        case 'closeDialogs': {
+          let closed = 0;
+          const dialogs = [...document.querySelectorAll('[role="dialog"]')];
+          for (const d of dialogs) {
+            const closeBtn = d.querySelector(
+              '[aria-label="Close"], [aria-label="关闭"], .ant-lpt-modal-close, .ant-modal-close, [class*="-modal-close"]',
+            );
+            if (closeBtn) {
+              closeBtn.click();
+              closed++;
+              continue;
+            }
+            const ack = [...d.querySelectorAll('button')].find((b) => b.textContent?.trim() === '知道了');
+            if (ack) {
+              ack.click();
+              closed++;
+            }
+          }
+          const toast = document.getElementById('as-toast');
+          if (toast) toast.remove();
+          return { success: true, data: { closed, dialogs: dialogs.length } };
         }
 
         case 'getContent': {
@@ -409,6 +367,26 @@
               }).filter(d => d.title || d.inputs > 0 || d.buttons.length > 0);
             return { success: true, data: { _url: location.href, _title: document.title, inputs, buttons, forms, navLinks, sections, dialogs } };
           }
+          if (params.mode === 'query') {
+            if (!params.selector) return { success: false, error: 'selector required for query mode' };
+            let nodes = [];
+            try {
+              nodes = [...document.querySelectorAll(params.selector)];
+            } catch (e) {
+              return { success: false, error: 'Invalid selector: ' + params.selector, errorCategory: 'not_found' };
+            }
+            const matches = nodes.slice(0, 50).map((el, i) => ({
+              index: i + 1,
+              tag: el.tagName.toLowerCase(),
+              class: typeof el.className === 'string' ? el.className.trim() : '',
+              id: el.id || '',
+              text: el.textContent?.trim().slice(0, 80) || '',
+              placeholder: el.getAttribute('placeholder') || '',
+              value: el.value || '',
+            }));
+            return { success: true, data: { _url: location.href, total: nodes.length, matches } };
+          }
+          __asDomNodes = 0;
           const root = params.selector
             ? document.querySelector(params.selector)
             : document.body;
@@ -416,16 +394,6 @@
           const dom = domToJSON(root) || {};
           dom._url = location.href;
           return { success: true, data: dom };
-        }
-
-        case 'executeJS': {
-          // Tier 2a: MAIN-world eval via inject.js bridge (no debugger).
-          try {
-            const data = await evalViaInjectBridge(params.code);
-            return { success: true, data, method: 'inject-bridge', _resultType: data === '__NO_RETURN__' ? 'void' : typeof data };
-          } catch (e) {
-            return { success: false, needsMainWorld: true, error: e.message, errorCategory: 'csp_blocked' };
-          }
         }
 
         default:
@@ -436,7 +404,12 @@
     }
   }
 
+  // Global DOM-node budget so a huge page cannot balloon the full-mode payload.
+  let __asDomNodes = 0;
+  const DOM_NODE_CAP = 2000;
+
   function domToJSON(node) {
+    if (++__asDomNodes > DOM_NODE_CAP) return null;
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent?.trim();
       return text || null;

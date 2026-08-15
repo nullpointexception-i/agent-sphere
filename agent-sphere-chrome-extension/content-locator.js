@@ -39,44 +39,62 @@ window.__asContent = window.__asContent || {};
     }
   };
 
-  AS.locateBySelector = function (selector) {
+  // All matches for an XPath expression (document order).
+  AS.xpathQueryAll = function (expr, doc) {
+    const root = doc || document;
+    try {
+      const res = root.evaluate(expr, root, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+      const out = [];
+      for (let i = 0; i < res.snapshotLength; i++) out.push(res.snapshotItem(i));
+      return out;
+    } catch (e) {
+      return [];
+    }
+  };
+
+  // Locate by CSS selector; `index` is 1-based (2nd identical element etc.).
+  AS.locateBySelector = function (selector, index) {
     if (!selector) return null;
     try {
-      return document.querySelector(selector);
+      const nodes = document.querySelectorAll(selector);
+      const el = index == null || index <= 0 ? nodes[0] : nodes[index - 1];
+      return el || null;
     } catch (e) {
       return null;
     }
   };
 
-  AS.locateByText = function (text) {
+  // Locate by visible text; `occurrence` is 1-based (Nth element matching the text).
+  AS.locateByText = function (text, occurrence) {
     if (!text) return null;
+    const occ = occurrence == null || occurrence <= 0 ? 1 : occurrence;
     const safe = String(text).replace(/'/g, "\\'");
+    let found = [];
+
     // Phase 1: exact normalize-space match
-    let el = AS.xpathQuery(`//*[text()[normalize-space()='${safe}']]`);
+    found = AS.xpathQueryAll(`//*[text()[normalize-space()='${safe}']]`);
     // Phase 2: contains() on direct text nodes
-    if (!el) el = AS.xpathQuery(`//*[contains(text(), '${safe}')]`);
+    if (found.length < occ) found = AS.xpathQueryAll(`//*[contains(text(), '${safe}')]`);
     // Phase 3: any descendant contains → up-search to nearest clickable ancestor
-    if (!el) {
-      const anyNode = AS.xpathQuery(`//*[contains(., '${safe}')]`);
-      if (anyNode) {
-        el = anyNode.closest(
+    if (found.length < occ) {
+      found = [...new Set(
+        AS.xpathQueryAll(`//*[contains(., '${safe}')]`).map((n) => n.closest(
           'a, button, [role="button"], [onclick], summary, [aria-haspopup], [tabindex]:not([tabindex="-1"])',
-        );
-        if (!el) el = anyNode; // React delegation handles clicks on children
-      }
+        ) || n),
+      )];
     }
-    // aria-label / title lookup
-    if (!el) el = AS.locateBySelector(`[aria-label="${text}"]`);
-    if (!el) el = AS.locateBySelector(`[title="${text}"]`);
-    // Glob / fuzzy text matching across clickable elements
-    if (!el && (String(text).includes('*') || String(text).includes('?'))) {
+    // Phase 4: aria-label / title lookup
+    if (found.length < occ) {
+      const byLabel = AS.locateBySelector(`[aria-label="${text}"]`);
+      const byTitle = AS.locateBySelector(`[title="${text}"]`);
+      found = [byLabel, byTitle].filter(Boolean);
+    }
+    // Phase 5: glob / fuzzy text matching across clickable elements
+    if (found.length < occ && (String(text).includes('*') || String(text).includes('?'))) {
       const regex = AS.globToRegExp(text);
-      const candidates = [
-        ...document.querySelectorAll(
-          'a, button, [role="button"], [onclick], summary, [aria-haspopup]',
-        ),
-      ];
-      el = candidates.find((n) => {
+      found = [...document.querySelectorAll(
+        'a, button, [role="button"], [onclick], summary, [aria-haspopup]',
+      )].filter((n) => {
         const t = (
           n.textContent ||
           n.getAttribute('aria-label') ||
@@ -85,14 +103,13 @@ window.__asContent = window.__asContent || {};
         ).trim();
         return regex.test(t);
       });
-      el = el || null;
     }
-    return el;
+    return found.length >= occ ? found[occ - 1] : (found[0] || null);
   };
 
   AS.locate = function (params) {
-    let el = AS.locateBySelector(params.selector);
-    if (!el && params.text) el = AS.locateByText(params.text);
+    let el = AS.locateBySelector(params.selector, params.index);
+    if (!el && params.text) el = AS.locateByText(params.text, params.occurrence);
     return el;
   };
 })();

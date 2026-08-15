@@ -23,7 +23,7 @@
     "128": "icon-128.png"
   },
   "web_accessible_resources": [{
-    "resources": ["page-script.js", "inject.js"],
+    "resources": ["page-script.js"],
     "matches": ["<all_urls>"]
   }]
 }

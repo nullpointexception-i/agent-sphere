@@ -12,6 +12,8 @@ public class ChromeCallbackDTO {
     private String error;
     private String errorCategory;
     private String method;
+    private String resultType;
+    private String warning;
 
     public ChromeCallbackDTO() {
     }

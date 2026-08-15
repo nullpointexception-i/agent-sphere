@@ -34,4 +34,10 @@ public class ChromeExecuteContext extends ExecuteContext {
 
     @Schema(example = "false", description = "type操作时是否追加到已有内容末尾（不替换）")
     private Boolean append;
+
+    @Schema(example = "2", description = "selector命中多个元素时定位第N个（1起），如两个相同的input[type=number]；仅click/type/hover生效")
+    private Integer index;
+
+    @Schema(example = "2", description = "text匹配多处文本时定位第N处（1起），如多个\"确定\"按钮；仅click/hover生效")
+    private Integer occurrence;
 }

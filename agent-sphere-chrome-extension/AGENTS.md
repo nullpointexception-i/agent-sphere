@@ -17,8 +17,6 @@ offscreen.html/js — long-lived task SSE + command queue (immune to SW suspensi
 background.js (ESM) — message router, executeInPage, tab grouping, callback POST
    ↕ tabs.sendMessage / chrome.scripting / chrome.debugger
 content.js + content-locator.js + content-editors.js — primary execution layer (ISOLATED world)
-   ↕ postMessage
-inject.js (MAIN world, web_accessible) — eval bridge for executeJS tier 2a
 page-script.js (MAIN world) — auth/session bridge (sessionStorage → content script)
 ```
 
@@ -29,17 +27,19 @@ Files:
 - `lib/offscreen-bridge.js` — creates/pings the offscreen doc (alarm recreates it if the browser closes it).
 - `offscreen.js` — holds `/api/v1/runtime/user/task/stream` SSE, zombie detection, reconnect, forwards `browser_operation` to background. **Offscreen documents support ONLY `chrome.runtime`** — no `chrome.storage`/`chrome.tabs` there. Token/baseUrl are fetched from background via `task:creds`, and connection status is reported via `task:status` (background writes `storage.local.taskConnected`). Do not call `chrome.storage` inside `offscreen.js`.
 - `content-locator.js` / `content-editors.js` / `content.js` — injected together (in that order) into the isolated world; share the `window.__asContent` namespace.
-- `inject.js` — MAIN-world eval bridge (postMessage round-trip), CSP-dependent.
+- `inject.js` — **deleted.** There is no inject-bridge tier anymore.
+- `page-script.js` — MAIN-world script (web_accessible) intercepting `window.open`.
 
 ## Key behaviors
 
 - **No screenshots.** The screenshot pipeline was removed end-to-end (extension, backend `ChromeCallbackController`, UI PiP). Do not reintroduce `Page.captureScreenshot`/`captureVisibleTab` without an explicit requirement.
-- **executeJS is tiered, debugger is last resort** (in `background.js#executeJsOnTab`):
-  1. isolated world via `chrome.scripting` (never CSP-blocked, no page globals)
-  2. MAIN world via `inject.js` postMessage bridge (Ui.Vision pattern)
-  3. MAIN world via `chrome.scripting` `world:'MAIN'` (skipped once an origin proves CSP-strict — `cspBlockedOrigins`)
-  4. `chrome.debugger` `Runtime.evaluate` (bypasses CSP; strict sites like 猎聘 land here)
+- **executeJS is two-tier, debugger is the strict-CSP fallback** (in `background.js#executeJsOnTab`):
+  1. MAIN world via `chrome.scripting` (`world:'MAIN'`) — the page CSP applies, so this works on most sites and fails fast on strict-CSP origins (cached in `cspBlockedOrigins`).
+  2. `chrome.debugger` `Runtime.evaluate` (bypasses CSP; strict sites like 猎聘 land here).
+  **There is NO isolated-world tier**: MV3's extension CSP (`script-src 'self' 'wasm-unsafe-eval' …`) forbids `eval()`/`new Function()` in content-script isolated worlds, so an isolated eval can never work — do not reintroduce it.
   Keep that order. Do not make debugger the default path.
+- **executeJS result transparency**: results always carry `method` (`scripting-main`/`debugger`), `resultType`, and — when execution may have been blocked or the value was unserializable — a `warning` field. The backend surfaces these (`ChromeResultVO.warning/resultType`) so the agent stops retrying a blocked executeJS.
+- **Content-script capabilities**: `click`/`type`/`hover` accept `index` (1-based, selector) and `occurrence` (1-based, text) to pick the Nth of identical elements (`content-locator.js`). `closeDialogs` closes every open `[role="dialog"]`/toast in one call. `getContent(mode: query, selector)` returns a compact up-to-50-element match list instead of the full DOM. `getContent` full mode is capped at 2000 DOM nodes.
 - **Debugger disconnects**: an external detach (opening DevTools on the controlled tab, cross-site navigation) drops the session. The `onDetach` listener + retry-once in `cdp-client.js` make the next command self-heal. It is still best to avoid opening DevTools on the controlled tab and to avoid cross-site navigation mid-task.
 - **Tab grouping**: every tab the plugin navigates/opens is added to the `AgentSphere` group (`tabGroups` permission). Requires the `tabGroups` + `offscreen` permissions — keep them in `manifest.json`.
 - **Results** carry `errorCategory` (`not_found`/`csp_blocked`/`detached`/`inject_failed`/`timeout`/`no_tab`) and `method` so the backend agent can pick a retry strategy instead of blind retries.
@@ -47,14 +47,14 @@ Files:
 
 ## Permissions (manifest.json)
 
-`tabs`, `scripting`, `storage`, `activeTab`, `alarms`, `debugger`, `webNavigation`, `tabGroups`, `offscreen`; host `<all_urls>`. `page-script.js` + `inject.js` are web-accessible.
+`tabs`, `scripting`, `storage`, `activeTab`, `alarms`, `debugger`, `webNavigation`, `tabGroups`, `offscreen`; host `<all_urls>`. `page-script.js` is web-accessible.
 
 ## No tests / linter / CI
 
 Manually reload the unpacked extension and smoke-test before pushing:
 - log in on a widget/main site → Task badge on
 - `navigate` several tabs → all land in the `AgentSphere` group
-- executeJS on a normal site (isolated/inject) and on a strict-CSP site (debugger fallback)
+- executeJS on a normal site (MAIN-world scripting) and on a strict-CSP site (debugger fallback)
 - cross-site navigation mid-task → next executeJS recovers
 - `devtools` on the controlled tab → session self-heals on next command
 

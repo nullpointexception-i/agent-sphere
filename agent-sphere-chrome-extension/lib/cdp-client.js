@@ -98,6 +98,16 @@ export class CdpClient {
   }
 
   _toResult(result) {
+    if (result && result.unserializableValue) {
+      // e.g. a DOM node / function with returnByValue:true → not JSON-serializable.
+      return {
+        success: true,
+        data: `<unserializable:${result.type || 'object'}>`,
+        _resultType: result.type || 'object',
+        method: 'debugger',
+        warning: 'evaluation succeeded but the value is not serializable',
+      };
+    }
     const value = result && result.value;
     if (value === undefined) {
       return { success: true, data: '__NO_RETURN__', _resultType: 'void', method: 'debugger' };
