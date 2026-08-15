@@ -1,19 +1,23 @@
 package com.buukle.agent.runtime.kernel.runner;
 
+import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RBucket;
+import org.redisson.api.RList;
+import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicReference;
-
+/**
+ * 会话输入（steer 槽位 / 排队输入）分布式存储。
+ * 队列/槽位落 Redis，副本重启或 run 被接管后剩余输入不丢，可续跑。
+ */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class SessionInputManager {
 
-    private final ConcurrentHashMap<Long, AtomicReference<InputMessage>> steerSlots = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Long, BlockingQueue<InputMessage>> queues = new ConcurrentHashMap<>();
+    private final RedissonClient redissonClient;
 
     public void steer(Long sessionId, String text, Long modelRouteId) {
         steer(sessionId, text, modelRouteId, false);
@@ -21,7 +25,7 @@ public class SessionInputManager {
 
     public void steer(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume) {
         InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(), isClarificationResume);
-        steerSlots.computeIfAbsent(sessionId, k -> new AtomicReference<>()).set(msg);
+        steerBucket(sessionId).set(msg);
         log.debug("Steer input set for session {}", sessionId);
     }
 
@@ -31,42 +35,44 @@ public class SessionInputManager {
 
     public void queue(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume) {
         InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(), isClarificationResume);
-        queues.computeIfAbsent(sessionId, k -> new LinkedBlockingQueue<>()).add(msg);
+        queueList(sessionId).add(msg);
         log.debug("Queued input for session {}", sessionId);
     }
 
     public InputMessage promoteInput(Long sessionId) {
-        AtomicReference<InputMessage> slot = steerSlots.get(sessionId);
-        if (slot != null) {
-            InputMessage msg = slot.getAndSet(null);
-            if (msg != null) return msg;
-        }
-        BlockingQueue<InputMessage> queue = queues.get(sessionId);
-        if (queue != null) {
-            InputMessage msg = queue.poll();
-            if (msg != null && queue.isEmpty()) {
-                queues.remove(sessionId);
-            }
+        InputMessage msg = steerBucket(sessionId).getAndDelete();
+        if (msg != null) {
             return msg;
+        }
+        RList<InputMessage> queue = queueList(sessionId);
+        if (!queue.isEmpty()) {
+            return queue.remove(0);
         }
         return null;
     }
 
     public boolean hasPending(Long sessionId) {
-        AtomicReference<InputMessage> slot = steerSlots.get(sessionId);
-        if (slot != null && slot.get() != null) return true;
-        BlockingQueue<InputMessage> queue = queues.get(sessionId);
-        return queue != null && !queue.isEmpty();
+        if (steerBucket(sessionId).get() != null) {
+            return true;
+        }
+        return !queueList(sessionId).isEmpty();
     }
 
     public boolean hasQueued(Long sessionId) {
-        BlockingQueue<InputMessage> queue = queues.get(sessionId);
-        return queue != null && !queue.isEmpty();
+        return !queueList(sessionId).isEmpty();
     }
 
     public void clear(Long sessionId) {
-        steerSlots.remove(sessionId);
-        queues.remove(sessionId);
+        steerBucket(sessionId).delete();
+        queueList(sessionId).delete();
+    }
+
+    private RBucket<InputMessage> steerBucket(Long sessionId) {
+        return redissonClient.getBucket(DistributedRuntimeConstants.sessionSteerKey(sessionId));
+    }
+
+    private RList<InputMessage> queueList(Long sessionId) {
+        return redissonClient.getList(DistributedRuntimeConstants.sessionQueueKey(sessionId));
     }
 
     public record InputMessage(String text, Long modelRouteId, long timestamp, boolean isClarificationResume) {

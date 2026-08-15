@@ -20,6 +20,7 @@ public class AgentRuntimeProperties {
     private LockConfig lock = new LockConfig();
     private AsyncConfig async = new AsyncConfig();
     private SsoConfig sso = new SsoConfig();
+    private DistributedConfig distributed = new DistributedConfig();
 
     @Data
     public static class SessionConfig {
@@ -148,5 +149,14 @@ public class AgentRuntimeProperties {
         private String baseUrl = "http://localhost:8080";
         private Duration stateTtl = Duration.ofMinutes(5);
         private Duration otcTtl = Duration.ofSeconds(30);
+    }
+
+    /** 多副本分布式运行态配置。 */
+    @Data
+    public static class DistributedConfig {
+        /** session 执行者 owner 租约时长（过期后孤儿清扫接管）。 */
+        private Duration ownerLease = Duration.ofMinutes(5);
+        /** 孤儿 run 清扫间隔。 */
+        private Duration orphanSweepInterval = Duration.ofSeconds(30);
     }
 }

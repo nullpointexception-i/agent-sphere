@@ -2,6 +2,8 @@ package com.buukle.agent.agui.service;
 
 import com.buukle.agent.agui.dtvo.AguiEventType;
 import com.buukle.agent.agui.dtvo.AguiEventVO;
+import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
+import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.EventType;
 import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
@@ -34,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class AguiEventTranslator {
 
-    private final AguiStreamManager streamManager;
+    private final RedisEventBus eventBus;
     private final Map<String, RunStreamState> states = new ConcurrentHashMap<>();
 
     @EventListener
@@ -55,11 +57,14 @@ public class AguiEventTranslator {
             if (aguiEvents == null) {
                 return;
             }
+            // 翻译（含累积状态）留在执行副本，产物经事件总线广播，各副本 relay 投本地 emitter
             for (AguiEventVO agui : aguiEvents) {
-                streamManager.send(sessionId, runId, agui);
+                eventBus.publish(DistributedRuntimeConstants.TOPIC_AGUI,
+                        new AguiEventEnvelope(sessionId, runId, false, agui));
             }
             if (isTerminal(event.getEventType())) {
-                streamManager.complete(sessionId, runId);
+                eventBus.publish(DistributedRuntimeConstants.TOPIC_AGUI,
+                        new AguiEventEnvelope(sessionId, runId, true, null));
                 states.remove(stateKey);
             }
         }

@@ -1,6 +1,7 @@
 package com.buukle.agent.agui.service;
 
 import com.buukle.agent.agui.dtvo.AguiEventVO;
+import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
@@ -26,13 +27,13 @@ class AguiEventTranslatorTest {
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock
-    AguiStreamManager streamManager;
+    RedisEventBus eventBus;
 
     AguiEventTranslator translator;
 
     @BeforeEach
     void setUp() {
-        translator = new AguiEventTranslator(streamManager);
+        translator = new AguiEventTranslator(eventBus);
     }
 
     private static RuntimeEventDataVO data(Long sessionId, Long runId) {

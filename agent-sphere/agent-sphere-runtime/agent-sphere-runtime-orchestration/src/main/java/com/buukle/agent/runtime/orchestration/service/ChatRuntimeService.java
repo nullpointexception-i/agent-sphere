@@ -41,6 +41,7 @@ public class ChatRuntimeService {
     private final SessionSpi sessionSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final AgentPendingClarificationMapper clarificationMapper;
+    private final SessionRunner sessionRunner;
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
@@ -161,16 +162,16 @@ public class ChatRuntimeService {
      */
     public void stopSession(Long sessionId) {
         assertSessionOwnership(sessionId);
-        SessionRunner.cancelSession(sessionId);
+        sessionRunner.cancelSession(sessionId);
 
         RunVO active = runSpi.findActiveRun(sessionId);
         if (active == null) {
             // 无活动 run：清除标志，避免误杀之后新发起的 run
-            SessionRunner.clearSessionCancelled(sessionId);
+            sessionRunner.clearSessionCancelled(sessionId);
         } else if (RunStatus.AWAITING_USER.name().equals(active.getStatus())) {
             // 停车态：loop 已退出，标志不会生效 → 复用 stopRun 的澄清取消逻辑后清除标志
             stopRun(sessionId, active.getId());
-            SessionRunner.clearSessionCancelled(sessionId);
+            sessionRunner.clearSessionCancelled(sessionId);
         }
         // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止，收口处消费标志并发布终态
     }
@@ -207,7 +208,7 @@ public class ChatRuntimeService {
                             .setAssistantReply(RunnerConstants.CANCEL_MSG)
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
         } else {
-            SessionRunner.cancelRun(runId);
+            sessionRunner.cancelRun(runId);
         }
     }
 

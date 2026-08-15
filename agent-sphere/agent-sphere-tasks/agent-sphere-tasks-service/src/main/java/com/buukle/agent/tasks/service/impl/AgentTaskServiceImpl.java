@@ -1,6 +1,7 @@
 package com.buukle.agent.tasks.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.exception.BizException;
@@ -13,9 +14,6 @@ import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
-import com.buukle.agent.instance.dtvo.vo.InstanceVO;
-import com.buukle.agent.instance.dtvo.vo.RunVO;
-import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.InstanceSpi;
@@ -39,10 +37,10 @@ import com.buukle.agent.tasks.service.AgentTaskService;
 import com.buukle.agent.tasks.service.TaskCallbackService;
 import com.buukle.agent.tasks.service.TaskContractValidator;
 import com.buukle.agent.util.json.JsonUtils;
-import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -52,9 +50,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -69,6 +64,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private static final int MAX_TITLE_LENGTH = 60;
     private static final String MSG_AUTONOMOUS_HEADER = "\n【自主任务模式】这是一个后台自动执行的任务：禁止向用户提问、请求澄清或确认任何内容；信息不足时基于已有上下文做合理假设并继续完成。\n";
     private static final String MSG_TASK_CONFIG_HEADER = "\n\n【任务配置】请严格依据以下配置执行任务：\n";
+    private static final String MSG_SITE_PLAYBOOK_HEADER = "\n\n【站点操作手册 Site Playbook】以下为当前站点的已知知识与注意事项，请严格照做、不要重复摸索：\n";
     private static final String MSG_EXPECTED_OUTPUT_HEADER = "\n\n【期望输出】请严格按以下 JSON Schema 返回最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
     private static final String MSG_STRICT_RETURN = "\n\n请务必按上述配置完成任务，并将你的执行结果按照符合【期望输出】schema 的 JSON 返回。";
     // 结构化提炼（第二阶段）
@@ -94,11 +90,6 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     @Value("${hri-ai.tasks.poll-interval:2s}")
     private Duration pollInterval;
-
-    private final ScheduledExecutorService pollScheduler = Executors.newScheduledThreadPool(2);
-    private final Map<Long, ScheduledFuture<?>> pollFutures = new ConcurrentHashMap<>();
-    // 每个任务当前轮询阶段（execute → extract → refine），同一任务互不干扰
-    private final Map<Long, String> pollPhases = new ConcurrentHashMap<>();
 
     @Override
     public TaskVO submit(CreateTaskDTO dto, CallerAuth auth) {
@@ -134,9 +125,12 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             task.setSessionId(session.getId());
             task.setRunId(resp.getRunId());
             task.setStatus(TaskEnum.STATUS_RUNNING);
+            task.setPollPhase(PHASE_EXECUTE);
+            task.setStartedAt(LocalDateTime.now());
+            task.setPolledAt(LocalDateTime.now());
             taskMapper.updateById(task);
 
-            schedulePoll(task);
+            // DB 化轮询：无需本地调度，由各副本的 @Scheduled sweep 认领（见 pollSweep）
         } catch (Exception e) {
             log.warn("Task {} submit failed: {}", task.getId(), e.getMessage());
             markTaskFailed(task.getId(), e.getMessage());
@@ -324,11 +318,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                 log.warn("Failed to stop run for task {}: {}", id, e.getMessage());
             }
         }
-        ScheduledFuture<?> poll = pollFutures.remove(id);
-        if (poll != null) {
-            poll.cancel(false);
-        }
-        pollPhases.remove(id);
+        // DB 化轮询：无需取消本地 future；条件更新保证单胜者
         transitionToTerminal(task, TaskEnum.STATUS_CANCELLED, task.getResultJson());
     }
 
@@ -379,62 +369,77 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
     }
 
-    private void schedulePoll(AgentTask task) {
-        final Long taskId = task.getId();
-        final Long runId = task.getRunId();
-        final long start = System.currentTimeMillis();
-        pollPhases.put(taskId, PHASE_EXECUTE);
-
-        ScheduledFuture<?> future = pollScheduler.scheduleWithFixedDelay(() -> {
-            try {
-                if (System.currentTimeMillis() - start > MAX_POLL_SECONDS * 1000) {
-                    markTerminal(taskId, TaskEnum.STATUS_FAILED,
-                            JsonUtils.toJson(Map.of("error", "task poll timeout")));
-                    throw new StopPolling();
-                }
-                String phase = pollPhases.getOrDefault(taskId, PHASE_EXECUTE);
-                // 每次从 DB 读最新 runId（execute→extract→refine 会更新）
-                AgentTask fresh = taskMapper.selectById(taskId);
-                if (fresh == null || fresh.getRunId() == null) {
-                    markTerminal(taskId, TaskEnum.STATUS_FAILED,
-                            JsonUtils.toJson(Map.of("error", "run not found")));
-                    throw new StopPolling();
-                }
-                Long currentRunId = fresh.getRunId();
-                RunVO run = runSpi.getRun(currentRunId);
-                if (run == null) {
-                    markTerminal(taskId, TaskEnum.STATUS_FAILED,
-                            JsonUtils.toJson(Map.of("error", "run not found")));
-                    throw new StopPolling();
-                }
-                String rs = run.getStatus();
-                if (TaskEnum.STATUS_FAILED.equals(rs) || TaskEnum.STATUS_CANCELLED.equals(rs)) {
-                    markTerminal(taskId, TaskEnum.STATUS_FAILED.equals(rs)
-                            ? TaskEnum.STATUS_FAILED : TaskEnum.STATUS_CANCELLED, replyJson(run));
-                    throw new StopPolling();
-                }
-                if (!TaskEnum.STATUS_COMPLETED.equals(rs)) {
-                    return; // 仍在运行，等待下一轮
-                }
-                if (handleCompletedPhase(fresh, phase, currentRunId, run)) {
-                    throw new StopPolling();
-                }
-            } catch (StopPolling sp) {
-                stopPolling(taskId);
-            } catch (Exception e) {
-                log.warn("Poll task {} failed: {}", taskId, e.getMessage());
+    /** 每副本 @Scheduled sweep：认领 RUNNING 且到期的任务，各执行一轮 pollOnce（DB 化，副本可互换）。 */
+    @Scheduled(fixedDelayString = "${hri-ai.tasks.poll-interval:2s}")
+    public void pollSweep() {
+        LocalDateTime cutoff = LocalDateTime.now().minus(pollInterval);
+        List<AgentTask> due = taskMapper.selectList(new LambdaQueryWrapper<AgentTask>()
+                .eq(AgentTask::getStatus, TaskEnum.STATUS_RUNNING)
+                .and(w -> w.isNull(AgentTask::getPolledAt).or().lt(AgentTask::getPolledAt, cutoff))
+                .last("LIMIT 20"));
+        for (AgentTask task : due) {
+            if (!claimTask(task)) {
+                continue; // 其他副本已认领
             }
-        }, pollInterval.toMillis(), pollInterval.toMillis(), TimeUnit.MILLISECONDS);
-        pollFutures.put(taskId, future);
-        log.info("Task {} scheduled for polling run {}", taskId, runId);
+            try {
+                // 后台调度线程无请求上下文：以任务创建人身份执行，满足归属校验
+                AuthContext.setUsername(task.getCreatedBy());
+                AuthContext.setSuperAdmin(false);
+                AuthContext.setPermissions(Set.of());
+                pollOnce(task);
+            } catch (Exception e) {
+                log.warn("Poll task {} failed: {}", task.getId(), e.getMessage());
+            } finally {
+                AuthContext.clear();
+            }
+        }
     }
 
-    private void stopPolling(Long taskId) {
-        pollPhases.remove(taskId);
-        ScheduledFuture<?> poll = pollFutures.remove(taskId);
-        if (poll != null) {
-            poll.cancel(false);
+    /** 条件更新认领：仅当仍为 RUNNING 且 polled_at 过期时把 polled_at 前移；返回是否认领成功（单胜者）。 */
+    private boolean claimTask(AgentTask task) {
+        LocalDateTime cutoff = LocalDateTime.now().minus(pollInterval);
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<AgentTask>()
+                .eq(AgentTask::getId, task.getId())
+                .eq(AgentTask::getStatus, TaskEnum.STATUS_RUNNING)
+                .and(w -> w.isNull(AgentTask::getPolledAt).or().lt(AgentTask::getPolledAt, cutoff))
+                .set(AgentTask::getPolledAt, LocalDateTime.now()));
+        return updated > 0;
+    }
+
+    /** 单任务一轮轮询：超时/run 终态/阶段推进。 */
+    private void pollOnce(AgentTask task) {
+        Long taskId = task.getId();
+        if (task.getStartedAt() != null
+                && Duration.between(task.getStartedAt(), LocalDateTime.now()).toMillis() > MAX_POLL_SECONDS * 1000) {
+            markTerminal(taskId, TaskEnum.STATUS_FAILED,
+                    JsonUtils.toJson(Map.of("error", "task poll timeout")));
+            return;
         }
+        String phase = task.getPollPhase() == null ? PHASE_EXECUTE : task.getPollPhase();
+        // 每次从 DB 读最新 runId（execute→extract→refine 会更新）
+        AgentTask fresh = taskMapper.selectById(taskId);
+        if (fresh == null || fresh.getRunId() == null) {
+            markTerminal(taskId, TaskEnum.STATUS_FAILED,
+                    JsonUtils.toJson(Map.of("error", "run not found")));
+            return;
+        }
+        Long currentRunId = fresh.getRunId();
+        RunVO run = runSpi.getRun(currentRunId);
+        if (run == null) {
+            markTerminal(taskId, TaskEnum.STATUS_FAILED,
+                    JsonUtils.toJson(Map.of("error", "run not found")));
+            return;
+        }
+        String rs = run.getStatus();
+        if (TaskEnum.STATUS_FAILED.equals(rs) || TaskEnum.STATUS_CANCELLED.equals(rs)) {
+            markTerminal(taskId, TaskEnum.STATUS_FAILED.equals(rs)
+                    ? TaskEnum.STATUS_FAILED : TaskEnum.STATUS_CANCELLED, replyJson(run));
+            return;
+        }
+        if (!TaskEnum.STATUS_COMPLETED.equals(rs)) {
+            return; // 仍在运行，等待下一轮
+        }
+        handleCompletedPhase(fresh, phase, currentRunId, run);
     }
 
     /**
@@ -495,10 +500,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (extractRunId == null) {
             log.warn("Task {} extraction run not created, falling back to execute reply", task.getId());
             markTerminal(task.getId(), TaskEnum.STATUS_COMPLETED, replyJson(executeRun));
-            stopPolling(task.getId());
             return;
         }
-        pollPhases.put(task.getId(), PHASE_EXTRACT);
+        task.setPollPhase(PHASE_EXTRACT);
         task.setRunId(extractRunId);
         taskMapper.updateById(task);
         log.info("Task {} extraction run {} started", task.getId(), extractRunId);
@@ -511,10 +515,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (refineRunId == null) {
             log.warn("Task {} refine run not created, falling back to invalid extract content", task.getId());
             markTerminal(task.getId(), TaskEnum.STATUS_COMPLETED, JsonUtils.toJson(Map.of("reply", invalidContent)));
-            stopPolling(task.getId());
             return;
         }
-        pollPhases.put(task.getId(), PHASE_REFINE);
+        task.setPollPhase(PHASE_REFINE);
         task.setRunId(refineRunId);
         taskMapper.updateById(task);
         log.info("Task {} refine run {} started", task.getId(), refineRunId);
@@ -595,10 +598,17 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (isTerminal(task.getStatus())) {
             return;
         }
-        task.setStatus(status);
-        task.setResultJson(resultJson);
-        taskMapper.updateById(task);
-        taskCallbackService.notifyTerminal(task);
+        // 条件更新保证多副本单胜者；仅获胜者触发一次 notifyTerminal
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<AgentTask>()
+                .eq(AgentTask::getId, task.getId())
+                .in(AgentTask::getStatus, TaskEnum.STATUS_RUNNING, TaskEnum.STATUS_QUEUED)
+                .set(AgentTask::getStatus, status)
+                .set(AgentTask::getResultJson, resultJson));
+        if (updated > 0) {
+            task.setStatus(status);
+            task.setResultJson(resultJson);
+            taskCallbackService.notifyTerminal(task);
+        }
     }
 
     private boolean isTerminal(String status) {
@@ -617,7 +627,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
     }
 
-    /** 组装任务 prompt：自主模式指令 + goal + 配置 + 期望输出 schema，禁止提问并要求严格按 schema 返回结构化结果。 */
+    /** 组装任务 prompt：自主模式指令 + goal + 配置 + 站点手册 + 期望输出 schema，禁止提问并要求严格按 schema 返回结构化结果。 */
     private String buildPrompt(CreateTaskDTO dto) {
         StringBuilder sb = new StringBuilder(MSG_AUTONOMOUS_HEADER);
         if (dto.getGoal() != null) {
@@ -625,6 +635,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
         if (dto.getConfig() != null && !dto.getConfig().isEmpty()) {
             sb.append(MSG_TASK_CONFIG_HEADER).append(JsonUtils.toJson(dto.getConfig()));
+        }
+        if (StringUtils.hasText(dto.getSitePlaybook())) {
+            sb.append(MSG_SITE_PLAYBOOK_HEADER).append(dto.getSitePlaybook());
         }
         if (dto.getExpectedOutput() != null && !dto.getExpectedOutput().isEmpty()) {
             sb.append(MSG_EXPECTED_OUTPUT_HEADER).append(JsonUtils.toJson(dto.getExpectedOutput()));
@@ -658,13 +671,5 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         vo.setCreatedAt(t.getCreatedAt() == null ? null : t.getCreatedAt().toString());
         vo.setUpdatedAt(t.getUpdatedAt() == null ? null : t.getUpdatedAt().toString());
         return vo;
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        pollScheduler.shutdownNow();
-    }
-
-    private static final class StopPolling extends RuntimeException {
     }
 }

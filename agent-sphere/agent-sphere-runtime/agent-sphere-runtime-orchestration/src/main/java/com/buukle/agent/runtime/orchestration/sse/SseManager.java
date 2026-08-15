@@ -1,33 +1,33 @@
 package com.buukle.agent.runtime.orchestration.sse;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
-import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
+/**
+ * 本地 SSE emitter 注册表 + 投递。
+ *
+ * 多副本下仅持有**本副本**的连接：事件由 Redis 事件总线发布 → 各副本 relay 调
+ * {@link #sendBySession}/{@link #sendByUser} 投本地 emitter；缓存/回放由 {@link SseEventCache}
+ * 承担（origin 写、注册时 flush）。
+ */
 @Component
 public class SseManager {
-    private static final int MAX_CACHE_PER_SESSION = 300;
 
     private final ConcurrentHashMap<Long, List<SseEmitter>> sessionEmitters = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Long, ConcurrentLinkedQueue<CachedEvent>> eventCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, List<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, ConcurrentLinkedQueue<CachedEvent>> userEventCache = new ConcurrentHashMap<>();
-    private final Duration cacheTtl;
+    private final SseEventCache sseEventCache;
     private final ScheduledExecutorService heartbeats;
 
-    public SseManager(AgentRuntimeProperties properties) {
-        this.cacheTtl = properties.getSse().getCacheTtl();
+    public SseManager(AgentRuntimeProperties properties, SseEventCache sseEventCache) {
+        this.sseEventCache = sseEventCache;
         long heartbeatInterval = properties.getSse().getHeartbeatInterval().getSeconds();
         this.heartbeats = Executors.newScheduledThreadPool(1, r -> {
             Thread t = new Thread(r, "sse-heartbeat");
@@ -95,23 +95,15 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
-        flushCache(sessionId, emitter);
+        // 跨副本重连：回放 Redis 缓存中该 session 的近端事件
+        sseEventCache.flushSessionEvents(sessionId, emitter);
         return emitter;
     }
 
+    /** 本副本 session 级投递（relay 调用；origin 已在发布前写缓存）。 */
     public void sendBySession(Long sessionId, Object event) {
-        // 新 run 开始时清空该 session 的缓存，避免重连后重放旧 run 的事件
-        if (event instanceof RuntimeEventVO re
-                && re.getEventType() instanceof RunStatus s
-                && s == RunStatus.PENDING
-                && re.getData() != null && re.getData().getSessionId() != null) {
-            ConcurrentLinkedQueue<CachedEvent> q = eventCache.get(re.getData().getSessionId());
-            if (q != null) q.clear();
-        }
-
         List<SseEmitter> emitters = sessionEmitters.get(sessionId);
         if (emitters == null || emitters.isEmpty()) {
-            cacheEvent(sessionId, event);
             return;
         }
         List<SseEmitter> failed = new ArrayList<>();
@@ -125,7 +117,6 @@ public class SseManager {
         if (!failed.isEmpty()) {
             List<SseEmitter> remaining = sessionEmitters.get(sessionId);
             if (remaining != null) remaining.removeAll(failed);
-            cacheEvent(sessionId, event);
         }
     }
 
@@ -151,15 +142,14 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
-        flushUserCache(username, emitter);
+        sseEventCache.flushUserEvents(username, emitter);
         return emitter;
     }
 
-    /** 向用户所有用户级连接推送事件（无连接时缓存）。 */
+    /** 本副本用户级投递。 */
     public void sendByUser(String username, Object event) {
         List<SseEmitter> emitters = userEmitters.get(username);
         if (emitters == null || emitters.isEmpty()) {
-            cacheUserEvent(username, event);
             return;
         }
         List<SseEmitter> failed = new ArrayList<>();
@@ -173,7 +163,6 @@ public class SseManager {
         if (!failed.isEmpty()) {
             List<SseEmitter> remaining = userEmitters.get(username);
             if (remaining != null) remaining.removeAll(failed);
-            cacheUserEvent(username, event);
         }
     }
 
@@ -185,90 +174,5 @@ public class SseManager {
                 userEmitters.remove(username);
             }
         }
-    }
-
-    private void cacheUserEvent(String username, Object event) {
-        ConcurrentLinkedQueue<CachedEvent> queue = userEventCache.computeIfAbsent(username, k -> new ConcurrentLinkedQueue<>());
-        queue.add(new CachedEvent(event, Instant.now()));
-        while (queue.size() > MAX_CACHE_PER_SESSION) queue.poll();
-        evictExpiredUser(username, queue);
-    }
-
-    private void flushUserCache(String username, SseEmitter emitter) {
-        ConcurrentLinkedQueue<CachedEvent> queue = userEventCache.get(username);
-        if (queue == null || queue.isEmpty()) return;
-        List<CachedEvent> remaining = new ArrayList<>();
-        while (!queue.isEmpty()) {
-            CachedEvent cached = queue.poll();
-            if (cached != null && Duration.between(cached.timestamp, Instant.now()).compareTo(cacheTtl) <= 0) {
-                try {
-                    emitter.send(SseEmitter.event().data(cached.event));
-                } catch (Exception e) {
-                    remaining.add(cached);
-                }
-            }
-        }
-        if (!remaining.isEmpty()) {
-            queue.addAll(remaining);
-        }
-        if (queue.isEmpty()) {
-            userEventCache.remove(username);
-        }
-    }
-
-    private void evictExpiredUser(String username, ConcurrentLinkedQueue<CachedEvent> queue) {
-        Iterator<CachedEvent> it = queue.iterator();
-        while (it.hasNext()) {
-            if (Duration.between(it.next().timestamp, Instant.now()).compareTo(cacheTtl) > 0) {
-                it.remove();
-            }
-        }
-        if (queue.isEmpty()) {
-            userEventCache.remove(username);
-        }
-    }
-
-    private void cacheEvent(Long sessionId, Object event) {
-        ConcurrentLinkedQueue<CachedEvent> queue = eventCache.computeIfAbsent(sessionId, k -> new ConcurrentLinkedQueue<>());
-        queue.add(new CachedEvent(event, Instant.now()));
-        while (queue.size() > MAX_CACHE_PER_SESSION) queue.poll();
-        evictExpired(sessionId, queue);
-    }
-
-    private void flushCache(Long sessionId, SseEmitter emitter) {
-        ConcurrentLinkedQueue<CachedEvent> queue = eventCache.get(sessionId);
-        if (queue == null || queue.isEmpty()) return;
-        List<CachedEvent> remaining = new ArrayList<>();
-        while (!queue.isEmpty()) {
-            CachedEvent cached = queue.poll();
-            if (cached != null && Duration.between(cached.timestamp, Instant.now()).compareTo(cacheTtl) <= 0) {
-                try {
-                    emitter.send(SseEmitter.event().data(cached.event));
-                } catch (Exception e) {
-                    remaining.add(cached);
-                }
-            }
-        }
-        if (!remaining.isEmpty()) {
-            queue.addAll(remaining);
-        }
-        if (queue.isEmpty()) {
-            eventCache.remove(sessionId);
-        }
-    }
-
-    private void evictExpired(Long sessionId, ConcurrentLinkedQueue<CachedEvent> queue) {
-        Iterator<CachedEvent> it = queue.iterator();
-        while (it.hasNext()) {
-            if (Duration.between(it.next().timestamp, Instant.now()).compareTo(cacheTtl) > 0) {
-                it.remove();
-            }
-        }
-        if (queue.isEmpty()) {
-            eventCache.remove(sessionId);
-        }
-    }
-
-    private record CachedEvent(Object event, Instant timestamp) {
     }
 }

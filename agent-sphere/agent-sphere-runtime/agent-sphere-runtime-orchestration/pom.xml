@@ -61,5 +61,9 @@
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-instance-repository</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-infrastructure</artifactId>
+        </dependency>
     </dependencies>
 </project>

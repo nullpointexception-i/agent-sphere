@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
@@ -33,18 +34,17 @@ import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RMapCache;
+import org.redisson.api.RSet;
+import org.redisson.api.RedissonClient;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -55,8 +55,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SessionRunner {
 
     private static final Duration CONTEXT_TTL = Duration.ofMinutes(30);
-    private static final Set<Long> CANCELLED_RUNS = ConcurrentHashMap.newKeySet();
-    private static final Set<Long> CANCELLED_SESSIONS = ConcurrentHashMap.newKeySet();
+    /** Redis 取消 RSet 的占位标记（RSet 用作布尔标志，contains/add 均为该值）。 */
+    private static final Object CANCEL_MARKER = Boolean.TRUE;
     private final AgentRuntimeProperties properties;
     private final RunSpi runSpi;
     private final SessionSpi sessionSpi;
@@ -72,72 +72,80 @@ public class SessionRunner {
     private final ToolExecutor toolExecutor;
     private final TitleService titleService;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
-    private final ConcurrentHashMap<Long, ContextEntry> contexts = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Long, Long> pendingRunIds = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService contextSweeper = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "context-sweeper");
-        t.setDaemon(true);
-        return t;
-    });
+    private final RedissonClient redissonClient;
 
-    public static void cancelRun(Long runId) {
-        if (runId != null) CANCELLED_RUNS.add(runId);
+    /** run 级取消：写 Redis RSet（任意副本可调），执行副本 loop 读取并消费。 */
+    public void cancelRun(Long runId) {
+        if (runId != null) {
+            runCancelSet(runId).add(CANCEL_MARKER);
+        }
     }
 
     /** session 级取消：loop 内按"当前 run 所属 session 是否被停"直接终止（不依赖 runId）。 */
-    public static void cancelSession(Long sessionId) {
-        if (sessionId != null) CANCELLED_SESSIONS.add(sessionId);
+    public void cancelSession(Long sessionId) {
+        if (sessionId != null) {
+            sessionCancelSet(sessionId).add(CANCEL_MARKER);
+        }
     }
 
     /** 清除 session 取消标志（无活动 run / 已消费时调用，避免误杀下一个新 run）。 */
-    public static void clearSessionCancelled(Long sessionId) {
-        if (sessionId != null) CANCELLED_SESSIONS.remove(sessionId);
+    public void clearSessionCancelled(Long sessionId) {
+        if (sessionId != null) {
+            sessionCancelSet(sessionId).delete();
+        }
     }
 
-    /** 该 session 当前是否有正在执行的 run（contexts 在 run 开始注册、结束移除）。 */
+    /** 该 session 当前是否有正在执行的 run（owner 租约由协调器在 RUNNING 时设置、IDLE 时清除）。 */
     public boolean hasActiveRun(Long sessionId) {
-        return sessionId != null && contexts.containsKey(sessionId);
+        return sessionId != null && redissonClient.getBucket(
+                DistributedRuntimeConstants.sessionOwnerKey(sessionId)).isExists();
     }
 
-    @PostConstruct
-    void startContextSweeper() {
-        contextSweeper.scheduleAtFixedRate(() -> {
-            Instant now = Instant.now();
-            contexts.forEach((sid, entry) -> {
-                if (Duration.between(entry.createdAt(), now).compareTo(CONTEXT_TTL) > 0) {
-                    contexts.remove(sid);
-                    log.info("Evicted stale context for session {}", sid);
-                }
-            });
-        }, 5, 30, TimeUnit.MINUTES);
+    private RSet<Object> runCancelSet(Long runId) {
+        return redissonClient.getSet(DistributedRuntimeConstants.runCancelKey(runId));
     }
 
-    @PreDestroy
-    void stopContextSweeper() {
-        contextSweeper.shutdown();
+    private RSet<Object> sessionCancelSet(Long sessionId) {
+        return redissonClient.getSet(DistributedRuntimeConstants.sessionCancelKey(sessionId));
+    }
+
+    private boolean isRunCancelled(Long runId) {
+        return runId != null && runCancelSet(runId).contains(CANCEL_MARKER);
+    }
+
+    private boolean isSessionCancelled(Long sessionId) {
+        return sessionId != null && sessionCancelSet(sessionId).contains(CANCEL_MARKER);
+    }
+
+    private void clearRunCancelled(Long runId) {
+        if (runId != null) {
+            runCancelSet(runId).delete();
+        }
     }
 
     public void registerContext(Long sessionId, KernelContext ctx) {
-        contexts.put(sessionId, new ContextEntry(ctx, Instant.now()));
+        ctxCache().put(sessionId, ctx, CONTEXT_TTL.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void setPendingRun(Long sessionId, Long runId) {
-        pendingRunIds.put(sessionId, runId);
+        if (runId != null) {
+            redissonClient.<Long>getBucket(
+                    DistributedRuntimeConstants.sessionPendingRunKey(sessionId)).set(runId);
+        }
     }
 
     private KernelContext getContext(Long sessionId) {
-        ContextEntry entry = contexts.get(sessionId);
-        if (entry == null) return null;
-        if (Duration.between(entry.createdAt(), Instant.now()).compareTo(CONTEXT_TTL) > 0) {
-            contexts.remove(sessionId);
-            return null;
-        }
-        return entry.ctx();
+        return ctxCache().get(sessionId);
+    }
+
+    private RMapCache<Long, KernelContext> ctxCache() {
+        return redissonClient.getMapCache(DistributedRuntimeConstants.KEY_CTX);
     }
 
     public void run(Long sessionId) {
         int loopCount = 0;
-        Long currentRunId = pendingRunIds.remove(sessionId);
+        Long currentRunId = redissonClient.<Long>getBucket(
+                DistributedRuntimeConstants.sessionPendingRunKey(sessionId)).getAndDelete();
         RunVO currentRun = currentRunId != null ? runSpi.getRun(currentRunId) : null;
         List<ChatMessageDTO> messages = new ArrayList<>();
         boolean hasToolCalls = false;
@@ -147,7 +155,7 @@ public class SessionRunner {
         int compactionRetries = 0;
         loop:
         while (loopCount < maxLoopCount) {
-            if (CANCELLED_RUNS.contains(currentRunId) || CANCELLED_SESSIONS.contains(sessionId)) break;
+            if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
             log.info("------******************--------run:{}-loopCount:{}", currentRunId, loopCount);
             SessionInputManager.InputMessage input = null;
             if (!hasToolCalls) {
@@ -210,7 +218,7 @@ public class SessionRunner {
             AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
             TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef);
 
-            if (CANCELLED_RUNS.contains(currentRunId) || CANCELLED_SESSIONS.contains(sessionId)) break;
+            if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
 
             // 统一收口：根据 TurnOutcome 判定 run 状态
             if (turn.content() != null && !turn.content().isBlank()) {
@@ -342,7 +350,7 @@ public class SessionRunner {
             });
 
             // Check for cancellation before ANY tool submission
-            if (CANCELLED_RUNS.contains(currentRunId) || CANCELLED_SESSIONS.contains(sessionId)) {
+            if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                 break;
             }
 
@@ -351,12 +359,12 @@ public class SessionRunner {
                 fibers.submit(turn.toolCalls().get(fi).id(),
                         () -> toolExecutor.execute(turn.toolCalls().get(fi), sid, rid, tl));
             }
-            var results = fibers.awaitAll(() -> CANCELLED_RUNS.contains(rid) || CANCELLED_SESSIONS.contains(sid));
+            var results = fibers.awaitAll(() -> isRunCancelled(rid) || isSessionCancelled(sid));
 
             // If cancelled during tool execution, publish FAILED events and exit.
             // 不要在此消费 CANCELLED_RUNS：终态（run=CANCELLED + 终态事件）统一由循环后的收口处理，
             // 否则 run 会一直停留在 RUNNING 且前端收不到 run_cancelled/run_failed。
-            if (CANCELLED_RUNS.contains(currentRunId) || CANCELLED_SESSIONS.contains(sessionId)) {
+            if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                 for (TurnToolCall tc : turn.toolCalls()) {
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                             new RuntimeEventDataVO()
@@ -443,8 +451,14 @@ public class SessionRunner {
         }
 
         // Handle cancellation after loop exits（run 级或 session 级取消都统一收口）
-        boolean runCancelled = CANCELLED_RUNS.remove(currentRunId);
-        boolean sessionCancelled = CANCELLED_SESSIONS.remove(sessionId);
+        boolean runCancelled = isRunCancelled(currentRunId);
+        if (runCancelled) {
+            clearRunCancelled(currentRunId);
+        }
+        boolean sessionCancelled = isSessionCancelled(sessionId);
+        if (sessionCancelled) {
+            clearSessionCancelled(sessionId);
+        }
         if ((runCancelled || sessionCancelled) && currentRun != null) {
             currentRun.setStatus(RunStatus.CANCELLED.name());
             runSpi.updateRun(currentRun);
@@ -457,7 +471,7 @@ public class SessionRunner {
         }
 
         inputManager.clear(sessionId);
-        contexts.remove(sessionId);
+        ctxCache().remove(sessionId);
     }
 
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
@@ -474,7 +488,7 @@ public class SessionRunner {
             List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
 
             fallbackRouteExecutor.execute(routes, (i, route) -> {
-                if (CANCELLED_RUNS.contains(runId) || CANCELLED_SESSIONS.contains(sessionId)) {
+                if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
                     cancelled.set(true);
                     throw new RuntimeException("Run cancelled");
                 }
@@ -542,7 +556,7 @@ public class SessionRunner {
                     long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
                     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
                     while (!streamDone.await(1, TimeUnit.SECONDS)) {
-                        if (CANCELLED_RUNS.contains(runId) || CANCELLED_SESSIONS.contains(sessionId)) {
+                        if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
                             cancelled.set(true);
                             future.cancel(true);
                             throw new RuntimeException("Run cancelled");
@@ -624,8 +638,5 @@ public class SessionRunner {
             log.warn("Failed to resolve API key id={}", route.getApiKeyId(), e);
             return "";
         }
-    }
-
-    private record ContextEntry(KernelContext ctx, Instant createdAt) {
     }
 }

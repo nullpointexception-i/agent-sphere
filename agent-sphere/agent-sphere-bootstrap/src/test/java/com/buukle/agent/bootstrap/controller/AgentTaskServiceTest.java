@@ -1,5 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
@@ -22,6 +24,8 @@ import com.buukle.agent.tasks.repository.AgentTaskMapper;
 import com.buukle.agent.tasks.service.TaskCallbackService;
 import com.buukle.agent.tasks.service.TaskContractValidator;
 import com.buukle.agent.tasks.service.impl.AgentTaskServiceImpl;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -71,6 +76,13 @@ class AgentTaskServiceTest {
 
     @InjectMocks
     AgentTaskServiceImpl taskService;
+
+    @BeforeAll
+    static void initMpTableInfo() {
+        // 单元测试无 MyBatis-Plus 上下文：LambdaWrapper 需要实体 TableInfo
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""), AgentTask.class);
+    }
 
     @BeforeEach
     void setUp() {
@@ -171,14 +183,14 @@ class AgentTaskServiceTest {
         task.setRunId(22L);
         given(taskMapper.selectById(7L)).willReturn(task);
         given(instanceSpi.getInstance(2L)).willReturn(instance(2L));
+        given(taskMapper.update(isNull(), any())).willReturn(1);
 
         taskService.stop(7L, AUTH);
 
         ArgumentCaptor<AgentTask> captor = ArgumentCaptor.forClass(AgentTask.class);
-        verify(taskMapper).updateById(captor.capture());
+        verify(taskCallbackService).notifyTerminal(captor.capture());
         assertEquals("CANCELLED", captor.getValue().getStatus());
         verify(chatRuntimeService).stopRun(11L, 22L);
-        verify(taskCallbackService).notifyTerminal(any(AgentTask.class));
     }
 
     @Test
@@ -305,11 +317,12 @@ class AgentTaskServiceTest {
         persisted.setId(1L);
         persisted.setStatus("QUEUED");
         given(taskMapper.selectById(1L)).willReturn(persisted);
+        given(taskMapper.update(isNull(), any())).willReturn(1);
 
         assertThrows(RuntimeException.class, () -> taskService.submit(dto, AUTH));
 
         ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
-        verify(taskMapper).updateById(taskCaptor.capture());
+        verify(taskCallbackService).notifyTerminal(taskCaptor.capture());
         AgentTask failed = taskCaptor.getValue();
         assertEquals("FAILED", failed.getStatus());
         org.junit.jupiter.api.Assertions.assertTrue(failed.getResultJson().contains("boom"));
@@ -389,13 +402,14 @@ class AgentTaskServiceTest {
         given(taskMapper.selectById(1L)).willReturn(task);
         given(contractValidator.validate(any(), eq("{\"status\":\"still-bad\"}")))
                 .willReturn(List.of("still invalid"));
+        given(taskMapper.update(isNull(), any())).willReturn(1);
 
         boolean refineDone = ReflectionTestUtils.invokeMethod(taskService, "handleCompletedPhase",
                 task, "refine", 30L, run(30L, "COMPLETED", "{\"status\":\"still-bad\"}"));
         assertEquals(true, refineDone);
         verify(chatRuntimeService, never()).chat(anyLong(), any(SendMessageDTO.class));
         ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
-        verify(taskMapper).updateById(taskCaptor.capture());
+        verify(taskCallbackService).notifyTerminal(taskCaptor.capture());
         assertEquals("COMPLETED", taskCaptor.getValue().getStatus());
         org.junit.jupiter.api.Assertions.assertTrue(taskCaptor.getValue().getResultJson().contains("still-bad"));
     }

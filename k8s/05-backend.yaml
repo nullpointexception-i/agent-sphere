@@ -4,7 +4,7 @@ metadata:
   name: backend
   namespace: agent-sphere
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: backend
@@ -26,6 +26,13 @@ spec:
             port: 8080
           initialDelaySeconds: 15
           periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 20
+          failureThreshold: 3
         resources:
           requests:
             memory: 512Mi

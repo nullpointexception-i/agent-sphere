@@ -186,6 +186,13 @@ buukle:
       backend-retention-days: 90                    # 后端事件保留天数 / Backend event retention days
       cleanup-cron: "0 0 3 * * ?"                   # 清理定时任务cron / Cleanup cron expression
 
+    # ============================================================
+    # 多副本分布式运行态 / Distributed runtime
+    # ============================================================
+    distributed:
+      owner-lease: 5m                              # session 执行者 owner 租约 / Owner lease duration
+      orphan-sweep-interval: 30s                    # 孤儿 run 清扫间隔 / Orphan sweep interval
+
 # ============================================================
 # 能力开放层配置 / Capability Open Platform
 # ============================================================

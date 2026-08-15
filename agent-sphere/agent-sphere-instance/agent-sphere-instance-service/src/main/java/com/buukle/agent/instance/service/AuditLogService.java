@@ -7,15 +7,17 @@ import com.buukle.agent.instance.domain.AgentAuditLog;
 import com.buukle.agent.instance.dtvo.dto.FrontendTrackDTO;
 import com.buukle.agent.instance.repository.AgentAuditLogMapper;
 import lombok.RequiredArgsConstructor;
+import org.redisson.api.RAtomicLong;
+import org.redisson.api.RedissonClient;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -27,9 +29,8 @@ public class AuditLogService {
     private static final String RESOURCE_TYPE_FRONTEND = "Frontend";
     private static final String FRONTEND_DETAIL_FORMAT = "%s | %s | pos=%s,%s | text=%s";
 
-    private final ConcurrentHashMap<String, int[]> frontendRateMap = new ConcurrentHashMap<>();
-
     private final AgentAuditLogMapper auditLogMapper;
+    private final RedissonClient redissonClient;
 
     @Async("auditTaskExecutor")
     @EventListener
@@ -69,14 +70,14 @@ public class AuditLogService {
         Long userId = AuthContext.getUserId();
         if (userId != null) {
             String key = FE_RATE_KEY_PREFIX + userId;
-            int now = (int) (System.currentTimeMillis() / 1000);
-            int window = now / FE_WINDOW_SECONDS;
-            int[] state = frontendRateMap.get(key);
-            if (state != null && state[0] == window && state[1] >= MAX_FE_PER_WINDOW) return;
-            if (state == null || state[0] != window) {
-                frontendRateMap.put(key, new int[]{window, events.size()});
-            } else {
-                state[1] += events.size();
+            // 多副本共享限流：Redis INCR + EXPIRE（滑动窗口，10s）
+            RAtomicLong counter = redissonClient.getAtomicLong(key);
+            long count = counter.incrementAndGet();
+            if (count == 1) {
+                counter.expire(Duration.ofSeconds(FE_WINDOW_SECONDS));
+            }
+            if (count > MAX_FE_PER_WINDOW) {
+                return;
             }
         }
 

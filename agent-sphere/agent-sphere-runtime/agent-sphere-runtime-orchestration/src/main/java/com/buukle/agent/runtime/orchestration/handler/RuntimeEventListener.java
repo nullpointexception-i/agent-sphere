@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.handler;
 
+import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
+import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentUserInLoopRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
@@ -12,8 +14,9 @@ import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
+import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEnvelope;
 import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEvent;
-import com.buukle.agent.runtime.orchestration.sse.SseManager;
+import com.buukle.agent.runtime.orchestration.sse.SseEventCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -25,7 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 @RequiredArgsConstructor
 public class RuntimeEventListener {
-    private final SseManager sseManager;
+    private final SseEventCache eventCache;
+    private final RedisEventBus eventBus;
     private final RunSpi runSpi;
     private final AgentUserInLoopRecordSpi hitlRecordSpi;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
@@ -144,11 +148,18 @@ public class RuntimeEventListener {
 
         Long sessionId = data != null ? data.getSessionId() : null;
         if (sessionId != null) {
-            sseManager.sendBySession(sessionId, transformForFrontend(event));
+            RuntimeEventVO frontendEvent = transformForFrontend(event);
+            // 新 run 开始时清空该 session 缓存，避免重连后重放旧 run 事件
+            if (event.getEventType() instanceof RunStatus s && s == RunStatus.PENDING) {
+                eventCache.clearSessionEvents(sessionId);
+            }
+            // 单写者（本执行副本）：先写缓存、再发布，保证跨副本重连可回放且无重复
+            eventCache.appendSessionEvent(sessionId, frontendEvent);
+            eventBus.publish(DistributedRuntimeConstants.TOPIC_EVENTS, frontendEvent);
         }
     }
 
-    /** 浏览器指令：除按 session 投递前端外，额外按 session 归属用户投递到用户级 task 连接（浏览器插件）。 */
+    /** 浏览器指令：按 session 归属用户投递到用户级 task 连接（浏览器插件），经事件总线广播。 */
     private void handleChromeCommand(RuntimeEventVO event, RuntimeEventDataVO data) {
         if (!(event instanceof ChromeCommandEvent chromeEvent)) {
             return;
@@ -160,7 +171,8 @@ public class RuntimeEventListener {
         try {
             SessionVO session = sessionSpi.getSession(sessionId);
             if (session != null && session.getCreatedBy() != null && !session.getCreatedBy().isBlank()) {
-                sseManager.sendByUser(session.getCreatedBy(), chromeEvent.getCommand());
+                eventBus.publish(DistributedRuntimeConstants.TOPIC_CHROME_COMMAND,
+                        new ChromeCommandEnvelope(session.getCreatedBy(), chromeEvent.getCommand()));
             }
         } catch (Exception e) {
             // session 不存在/无归属：仅按 session 投递前端，忽略
