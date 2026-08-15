@@ -377,7 +377,7 @@ Response:
 }
 ```
 
-Run interactions (list view):
+Run  interactions (list view):
 
 ![Run interactions](agent-sphere-readme/Interactions-of-run.png)
 
