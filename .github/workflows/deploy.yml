@@ -90,8 +90,13 @@ jobs:
     - name: Package Chrome Extension
       run: |
         mkdir -p output
+        TAG="${{ github.ref_name }}"
+        VER="${TAG#v}"     # 去掉前缀 v
+        VER="${VER%-*}"    # 去掉 -alpha/-beta 后缀 → 纯数字点分段（Chrome 扩展版本要求）
         cd agent-sphere-chrome-extension
-        zip -r ../output/agent-sphere-chrome-extension-${{ github.ref_name }}.zip \
+        # 打包时自动将版本号替换为与 tag 数字版本一致（仅影响本次 checkout 产物，不提交回仓库）
+        sed -i "s|\"version\": *\"[^\"]*\"|\"version\": \"${VER}\"|" manifest.json package.json
+        zip -r ../output/agent-sphere-chrome-extension-${TAG}.zip \
           manifest.json background.js lib content.js content-locator.js content-editors.js \
           page-script.js inject.js popup.html popup.js offscreen.html offscreen.js \
           icon-16.png icon-32.png icon-48.png icon-128.png
