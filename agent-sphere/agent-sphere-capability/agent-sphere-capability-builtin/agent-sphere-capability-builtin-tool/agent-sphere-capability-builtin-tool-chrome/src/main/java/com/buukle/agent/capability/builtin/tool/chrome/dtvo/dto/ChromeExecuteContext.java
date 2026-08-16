@@ -40,4 +40,49 @@ public class ChromeExecuteContext extends ExecuteContext {
 
     @Schema(example = "2", description = "text匹配多处文本时定位第N处（1起），如多个\"确定\"按钮；仅click/hover生效")
     private Integer occurrence;
+
+    @Schema(example = "0", description = "快照(getContent mode:snapshot)返回的稳定元素引用（0起），用于click/type/hover/select/upload直接定位，免去selector；优先于selector/text")
+    private Integer ref;
+
+    @Schema(example = "3000", description = "元素出现/可交互前的最大等待毫秒（默认3000），click/type/hover/select/upload生效")
+    private Integer waitMs;
+
+    @Schema(example = "500", description = "wait动作：固定等待毫秒")
+    private Integer ms;
+
+    @Schema(example = "8000", description = "wait动作：等待selector/text/ref出现的最长毫秒（默认8000）")
+    private Integer timeout;
+
+    @Schema(example = "Enter", description = "key动作：按键名（Enter/Tab/Escape/Backspace/ArrowDown等），可选codeKey指定物理键")
+    private String key;
+
+    @Schema(example = "Enter", description = "key动作：物理键code")
+    private String codeKey;
+
+    @Schema(example = "down", description = "scroll动作：方向 up/down/left/right，或给定selector/ref滚动到该元素")
+    private String direction;
+
+    @Schema(example = "600", description = "scroll动作：滚动像素，缺省为视口高度0.8")
+    private Integer amount;
+
+    @Schema(example = "value_1", description = "select动作：<select>要选中的value")
+    private String value;
+
+    @Schema(example = "选项B", description = "select动作：<select>要选中的选项文本或value")
+    private String label;
+
+    @Schema(example = "200", description = "getContent mode:snapshot 的元素上限（默认200）")
+    private Integer max;
+
+    @Schema(example = "resume.pdf", description = "upload动作：文件名")
+    private String fileName;
+
+    @Schema(example = "JVBERi0xLjQK...", description = "upload动作：文件内容base64")
+    private String fileBase64;
+
+    @Schema(example = "application/pdf", description = "upload动作：MIME类型")
+    private String fileType;
+
+    @Schema(example = "0", description = "指定操作的iframe frameId（同源iframe内元素定位；缺省顶层）")
+    private Integer frameId;
 }

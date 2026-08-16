@@ -27,25 +27,24 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
 
     private static final String DESCRIPTION = "Chrome browser automation. Operations in priority order:\n"
             + "1. navigate — open a URL in the browser.\n"
-            + "2. getContent(mode: summary) — discover interactive elements, navigation links (navLinks), expandable sections, and open dialogs/modals (dialogs). Returns inputs/buttons/forms/navLinks/sections/dialogs. Icon-only buttons are reported by their aria-label or title attribute (e.g. 'plus').\n"
-            + "   getContent(mode: query, selector) — return a compact list of up to 50 elements matching `selector` (each with index/tag/class/text/placeholder/value) instead of the full DOM. Use it to target repeated elements (e.g. multiple identical inputs).\n"
-            + "3. click(selector) or click(text) — click an element by CSS selector OR by visible text. Text-based click uses 3-phase fuzzy matching: exact text → contains(text) → contains(any descendant) with up-search to nearest clickable ancestor. Works even when text is nested in child elements (e.g. menus, submenu-titles). "
-            + "When a selector/text matches several elements, pass `index` (selector, 1-based) or `occurrence` (text, 1-based) to pick the Nth one (e.g. the 2nd of two identical number inputs, or the 2nd '确定' button).\n"
-            + "4. type(selector, text, append?): fill input fields (works with modern SPA frameworks like React/Vue/Angular). "
-            + "When append=true, text is appended to existing content instead of replacing it. Useful for incrementally writing articles, multi-line inputs, or chat message boxes. "
-            + "Pass `index` when the selector matches several inputs.\n"
-            + "   For Draft.js editors (Zhihu article editor, Facebook): first click() the editor area (e.g. by placeholder text '请输入正文') to activate it, "
-            + "then type() on selector '.public-DraftEditor-content'. If type() returns success but no visible text change, the editor likely needs activation first.\n"
-            + "5. hover(selector/text) — simulate mouse-over (reveals JS-driven hover menus, e.g. per-card action buttons).\n"
-            + "6. closeDialogs — close all open modal dialogs/toasts in one call (use after an action that opened a modal, to clean up leftover dialogs).\n"
-            + "7. executeJS — LAST RESORT for complex interactions when other actions fail. It is BLOCKED on strict-CSP sites (e.g. 猎聘/liepin): if the result has success=false / errorCategory=csp_blocked / a `warning` field / data null with no effect, do NOT retry — re-read the page with getContent and use click/type instead. If the JS expression has no return value (undefined), the result data is '__NO_RETURN__' with resultType 'void'.\n"
-            + "8. Tab following: clicking a link that opens a new tab (target=\"_blank\" or window.open) will automatically switch control to the new tab. The result will include _newTabId and _newTabUrl.\n"
-            + "The _url field in click/getContent results reflects the page URL after SPA route changes (500ms polling window).\n"
-            + "Always prefer getContent to discover the page structure, and text-based click over CSS selectors for navigation elements.\n"
-            + "9. Multi-tab management: navigate returns tabId. To operate a specific tab, pass the tabId parameter to getContent/click/type/executeJS. Without tabId, operations target the last navigated tab."
-            + "10. Results include `errorCategory` (not_found / csp_blocked / detached / inject_failed / timeout / no_tab / unknown) and `method`. "
-            + "Do NOT blindly retry after `csp_blocked` or `detached` — re-read the page (getContent) and adjust strategy instead.";
-    private static final long TIMEOUT_SECONDS = 30;
+            + "2. getContent(mode: snapshot) — BEST for discovering the page: returns an indexable list of visible interactive elements, each with a stable `ref` (0-based), role/name/tag/type/state/href. Also returns `domHash` — a fingerprint of the page. Reuse `ref` directly in click/type/hover/select/upload to avoid selector guessing.\n"
+            + "   getContent(mode: summary) — structured summary (inputs/buttons/forms/navLinks/sections/dialogs). Icon-only buttons are reported by aria-label/title/svg-title/alt.\n"
+            + "   getContent(mode: query, selector) — compact list of up to 50 matches for repeated elements (each with index).\n"
+            + "3. click(ref) or click(selector) or click(text) — click an element. Auto-waits up to ~3s for the element to appear and be interactable. Text click uses multi-phase fuzzy matching. Use `index`/`occurrence` for the Nth match. Result includes `changed` — true if the page likely changed after the click; if `changed:false` and no URL change, do NOT re-read the page, try a different action or wait.\n"
+            + "4. type(selector|ref, text, append?) — fill input fields (works with SPA frameworks). When append=true, append instead of replace.\n"
+            + "5. key(key) — send a keyboard key (Enter/Tab/Escape/Backspace/ArrowDown etc.) to the focused element (submit forms, close modals, shortcuts).\n"
+            + "6. select(selector|ref, value|label) — choose an option in a <select>.\n"
+            + "7. scroll(direction: up|down|left|right, amount?) or scroll(selector|ref) — scroll the page / to an element (infinite scroll, virtualized lists).\n"
+            + "8. hover(selector/text) — reveal JS-driven hover menus.\n"
+            + "9. upload(selector|ref, fileName, fileBase64, fileType?) — upload a file to an <input type=file> (works with drag-drop upload UIs).\n"
+            + "10. wait(ms) or wait(selector|text|ref, timeout) — explicitly wait for dynamic content. Prefer `wait` over blind retries.\n"
+            + "11. closeDialogs — close open modal dialogs/toasts.\n"
+            + "12. executeJS — LAST RESORT (BLOCKED on strict-CSP sites e.g. 猎聘). If csp_blocked/detached, do NOT retry — re-read with getContent snapshot and use click/type.\n"
+            + "13. Tab following: clicking a link opening a new tab auto-switches control (result includes _newTabId/_newTabUrl). Pass `tabId` to target a specific tab.\n"
+            + "Rules: prefer getContent(snapshot)+ref for everything. If an action returns not_found/not_interactable, use wait() for a dynamic element or re-read the snapshot (refs may shift after DOM changes). Never blindly retry after csp_blocked/detached. If click returns changed:false, the page did not react — pick another approach.\n"
+            + "Results include `errorCategory` (not_found / csp_blocked / detached / inject_failed / timeout / no_tab / unknown) and `method`.";
+    private static final long NAVIGATE_TIMEOUT_SECONDS = 30;
+    private static final long ACTION_TIMEOUT_SECONDS = 10;
 
     private static final String ACTION_NAVIGATE = "navigate";
     private static final String ACTION_CLICK = "click";
@@ -54,7 +53,6 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
     private static final String ERR_NAVIGATE_URL = "url is required for navigate action. Example: {\"action\":\"navigate\",\"url\":\"https://example.com\"}";
     private static final String ERR_SELECTOR_REQUIRED = "selector is required for %s action";
     private static final String ERR_NO_HANDLER = "Chrome Extension bridge not connected";
-    private static final String ERR_TIMEOUT = "Chrome operation timed out after %ds";
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
@@ -118,7 +116,24 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
                 .withTabId(cec.getTabId())
                 .withAppend(cec.getAppend())
                 .withIndex(cec.getIndex())
-                .withOccurrence(cec.getOccurrence());
+                .withOccurrence(cec.getOccurrence())
+                .withRef(cec.getRef())
+                .withWaitMs(cec.getWaitMs())
+                .withMs(cec.getMs())
+                .withTimeout(cec.getTimeout())
+                .withKey(cec.getKey())
+                .withCodeKey(cec.getCodeKey())
+                .withDirection(cec.getDirection())
+                .withAmount(cec.getAmount())
+                .withValue(cec.getValue())
+                .withLabel(cec.getLabel())
+                .withMax(cec.getMax())
+                .withFileName(cec.getFileName())
+                .withFileBase64(cec.getFileBase64())
+                .withFileType(cec.getFileType())
+                .withFrameId(cec.getFrameId());
+
+        long timeoutSeconds = ACTION_NAVIGATE.equals(action) ? NAVIGATE_TIMEOUT_SECONDS : ACTION_TIMEOUT_SECONDS;
 
         try {
             eventPublisher.publishEvent(cmd);
@@ -126,7 +141,7 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             CompletableFuture<ChromeCallbackDTO> future = new CompletableFuture<>();
             ChromePendingStore.put(commandId, future);
 
-            ChromeCallbackDTO cb = future.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            ChromeCallbackDTO cb = future.get(timeoutSeconds, TimeUnit.SECONDS);
             ChromePendingStore.remove(commandId);
 
             ChromeResultVO vo = cb.isSuccess()
@@ -147,7 +162,7 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
         } catch (java.util.concurrent.TimeoutException e) {
             ChromePendingStore.remove(commandId);
             log.warn("Chrome command timed out: {} (commandId={})", action, commandId);
-            return ChromeResultVO.fail(String.format(ERR_TIMEOUT, TIMEOUT_SECONDS));
+            return ChromeResultVO.fail(String.format("Chrome operation timed out after %ds", timeoutSeconds));
         } catch (Exception e) {
             ChromePendingStore.remove(commandId);
             log.warn("Chrome command failed: {}", action, e);

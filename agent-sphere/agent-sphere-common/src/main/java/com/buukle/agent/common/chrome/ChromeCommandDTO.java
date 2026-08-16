@@ -17,6 +17,21 @@ public class ChromeCommandDTO {
     private Boolean append;
     private Integer index;
     private Integer occurrence;
+    private Integer ref;
+    private Integer waitMs;
+    private Integer ms;
+    private Integer timeout;
+    private String key;
+    private String codeKey;
+    private String direction;
+    private Integer amount;
+    private String value;
+    private String label;
+    private Integer max;
+    private String fileName;
+    private String fileBase64;
+    private String fileType;
+    private Integer frameId;
 
     public ChromeCommandDTO() {
     }
@@ -69,6 +84,81 @@ public class ChromeCommandDTO {
 
     public ChromeCommandDTO withOccurrence(Integer occurrence) {
         this.occurrence = occurrence;
+        return this;
+    }
+
+    public ChromeCommandDTO withRef(Integer ref) {
+        this.ref = ref;
+        return this;
+    }
+
+    public ChromeCommandDTO withWaitMs(Integer waitMs) {
+        this.waitMs = waitMs;
+        return this;
+    }
+
+    public ChromeCommandDTO withMs(Integer ms) {
+        this.ms = ms;
+        return this;
+    }
+
+    public ChromeCommandDTO withTimeout(Integer timeout) {
+        this.timeout = timeout;
+        return this;
+    }
+
+    public ChromeCommandDTO withKey(String key) {
+        this.key = key;
+        return this;
+    }
+
+    public ChromeCommandDTO withCodeKey(String codeKey) {
+        this.codeKey = codeKey;
+        return this;
+    }
+
+    public ChromeCommandDTO withDirection(String direction) {
+        this.direction = direction;
+        return this;
+    }
+
+    public ChromeCommandDTO withAmount(Integer amount) {
+        this.amount = amount;
+        return this;
+    }
+
+    public ChromeCommandDTO withValue(String value) {
+        this.value = value;
+        return this;
+    }
+
+    public ChromeCommandDTO withLabel(String label) {
+        this.label = label;
+        return this;
+    }
+
+    public ChromeCommandDTO withMax(Integer max) {
+        this.max = max;
+        return this;
+    }
+
+    public ChromeCommandDTO withFileName(String fileName) {
+        this.fileName = fileName;
+        return this;
+    }
+
+    public ChromeCommandDTO withFileBase64(String fileBase64) {
+        this.fileBase64 = fileBase64;
+        return this;
+    }
+
+    public ChromeCommandDTO withFileType(String fileType) {
+        this.fileType = fileType;
+        return this;
+    }
+
+    public ChromeCommandDTO withFrameId(Integer frameId) {
+        this.frameId = frameId;
         return this;
     }
 }
