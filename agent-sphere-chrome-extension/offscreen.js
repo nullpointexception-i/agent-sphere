@@ -147,8 +147,22 @@ function handleSseData(dataLine) {
       mode: cmd.mode,
       tabId: cmd.tabId,
       append: cmd.append,
+      ref: cmd.ref,
+      waitMs: cmd.waitMs,
+      ms: cmd.ms,
+      timeout: cmd.timeout,
+      key: cmd.key,
+      codeKey: cmd.codeKey,
+      direction: cmd.direction,
+      amount: cmd.amount,
+      value: cmd.value,
+      label: cmd.label,
+      max: cmd.max,
       index: cmd.index,
       occurrence: cmd.occurrence,
+      frameId: cmd.frameId,
+      fileName: cmd.fileName,
+      fileBase64: cmd.fileBase64,
     };
     Object.keys(params).forEach((k) => { if (params[k] == null) delete params[k]; });
     // Forward to the background service worker; it executes and POSTs the callback.

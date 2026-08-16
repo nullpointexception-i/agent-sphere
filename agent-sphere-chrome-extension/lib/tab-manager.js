@@ -10,6 +10,8 @@ export class TabManager {
     this.tabFollowPending = null;
     this.tabFollowResolve = null;
     this.pluginGroupId = null;
+    // 已注入 content scripts 的 tab 缓存（避免每次命令都重注入 + 300ms 停顿）
+    this.injectedTabs = new Set();
 
     // Follow tabs opened by the controlled tab (target=_blank / window.open).
     chrome.tabs.onCreated.addListener((tab) => {
@@ -29,7 +31,15 @@ export class TabManager {
       }
     });
 
+    // 页面导航/重新加载后 content scripts 失效 → 失效注入缓存
+    chrome.tabs.onUpdated.addListener((tabId, info) => {
+      if (info.status === 'loading') {
+        this.injectedTabs.delete(tabId);
+      }
+    });
+
     chrome.tabs.onRemoved.addListener((tabId) => {
+      this.injectedTabs.delete(tabId);
       if (tabId === this.controlledTabId) {
         this.controlledTabId = null;
       }
@@ -49,11 +59,13 @@ export class TabManager {
   }
 
   async injectContentScript(tabId) {
+    if (this.injectedTabs.has(tabId)) return true;
     try {
       await chrome.scripting.executeScript({
         target: { tabId, allFrames: true },
         files: CONTENT_FILES,
       });
+      this.injectedTabs.add(tabId);
       return true;
     } catch (e) {
       // chrome://, extension store, PDF viewer, etc.
@@ -63,12 +75,14 @@ export class TabManager {
   }
 
   // Send a message to a tab's content script, re-injecting when the receiver is missing.
-  async askContent(tabId, msg, maxRetries = 3) {
+  async askContent(tabId, msg, maxRetries = 3, frameId = 0) {
+    const sendOpts = frameId ? { frameId } : undefined;
     for (let i = 0; i < maxRetries; i++) {
       try {
-        return await chrome.tabs.sendMessage(tabId, msg);
+        return await chrome.tabs.sendMessage(tabId, msg, sendOpts);
       } catch (e) {
         if (String(e.message).includes('Receiving end does not exist') && i < maxRetries - 1) {
+          this.injectedTabs.delete(tabId);
           const injected = await this.injectContentScript(tabId);
           if (!injected) break;
           await new Promise((r) => setTimeout(r, 300));

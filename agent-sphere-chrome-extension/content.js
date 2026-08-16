@@ -240,8 +240,11 @@
         return { success: true };
 
       case 'click': {
-          const el = AS.locate(params);
-          if (!el) return { success: false, error: 'Element not found: ' + (params.selector || params.text), errorCategory: 'not_found' };
+          // 等待元素出现且可交互（动态页面/慢加载）
+          const el = await AS.waitForElement(params, params.waitMs || 3000);
+          if (!el) {
+            return { success: false, error: 'Element not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector || params.text), errorCategory: 'not_found' };
+          }
           const isSubmitBtn = (el.tagName === 'BUTTON' && el.type === 'submit')
             || (el.tagName === 'INPUT' && el.type === 'submit');
           if (isSubmitBtn && el.form) {
@@ -265,6 +268,7 @@
             || !!(el.target === '_blank')
             || !!(el.closest('[onclick*="window.open"]'));
           const urlBefore = location.href;
+          const domBefore = domFingerprint();
           // Automa-style synthetic mouse events + click() (React-friendly)
           try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* ignore */ }
           el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, view: window }));
@@ -277,24 +281,119 @@
               await new Promise((r) => setTimeout(r, 100));
             }
           }
-          return { success: true, data: { tag: el.tagName.toLowerCase(), text: el.textContent?.trim().slice(0, 100), _url: urlAfter, _newTabExpected: newTabExpected } };
+          // 动作后短 settle，避免 agent 立即重读
+          await new Promise((r) => setTimeout(r, 250));
+          return {
+            success: true,
+            data: {
+              tag: el.tagName.toLowerCase(),
+              text: el.textContent?.trim().slice(0, 100),
+              _url: urlAfter,
+              _newTabExpected: newTabExpected,
+              changed: location.href !== urlBefore || domFingerprint() !== domBefore,
+            },
+          };
         }
 
         case 'type': {
-          const el = AS.locateBySelector(params.selector, params.index);
-          if (!el) return { success: false, error: 'Input not found: ' + params.selector, errorCategory: 'not_found' };
+          const el = await AS.waitForElement(params, params.waitMs || 3000);
+          if (!el) return { success: false, error: 'Input not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector), errorCategory: 'not_found' };
           return AS.typeInElement(el, params.text, params.append === true);
         }
 
         case 'hover': {
-          const el = AS.locate(params);
-          if (!el) return { success: false, error: 'Element not found: ' + (params.selector || params.text), errorCategory: 'not_found' };
+          const el = await AS.waitForElement(params, params.waitMs || 3000);
+          if (!el) {
+            return { success: false, error: 'Element not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector || params.text), errorCategory: 'not_found' };
+          }
           try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* ignore */ }
           el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, view: window }));
           el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, view: window }));
           el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, view: window }));
           await new Promise((r) => setTimeout(r, 150));
           return { success: true, data: { tag: el.tagName.toLowerCase(), text: el.textContent?.trim().slice(0, 100) } };
+        }
+
+        case 'wait': {
+          const timeout = params.timeout || 8000;
+          if (params.selector || params.text || params.ref != null) {
+            const el = await AS.waitForElement(params, timeout);
+            return { success: true, data: { found: !!el } };
+          }
+          await new Promise((r) => setTimeout(r, params.ms || 0));
+          return { success: true };
+        }
+
+        case 'key': {
+          const key = params.key || params.keyCode || 'Enter';
+          const target = await AS.waitForElement(params, params.waitMs || 3000);
+          const el = target || document.activeElement || document.body;
+          const code = params.codeKey || key;
+          const opts = { key, code, bubbles: true, cancelable: true, view: window };
+          el.dispatchEvent(new KeyboardEvent('keydown', opts));
+          el.dispatchEvent(new KeyboardEvent('keypress', opts));
+          el.dispatchEvent(new KeyboardEvent('keyup', opts));
+          // 合成键盘事件不触发浏览器默认行为：Enter 时尝试真实表单提交
+          if (key === 'Enter' || key === 'NumpadEnter') {
+            const form = el.form || el.closest('form');
+            if (form) {
+              try { form.requestSubmit(); } catch (e) { /* ignore */ }
+            }
+          }
+          return { success: true, data: { key } };
+        }
+
+        case 'scroll': {
+          const dir = params.direction || 'down';
+          if (params.selector || params.text || params.ref != null) {
+            const el = await AS.waitForElement(params, params.waitMs || 3000);
+            if (!el) return { success: false, error: 'Element not found', errorCategory: 'not_found' };
+            try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* ignore */ }
+            return { success: true, data: { scrolled: 'element' } };
+          }
+          const amount = params.amount || Math.max(window.innerHeight * 0.8, 200);
+          if (dir === 'up') window.scrollBy(0, -amount);
+          else if (dir === 'left') window.scrollBy(-amount, 0);
+          else if (dir === 'right') window.scrollBy(amount, 0);
+          else window.scrollBy(0, amount);
+          await new Promise((r) => setTimeout(r, 100));
+          return { success: true, data: { scrolled: dir } };
+        }
+
+        case 'select': {
+          const el = await AS.waitForElement(params, params.waitMs || 3000);
+          if (!el || el.tagName !== 'SELECT') {
+            return { success: false, error: 'select element not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector), errorCategory: 'not_found' };
+          }
+          if (params.value != null) {
+            el.value = params.value;
+          } else if (params.label != null) {
+            const opt = [...el.options].find((o) => o.textContent?.trim() === params.label || o.value === params.label);
+            if (opt) el.value = opt.value;
+          }
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return { success: true, data: { selected: el.value } };
+        }
+
+        case 'upload': {
+          const el = await AS.waitForElement(params, params.waitMs || 3000);
+          if (!el || el.tagName !== 'INPUT' || el.type !== 'file') {
+            return { success: false, error: 'file input not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector), errorCategory: 'not_found' };
+          }
+          if (!params.fileName || !params.fileBase64) {
+            return { success: false, error: 'fileName and fileBase64 required for upload' };
+          }
+          const binary = atob(params.fileBase64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const file = new File([bytes], params.fileName, { type: params.fileType || 'application/octet-stream' });
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          el.files = dt.files;
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          return { success: true, data: { method: 'dataTransfer', file: params.fileName } };
         }
 
         case 'closeDialogs': {
@@ -331,13 +430,25 @@
                 placeholder: el.placeholder || '',
                 value: el.value || el.textContent?.slice(0, 50) || '',
               })).filter(i => i.selector || i.placeholder || i.name);
-            const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a[role="button"]')]
-              .map(el => ({
-                tag: el.tagName.toLowerCase(),
-                type: el.type || '',
-                selector: el.id ? `#${el.id}` : el.className ? `.${el.className.split(' ').filter(Boolean).join('.')}` : '',
-                text: el.textContent?.trim().slice(0, 50) || el.getAttribute('aria-label') || el.getAttribute('title') || el.value?.slice(0, 50) || '',
-              })).filter(b => b.text || b.selector);
+            const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a[role="button"], [role="button"]')]
+              .map(el => {
+                const name = (
+                  el.textContent?.trim() ||
+                  el.getAttribute('aria-label') ||
+                  el.getAttribute('title') ||
+                  el.getAttribute('alt') ||
+                  el.value?.trim() ||
+                  el.querySelector('svg title')?.textContent?.trim() ||
+                  ''
+                ).slice(0, 50);
+                return {
+                  tag: el.tagName.toLowerCase(),
+                  type: el.type || '',
+                  role: el.getAttribute('role') || (el.tagName === 'BUTTON' ? 'button' : el.tagName === 'A' ? 'link' : ''),
+                  selector: el.id ? `#${el.id}` : el.className ? `.${el.className.split(' ').filter(Boolean).join('.')}` : '',
+                  text: name,
+                };
+              }).filter(b => b.text || b.selector);
             const forms = [...document.querySelectorAll('form')].map(f => ({
               selector: f.id ? `#${f.id}` : f.className ? `.${f.className.split(' ').filter(Boolean).join('.')}` : '',
               action: f.action || '',
@@ -386,6 +497,22 @@
             }));
             return { success: true, data: { _url: location.href, total: nodes.length, matches } };
           }
+          if (params.mode === 'snapshot') {
+            const max = params.max || 200;
+            const els = AS.collectInteractables({ max });
+            const items = els.map((el, i) => AS.snapshotItem(el, i));
+            return {
+              success: true,
+              data: {
+                _url: location.href,
+                _title: document.title,
+                count: items.length,
+                truncated: items.length >= max,
+                domHash: domFingerprint(),
+                items,
+              },
+            };
+          }
           __asDomNodes = 0;
           const root = params.selector
             ? document.querySelector(params.selector)
@@ -407,6 +534,21 @@
   // Global DOM-node budget so a huge page cannot balloon the full-mode payload.
   let __asDomNodes = 0;
   const DOM_NODE_CAP = 2000;
+
+  // 轻量 DOM 指纹：动作前后对比，供 agent 判断"是否有实际变化"（避免动作后盲目重读）。
+  function domFingerprint() {
+    try {
+      return (
+        location.href +
+        '|' +
+        document.title +
+        '|' +
+        document.querySelectorAll('a,button,input,textarea,select,[role]').length
+      );
+    } catch (e) {
+      return location.href;
+    }
+  }
 
   function domToJSON(node) {
     if (++__asDomNodes > DOM_NODE_CAP) return null;

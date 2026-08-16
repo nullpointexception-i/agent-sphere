@@ -206,7 +206,7 @@ async function getActiveTabId() {
 async function waitIdle(tabId) {
   await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => new Promise((r) => requestIdleCallback(r, { timeout: 5000 })),
+    func: () => new Promise((r) => requestIdleCallback(r, { timeout: 2000 })),
   }).catch(() => {});
 }
 
@@ -221,6 +221,15 @@ function mapErrorCategory(e) {
 
 // --- Command execution ---
 async function executeInPage(commandId, action, params, sessionId) {
+  const t0 = Date.now();
+  try {
+    await executeInPageInner(commandId, action, params, sessionId);
+  } finally {
+    console.log(`[ChromeCmd] action=${action} tab=${params.tabId || tabManager.getControlled() || '-'} ms=${Date.now() - t0}`);
+  }
+}
+
+async function executeInPageInner(commandId, action, params, sessionId) {
   try {
     if (action === 'navigate') {
       await handleNavigate(commandId, params, sessionId);
@@ -238,6 +247,45 @@ async function executeInPage(commandId, action, params, sessionId) {
       return;
     }
 
+    // getContent(mode:'axtree') — CDP 可访问性树（仅显式请求时使用，需 debugger 附着）
+    if (action === 'getContent' && params.mode === 'axtree') {
+      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+      if (!targetTabId) {
+        sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
+        return;
+      }
+      try {
+        await cdpClient.attach(targetTabId);
+        const tab = await chrome.tabs.get(targetTabId).catch(() => null);
+        const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFullAXTree');
+        const INTERACTIVE = new Set([
+          'button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'radio',
+          'switch', 'menuitem', 'tab', 'option', 'listbox', 'slider', 'spinbutton', 'treeitem',
+        ]);
+        const compact = [];
+        for (const n of Array.isArray(nodes) ? nodes : []) {
+          const role = n.role?.value;
+          if (!role || !INTERACTIVE.has(role)) continue;
+          const name = n.name?.value || '';
+          if (!name) continue;
+          const state = (n.properties || [])
+            .filter((p) => ['checked', 'disabled', 'expanded', 'selected', 'focused'].includes(p.name))
+            .map((p) => `${p.name}:${p.value?.value ?? p.value?.type ?? true}`)
+            .join(' ');
+          compact.push({ role, name, state });
+          if (compact.length >= 200) break;
+        }
+        sendCallbackSafe(commandId, {
+          success: true,
+          data: { _url: tab?.url || '', count: compact.length, nodes: compact },
+          method: 'axtree',
+        }, targetTabId, sessionId);
+      } catch (e) {
+        sendCallbackSafe(commandId, failResult(e.message, ErrorCategory.UNKNOWN), targetTabId, sessionId);
+      }
+      return;
+    }
+
     // Other actions → content script
     const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
     if (!targetTabId) {
@@ -249,7 +297,7 @@ async function executeInPage(commandId, action, params, sessionId) {
       type: 'browser_operation',
       action,
       params,
-    });
+    }, 3, params.frameId);
 
     // Form submit button detected → navigate to extracted URL directly
     if (result?.data?._submitUrl) {
@@ -291,7 +339,7 @@ async function handleNavigate(commandId, params, sessionId) {
     try {
       const tab = await chrome.tabs.update(params.tabId, { url: params.url });
       await tabManager.injectContentScript(tab.id);
-      await tabManager.waitForTabComplete(tab.id);
+      await tabManager.waitForTabComplete(tab.id, 10000);
       await waitIdle(tab.id);
       const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
       const finalUrl = finalTab.url || params.url;
@@ -321,7 +369,7 @@ async function handleNavigate(commandId, params, sessionId) {
 
   const tab = await chrome.tabs.create({ url: params.url, active: false });
   await tabManager.injectContentScript(tab.id);
-  await tabManager.waitForTabComplete(tab.id);
+  await tabManager.waitForTabComplete(tab.id, 10000);
   await waitIdle(tab.id);
   const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
   const finalUrl = finalTab.url || params.url;
