@@ -281,16 +281,20 @@
               await new Promise((r) => setTimeout(r, 100));
             }
           }
-          // 动作后短 settle，避免 agent 立即重读
-          await new Promise((r) => setTimeout(r, 250));
+          // 动作后短 settle，避免 agent 立即重读（可用 params.timeout 覆盖）
+          const settleMs = Math.min(params.timeout && params.timeout > 0 ? params.timeout * 1000 : 250, 5000);
+          await new Promise((r) => setTimeout(r, settleMs));
           return {
             success: true,
             data: {
               tag: el.tagName.toLowerCase(),
+              class: typeof el.className === 'string' ? el.className.trim().slice(0, 60) : '',
               text: el.textContent?.trim().slice(0, 100),
               _url: urlAfter,
               _newTabExpected: newTabExpected,
+              _clickable: AS.isClickable(el),
               changed: location.href !== urlBefore || domFingerprint() !== domBefore,
+              ...pageHints(),
             },
           };
         }
@@ -298,7 +302,32 @@
         case 'type': {
           const el = await AS.waitForElement(params, params.waitMs || 3000);
           if (!el) return { success: false, error: 'Input not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector), errorCategory: 'not_found' };
-          return AS.typeInElement(el, params.text, params.append === true);
+          const res = AS.typeInElement(el, params.text, params.append === true);
+          if (!res.success) return res;
+          if (params.submit) {
+            const domBefore = domFingerprint();
+            const urlBefore = location.href;
+            // 派发 Enter（兼容 React 受控输入），等待提交/重渲染
+            el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+            el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
+            await new Promise((r) => setTimeout(r, Math.min(params.timeout && params.timeout > 0 ? params.timeout * 1000 : 600, 5000)));
+            return {
+              success: true,
+              data: { method: res.method, _submitted: true, _url: location.href, changed: location.href !== urlBefore || domFingerprint() !== domBefore, ...pageHints() },
+            };
+          }
+          return { success: true, data: { method: res.method } };
+        }
+
+        case 'wait': {
+          // wait(ms) 固定等待；或 wait(selector|text|ref, timeout) 等待元素出现
+          if (params.selector || params.text || params.ref != null) {
+            const el = await AS.waitForElement(params, params.timeout || 8000, 200);
+            return { success: true, data: { _url: location.href, _title: document.title, found: !!el, changed: false, ...pageHints() } };
+          }
+          const ms = Math.min(params.ms || 1000, 30000);
+          await new Promise((r) => setTimeout(r, ms));
+          return { success: true, data: { _url: location.href, _title: document.title, changed: false, ...pageHints() } };
         }
 
         case 'hover': {
@@ -476,7 +505,42 @@
                   buttons: [...d.querySelectorAll('button, [role="button"]')].map(b => b.textContent?.trim() || b.getAttribute('aria-label') || '').filter(Boolean),
                 };
               }).filter(d => d.title || d.inputs > 0 || d.buttons.length > 0);
-            return { success: true, data: { _url: location.href, _title: document.title, inputs, buttons, forms, navLinks, sections, dialogs } };
+            return { success: true, data: { _url: location.href, _title: document.title, inputs, buttons, forms, navLinks, sections, dialogs, ...pageHints() } };
+          }
+          if (params.mode === 'extract') {
+            // 结构化提取重复列表块（候选人卡片等）：一次返回数组，避免多次 full DOM 读取
+            if (!params.selector) return { success: false, error: 'selector required for extract mode' };
+            let nodes = [];
+            try {
+              nodes = [...document.querySelectorAll(params.selector)];
+            } catch (e) {
+              return { success: false, error: 'Invalid selector: ' + params.selector, errorCategory: 'not_found' };
+            }
+            const max = params.max || 50;
+            const textMax = params.textMax || 200;
+            const fields = Array.isArray(params.fields) && params.fields.length ? params.fields : ['text'];
+            const matches = nodes.slice(0, max).map((el, i) => {
+              const rec = { index: i + 1, tag: el.tagName.toLowerCase() };
+              for (const f of fields) {
+                if (f === 'text') {
+                  rec.text = el.textContent?.trim().slice(0, textMax) || '';
+                } else if (f === 'href') {
+                  rec.href = el.getAttribute('href') || (el.tagName === 'A' ? el.href : '') || '';
+                } else if (f === 'value') {
+                  rec.value = el.value || '';
+                } else if (f.startsWith('.')) {
+                  // 相对子选择器：取首个匹配子元素的文本
+                  const sub = el.querySelector(f.slice(1));
+                  rec[f] = sub?.textContent?.trim().slice(0, textMax) || '';
+                } else if (f.startsWith('@')) {
+                  rec[f.slice(1)] = el.getAttribute(f.slice(1)) || '';
+                } else {
+                  rec[f] = el.getAttribute(f) || '';
+                }
+              }
+              return rec;
+            });
+            return { success: true, data: { _url: location.href, total: nodes.length, matches, ...pageHints() } };
           }
           if (params.mode === 'query') {
             if (!params.selector) return { success: false, error: 'selector required for query mode' };
@@ -510,6 +574,7 @@
                 truncated: items.length >= max,
                 domHash: domFingerprint(),
                 items,
+                ...pageHints(),
               },
             };
           }
@@ -548,6 +613,80 @@
     } catch (e) {
       return location.href;
     }
+  }
+
+  // ---- 页面提示（动作结果里附带，减少 agent 重读）----
+
+  // 可见对话框标题列表（供 agent 知道弹了什么框、需不需要关）。
+  function visibleDialogs() {
+    try {
+      const seen = new Set();
+      const titles = [];
+      for (const el of document.querySelectorAll('[role="dialog"], [role="alertdialog"], .ant-modal, .el-dialog, .antd-fd-modal')) {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        if (cs.display === 'none' || cs.visibility === 'hidden' || (r.width <= 0 && r.height <= 0)) continue;
+        const t = (
+          el.getAttribute('aria-label') ||
+          el.getAttribute('aria-labelledby') ||
+          (el.querySelector('.ant-modal-title, .modal-title, [class*="header"]')?.textContent?.trim() || '')
+        ).slice(0, 60);
+        if (t && !seen.has(t)) {
+          seen.add(t);
+          titles.push(t);
+        }
+      }
+      return titles;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // 当前生效的筛选筹码指纹（文本集），供 agent 判断筛选增删是否成功。
+  function chipsFingerprint() {
+    try {
+      const out = [];
+      for (const el of document.querySelectorAll('[class*="tag"], [class*="chip"]')) {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        if (cs.display === 'none' || cs.visibility === 'hidden' || (r.width <= 0 && r.height <= 0)) continue;
+        const active = el.getAttribute('aria-selected') === 'true'
+          || el.classList.contains('checked')
+          || el.classList.contains('active')
+          || String(el.className).includes('Active');
+        if (!active) continue;
+        const t = el.textContent?.trim().slice(0, 20);
+        if (t) out.push(t);
+      }
+      return out.sort().join(',');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // 结果计数提示（"共有 N 份简历" 等），屏蔽异步刷新带来的重读。
+  function countHint() {
+    try {
+      const leaf = (pred) => {
+        for (const el of document.querySelectorAll('*')) {
+          const txt = (el.textContent || '').trim();
+          if (txt && !el.children.length && pred(txt)) return txt.slice(0, 40);
+        }
+        return '';
+      };
+      const cn = leaf((t) => /共有\s*[\d,]+\s*份/.test(t));
+      if (cn) return cn;
+      return leaf((t) => /resume/i.test(t) && /\d+/.test(t));
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function pageHints() {
+    const h = { dialogs: visibleDialogs(), chips: chipsFingerprint() };
+    const c = countHint();
+    if (c) h.count = c;
+    return { _hints: h };
   }
 
   function domToJSON(node) {

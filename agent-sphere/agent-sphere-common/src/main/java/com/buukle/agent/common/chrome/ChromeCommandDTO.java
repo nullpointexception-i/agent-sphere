@@ -32,6 +32,10 @@ public class ChromeCommandDTO {
     private String fileBase64;
     private String fileType;
     private Integer frameId;
+    private String scope;
+    private Boolean submit;
+    private java.util.List<String> fields;
+    private Integer textMax;
 
     public ChromeCommandDTO() {
     }
@@ -159,6 +163,26 @@ public class ChromeCommandDTO {
 
     public ChromeCommandDTO withFrameId(Integer frameId) {
         this.frameId = frameId;
+        return this;
+    }
+
+    public ChromeCommandDTO withScope(String scope) {
+        this.scope = scope;
+        return this;
+    }
+
+    public ChromeCommandDTO withSubmit(Boolean submit) {
+        this.submit = submit;
+        return this;
+    }
+
+    public ChromeCommandDTO withFields(java.util.List<String> fields) {
+        this.fields = fields;
+        return this;
+    }
+
+    public ChromeCommandDTO withTextMax(Integer textMax) {
+        this.textMax = textMax;
         return this;
     }
 }

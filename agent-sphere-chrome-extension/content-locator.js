@@ -53,10 +53,12 @@ window.__asContent = window.__asContent || {};
   };
 
   // Locate by CSS selector; `index` is 1-based (2nd identical element etc.).
-  AS.locateBySelector = function (selector, index) {
+  AS.locateBySelector = function (selector, index, scope) {
     if (!selector) return null;
     try {
-      const nodes = document.querySelectorAll(selector);
+      const root = scope ? document.querySelector(scope) : document;
+      if (!root) return null;
+      const nodes = root.querySelectorAll(selector);
       const el = index == null || index <= 0 ? nodes[0] : nodes[index - 1];
       return el || null;
     } catch (e) {
@@ -64,53 +66,121 @@ window.__asContent = window.__asContent || {};
     }
   };
 
+  // 可点击元素集合（含常见列表项/选项/开关等）。
+  const AS_CLICKABLE_SELECTOR = [
+    'a[href]',
+    'button',
+    'input[type="checkbox"]',
+    'input[type="radio"]',
+    'label',
+    '[onclick]',
+    '[role="button"]',
+    '[role="link"]',
+    '[role="menuitem"]',
+    '[role="tab"]',
+    '[role="option"]',
+    '[role="checkbox"]',
+    '[role="radio"]',
+    '[role="switch"]',
+    'li[class*="item"]',
+    'summary',
+    '[aria-haspopup]',
+    '[tabindex]:not([tabindex="-1"])',
+    '[contenteditable="true"]',
+  ].join(',');
+
+  // 元素是否可见：非隐藏、非零尺寸、未被覆盖（供文本定位过滤）。
+  function textNodeVisible(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 && r.height <= 0) return false;
+    return true;
+  }
+
+  /** 是否本身即为可点击元素。 */
+  AS.isClickable = function (el) {
+    if (!el) return false;
+    if (!textNodeVisible(el)) return false;
+    return Boolean(el.matches && el.matches(AS_CLICKABLE_SELECTOR));
+  };
+
+  /** 上溯到最近可点击祖先（无则返回原始节点，调用方用 isClickable 判定）。 */
+  function nearestClickable(el) {
+    if (!el) return null;
+    if (el.closest) {
+      const c = el.closest(AS_CLICKABLE_SELECTOR);
+      if (c) return c;
+    }
+    return el;
+  }
+
+  // 对候选列表：过滤不可见 → 上溯可点击 → 去重（保持 DOM 序）。
+  function normalizeCandidates(nodes) {
+    const out = [];
+    const seen = new Set();
+    for (const n of nodes) {
+      if (!textNodeVisible(n)) continue;
+      const c = nearestClickable(n);
+      if (!c || seen.has(c)) continue;
+      seen.add(c);
+      out.push(c);
+    }
+    return out;
+  }
+
   // Locate by visible text; `occurrence` is 1-based (Nth element matching the text).
-  AS.locateByText = function (text, occurrence) {
+  // `scope` 限定在某区域（如对话框/面板选择器）内查找，避免跨区重复文本（北京/确定等）。
+  AS.locateByText = function (text, occurrence, scope) {
     if (!text) return null;
     const occ = occurrence == null || occurrence <= 0 ? 1 : occurrence;
     const safe = String(text).replace(/'/g, "\\'");
+    const root = scope ? document.querySelector(scope) : document;
+    if (!root) return null;
+    const all = (expr) => AS.xpathQueryAll(expr, root);
     let found = [];
 
     // Phase 1: exact normalize-space match
-    found = AS.xpathQueryAll(`//*[text()[normalize-space()='${safe}']]`);
+    found = normalizeCandidates(all(`.//*[text()[normalize-space()='${safe}']]`));
     // Phase 2: contains() on direct text nodes
-    if (found.length < occ) found = AS.xpathQueryAll(`//*[contains(text(), '${safe}')]`);
+    if (found.length < occ) found = normalizeCandidates(all(`.//*[contains(text(), '${safe}')]`));
     // Phase 3: any descendant contains → up-search to nearest clickable ancestor
     if (found.length < occ) {
-      found = [...new Set(
-        AS.xpathQueryAll(`//*[contains(., '${safe}')]`).map((n) => n.closest(
-          'a, button, [role="button"], [onclick], summary, [aria-haspopup], [tabindex]:not([tabindex="-1"])',
-        ) || n),
-      )];
+      found = normalizeCandidates(
+        all(`.//*[contains(., '${safe}')]`).map((n) => n.closest(AS_CLICKABLE_SELECTOR) || n),
+      );
     }
     // Phase 4: aria-label / title lookup
     if (found.length < occ) {
-      const byLabel = AS.locateBySelector(`[aria-label="${text}"]`);
-      const byTitle = AS.locateBySelector(`[title="${text}"]`);
-      found = [byLabel, byTitle].filter(Boolean);
+      found = normalizeCandidates([
+        AS.locateBySelector(`[aria-label="${text}"]`, null, scope),
+        AS.locateBySelector(`[title="${text}"]`, null, scope),
+      ]);
     }
-    // Phase 5: glob / fuzzy text matching across clickable elements
+    // Phase 5: glob / fuzzy text matching across clickable elements (scoped)
     if (found.length < occ && (String(text).includes('*') || String(text).includes('?'))) {
       const regex = AS.globToRegExp(text);
-      found = [...document.querySelectorAll(
-        'a, button, [role="button"], [onclick], summary, [aria-haspopup]',
-      )].filter((n) => {
-        const t = (
-          n.textContent ||
-          n.getAttribute('aria-label') ||
-          n.getAttribute('title') ||
-          ''
-        ).trim();
-        return regex.test(t);
-      });
+      const scopeRoot = scope ? document.querySelector(scope) : document;
+      found = [...(scopeRoot || document).querySelectorAll(AS_CLICKABLE_SELECTOR)]
+        .filter((n) => {
+          const t = (
+            n.textContent ||
+            n.getAttribute('aria-label') ||
+            n.getAttribute('title') ||
+            ''
+          ).trim();
+          return regex.test(t);
+        })
+        .slice(0, occ);
     }
     return found.length >= occ ? found[occ - 1] : (found[0] || null);
   };
 
   AS.locate = function (params) {
     if (params && params.ref != null) return AS.locateByRef(params.ref);
-    let el = AS.locateBySelector(params.selector, params.index);
-    if (!el && params.text) el = AS.locateByText(params.text, params.occurrence);
+    let el = AS.locateBySelector(params.selector, params.index, params.scope);
+    if (!el && params.text) el = AS.locateByText(params.text, params.occurrence, params.scope);
     return el;
   };
 

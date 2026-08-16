@@ -30,8 +30,9 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             + "2. getContent(mode: snapshot) — BEST for discovering the page: returns an indexable list of visible interactive elements, each with a stable `ref` (0-based), role/name/tag/type/state/href. Also returns `domHash` — a fingerprint of the page. Reuse `ref` directly in click/type/hover/select/upload to avoid selector guessing.\n"
             + "   getContent(mode: summary) — structured summary (inputs/buttons/forms/navLinks/sections/dialogs). Icon-only buttons are reported by aria-label/title/svg-title/alt.\n"
             + "   getContent(mode: query, selector) — compact list of up to 50 matches for repeated elements (each with index).\n"
-            + "3. click(ref) or click(selector) or click(text) — click an element. Auto-waits up to ~3s for the element to appear and be interactable. Text click uses multi-phase fuzzy matching. Use `index`/`occurrence` for the Nth match. Result includes `changed` — true if the page likely changed after the click; if `changed:false` and no URL change, do NOT re-read the page, try a different action or wait.\n"
-            + "4. type(selector|ref, text, append?) — fill input fields (works with SPA frameworks). When append=true, append instead of replace.\n"
+            + "   getContent(mode: extract, selector, fields) — structured extraction of repeated list blocks (e.g. candidate cards). `fields`: text (element text), .xxx (first sub-element text by CSS), @attr (attribute), href, value. Returns an array — ideal for reading N candidates/cards in ONE call instead of repeated full-DOM reads.\n"
+            + "3. click(ref) or click(selector) or click(text) — click an element. Auto-waits up to ~3s for the element to appear and be interactable. Text click is scoped to VISIBLE clickable elements (hidden/CSS text ignored). Duplicate text across sections (e.g. several '确定'/'北京') is resolved with `occurrence` (Nth) and `scope` (restrict search to a container selector like [role=dialog]). Result includes `changed` (true if the page likely changed), `_clickable` (false = no real click target, treat as mis-click), `_clickedTag`/`class`, and `_hints` (dialogs/chips/count). If `changed:false` and no URL change, do NOT re-read the page — try another approach or wait.\n"
+            + "4. type(selector|ref, text, append?, submit?) — fill input fields (works with SPA frameworks). When append=true, append instead of replace. When submit=true, presses Enter after typing (e.g. to fire a search); result includes `_submitted`/`changed`.\n"
             + "5. key(key) — send a keyboard key (Enter/Tab/Escape/Backspace/ArrowDown etc.) to the focused element (submit forms, close modals, shortcuts).\n"
             + "6. select(selector|ref, value|label) — choose an option in a <select>.\n"
             + "7. scroll(direction: up|down|left|right, amount?) or scroll(selector|ref) — scroll the page / to an element (infinite scroll, virtualized lists).\n"
@@ -41,7 +42,9 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             + "11. closeDialogs — close open modal dialogs/toasts.\n"
             + "12. executeJS — LAST RESORT (BLOCKED on strict-CSP sites e.g. 猎聘). If csp_blocked/detached, do NOT retry — re-read with getContent snapshot and use click/type.\n"
             + "13. Tab following: clicking a link opening a new tab auto-switches control (result includes _newTabId/_newTabUrl). Pass `tabId` to target a specific tab.\n"
-            + "Rules: prefer getContent(snapshot)+ref for everything. If an action returns not_found/not_interactable, use wait() for a dynamic element or re-read the snapshot (refs may shift after DOM changes). Never blindly retry after csp_blocked/detached. If click returns changed:false, the page did not react — pick another approach.\n"
+            + "14. Per-command timeout: pass `timeout` (seconds, min 2) to override the default 10s for slow re-renders (default 30s for navigate).\n"
+            + "Rules: prefer getContent(snapshot)+ref for everything. Use `_hints.dialogs` to know a modal opened and close it (click its 确定/取消 via scope). `_hints.count` shows result-count text (e.g. '共有 N 份简历') — filter counts may update asynchronously; wait() 1-2s before concluding a filter had no effect. If an action returns not_found/not_interactable, use wait() for a dynamic element or re-read the snapshot (refs may shift after DOM changes). Never blindly retry after csp_blocked/detached. If click returns changed:false, the page did not react — pick another approach.\n"
+            + "When a strict filter combination returns 0 results, loosen filters stepwise (remove the most specific first) and evaluate candidates per-item against ALL criteria — do not settle for a zero-result dead end.\n"
             + "Results include `errorCategory` (not_found / csp_blocked / detached / inject_failed / timeout / no_tab / unknown) and `method`.";
     private static final long NAVIGATE_TIMEOUT_SECONDS = 30;
     private static final long ACTION_TIMEOUT_SECONDS = 10;
@@ -131,9 +134,16 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
                 .withFileName(cec.getFileName())
                 .withFileBase64(cec.getFileBase64())
                 .withFileType(cec.getFileType())
-                .withFrameId(cec.getFrameId());
+                .withFrameId(cec.getFrameId())
+                .withScope(cec.getScope())
+                .withSubmit(cec.getSubmit())
+                .withFields(cec.getFields())
+                .withTextMax(cec.getTextMax());
 
         long timeoutSeconds = ACTION_NAVIGATE.equals(action) ? NAVIGATE_TIMEOUT_SECONDS : ACTION_TIMEOUT_SECONDS;
+        if (cec.getTimeout() != null && cec.getTimeout() > 0) {
+            timeoutSeconds = Math.max(2, cec.getTimeout());
+        }
 
         try {
             eventPublisher.publishEvent(cmd);

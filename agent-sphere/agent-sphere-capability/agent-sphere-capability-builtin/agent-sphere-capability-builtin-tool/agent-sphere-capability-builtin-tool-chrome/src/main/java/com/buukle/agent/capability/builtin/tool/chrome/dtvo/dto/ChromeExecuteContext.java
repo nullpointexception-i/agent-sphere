@@ -6,6 +6,8 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.util.List;
+
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class ChromeExecuteContext extends ExecuteContext {
@@ -85,4 +87,16 @@ public class ChromeExecuteContext extends ExecuteContext {
 
     @Schema(example = "0", description = "指定操作的iframe frameId（同源iframe内元素定位；缺省顶层）")
     private Integer frameId;
+
+    @Schema(example = "[role=\"dialog\"]", description = "把 text/selector 查找限定在该选择器对应的区域内（解决重复文本如多个\"确定\"/\"北京\"），仅 click/hover/type 生效")
+    private String scope;
+
+    @Schema(example = "true", description = "type 动作：输入后派发 Enter 提交（如搜索框回车触发搜索），并回传 _submitted/changed")
+    private Boolean submit;
+
+    @Schema(example = "[\"text\",\".name\",\"@data-id\"]", description = "getContent mode:extract 的字段：text=元素文本；.xxx=相对子选择器取首个子元素文本；@attr=取属性；href/value 为内置字段")
+    private List<String> fields;
+
+    @Schema(example = "200", description = "getContent mode:extract / textMax：单字段文本截断长度（默认200）")
+    private Integer textMax;
 }

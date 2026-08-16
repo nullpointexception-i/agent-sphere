@@ -163,6 +163,11 @@ function handleSseData(dataLine) {
       frameId: cmd.frameId,
       fileName: cmd.fileName,
       fileBase64: cmd.fileBase64,
+      fileType: cmd.fileType,
+      scope: cmd.scope,
+      submit: cmd.submit,
+      fields: cmd.fields,
+      textMax: cmd.textMax,
     };
     Object.keys(params).forEach((k) => { if (params[k] == null) delete params[k]; });
     // Forward to the background service worker; it executes and POSTs the callback.
