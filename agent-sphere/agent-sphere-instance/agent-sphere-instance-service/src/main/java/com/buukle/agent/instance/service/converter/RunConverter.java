@@ -19,6 +19,7 @@ public class RunConverter {
         vo.setReasoning(run.getReasoning());
         vo.setIntentClassification(run.getIntentClassification());
         vo.setStatus(run.getStatus());
+        vo.setLoopCapped(run.getLoopCapped());
         vo.setCreatedBy(run.getCreatedBy());
         vo.setCreatedAt(run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
         return vo;
@@ -43,6 +44,7 @@ public class RunConverter {
         run.setReasoning(vo.getReasoning());
         run.setIntentClassification(vo.getIntentClassification());
         run.setStatus(vo.getStatus());
+        run.setLoopCapped(vo.getLoopCapped());
         return run;
     }
 }

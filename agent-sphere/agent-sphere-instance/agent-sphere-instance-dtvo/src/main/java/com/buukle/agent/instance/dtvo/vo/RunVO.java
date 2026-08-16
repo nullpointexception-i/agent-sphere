@@ -17,6 +17,8 @@ public class RunVO implements Serializable {
     private String reasoning;
     private String intentClassification;
     private String status;
+    /** 命中循环次数上限被强收口（任务守卫据此判失败） */
+    private Boolean loopCapped;
     private String delivery;
     private String createdBy;
     private String createdAt;

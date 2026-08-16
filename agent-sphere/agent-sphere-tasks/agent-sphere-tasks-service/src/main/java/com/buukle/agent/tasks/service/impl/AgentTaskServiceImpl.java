@@ -3,7 +3,9 @@ package com.buukle.agent.tasks.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
@@ -77,6 +79,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     private final AgentTaskMapper taskMapper;
     private final AgentTaskArtifactMapper artifactMapper;
+    private final AgentRuntimeProperties runtimeProperties;
     private final InstanceSpi instanceSpi;
     private final SessionSpi sessionSpi;
     private final RunSpi runSpi;
@@ -119,7 +122,13 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             SendMessageDTO message = new SendMessageDTO();
             message.setMessage(buildPrompt(dto));
             message.setNoClarification(true);
-            ChatMessageResponseVO resp = chatRuntimeService.chat(session.getId(), message);
+            TaskLoopLimitHolder.set(propertiesTaskLoopLimit());
+            ChatMessageResponseVO resp;
+            try {
+                resp = chatRuntimeService.chat(session.getId(), message);
+            } finally {
+                TaskLoopLimitHolder.clear();
+            }
 
             task.setSessionId(session.getId());
             task.setRunId(resp.getRunId());
@@ -449,6 +458,13 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private boolean handleCompletedPhase(AgentTask task, String phase, Long currentRunId, RunVO run) {
         switch (phase) {
             case PHASE_EXECUTE -> {
+                // 命中循环次数上限被强收口 → 视为执行失败，不再进入提炼阶段
+                if (Boolean.TRUE.equals(run.getLoopCapped())) {
+                    log.warn("Task {} execute run {} hit loop cap, failing task", task.getId(), currentRunId);
+                    markTerminal(task.getId(), TaskEnum.STATUS_FAILED,
+                            JsonUtils.toJson(Map.of("error", "run loop limit reached")));
+                    return true;
+                }
                 // 无契约（未配置 expectedOutput）→ 保持原有行为直接收尾
                 if (!StringUtils.hasText(task.getExpectedOutputJson())) {
                     markTerminal(task.getId(), TaskEnum.STATUS_COMPLETED, replyJson(run));
@@ -534,7 +550,13 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             SendMessageDTO send = new SendMessageDTO();
             send.setMessage(message);
             send.setNoClarification(true);
-            ChatMessageResponseVO resp = chatRuntimeService.chat(task.getSessionId(), send);
+            TaskLoopLimitHolder.set(propertiesTaskLoopLimit());
+            ChatMessageResponseVO resp;
+            try {
+                resp = chatRuntimeService.chat(task.getSessionId(), send);
+            } finally {
+                TaskLoopLimitHolder.clear();
+            }
             return resp == null ? null : resp.getRunId();
         } catch (Exception e) {
             log.warn("Task {} follow-up run failed: {}", task.getId(), e.getMessage());
@@ -624,6 +646,11 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private String titleOf(String goal) {
         String title = goal == null ? "" : goal.trim();
         return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
+    }
+
+    /** 任务 run 的更高轮次上限（配置缺失则回落默认 maxLoopCount）。 */
+    private Integer propertiesTaskLoopLimit() {
+        return runtimeProperties.getRunner().getTaskMaxLoopCount();
     }
 
     /** 组装任务 prompt：自主模式指令 + goal + 配置 + 期望输出 schema，禁止提问并要求严格按 schema 返回结构化结果。 */

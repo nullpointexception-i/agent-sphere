@@ -102,6 +102,9 @@ export const agentApi = {
       request<any>(
         `${BASE}/instance/runs?sessionId=${sessionId}&page=${page}&size=${size}${keyword ? `&keyword=${encodeURIComponent(keyword)}` : ''}`,
       ),
+    // 按需批量补拉推理：返回 {runId: reasoning}（列表默认离行，不含 reasoning）
+    reasoning: (runIds: number[]) =>
+      request<Record<string, string>>(`${BASE}/instance/runs/reasoning?runIds=${runIds.join(',')}`),
     stop: (sessionId: number, runId: number) =>
       request<void>(`${BASE}/runtime/${sessionId}/run/${runId}/stop`, { method: 'POST' }),
     sessionStop: (sessionId: number) =>

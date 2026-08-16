@@ -2,10 +2,12 @@ package com.buukle.agent.bootstrap.controller;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
+import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -47,6 +49,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -73,6 +76,8 @@ class AgentTaskServiceTest {
     SsoIdentitySpi ssoIdentitySpi;
     @Mock
     TaskContractValidator contractValidator;
+    @Mock
+    AgentRuntimeProperties runtimeProperties;
 
     @InjectMocks
     AgentTaskServiceImpl taskService;
@@ -87,6 +92,7 @@ class AgentTaskServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(taskService, "pollInterval", Duration.ofDays(1));
+        lenient().when(runtimeProperties.getRunner()).thenReturn(new AgentRuntimeProperties.RunnerConfig());
     }
 
     private void stubIdentity() {
@@ -412,5 +418,23 @@ class AgentTaskServiceTest {
         verify(taskCallbackService).notifyTerminal(taskCaptor.capture());
         assertEquals("COMPLETED", taskCaptor.getValue().getStatus());
         org.junit.jupiter.api.Assertions.assertTrue(taskCaptor.getValue().getResultJson().contains("still-bad"));
+    }
+
+    @Test
+    void execute_loopCapped_failsTaskWithoutExtraction() {
+        AgentTask task = taskWithContract(1L, 10L);
+        given(taskMapper.selectById(1L)).willReturn(task);
+        given(taskMapper.update(isNull(), any())).willReturn(1);
+        RunVO loopCapped = run(10L, "COMPLETED", "部分结果");
+        loopCapped.setLoopCapped(true);
+
+        boolean executeDone = ReflectionTestUtils.invokeMethod(taskService, "handleCompletedPhase",
+                task, "execute", 10L, loopCapped);
+        assertEquals(true, executeDone);
+        verify(chatRuntimeService, never()).chat(anyLong(), any(SendMessageDTO.class));
+        ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
+        verify(taskCallbackService).notifyTerminal(taskCaptor.capture());
+        assertEquals("FAILED", taskCaptor.getValue().getStatus());
+        org.junit.jupiter.api.Assertions.assertTrue(taskCaptor.getValue().getResultJson().contains("loop limit"));
     }
 }

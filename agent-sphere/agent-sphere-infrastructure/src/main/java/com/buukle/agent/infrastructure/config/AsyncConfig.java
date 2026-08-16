@@ -1,6 +1,7 @@
 package com.buukle.agent.infrastructure.config;
 
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,7 @@ public class AsyncConfig {
             String displayName = AuthContext.getDisplayName();
             Long userId = AuthContext.getUserId();
             boolean superAdmin = AuthContext.isSuperAdmin();
+            Integer taskLoopLimit = TaskLoopLimitHolder.get();
 
             Thread.ofVirtual().name("runtime-vt-").start(() -> {
                 try {
@@ -35,10 +37,12 @@ public class AsyncConfig {
                     AuthContext.setDisplayName(displayName);
                     AuthContext.setUserId(userId);
                     AuthContext.setSuperAdmin(superAdmin);
+                    if (taskLoopLimit != null) TaskLoopLimitHolder.set(taskLoopLimit);
                     task.run();
                 } finally {
                     TenantUtil.stop();
                     AuthContext.clear();
+                    TaskLoopLimitHolder.clear();
                 }
             });
         };

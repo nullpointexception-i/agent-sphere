@@ -123,6 +123,18 @@ export default function Chat() {
     try {
       const res = await agentApi.runs.listBySession(sid, page, 3);
       const runs = (res.records || []).slice().reverse();
+      // 列表默认离行：批量补拉本页各 run 的推理
+      try {
+        const ids = runs.map((r: any) => r.id).filter(Boolean);
+        if (ids.length > 0) {
+          const reasonMap = await agentApi.runs.reasoning(ids);
+          for (const r of runs) {
+            if (reasonMap[r.id]) r.reasoning = reasonMap[r.id];
+          }
+        }
+      } catch {
+        // 推理补拉失败不影响历史消息展示
+      }
       if (runs.length < 3) setHasMoreHistory(false);
       historyPageRef.current = page + 1;
       const historyMsgs: any[] = [];

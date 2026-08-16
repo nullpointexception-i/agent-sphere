@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import { HttpAgent, type AbstractAgent } from '@ag-ui/client';
 import { CopilotChat, CopilotKit } from '@copilotkit/react-core/v2';
-import { ApiError, createApi, stopSession } from '../api';
+import { ApiClient, ApiError, createApi, stopSession } from '../api';
 import type { WidgetConfig } from '../config';
 import type {
   ClarificationVO,
@@ -28,6 +28,25 @@ interface CopilotViewProps {
 }
 
 type ChatMessage = Parameters<AbstractAgent['setMessages']>[0][number];
+
+/** 列表默认离行（不含 reasoning）：批量补拉本批 run 的推理后回填。 */
+async function fillHistoryReasoning(api: ApiClient, runs: RunVO[]): Promise<void> {
+  const ids = runs.map((r) => r.id).filter((id): id is number => id != null);
+  if (ids.length === 0) {
+    return;
+  }
+  try {
+    const reasonMap = await api.runsReasoning(ids);
+    for (const r of runs) {
+      const reasoning = reasonMap[String(r.id)];
+      if (reasoning) {
+        r.reasoning = reasoning;
+      }
+    }
+  } catch {
+    // 推理补拉失败不影响历史消息展示
+  }
+}
 
 interface ClarificationState {
   clarificationId: string;
@@ -562,6 +581,10 @@ export function CopilotView({ config, user }: CopilotViewProps) {
         if (cancelled) {
           return;
         }
+        await fillHistoryReasoning(api, res.records);
+        if (cancelled) {
+          return;
+        }
         agent.setMessages(toChatMessages(res.records.slice().reverse()));
         setHasMoreHistory(res.records.length >= HISTORY_PAGE_SIZE);
         setTodos(todoList);
@@ -660,6 +683,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
         historyPageRef.current,
         HISTORY_PAGE_SIZE,
       );
+      await fillHistoryReasoning(api, res.records);
       const older = toChatMessages(res.records.slice().reverse());
       const current = agent.messages as ChatMessage[];
       agent.setMessages([...older, ...current]);

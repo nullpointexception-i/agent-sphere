@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
@@ -152,6 +153,11 @@ public class SessionRunner {
         StringBuilder allContent = new StringBuilder();
 
         int maxLoopCount = properties.getRunner().getMaxLoopCount();
+        Integer taskLoopLimit = TaskLoopLimitHolder.get();
+        if (taskLoopLimit != null && taskLoopLimit > 0) {
+            maxLoopCount = taskLoopLimit;
+            log.info("Session {} uses task loop limit {}", sessionId, taskLoopLimit);
+        }
         int compactionRetries = 0;
         loop:
         while (loopCount < maxLoopCount) {
@@ -267,6 +273,9 @@ public class SessionRunner {
                     break loop;
                 }
                 case COMPLETE -> {
+                    if (isLastLoop) {
+                        markLoopCapped(currentRun, maxLoopCount);
+                    }
                     String reply = allContent.length() > 0
                             ? allContent.toString()
                             : turnReasoningRef.get();
@@ -431,6 +440,7 @@ public class SessionRunner {
 
             // 最后一轮工具执行后，直接结束
             if (isLastLoop) {
+                markLoopCapped(currentRun, maxLoopCount);
                 String fallback = allContent.length() > 0
                         ? allContent.toString()
                         : RunnerConstants.FALLBACK_COMPLETE_MSG;
@@ -472,6 +482,15 @@ public class SessionRunner {
 
         inputManager.clear(sessionId);
         ctxCache().remove(sessionId);
+    }
+
+    /** 达到轮次上限强收口时标记 run（任务守卫据 loopCapped 判失败，避免"半成品"冒充完成）。 */
+    private void markLoopCapped(RunVO run, int maxLoopCount) {
+        if (run == null) {
+            return;
+        }
+        run.setLoopCapped(true);
+        log.warn("Run {} hit loop cap {} (loopCapped=true, task guard will fail the task)", run.getId(), maxLoopCount);
     }
 
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,

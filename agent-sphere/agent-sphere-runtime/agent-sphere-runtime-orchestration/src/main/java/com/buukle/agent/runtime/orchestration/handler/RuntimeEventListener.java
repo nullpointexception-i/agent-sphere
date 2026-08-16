@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.orchestration.handler;
 
+import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
@@ -10,6 +11,7 @@ import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.AgentUserInLoopRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.runtime.kernel.ReasoningBufferStore;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.port.vo.*;
@@ -34,12 +36,8 @@ public class RuntimeEventListener {
     private final AgentUserInLoopRecordSpi hitlRecordSpi;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final SessionSpi sessionSpi;
-
-    /** 推理落库的长度上限（超出截断，避免单 run 推理撑爆行宽） */
-    private static final int REASONING_MAX_CHARS = 10000;
-
-    /** 按 runId 累积的模型推理文本（终态 run 一次性写入 agent_run.reasoning） */
-    private final Map<Long, StringBuilder> reasoningBuffers = new ConcurrentHashMap<>();
+    private final AgentRuntimeProperties runtimeProperties;
+    private final ReasoningBufferStore reasoningBufferStore;
 
     private static RuntimeEventVO transformForFrontend(RuntimeEventVO event) {
         EventType type = event.getEventType();
@@ -229,17 +227,17 @@ public class RuntimeEventListener {
         if (!RuntimeEventTypeConstant.REASONING_TYPE_LLM.equals(data.getReasoningType())) {
             return;
         }
-        reasoningBuffers.computeIfAbsent(runId, k -> new StringBuilder()).append(response);
+        reasoningBufferStore.accumulate(runId, response);
     }
 
     private void flushReasoning(RunVO run) {
-        StringBuilder sb = reasoningBuffers.remove(run.getId());
-        if (sb == null || sb.length() == 0) {
+        String reasoning = reasoningBufferStore.drain(run.getId());
+        if (reasoning == null) {
             return;
         }
-        String reasoning = sb.toString();
-        if (reasoning.length() > REASONING_MAX_CHARS) {
-            reasoning = reasoning.substring(0, REASONING_MAX_CHARS);
+        int maxChars = runtimeProperties.getRunner().getMaxReasoningChars();
+        if (reasoning.length() > maxChars) {
+            reasoning = reasoning.substring(0, maxChars);
         }
         run.setReasoning(reasoning);
     }

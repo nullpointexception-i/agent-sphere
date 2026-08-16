@@ -89,6 +89,8 @@ buukle:
     # ============================================================
     runner:
       max-loop-count: 128                          # 单次 run 最大循环次数 / Max loop count per run
+      task-max-loop-count: 500                     # 任务触发 run 的更高轮次上限（长任务寻访/收藏） / Task run max loop count
+      max-reasoning-chars: 500000                   # 单 run 推理落库长度上限（字符） / Max persisted reasoning chars
       turn-timeout: 180s                           # 单轮 LLM 调用超时 / Single LLM turn timeout
       compaction:
         budget-ratio: 0.7                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio

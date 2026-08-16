@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @WithTenant
 @RestController
 @RequestMapping("/api/v1/instance/runs")
@@ -32,5 +34,14 @@ public class RunController extends BaseController {
                                            @RequestParam(defaultValue = "1") int page,
                                            @RequestParam(defaultValue = "10") int size) {
         return ok(runService.pageRunsBySession(sessionId, keyword, page, size));
+    }
+
+    /**
+     * 按需批量补拉推理（离行列表的定点填充）：返回 runId → reasoning。
+     * 示例：/api/v1/instance/runs/reasoning?runIds=1,2,3
+     */
+    @GetMapping("/reasoning")
+    public ResponseEntity<?> reasoning(@RequestParam("runIds") List<Long> runIds) {
+        return ok(runService.findReasoningBatch(runIds));
     }
 }

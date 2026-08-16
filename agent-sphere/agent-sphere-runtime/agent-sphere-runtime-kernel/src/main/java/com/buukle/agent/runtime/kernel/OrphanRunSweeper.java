@@ -24,6 +24,7 @@ public class OrphanRunSweeper {
 
     private final RedissonClient redissonClient;
     private final RunSpi runSpi;
+    private final ReasoningBufferStore reasoningBufferStore;
     private final SessionRunCoordinator coordinator;
 
     @Scheduled(fixedDelayString = "${buukle.agent.distributed.orphan-sweep-interval:PT30S}")
@@ -62,6 +63,7 @@ public class OrphanRunSweeper {
             log.warn("Orphan run detected for session {} (owner lease expired), marking FAILED", sessionId);
             RunVO active = runSpi.findActiveRun(sessionId);
             if (active != null) {
+                flushReasoning(active);
                 active.setStatus(RunStatus.FAILED.name());
                 runSpi.updateRun(active);
             }
@@ -75,5 +77,17 @@ public class OrphanRunSweeper {
     private static boolean isActiveState(String state) {
         return SessionRunCoordinator.State.RUNNING.name().equals(state)
                 || SessionRunCoordinator.State.RUNNING_WITH_PENDING.name().equals(state);
+    }
+
+    /** 清空本副本内存中的推理缓冲并写回 run，避免孤儿 run 的推理丢失。 */
+    private void flushReasoning(RunVO run) {
+        try {
+            String reasoning = reasoningBufferStore.drain(run.getId());
+            if (reasoning != null) {
+                run.setReasoning(reasoning);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to flush reasoning for run {} during orphan sweep", run.getId(), e);
+        }
     }
 }

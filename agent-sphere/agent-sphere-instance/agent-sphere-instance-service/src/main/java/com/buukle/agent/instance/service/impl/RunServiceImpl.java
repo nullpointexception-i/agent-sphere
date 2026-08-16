@@ -19,6 +19,7 @@ import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,6 +29,9 @@ import java.util.stream.Collectors;
 public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements RunService {
     private final RunConverter runConverter;
     private final ClarificationService clarificationService;
+
+    /** 列表/增量查询排除的大字段属性名（按需经 findReasoningBatch 定点补拉，避免行宽撑爆） */
+    private static final String REASONING_PROPERTY = "reasoning";
 
     @Override
     public RunVO createRun(CreateRunDTO dto) {
@@ -67,8 +71,10 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
 
     @Override
     public List<RunVO> listRunsBySessionAfterId(Long sessionId, Long afterRunId) {
+        // 离行：列表/增量查询排除 reasoning 大字段，按需走 findReasoningBatch 定点补拉
         List<AgentRun> runs = lambdaQuery().eq(AgentRun::getSessionId, sessionId)
                 .gt(AgentRun::getId, afterRunId)
+                .select(AgentRun.class, i -> !REASONING_PROPERTY.equals(i.getProperty()))
                 .orderByAsc(AgentRun::getId)
                 .list();
         return runs.stream().map(runConverter::toVO).toList();
@@ -79,6 +85,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         Page<AgentRun> p = lambdaQuery()
                 .eq(AgentRun::getSessionId, sessionId)
                 .like(keyword != null && !keyword.isBlank(), AgentRun::getUserMessage, keyword)
+                .select(AgentRun.class, i -> !REASONING_PROPERTY.equals(i.getProperty()))
                 .orderByDesc(AgentRun::getCreatedAt)
                 .page(new Page<>(page, size));
         IPage<RunVO> voPage = p.convert(runConverter::toVO);
@@ -93,6 +100,20 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
             }
         }
         return voPage;
+    }
+
+    @Override
+    public Map<Long, String> findReasoningBatch(Collection<Long> runIds) {
+        if (runIds == null || runIds.isEmpty()) {
+            return Map.of();
+        }
+        return lambdaQuery()
+                .in(AgentRun::getId, runIds)
+                .select(AgentRun::getId, AgentRun::getReasoning)
+                .list()
+                .stream()
+                .filter(r -> r.getReasoning() != null)
+                .collect(Collectors.toMap(AgentRun::getId, AgentRun::getReasoning));
     }
 
     private static void stripClarificationPrefix(RunVO runVO) {
