@@ -42,7 +42,7 @@
 - **LLM ReAct 编排** — `SessionRunner` 执行 `Plan → Act → Observe → Learn` 循环，支持单轮超时、取消、自动上下文压缩。
 - **多供应商模型路由** — 支持 OpenAI / DeepSeek / 智谱（BigModel）/ 中转站，主路由 + fallback 路由链自动降级。
 - **统一能力层** — MCP Server、内置 SPI 工具、CLI 执行、浏览器自动化、复合技能，通过 `ToolExecutor` 统一分发。
-- **真实浏览器自动化** — Manifest V3 Chrome 扩展桥接，执行 DOM 操作（导航 / 点击 / 输入 / 截图 / executeJS）并实时视觉反馈。
+- **真实浏览器自动化** — Manifest V3 Chrome 扩展桥接，执行 DOM 操作（导航 / 点击 / 输入 / executeJS）并实时执行反馈。
 - **多级记忆** — 持久化 run、工具调用记录（写时 JSON 压缩）、基于 token 预算的上下文压缩。
 - **人工介入澄清（Human-in-the-loop）** — LLM 通过 `ask_clarification` 工具暂停提问，AG-UI interrupt/resume 恢复执行（`confirm` / `choice` / `input`）。
 - **OIDC 多认证源 SSO** — PKCE + JWKS 验签，任意 IdP 登录、JIT 开通本地用户，配合完整 RBAC 与审计日志。
@@ -81,13 +81,20 @@
 |---------|------|------|------|
 | **MCP (Model Context Protocol)** | MCP Server 客户端 | 标准协议，接入任意 MCP Server | Jira、GitHub、Slack、数据库 |
 | **Builtin (内置工具)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI 扩展 | WebFetch、WebRead、Chrome、Todowrite、DocWrite |
-| **Chrome 浏览器** | Chrome Extension 桥接 | DOM 操作 + 实时视觉反馈 | 导航、点击、填表、截图 |
+| **Chrome 浏览器** | Chrome Extension 桥接 | DOM 操作 + 实时执行反馈 | 导航、点击、填表、executeJS |
 | **CLI (命令行)** | `ProcessBuilder` 执行 | 本地或远程 Shell | Git 操作、构建部署、系统管理 |
 | **Skill (复合技能)** | 多步任务编排 | LLM 驱动的任务分解 | 跨系统工作流 |
 
 #### 2.2.3 Chrome Extension（浏览器桥接）
 
 扩展在用户浏览器中桥接后端自动化操作。它只维持**一条用户级 task SSE 连接**（`/api/v1/runtime/user/task/stream`），为该用户的所有会话/任务投递 `browser_operation` 指令（不做会话跟随）。安装时声明 `<all_urls>` 宿主权限，可在 agent 操作的任意页面注入内容脚本。
+
+近期架构要点：
+- **不再截图** —— 截图链路已端到端移除（扩展/后端/UI），过程记录为文本/事件方式。
+- **SSE 常驻 offscreen document**（`offscreen.html/js`）—— 免疫 MV3 Service Worker 挂起；浏览器关闭后由后台 alarm 自动重建。
+- **原生 ES Modules** —— 后台 Service Worker（`background.js`，`"type": "module"`）import `lib/cdp-client.js`、`lib/tab-manager.js`、`lib/result.js`、`lib/offscreen-bridge.js`；执行层为 `content.js` + `content-locator.js` + `content-editors.js`（按序注入隔离世界）。
+- **标签分组** —— 插件导航/新开的标签自动聚合到 **`AgentSphere` 标签分组**（`tabGroups` 权限），组被关闭后自动重建。
+- **`executeJS` 分级降级**（debugger 仅兜底）：隔离世界（`chrome.scripting`）→ `inject.js` 主世界 postMessage 桥 → `chrome.scripting` MAIN 世界 → `chrome.debugger` `Runtime.evaluate`（严格 CSP 站点）。
 
 ![Chrome Extension 浏览器桥接结构](agent-sphere-readme/chrome-extension-structure.png)
 
@@ -242,9 +249,13 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 ### 3.5 多标签页管理
 
+插件导航、打开或跟随（target=_blank / window.open）的所有标签自动聚合到**单个 `AgentSphere` 标签分组**（首次创建，组被关闭后自动重建），自动化过程中浏览器保持整洁。多标签跟随仍会自动把控制切换到新开的标签。
+
 ![多标签页管理](agent-sphere-readme/multi-tab.png)
 
 ### 3.6 超时与取消链
+
+停止/取消为 **session 级**：`POST /api/v1/runtime/{sessionId}/stop` 停止该会话当前 run，与请求落到哪个后端副本无关，**无需 runId**。取消标志存于 Redis（`runtime:cancel-session:{sessionId}`），`SessionRunner` 循环在各取消检查点（循环顶部、每轮结束、工具 fiber 前/中/后、LLM 轮次）检测并终止 run，发布取消终态事件。同一端点也会取消停车态（`AWAITING_USER`）run（并解除待处理澄清）。
 
 ![超时与取消链](agent-sphere-readme/timeout-cancel-chain.png)
 
@@ -252,10 +263,10 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 扩展不再做会话跟随，而是维持**一条用户级 task SSE 流**（`/api/v1/runtime/user/task/stream`），接收该登录用户的所有 `browser_operation` 指令（后端按会话归属用户 `session.created_by` 分发）。
 
-- **连接时机**：登录上报（`auth` / `auth_token`）、扩展/Service Worker 启动、keepalive 兜底、断线后自动重连。
+- **连接时机**：登录上报（`auth` / `auth_token`）、扩展/Service Worker 启动、断线后自动重连。连接由 **offscreen document** 常驻持有（免疫 MV3 Service Worker 挂起）；后台 alarm 在浏览器关闭 offscreen 后自动重建，keepalive 兜底拉取凭证并重连。
 - **重连策略**：断开后前 30s 每秒重试 1 次，之后回落到每 5s；成功或重新登录后计数归零。
 - **鉴权**：`Authorization: Bearer <token>`；连接按 `AuthContext.getUsername()` 注册，任务的会话必须归属同一用户才能收到其指令。
-- **回调**：指令结果 POST 到 `/api/v1/chrome/callback?sessionId=<cmd.sessionId>`（指令 DTO 自带会话 id）。
+- **回调**：指令结果 POST 到 `/api/v1/chrome/callback?sessionId=<cmd.sessionId>`（指令 DTO 自带会话 id）。多副本下回调经 Redis 事件总线广播，执行副本的 pending future 必被完成。
 
 ![用户级 Task 连接](agent-sphere-readme/user-task-connection.png)
 
@@ -281,7 +292,7 @@ AgentSphere 支持 **用户澄清（User Clarification）** 机制，使 LLM 在
 
 用户可随时取消待处理的澄清：
 - **卡片取消**：每张澄清卡片都有取消按钮，点击后发送取消信号并停止当前 Run。
-- **输入框取消**：存在待处理澄清时，聊天输入框显示停止按钮；点击后取消所有待处理澄清并停止当前 Run。
+- **输入框取消**：run 运行中聊天输入框显示停止按钮；点击后发起 **session 级停止**（`POST /api/v1/runtime/{sessionId}/stop`，无需 runId），取消当前 run 与所有待处理澄清。主站与内嵌 widget 均用此端点。
 - **新消息自动取消**：存在待处理澄清时发送新消息，系统自动先取消所有待处理澄清。
 
 #### SSE 事件
@@ -312,6 +323,8 @@ AgentSphere 支持 **用户澄清（User Clarification）** 机制，使 LLM 在
 | `tool.max-parallel` | 3 | 工具最大并行数 |
 | `tool.execution-timeout` | 60s | 单批工具执行超时 |
 | `tool.submit-timeout` | 30s | 工具提交超时 |
+| `distributed.owner-lease` | 5m | 会话执行者 owner 租约（多副本接管） |
+| `distributed.orphan-sweep-interval` | 30s | 孤儿 run 清扫间隔（租约过期 → FAILED → 续跑） |
 
 ### 4.2 可观测性 (Observability)
 
@@ -348,6 +361,8 @@ reasoning_token   → "🤔 用户问天气，我需要打开天气网站"
 | `clarification_responded` | 用户做出回应 | 卡片显示 ✓，run 继续 |
 | `clarification_expired` | 澄清 TTL 到期 | 卡片显示已过期 |
 | `clarification_dismissed` | Run 被取消（等待用户时） | 卡片显示已撤销 |
+
+> 模型推理（`reasoning_token`）在 run 结束时会**持久化**到 `agent_run.reasoning`，因此主站与内嵌 widget 都能在会话历史中回看 thinking（不仅实时）。widget 还通过被动 `/api/v1/runtime/{sessionId}/stream` 实时流式展示任务触发的 run 的 thinking。
 
 #### 4.2.2 Run Activity API
 
@@ -423,6 +438,9 @@ npm run dev
 # Chrome → chrome://extensions → 开发者模式 → 加载已解压的扩展
 # 选择 agent-sphere-chrome-extension 目录
 #（声明 <all_urls>：读取并更改所有网站的数据，安装时授予）
+# 运行时文件：manifest.json、background.js（ESM）+ lib/*、content.js + content-locator.js + content-editors.js、
+# page-script.js / inject.js（主世界桥）、offscreen.html/js（SSE 承载）、popup.html/js。
+# 权限含 `offscreen` 与 `tabGroups`（插件标签自动归入 “AgentSphere” 分组）。
 
 # 5. 配置 URL
 # 点击扩展图标 → Settings Tab
@@ -446,6 +464,10 @@ npm run dev
 | **基于 token 预算的压缩触发** | `shouldCompact` 在 `runTurn` 的 execute 回调内 | 使用实际调用的 model route 的 maxInputTokens，确保准确 |
 | **compaction 游标** | `compactedUptoRunId` 标记已压缩的 run | HistoryLoader 跳过已压 run，只加载之后的 |
 | **压缩保护循环** | 最多 3 次重试 | 防止网络波动导致压缩失败时无限循环 |
+| **Redis 事件总线** | Redisson `RTopic` topic（`runtime.events` / `runtime.agui` / `runtime.chrome.*`） | 多副本下 SSE / AG-UI / Chrome 投递；SSE 事件缓存入 Redis，跨副本重连可回放（单写者，先写缓存再发布） |
+| **分布式运行态** | Redis 状态 + owner 租约（`SessionRunCoordinator`）、Redis 队列/steer（`SessionInputManager`）、Redis 取消集合、`OrphanRunSweeper` | run 锚定单副本但输入/状态/取消语义存活；租约过期 → run FAILED → 续跑。使 `replicas: 2` 安全 |
+| **session 级停止** | `POST /api/v1/runtime/{sessionId}/stop` | 按会话取消，无需 runId；跨副本生效（loop 检测 Redis 取消集合，含停车态 `AWAITING_USER` run） |
+| **任务轮询 DB 化** | `@Scheduled` sweep + 条件认领（`polled_at`/`poll_phase`）+ 单胜者终态更新 | 任务轮询在副本重启后存活，无内存 poller |
 
 ### 4.6 性能优化
 
@@ -643,6 +665,8 @@ SSO 登录页（选择身份源）：
 - **Agent 列表与会话**：来自 `/instance/instances/all` 与 `/instance/sessions`（增删改查）。会话支持新建、行内重命名（✓/✕）、归档（行内两步确认），并带无限滚动分页。
 - **对话（AG-UI）**：每个 Agent 对应一个 `HttpAgent`，请求 `{apiBase}/copilot/agent/{id}/services/chat/run`；后端以 SSE `data:` 行推送 AG-UI 事件（`TEXT_MESSAGE_*`、`REASONING_MESSAGE_*`、`TOOL_CALL_*`、`RUN_*`）。请求携带 `Authorization: Bearer`，不经过 CopilotKit 运行时。
 - **澄清（人工介入）**：Agent 中断暂停时，聊天内即时出现澄清卡片（confirm / choice / input）。回复或取消通过 AG-UI `resume` 恢复执行（`resolved` / `cancelled`）；已答复的卡片也会从会话历史中渲染。
+- **Thinking / 推理展示**：任务触发的 run 的 thinking 通过被动 `/api/v1/runtime/{sessionId}/stream` 实时流入聊天框（注入为 `reasoning` 消息）；持久化的 `agent_run.reasoning` 会在会话历史中渲染。
+- **session 级停止**：停止按钮先中止本地流，再调用 `POST /api/v1/runtime/{sessionId}/stop`（不依赖 runId），因此在 widget 中停止任务 run 同样生效。
 - **实时更新**：会话标题通过 `session_title_updated` 自定义事件实时同步；辅助面板展示当前任务清单（`STATE_SNAPSHOT` todos）与工具调用动态（悬浮查看详情）。
 - **宿主模式**：传入 `mountTo` 后 Widget 静态渲染在你的布局中（如抽屉或区域块），而不是悬浮气泡。
 

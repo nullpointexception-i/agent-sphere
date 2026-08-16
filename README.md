@@ -42,7 +42,7 @@ Embeddable chat widget (shadow DOM, OIDC SSO, AG-UI streaming):
 - **LLM ReAct orchestration** — `SessionRunner` runs a `Plan → Act → Observe → Learn` loop with per-turn timeout, cancellation, and automatic context compaction.
 - **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations, with primary + fallback route chains and graceful degradation.
 - **Unified capability layer** — MCP servers, built-in SPI tools, CLI execution, browser automation, and composite skills, dispatched through a single `ToolExecutor`.
-- **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / screenshot / executeJS) with real-time visual feedback.
+- **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / executeJS) with real-time execution feedback.
 - **Multi-level memory** — persistent runs, tool-call records with write-time JSON compression, and token-budget based context compaction.
 - **Human-in-the-loop clarification** — the LLM pauses with a `ask_clarification` tool and resumes via AG-UI interrupt/resume (`confirm` / `choice` / `input`).
 - **OIDC multi-provider SSO** — PKCE + JWKS-verified logins from any IdP, JIT user provisioning, plus full RBAC and audit logging.
@@ -81,13 +81,20 @@ Manages the complete execution lifecycle of an AI session, implementing the **Pl
 |-----------------|----------------|-------------|----------|
 | **MCP (Model Context Protocol)** | MCP Server client | Standard protocol, connects to any MCP Server | Jira, GitHub, Slack, databases |
 | **Builtin (built-in tools)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI extension | WebFetch, WebRead, Chrome, Todowrite, DocWrite |
-| **Chrome Browser** | Chrome Extension bridge | DOM operations + real-time visual feedback | Navigate, click, fill forms, screenshot |
+| **Chrome Browser** | Chrome Extension bridge | DOM operations + real-time execution feedback | Navigate, click, fill forms, executeJS |
 | **CLI (command line)** | `ProcessBuilder` execution | Local or remote shell | Git operations, build/deploy, system administration |
 | **Skill (composite skills)** | Multi-step task orchestration | LLM-driven task decomposition | Cross-system workflows |
 
 #### 2.2.3 Chrome Extension (Browser Bridge)
 
 The extension bridges the backend with the user's browser for automated operations. It keeps a **single user-level task SSE connection** (`/api/v1/runtime/user/task/stream`) that delivers `browser_operation` commands for any of the user's sessions/runs — no per-session following. It declares `<all_urls>` host permission (granted at install) so it can inject a content script into any page the agent operates on.
+
+Recent architecture notes:
+- **No screenshots** — the screenshot pipeline was removed end-to-end (extension, backend, UI). Process recording is text/event based.
+- **SSE lives in an offscreen document** (`offscreen.html/js`) — immune to MV3 service-worker suspension; the background alarm re-creates it if the browser closes it.
+- **Native ES modules** — the background service worker (`background.js`, `"type": "module"`) imports `lib/cdp-client.js`, `lib/tab-manager.js`, `lib/result.js`, `lib/offscreen-bridge.js`; the execution layer is `content.js` + `content-locator.js` + `content-editors.js` (injected in order into the isolated world).
+- **Tab grouping** — every tab the plugin navigates/opens is auto-grouped under the `AgentSphere` tab group (`tabGroups` permission), recreated if closed.
+- **`executeJS` is tiered** (debugger only as last resort): isolated world (`chrome.scripting`) → `inject.js` MAIN-world postMessage bridge → `chrome.scripting` MAIN world → `chrome.debugger` `Runtime.evaluate` (strict-CSP sites).
 
 ![Chrome Extension browser bridge structure](agent-sphere-readme/chrome-extension-structure.png)
 
@@ -242,9 +249,13 @@ Dynamic adjustment:
 
 ### 3.5 Multi-tab Management
 
+Every tab the plugin navigates, opens, or follows (target=_blank / window.open) is aggregated into a single **`AgentSphere` tab group** (created once, recreated if the group is closed), so the browser stays organized during automation. Multi-tab following still auto-switches control to newly opened tabs.
+
 ![Multi-tab management](agent-sphere-readme/multi-tab.png)
 
 ### 3.6 Timeout and Cancellation Chain
+
+Stop/cancel is **session-level**: `POST /api/v1/runtime/{sessionId}/stop` stops the current run of the session regardless of which backend replica handled the request — no `runId` required. The cancel flag lives in Redis (`runtime:cancel-session:{sessionId}`) and the `SessionRunner` loop checks it at every cancellation point (loop top, after each turn, before/during/after tool fibers, and the LLM turn), terminating the run and publishing the cancel terminal event. The same endpoint also cancels a parked `AWAITING_USER` run (dismissing pending clarifications).
 
 ![Timeout and cancellation chain](agent-sphere-readme/timeout-cancel-chain.png)
 
@@ -252,10 +263,10 @@ Dynamic adjustment:
 
 The extension no longer follows sessions. Instead it maintains a **single per-user task SSE stream** (`/api/v1/runtime/user/task/stream`) that receives every `browser_operation` command for the logged-in user (the backend fans out by the session owner, `session.created_by`).
 
-- **When it connects**: on login (`auth` / `auth_token` reported by the content script), on extension/service-worker startup, on the keepalive alarm, and after a failed/closed connection.
+- **When it connects**: on login (`auth` / `auth_token` reported by the content script), on extension/service-worker startup, and after a failed/closed connection. The connection is held by an **offscreen document** (immune to MV3 service-worker suspension); the background alarm re-creates the offscreen document if the browser closed it, and the keepalive loop pulls credentials and reconnects.
 - **Reconnect**: the first 30 s retries once per second, then falls back to every 5 s; the count resets on success or a fresh login.
 - **Auth**: `Authorization: Bearer <token>`; the stream is registered under `AuthContext.getUsername()`, so a task's session must be owned by the same user to receive its commands.
-- **Callbacks**: command results are posted to `/api/v1/chrome/callback?sessionId=<cmd.sessionId>` (the command DTO carries its own session id).
+- **Callbacks**: command results are posted to `/api/v1/chrome/callback?sessionId=<cmd.sessionId>` (the command DTO carries its own session id). Multi-replica: callbacks are broadcast over the Redis event bus so the executing replica's pending future always completes.
 
 ![User-level task connection](agent-sphere-readme/user-task-connection.png)
 
@@ -281,7 +292,7 @@ AgentSphere supports a **User Clarification** mechanism that enables the LLM to 
 
 Users can cancel a pending clarification at any time:
 - **Cancel via card**: Each clarification card has a Cancel button that sends a cancel signal and stops the run.
-- **Cancel via sender**: When there are pending clarifications, the chat input shows a stop button; clicking it cancels all pending clarifications and stops the current run.
+- **Cancel via sender**: The chat input shows a stop button while a run is active; clicking it issues a **session-level stop** (`POST /api/v1/runtime/{sessionId}/stop` — no runId required), cancelling the current run and any pending clarifications. Both the main UI and the embeddable widget use this endpoint.
 - **Auto-cancel on new message**: Sending a new message while clarifications are pending automatically cancels them first.
 
 #### SSE Events
@@ -312,6 +323,8 @@ Users can cancel a pending clarification at any time:
 | `tool.max-parallel` | 3 | Maximum parallel tool executions |
 | `tool.execution-timeout` | 60s | Single batch tool execution timeout |
 | `tool.submit-timeout` | 30s | Tool submission timeout |
+| `distributed.owner-lease` | 5m | Session executor owner lease (multi-replica takeover) |
+| `distributed.orphan-sweep-interval` | 30s | Orphan-run sweep interval (stale owner → FAILED → re-wake) |
 
 ### 4.2 Observability
 
@@ -348,6 +361,8 @@ reasoning_token   → "🤔 The user is asking about weather, I need to open a w
 | `clarification_responded` | User responds | Card shows ✓, run resumes |
 | `clarification_expired` | Clarification TTL expires | Card shows expired |
 | `clarification_dismissed` | Run cancelled while waiting | Card shows dismissed |
+
+> Model reasoning (`reasoning_token`) is **persisted** to `agent_run.reasoning` at run end, so both the main UI and the embeddable widget render the thinking in session history (not only live). The widget also streams task-triggered runs' thinking live via the passive `/api/v1/runtime/{sessionId}/stream`.
 
 #### 4.2.2 Run Activity API
 
@@ -423,6 +438,9 @@ npm run dev
 # Chrome → chrome://extensions → Developer mode → Load unpacked
 # Select the agent-sphere-chrome-extension directory
 # (declares <all_urls>: read & change data on all sites, granted at install)
+# Runtime files: manifest.json, background.js (ESM) + lib/*, content.js + content-locator.js + content-editors.js,
+# page-script.js / inject.js (MAIN-world bridges), offscreen.html/js (SSE host), popup.html/js.
+# Permissions include `offscreen` and `tabGroups` (plugin tabs auto-group under "AgentSphere").
 
 # 5. Configure URLs
 # Click the extension icon → Settings Tab
@@ -446,6 +464,10 @@ npm run dev
 | **Token budget-based compaction trigger** | `shouldCompact` inside `runTurn`'s execute callback | Uses the actual called model route's maxInputTokens for accuracy |
 | **Compaction cursor** | `compactedUptoRunId` marks compacted runs | HistoryLoader skips compacted runs, only loads subsequent ones |
 | **Compaction protection loop** | Max 3 retries | Prevents infinite loops when compaction fails due to network fluctuations |
+| **Redis event bus** | Redisson `RTopic` topics (`runtime.events` / `runtime.agui` / `runtime.chrome.*`) | Multi-replica SSE / AG-UI / Chrome delivery; SSE event cache in Redis for cross-replica reconnect replay (single-writer, write-before-publish) |
+| **Distributed runtime state** | Redis state + owner lease (`SessionRunCoordinator`), Redis queue/steer (`SessionInputManager`), Redis cancel sets, `OrphanRunSweeper` | Run executes on one replica but input/state/cancel survive; stale owner → run FAILED → re-wake. Makes `replicas: 2` safe |
+| **Session-level stop** | `POST /api/v1/runtime/{sessionId}/stop` | Cancel by session, no runId; works across replicas (loop checks Redis cancel set, incl. parked `AWAITING_USER` runs) |
+| **Task polling DB-ized** | `@Scheduled` sweep + conditional claim (`polled_at`/`poll_phase`) + single-winner terminal update | Task polling survives replica restarts; no in-memory poller |
 
 ### 4.6 Performance Optimizations
 
@@ -643,6 +665,8 @@ Embedded into a third-party system page (`mountTo`):
 - **Agent list & sessions**: loaded from `/instance/instances/all` and `/instance/sessions` (CRUD). Sessions support create, inline rename (✓/✕), and archive (two-step inline confirm), all with infinite-scroll pagination.
 - **Chat (AG-UI)**: one `HttpAgent` per agent posts to `{apiBase}/copilot/agent/{id}/services/chat/run`; the backend streams SSE `data:` lines of AG-UI events (`TEXT_MESSAGE_*`, `REASONING_MESSAGE_*`, `TOOL_CALL_*`, `RUN_*`). Requests carry `Authorization: Bearer` and never go through the CopilotKit runtime.
 - **Clarification (human-in-the-loop)**: when the agent pauses with an interrupt, a clarification card appears inline (confirm / choice / input). Responding or cancelling resumes the run via AG-UI `resume` (`resolved` / `cancelled`); answered cards are also rendered from session history.
+- **Thinking / reasoning**: task-triggered runs' thinking streams live into the chatbox via a passive `/api/v1/runtime/{sessionId}/stream` (injected as a `reasoning` message), and persisted `agent_run.reasoning` is rendered in session history.
+- **Session-level stop**: the stop button aborts the local stream and calls `POST /api/v1/runtime/{sessionId}/stop` (no runId dependency), so stopping a task run works from the widget.
 - **Live updates**: session titles sync in real time via the `session_title_updated` custom event; the auxiliary panel shows the current task list (`STATE_SNAPSHOT` todos) and tool-call activity with hover details.
 - **Hosted mode**: passing `mountTo` renders the widget statically inside your layout (e.g. inside a drawer or a section) instead of a floating bubble.
 
