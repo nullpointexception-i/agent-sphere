@@ -8,7 +8,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -55,11 +54,11 @@ class PluginFileControllerTest {
 
     @Test
     void download_whenFileExists_streamsAttachment() throws Exception {
-        ResponseEntity<org.springframework.core.io.Resource> response = ResponseEntity.ok()
+        ResponseEntity<byte[]> response = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"agent-sphere-chrome-extension.zip\"")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .body(new ByteArrayResource(new byte[]{1, 2, 3}));
+                .body(new byte[]{1, 2, 3});
         given(pluginFileService.download()).willReturn(response);
 
         mockMvc.perform(get("/api/v1/system/config/plugin/download"))

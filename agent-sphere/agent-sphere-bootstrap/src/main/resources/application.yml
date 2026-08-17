@@ -25,6 +25,10 @@ spring:
     time-zone: Asia/Shanghai                        # 时区 / Time zone
     serialization:
       fail-on-empty-beans: false                    # 空对象不报错 / Don't fail on empty beans
+  servlet:
+    multipart:
+      max-file-size: 110MB                          # 单文件上传上限 / Max single file upload size
+      max-request-size: 120MB                       # 请求体上限 / Max request size
 
 mybatis-plus:
   type-handlers-package: com.buukle.agent.infrastructure.handler
@@ -83,12 +87,6 @@ buukle:
       read-timeout: 60s                            # LLM API 读取超时 / LLM API read timeout
       stream-read-timeout: 120s                    # 流式读取超时 / Stream read timeout
       stream-timeout: 120s                         # 流式总超时（含思考）/ Stream total timeout (incl. reasoning)
-
-    # ============================================================
-    # 插件安装包托管 / Plugin Package Storage
-    # ============================================================
-    plugin:
-      storage-path: /app/data/plugin               # 插件安装包存储目录 / Plugin package storage dir
 
     # ============================================================
     # Runner 执行引擎配置 / Runner Config
