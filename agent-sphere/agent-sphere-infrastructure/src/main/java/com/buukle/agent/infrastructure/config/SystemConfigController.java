@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +29,21 @@ public class SystemConfigController extends BaseController {
     private final SystemConfigServiceImpl systemConfigService;
     private final CryptoService cryptoService;
     private final ApiKeyMapper apiKeyMapper;
+
+    /**
+     * 公开配置读取（免鉴权，AuthInterceptor 白名单）：仅返回 {@link SystemConfigKeys#PUBLIC_KEYS}
+     * 白名单内的非敏感键。登录页 / widget 据此拉取插件下载地址。未知/非白名单键忽略。
+     */
+    @GetMapping("/public")
+    public ResponseEntity<?> publicConfig(@RequestParam("keys") List<String> keys) {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (String key : keys) {
+            if (key != null && SystemConfigKeys.PUBLIC_KEYS.contains(key)) {
+                result.put(key, systemConfigSpi.get(key, ""));
+            }
+        }
+        return ok(result);
+    }
 
     @RequirePermission("admin:settings:read")
     @GetMapping

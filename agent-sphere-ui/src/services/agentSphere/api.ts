@@ -3,6 +3,11 @@ import { request } from '@umijs/max';
 const BASE = '/api/v1';
 
 export const agentApi = {
+  system: {
+    // 公开配置读取（无需登录）：当前支持 plugin.download-url
+    publicConfig: (keys: string[]) =>
+      request<Record<string, string>>(`${BASE}/system/config/public?keys=${keys.join(',')}`),
+  },
   sso: {
     providers: () =>
       request<{ code: string; name: string }[]>(`${BASE}/auth/sso/providers`),
@@ -267,6 +272,13 @@ export const agentApi = {
       request<any>(`${BASE}/system/config/${key}`, { method: 'PUT', data: { value } }),
     regenerateAesKey: () =>
       request<any>(`${BASE}/system/config/crypto.aes-key/regenerate`, { method: 'POST' }),
+    uploadPlugin: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return request<any>(`${BASE}/system/config/plugin/upload`, { method: 'POST', data: form });
+    },
+    deletePlugin: () =>
+      request<any>(`${BASE}/system/config/plugin`, { method: 'DELETE' }),
     roles: {
       list: (page = 1, size = 20) =>
         request<any>(`${BASE}/admin/roles`, { params: { page, size } }),

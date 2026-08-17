@@ -21,6 +21,11 @@ export interface WidgetConfig {
    * bottom-right floating bubble. Default undefined (floating bubble).
    */
   mountTo?: HTMLElement;
+  /**
+   * Chrome 插件下载地址覆盖。未提供且后端配置了 plugin.download-url（应用内上传托管或外链）
+   * 时，widget 运行时从公开配置拉取并在"新会话"按钮上方展示下载入口。
+   */
+  pluginDownloadUrl?: string;
 }
 
 export const DEFAULT_CONFIG: Required<Pick<WidgetConfig, 'apiBase' | 'provider' | 'autoLogin' | 'title'>> = {

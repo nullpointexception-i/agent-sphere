@@ -263,6 +263,7 @@ export default {
   'pages.theme': '主题设置',
   'pages.logout': '退出登录',
   'pages.login.register': '去注册',
+  'pages.login.pluginDownload': '插件下载',
   'pages.login.sso.title': 'SSO 统一认证登录',
   'pages.login.sso.desc': '使用企业身份源一键登录，无需注册账号',
   'pages.login.sso.choose': '选择认证源',
@@ -367,6 +368,8 @@ export default {
   'pages.admin.settings.group.chrome': '浏览器扩展',
   'pages.admin.settings.group.web-read': '网页读取',
   'pages.admin.settings.group.rate-limit': '限流配置',
+  'pages.admin.settings.group.plugin': '插件安装包',
+  'pages.admin.settings.group.user': '用户初始化',
   'pages.admin.settings.regenerate.btn': '重新生成',
   'pages.admin.settings.regenerate.confirm':
     '重新生成 AES 密钥将重新加密所有 API Key，此操作不可撤销。确定继续？',

@@ -284,6 +284,24 @@
   border-color: #2563eb;
 }
 
+.aw-plugin-download {
+  flex-shrink: 0;
+  margin: 2px 8px 2px 10px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: #2563eb;
+  text-align: center;
+  text-decoration: none;
+  border: 1px dashed #c7d7fe;
+  border-radius: 8px;
+  background: #f8faff;
+}
+
+.aw-plugin-download:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
 .aw-chat {
   flex: 1;
   min-height: 0;

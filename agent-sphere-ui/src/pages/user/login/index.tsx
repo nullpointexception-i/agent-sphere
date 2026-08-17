@@ -61,6 +61,23 @@ const Login: React.FC = () => {
   const { styles } = useStyles();
   const { message } = App.useApp();
   const intl = useIntl();
+  const [pluginDownloadUrl, setPluginDownloadUrl] = useState<string>('');
+
+  useEffect(() => {
+    agentApi.system
+      .publicConfig(['plugin.download-url'])
+      .then((res: Record<string, string>) => {
+        const raw = res?.['plugin.download-url'] || '';
+        if (!raw) {
+          setPluginDownloadUrl('');
+          return;
+        }
+        setPluginDownloadUrl(
+          /^https?:\/\//i.test(raw) ? raw : `${window.location.origin}${raw}`,
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   const getSafeRedirectUrl = (redirect: string | null): string => {
     if (!redirect?.startsWith('/')) return '/';
@@ -332,6 +349,21 @@ const Login: React.FC = () => {
                   />
                 </a>
               </div>
+              {pluginDownloadUrl && (
+                <div
+                  style={{
+                    marginBottom: 24,
+                    textAlign: 'center',
+                  }}
+                >
+                  <a href={pluginDownloadUrl}>
+                    <FormattedMessage
+                      id="pages.login.pluginDownload"
+                      defaultMessage="插件下载"
+                    />
+                  </a>
+                </div>
+              )}
             </LoginForm>
           </Col>
           {ssoProviders.length > 0 && (

@@ -5,6 +5,7 @@ import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.admin.spi.RoleSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.event.UserRegisteredEvent;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.AvatarGenerator;
 import com.buukle.agent.instance.domain.AgentUser;
@@ -16,6 +17,7 @@ import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.UserMapper;
 import com.buukle.agent.instance.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -32,6 +34,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     private final PasswordEncoder passwordEncoder;
     private final PermissionSpi permissionSpi;
     private final RoleSpi roleSpi;
+    private final ApplicationEventPublisher eventPublisher;
 
     public static String sha256(String input) {
         try {
@@ -219,6 +222,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         List<Long> initialRoleIds = resolveInitialRoleIds(roleSpi, defaultRoleId);
         if (!initialRoleIds.isEmpty()) {
             roleSpi.assignRoles(user.getId(), initialRoleIds);
+        }
+        // 自助注册（非 SSO 开通）：发布事件触发资源初始化模板（NativeUserResourceProvisioner）
+        if (defaultRoleId == null) {
+            UserRegisteredEvent event = new UserRegisteredEvent();
+            event.setUserId(user.getId());
+            event.setUsername(user.getUsername());
+            eventPublisher.publishEvent(event);
         }
         // Auto-login
         String token = generateToken();

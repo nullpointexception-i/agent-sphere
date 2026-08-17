@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { App, Button, Collapse, Form, Input, Modal, Tag } from 'antd';
+import { App, Button, Collapse, Form, Input, Modal, Tag, Upload } from 'antd';
 import { useEffect, useState } from 'react';
 import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
@@ -18,6 +18,8 @@ const GROUP_LABELS: Record<string, string> = {
   chrome: 'pages.admin.settings.group.chrome',
   'web-read': 'pages.admin.settings.group.web-read',
   'rate-limit': 'pages.admin.settings.group.rate-limit',
+  plugin: 'pages.admin.settings.group.plugin',
+  user: 'pages.admin.settings.group.user',
 };
 
 export default function AdminSettings() {
@@ -75,6 +77,54 @@ export default function AdminSettings() {
               intl.formatMessage({
                 id: 'pages.admin.settings.regenerate.success',
               }),
+          );
+          loadConfigs();
+        } catch {
+          message.error(intl.formatMessage({ id: 'pages.chat.saveFailed' }));
+        }
+      },
+    });
+  };
+
+  const handleUploadPlugin = async (file: File) => {
+    try {
+      await agentApi.admin.uploadPlugin(file);
+      message.success(
+        intl.formatMessage({
+          id: 'pages.admin.settings.plugin.upload.success',
+          defaultMessage: '上传成功',
+        }),
+      );
+      loadConfigs();
+    } catch (e: any) {
+      message.error(
+        e?.response?.data?.message ||
+          intl.formatMessage({
+            id: 'pages.chat.saveFailed',
+            defaultMessage: '保存失败',
+          }),
+      );
+    }
+    return false;
+  };
+
+  const handleDeletePlugin = () => {
+    modal.confirm({
+      title: intl.formatMessage({
+        id: 'pages.admin.settings.plugin.delete.confirm',
+        defaultMessage: '确认删除已托管的插件安装包吗？删除后下载入口将隐藏。',
+      }),
+      okText: intl.formatMessage({ id: 'pages.save' }),
+      cancelText: intl.formatMessage({ id: 'pages.cancel' }),
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await agentApi.admin.deletePlugin();
+          message.success(
+            intl.formatMessage({
+              id: 'pages.admin.settings.plugin.delete.success',
+              defaultMessage: '已删除',
+            }),
           );
           loadConfigs();
         } catch {
@@ -156,6 +206,27 @@ export default function AdminSettings() {
         >
           {intl.formatMessage({ id: 'pages.admin.settings.regenerate.btn' })}
         </Button>
+      ) : group === 'plugin' && canUpdate ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Upload
+            accept=".zip"
+            showUploadList={false}
+            beforeUpload={(file) => handleUploadPlugin(file)}
+          >
+            <Button size="small" type="primary">
+              {intl.formatMessage({
+                id: 'pages.admin.settings.plugin.upload.btn',
+                defaultMessage: '上传安装包',
+              })}
+            </Button>
+          </Upload>
+          <Button size="small" danger onClick={handleDeletePlugin}>
+            {intl.formatMessage({
+              id: 'pages.admin.settings.plugin.delete.btn',
+              defaultMessage: '删除',
+            })}
+          </Button>
+        </div>
       ) : null,
   }));
 
@@ -175,18 +246,30 @@ export default function AdminSettings() {
               id: 'pages.admin.settings.edit.label',
             })}
           >
-            <Input
-              placeholder={
-                editingConfig?.isSecret
-                  ? intl.formatMessage({
-                      id: 'pages.admin.settings.edit.secret.placeholder',
-                    })
-                  : undefined
-              }
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              type={editingConfig?.isSecret ? 'password' : 'text'}
-            />
+            {editingConfig?.configKey === 'user.resource-template' ? (
+              <Input.TextArea
+                rows={10}
+                placeholder={intl.formatMessage({
+                  id: 'pages.admin.settings.edit.template.placeholder',
+                  defaultMessage: 'JSON 数组（留空使用默认模板）',
+                })}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+              />
+            ) : (
+              <Input
+                placeholder={
+                  editingConfig?.isSecret
+                    ? intl.formatMessage({
+                        id: 'pages.admin.settings.edit.secret.placeholder',
+                      })
+                    : undefined
+                }
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                type={editingConfig?.isSecret ? 'password' : 'text'}
+              />
+            )}
           </Form.Item>
         </Form>
       </Modal>

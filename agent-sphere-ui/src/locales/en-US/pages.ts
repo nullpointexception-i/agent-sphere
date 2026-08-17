@@ -271,6 +271,7 @@ export default {
   'pages.theme': 'Theme Settings',
   'pages.logout': 'Logout',
   'pages.login.register': 'Register',
+  'pages.login.pluginDownload': 'Plugin Download',
   'pages.login.sso.title': 'Enterprise SSO Sign-in',
   'pages.login.sso.desc':
     'Sign in with your enterprise identity provider. No registration needed.',
@@ -381,6 +382,8 @@ export default {
   'pages.admin.settings.group.chrome': 'Chrome Extension',
   'pages.admin.settings.group.web-read': 'Web Read',
   'pages.admin.settings.group.rate-limit': 'Rate Limit',
+  'pages.admin.settings.group.plugin': 'Plugin Package',
+  'pages.admin.settings.group.user': 'User Init',
   'pages.admin.settings.regenerate.btn': 'Regenerate',
   'pages.admin.settings.regenerate.confirm':
     'Regenerating the AES key will re-encrypt all API keys. This action cannot be undone. Continue?',

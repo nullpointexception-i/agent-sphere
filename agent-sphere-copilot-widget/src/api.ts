@@ -168,6 +168,13 @@ export function runsReasoning(base: string, runIds: number[]): Promise<Record<st
   });
 }
 
+/** 公开配置读取（免鉴权）：当前支持 plugin.download-url（插件安装包下载地址）。 */
+export function publicConfig(base: string, keys: string[]): Promise<Record<string, string>> {
+  return request(base, '/system/config/public', {
+    params: { keys: keys.join(',') },
+  });
+}
+
 /** session 级停止：停止该 session 当前运行中的 run（不依赖 runId）。 */
 export function stopSession(base: string, sessionId: number): Promise<void> {
   return request(base, `/runtime/${sessionId}/stop`, { method: 'POST' });
@@ -188,6 +195,7 @@ export interface ApiClient {
     size?: number,
   ) => Promise<{ records: RunVO[]; total: number }>;
   runsReasoning: (runIds: number[]) => Promise<Record<string, string>>;
+  publicConfig: (keys: string[]) => Promise<Record<string, string>>;
   stopSession: (sessionId: number) => Promise<void>;
   listInstancesPage: (page?: number, size?: number) => Promise<InstancePageVO>;
   getTodos: (sessionId: number) => Promise<SessionTodoVO[]>;
@@ -207,6 +215,7 @@ export function createApi(config: WidgetConfig): ApiClient {
     closeSession: (id) => closeSession(base, id),
     listRuns: (sessionId, page, size) => listRuns(base, sessionId, page, size),
     runsReasoning: (runIds) => runsReasoning(base, runIds),
+    publicConfig: (keys) => publicConfig(base, keys),
     stopSession: (sessionId) => stopSession(base, sessionId),
     listInstancesPage: (page, size) => listInstancesPage(base, page, size),
     getTodos: (sessionId) => getTodos(base, sessionId),

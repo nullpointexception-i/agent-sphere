@@ -85,6 +85,12 @@ buukle:
       stream-timeout: 120s                         # 流式总超时（含思考）/ Stream total timeout (incl. reasoning)
 
     # ============================================================
+    # 插件安装包托管 / Plugin Package Storage
+    # ============================================================
+    plugin:
+      storage-path: /app/data/plugin               # 插件安装包存储目录 / Plugin package storage dir
+
+    # ============================================================
     # Runner 执行引擎配置 / Runner Config
     # ============================================================
     runner:

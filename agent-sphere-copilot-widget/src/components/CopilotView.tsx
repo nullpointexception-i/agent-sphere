@@ -199,6 +199,18 @@ function mergeById<T extends { id: number }>(prev: T[], next: T[]): T[] {
   return Array.from(map.values());
 }
 
+/** 后端返回的相对路径按 apiBase 所在源解析为绝对地址；外链原样返回。 */
+function resolveAbsoluteUrl(raw: string, apiBase: string): string {
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+  if (/^https?:\/\//i.test(apiBase)) {
+    const base = apiBase.endsWith('/') ? apiBase : `${apiBase}/`;
+    return new URL(raw.startsWith('/') ? raw.slice(1) : raw, base).toString();
+  }
+  return `${window.location.origin}${raw}`;
+}
+
 export function CopilotView({ config, user }: CopilotViewProps) {
   const api = useMemo(
     () => createApi(config),
@@ -227,6 +239,29 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const [editingTitle, setEditingTitle] = useState('');
   // 归档二次确认
   const [confirmingArchiveId, setConfirmingArchiveId] = useState<number | null>(null);
+  // 插件下载入口（配置覆盖优先，其次运行时公开配置拉取）
+  const [pluginDownloadUrl, setPluginDownloadUrl] = useState<string>('');
+
+  useEffect(() => {
+    const resolveUrl = async () => {
+      if (config.pluginDownloadUrl) {
+        setPluginDownloadUrl(config.pluginDownloadUrl);
+        return;
+      }
+      try {
+        const res = await api.publicConfig(['plugin.download-url']);
+        const raw = res?.['plugin.download-url'] || '';
+        if (!raw) {
+          setPluginDownloadUrl('');
+          return;
+        }
+        setPluginDownloadUrl(resolveAbsoluteUrl(raw, apiBase));
+      } catch {
+        // 拉取失败不展示下载入口
+      }
+    };
+    void resolveUrl();
+  }, [config.pluginDownloadUrl, api, apiBase]);
 
   useEffect(() => {
     if (error === null) {
@@ -884,6 +919,17 @@ export function CopilotView({ config, user }: CopilotViewProps) {
             ? `${user.ssoProviderCode}@${user.ssoSubject}`
             : user.englishName || user.displayName || user.username}
         </div>
+        {pluginDownloadUrl ? (
+          <a
+            className="aw-plugin-download"
+            href={pluginDownloadUrl}
+            target="_blank"
+            rel="noreferrer"
+            title="Chrome 插件下载"
+          >
+            插件下载
+          </a>
+        ) : null}
         <button
           type="button"
           className="aw-new-session"
