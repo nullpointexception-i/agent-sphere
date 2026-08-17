@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AgentTaskServiceImpl implements AgentTaskService {
 
-    private static final long MAX_POLL_SECONDS = 30 * 60; // 30 分钟兜底
+    private static final long MAX_POLL_SECONDS = 60 * 60; // 60 分钟兜底
     private static final int MAX_TITLE_LENGTH = 60;
     private static final String MSG_AUTONOMOUS_HEADER = "\n【自主任务模式】这是一个后台自动执行的任务：禁止向用户提问、请求澄清或确认任何内容；信息不足时基于已有上下文做合理假设并继续完成。\n";
     private static final String MSG_TASK_CONFIG_HEADER = "\n\n【任务配置】请严格依据以下配置执行任务：\n";
