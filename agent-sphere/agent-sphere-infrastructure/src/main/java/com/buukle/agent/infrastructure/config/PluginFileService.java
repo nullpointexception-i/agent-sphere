@@ -28,7 +28,7 @@ import java.nio.file.StandardCopyOption;
 @RequiredArgsConstructor
 public class PluginFileService {
 
-    public static final String DOWNLOAD_ROUTE = "/api/v1/system/config/plugin/download";
+    public static final String DOWNLOAD_ROUTE = "/system/config/plugin/download";
     public static final String FILE_NAME = "agent-sphere-chrome-extension.zip";
     private static final long MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
 

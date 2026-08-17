@@ -72,8 +72,12 @@ const Login: React.FC = () => {
           setPluginDownloadUrl('');
           return;
         }
+        // 后端存 apiBase 相对路由（如 /system/config/plugin/download），
+        // 需叠加 BASE=/api/v1 前缀；外链（http/https）原样使用
         setPluginDownloadUrl(
-          /^https?:\/\//i.test(raw) ? raw : `${window.location.origin}${raw}`,
+          /^https?:\/\//i.test(raw)
+            ? raw
+            : `${window.location.origin}${raw.startsWith('/') ? '/api/v1' + raw : `/api/v1/${raw}`}`,
         );
       })
       .catch(() => {});

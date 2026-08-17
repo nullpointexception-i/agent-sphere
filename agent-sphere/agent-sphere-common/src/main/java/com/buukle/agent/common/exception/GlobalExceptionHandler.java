@@ -10,6 +10,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -47,6 +48,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(),
                         CommonErrorCode.PARAM_INVALID.getMessage(), "请求体格式错误，请检查字段类型"));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(CommonErrorCode.RESOURCE_NOT_FOUND.getCode(),
+                        CommonErrorCode.RESOURCE_NOT_FOUND.getMessage(), e.getResourcePath()));
     }
 
     @ExceptionHandler(Exception.class)

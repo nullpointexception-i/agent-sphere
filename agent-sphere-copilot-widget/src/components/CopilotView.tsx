@@ -200,15 +200,18 @@ function mergeById<T extends { id: number }>(prev: T[], next: T[]): T[] {
 }
 
 /** 后端返回的相对路径按 apiBase 所在源解析为绝对地址；外链原样返回。 */
+/** 后端返回的相对路由按 apiBase 前缀解析为绝对地址（相对/绝对 apiBase 均正确）；外链原样返回。 */
 function resolveAbsoluteUrl(raw: string, apiBase: string): string {
   if (/^https?:\/\//i.test(raw)) {
     return raw;
   }
+  const clean = raw.replace(/^\/+/, '');
   if (/^https?:\/\//i.test(apiBase)) {
     const base = apiBase.endsWith('/') ? apiBase : `${apiBase}/`;
-    return new URL(raw.startsWith('/') ? raw.slice(1) : raw, base).toString();
+    return new URL(clean, base).toString();
   }
-  return `${window.location.origin}${raw}`;
+  const base = apiBase.endsWith('/') ? apiBase : `${apiBase}/`;
+  return `${window.location.origin}${base}${clean}`;
 }
 
 export function CopilotView({ config, user }: CopilotViewProps) {
