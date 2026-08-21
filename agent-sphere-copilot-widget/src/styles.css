@@ -286,12 +286,13 @@
 }
 
 .aw-plugin-download {
-  flex-shrink: 0;
-  margin: 2px 8px 2px 10px;
-  padding: 5px 8px;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
   color: #2563eb;
-  text-align: center;
   text-decoration: none;
   border: 1px dashed #c7d7fe;
   border-radius: 8px;
@@ -305,21 +306,20 @@
 }
 
 .aw-plugin-caret {
-  margin-left: 4px;
   font-size: 10px;
 }
 
 .aw-plugin-download-wrap {
   flex-shrink: 0;
   position: relative;
-  margin-bottom: 2px;
+  margin: 4px 8px 2px 10px;
 }
 
 .aw-plugin-menu {
   position: absolute;
   bottom: calc(100% + 4px);
-  left: 10px;
-  right: 8px;
+  left: 0;
+  right: 0;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
