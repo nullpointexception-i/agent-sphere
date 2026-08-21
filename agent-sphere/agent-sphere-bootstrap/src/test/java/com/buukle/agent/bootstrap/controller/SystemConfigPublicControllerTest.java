@@ -49,15 +49,20 @@ class SystemConfigPublicControllerTest {
     void publicConfig_returnsOnlyWhitelistedKeys() throws Exception {
         given(systemConfigSpi.get(SystemConfigKeys.PLUGIN_DOWNLOAD_URL, ""))
                 .willReturn("/api/v1/system/config/plugin/download");
+        given(systemConfigSpi.get(SystemConfigKeys.PLUGIN_STORE_URL, ""))
+                .willReturn("https://chromewebstore.google.com/detail/agentsphere/cpjaeggemhjndbnepjifgckodnlfhfkg");
 
         mockMvc.perform(get("/api/v1/system/config/public")
-                        .param("keys", "plugin.download-url,sso.base-url"))
+                        .param("keys", "plugin.download-url,plugin.store-url,sso.base-url"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$['plugin.download-url']")
                         .value("/api/v1/system/config/plugin/download"))
+                .andExpect(jsonPath("$['plugin.store-url']")
+                        .value("https://chromewebstore.google.com/detail/agentsphere/cpjaeggemhjndbnepjifgckodnlfhfkg"))
                 .andExpect(jsonPath("$['sso.base-url']").doesNotExist());
 
         verify(systemConfigSpi).get(eq(SystemConfigKeys.PLUGIN_DOWNLOAD_URL), eq(""));
+        verify(systemConfigSpi).get(eq(SystemConfigKeys.PLUGIN_STORE_URL), eq(""));
     }
 
     @Test

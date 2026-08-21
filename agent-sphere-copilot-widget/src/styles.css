@@ -69,6 +69,7 @@
   border-right: 1px solid #e5e7eb;
   padding: 10px 8px 10px 0;
   background: #fbfcfe;
+  position: relative;
 }
 
 .aw-sidebar-title {
@@ -295,11 +296,50 @@
   border: 1px dashed #c7d7fe;
   border-radius: 8px;
   background: #f8faff;
+  cursor: pointer;
 }
 
 .aw-plugin-download:hover {
   background: #eff6ff;
   border-color: #2563eb;
+}
+
+.aw-plugin-caret {
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+.aw-plugin-download-wrap {
+  flex-shrink: 0;
+  position: relative;
+  margin-bottom: 2px;
+}
+
+.aw-plugin-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 10px;
+  right: 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  z-index: 20;
+}
+
+.aw-plugin-menu-item {
+  display: block;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #374151;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+.aw-plugin-menu-item:hover {
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .aw-chat {

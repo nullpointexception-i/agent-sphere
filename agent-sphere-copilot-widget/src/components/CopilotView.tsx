@@ -242,29 +242,33 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const [editingTitle, setEditingTitle] = useState('');
   // 归档二次确认
   const [confirmingArchiveId, setConfirmingArchiveId] = useState<number | null>(null);
-  // 插件下载入口（配置覆盖优先，其次运行时公开配置拉取）
+  // 插件下载入口（应用市场 + 站内，配置覆盖优先，其次运行时公开配置拉取）
+  const [pluginStoreUrl, setPluginStoreUrl] = useState<string>('');
   const [pluginDownloadUrl, setPluginDownloadUrl] = useState<string>('');
+  const [pluginMenuOpen, setPluginMenuOpen] = useState(false);
 
   useEffect(() => {
     const resolveUrl = async () => {
-      if (config.pluginDownloadUrl) {
-        setPluginDownloadUrl(config.pluginDownloadUrl);
-        return;
-      }
       try {
-        const res = await api.publicConfig(['plugin.download-url']);
-        const raw = res?.['plugin.download-url'] || '';
-        if (!raw) {
-          setPluginDownloadUrl('');
-          return;
-        }
-        setPluginDownloadUrl(resolveAbsoluteUrl(raw, apiBase));
+        const res = await api.publicConfig(['plugin.download-url', 'plugin.store-url']);
+        setPluginDownloadUrl(config.pluginDownloadUrl || resolveAbsoluteUrl(res?.['plugin.download-url'] || '', apiBase));
+        setPluginStoreUrl(resolveAbsoluteUrl(res?.['plugin.store-url'] || '', apiBase));
       } catch {
-        // 拉取失败不展示下载入口
+        // 拉取失败仅保留配置覆盖
+        setPluginDownloadUrl(config.pluginDownloadUrl || '');
       }
     };
     void resolveUrl();
   }, [config.pluginDownloadUrl, api, apiBase]);
+
+  useEffect(() => {
+    if (!pluginMenuOpen) {
+      return;
+    }
+    const close = () => setPluginMenuOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [pluginMenuOpen]);
 
   useEffect(() => {
     if (error === null) {
@@ -922,16 +926,52 @@ export function CopilotView({ config, user }: CopilotViewProps) {
             ? `${user.ssoProviderCode}@${user.ssoSubject}`
             : user.englishName || user.displayName || user.username}
         </div>
-        {pluginDownloadUrl ? (
-          <a
-            className="aw-plugin-download"
-            href={pluginDownloadUrl}
-            target="_blank"
-            rel="noreferrer"
-            title="Chrome 插件下载"
-          >
-            插件下载
-          </a>
+        {pluginStoreUrl || pluginDownloadUrl ? (
+          <div className="aw-plugin-download-wrap">
+            {pluginMenuOpen && (pluginStoreUrl || pluginDownloadUrl) ? (
+              <div className="aw-plugin-menu" role="menu">
+                {pluginStoreUrl ? (
+                  <a
+                    className="aw-plugin-menu-item"
+                    href={pluginStoreUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    role="menuitem"
+                  >
+                    从应用市场下载
+                  </a>
+                ) : null}
+                {pluginDownloadUrl ? (
+                  <a
+                    className="aw-plugin-menu-item"
+                    href={pluginDownloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    role="menuitem"
+                  >
+                    站内下载
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+            <a
+              className="aw-plugin-download"
+              href={pluginDownloadUrl || pluginStoreUrl || '#'}
+              target="_blank"
+              rel="noreferrer"
+              title="Chrome 插件下载"
+              onClick={(
+                e: React.MouseEvent<HTMLAnchorElement>,
+              ) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setPluginMenuOpen((open) => !open);
+              }}
+            >
+              插件下载
+              <span className="aw-plugin-caret">▾</span>
+            </a>
+          </div>
         ) : null}
         <button
           type="button"

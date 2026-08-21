@@ -1,4 +1,9 @@
-import { GlobalOutlined, LockOutlined, UserOutlined } from '@ant-design/icons';
+import {
+  DownOutlined,
+  GlobalOutlined,
+  LockOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
 import {
   LoginForm,
   ProFormCheckbox,
@@ -61,24 +66,23 @@ const Login: React.FC = () => {
   const { styles } = useStyles();
   const { message } = App.useApp();
   const intl = useIntl();
+  const [pluginStoreUrl, setPluginStoreUrl] = useState<string>('');
   const [pluginDownloadUrl, setPluginDownloadUrl] = useState<string>('');
 
   useEffect(() => {
     agentApi.system
-      .publicConfig(['plugin.download-url'])
+      .publicConfig(['plugin.download-url', 'plugin.store-url'])
       .then((res: Record<string, string>) => {
-        const raw = res?.['plugin.download-url'] || '';
-        if (!raw) {
-          setPluginDownloadUrl('');
-          return;
-        }
         // 后端存 apiBase 相对路由（如 /system/config/plugin/download），
         // 需叠加 BASE=/api/v1 前缀；外链（http/https）原样使用
-        setPluginDownloadUrl(
-          /^https?:\/\//i.test(raw)
+        const toAbs = (raw: string) => {
+          if (!raw) return '';
+          return /^https?:\/\//i.test(raw)
             ? raw
-            : `${window.location.origin}${raw.startsWith('/') ? '/api/v1' + raw : `/api/v1/${raw}`}`,
-        );
+            : `${window.location.origin}${raw.startsWith('/') ? `/api/v1${raw}` : `/api/v1/${raw}`}`;
+        };
+        setPluginStoreUrl(toAbs(res?.['plugin.store-url'] || ''));
+        setPluginDownloadUrl(toAbs(res?.['plugin.download-url'] || ''));
       })
       .catch(() => {});
   }, []);
@@ -353,19 +357,68 @@ const Login: React.FC = () => {
                   />
                 </a>
               </div>
-              {pluginDownloadUrl && (
+              {(pluginStoreUrl || pluginDownloadUrl) && (
                 <div
                   style={{
                     marginBottom: 24,
                     textAlign: 'center',
                   }}
                 >
-                  <a href={pluginDownloadUrl}>
-                    <FormattedMessage
-                      id="pages.login.pluginDownload"
-                      defaultMessage="插件下载"
-                    />
-                  </a>
+                  <Dropdown
+                    menu={{
+                      items: [
+                        ...(pluginStoreUrl
+                          ? [
+                              {
+                                key: 'store',
+                                label: (
+                                  <a
+                                    href={pluginStoreUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {intl.formatMessage({
+                                      id: 'pages.login.pluginStore',
+                                      defaultMessage: '从应用市场下载',
+                                    })}
+                                  </a>
+                                ),
+                              },
+                            ]
+                          : []),
+                        ...(pluginDownloadUrl
+                          ? [
+                              {
+                                key: 'site',
+                                label: (
+                                  <a
+                                    href={pluginDownloadUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {intl.formatMessage({
+                                      id: 'pages.login.pluginSiteDownload',
+                                      defaultMessage: '站内下载',
+                                    })}
+                                  </a>
+                                ),
+                              },
+                            ]
+                          : []),
+                      ],
+                    }}
+                  >
+                    <a
+                      style={{ display: 'inline-flex', alignItems: 'center' }}
+                      onClick={(e) => e.preventDefault()}
+                    >
+                      <FormattedMessage
+                        id="pages.login.pluginDownload"
+                        defaultMessage="插件下载"
+                      />
+                      <DownOutlined style={{ marginLeft: 4, fontSize: 10 }} />
+                    </a>
+                  </Dropdown>
                 </div>
               )}
             </LoginForm>

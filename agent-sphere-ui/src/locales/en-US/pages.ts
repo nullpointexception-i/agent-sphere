@@ -272,6 +272,8 @@ export default {
   'pages.logout': 'Logout',
   'pages.login.register': 'Register',
   'pages.login.pluginDownload': 'Plugin Download',
+  'pages.login.pluginStore': 'From Chrome Web Store',
+  'pages.login.pluginSiteDownload': 'Download here',
   'pages.login.sso.title': 'Enterprise SSO Sign-in',
   'pages.login.sso.desc':
     'Sign in with your enterprise identity provider. No registration needed.',

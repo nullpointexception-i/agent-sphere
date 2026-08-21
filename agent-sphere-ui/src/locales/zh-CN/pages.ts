@@ -264,6 +264,8 @@ export default {
   'pages.logout': '退出登录',
   'pages.login.register': '去注册',
   'pages.login.pluginDownload': '插件下载',
+  'pages.login.pluginStore': '从应用市场下载',
+  'pages.login.pluginSiteDownload': '站内下载',
   'pages.login.sso.title': 'SSO 统一认证登录',
   'pages.login.sso.desc': '使用企业身份源一键登录，无需注册账号',
   'pages.login.sso.choose': '选择认证源',
