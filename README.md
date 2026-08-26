@@ -16,7 +16,7 @@
 
 This project is an AI  Agent orchestration platform. Driven by an LLM-based decision engine and combined with capabilities (built-in tools, MCP protocol, CLI execution, browser automation, etc.), it implements a primary closed loop of **Perception → Planning → Execution → Feedback**.
 
-It supports configuring different model providers: OpenAI, DeepSeek, QuickRouter (relay station), BigModel (Zhipu AI), LiteLLM.
+It supports configuring different model providers: OpenAI, DeepSeek, QuickRouter (relay station), BigModel (Zhipu AI), LiteLLM, OrcaRouter.
 ---
 
 Screenshots
@@ -40,7 +40,7 @@ Embeddable chat widget (shadow DOM, OIDC SSO, AG-UI streaming):
 ## Features
 
 - **LLM ReAct orchestration** — `SessionRunner` runs a `Plan → Act → Observe → Learn` loop with per-turn timeout, cancellation, and automatic context compaction.
-- **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations, with primary + fallback route chains and graceful degradation.
+- **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations / OrcaRouter, with primary + fallback route chains and graceful degradation.
 - **Unified capability layer** — MCP servers, built-in SPI tools, CLI execution, browser automation, and composite skills, dispatched through a single `ToolExecutor`.
 - **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / executeJS) with real-time execution feedback.
 - **Multi-level memory** — persistent runs, tool-call records with write-time JSON compression, and token-budget based context compaction.
