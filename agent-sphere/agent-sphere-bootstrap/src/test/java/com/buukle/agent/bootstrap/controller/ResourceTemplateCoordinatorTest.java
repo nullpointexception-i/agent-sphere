@@ -92,7 +92,7 @@ class ResourceTemplateCoordinatorTest {
     }
 
     @Test
-    void defaultTemplate_shouldBeValidJsonWithSevenCompletions() throws Exception {
+    void defaultTemplate_shouldBeValidJsonWithEightCompletions() throws Exception {
         JsonNode arr = JsonUtils.getMapper().readTree(ResourceTemplates.DEFAULT);
         assertTrue(arr.isArray());
         List<JsonNode> completions = new ArrayList<>();
@@ -101,7 +101,7 @@ class ResourceTemplateCoordinatorTest {
                 completions.add(node);
             }
         }
-        assertEquals(7, completions.size());
+        assertEquals(8, completions.size());
         for (JsonNode c : completions) {
             assertTrue(c.hasNonNull("name"));
             assertTrue(c.hasNonNull("description"));
@@ -118,7 +118,7 @@ class ResourceTemplateCoordinatorTest {
         Set<String> businessTypes = completions.stream()
                 .map(c -> c.path("businessType").asText())
                 .collect(Collectors.toSet());
-        assertEquals(7, businessTypes.size(), "7 个 completions 的 businessType 应互不重复");
+        assertEquals(8, businessTypes.size(), "8 个 completions 的 businessType 应互不重复");
 
         JsonNode instance = null;
         for (JsonNode node : arr) {
