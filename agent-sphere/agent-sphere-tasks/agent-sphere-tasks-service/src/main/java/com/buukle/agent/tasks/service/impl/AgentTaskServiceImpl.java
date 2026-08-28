@@ -319,12 +319,20 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (!TaskEnum.STATUS_RUNNING.equals(task.getStatus()) && !TaskEnum.STATUS_QUEUED.equals(task.getStatus())) {
             return;
         }
-        if (task.getSessionId() != null && task.getRunId() != null) {
-            try {
+        // 外部 API 无请求上下文（AuthInterceptor 对 /api/v1/api 前缀不设身份）：
+        // 以任务创建人身份取消 run，否则 ChatRuntimeService.assertSessionOwnership 会抛 FORBIDDEN
+        // 被吞掉后 Redis 取消集合未写入，run 无法停止。
+        AuthContext.setUsername(task.getCreatedBy());
+        AuthContext.setSuperAdmin(false);
+        AuthContext.setPermissions(Set.of());
+        try {
+            if (task.getSessionId() != null && task.getRunId() != null) {
                 chatRuntimeService.stopRun(task.getSessionId(), task.getRunId());
-            } catch (Exception e) {
-                log.warn("Failed to stop run for task {}: {}", id, e.getMessage());
             }
+        } catch (Exception e) {
+            log.warn("Failed to stop run for task {}: {}", id, e.getMessage());
+        } finally {
+            AuthContext.clear();
         }
         // DB 化轮询：无需取消本地 future；条件更新保证单胜者
         transitionToTerminal(task, TaskEnum.STATUS_CANCELLED, task.getResultJson());

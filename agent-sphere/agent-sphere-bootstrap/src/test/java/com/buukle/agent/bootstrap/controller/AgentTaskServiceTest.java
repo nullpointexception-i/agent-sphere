@@ -43,12 +43,14 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -196,6 +198,36 @@ class AgentTaskServiceTest {
         ArgumentCaptor<AgentTask> captor = ArgumentCaptor.forClass(AgentTask.class);
         verify(taskCallbackService).notifyTerminal(captor.capture());
         assertEquals("CANCELLED", captor.getValue().getStatus());
+        verify(chatRuntimeService).stopRun(11L, 22L);
+    }
+
+    @Test
+    void stop_setsTaskOwnerContextForRunCancellation() {
+        stubIdentity();
+        AgentTask task = new AgentTask();
+        task.setId(7L);
+        task.setStatus("RUNNING");
+        task.setCreatedBy("elvin");
+        task.setInstanceId(2L);
+        task.setSessionId(11L);
+        task.setRunId(22L);
+        given(taskMapper.selectById(7L)).willReturn(task);
+        given(instanceSpi.getInstance(2L)).willReturn(instance(2L));
+        given(taskMapper.update(isNull(), any())).willReturn(1);
+
+        java.util.concurrent.atomic.AtomicReference<String> ctxAtCall =
+                new java.util.concurrent.atomic.AtomicReference<>("");
+        doAnswer(inv -> {
+            ctxAtCall.set(com.buukle.agent.common.context.AuthContext.getUsername());
+            return null;
+        }).when(chatRuntimeService).stopRun(eq(11L), eq(22L));
+
+        taskService.stop(7L, AUTH);
+
+        // 取消 run 必须以任务创建人身份执行（否则 assertSessionOwnership 抛 FORBIDDEN 被吞）
+        assertEquals("elvin", ctxAtCall.get());
+        // 调用后上下文已清理
+        assertNull(com.buukle.agent.common.context.AuthContext.getUsername());
         verify(chatRuntimeService).stopRun(11L, 22L);
     }
 
