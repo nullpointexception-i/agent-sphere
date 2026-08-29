@@ -9,6 +9,7 @@ public enum ModelProviderCompany {
     DEEPSEEK("DeepSeek", "深度求索", "deepseek"),
     OPENAI("OpenAI", "OpenAI", "openai"),
     GLM("GLM", "智谱", "GLM"),
+    ORCAROUTER("OrcaRouter", "OrcaRouter", "orcarouter"),
     ;
 
     private final String nameEn;
