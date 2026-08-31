@@ -20,6 +20,9 @@ spring:
     locations: classpath:db/migration               # 迁移脚本目录 / Migration scripts location
     baseline-on-migrate: true                       # 自动基线已有数据库 / Auto-baseline existing DB
     baseline-version: 0                             # 基线版本号 / Baseline version
+    # 允许补跑"已解析但历史缺失/乱序"的迁移（如线上 V47/V51 历史行波动的恢复场景）；
+    # V47(3 参归一化)/V51(setval+IF EXISTS 守卫)均幂等，补跑安全。迁移补齐后可考虑改回 false。
+    out-of-order: true
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss               # JSON 日期格式 / JSON date format
     time-zone: Asia/Shanghai                        # 时区 / Time zone
