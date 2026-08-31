@@ -3,6 +3,14 @@
 -- 平台 'system' 行仅作组织/模板展示，真实调用走各用户私有副本（created_by = 用户用户名）。
 -- 本迁移幂等：已存在同名(business_type+created_by)非删除记录则跳过。
 -- id 由 BIGSERIAL 自增，迁移不指定显式 id。
+-- 注意：V34 以显式 id 1..7 种子，显式 id 不回绕自增序列；此处先对齐序列，
+-- 避免本迁移的 RETURNING id 语句拿到重复 id（agent_completions_pkey 冲突）。
+SELECT setval('agent_completions_id_seq',
+       GREATEST((SELECT COALESCE(MAX(id),0) FROM agent_completions),
+                (SELECT last_value FROM agent_completions_id_seq)), true);
+SELECT setval('agent_completions_prompt_id_seq',
+       GREATEST((SELECT COALESCE(MAX(id),0) FROM agent_completions_prompt),
+                (SELECT last_value FROM agent_completions_prompt_id_seq)), true);
 DO $$
 DECLARE
     r RECORD;
