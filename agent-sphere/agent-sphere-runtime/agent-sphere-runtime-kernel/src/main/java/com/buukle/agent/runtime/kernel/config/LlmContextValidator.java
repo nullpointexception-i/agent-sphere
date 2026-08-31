@@ -122,9 +122,12 @@ public class LlmContextValidator {
 
         // === WebRead advanced 校验 ===
         var wrAdv = t.getWebReadAdvanced();
-        if (wrAdv.isUseJinaFallback()) {
-            require(wrAdv.getJinaApiKey() != null && !wrAdv.getJinaApiKey().isEmpty(),
-                    "web-read-advanced.jina-api-key must be non-empty when use-jina-fallback=true");
+        if (wrAdv.isUseJinaFallback()
+                && (wrAdv.getJinaApiKey() == null || wrAdv.getJinaApiKey().isEmpty())) {
+            // jina-api-key 是运行时系统配置（agent_system_config），未配置时可回落 html-to-markdown，
+            // 仅在 key 为空时告警，不阻止启动。
+            log.warn("web-read-advanced.jina-api-key is empty while use-jina-fallback=true; "
+                    + "jina fallback will be skipped until a key is configured in System Config");
         }
         require(VALID_ENGINES.contains(wrAdv.getJinaEngine()),
                 "web-read-advanced.jina-engine must be one of " + VALID_ENGINES + ", got: " + wrAdv.getJinaEngine());
