@@ -497,142 +497,161 @@ public class SessionRunner {
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
                                KernelContext ctx, AtomicReference<String> turnReasoning) {
-        AtomicReference<String> contentRef = new AtomicReference<>("");
-        List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
-        AtomicReference<String> errorRef = new AtomicReference<>();
-        AtomicReference<String> reasoningRef = new AtomicReference<>("");
-        java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
-        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
-
-        try {
-            List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
-
-            fallbackRouteExecutor.execute(routes, (i, route) -> {
-                if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
-                    cancelled.set(true);
-                    throw new RuntimeException("Run cancelled");
-                }
-
-                // ★ 压缩检查：使用实际 route（和 LLM 调用同源）
-                if (compactionService.shouldCompact(messages, route)) {
-                    compactionTriggered.set(true);
-                    return null;
-                }
-
-                String apiKey = resolveApiKey(route);
-                ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
-                        .setModel(route.getModelName())
-                        .setStream(true)
-                        .setMessages(new ArrayList<>(messages));
-                if (!toolDefs.isEmpty()) {
-                    request.setTools(toolDefs);
-                }
-
-                CountDownLatch streamDone = new CountDownLatch(1);
-                CompletableFuture<Void> future = kernelLlmService.stream(
-                        route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
-                        request,
-                        event -> {
-                            switch (event) {
-                                case LLMEvent.TextDelta t -> {
-                                    contentRef.updateAndGet(c -> c + t.text());
-                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
-                                            new RuntimeEventDataVO()
-                                                    .setSessionId(sessionId).setRunId(runId).setResponse(t.text())));
-                                }
-                                case LLMEvent.ReasoningDelta r -> {
-                                    reasoningRef.updateAndGet(c -> c + r.text());
-                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                            new RuntimeEventDataVO()
-                                                    .setSessionId(sessionId).setRunId(runId)
-                                                    .setResponse(r.text())
-                                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                                    .setPublishId(UUID.randomUUID().toString())));
-                                }
-                                case LLMEvent.ToolCall tc -> {
-                                    String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
-                                    toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
-                                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
-                                            new RuntimeEventDataVO()
-                                                    .setSessionId(sessionId).setRunId(runId)
-                                                    .setToolName(tc.name())
-                                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                                                    .setArgumentsJson(tc.arguments())
-                                                    .setPublishId(callPublishId)));
-                                }
-                                case LLMEvent.Error e -> errorRef.set(e.message());
-                                default -> {
-                                }
-                            }
-                        },
-                        new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
-                                .setInteractionType(LlmInteractionType.CHAT_REPLY));
-
-                future.whenComplete((v, ex) -> streamDone.countDown());
-
+        int turnRetries = properties.getRunner().getLlmTurnMaxRetries();
+        AtomicReference<String> turnReasoningOut = turnReasoning;
+        for (int attempt = 0; attempt <= turnRetries; attempt++) {
+            if (attempt > 0) {
+                log.warn("LLM turn failed transiently, retrying {}/{}: session={}", attempt, turnRetries, sessionId);
                 try {
-                    long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
-                    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
-                    while (!streamDone.await(1, TimeUnit.SECONDS)) {
-                        if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
-                            cancelled.set(true);
-                            future.cancel(true);
-                            throw new RuntimeException("Run cancelled");
-                        }
-                        if (System.nanoTime() >= deadline) {
-                            future.cancel(true);
-                            throw new RuntimeException("Turn timed out for route " + route.getId());
-                        }
-                    }
-                } catch (InterruptedException e) {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    throw new RuntimeException(e);
+                    return TurnResult.error("LLM turn retry interrupted");
                 }
-
-                String error = errorRef.get();
-                if (error != null) {
-                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId).setRunId(runId)
-                                    .setResponse("⚠️ " + route.getModelName() + ": " + error + "，尝试备用路由...")
-                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                    .setPublishId(UUID.randomUUID().toString())));
-                    throw new RuntimeException("Route failed: " + error);
-                }
-
-                return null;
-            });
-        } catch (Exception e) {
-            if (!cancelled.get()) {
-                log.error("Turn execution failed for session {}", sessionId, e);
             }
+            // 每轮独立累积，避免重试残留上轮的输出/工具调用
+            AtomicReference<String> contentRef = new AtomicReference<>("");
+            List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
+            AtomicReference<String> errorRef = new AtomicReference<>();
+            AtomicReference<String> reasoningRef = new AtomicReference<>("");
+            java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+            try {
+                List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
+
+                fallbackRouteExecutor.execute(routes, (i, route) -> {
+                    if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
+                        cancelled.set(true);
+                        throw new RuntimeException("Run cancelled");
+                    }
+
+                    // ★ 压缩检查：使用实际 route（和 LLM 调用同源）
+                    if (compactionService.shouldCompact(messages, route)) {
+                        compactionTriggered.set(true);
+                        return null;
+                    }
+
+                    String apiKey = resolveApiKey(route);
+                    ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
+                            .setModel(route.getModelName())
+                            .setStream(true)
+                            .setMessages(new ArrayList<>(messages));
+                    if (!toolDefs.isEmpty()) {
+                        request.setTools(toolDefs);
+                    }
+
+                    CountDownLatch streamDone = new CountDownLatch(1);
+                    CompletableFuture<Void> future = kernelLlmService.stream(
+                            route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
+                            request,
+                            event -> {
+                                switch (event) {
+                                    case LLMEvent.TextDelta t -> {
+                                        contentRef.updateAndGet(c -> c + t.text());
+                                        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
+                                                new RuntimeEventDataVO()
+                                                        .setSessionId(sessionId).setRunId(runId).setResponse(t.text())));
+                                    }
+                                    case LLMEvent.ReasoningDelta r -> {
+                                        reasoningRef.updateAndGet(c -> c + r.text());
+                                        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                                new RuntimeEventDataVO()
+                                                        .setSessionId(sessionId).setRunId(runId)
+                                                        .setResponse(r.text())
+                                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                                        .setPublishId(UUID.randomUUID().toString())));
+                                    }
+                                    case LLMEvent.ToolCall tc -> {
+                                        String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
+                                        toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
+                                        eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
+                                                new RuntimeEventDataVO()
+                                                        .setSessionId(sessionId).setRunId(runId)
+                                                        .setToolName(tc.name())
+                                                        .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                                        .setArgumentsJson(tc.arguments())
+                                                        .setPublishId(callPublishId)));
+                                    }
+                                    case LLMEvent.Error e -> errorRef.set(e.message());
+                                    default -> {
+                                    }
+                                }
+                            },
+                            new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
+                                    .setInteractionType(LlmInteractionType.CHAT_REPLY));
+
+                    future.whenComplete((v, ex) -> streamDone.countDown());
+
+                    try {
+                        long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
+                        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
+                        while (!streamDone.await(1, TimeUnit.SECONDS)) {
+                            if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
+                                cancelled.set(true);
+                                future.cancel(true);
+                                throw new RuntimeException("Run cancelled");
+                            }
+                            if (System.nanoTime() >= deadline) {
+                                future.cancel(true);
+                                throw new RuntimeException("Turn timed out for route " + route.getId());
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(e);
+                    }
+
+                    String error = errorRef.get();
+                    if (error != null) {
+                        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                new RuntimeEventDataVO()
+                                        .setSessionId(sessionId).setRunId(runId)
+                                        .setResponse("⚠️ " + route.getModelName() + ": " + error + "，尝试备用路由...")
+                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                        .setPublishId(UUID.randomUUID().toString())));
+                        throw new RuntimeException("Route failed: " + error);
+                    }
+
+                    return null;
+                });
+            } catch (Exception e) {
+                if (!cancelled.get()) {
+                    log.error("Turn execution failed for session {}", sessionId, e);
+                }
+            }
+
+            // ★ 压缩触发：compact 后让 caller 重新组装
+            if (compactionTriggered.get()) {
+                compactionService.compact(sessionId, runId, ctx);
+                return TurnResult.compacted();
+            }
+
+            if (cancelled.get()) {
+                turnReasoningOut.set(reasoningRef.get());
+                return TurnResult.cancelled(getTurnContent(contentRef), toolCalls);
+            }
+
+            String error = errorRef.get();
+            // 瞬时失败且尚无任何输出（未下发分片）→ 同轮限界重试；带部分输出或已是终态错误则不重试
+            if (error != null && attempt < turnRetries
+                    && getTurnContent(contentRef).isEmpty() && toolCalls.isEmpty()) {
+                continue;
+            }
+            turnReasoningOut.set(reasoningRef.get());
+            if (error != null) {
+                return TurnResult.error(error);
+            }
+            if (!toolCalls.isEmpty()) {
+                return TurnResult.toolCalls(getTurnContent(contentRef), toolCalls);
+            }
+            return TurnResult.complete(getTurnContent(contentRef));
         }
-
-        // ★ 压缩触发：compact 后让 caller 重新组装
-        if (compactionTriggered.get()) {
-            compactionService.compact(sessionId, runId, ctx);
-            return TurnResult.compacted();
-        }
-
-        turnReasoning.set(reasoningRef.get());
-
-        if (cancelled.get()) {
-            return TurnResult.cancelled(getTurnContent(contentRef), toolCalls);
-        }
-
-        String error = errorRef.get();
-        if (error != null) {
-            return TurnResult.error(error);
-        }
-
-        if (!toolCalls.isEmpty()) {
-            return TurnResult.toolCalls(getTurnContent(contentRef), toolCalls);
-        }
-
-        return TurnResult.complete(getTurnContent(contentRef));
+        turnReasoningOut.set("");
+        return TurnResult.error("LLM turn retries exhausted");
     }
 
     private static String getTurnContent(AtomicReference<String> contentRef) {

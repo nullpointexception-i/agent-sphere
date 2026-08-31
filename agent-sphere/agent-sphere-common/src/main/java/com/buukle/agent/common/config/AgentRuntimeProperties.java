@@ -51,6 +51,8 @@ public class AgentRuntimeProperties {
         /** 单 run 推理落库长度上限（数据完整兜底，默认 50 万字符）。 */
         private int maxReasoningChars = 500000;
         private Duration turnTimeout = Duration.ofSeconds(180);
+        /** 单轮 LLM 失败（非取消）时在同轮内重试次数，降低长任务被瞬时抖动中断的概率。 */
+        private int llmTurnMaxRetries = 1;
         private CompactionConfig compaction = new CompactionConfig();
 
         @Data
@@ -119,7 +121,10 @@ public class AgentRuntimeProperties {
         private Duration readTimeout = Duration.ofSeconds(60);
         private Duration streamReadTimeout = Duration.ofSeconds(120);
         private Duration streamTimeout = Duration.ofSeconds(120);
-
+        /** 流式传输瞬时失败（EOF/断连等，chunks=0）重试次数，耗尽后显式报错。 */
+        private int streamMaxRetries = 2;
+        /** 流式重试固定退避时长。 */
+        private Duration streamRetryDelay = Duration.ofSeconds(1);
     }
 
     /** 嵌套 ReAct Skill 执行配置。 */

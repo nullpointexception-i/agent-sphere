@@ -12,7 +12,9 @@ import {
   type ProColumns,
   ProTable,
 } from '@ant-design/pro-components';
+import XMarkdown from '@ant-design/x-markdown';
 import { useIntl } from '@umijs/max';
+import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { App, Button, DatePicker, Form, Input, Modal, Switch, Tag } from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
@@ -21,6 +23,7 @@ import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
+import SkillMarkdownEditor from './components/SkillMarkdownEditor';
 import SkillToolPicker, { WILDCARD_ALL } from './components/SkillToolPicker';
 
 const SAMPLE_DEFINITION = `{
@@ -85,7 +88,7 @@ function buildDefinition(values: {
   allowTools: string[];
 }): string {
   let parameters = EMPTY_PARAMETERS;
-  if (values.parameters && values.parameters.trim()) {
+  if (values.parameters?.trim()) {
     try {
       parameters = JSON.parse(values.parameters);
     } catch {
@@ -435,7 +438,7 @@ export default function SkillList() {
                 : undefined
             }
             onChange={(dates) => {
-              if (dates && dates[0] && dates[1]) {
+              if (dates?.[0] && dates?.[1]) {
                 const diff = dates[1].diff(dates[0], 'day');
                 if (diff > 90) {
                   setTimeRange([dates[0], dates[0].add(90, 'day')]);
@@ -489,7 +492,8 @@ export default function SkillList() {
           setEditing(null);
         }}
         confirmLoading={submitting}
-        width={640}
+        width="80%"
+        styles={{ body: { height: '80vh', overflowY: 'auto' } }}
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -515,11 +519,11 @@ export default function SkillList() {
             name="promptTemplate"
             label={labelWithRule(
               '任务指令 (promptTemplate)',
-              '支持 {{字段}} 占位符',
+              '支持 Markdown 与 {{字段}} 占位符',
             )}
             rules={[{ required: true, message: '任务指令不能为空' }]}
           >
-            <Input.TextArea rows={5} maxLength={15000} />
+            <SkillMarkdownEditor />
           </Form.Item>
           <Form.Item
             name="parameters"
@@ -573,67 +577,106 @@ export default function SkillList() {
         open={!!viewRecord}
         onCancel={() => setViewRecord(null)}
         footer={null}
-        width={620}
+        width="80%"
+        styles={{ body: { height: '80vh', overflowY: 'auto' } }}
       >
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            {[
-              {
-                label: intl.formatMessage({ id: 'pages.table.id' }),
-                value: viewRecord?.id,
-              },
-              {
-                label: intl.formatMessage({ id: 'pages.table.name' }),
-                value: viewRecord?.name,
-              },
-              { label: '状态', value: viewRecord?.status || '-' },
-              {
-                label: intl.formatMessage({ id: 'pages.table.description' }),
-                value: viewRecord?.description || '-',
-              },
-              {
-                label: 'definition',
-                value: viewRecord?.definition || '-',
-              },
-              {
-                label: intl.formatMessage({ id: 'pages.table.created' }),
-                value: formatTime(viewRecord?.createdAt),
-              },
-              {
-                label: intl.formatMessage({
-                  id: 'pages.table.updatedAt',
-                  defaultMessage: 'Updated At',
-                }),
-                value: formatTime(viewRecord?.updatedAt),
-              },
-            ].map((row) => (
-              <tr key={row.label}>
-                <td
+        {(() => {
+          const parsed = parseDefinition(viewRecord?.definition);
+          const allowTools = parsed.allowTools || [];
+          return (
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                  marginBottom: 12,
+                  color: '#8c8c8c',
+                }}
+              >
+                <span>
+                  {intl.formatMessage({ id: 'pages.table.id' })}:{' '}
+                  <b style={{ color: 'rgba(0,0,0,0.88)' }}>{viewRecord?.id}</b>
+                </span>
+                <span>状态: {viewRecord?.status || '-'}</span>
+                <span>
+                  {intl.formatMessage({ id: 'pages.table.created' })}:{' '}
+                  {formatTime(viewRecord?.createdAt)}
+                </span>
+                <span>
+                  {intl.formatMessage({
+                    id: 'pages.table.updatedAt',
+                    defaultMessage: 'Updated',
+                  })}
+                  : {formatTime(viewRecord?.updatedAt)}
+                </span>
+              </div>
+              {viewRecord?.description ? (
+                <div
                   style={{
-                    padding: '8px 12px',
-                    fontWeight: 500,
-                    color: '#8c8c8c',
-                    borderBottom: '1px solid #f0f0f0',
-                    width: 140,
-                    verticalAlign: 'top',
-                  }}
-                >
-                  {row.label}
-                </td>
-                <td
-                  style={{
-                    padding: '8px 12px',
-                    borderBottom: '1px solid #f0f0f0',
+                    marginBottom: 12,
+                    color: '#555',
                     whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
                   }}
                 >
-                  {row.value || '-'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  {viewRecord.description}
+                </div>
+              ) : null}
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                任务指令 (promptTemplate)
+              </div>
+              <div
+                style={{
+                  border: '1px solid #f0f0f0',
+                  borderRadius: 8,
+                  padding: '12px 16px',
+                  marginBottom: 16,
+                  maxHeight: 380,
+                  overflow: 'auto',
+                }}
+              >
+                <XMarkdown content={parsed.promptTemplate || '（未设置）'} />
+              </div>
+              {parsed.parameters ? (
+                <>
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                    入参 JSON Schema (parameters)
+                  </div>
+                  <pre
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                      background: '#f6f8fa',
+                      padding: 12,
+                      borderRadius: 8,
+                      maxHeight: 260,
+                      overflow: 'auto',
+                      marginBottom: 16,
+                    }}
+                  >
+                    {parsed.parameters}
+                  </pre>
+                </>
+              ) : null}
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                允许工具 (allowTools)
+              </div>
+              <div>
+                {allowTools.length === 0 ? (
+                  <span style={{ color: '#999' }}>
+                    未选择（不调用任何工具）
+                  </span>
+                ) : (
+                  allowTools.map((ref) => (
+                    <Tag key={ref} color={ref.includes('*') ? 'gold' : 'blue'}>
+                      {ref}
+                    </Tag>
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
     </PageContainer>
   );

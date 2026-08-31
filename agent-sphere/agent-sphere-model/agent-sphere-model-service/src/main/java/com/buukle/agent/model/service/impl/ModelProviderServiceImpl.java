@@ -126,115 +126,152 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
 
     private void streamEvents(String baseUrl, String apiKey, String modelName, String requestBody,
                               String company, Consumer<LLMEvent> onEvent, Runnable onDone) {
-        StringBuilder contentBuilder = new StringBuilder();
-        StringBuilder reasoningBuilder = new StringBuilder();
-        int chunkCount = 0;
-        try {
-            String url = baseUrl + LlmApiConstants.CHAT_COMPLETIONS_PATH;
-            log.info("LLM stream request: model={}, url={}, body={}", modelName, url, truncate(requestBody));
+        int streamMaxRetries = properties.getLlm().getStreamMaxRetries();
+        long retryDelayMillis = properties.getLlm().getStreamRetryDelay().toMillis();
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .header(LlmApiConstants.HEADER_CONTENT_TYPE, LlmApiConstants.APPLICATION_JSON)
-                    .header(LlmApiConstants.HEADER_AUTHORIZATION, LlmApiConstants.BEARER_PREFIX + apiKey)
-                    .header(LlmApiConstants.HEADER_ACCEPT, LlmApiConstants.TEXT_EVENT_STREAM)
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .build();
-
-            HttpResponse<java.io.InputStream> response = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
-                    .orTimeout(streamReadTimeoutSeconds, TimeUnit.SECONDS)
-                    .get();
-            if (response.statusCode() >= 400) {
-                String errorBody = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-                log.error("LLM stream error: status={}, body={}", response.statusCode(), errorBody);
-                String uiMsg = switch (response.statusCode()) {
-                    case 429 -> "请求过于频繁，请稍后再试";
-                    case 502 -> "模型服务暂时不可用";
-                    default -> "模型调用异常 (" + response.statusCode() + "): " + truncate(errorBody);
-                };
-                onEvent.accept(new LLMEvent.Error(uiMsg));
-                onDone.run();
-                return;
+        for (int attempt = 0; attempt <= streamMaxRetries; attempt++) {
+            if (attempt > 0) {
+                log.warn("LLM stream transient failure, retrying {}/{}: model={}", attempt, streamMaxRetries, modelName);
+                try {
+                    Thread.sleep(retryDelayMillis);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    onDone.run();
+                    return;
+                }
             }
-            log.info("LLM stream response: status={}", response.statusCode());
+            int chunkCount = 0;
+            java.util.concurrent.Future<?> readTimeoutFuture = null;
+            try {
+                StringBuilder contentBuilder = new StringBuilder();
+                StringBuilder reasoningBuilder = new StringBuilder();
+                String url = baseUrl + LlmApiConstants.CHAT_COMPLETIONS_PATH;
+                log.info("LLM stream request: model={}, url={}, body={}", modelName, url, truncate(requestBody));
 
-            ToolStream toolStream = new ToolStream(onEvent);
-            READ_TIMEOUT_SCHEDULER.schedule(Thread.currentThread()::interrupt, streamReadTimeoutSeconds, TimeUnit.SECONDS);
-            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.startsWith(LlmApiConstants.SSE_DATA_PREFIX)) {
-                        String data = line.substring(LlmApiConstants.SSE_DATA_PREFIX.length()).trim();
-                        if (LlmApiConstants.SSE_DONE_MARKER.equals(data)) break;
-                        chunkCount++;
-                        try {
-                            JsonNode chunk = JsonUtils.parse(data, JsonNode.class);
-                            if (chunk != null && chunk.has(LlmApiConstants.FIELD_CHOICES)
-                                    && chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
-                                    && chunk.get(LlmApiConstants.FIELD_CHOICES).size() > 0) {
-                                JsonNode choice = chunk.get(LlmApiConstants.FIELD_CHOICES).get(0);
-                                if (choice.has(LlmApiConstants.FIELD_FINISH_REASON)
-                                        && !choice.get(LlmApiConstants.FIELD_FINISH_REASON).isNull()) {
-                                    log.debug("LLM finish_reason: {}", choice.get(LlmApiConstants.FIELD_FINISH_REASON).asText());
-                                }
-                                JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
-                                if (delta != null) {
-                                    if (delta.has(LlmApiConstants.FIELD_REASONING_CONTENT)
-                                            && delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).isTextual()) {
-                                        String r = delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).asText();
-                                        if (!r.isEmpty()) {
-                                            reasoningBuilder.append(r);
-                                            onEvent.accept(new LLMEvent.ReasoningDelta(r));
-                                        }
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .header(LlmApiConstants.HEADER_CONTENT_TYPE, LlmApiConstants.APPLICATION_JSON)
+                        .header(LlmApiConstants.HEADER_AUTHORIZATION, LlmApiConstants.BEARER_PREFIX + apiKey)
+                        .header(LlmApiConstants.HEADER_ACCEPT, LlmApiConstants.TEXT_EVENT_STREAM)
+                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                        .build();
+
+                HttpResponse<java.io.InputStream> response = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
+                        .orTimeout(streamReadTimeoutSeconds, TimeUnit.SECONDS)
+                        .get();
+                if (response.statusCode() >= 400) {
+                    String errorBody = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                    log.error("LLM stream error: status={}, body={}", response.statusCode(), errorBody);
+                    String uiMsg = switch (response.statusCode()) {
+                        case 429 -> "请求过于频繁，请稍后再试";
+                        case 502 -> "模型服务暂时不可用";
+                        default -> "模型调用异常 (" + response.statusCode() + "): " + truncate(errorBody);
+                    };
+                    onEvent.accept(new LLMEvent.Error(uiMsg));
+                    onDone.run();
+                    return;
+                }
+                log.info("LLM stream response: status={}", response.statusCode());
+
+                ToolStream toolStream = new ToolStream(onEvent);
+                // 响应头已就绪：body 阶段用定时中断兜底读取超时（每轮取消，避免残留中断）
+                readTimeoutFuture = READ_TIMEOUT_SCHEDULER.schedule(
+                        Thread.currentThread()::interrupt, streamReadTimeoutSeconds, TimeUnit.SECONDS);
+                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith(LlmApiConstants.SSE_DATA_PREFIX)) {
+                            String data = line.substring(LlmApiConstants.SSE_DATA_PREFIX.length()).trim();
+                            if (LlmApiConstants.SSE_DONE_MARKER.equals(data)) break;
+                            chunkCount++;
+                            try {
+                                JsonNode chunk = JsonUtils.parse(data, JsonNode.class);
+                                if (chunk != null && chunk.has(LlmApiConstants.FIELD_CHOICES)
+                                        && chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
+                                        && chunk.get(LlmApiConstants.FIELD_CHOICES).size() > 0) {
+                                    JsonNode choice = chunk.get(LlmApiConstants.FIELD_CHOICES).get(0);
+                                    if (choice.has(LlmApiConstants.FIELD_FINISH_REASON)
+                                            && !choice.get(LlmApiConstants.FIELD_FINISH_REASON).isNull()) {
+                                        log.debug("LLM finish_reason: {}", choice.get(LlmApiConstants.FIELD_FINISH_REASON).asText());
                                     }
-                                    if (delta.has(LlmApiConstants.FIELD_CONTENT)
-                                            && delta.get(LlmApiConstants.FIELD_CONTENT).isTextual()) {
-                                        String c = delta.get(LlmApiConstants.FIELD_CONTENT).asText();
-                                        if (!c.isEmpty()) {
-                                            contentBuilder.append(c);
-                                            onEvent.accept(new LLMEvent.TextDelta(c));
+                                    JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
+                                    if (delta != null) {
+                                        if (delta.has(LlmApiConstants.FIELD_REASONING_CONTENT)
+                                                && delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).isTextual()) {
+                                            String r = delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).asText();
+                                            if (!r.isEmpty()) {
+                                                reasoningBuilder.append(r);
+                                                onEvent.accept(new LLMEvent.ReasoningDelta(r));
+                                            }
                                         }
+                                        if (delta.has(LlmApiConstants.FIELD_CONTENT)
+                                                && delta.get(LlmApiConstants.FIELD_CONTENT).isTextual()) {
+                                            String c = delta.get(LlmApiConstants.FIELD_CONTENT).asText();
+                                            if (!c.isEmpty()) {
+                                                contentBuilder.append(c);
+                                                onEvent.accept(new LLMEvent.TextDelta(c));
+                                            }
+                                        }
+                                        chatResponseAdapter.adaptResponse(choice, toolStream, company);
                                     }
-                                    chatResponseAdapter.adaptResponse(choice, toolStream, company);
                                 }
+                            } catch (Exception ignored) {
                             }
-                        } catch (Exception ignored) {
                         }
                     }
                 }
-            }
-            toolStream.finishAll();
+                toolStream.finishAll();
 
-            if (toolStream.isEmpty()) {
-                ContentToolCallResult ctcr = chatResponseAdapter.extractToolCalls(contentBuilder.toString(), company);
-                if (ctcr.isEmpty()) {
-                    ctcr = chatResponseAdapter.extractToolCalls(reasoningBuilder.toString(), company);
-                }
-                if (!ctcr.isEmpty()) {
-                    contentBuilder.setLength(0);
-                    if (ctcr.cleanedContent() != null) {
-                        contentBuilder.append(ctcr.cleanedContent());
+                if (toolStream.isEmpty()) {
+                    ContentToolCallResult ctcr = chatResponseAdapter.extractToolCalls(contentBuilder.toString(), company);
+                    if (ctcr.isEmpty()) {
+                        ctcr = chatResponseAdapter.extractToolCalls(reasoningBuilder.toString(), company);
                     }
-                    for (ContentToolCallResult.ContentToolCall tc : ctcr.toolCalls()) {
-                        String callId = LlmApiConstants.PARSED_CALL_ID_PREFIX + System.nanoTime();
-                        onEvent.accept(new LLMEvent.ToolCall(callId, tc.name(), tc.arguments()));
+                    if (!ctcr.isEmpty()) {
+                        contentBuilder.setLength(0);
+                        if (ctcr.cleanedContent() != null) {
+                            contentBuilder.append(ctcr.cleanedContent());
+                        }
+                        for (ContentToolCallResult.ContentToolCall tc : ctcr.toolCalls()) {
+                            String callId = LlmApiConstants.PARSED_CALL_ID_PREFIX + System.nanoTime();
+                            onEvent.accept(new LLMEvent.ToolCall(callId, tc.name(), tc.arguments()));
+                        }
                     }
                 }
-            }
 
-            Map<String, Object> usage = Map.of();
-            String content = contentBuilder.toString();
-            String reasoning = reasoningBuilder.toString();
-            log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}",
-                    modelName, chunkCount, content.length(), reasoning.length());
-            onEvent.accept(new LLMEvent.Finish(LlmApiConstants.FINISH_REASON_STOP, usage));
-        } catch (Exception e) {
-            boolean timedOut = Thread.interrupted();
-            log.error("LLM stream failed: model={}, timedOut={}, chunks={}, content={}, reasoning={}",
-                    modelName, timedOut, chunkCount, truncate(contentBuilder.toString()), truncate(reasoningBuilder.toString()), e);
-        } finally {
-            onDone.run();
+                Map<String, Object> usage = Map.of();
+                String content = contentBuilder.toString();
+                String reasoning = reasoningBuilder.toString();
+                log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}",
+                        modelName, chunkCount, content.length(), reasoning.length());
+                onEvent.accept(new LLMEvent.Finish(LlmApiConstants.FINISH_REASON_STOP, usage));
+                onDone.run();
+                if (readTimeoutFuture != null) {
+                    readTimeoutFuture.cancel(false);
+                }
+                return;
+            } catch (Exception e) {
+                boolean userTimedOut = Thread.interrupted();
+                if (readTimeoutFuture != null) {
+                    readTimeoutFuture.cancel(false);
+                }
+                // 传输层瞬时失败（EOF/断连等，未收到任何分片）→ 重试；超时/取消不重试
+                if (attempt < streamMaxRetries && chunkCount == 0 && !userTimedOut) {
+                    log.warn("LLM stream failed, will retry: model={}, timedOut={}, chunks={}, err={}",
+                            modelName, userTimedOut, chunkCount, e.toString());
+                    continue;
+                }
+                log.error("LLM stream failed: model={}, timedOut={}, chunks={}, retried={}",
+                        modelName, userTimedOut, chunkCount, attempt, e);
+                // 显式报错而非静默空结果，供上层路由降级/任务重试感知
+                onEvent.accept(new LLMEvent.Error(userTimedOut
+                        ? "模型流式读取超时（已重试）"
+                        : "上游连接中断（chunks=0），重试 " + attempt + " 次后仍失败"));
+                onDone.run();
+                return;
+            }
         }
+        onDone.run();
     }
 
     private String truncate(String body) {

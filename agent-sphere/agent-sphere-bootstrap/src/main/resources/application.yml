@@ -90,6 +90,8 @@ buukle:
       read-timeout: 60s                            # LLM API 读取超时 / LLM API read timeout
       stream-read-timeout: 120s                    # 流式读取超时 / Stream read timeout
       stream-timeout: 120s                         # 流式总超时（含思考）/ Stream total timeout (incl. reasoning)
+      stream-max-retries: 2                        # 流式瞬时失败(chunks=0)重试次数 / Stream transient retries
+      stream-retry-delay: 1s                       # 流式重试固定退避 / Stream retry fixed backoff
 
     # ============================================================
     # Runner 执行引擎配置 / Runner Config
@@ -99,6 +101,7 @@ buukle:
       task-max-loop-count: 500                     # 任务触发 run 的更高轮次上限（长任务寻访/收藏） / Task run max loop count
       max-reasoning-chars: 500000                   # 单 run 推理落库长度上限（字符） / Max persisted reasoning chars
       turn-timeout: 180s                           # 单轮 LLM 调用超时 / Single LLM turn timeout
+      llm-turn-max-retries: 1                      # 单轮 LLM 失败(非取消)重试次数 / Per-turn LLM retries
       compaction:
         budget-ratio: 0.7                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio
 
