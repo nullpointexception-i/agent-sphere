@@ -1,8 +1,8 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
-import { Helmet, history, SelectLang, useIntl, useModel } from '@umijs/max';
+import { Helmet, history, SelectLang, useIntl } from '@umijs/max';
 import { Alert, App } from 'antd';
-import React, { startTransition, useState } from 'react';
+import React, { useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { setStoredUser } from '@/utils/auth';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -22,7 +22,6 @@ const Register: React.FC = () => {
   const { styles } = useStyles();
   const { message } = App.useApp();
   const intl = useIntl();
-  const { setInitialState } = useModel('@@initialState');
   const [errorMessage, setErrorMessage] = useState('');
   const [usernameStatus, setUsernameStatus] = useState<
     'idle' | 'valid' | 'invalid'
@@ -54,19 +53,13 @@ const Register: React.FC = () => {
       message.success(
         intl.formatMessage({
           id: 'pages.register.success',
-          defaultMessage: 'Registration successful!',
+          defaultMessage: '注册成功！',
         }),
       );
-      const userInfo = {
-        id: user.id,
-        name: user.displayName,
-        avatar: user.avatar,
-        email: user.email,
-      };
-      startTransition(() =>
-        setInitialState((s: any) => ({ ...s, currentUser: userInfo })),
-      );
-      history.push('/chat');
+      // 整页刷新让 getInitialState 重新执行并拉取 /auth/me：
+      // 注册响应已含 permissions，但 SPA push 不会触发重新初始化，
+      // 需重载才能让菜单按新用户的权限正常展示（与登录流程一致）。
+      window.location.href = '/chat';
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
       setErrorMessage(
