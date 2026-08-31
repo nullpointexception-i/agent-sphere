@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createApi, ApiError, type ApiClient } from './api';
-import { clearUser, getUser, setUser } from './auth';
+import { clearAllSessionData, getUser, setUser } from './auth';
 import {
   SSO_QUERY_PARAM_ERROR,
   SSO_QUERY_PARAM_OTC,
@@ -14,6 +14,28 @@ type Phase = 'booting' | 'authed' | 'login';
 
 interface RootProps {
   config: WidgetConfig;
+}
+
+const AUTO_LOGIN_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
+const LOGOUT_EVENT = 'agent-sphere:logout';
+
+/**
+ * 校验缓存用户是否仍是当前宿主用户（identityKey 为 Bole 等宿主的 userId）。
+ * 缓存用户通过 /sso/me 得到 ssoSubject（= 宿主 userId 字符串）；不匹配即残留旧会话。
+ */
+function identityMatches(config: WidgetConfig, u: UserVO | null): boolean {
+  const expected = config.identityKey;
+  if (expected == null || expected === '') {
+    return true;
+  }
+  if (!u) {
+    return false;
+  }
+  if (u.ssoSubject) {
+    return u.ssoSubject === String(expected);
+  }
+  // 尚未解析出身份信息，无法判定 —— 不误伤
+  return true;
 }
 
 function readQueryParam(name: string): string | null {
@@ -37,9 +59,6 @@ function stripQueryParams(names: string[]): void {
   const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
   window.history.replaceState(null, '', url);
 }
-
-const AUTO_LOGIN_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
-const LOGOUT_EVENT = 'agent-sphere:logout';
 
 /** 与主站同步：登录后/每次启动拉取 /sso/me，把 providerCode@subject 并入本地用户。 */
 async function syncSsoIdentity(api: ApiClient, u: UserVO): Promise<UserVO> {
@@ -104,7 +123,12 @@ export function Root({ config }: RootProps) {
       if (result === 'handled') {
         return;
       }
-      const stored = getUser();
+      let stored = getUser();
+      if (stored && !identityMatches(config, stored)) {
+        // 缓存用户与宿主当前用户不一致（切换后残留旧会话）：丢弃缓存，避免旧 token 继续可用
+        clearAllSessionData();
+        stored = null;
+      }
       if (stored) {
         const api = createApi(config);
         const merged = await syncSsoIdentity(api, stored);
@@ -147,8 +171,7 @@ export function Root({ config }: RootProps) {
 
   useEffect(() => {
     const handleExternalLogout = () => {
-      clearUser();
-      sessionStorage.removeItem(AUTO_LOGIN_TRIED_KEY);
+      clearAllSessionData();
       setUserState(null);
       setAuthError(null);
       setPhase('login');

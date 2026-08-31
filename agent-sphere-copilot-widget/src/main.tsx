@@ -1,6 +1,6 @@
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import { DEFAULT_CONFIG, type WidgetConfig } from './config';
-import { clearUser } from './auth';
+import { clearAllSessionData, clearUser } from './auth';
 import { Root } from './Root';
 import styles from './styles.css?inline';
 import copilotStyles from '@copilotkit/react-core/v2/styles.css?inline';
@@ -16,6 +16,11 @@ export interface AgentSphereWidget {
   mount?: (options?: WidgetConfig) => WidgetHandle;
   /** 清除当前用户会话并重新挂载，触发静默 SSO 重新登录（用户切换时由宿主调用）。 */
   relogin?: () => void;
+  /**
+   * 仅清空会话数据（内存缓存 + sessionStorage key），不重新挂载、不触发认证。
+   * 宿主（如 Bole）在切换用户后调用它清除旧用户残留，随后自行发起新用户认证。
+   */
+  resetSession?: () => void;
 }
 
 function resolveConfig(options: WidgetConfig = {}): WidgetConfig {
@@ -110,6 +115,9 @@ const api: AgentSphereWidget = {
     if (lastConfig) {
       mountWidget(lastConfig);
     }
+  },
+  resetSession: () => {
+    clearAllSessionData();
   },
 };
 
