@@ -21,6 +21,7 @@ import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
+import SkillToolPicker, { WILDCARD_ALL } from './components/SkillToolPicker';
 
 const SAMPLE_DEFINITION = `{
   "version": 1,
@@ -40,14 +41,6 @@ const SAMPLE_DEFINITION = `{
   ]
 }`;
 
-/** 工具引用格式说明 */
-const ALLOW_TOOLS_HINT = `每行一个白名单工具引用：
-builtin:<internalName>
-mcp:<capabilityId>:<nativeToolName>
-cli:<capabilityId>
-skill:<skillId>
-留空 = 不允许调用任何工具；填 "*" = 允许全部。`;
-
 const EMPTY_PARAMETERS = { type: 'object', properties: {} };
 
 interface SkillRecord {
@@ -66,24 +59,22 @@ interface SkillRecord {
 function parseDefinition(def?: string): {
   promptTemplate: string;
   parameters: string;
-  allowTools: string;
+  allowTools: string[];
 } {
-  if (!def) return { promptTemplate: '', parameters: '', allowTools: '' };
+  if (!def) return { promptTemplate: '', parameters: '', allowTools: [] };
   try {
     const raw = def.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const obj = JSON.parse(raw);
     if (typeof obj.prompt === 'string') {
-      return { promptTemplate: obj.prompt, parameters: '', allowTools: '' };
+      return { promptTemplate: obj.prompt, parameters: '', allowTools: [] };
     }
     return {
       promptTemplate: obj.promptTemplate || '',
       parameters: obj.parameters ? JSON.stringify(obj.parameters, null, 2) : '',
-      allowTools: Array.isArray(obj.allowTools)
-        ? obj.allowTools.join('\n')
-        : '',
+      allowTools: Array.isArray(obj.allowTools) ? obj.allowTools : [],
     };
   } catch {
-    return { promptTemplate: '', parameters: '', allowTools: '' };
+    return { promptTemplate: '', parameters: '', allowTools: [] };
   }
 }
 
@@ -91,7 +82,7 @@ function parseDefinition(def?: string): {
 function buildDefinition(values: {
   promptTemplate: string;
   parameters: string;
-  allowTools: string;
+  allowTools: string[];
 }): string {
   let parameters = EMPTY_PARAMETERS;
   if (values.parameters && values.parameters.trim()) {
@@ -101,16 +92,18 @@ function buildDefinition(values: {
       throw new Error('parameters 不是合法 JSON');
     }
   }
-  const allowTools = (values.allowTools || '')
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const allowTools = (
+    Array.isArray(values.allowTools) ? values.allowTools : []
+  ).filter(Boolean);
+  const finalAllowTools = allowTools.includes(WILDCARD_ALL)
+    ? [WILDCARD_ALL]
+    : allowTools;
   return JSON.stringify(
     {
       version: 1,
       parameters,
       promptTemplate: values.promptTemplate,
-      ...(allowTools.length > 0 ? { allowTools } : {}),
+      ...(finalAllowTools.length > 0 ? { allowTools: finalAllowTools } : {}),
     },
     null,
     2,
@@ -542,9 +535,12 @@ export default function SkillList() {
           </Form.Item>
           <Form.Item
             name="allowTools"
-            label={labelWithRule('允许工具 (allowTools)', ALLOW_TOOLS_HINT)}
+            label={labelWithRule(
+              '允许工具 (allowTools)',
+              '选取 Skill 子 Agent 可调用的工具；未选择则禁止调用任何工具',
+            )}
           >
-            <Input.TextArea rows={3} placeholder={'builtin:chrome\nskill:8'} />
+            <SkillToolPicker />
           </Form.Item>
           <Button type="link" size="small" onClick={() => setSampleOpen(true)}>
             查看样例

@@ -15,6 +15,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
+import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
@@ -367,6 +368,11 @@ public class SkillReActExecutor {
         }
         List<RuntimeTool> result = new ArrayList<>();
         for (RuntimeTool tool : sessionTools) {
+            // 嵌套 Skill 禁止 ask_clarification：子 Agent 不得向用户提问
+            if (tool.getToolRef() != null
+                    && tool.getToolRef().equals(ToolRefs.builtin(ChatClarification.INTERNAL_NAME))) {
+                continue;
+            }
             if (matchesAny(allowedRefs, tool)) {
                 result.add(tool);
             }
