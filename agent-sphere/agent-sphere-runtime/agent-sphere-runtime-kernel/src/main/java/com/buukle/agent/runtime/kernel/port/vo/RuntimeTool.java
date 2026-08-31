@@ -16,6 +16,8 @@ public class RuntimeTool implements Serializable {
     private String capabilityType;
     private Long capabilityId;
     private String llmToolName;
+    /** 稳定工具引用（builtin:/mcp:/cli:/skill:），供 Skill allowTools 白名单匹配。 */
+    private String toolRef;
     private String displayName;
     private String displayNameCn;
     private String displayNameEn;

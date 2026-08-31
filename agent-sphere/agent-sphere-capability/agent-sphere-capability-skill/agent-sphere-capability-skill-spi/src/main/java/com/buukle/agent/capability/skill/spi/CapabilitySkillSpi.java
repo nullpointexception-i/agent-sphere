@@ -22,5 +22,11 @@ public interface CapabilitySkillSpi {
 
     void batchDeleteSkill(java.util.List<Long> ids);
 
+    /** 单个启用/禁用。 */
+    SkillVO updateStatus(Long id, String status);
+
+    /** 批量启用/禁用。 */
+    void batchUpdateStatus(java.util.List<Long> ids, String status);
+
     List<SkillVO> listSkillsByIds(List<Long> ids);
 }

@@ -1,6 +1,8 @@
 package com.buukle.agent.capability.skill.controller;
 
+import com.buukle.agent.capability.skill.dtvo.dto.BatchUpdateSkillStatusDTO;
 import com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO;
+import com.buukle.agent.capability.skill.dtvo.dto.UpdateSkillStatusDTO;
 import com.buukle.agent.capability.skill.service.CapabilitySkillService;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
@@ -28,11 +30,13 @@ public class CapabilitySkillController extends BaseController {
         return created(capabilitySkillService.createSkill(dto));
     }
 
+    @RequirePermission("capability:skill:read")
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
         return ok(capabilitySkillService.getSkill(id));
     }
 
+    @RequirePermission("capability:skill:read")
     @GetMapping
     public ResponseEntity<?> list(
             @RequestParam(defaultValue = "1") int page,
@@ -63,6 +67,21 @@ public class CapabilitySkillController extends BaseController {
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody java.util.List<Long> ids) {
         capabilitySkillService.batchDeleteSkill(ids);
+        return ok();
+    }
+
+    @AuditLog(action = "UPDATE_STATUS", resourceType = "Capability", resourceId = "#id")
+    @RequirePermission("capability:skill:update")
+    @PutMapping("/{id}/status")
+    public ResponseEntity<?> updateStatus(@PathVariable Long id, @Valid @RequestBody UpdateSkillStatusDTO dto) {
+        return ok(capabilitySkillService.updateStatus(id, dto.getStatus()));
+    }
+
+    @AuditLog(action = "BATCH_UPDATE_STATUS", resourceType = "Capability", resourceId = "#dto?.ids?.toString()")
+    @RequirePermission("capability:skill:update")
+    @PostMapping("/batch/status")
+    public ResponseEntity<?> batchUpdateStatus(@Valid @RequestBody BatchUpdateSkillStatusDTO dto) {
+        capabilitySkillService.batchUpdateStatus(dto.getIds(), dto.getStatus());
         return ok();
     }
 }

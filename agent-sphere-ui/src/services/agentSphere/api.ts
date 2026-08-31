@@ -212,6 +212,10 @@ export const agentApi = {
       request<void>(`${BASE}/capability/skill/${id}`, { method: 'DELETE' }),
     batchDelete: (ids: number[]) =>
       request<void>(`${BASE}/capability/skill/batch`, { method: 'DELETE', data: ids }),
+    updateStatus: (id: number, status: string) =>
+      request<any>(`${BASE}/capability/skill/${id}/status`, { method: 'PUT', data: { status } }),
+    batchUpdateStatus: (ids: number[], status: string) =>
+      request<any>(`${BASE}/capability/skill/batch/status`, { method: 'POST', data: { ids, status } }),
   },
 
   cli: {

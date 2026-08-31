@@ -16,6 +16,7 @@ public class AgentRuntimeProperties {
     private RunnerConfig runner = new RunnerConfig();
     private ToolConfig tool = new ToolConfig();
     private LlmConfig llm = new LlmConfig();
+    private SkillConfig skill = new SkillConfig();
     private McpConfig mcp = new McpConfig();
     private LockConfig lock = new LockConfig();
     private AsyncConfig async = new AsyncConfig();
@@ -119,6 +120,23 @@ public class AgentRuntimeProperties {
         private Duration streamReadTimeout = Duration.ofSeconds(120);
         private Duration streamTimeout = Duration.ofSeconds(120);
 
+    }
+
+    /** 嵌套 ReAct Skill 执行配置。 */
+    @Data
+    public static class SkillConfig {
+        /** 是否启用 skill 嵌套执行（feature flag，可一键回退）。 */
+        private boolean executionEnabled = true;
+        /** 子循环最大轮次。 */
+        private int maxSubLoopCount = 8;
+        /** skill 最大嵌套深度（1=不允许调用其他 skill）。 */
+        private int maxNestedDepth = 3;
+        /** 单个 skill 执行总超时（外层工具 fiber 需容得下该预算）。 */
+        private Duration executionTimeout = Duration.ofMinutes(10);
+        /** 渲染后 prompt 最大长度。 */
+        private int maxPromptChars = 20000;
+        /** skill 返回结果最大字符数。 */
+        private int maxResultChars = 2000;
     }
 
     @Data

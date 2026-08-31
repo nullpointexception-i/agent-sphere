@@ -9,8 +9,12 @@ import com.buukle.agent.capability.cli.spi.CapabilityCliSpi;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpToolInfoVO;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
+import com.buukle.agent.capability.skill.dtvo.enums.SkillCapabilityEnum;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
+import com.buukle.agent.common.skill.SkillDefinition;
+import com.buukle.agent.common.skill.SkillDefinitionParser;
+import com.buukle.agent.common.skill.ToolRefs;
 import com.buukle.agent.instance.dtvo.vo.CapabilityFullVO;
 import com.buukle.agent.instance.dtvo.vo.CapabilityVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
@@ -18,9 +22,6 @@ import com.buukle.agent.instance.spi.InstanceCapabilitySpi;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -39,7 +40,6 @@ import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.*;
 @RequiredArgsConstructor
 public class ContextPreparer {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final String DEFAULT_EMPTY_SCHEMA = "{\"type\":\"object\",\"properties\":{}}";
     private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (clear, friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"confirm=yes/no; choice=provide 2-5 concise distinct options; input=free-form answer\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Short display text shown to the user (max ~20 chars, a concise option phrase, NOT a full sentence, NOT placeholder like 'http://')\"},\"value\":{\"type\":\"string\",\"description\":\"Machine value sent back to the agent when the user picks this option\"},\"description\":{\"type\":\"string\",\"description\":\"Optional short explanation for the option\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"description\":\"2-5 concise, distinct choices (required when type=choice). No duplicates, no placeholder URLs, no full sentences.\"},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"}},\"required\":[\"title\",\"type\"]}";
 
@@ -64,34 +64,6 @@ public class ContextPreparer {
         full.setAuthConfig(authConfig);
         full.setToolSchema(toolSchema);
         return full;
-    }
-
-    static SkillDefinition parseSkillDefinition(String definition) {
-        if (definition == null || definition.isBlank()) return null;
-        String jsonStr = definition;
-
-        int jsonStart = definition.indexOf(SKILL_MARKDOWN_FENCE);
-        if (jsonStart >= 0) {
-            int contentStart = jsonStart + SKILL_MARKDOWN_FENCE.length();
-            int jsonEnd = definition.indexOf("```", contentStart);
-            if (jsonEnd >= 0) {
-                jsonStr = definition.substring(contentStart, jsonEnd).trim();
-            }
-        }
-
-        try {
-            JsonNode root = JSON.readTree(jsonStr);
-            JsonNode params = root.get(SKILL_DEF_PARAMETERS);
-            JsonNode promptTemplate = root.get(SKILL_DEF_PROMPT_TEMPLATE);
-            if (params == null || promptTemplate == null) {
-                log.warn("Skill definition missing '{}' or '{}'", SKILL_DEF_PARAMETERS, SKILL_DEF_PROMPT_TEMPLATE);
-                return null;
-            }
-            return new SkillDefinition(params.toString(), promptTemplate.asText());
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to parse skill definition JSON: {}", e.getMessage());
-            return null;
-        }
     }
 
     public KernelContext prepare(RunVO run, ValidationResult validated, String message) {
@@ -181,6 +153,7 @@ public class ContextPreparer {
                     .capabilityType(CAPABILITY_TYPE_BUILTIN)
                     .capabilityId(tool.getId())
                     .llmToolName(llmName)
+                    .toolRef(ToolRefs.builtin(tool.getName()))
                     .displayName(tool.getDisplayNameCn())
                     .displayNameCn(tool.getDisplayNameCn())
                     .displayNameEn(tool.getDisplayNameEn())
@@ -198,6 +171,7 @@ public class ContextPreparer {
                     .capabilityType(CAPABILITY_TYPE_BUILTIN)
                     .capabilityId(clarificationId)
                     .llmToolName(clarificationLlmName)
+                    .toolRef(ToolRefs.builtin(ChatClarification.INTERNAL_NAME))
                     .displayName(ChatClarification.DISPLAY_NAME)
                     .displayNameCn(ChatClarification.DISPLAY_NAME_CN)
                     .displayNameEn(ChatClarification.DISPLAY_NAME)
@@ -225,6 +199,7 @@ public class ContextPreparer {
                     .capabilityType(CAPABILITY_TYPE_BUILTIN)
                     .capabilityId(cap.getCapabilityId())
                     .llmToolName(llmName)
+                    .toolRef(ToolRefs.builtin(tool.getName()))
                     .displayName(tool.getDisplayNameCn())
                     .displayNameCn(tool.getDisplayNameCn())
                     .displayNameEn(tool.getDisplayNameEn())
@@ -243,6 +218,7 @@ public class ContextPreparer {
                 .capabilityType(CAPABILITY_TYPE_CLI)
                 .capabilityId(cap.getCapabilityId())
                 .llmToolName(llmName)
+                .toolRef(ToolRefs.cli(cap.getCapabilityId()))
                 .displayName(cli.getName())
                 .description("")
                 .parametersSchemaJson(cli.getParamSchema())
@@ -250,21 +226,32 @@ public class ContextPreparer {
     }
 
     void resolveSkillTool(SkillVO skill, CapabilityVO cap, List<RuntimeTool> result) {
+        if (!SkillCapabilityEnum.STATUS_ENABLED.equals(skill.getStatus())) {
+            log.warn("Skill {} is disabled, skipping", skill.getId());
+            return;
+        }
         String llmName = LLM_PREFIX_SKILL + skill.getId();
-        SkillDefinition def = parseSkillDefinition(skill.getDefinition());
+        SkillDefinition def;
+        try {
+            def = SkillDefinitionParser.parse(skill.getDefinition());
+        } catch (com.buukle.agent.common.skill.InvalidSkillDefinition e) {
+            log.warn("Skill {} definition invalid, skipping: {}", skill.getId(), e.getMessage());
+            return;
+        }
         if (def == null) {
-            log.warn("Skill {} has invalid definition, skipping", skill.getId());
             return;
         }
         Map<String, Object> binding = new HashMap<>();
-        binding.put(ExecBindingKeys.SKILL_PROMPT_TEMPLATE, def.promptTemplate);
+        binding.put(ExecBindingKeys.SKILL_PROMPT_TEMPLATE, def.promptTemplate());
+        binding.put(ExecBindingKeys.SKILL_ALLOW_TOOLS, def.allowTools());
         result.add(RuntimeTool.builder()
                 .capabilityType(CAPABILITY_TYPE_SKILL)
                 .capabilityId(cap.getCapabilityId())
                 .llmToolName(llmName)
+                .toolRef(ToolRefs.skill(skill.getId()))
                 .displayName(skill.getName())
                 .description(skill.getDescription() != null ? skill.getDescription() : "")
-                .parametersSchemaJson(def.parametersSchemaJson)
+                .parametersSchemaJson(def.parametersSchemaJson())
                 .execBinding(binding).build());
     }
 
@@ -286,6 +273,7 @@ public class ContextPreparer {
                             .capabilityType(CAPABILITY_TYPE_MCP)
                             .capabilityId(cap.getCapabilityId())
                             .llmToolName(llmName)
+                            .toolRef(ToolRefs.mcp(cap.getCapabilityId(), tool.getName()))
                             .displayName(tool.getName())
                             .description(tool.getDescription() != null ? tool.getDescription() : "")
                             .parametersSchemaJson(tool.getInputSchema())
@@ -307,12 +295,10 @@ public class ContextPreparer {
                 .capabilityType(CAPABILITY_TYPE_MCP)
                 .capabilityId(cap.getCapabilityId())
                 .llmToolName(llmName)
+                .toolRef(ToolRefs.mcp(cap.getCapabilityId(), mcp.getName()))
                 .displayName(mcp.getName())
                 .description(mcp.getDescription() != null ? mcp.getDescription() : "")
                 .parametersSchemaJson(DEFAULT_EMPTY_SCHEMA)
                 .execBinding(binding).build());
-    }
-
-    record SkillDefinition(String parametersSchemaJson, String promptTemplate) {
     }
 }

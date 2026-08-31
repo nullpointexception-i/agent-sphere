@@ -12,15 +12,18 @@ import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.contract.CliExecutionBinding;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
+import com.buukle.agent.runtime.kernel.port.SkillExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
+import com.buukle.agent.runtime.kernel.skill.SkillReActExecutor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -39,7 +42,6 @@ public class ToolExecutor {
     private static final int CLARIFICATION_ID_LENGTH = 8;
     private static final String JSON_ERROR_UNKNOWN_TOOL = "{\"error\":\"Unknown tool: ";
     private static final String JSON_ERROR_CLARIFICATION = "{\"error\":\"Failed to process clarification\"}";
-    private static final String JSON_INFO_SKILL_DELEGATED = "{\"info\":\"Skill tool delegated to next turn\"}";
     private static final String JSON_ERROR_UNSUPPORTED_TYPE = "{\"error\":\"Unsupported capability type: ";
     private static final String JSON_ERROR_EXECUTION = "{\"error\":\"";
     private static final String STATUS_AWAITING_USER = "awaiting_user";
@@ -50,8 +52,17 @@ public class ToolExecutor {
     private final SessionTodoSpi sessionTodoSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final ClarificationSpi clarificationSpi;
+    private final org.springframework.beans.factory.ObjectProvider<SkillReActExecutor> skillReActExecutorProvider;
 
+    /** 主循环工具入口：以根上下文执行（主 Agent 无父级限制）。 */
     public String execute(TurnToolCall tc, Long sessionId, Long runId, List<RuntimeTool> tools) {
+        return execute(tc, SkillExecutionContext.root(sessionId, runId, null), tools);
+    }
+
+    /** 带嵌套上下文执行：Skill 子循环内层工具使用子上下文（深度/栈/白名单）。 */
+    public String execute(TurnToolCall tc, SkillExecutionContext ctx, List<RuntimeTool> tools) {
+        Long sessionId = ctx.getSessionId();
+        Long runId = ctx.getRunId();
         RuntimeTool tool = tools.stream()
                 .filter(t -> tc.name().equals(t.getLlmToolName()))
                 .findFirst().orElse(null);
@@ -113,7 +124,11 @@ public class ToolExecutor {
                 return cliExecutorService.execute(cliBinding, args);
             }
             if (CAPABILITY_TYPE_SKILL.equals(type)) {
-                return JSON_INFO_SKILL_DELEGATED;
+                SkillReActExecutor skillExecutor = skillReActExecutorProvider.getIfAvailable();
+                if (skillExecutor == null) {
+                    return "{\"error\":\"Skill executor unavailable\"}";
+                }
+                return skillExecutor.execute(tool, args, ctx, tools);
             }
             return JSON_ERROR_UNSUPPORTED_TYPE + type + "\"}";
         } catch (Exception e) {

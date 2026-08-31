@@ -108,6 +108,17 @@ buukle:
       execution-timeout: 60s                       # 工具执行超时 / Tool execution timeout
       cli-timeout: 30s                             # CLI 工具超时 / CLI tool timeout
 
+    # ============================================================
+    # Skill 嵌套 ReAct 执行 / Skill Nested ReAct Execution
+    # ============================================================
+    skill:
+      execution-enabled: true                      # 是否启用 Skill 嵌套执行 / Enable skill nested execution
+      max-sub-loop-count: 8                        # 子循环最大轮次 / Max sub-loop count
+      max-nested-depth: 3                          # 最大嵌套深度 / Max nested depth
+      execution-timeout: 10m                       # 单个 Skill 执行超时 / Skill execution timeout
+      max-prompt-chars: 20000                      # 渲染后 prompt 最大长度 / Max rendered prompt chars
+      max-result-chars: 2000                       # Skill 返回结果最大字符数 / Max result chars
+
       # ---- 网页读取工具 / Web Read Tool ----
       web-read:
         connect-timeout: 10s                       # 连接超时 / Connect timeout

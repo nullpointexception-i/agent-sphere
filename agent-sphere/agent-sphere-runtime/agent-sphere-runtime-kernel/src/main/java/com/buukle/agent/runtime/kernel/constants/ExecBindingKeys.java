@@ -8,6 +8,7 @@ public final class ExecBindingKeys {
     public static final String CLI_WORKING_DIR = "workingDir";
     // ---- Skill ----
     public static final String SKILL_PROMPT_TEMPLATE = "promptTemplate";
+    public static final String SKILL_ALLOW_TOOLS = "allowTools";
     // ---- MCP ----
     public static final String MCP_SERVER_URL = "serverUrl";
     public static final String MCP_SERVER_TYPE = "serverType";

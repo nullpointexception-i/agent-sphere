@@ -37,6 +37,9 @@ public class SkillInitializer implements ResourceInitializer {
         }
         CreateSkillDTO dto = new CreateSkillDTO();
         dto.setName(name);
+        String description = descriptor.path("description").asText(null);
+        // 模板未带 description 时用 name 兜底，避免工具描述为空
+        dto.setDescription(StringUtils.hasText(description) ? description : name);
         dto.setDefinition(descriptor.path("definition").asText(null));
         skillSpi.createSkill(dto);
     }

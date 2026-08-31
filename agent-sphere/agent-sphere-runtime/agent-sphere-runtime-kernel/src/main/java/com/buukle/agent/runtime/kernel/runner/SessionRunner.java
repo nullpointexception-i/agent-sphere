@@ -366,7 +366,8 @@ public class SessionRunner {
             for (int i = 0; i < turn.toolCalls().size(); i++) {
                 int fi = i;
                 fibers.submit(turn.toolCalls().get(fi).id(),
-                        () -> toolExecutor.execute(turn.toolCalls().get(fi), sid, rid, tl));
+                        () -> toolExecutor.execute(turn.toolCalls().get(fi),
+                                com.buukle.agent.runtime.kernel.port.SkillExecutionContext.root(sid, rid, ctx), tl));
             }
             var results = fibers.awaitAll(() -> isRunCancelled(rid) || isSessionCancelled(sid));
 
