@@ -58,7 +58,7 @@ Env overrides (defaults): `DB_HOST` (127.0.0.1), `DB_PORT` (5432), `DB_USERNAME`
 
 ## Flyway
 
-Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql`. 历史 52 个迁移(V1–V52)已整合为**单个 `V1__init.sql`**(终态建表 + 全量种子 + 序列对齐),原文件归档于 `agent-sphere-bootstrap/migrations-archive-v1-v52/`(仅供查阅,Flyway 不扫描)。新增改动一律从 **V2 起**编号;`baseline-on-migrate: true`, baseline 0。**严禁编辑已应用过的迁移**(校验和会不匹配;如需改已有迁移,先 `flyway repair` 或对受影响库删对应 `flyway_schema_history` 行再重放)。注意 `V1__init.sql` 含种子:`demo001/demo001` 演示账号、Bole completions id 1–7 为外部契约不可改号、末尾 setval 对齐序列。
+Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql` (currently V1–V5; check the directory for the current highest number before adding a new one). `baseline-on-migrate: true`, baseline 0. Add new `V<n>` files; never edit applied migrations.
 
 ## MyBatis-Plus
 
