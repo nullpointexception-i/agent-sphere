@@ -30,6 +30,10 @@ const AUTH_RESULT_EVENT = 'agent-sphere:auth-result';
 const IFRAME_POLL_INTERVAL_MS = 200;
 const IFRAME_POLL_TIMEOUT_MS = 15000;
 
+/** 每次 init/reset 都使旧的异步 SSO 流程失效，避免旧用户结果覆盖新用户。 */
+let authGeneration = 0;
+let activeProbeController: AbortController | null = null;
+
 export interface AuthResultDetail {
   via: 'exchange' | 'error' | 'skip';
   pending?: boolean;
@@ -104,11 +108,17 @@ function isSilentProbeFrame(): boolean {
  * 在隐藏同源 iframe 内执行静默 OIDC 探测，返回落回的 ?otc= 或 ?error=。
  * 整个过程中顶层窗口 URL 保持不变。父窗口仅在 iframe 回落同源后读取其 location。
  */
-function silentProbeInFrame(base: string, provider: string, redirectUri: string): Promise<{ otc?: string; error?: string }> {
+function silentProbeInFrame(
+  base: string,
+  provider: string,
+  redirectUri: string,
+  signal?: AbortSignal,
+): Promise<{ otc?: string; error?: string }> {
   return new Promise((resolve) => {
     let settled = false;
     let iframe: HTMLIFrameElement | undefined;
     let interval: number | undefined;
+    let removeAbortListener = () => {};
 
     const cleanup = () => {
       if (iframe) {
@@ -124,6 +134,7 @@ function silentProbeInFrame(base: string, provider: string, redirectUri: string)
       } catch {
         // ignore
       }
+      removeAbortListener();
     };
 
     const finish = (result: { otc?: string; error?: string }) => {
@@ -138,8 +149,21 @@ function silentProbeInFrame(base: string, provider: string, redirectUri: string)
       resolve(result);
     };
 
+    if (signal) {
+      const onAbort = () => finish({ error: 'cancelled' });
+      signal.addEventListener('abort', onAbort, { once: true });
+      removeAbortListener = () => signal.removeEventListener('abort', onAbort);
+      if (signal.aborted) {
+        finish({ error: 'cancelled' });
+        return;
+      }
+    }
+
     ssoAuthorize(base, provider, redirectUri, 'none')
       .then(({ authorizeUrl }) => {
+        if (signal?.aborted || settled) {
+          return;
+        }
         // 子窗口（回落命中同源 SPA）内的 auth-main 据守卫跳过自身处理
         try {
           sessionStorage.setItem(STORAGE_IFRAME_GUARD_KEY, '1');
@@ -206,24 +230,41 @@ async function syncSsoIdentity(base: string, user: UserVO): Promise<UserVO> {
 }
 
 /** 兑换 otc 并落盘 token（复用顶层与 iframe 两种入口）。 */
-async function exchangeAndPersist(base: string, otc: string, pending: boolean): Promise<void> {
+async function exchangeAndPersist(
+  base: string,
+  otc: string,
+  pending: boolean,
+  generation: number,
+): Promise<void> {
   try {
     const user = await ssoExchange(base, otc);
+    if (generation !== authGeneration) {
+      return;
+    }
     if (user?.token) {
       setUser(user);
       const merged = await syncSsoIdentity(base, user);
+      if (generation !== authGeneration) {
+        return;
+      }
       setUser(merged);
     }
     setFlag(STORAGE_TRIED_KEY, false);
     console.log('[AgentSphereAuth] exchange ok, token stored', { pending });
     dispatchResult({ via: 'exchange', pending });
   } catch (err) {
+    if (generation !== authGeneration) {
+      return;
+    }
     console.warn('[AgentSphereAuth] exchange failed', err);
     dispatchResult({ via: 'error', pending });
   }
 }
 
-async function run(base: string, provider: string, autoLogin: boolean): Promise<void> {
+async function run(base: string, provider: string, autoLogin: boolean, generation: number): Promise<void> {
+  if (generation !== authGeneration) {
+    return;
+  }
   const otc = readParam(SSO_QUERY_PARAM_OTC);
   const errorParam = readParam(SSO_QUERY_PARAM_ERROR);
   const redirectUri = window.location.origin + window.location.pathname;
@@ -238,12 +279,15 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
   if (otc) {
     const pending = readFlag(STORAGE_PENDING_KEY);
     setFlag(STORAGE_PENDING_KEY, false);
-    await exchangeAndPersist(base, otc, pending);
+    await exchangeAndPersist(base, otc, pending, generation);
     stripParams([SSO_QUERY_PARAM_OTC]);
     return;
   }
 
   if (errorParam) {
+    if (generation !== authGeneration) {
+      return;
+    }
     setFlag(STORAGE_TRIED_KEY, true);
     console.warn('[AgentSphereAuth] sso error param:', errorParam);
     stripParams([SSO_QUERY_PARAM_ERROR]);
@@ -267,9 +311,17 @@ async function run(base: string, provider: string, autoLogin: boolean): Promise<
   const pending = true;
 
   // 静默探测改为隐藏同源 iframe，避免整页跳转破坏当前标签页（含 ?open= 等参数）
-  const result = await silentProbeInFrame(base, provider, redirectUri);
+  const controller = new AbortController();
+  activeProbeController = controller;
+  const result = await silentProbeInFrame(base, provider, redirectUri, controller.signal);
+  if (activeProbeController === controller) {
+    activeProbeController = null;
+  }
+  if (generation !== authGeneration) {
+    return;
+  }
   if (result.otc) {
-    await exchangeAndPersist(base, result.otc, pending);
+    await exchangeAndPersist(base, result.otc, pending, generation);
     return;
   }
   setFlag(STORAGE_PENDING_KEY, false);
@@ -288,10 +340,16 @@ const api: AgentSphereAuthApi = {
     const base = config.apiBase ?? '/api/v1';
     const provider = config.provider ?? 'business';
     const autoLogin = config.autoLogin !== false;
+    const generation = ++authGeneration;
+    activeProbeController?.abort();
+    activeProbeController = null;
     console.log('[AgentSphereAuth] init', { base, provider, autoLogin });
-    void run(base, provider, autoLogin);
+    void run(base, provider, autoLogin, generation);
   },
   reset: () => {
+    authGeneration += 1;
+    activeProbeController?.abort();
+    activeProbeController = null;
     clearUser();
     setFlag(STORAGE_TRIED_KEY, false);
     setFlag(STORAGE_PENDING_KEY, false);

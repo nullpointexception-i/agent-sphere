@@ -22,7 +22,7 @@ export interface WidgetConfig {
    */
   mountTo?: HTMLElement;
   /**
-   * 宿主提供的当前用户身份标识（如 Bole 的 userId 字符串）。挂载时若缓存用户与
+   * 宿主提供的当前用户身份标识（如 Bole 的 username 字符串）。挂载时若缓存用户与
    * 该标识不匹配（宿主切换用户后残留旧会话），widget 会丢弃缓存并触发重新登录，
    * 防止旧用户 token 继续进入 chat。
    */

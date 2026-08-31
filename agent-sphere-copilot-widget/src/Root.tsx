@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createApi, ApiError, type ApiClient } from './api';
-import { clearAllSessionData, getUser, setUser } from './auth';
+import { clearWidgetUserSession, getUser, setUser } from './auth';
 import {
   SSO_QUERY_PARAM_ERROR,
   SSO_QUERY_PARAM_OTC,
@@ -20,8 +20,8 @@ const AUTO_LOGIN_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
 const LOGOUT_EVENT = 'agent-sphere:logout';
 
 /**
- * 校验缓存用户是否仍是当前宿主用户（identityKey 为 Bole 等宿主的 userId）。
- * 缓存用户通过 /sso/me 得到 ssoSubject（= 宿主 userId 字符串）；不匹配即残留旧会话。
+ * 校验缓存用户是否仍是当前宿主用户（identityKey 为宿主的 username/display subject）。
+ * AgentSphere /sso/me 当前返回 displaySubject 作为 ssoSubject；不匹配即残留旧会话。
  */
 function identityMatches(config: WidgetConfig, u: UserVO | null): boolean {
   const expected = config.identityKey;
@@ -126,7 +126,7 @@ export function Root({ config }: RootProps) {
       let stored = getUser();
       if (stored && !identityMatches(config, stored)) {
         // 缓存用户与宿主当前用户不一致（切换后残留旧会话）：丢弃缓存，避免旧 token 继续可用
-        clearAllSessionData();
+        clearWidgetUserSession();
         stored = null;
       }
       if (stored) {
@@ -171,7 +171,7 @@ export function Root({ config }: RootProps) {
 
   useEffect(() => {
     const handleExternalLogout = () => {
-      clearAllSessionData();
+      clearWidgetUserSession();
       setUserState(null);
       setAuthError(null);
       setPhase('login');

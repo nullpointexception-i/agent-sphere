@@ -1,6 +1,6 @@
 import { createRoot, type Root as ReactRoot } from 'react-dom/client';
 import { DEFAULT_CONFIG, type WidgetConfig } from './config';
-import { clearAllSessionData, clearUser } from './auth';
+import { clearUser, clearWidgetSession } from './auth';
 import { Root } from './Root';
 import styles from './styles.css?inline';
 import copilotStyles from '@copilotkit/react-core/v2/styles.css?inline';
@@ -117,7 +117,7 @@ const api: AgentSphereWidget = {
     }
   },
   resetSession: () => {
-    clearAllSessionData();
+    clearWidgetSession();
   },
 };
 
