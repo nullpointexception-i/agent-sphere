@@ -83,6 +83,7 @@ export default function CliList() {
               icon={<EditOutlined />}
               onClick={() => {
                 setEditing(record);
+                form.resetFields();
                 form.setFieldsValue(record);
                 setModalOpen(true);
               }}

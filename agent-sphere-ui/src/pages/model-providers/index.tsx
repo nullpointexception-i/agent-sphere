@@ -189,6 +189,7 @@ export default function ModelProviders() {
                       }}
                       onClick={() => {
                         setEditingProvider(item);
+                        providerForm.resetFields();
                         providerForm.setFieldsValue(item);
                         setProviderModal(true);
                       }}
