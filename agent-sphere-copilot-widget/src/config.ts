@@ -22,6 +22,12 @@ export interface WidgetConfig {
    */
   mountTo?: HTMLElement;
   /**
+   * 宿主提供的当前用户身份标识（如 Bole 的 userId 字符串）。挂载时若缓存用户与
+   * 该标识不匹配（宿主切换用户后残留旧会话），widget 会丢弃缓存并触发重新登录，
+   * 防止旧用户 token 继续进入 chat。
+   */
+  identityKey?: string;
+  /**
    * Chrome 插件下载地址覆盖。未提供且后端配置了 plugin.download-url（应用内上传托管或外链）
    * 时，widget 运行时从公开配置拉取并在"新会话"按钮上方展示下载入口。
    */
