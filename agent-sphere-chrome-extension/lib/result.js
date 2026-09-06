@@ -5,6 +5,8 @@ export const ErrorCategory = {
   INJECT_FAILED: 'inject_failed',
   TIMEOUT: 'timeout',
   NO_TAB: 'no_tab',
+  WRONG_SITE: 'wrong_site',
+  AMBIGUOUS: 'ambiguous',
   UNKNOWN: 'unknown',
 };
 

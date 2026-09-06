@@ -16,7 +16,7 @@ offscreen.html/js — long-lived task SSE + command queue (immune to SW suspensi
    ↕ runtime message {target:'background', action:'task:command'}
 background.js (ESM) — message router, executeInPage, tab grouping, callback POST
    ↕ tabs.sendMessage / chrome.scripting / chrome.debugger
-content.js + content-locator.js + content-editors.js — primary execution layer (ISOLATED world)
+content.js + content-locator.js — primary execution layer (ISOLATED world)
 page-script.js (MAIN world) — auth/session bridge (sessionStorage → content script)
 ```
 
@@ -26,7 +26,7 @@ Files:
 - `lib/tab-manager.js` — controlled tab, content-script injection (3 files, ordered), `askContent` auto-re-injects on "Receiving end does not exist", and the **`AgentSphere` tab group** (aggregates every plugin tab; recreated if the group is closed).
 - `lib/offscreen-bridge.js` — creates/pings the offscreen doc (alarm recreates it if the browser closes it).
 - `offscreen.js` — holds `/api/v1/runtime/user/task/stream` SSE, zombie detection, reconnect, forwards `browser_operation` to background. **Offscreen documents support ONLY `chrome.runtime`** — no `chrome.storage`/`chrome.tabs` there. Token/baseUrl are fetched from background via `task:creds`, and connection status is reported via `task:status` (background writes `storage.local.taskConnected`). Do not call `chrome.storage` inside `offscreen.js`.
-- `content-locator.js` / `content-editors.js` / `content.js` — injected together (in that order) into the isolated world; share the `window.__asContent` namespace.
+- `content-locator.js` / `content.js` — injected together (in that order) into the isolated world; share the `window.__asContent` namespace. Write actions (click/type/key/hover) run via CDP trusted input in `background.js`; content script only reads/wait/scroll/uploads.
 - `inject.js` — **deleted.** There is no inject-bridge tier anymore.
 - `page-script.js` — MAIN-world script (web_accessible) intercepting `window.open`.
 

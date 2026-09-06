@@ -11,11 +11,15 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@ag-ui/client": "^0.0.57",
-    "@copilotkit/react-core": "^1.66.2",
+    "@ag-ui/client": "0.0.57",
+    "@copilotkit/react-core": "1.67.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^3.24.0"
+  },
+  "overrides": {
+    "@ag-ui/client": "0.0.57",
+    "@ag-ui/core": "0.0.57"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -25,6 +25,8 @@ public class AgentToolCallRecord {
     private String compressedArtifact;
     private String status;
     private String errorMessage;
+    /** 归属的子 Agent 运行（NULL=主 Agent）。 */
+    private Long subAgentRunId;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

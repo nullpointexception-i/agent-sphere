@@ -82,6 +82,12 @@ buukle:
       heartbeat-interval: 15s                      # SSE 心跳间隔 / SSE heartbeat interval
 
     # ============================================================
+    # Chrome 浏览器工具 / Chrome Tool (写动作统一走 CDP 受信输入，无执行模式开关)
+    # ============================================================
+    chrome:
+      extension-token: ""
+
+    # ============================================================
     # LLM 模型配置 / LLM Config
     # ============================================================
     llm:
@@ -119,8 +125,8 @@ buukle:
     # ============================================================
     skill:
       execution-enabled: true                      # 是否启用 Skill 嵌套执行 / Enable skill nested execution
-      max-sub-loop-count: 8                        # 子循环最大轮次 / Max sub-loop count
-      max-nested-depth: 3                          # 最大嵌套深度 / Max nested depth
+      max-sub-loop-count: 128                      # 子循环最大轮次 / Max sub-loop count
+      max-nested-depth: 2                          # 最大嵌套深度 / Max nested depth
       execution-timeout: 10m                       # 单个 Skill 执行超时 / Skill execution timeout
       max-prompt-chars: 20000                      # 渲染后 prompt 最大长度 / Max rendered prompt chars
       max-result-chars: 2000                       # Skill 返回结果最大字符数 / Max result chars
@@ -187,8 +193,7 @@ buukle:
     # ============================================================
     # Chrome 扩展配置 / Chrome Extension Config
     # ============================================================
-    chrome:
-      extension-token: ""
+
 
     # ============================================================
     # 加密配置 / Crypto Config

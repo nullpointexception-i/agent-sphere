@@ -77,3 +77,36 @@ export interface SessionTodoVO {
   priority: string;
   sortOrder: number;
 }
+
+export interface SubAgentRunVO {
+  id: number;
+  sessionId: number;
+  runId?: number | null;
+  parentToolCallId?: string | null;
+  agentType?: string;
+  agentRef?: string;
+  displayName: string;
+  status?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  createdAt?: string;
+}
+
+export interface SubAgentTimelineItemVO {
+  activityType: 'llm_interaction' | 'tool_call';
+  createdAt?: string;
+  interactionId?: number;
+  interactionType?: string;
+  modelName?: string;
+  reasoning?: string | null;
+  reply?: string | null;
+  success?: boolean;
+  stepId?: number;
+  toolName?: string;
+  displayNameCn?: string;
+  displayNameEn?: string;
+  argumentsJson?: string | null;
+  artifact?: string | null;
+  toolStatus?: string;
+  toolErrorMessage?: string;
+}

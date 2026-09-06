@@ -24,6 +24,7 @@ import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.orchestrator.RuntimeOrchestrator;
+import com.buukle.agent.util.TextSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -63,7 +64,7 @@ public class ChatRuntimeService {
         sessionSpi.touchSession(sessionId);
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);
-        createRunDTO.setUserMessage(dto.getMessage());
+        createRunDTO.setUserMessage(TextSanitizer.sanitize(dto.getMessage()));
         createRunDTO.setType(RunEnum.TYPE_AUTO);
         createRunDTO.setNoClarification(dto.getNoClarification());
         RunVO run = runSpi.createRun(createRunDTO);
@@ -172,6 +173,10 @@ public class ChatRuntimeService {
             // 停车态：loop 已退出，标志不会生效 → 复用 stopRun 的澄清取消逻辑后清除标志
             stopRun(sessionId, active.getId());
             sessionRunner.clearSessionCancelled(sessionId);
+        } else {
+            // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止；同时写 run 级取消键兜底，
+            // 避免“session 键被收口清空早于被中断的子 Agent 回收”造成子 Agent 空窗续跑。
+            sessionRunner.cancelRun(active.getId());
         }
         // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止，收口处消费标志并发布终态
     }

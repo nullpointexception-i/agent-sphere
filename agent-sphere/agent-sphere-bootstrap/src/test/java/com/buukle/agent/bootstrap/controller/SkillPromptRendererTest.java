@@ -21,9 +21,18 @@ class SkillPromptRendererTest {
     }
 
     @Test
-    void render_missingFieldThrows() {
+    void render_missingFieldIsMarkedNotFatal() {
+        // 缺字段不再中止整个 skill：回填显式标记，供 skill 结合 {{input}} 自抽取。
+        String result = SkillPromptRenderer.render(
+                "```json\n{{input}}\n``` 频道={{channel_url}}", "{\"other\":1}");
+        assertTrue(result.contains("[缺参数:channel_url]"));
+        assertTrue(result.contains("\"other\":1"));
+    }
+
+    @Test
+    void render_invalidPathStillThrows() {
         assertThrows(InvalidSkillDefinition.class,
-                () -> SkillPromptRenderer.render("名字 {{name}}", "{\"other\":1}"));
+                () -> SkillPromptRenderer.render("名字 {{}}", "{\"name\":\"x\"}"));
     }
 
     @Test

@@ -19,4 +19,7 @@ public class ChatMessageDTO implements Serializable {
     private String toolCallId;
     @JsonProperty("tool_calls")
     private List<ToolCallDTO> toolCalls;
+    @JsonProperty("reasoning_content")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String reasoningContent;
 }

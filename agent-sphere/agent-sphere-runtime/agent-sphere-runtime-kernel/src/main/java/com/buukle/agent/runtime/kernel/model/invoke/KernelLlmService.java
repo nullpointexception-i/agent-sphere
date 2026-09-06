@@ -4,6 +4,7 @@ import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.spi.ModelProviderSpi;
+import com.buukle.agent.util.TextSanitizer;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -41,6 +42,8 @@ public class KernelLlmService {
             boolean success = true;
             String errorMessage = null;
             StringBuilder resultCollector = new StringBuilder();
+            StringBuilder textCollector = new StringBuilder();
+            StringBuilder reasoningCollector = new StringBuilder();
             String requestBody = JsonUtils.toJson(request);
             try {
                 CountDownLatch done = new CountDownLatch(1);
@@ -51,9 +54,20 @@ public class KernelLlmService {
                         modelProviderSpi.stream(company, baseUrl, apiKey, modelName, request,
                                 event -> {
                                     if (future.isCancelled()) return;
-                                    if (event instanceof LLMEvent.TextDelta(String text1)) resultCollector.append(text1);
-                                    else if (event instanceof LLMEvent.ReasoningDelta(String text)) resultCollector.append(text);
-                                    onEvent.accept(event);
+                                    // 清洗 LLM 文本中的 NUL（PG text 列拒绝），再进 collectors 与转发事件
+                                    if (event instanceof LLMEvent.TextDelta(String text1)) {
+                                        String clean = TextSanitizer.sanitize(text1);
+                                        resultCollector.append(clean);
+                                        textCollector.append(clean);
+                                        onEvent.accept(new LLMEvent.TextDelta(clean));
+                                    } else if (event instanceof LLMEvent.ReasoningDelta(String text)) {
+                                        String clean = TextSanitizer.sanitize(text);
+                                        reasoningCollector.append(clean);
+                                        resultCollector.append(clean); // response_body 保持兼容（合并）
+                                        onEvent.accept(new LLMEvent.ReasoningDelta(clean));
+                                    } else {
+                                        onEvent.accept(event);
+                                    }
                                 },
                                 done::countDown);
                     } catch (Exception e) {
@@ -79,6 +93,8 @@ public class KernelLlmService {
             } finally {
                 eventPublisher.publishEvent(new LlmInteractionEvent(
                         this, meta, modelName, requestBody, resultCollector.toString(),
+                        textCollector.length() > 0 ? textCollector.toString() : null,
+                        reasoningCollector.length() > 0 ? reasoningCollector.toString() : null,
                         System.currentTimeMillis() - start, success, errorMessage));
             }
         });

@@ -4,7 +4,7 @@ import {
   SSO_EXCHANGE_PATH,
   type WidgetConfig,
 } from './config';
-import type { InstancePageVO, InstanceVO, RunVO, SessionTodoVO, SessionVO, SsoIdentityVO, UserVO } from './types';
+import type { InstancePageVO, InstanceVO, RunVO, SessionTodoVO, SessionVO, SubAgentRunVO, SubAgentTimelineItemVO, SsoIdentityVO, UserVO } from './types';
 
 export interface ErrorBody {
   errorCode?: string;
@@ -168,6 +168,33 @@ export function runsReasoning(base: string, runIds: number[]): Promise<Record<st
   });
 }
 
+/** 子 Agent 历史运行列表（agent_sub_agent_run）。 */
+export function listSubAgentRuns(base: string, sessionId: number): Promise<SubAgentRunVO[]> {
+  return request(base, `/instance/sessions/${sessionId}/sub-agent-runs`);
+}
+
+/** 子 Agent 时间线（interactions + tool_calls 按时序）。 */
+export function subAgentTimeline(base: string, subAgentRunId: number): Promise<SubAgentTimelineItemVO[]> {
+  return request(base, `/instance/sub-agent-runs/${subAgentRunId}/timeline`);
+}
+
+/** run 活动流（llm_interaction + tool_call 交错，含 reasoning/replyContent）。 */
+export function runActivities(
+  base: string,
+  runId: number,
+  sessionId: number,
+  offset = 0,
+  limit = 100,
+): Promise<{ total: number; records: any[] }> {
+  return request(base, `/instance/runs/${runId}/activities`, {
+    params: {
+      sessionId: String(sessionId),
+      offset: String(offset),
+      limit: String(limit),
+    },
+  });
+}
+
 /** 公开配置读取（免鉴权）：当前支持 plugin.download-url（插件安装包下载地址）。 */
 export function publicConfig(base: string, keys: string[]): Promise<Record<string, string>> {
   return request(base, '/system/config/public', {
@@ -199,6 +226,14 @@ export interface ApiClient {
   stopSession: (sessionId: number) => Promise<void>;
   listInstancesPage: (page?: number, size?: number) => Promise<InstancePageVO>;
   getTodos: (sessionId: number) => Promise<SessionTodoVO[]>;
+  listSubAgentRuns: (sessionId: number) => Promise<SubAgentRunVO[]>;
+  subAgentTimeline: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
+  runActivities: (
+    runId: number,
+    sessionId: number,
+    offset?: number,
+    limit?: number,
+  ) => Promise<{ total: number; records: any[] }>;
 }
 
 export function createApi(config: WidgetConfig): ApiClient {
@@ -219,5 +254,9 @@ export function createApi(config: WidgetConfig): ApiClient {
     stopSession: (sessionId) => stopSession(base, sessionId),
     listInstancesPage: (page, size) => listInstancesPage(base, page, size),
     getTodos: (sessionId) => getTodos(base, sessionId),
+    listSubAgentRuns: (sessionId) => listSubAgentRuns(base, sessionId),
+    subAgentTimeline: (subAgentRunId) => subAgentTimeline(base, subAgentRunId),
+    runActivities: (runId, sessionId, offset, limit) =>
+      runActivities(base, runId, sessionId, offset, limit),
   };
 }

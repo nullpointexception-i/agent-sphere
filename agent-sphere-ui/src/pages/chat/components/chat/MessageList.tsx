@@ -2,8 +2,10 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   CopyOutlined,
+  DownOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
+  RightOutlined,
   RobotOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -25,7 +27,7 @@ import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import { useIntl } from '@umijs/max';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
 
@@ -62,6 +64,10 @@ interface MessageListProps {
   collapsedKeys: Set<string>;
   onCollapsedKeysChange: (keys: Set<string>) => void;
   onCancelClarification?: (clarification: any) => void;
+  /** 主 Agent live interaction 级 timeline（reasoning/reply/tool 交错）。 */
+  mainTimeline?: any[];
+  /** 主 Agent 历史 interaction 级 timeline（loadHistory 组装）。 */
+  historyTimeline?: any[];
 }
 
 const COLLAPSE_THRESHOLD = 300;
@@ -69,11 +75,231 @@ const CODE_LIKE_PATTERN =
   /^(package |import |public |private |protected |class |interface |function |const |let |var |def |fun |#include|#define|<!DOCTYPE|<html|<svg|<xml)/m;
 const STREAMING_IDLE = { hasNextChunk: false, enableAnimation: false };
 
+/** 主 Agent thinking 气泡 max-height（内部滚动） */
+const REASONING_MAX_HEIGHT = 400;
+/** 子 Agent（skill）thinking 展开态 max-height（内部滚动） */
+const SKILL_REASON_MAX_HEIGHT = 240;
+
+/** 后端子 Agent 哨兵：`▶ Skill <skillId>: <name>`（skillId 为数字） */
+const SKILL_REASON_MARKER_RE = /▶\s*Skill\s+(\d+)\s*:\s*([^\n]*)/;
+
+export interface SkillReasonBlock {
+  skillId: string;
+  name: string;
+  content: string;
+}
+
+/**
+ * 把一条 reasoning 原始文本（可能内嵌 N 段子 Agent thinking）拆成
+ * 「主 Agent 段 + 按时间序的子 Agent 段列表」。哨兵本身不保留在正文里。
+ * 哨兵可能位于任意字符后（SSE delta 直接拼接，不保证换行），用 exec 顺序扫描切分。
+ */
+export function splitSkillSegments(raw: string): {
+  main: string;
+  blocks: SkillReasonBlock[];
+} {
+  if (!raw) return { main: '', blocks: [] };
+  const blocks: SkillReasonBlock[] = [];
+  let lastEnd = 0;
+  let nextIsContent = false;
+  const re = new RegExp(SKILL_REASON_MARKER_RE, 'g');
+  let m: RegExpExecArray | null = re.exec(raw);
+  let mainText = '';
+  while (m !== null) {
+    const markerStart = m.index;
+    if (!nextIsContent && lastEnd < markerStart) {
+      mainText += raw.substring(lastEnd, markerStart);
+    } else if (nextIsContent && lastEnd < markerStart) {
+      // 上一段技能正文
+      blocks[blocks.length - 1].content += raw.substring(lastEnd, markerStart);
+    }
+    blocks.push({ skillId: m[1], name: m[2] || m[1], content: '' });
+    nextIsContent = true;
+    lastEnd = re.lastIndex;
+    m = re.exec(raw);
+  }
+  if (nextIsContent && lastEnd < raw.length) {
+    blocks[blocks.length - 1].content += raw.substring(lastEnd);
+  } else if (!nextIsContent) {
+    mainText = raw;
+  }
+  return { main: mainText.trim(), blocks };
+}
+
+/** bottom-anchored 滚动：仅当用户停留在容器底部附近时跟随最新内容。 */
+const NEAR_BOTTOM_THRESHOLD = 24;
+
+function isNearBottom(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  return (
+    el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD
+  );
+}
+
+/** 在 rAF 内把滚动容器滚到底（等布局完成后执行）。 */
+function scrollToBottom(el: HTMLElement | null) {
+  if (!el) return;
+  const raf = window.requestAnimationFrame(() => {
+    if (el.isConnected) el.scrollTop = el.scrollHeight;
+  });
+  return raf;
+}
+
+/** 主 reasoning 气泡内嵌的子 Agent（skill）thinking：默认折叠，点击展开；展开态最大高度 + 内部滚动。 */
+function SkillReasonBlocks({
+  blocks,
+  markdownComponents,
+}: {
+  blocks: SkillReasonBlock[];
+  markdownComponents: any;
+}) {
+  const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+  const blockRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const prevOpenKeysRef = useRef<Record<string, boolean>>({});
+  const contentFingerprint = blocks.map((b) => b.content.length).join('-');
+
+  // 打开的子块：右侧内容增长时，若用户停留在底部则自动滚动到最新；
+  // 刚展开的块（上一轮是折叠）强制滚到底，保证最新内容可见。
+  useEffect(() => {
+    Object.keys(openKeys).forEach((k) => {
+      if (!openKeys[k]) return;
+      const el = blockRefs.current[k];
+      if (!el) return;
+      if (isNearBottom(el) || !prevOpenKeysRef.current[k]) {
+        scrollToBottom(el);
+      }
+    });
+    prevOpenKeysRef.current = { ...openKeys };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openKeys, contentFingerprint]);
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      {blocks.map((b, i) => {
+        const k = `${b.skillId}-${i}`;
+        const isOpen = !!openKeys[k];
+        return (
+          <div
+            key={k}
+            style={{
+              borderLeft: '2px solid #91caff',
+              paddingLeft: 8,
+              marginBottom: 6,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setOpenKeys((p) => ({ ...p, [k]: !p[k] }))}
+              style={{
+                cursor: 'pointer',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: 12,
+                color: '#1677ff',
+                fontStyle: 'normal',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              {isOpen ? <DownOutlined /> : <RightOutlined />}
+              <span>⚙️ Skill {b.name}</span>
+            </button>
+            {isOpen && (
+              <div
+                ref={(el) => {
+                  blockRefs.current[k] = el;
+                }}
+                style={{
+                  maxHeight: SKILL_REASON_MAX_HEIGHT,
+                  overflowY: 'auto',
+                  marginTop: 4,
+                }}
+              >
+                <XMarkdown
+                  streaming={STREAMING_IDLE}
+                  components={markdownComponents}
+                >
+                  {b.content || ' '}
+                </XMarkdown>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 主 reasoning 气泡内容：max-height 内部滚动 + 打开时 bottom-anchored 自动跟随最新。 */
+function ReasoningContent({
+  content,
+  markdownComponents,
+}: {
+  content: string;
+  markdownComponents: any;
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const split = splitSkillSegments(content);
+  const lenKey = `${split.main.length}-${split.blocks.map((b) => b.content.length).join('-')}`;
+
+  // 内容增长且用户停留在容器底部附近时自动滚到底（打开即跟随）
+  useEffect(() => {
+    if (isNearBottom(scrollRef.current)) {
+      scrollToBottom(scrollRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lenKey]);
+
+  const intl = useIntl();
+  return (
+    <div
+      ref={scrollRef}
+      style={{
+        fontSize: 13,
+        color: '#8c8c8c',
+        fontStyle: 'italic',
+        borderLeft: '2px solid #d9d9d9',
+        paddingLeft: 8,
+        margin: '4px 0',
+        maxHeight: REASONING_MAX_HEIGHT,
+        overflowY: 'auto',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          color: '#bfbfbf',
+          marginBottom: 2,
+        }}
+      >
+        {intl.formatMessage({
+          id: 'chat.reasoning.label',
+          defaultMessage: 'Reasoning',
+        })}
+      </div>
+      {split.main ? (
+        <XMarkdown streaming={STREAMING_IDLE} components={markdownComponents}>
+          {split.main}
+        </XMarkdown>
+      ) : null}
+      <SkillReasonBlocks
+        blocks={split.blocks}
+        markdownComponents={markdownComponents}
+      />
+    </div>
+  );
+}
+
 export default function MessageList({
   messages,
   collapsedKeys,
   onCollapsedKeysChange,
   onCancelClarification,
+  mainTimeline = [],
+  historyTimeline = [],
 }: MessageListProps) {
   const intl = useIntl();
   const { styles } = useStyles();
@@ -261,42 +487,23 @@ export default function MessageList({
         contentRender: (content: string) => {
           if (!content) return null;
           return (
-            <div
-              style={{
-                fontSize: 13,
-                color: '#8c8c8c',
-                fontStyle: 'italic',
-                borderLeft: '2px solid #d9d9d9',
-                paddingLeft: 8,
-                margin: '4px 0',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  color: '#bfbfbf',
-                  marginBottom: 2,
-                }}
-              >
-                {intl.formatMessage({
-                  id: 'chat.reasoning.label',
-                  defaultMessage: 'Reasoning',
-                })}
-              </div>
-              <XMarkdown
-                streaming={STREAMING_IDLE}
-                components={markdownComponents}
-              >
-                {content}
-              </XMarkdown>
-            </div>
+            <ReasoningContent
+              content={content}
+              markdownComponents={markdownComponents}
+            />
           );
         },
       }),
       'reasoning-collapsed': () => ({
         placement: 'start' as const,
         avatar: null,
+      }),
+      // interaction 级 timeline 卡（内容已是 JSX）
+      timeline: () => ({
+        placement: 'start' as const,
+        avatar: null,
+        styles: { content: { background: 'transparent', maxWidth: '100%' } },
+        contentRender: (content: any) => content,
       }),
     }),
     [markdownComponents, intl, styles.markdown],
@@ -305,8 +512,10 @@ export default function MessageList({
   const bubbleItems = useMemo<BubbleItemType[]>(() => {
     const visible = messages.filter(
       (m: any) =>
-        (m.content && m.content !== '{}') ||
-        (m.clarifications && m.clarifications.length > 0),
+        // 推理已改为 interaction timeline 展示，不再渲染独立 reasoning 气泡
+        m.role !== 'reasoning' &&
+        ((m.content && m.content !== '{}') ||
+          (m.clarifications && m.clarifications.length > 0)),
     );
     const visibleItems = visible
       .map((m: any, idx: number) => {
@@ -340,6 +549,7 @@ export default function MessageList({
             };
           }
           const elapsed = m.ts ? Math.floor((Date.now() - m.ts) / 1000) : 0;
+          const split = splitSkillSegments(m.content);
           return {
             key,
             role: 'reasoning',
@@ -365,7 +575,7 @@ export default function MessageList({
                   type="text"
                   size="small"
                   icon={<CopyOutlined />}
-                  onClick={() => handleCopy(m.content)}
+                  onClick={() => handleCopy(split.main || m.content)}
                 />
               </div>
             ),
@@ -443,6 +653,8 @@ export default function MessageList({
             </div>
           ),
         };
+        // 回合归属（后端 runId）→ 供按 run 锚定排序（跨回合不再依赖墙钟）
+        (item as any)._runId = (m as any).runId ?? null;
         if (m.clarifications && m.clarifications.length > 0) {
           const clarifications = m.clarifications;
           item.contentRender = (_content: string) => (
@@ -476,18 +688,230 @@ export default function MessageList({
       })
       .filter(Boolean) as BubbleItemType[];
 
-    return visibleItems;
-  }, [messages, collapsedKeys, intl]);
+    // 合并 interaction timeline（历史 + live）进单一 Bubble.List 消息流，按时间排序。
+    // mainTimeline（live）排在 historyTimeline 前，去重时优先保留 live 版本。
+    const timelineItems: BubbleItemType[] = [
+      ...mainTimeline.map(
+        (entry) =>
+          ({
+            key: `mt-${entry.key}`,
+            role: 'timeline',
+            content: (
+              <MainTimelineEntry
+                entry={entry}
+                markdownComponents={markdownComponents}
+              />
+            ),
+            _runId: (entry as any).runId ?? null,
+            _seq: (entry as any).seq ?? 0,
+          }) as BubbleItemType,
+      ),
+      ...historyTimeline.map(
+        (entry) =>
+          ({
+            key: `ht-${entry.key}`,
+            role: 'timeline',
+            content: (
+              <MainTimelineEntry
+                entry={entry}
+                markdownComponents={markdownComponents}
+              />
+            ),
+            _runId: (entry as any).runId ?? null,
+            _seq: (entry as any).seq ?? 0,
+          }) as BubbleItemType,
+      ),
+    ];
+
+    const toTs = (v: any): number => {
+      if (typeof v === 'number') return v;
+      if (typeof v !== 'string' || !v) return 0;
+      // 兼容后端 `YYYY-MM-DD HH:mm:ss[.ffffff]`（非 ISO，new Date 会 NaN）与 ISO 格式
+      const iso = v.replace(' ', 'T');
+      const ts = new Date(iso).getTime();
+      if (Number.isFinite(ts)) return ts;
+      // 兜底：手动解析
+      const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/.exec(v);
+      if (!m) return 0;
+      const [, y, mo, d, h, mi, s] = m.map(Number);
+      return new Date(y, mo - 1, d, h, mi, s).getTime();
+    };
+
+    const orderOf = (item: any): number => {
+      const m = item as any;
+      if (m.role === 'timeline') {
+        const t = m.content && m.content.props && m.content.props.entry;
+        if (t && t.createdAt) return toTs(t.createdAt);
+        if (t && t.ts) return toTs(t.ts);
+        return 0;
+      }
+      return toTs(m.ts);
+    };
+
+    // 回合（run）锚定排序：跨回合先后以“后端 runId 升序”为准（后端单调），
+    // 只有同一回合内部才用墙钟/createdAt 微排序——杜绝“新用户消息跑到上一回合回复之上”。
+    const allItems = [...visibleItems, ...timelineItems];
+
+    // 回合级去重：同一 run 的同类条目（按 role）只保留一份。
+    // key 带 role：用户气泡与 AI（澄清/错误）气泡不再碰撞——否则澄清卡会被当成同 run 重复项误丢。
+    // timeline 卡按 (runId, seq)；user 重复（live + 历史重建）仍去重。
+    const dedupKeys = new Set<string>();
+    const dedupedItems = allItems.filter((it) => {
+      const rid = (it as any)._runId;
+      if (rid == null) return true;
+      const role = (it as any).role;
+      const key =
+        role === 'timeline'
+          ? `t:${Number(rid)}:${(it as any)._seq ?? 0}`
+          : `m:${Number(rid)}:${role}`;
+      if (dedupKeys.has(key)) return false;
+      dedupKeys.add(key);
+      return true;
+    });
+
+    const knownRunIds = new Set<number>();
+    for (const it of dedupedItems) {
+      const rid = (it as any)._runId;
+      if (rid != null) knownRunIds.add(Number(rid));
+    }
+    const runIndex = new Map<number, number>();
+    [...knownRunIds]
+      .sort((a, b) => a - b)
+      .forEach((id, i) => {
+        runIndex.set(id, i);
+      });
+    const runOrdinalOf = (item: any): number => {
+      const rid = (item as any)._runId;
+      if (rid == null) return Number.MAX_SAFE_INTEGER; // 未落库/未知 run → 视为当前最新，排末尾
+      return runIndex.get(Number(rid)) ?? Number.MAX_SAFE_INTEGER;
+    };
+
+    const combined = dedupedItems
+      .sort(
+        (a, b) => runOrdinalOf(a) - runOrdinalOf(b) || orderOf(a) - orderOf(b),
+      )
+      .map(
+        (item: any) =>
+          ({
+            ...item,
+            _order: orderOf(item),
+          }) as BubbleItemType,
+      );
+
+    return combined;
+  }, [
+    messages,
+    collapsedKeys,
+    intl,
+    historyTimeline,
+    mainTimeline,
+    markdownComponents,
+  ]);
 
   return (
     <>
       <Bubble.List
         items={bubbleItems}
         role={roleConfig}
-        autoScroll
-        styles={{ root: { maxWidth: 940 } }}
+        styles={{
+          root: {
+            maxWidth: 940,
+            // 单一滚动容器（.messages）接手：列表高度随内容自然撑开，不做内部滚动
+            flex: '0 0 auto',
+            overflow: 'visible',
+          },
+        }}
       />
     </>
+  );
+}
+
+/** 待渲染条目渲染前，先定义主 Agent interaction 单条组件。 */
+export function MainTimelineEntry({
+  entry,
+  markdownComponents,
+}: {
+  entry: any;
+  markdownComponents: any;
+}) {
+  const [reasonOpen, setReasonOpen] = useState<boolean>(true);
+  return (
+    <div>
+      {entry.reason && entry.reason.trim() ? (
+        <div
+          style={{
+            borderLeft: '2px solid #d9d9d9',
+            paddingLeft: 8,
+            fontSize: 13,
+            color: '#8c8c8c',
+            fontStyle: 'italic',
+            margin: '2px 0',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setReasonOpen((o) => !o)}
+            style={{
+              cursor: 'pointer',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: 12,
+              color: '#1677ff',
+              fontWeight: 500,
+            }}
+          >
+            {reasonOpen ? '▾' : '▸'} Model Reason
+          </button>
+          {reasonOpen && (
+            <div style={{ marginTop: 4, maxHeight: 240, overflowY: 'auto' }}>
+              <XMarkdown
+                streaming={STREAMING_IDLE}
+                components={markdownComponents}
+              >
+                {entry.reason}
+              </XMarkdown>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {entry.tools && entry.tools.length > 0 ? (
+        <div style={{ margin: '2px 0' }}>
+          {entry.tools.map((t: any) => (
+            <div
+              key={t.callId}
+              style={{
+                border: '1px solid #f0f0f0',
+                borderRadius: 4,
+                padding: '4px 8px',
+                margin: '3px 0',
+                background: '#fff',
+                fontSize: 12,
+                color: '#595959',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span>🛠️</span>
+              <span>{t.name}</span>
+              <span style={{ marginLeft: 'auto', color: '#bfbfbf' }}>
+                {t.status || ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {entry.reply ? (
+        <div style={{ marginTop: 2 }}>
+          <XMarkdown streaming={STREAMING_IDLE} components={markdownComponents}>
+            {entry.reply}
+          </XMarkdown>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

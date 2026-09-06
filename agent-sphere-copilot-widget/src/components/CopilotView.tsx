@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import { HttpAgent, type AbstractAgent } from '@ag-ui/client';
-import { CopilotChat, CopilotKit } from '@copilotkit/react-core/v2';
+import {
+  CopilotChat,
+  CopilotKit,
+  type CopilotChatReasoningMessageProps,
+} from '@copilotkit/react-core/v2';
 import { ApiClient, ApiError, createApi, stopSession } from '../api';
 import type { WidgetConfig } from '../config';
 import type {
@@ -46,6 +50,29 @@ async function fillHistoryReasoning(api: ApiClient, runs: RunVO[]): Promise<void
   } catch {
     // 推理补拉失败不影响历史消息展示
   }
+}
+
+/** 拉取本批 run 的 activities（interaction 级 timeline 数据源）。 */
+async function loadActivitiesForRuns(
+  api: ApiClient,
+  sessionId: number,
+  runs: RunVO[],
+): Promise<Record<number, any[]>> {
+  const map: Record<number, any[]> = {};
+  await Promise.all(
+    runs
+      .map((r) => r.id)
+      .filter((id): id is number => id != null)
+      .map(async (id) => {
+        try {
+          const res = await api.runActivities(id, sessionId, 0, 100);
+          map[id] = Array.isArray(res?.records) ? res.records : [];
+        } catch {
+          map[id] = [];
+        }
+      }),
+  );
+  return map;
 }
 
 interface ClarificationState {
@@ -154,7 +181,49 @@ function buildLiveClarificationMessage(
   };
 }
 
-function toChatMessages(runs: RunVO[]): ChatMessage[] {
+interface SkillReasonBlock {
+  skillId: string;
+  name: string;
+  content: string;
+}
+
+const SKILL_REASON_MARKER_RE = /▶\s*Skill\s+(\d+)\s*:\s*([^\n]*)/;
+
+/** 与主 UI 一致的哨兵切分：拆成「主 Agent 段 + 按时序子 Agent 段」。 */
+function splitSkillSegments(raw: string): { main: string; blocks: SkillReasonBlock[] } {
+  if (!raw) {
+    return { main: '', blocks: [] };
+  }
+  const blocks: SkillReasonBlock[] = [];
+  let lastEnd = 0;
+  let nextIsContent = false;
+  const re = new RegExp(SKILL_REASON_MARKER_RE, 'g');
+  let m: RegExpExecArray | null = re.exec(raw);
+  let mainText = '';
+  while (m !== null) {
+    const markerStart = m.index;
+    if (!nextIsContent && lastEnd < markerStart) {
+      mainText += raw.substring(lastEnd, markerStart);
+    } else if (nextIsContent && lastEnd < markerStart) {
+      blocks[blocks.length - 1].content += raw.substring(lastEnd, markerStart);
+    }
+    blocks.push({ skillId: m[1], name: m[2] || m[1], content: '' });
+    nextIsContent = true;
+    lastEnd = re.lastIndex;
+    m = re.exec(raw);
+  }
+  if (nextIsContent && lastEnd < raw.length) {
+    blocks[blocks.length - 1].content += raw.substring(lastEnd);
+  } else if (!nextIsContent) {
+    mainText = raw;
+  }
+  return { main: mainText.trim(), blocks };
+}
+
+function toChatMessages(
+  runs: RunVO[],
+  activitiesByRun?: Record<number, any[]>,
+): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (const r of runs) {
     if (
@@ -172,6 +241,55 @@ function toChatMessages(runs: RunVO[]): ChatMessage[] {
     const block = r.clarifications?.length
       ? buildClarificationBlock(r.clarifications)
       : '';
+    // interaction 级 timeline（若已拉取 activities）
+    const acts = activitiesByRun ? activitiesByRun[r.id] : undefined;
+    if (acts && acts.length > 0) {
+      // activities 为 created_at DESC → 转正序后归组
+      const list = [...acts].reverse();
+      const interactions: { reason: string; reply: string; tools: string[] }[] = [];
+      for (const act of list) {
+        if (!act) continue;
+        if (act.activityType === 'llm_interaction') {
+          interactions.push({
+            reason: act.reasoning || '',
+            reply: act.replyContent || act.reply || '',
+            tools: [],
+          });
+        } else if (act.activityType === 'tool_call') {
+          const cur = interactions[interactions.length - 1];
+          const line = `${act.displayNameCn || act.toolName || 'tool'}${act.toolStatus ? ` [${act.toolStatus}]` : ''}`;
+          if (cur) {
+            cur.tools.push(line);
+          } else {
+            interactions.push({ reason: '', reply: '', tools: [line] });
+          }
+        }
+      }
+      interactions.forEach((it, i) => {
+        const reasonText = [it.reason, ...(it.tools.length ? [`\n工具调用：${it.tools.join(', ')}`] : [])]
+          .filter(Boolean)
+          .join('\n');
+        if (reasonText.trim()) {
+          messages.push({
+            id: `r-${r.id}-${i}`,
+            role: 'reasoning',
+            content: reasonText,
+          });
+        }
+        if (it.reply.trim()) {
+          messages.push({
+            id: `a-${r.id}-${i}`,
+            role: 'assistant',
+            content: it.reply,
+          });
+        }
+      });
+      // 澄清块单独输出（HITL 交互独立于模型 reply）
+      if (block) {
+        messages.push({ id: `a-${r.id}-cls`, role: 'assistant', content: block });
+      }
+      continue; // 已按 interaction 输出，不再单独输出 assistantReply
+    }
     if (r.reasoning && r.reasoning.trim()) {
       messages.push({
         id: `r-${r.id}`,
@@ -197,6 +315,147 @@ function mergeById<T extends { id: number }>(prev: T[], next: T[]): T[] {
   for (const item of prev) map.set(item.id, item);
   for (const item of next) map.set(item.id, item);
   return Array.from(map.values());
+}
+
+const REASONING_MAX_HEIGHT = 320;
+const SKILL_REASON_MAX_HEIGHT = 200;
+
+const NEAR_BOTTOM_THRESHOLD = 24;
+
+function isNearBottom(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD;
+}
+
+function scrollToBottom(el: HTMLElement | null) {
+  if (!el) return;
+  window.requestAnimationFrame(() => {
+    if (el.isConnected) el.scrollTop = el.scrollHeight;
+  });
+}
+
+/** CopilotKit reasoningMessage 槽位：主 Agent 段 + 内嵌子 Agent(skill) 折叠块。 */
+function SkillReasoningMessage(props: CopilotChatReasoningMessageProps) {
+  const message = props.message as { id?: string; role?: string; content?: string };
+  const messages = (props.messages ?? []) as { id?: string }[];
+  const isLatest = messages.length > 0 && messages[messages.length - 1]?.id === message.id;
+  const streaming = !!(props.isRunning && isLatest);
+  const content = typeof message.content === 'string' ? message.content : '';
+  const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+  const [wholeOpen, setWholeOpen] = useState(streaming);
+  const mainRef = useRef<HTMLDivElement | null>(null);
+  const blockRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const prevOpenKeysRef = useRef<Record<string, boolean>>({});
+
+  const split = useMemo(() => splitSkillSegments(content), [content]);
+  useEffect(() => {
+    if (streaming) setWholeOpen(true);
+  }, [streaming]);
+
+  const mainLen = split.main.length;
+  const blocksLen = split.blocks.map((b) => b.content.length).join('-');
+
+  // 主段：内容增长且用户停留在容器底部附近时自动滚到底
+  useEffect(() => {
+    if (wholeOpen && isNearBottom(mainRef.current)) {
+      scrollToBottom(mainRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wholeOpen, mainLen]);
+
+  // 子块：打开状态下内容增长滚动到底；刚展开的块强制滚到底
+  useEffect(() => {
+    Object.keys(openKeys).forEach((k) => {
+      if (!openKeys[k]) return;
+      const el = blockRefs.current[k];
+      if (!el) return;
+      if (isNearBottom(el) || !prevOpenKeysRef.current[k]) {
+        scrollToBottom(el);
+      }
+    });
+    prevOpenKeysRef.current = { ...openKeys };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openKeys, blocksLen]);
+
+  return (
+    <div
+      style={{
+        fontSize: 12,
+        color: '#6b7280',
+        borderLeft: '2px solid #e5e7eb',
+        paddingLeft: 8,
+        margin: '4px 0',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setWholeOpen((v) => !v)}
+        style={{
+          cursor: 'pointer',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          fontSize: 11,
+          fontWeight: 500,
+          color: '#9ca3af',
+        }}
+      >
+        {streaming ? 'Thinking…' : 'Reasoning'}
+        {' '}
+        {wholeOpen ? '▾' : '▸'}
+      </button>
+      {wholeOpen && (
+        <div
+          ref={mainRef}
+          style={{ maxHeight: REASONING_MAX_HEIGHT, overflowY: 'auto', marginTop: 4 }}
+        >
+          {split.main ? <div style={{ whiteSpace: 'pre-wrap' }}>{split.main}</div> : null}
+          {split.blocks.map((b, i) => {
+            const k = `${b.skillId}-${i}`;
+            const isOpen = !!openKeys[k];
+            return (
+              <div key={k} style={{ marginTop: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setOpenKeys((p) => ({ ...p, [k]: !p[k] }))}
+                  style={{
+                    cursor: 'pointer',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: 11,
+                    color: '#2563eb',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <span>{isOpen ? '▾' : '▸'}</span>
+                  <span>⚙️ Skill {b.name}</span>
+                </button>
+                {isOpen && (
+                  <div
+                    ref={(el) => {
+                      blockRefs.current[k] = el;
+                    }}
+                    style={{
+                      maxHeight: SKILL_REASON_MAX_HEIGHT,
+                      overflowY: 'auto',
+                      marginTop: 4,
+                      whiteSpace: 'pre-wrap',
+                      color: '#8b8b8b',
+                    }}
+                  >
+                    {b.content}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** 后端返回的相对路径按 apiBase 所在源解析为绝对地址；外链原样返回。 */
@@ -246,6 +505,17 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const [pluginStoreUrl, setPluginStoreUrl] = useState<string>('');
   const [pluginDownloadUrl, setPluginDownloadUrl] = useState<string>('');
   const [pluginMenuOpen, setPluginMenuOpen] = useState(false);
+  // 子 Agent 实时聚合（SSE）与历史
+  const [subAgentLive, setSubAgentLive] = useState<any[]>([]);
+  const [subAgentHistorical, setSubAgentHistorical] = useState<any[]>([]);
+  const [subAgentModal, setSubAgentModal] = useState<{
+    title: string;
+    live?: any;
+    timeline: any[];
+  } | null>(null);
+  // 主 Agent live interaction 级 timeline（全部 run：自发起 + 被动）
+  const [mainTimeline, setMainTimeline] = useState<any[]>([]);
+  const mainTimelineSeqRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const resolveUrl = async () => {
@@ -614,6 +884,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     setHasMoreHistory(false);
     setLoadingHistory(true);
     setTodos([]);
+    setSubAgentLive([]);
+    setSubAgentHistorical([]);
     (async () => {
       try {
         const [res, todoList] = await Promise.all([
@@ -624,12 +896,26 @@ export function CopilotView({ config, user }: CopilotViewProps) {
           return;
         }
         await fillHistoryReasoning(api, res.records);
+        const actsMap = await loadActivitiesForRuns(
+          api,
+          selectedSessionId,
+          res.records,
+        );
         if (cancelled) {
           return;
         }
-        agent.setMessages(toChatMessages(res.records.slice().reverse()));
+        agent.setMessages(
+          toChatMessages(res.records.slice().reverse(), actsMap),
+        );
         setHasMoreHistory(res.records.length >= HISTORY_PAGE_SIZE);
         setTodos(todoList);
+        // 子 Agent 历史回放
+        try {
+          const subRuns = await api.listSubAgentRuns(selectedSessionId);
+          if (!cancelled) setSubAgentHistorical(subRuns || []);
+        } catch {
+          // 忽略
+        }
       } catch {
         // 历史加载失败不影响新对话
       } finally {
@@ -661,8 +947,79 @@ export function CopilotView({ config, user }: CopilotViewProps) {
       onOpen: () => {
         console.log('[AgentSphere] reasoning stream connected for session', selectedSessionId);
       },
-      onReasoning: (runId, delta) => {
+      onReasoning: (runId, delta, nodeName) => {
         if (ownRunIdsRef.current.has(runId)) {
+          return;
+        }
+        // 子 Agent thinking：路由进子 Agent 卡片（不进主 reasoning 气泡）
+        const isSub = !!nodeName && nodeName.startsWith('skill:');
+        if (isSub && nodeName) {
+          const skillId = nodeName.slice('skill:'.length);
+          const key = `w-${runId}-${skillId}`;
+          setSubAgentLive((prev) => {
+            const exists = prev.find((s) => s.key === key);
+            if (exists) {
+              return prev.map((s) =>
+                s.key === key ? { ...s, reasoning: s.reasoning + delta } : s,
+              );
+            }
+            return [
+              ...prev,
+              {
+                key,
+                runId,
+                skillId,
+                name: `Skill ${skillId}`,
+                status: 'RUNNING',
+                reasoning: delta,
+                reply: '',
+                toolCalls: [],
+              },
+            ];
+          });
+          return;
+        }
+        // 主 Agent 被动 run 推理 → interaction 级 timeline（不外提 CopilotKit reasoning 消息）
+        if (!ownRunIdsRef.current.has(runId)) {
+          const rid = runId;
+          setMainTimeline((prev) => {
+            const cur = mainTimelineSeqRef.current[rid] ?? 0;
+            const hasCur = prev.some(
+              (it) => String(it.runId) === rid && it.seq === cur,
+            );
+            const curHasTool =
+              hasCur &&
+              prev
+                .filter((it) => String(it.runId) === rid && it.seq === cur)
+                .some((it) => it.tools?.length > 0);
+            let seq = cur;
+            if (!hasCur || curHasTool) {
+              seq = cur + 1;
+              mainTimelineSeqRef.current[rid] = seq;
+            }
+            const key = `m-${rid}-${seq}`;
+            const existing = prev.find((it) => it.key === key);
+            if (existing) {
+              return prev.map((it) =>
+                it.key === key
+                  ? { ...it, reason: it.reason + delta }
+                  : it,
+              );
+            }
+            return [
+              ...prev,
+              {
+                key,
+                runId: rid,
+                seq,
+                reason: delta,
+                reply: '',
+                tools: [],
+                status: 'RUNNING',
+                ts: Date.now(),
+              },
+            ];
+          });
           return;
         }
         // 任务 run 推理开始 → 置流式态，让 reasoning 块展开显示 "Thinking…"
@@ -697,6 +1054,174 @@ export function CopilotView({ config, user }: CopilotViewProps) {
           streamingRunIdRef.current = null;
           agent.isRunning = false;
         }
+        // 主 Agent timeline 收口
+        setMainTimeline((prev) =>
+          prev.map((it) =>
+            String(it.runId) === String(runId)
+              ? { ...it, status: 'COMPLETED' }
+              : it,
+          ),
+        );
+      },
+      onEvent: (parsed) => {
+        const evtType = String(parsed.eventType || parsed.type || '');
+        const d = (parsed.data || parsed) as Record<string, any>;
+        const nodeName: unknown = d?.nodeName;
+        const isSub =
+          String(nodeName || '').startsWith('skill:') ||
+          d?.subAgentRunId != null;
+        const runId = d?.runId != null ? String(d.runId) : '';
+        if (!runId) return;
+        // 主 Agent 被动 run 的 reply / tool_call → mainTimeline
+        if (!isSub && !ownRunIdsRef.current.has(runId)) {
+          const rid = runId;
+          if (evtType === 'content_token') {
+            const delta = String(d?.response || '');
+            if (!delta) return;
+            setMainTimeline((prev) => {
+              const cur = mainTimelineSeqRef.current[rid] ?? 0;
+              const hasCur = prev.some(
+                (it) => String(it.runId) === rid && it.seq === cur,
+              );
+              let seq = cur;
+              let base: any[] = prev;
+              if (!hasCur) {
+                seq = 0;
+                base = [
+                  ...prev,
+                  {
+                    key: `m-${rid}-0`,
+                    runId: rid,
+                    seq: 0,
+                    reason: '',
+                    reply: '',
+                    tools: [],
+                    status: 'RUNNING',
+                  },
+                ];
+                mainTimelineSeqRef.current[rid] = 0;
+              }
+              const key = `m-${rid}-${seq}`;
+              return base.map((it) =>
+                it.key === key ? { ...it, reply: it.reply + delta } : it,
+              );
+            });
+            return;
+          }
+          // tool_call 状态（reasoning_token 包装）
+          const toolStatus = String(d?.reasoningSubType || '');
+          if (toolStatus.startsWith('tool_call_')) {
+            const tool = {
+              callId: String(d?.publishId || `${rid}-${Date.now()}`),
+              name: String(d?.toolName || d?.displayNameCn || 'tool'),
+              args: String(d?.argumentsJson || ''),
+              status: toolStatus.replace('tool_call_', ''),
+            };
+            setMainTimeline((prev) => {
+              const cur = mainTimelineSeqRef.current[rid] ?? 0;
+              const hasCur = prev.some(
+                (it) => String(it.runId) === rid && it.seq === cur,
+              );
+              let seq = cur;
+              let base: any[] = prev;
+              if (!hasCur) {
+                seq = 0;
+                base = [
+                  ...prev,
+                  {
+                    key: `m-${rid}-0`,
+                    runId: rid,
+                    seq: 0,
+                    reason: '',
+                    reply: '',
+                    tools: [],
+                    status: 'RUNNING',
+                  },
+                ];
+                mainTimelineSeqRef.current[rid] = 0;
+              }
+              const key = `m-${rid}-${seq}`;
+              return base.map((it) => {
+                if (it.key !== key) return it;
+                const idx = it.tools.findIndex(
+                  (t: any) => t.callId === tool.callId,
+                );
+                if (idx >= 0) {
+                  const next = [...it.tools];
+                  next[idx] = { ...next[idx], ...tool };
+                  return { ...it, tools: next };
+                }
+                return { ...it, tools: [...it.tools, tool] };
+              });
+            });
+            return;
+          }
+          return;
+        }
+        const skillId = String(nodeName || '')
+          .replace(/^skill:/, '')
+          .concat(d?.subAgentRunId != null ? `-${d.subAgentRunId}` : '');
+        const key = `w-${runId}-${skillId}`;
+        const ensure = (prev: any[]) => {
+          const exists = prev.find((s) => s.key === key);
+          return exists
+            ? prev
+            : [
+                ...prev,
+                {
+                  key,
+                  runId,
+                  skillId,
+                  name: `Skill ${skillId}`,
+                  status: 'RUNNING',
+                  reasoning: '',
+                  reply: '',
+                  toolCalls: [],
+                },
+              ];
+        };
+        if (evtType === 'content_token') {
+          const delta = String(d?.response || '');
+          setSubAgentLive((prev) =>
+            ensure(prev).map((s) =>
+              s.key === key ? { ...s, reply: s.reply + delta } : s,
+            ),
+          );
+        } else if (
+          evtType === 'reasoning_token' &&
+          d?.reasoningSubType === 'model_reason'
+        ) {
+          const delta = String(d?.response || '');
+          setSubAgentLive((prev) =>
+            ensure(prev).map((s) =>
+              s.key === key ? { ...s, reasoning: s.reasoning + delta } : s,
+            ),
+          );
+        } else if (
+          (d?.reasoningSubType as string)?.startsWith('tool_call_')
+        ) {
+          const status = String(d?.reasoningSubType).replace('tool_call_', '');
+          const tool = {
+            callId: String(d?.publishId || `${key}-${Date.now()}`),
+            toolName: String(d?.toolName || d?.displayNameCn || 'tool'),
+            args: String(d?.argumentsJson || ''),
+            status,
+          };
+          setSubAgentLive((prev) =>
+            ensure(prev).map((s) => {
+              if (s.key !== key) return s;
+              const idx = s.toolCalls.findIndex(
+                (t: any) => t.callId === tool.callId,
+              );
+              if (idx >= 0) {
+                const next = [...s.toolCalls];
+                next[idx] = { ...next[idx], ...tool };
+                return { ...s, toolCalls: next };
+              }
+              return { ...s, toolCalls: [...s.toolCalls, tool] };
+            }),
+          );
+        }
       },
     });
     return () => {
@@ -726,7 +1251,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
         HISTORY_PAGE_SIZE,
       );
       await fillHistoryReasoning(api, res.records);
-      const older = toChatMessages(res.records.slice().reverse());
+      const actsMap = await loadActivitiesForRuns(
+        api,
+        selectedSessionId,
+        res.records,
+      );
+      const older = toChatMessages(res.records.slice().reverse(), actsMap);
       const current = agent.messages as ChatMessage[];
       agent.setMessages([...older, ...current]);
       historyPageRef.current += 1;
@@ -1014,9 +1544,370 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   agentId={String(selectedAgentId)}
                   threadId={String(selectedSession.id)}
                   onStop={handleStop}
+                  messageView={{
+                    reasoningMessage: SkillReasoningMessage as never,
+                  }}
                 />
+                {mainTimeline.length > 0 ? (
+                  <div
+                    style={{
+                      borderTop: '1px dashed #e5e7eb',
+                      padding: '8px 4px',
+                      fontSize: 12,
+                      color: '#4b5563',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: '#9ca3af',
+                        marginBottom: 6,
+                        fontWeight: 600,
+                      }}
+                    >
+                      Agent Timeline（按交互）
+                    </div>
+                    {[...mainTimeline]
+                      .sort((a, b) => (b.seq || 0) - (a.seq || 0))
+                      .map((it) => (
+                        <div
+                          key={it.key}
+                          style={{
+                            border: '1px solid #eef0f3',
+                            borderLeft: '3px solid #1677ff',
+                            borderRadius: 6,
+                            padding: '6px 8px',
+                            marginBottom: 6,
+                            background: '#f9fafb',
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: '#9ca3af',
+                              marginBottom: 4,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                            }}
+                          >
+                            <span>🧭 Interaction #{it.seq + 1}</span>
+                            <span>{it.status || ''}</span>
+                          </div>
+                          {it.reason && it.reason.trim() ? (
+                            <details style={{ marginBottom: 4 }}>
+                              <summary
+                                style={{
+                                  cursor: 'pointer',
+                                  color: '#6b7280',
+                                  fontStyle: 'italic',
+                                  fontSize: 11,
+                                }}
+                              >
+                                推理
+                              </summary>
+                              <pre
+                                style={{
+                                  whiteSpace: 'pre-wrap',
+                                  maxHeight: 160,
+                                  overflowY: 'auto',
+                                  background: '#fff',
+                                  padding: 6,
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  color: '#6b7280',
+                                }}
+                              >
+                                {it.reason}
+                              </pre>
+                            </details>
+                          ) : null}
+                          {it.tools && it.tools.length > 0 ? (
+                            <div style={{ margin: '4px 0' }}>
+                              {it.tools.map((t: any, ti: number) => (
+                                <div
+                                  key={`${t.callId}-${ti}`}
+                                  style={{
+                                    fontSize: 11,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    padding: '2px 4px',
+                                  }}
+                                >
+                                  <span>🛠️</span>
+                                  <span>{t.name}</span>
+                                  <span
+                                    style={{
+                                      marginLeft: 'auto',
+                                      color: '#9ca3af',
+                                    }}
+                                  >
+                                    {t.status || ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          {it.reply ? (
+                            <div
+                              style={{
+                                marginTop: 4,
+                                fontSize: 12,
+                                color: '#374151',
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              {it.reply}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
               </div>
             </CopilotKit>
+            {subAgentLive.length + subAgentHistorical.length > 0 ? (
+              <div
+                style={{
+                  borderTop: '1px solid #eef0f3',
+                  padding: '6px 10px',
+                  background: '#fafafa',
+                  fontSize: 12,
+                  color: '#595959',
+                }}
+              >
+                <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>
+                  子 Agent（Sub-Agent）
+                </div>
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+                  {subAgentLive.map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() =>
+                        setSubAgentModal({
+                          title: s.name,
+                          live: s,
+                          timeline: [],
+                        })
+                      }
+                      style={{
+                        cursor: 'pointer',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 6,
+                        background: '#fff',
+                        padding: '3px 8px',
+                        whiteSpace: 'nowrap',
+                        fontSize: 11,
+                      }}
+                    >
+                      ⚙️ {s.name}
+                      <span style={{ marginLeft: 4, color: '#9ca3af' }}>
+                        {s.status || 'RUNNING'}
+                      </span>
+                    </button>
+                  ))}
+                  {subAgentHistorical.map((h) => (
+                    <button
+                      key={`h-${h.id}`}
+                      type="button"
+                      onClick={() => {
+                        api
+                          .subAgentTimeline(h.id)
+                          .then((tl) =>
+                            setSubAgentModal({
+                              title: h.displayName,
+                              live: undefined,
+                              timeline: tl || [],
+                            }),
+                          )
+                          .catch(() =>
+                            setSubAgentModal({
+                              title: h.displayName,
+                              live: undefined,
+                              timeline: [],
+                            }),
+                          );
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 6,
+                        background: '#fff',
+                        padding: '3px 8px',
+                        whiteSpace: 'nowrap',
+                        fontSize: 11,
+                      }}
+                    >
+                      ⚙️ {h.displayName}
+                      <span style={{ marginLeft: 4, color: '#9ca3af' }}>
+                        {h.status || ''}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {subAgentModal ? (
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 9999,
+                }}
+                onClick={() => setSubAgentModal(null)}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    background: '#fff',
+                    borderRadius: 10,
+                    width: 'min(88vw, 640px)',
+                    maxHeight: '80vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      borderBottom: '1px solid #eef0f3',
+                      fontWeight: 600,
+                      fontSize: 14,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span>⚙️ {subAgentModal.title}</span>
+                    <button
+                      type="button"
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        fontSize: 16,
+                        color: '#9ca3af',
+                      }}
+                      onClick={() => setSubAgentModal(null)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      padding: 12,
+                      overflowY: 'auto',
+                      fontSize: 12,
+                      color: '#4b5563',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      Model Reply
+                    </div>
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        maxHeight: 160,
+                        overflowY: 'auto',
+                        background: '#f9fafb',
+                        padding: 8,
+                        borderRadius: 6,
+                        fontSize: 12,
+                      }}
+                    >
+                      {subAgentModal.live
+                        ? subAgentModal.live.reply || '（无回复）'
+                        : subAgentModal.timeline
+                            .filter((t) => t.activityType === 'llm_interaction')
+                            .map((t) => t.reply || '')
+                            .filter(Boolean)
+                            .join('\n\n') || '（无回复）'}
+                    </pre>
+                    <div style={{ fontWeight: 600, margin: '10px 0 4px' }}>
+                      Tool Calls
+                    </div>
+                    {(
+                      subAgentModal.live
+                        ? subAgentModal.live.toolCalls
+                        : subAgentModal.timeline.filter(
+                            (t) => t.activityType === 'tool_call',
+                          )
+                    ).length === 0 ? (
+                      <div style={{ color: '#9ca3af' }}>（无工具调用）</div>
+                    ) : (
+                      (subAgentModal.live
+                        ? subAgentModal.live.toolCalls
+                        : subAgentModal.timeline.filter(
+                            (t) => t.activityType === 'tool_call',
+                          )
+                      ).map((t: any, i: number) => (
+                        <div
+                          key={`${t.callId ?? t.stepId}-${i}`}
+                          style={{
+                            border: '1px solid #eef0f3',
+                            borderRadius: 6,
+                            padding: 6,
+                            marginBottom: 6,
+                            fontSize: 12,
+                          }}
+                        >
+                          <b>{t.toolName}</b>
+                          <span style={{ marginLeft: 6, color: '#9ca3af' }}>
+                            {t.status || t.toolStatus || ''}
+                          </span>
+                          {t.args || t.argumentsJson ? (
+                            <pre
+                              style={{
+                                whiteSpace: 'pre-wrap',
+                                maxHeight: 80,
+                                overflowY: 'auto',
+                                background: '#f9fafb',
+                                padding: 4,
+                                borderRadius: 4,
+                                fontSize: 11,
+                                margin: '4px 0 0',
+                              }}
+                            >
+                              {t.args || t.argumentsJson}
+                            </pre>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                    <div style={{ fontWeight: 600, margin: '10px 0 4px' }}>
+                      Model Reason
+                    </div>
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        maxHeight: 160,
+                        overflowY: 'auto',
+                        background: '#f9fafb',
+                        padding: 8,
+                        borderRadius: 6,
+                        fontStyle: 'italic',
+                        color: '#6b7280',
+                        fontSize: 12,
+                      }}
+                    >
+                      {subAgentModal.live
+                        ? subAgentModal.live.reasoning || '（无推理）'
+                        : subAgentModal.timeline
+                            .filter((t) => t.activityType === 'llm_interaction')
+                            .map((t) => t.reasoning || '')
+                            .filter(Boolean)
+                            .join('\n\n') || '（无推理）'}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {clarification ? (
               <div className="aw-clarification">
                 <div className="aw-clarification-title">{clarification.title}</div>

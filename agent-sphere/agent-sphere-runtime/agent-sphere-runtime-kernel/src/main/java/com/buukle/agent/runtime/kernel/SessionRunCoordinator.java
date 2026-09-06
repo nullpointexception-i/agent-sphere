@@ -88,7 +88,8 @@ public class SessionRunCoordinator {
                 RLock lock = lock(sessionId);
                 lock.lock();
                 try {
-                    if (inputManager.hasPending(sessionId)) {
+                    // 已取消：丢弃排队消息并转 IDLE，不再为 pending 重启主循环
+                    if (inputManager.hasPending(sessionId) && !sessionRunner.isSessionCancelled(sessionId)) {
                         stateBucket(sessionId).set(State.RUNNING.name());
                         setOwner(sessionId);
                         submitRun(sessionId);

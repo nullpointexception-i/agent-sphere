@@ -11,6 +11,8 @@ import java.util.function.Consumer;
 public class FiberSet implements AutoCloseable {
 
     private static final long POLL_INTERVAL_NANOS = 500_000_000L; // 500ms
+    /** 取消时等待被中断工具线程退出的界内时长（防止取消键被清空后孤儿子 Agent 空窗续跑）。 */
+    private static final long CANCEL_JOIN_NANOS = TimeUnit.SECONDS.toNanos(10);
 
     private final Semaphore semaphore;
     private final ConcurrentLinkedQueue<CompletableFuture<FiberResult>> futures = new ConcurrentLinkedQueue<>();
@@ -18,6 +20,7 @@ public class FiberSet implements AutoCloseable {
     private final long submitTimeoutSeconds;
     private final long executionTimeoutSeconds;
     private Consumer<SingleResult> onResult;
+    private volatile boolean cancelled; // 显式取消（检查器触发）：整批结果不再采集
 
     @FunctionalInterface
     public interface CancellationChecker {
@@ -76,8 +79,12 @@ public class FiberSet implements AutoCloseable {
         try {
             while (true) {
                 if (checker != null && checker.isCancelled()) {
+                    cancelled = true;
                     interruptRunning();
+                    // 先 cancel：被中断任务即便之后返回，也无法把结果写入已取消的 future；
+                    // 再有界 join，等待工具线程真正退出，避免取消键被主循环收口清空后孤儿子 Agent 空窗续跑。
                     for (var f : futures) f.cancel(true);
+                    awaitRunningTerminated();
                     break;
                 }
                 long remaining = deadline - System.nanoTime();
@@ -100,6 +107,10 @@ public class FiberSet implements AutoCloseable {
         }
 
         ConcurrentHashMap<String, String> results = new ConcurrentHashMap<>();
+        if (cancelled) {
+            // 显式取消：整批结果已无意义（主循环 break 后不再使用），且避免“被中断任务”残留结果
+            return results;
+        }
         for (CompletableFuture<FiberResult> future : futures) {
             try {
                 FiberResult fr = future.getNow(null);
@@ -121,6 +132,35 @@ public class FiberSet implements AutoCloseable {
             Thread t = entry.getValue();
             if (t != null && !entry.getKey().isDone()) {
                 t.interrupt();
+            }
+        }
+    }
+
+    /**
+     * 有界等待被中断的工具线程退出，再让主循环收口。
+     * 若在中断后立即返回，孤儿子 Agent（skill）会唤醒后重查取消键——而取消键可能在收口时已被
+     * 清空 → 空窗续跑。这里等它们真正终止：它们唤醒后重查时取消键仍在位 → 以 cancelled 退出。
+     */
+    private void awaitRunningTerminated() {
+        long deadline = System.nanoTime() + CANCEL_JOIN_NANOS;
+        boolean reInterrupted = false;
+        while (!runningThreads.isEmpty()) {
+            long remaining = deadline - System.nanoTime();
+            if (remaining <= 0) {
+                log.warn("Fiber cancel join timed out after {}s; {} fiber(s) still running",
+                        TimeUnit.NANOSECONDS.toSeconds(CANCEL_JOIN_NANOS), runningThreads.size());
+                return;
+            }
+            try {
+                Thread.sleep(Math.min(200, TimeUnit.NANOSECONDS.toMillis(remaining)));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            // 过半时长后二次 interrupt，防止一次中断被阻塞点吞掉
+            if (!reInterrupted && remaining < CANCEL_JOIN_NANOS / 2) {
+                reInterrupted = true;
+                interruptRunning();
             }
         }
     }

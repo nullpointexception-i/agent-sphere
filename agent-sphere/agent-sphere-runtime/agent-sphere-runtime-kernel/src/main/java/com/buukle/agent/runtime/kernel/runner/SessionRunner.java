@@ -114,7 +114,8 @@ public class SessionRunner {
         return runId != null && runCancelSet(runId).contains(CANCEL_MARKER);
     }
 
-    private boolean isSessionCancelled(Long sessionId) {
+    /** 会话是否处于取消态（供协调器在 run 异常退出/重启决策时判断）。 */
+    public boolean isSessionCancelled(Long sessionId) {
         return sessionId != null && sessionCancelSet(sessionId).contains(CANCEL_MARKER);
     }
 
@@ -144,6 +145,17 @@ public class SessionRunner {
     }
 
     public void run(Long sessionId) {
+        try {
+            runInternal(sessionId);
+        } finally {
+            // 无论正常/取消/异常退出，都必须清空输入队列/steer：
+            // 协调器据此判断是否还有 pending；异常漏清会导致取消后被误判“还有消息”而重启主循环。
+            inputManager.clear(sessionId);
+            ctxCache().remove(sessionId);
+        }
+    }
+
+    private void runInternal(Long sessionId) {
         int loopCount = 0;
         Long currentRunId = redissonClient.<Long>getBucket(
                 DistributedRuntimeConstants.sessionPendingRunKey(sessionId)).getAndDelete();
@@ -158,6 +170,8 @@ public class SessionRunner {
             maxLoopCount = taskLoopLimit;
             log.info("Session {} uses task loop limit {}", sessionId, taskLoopLimit);
         }
+        log.info("Run {} execution source={}, effective loop limit={}", currentRunId,
+                taskLoopLimit != null ? "TASK" : "CHAT", maxLoopCount);
         int compactionRetries = 0;
         loop:
         while (loopCount < maxLoopCount) {
@@ -329,10 +343,22 @@ public class SessionRunner {
                                 .setPublishId(runPublishId)));
             }
 
+            // 含 skill 工具的轮次：外层 fiber 整批执行超时要容得下 skill 自身预算（skill 会按自己的 deadline 自终止），
+            // 否则长 skill（如 boss 寻访多步操作）会在默认 30s 被执行超时打断 → "Tool execution lost"/InterruptedException。
+            Duration batchExecutionTimeout = properties.getTool().getExecutionTimeout();
+            boolean hasSkillTool = turn.toolCalls().stream()
+                    .anyMatch(tc -> toolExecutor.isSkillTool(tc.name(), tools));
+            if (hasSkillTool) {
+                Duration skillBudget = properties.getSkill().getExecutionTimeout();
+                if (skillBudget != null && skillBudget.compareTo(batchExecutionTimeout) > 0) {
+                    batchExecutionTimeout = skillBudget;
+                }
+            }
+
             FiberSet fibers = new FiberSet(
                     properties.getTool().getMaxParallel(),
                     properties.getTool().getSubmitTimeout(),
-                    properties.getTool().getExecutionTimeout());
+                    batchExecutionTimeout);
             final Long sid = sessionId;
             final Long rid = currentRunId;
             final List<RuntimeTool> tl = tools;
@@ -480,9 +506,6 @@ public class SessionRunner {
                             .setAssistantReply(RunnerConstants.CANCEL_MSG)
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
         }
-
-        inputManager.clear(sessionId);
-        ctxCache().remove(sessionId);
     }
 
     /** 达到轮次上限强收口时标记 run（任务守卫据 loopCapped 判失败，避免"半成品"冒充完成）。 */

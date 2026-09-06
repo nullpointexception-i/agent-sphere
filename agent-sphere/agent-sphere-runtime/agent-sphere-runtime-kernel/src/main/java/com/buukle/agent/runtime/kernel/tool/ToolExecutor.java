@@ -3,6 +3,7 @@ package com.buukle.agent.runtime.kernel.tool;
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
+import com.buukle.agent.common.skill.ToolRefs;
 import com.buukle.agent.instance.dtvo.dto.TodowriteResultDTO;
 import com.buukle.agent.instance.dtvo.vo.SessionTodoVO;
 import com.buukle.agent.instance.spi.ClarificationSpi;
@@ -128,7 +129,10 @@ public class ToolExecutor {
                 if (skillExecutor == null) {
                     return "{\"error\":\"Skill executor unavailable\"}";
                 }
-                return skillExecutor.execute(tool, args, ctx, tools);
+                // 携带触发本 skill 的工具调用 id 作为 parentToolCallId（sub_agent_run.parent_tool_call_id 关联回溯）
+                SkillExecutionContext skillCtx = ctx.child(
+                        ctx.getSkillDepth() + 1, ctx.getSkillStack(), ctx.getInheritedAllowedToolRefs(), tc.id());
+                return skillExecutor.execute(tool, args, skillCtx, tools);
             }
             return JSON_ERROR_UNSUPPORTED_TYPE + type + "\"}";
         } catch (Exception e) {
@@ -155,6 +159,16 @@ public class ToolExecutor {
                 .filter(n -> n != null && !n.isBlank())
                 .findFirst()
                 .orElse(toolName);
+    }
+
+    /** 判断某个工具调用是否为 skill 工具（toolRef 形如 "skill:<id>"），用于放宽外层 fiber 超时。 */
+    public boolean isSkillTool(String toolName, List<RuntimeTool> tools) {
+        if (toolName == null || tools == null || tools.isEmpty()) return false;
+        String prefix = ToolRefs.TYPE_SKILL + ToolRefs.SEPARATOR;
+        return tools.stream().anyMatch(t ->
+                toolName.equals(t.getLlmToolName())
+                        && t.getToolRef() != null
+                        && t.getToolRef().startsWith(prefix));
     }
 
     private void persistTodosFromResult(Long sessionId, Long runId, String resultJson) {

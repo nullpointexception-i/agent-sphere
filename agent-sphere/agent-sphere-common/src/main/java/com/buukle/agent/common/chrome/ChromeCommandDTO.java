@@ -35,6 +35,7 @@ public class ChromeCommandDTO {
     private String scope;
     private Boolean submit;
     private java.util.List<String> fields;
+    private java.util.List<String> selectors;
     private Integer textMax;
 
     public ChromeCommandDTO() {
@@ -178,6 +179,11 @@ public class ChromeCommandDTO {
 
     public ChromeCommandDTO withFields(java.util.List<String> fields) {
         this.fields = fields;
+        return this;
+    }
+
+    public ChromeCommandDTO withSelectors(java.util.List<String> selectors) {
+        this.selectors = selectors;
         return this;
     }
 

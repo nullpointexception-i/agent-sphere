@@ -20,6 +20,12 @@ public class AgentLlmInteractionRecord {
     private Integer durationMs;
     private String errorMessage;
     private Boolean success;
+    /** 该次 LLM 调用独立的 thinking(reasoning_content) 全文；与 response_body(reply+合并) 拆分。 */
+    private String reasoning;
+    /** reply 正文（与 reasoning 拆分后的纯回复文本；缺省保留 response_body）。 */
+    private String replyContent;
+    /** 归属的子 Agent 运行（NULL=主 Agent）。 */
+    private Long subAgentRunId;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

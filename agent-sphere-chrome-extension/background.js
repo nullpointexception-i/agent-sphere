@@ -14,6 +14,12 @@ console.log('[AgentSphere] Service Worker started', new Date().toISOString());
 
 let token = '';
 let baseUrl = '';
+// 最近一次 navigate 的目标 origin：受控 tab 若离开该站点则拒绝继续操作（防跑偏）。
+let targetOrigin = null;
+// 命令并发守卫：导航重建 content script 期间悬空的命令不再堆积，避免后端 10s 空等。
+// 用时间戳租约：单命令超时（45s）后自动释放，防一条卡死命令锁死整个 session。
+const COMMAND_LEASE_MS = 45000;
+let commandInFlightAt = 0;
 
 // --- Keep the offscreen document (SSE host) alive / recreate if the browser closed it ---
 function startOffscreenKeepalive() {
@@ -221,12 +227,161 @@ function mapErrorCategory(e) {
 
 // --- Command execution ---
 async function executeInPage(commandId, action, params, sessionId) {
+  if (commandInFlightAt && Date.now() - commandInFlightAt < COMMAND_LEASE_MS) {
+    sendCallbackSafe(
+      commandId,
+      failResult('上一命令仍在执行（并发守卫），请稍候重试', ErrorCategory.UNKNOWN),
+      tabManager.getControlled(),
+      sessionId,
+    );
+    return;
+  }
+  if (commandInFlightAt) {
+    console.warn('[AgentSphere] command lease expired, releasing stuck guard');
+  }
+  commandInFlightAt = Date.now();
   const t0 = Date.now();
   try {
     await executeInPageInner(commandId, action, params, sessionId);
   } finally {
+    commandInFlightAt = 0;
     console.log(`[ChromeCmd] action=${action} tab=${params.tabId || tabManager.getControlled() || '-'} ms=${Date.now() - t0}`);
   }
+}
+
+// 受控 tab 必须仍在目标站点内，否则拒绝操作（run 26 曾跑偏到 localhost:8001）。
+async function assertControlledHost(tabId) {
+  if (!targetOrigin) return null;
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (!tab || !tab.url) return null;
+  try {
+    const host = new URL(tab.url).host;
+    if (host !== new URL(targetOrigin).host) {
+      return `受控 tab 已离开目标站点（实际 ${tab.url}，目标 ${targetOrigin}）。请先 navigate 回主站点再继续，勿在错误页面操作。`;
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+const KEY_CODE_MAP = {
+  enter: ['Enter', 'Enter', 13],
+  escape: ['Escape', 'Escape', 27],
+  tab: ['Tab', 'Tab', 9],
+  arrowdown: ['ArrowDown', 'ArrowDown', 40],
+  arrowup: ['ArrowUp', 'ArrowUp', 38],
+  arrowleft: ['ArrowLeft', 'ArrowLeft', 37],
+  arrowright: ['ArrowRight', 'ArrowRight', 39],
+  backspace: ['Backspace', 'Backspace', 8],
+  ' ': ['Space', 'Space', 32],
+  space: ['Space', 'Space', 32],
+};
+function keyInfoOf(key) {
+  const k = String(key == null ? 'Enter' : key).toLowerCase();
+  const m = KEY_CODE_MAP[k] || ['Enter', 'Enter', 13];
+  return { key: m[0], code: m[1], keyCode: m[2] };
+}
+
+// 写动作统一走 CDP 受信输入：内容脚本先跨帧定位算出主视口坐标，
+// 再由 Input.dispatchMouseEvent / Input.insertText / Input.dispatchKeyEvent 派发（isTrusted=true）。
+const WRITE_ACTIONS = new Set(['click', 'type', 'key', 'hover']);
+
+function hasLocator(params) {
+  return !!(params && (params.selector || params.text || params.ref != null));
+}
+
+async function locatePoint(tabId, params) {
+  const loc = await tabManager.askContent(tabId, {
+    type: 'browser_operation',
+    action: 'locate',
+    params,
+  }, 2, params && params.frameId);
+  const d = loc && loc.data;
+  if (!d) return null;
+  if (d.ok === false) return { ok: false, error: d.error, matches: d.matches, suggested: d.suggested };
+  if (!d.point || typeof d.point.x !== 'number' || typeof d.point.y !== 'number') return null;
+  return { ok: true, point: d.point, tag: d.tag, text: d.text, count: d.count };
+}
+
+async function cdpAct(tabId, action, params, loc) {
+  switch (action) {
+    case 'click':
+      await cdpClient.nativeClick(tabId, loc.point.x, loc.point.y);
+      break;
+    case 'hover':
+      await cdpClient.nativeHover(tabId, loc.point.x, loc.point.y);
+      break;
+    case 'type':
+      await cdpClient.nativeClick(tabId, loc.point.x, loc.point.y); // 先受信聚焦
+      if (params.append !== true) await cdpClient.clearInput(tabId); // insertText 只追加，整字段替换前先清空
+      await cdpClient.insertText(tabId, params.text || '');
+      if (params.submit) await cdpClient.nativeKeyPress(tabId, 'Enter', 'Enter', 13);
+      break;
+    case 'key': {
+      if (loc) await cdpClient.nativeClick(tabId, loc.point.x, loc.point.y); // 可选聚焦到给定元素
+      const ki = keyInfoOf(params.key);
+      await cdpClient.nativeKeyPress(tabId, ki.key, ki.code, ki.keyCode);
+      break;
+    }
+  }
+}
+
+// 写动作入口：locate → CDP；未命中/歧义/异常即报错，不降级不重试。
+async function writeAction(commandId, action, params, targetTabId, sessionId) {
+  let loc = null;
+  if (hasLocator(params)) {
+    loc = await locatePoint(targetTabId, params);
+    if (!loc || loc.ok === false) {
+      if (loc && loc.error === 'ambiguous') {
+        const scopeHint = (loc.suggested && loc.suggested.length)
+          ? '；建议容器 scope：' + loc.suggested.join(' / ')
+          : '；加 index/occurrence 或 scope';
+        sendCallbackSafe(commandId, failResult(
+          `Ambiguous: ${loc.matches || 2} on-screen matches for ${action}${scopeHint}`,
+          ErrorCategory.AMBIGUOUS,
+        ), targetTabId, sessionId);
+      } else {
+        const what = params.ref != null ? 'ref ' + params.ref : (params.selector || params.text);
+        sendCallbackSafe(commandId, failResult('Element not found: ' + what, ErrorCategory.NOT_FOUND), targetTabId, sessionId);
+      }
+      return null;
+    }
+  } else if (action !== 'key') {
+    sendCallbackSafe(commandId, failResult(action + ' requires selector/text/ref', ErrorCategory.NOT_FOUND), targetTabId, sessionId);
+    return null;
+  }
+  try {
+    await cdpAct(targetTabId, action, params, loc);
+  } catch (e) {
+    console.warn('[AgentSphere] cdpAct failed:', e?.message);
+    sendCallbackSafe(commandId, failResult(action + ' failed: ' + e.message, mapErrorCategory(e)), targetTabId, sessionId);
+    return null;
+  }
+  const data = { action, _executed: true };
+  if (loc) {
+    data.tag = loc.tag;
+    data.text = loc.text;
+  }
+  if (action === 'type' && hasLocator(params)) {
+    // 回读输入框当前值，供模型核对是否被累加/残留旧词（_echo_ok 表示已覆盖目标文本）。
+    try {
+      const echo = await tabManager.askContent(targetTabId, {
+        type: 'browser_operation',
+        action: 'readInput',
+        params: { selector: params.selector, text: params.text, ref: params.ref, scope: params.scope, occurrence: params.occurrence, frameId: params.frameId },
+      }, 2, params.frameId);
+      const e = echo && echo.data;
+      if (e && e.ok) {
+        data._echo = e.value;
+        data._echo_ok = (e.value || '') === (params.text || '');
+      }
+    } catch (err) {
+      console.warn('[AgentSphere] readInput echo failed:', err?.message);
+    }
+  }
+  const tabNow = await chrome.tabs.get(targetTabId).catch(() => null);
+  data._url = (tabNow && tabNow.url) || '';
+  sendCallbackSafe(commandId, okResult(data, 'cdp'), targetTabId, sessionId);
+  return data;
 }
 
 async function executeInPageInner(commandId, action, params, sessionId) {
@@ -242,6 +397,11 @@ async function executeInPageInner(commandId, action, params, sessionId) {
         sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
         return;
       }
+      const hostErr = await assertControlledHost(targetTabId);
+      if (hostErr) {
+        sendCallbackSafe(commandId, failResult(hostErr, ErrorCategory.WRONG_SITE), targetTabId, sessionId);
+        return;
+      }
       const result = await executeJsOnTab(targetTabId, params.code);
       sendCallbackSafe(commandId, result, targetTabId, sessionId);
       return;
@@ -252,6 +412,11 @@ async function executeInPageInner(commandId, action, params, sessionId) {
       const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
       if (!targetTabId) {
         sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
+        return;
+      }
+      const hostErr = await assertControlledHost(targetTabId);
+      if (hostErr) {
+        sendCallbackSafe(commandId, failResult(hostErr, ErrorCategory.WRONG_SITE), targetTabId, sessionId);
         return;
       }
       try {
@@ -292,39 +457,24 @@ async function executeInPageInner(commandId, action, params, sessionId) {
       sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
       return;
     }
+    const hostErr = await assertControlledHost(targetTabId);
+    if (hostErr) {
+      sendCallbackSafe(commandId, failResult(hostErr, ErrorCategory.WRONG_SITE), targetTabId, sessionId);
+      return;
+    }
 
+    // 写动作：CDP 受信输入（唯一变更路径）
+    if (WRITE_ACTIONS.has(action)) {
+      await writeAction(commandId, action, params, targetTabId, sessionId);
+      return;
+    }
+
+    // 其余动作 → 内容脚本（只读 / wait / scroll / upload / dialog 等）
     const result = await tabManager.askContent(targetTabId, {
       type: 'browser_operation',
       action,
       params,
     }, 3, params.frameId);
-
-    // Form submit button detected → navigate to extracted URL directly
-    if (result?.data?._submitUrl) {
-      executeInPage(commandId, 'navigate', { url: result.data._submitUrl }, sessionId);
-      return;
-    }
-
-    // New tab auto-follow: click opened a new tab → switch to it
-    if (action === 'click' && result?.data?._newTabExpected) {
-      await new Promise((resolve) => {
-        if (tabManager.tabFollowPending) return resolve();
-        tabManager.tabFollowResolve = resolve;
-        setTimeout(() => { tabManager.tabFollowResolve = null; resolve(); }, 5000);
-      });
-      if (tabManager.tabFollowPending) {
-        await tabManager.waitForTabComplete(tabManager.tabFollowPending.newTabId, 10000);
-        await waitIdle(tabManager.tabFollowPending.newTabId);
-        const finalTab = await chrome.tabs.get(tabManager.tabFollowPending.newTabId).catch(() => null);
-        if (finalTab) tabManager.tabFollowPending.url = finalTab.url || tabManager.tabFollowPending.url;
-        result.data._newTabId = tabManager.tabFollowPending.newTabId;
-        result.data._newTabUrl = tabManager.tabFollowPending.url;
-        tabManager.groupTab(tabManager.tabFollowPending.newTabId);
-        sendCallbackSafe(commandId, { ...result, action, detail: params.selector || '' }, tabManager.tabFollowPending.newTabId, sessionId);
-        tabManager.tabFollowPending = null;
-        return;
-      }
-    }
 
     sendCallbackSafe(commandId, { ...result, action, detail: params.selector || params.url || '' }, targetTabId, sessionId);
   } catch (e) {
@@ -338,11 +488,15 @@ async function handleNavigate(commandId, params, sessionId) {
   if (params.tabId) {
     try {
       const tab = await chrome.tabs.update(params.tabId, { url: params.url });
-      await tabManager.injectContentScript(tab.id);
       await tabManager.waitForTabComplete(tab.id, 10000);
       await waitIdle(tab.id);
+      if (!await tabManager.ensureContentScript(tab.id)) {
+        sendCallbackSafe(commandId, failResult('Content script unavailable after navigation', ErrorCategory.INJECT_FAILED), tab.id, sessionId);
+        return;
+      }
       const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
       const finalUrl = finalTab.url || params.url;
+      targetOrigin = originOf(finalUrl) || targetOrigin;
       tabManager.setControlled(tab.id);
       tabManager.groupTab(tab.id);
       sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
@@ -357,7 +511,12 @@ async function handleNavigate(commandId, params, sessionId) {
     try {
       const existingTab = await chrome.tabs.get(tabManager.getControlled());
       if (existingTab?.url === params.url || existingTab?.pendingUrl === params.url) {
+        if (!await tabManager.ensureContentScript(existingTab.id)) {
+          sendCallbackSafe(commandId, failResult('Content script unavailable in existing tab', ErrorCategory.INJECT_FAILED), existingTab.id, sessionId);
+          return;
+        }
         const existingUrl = existingTab.url || params.url;
+        targetOrigin = originOf(existingUrl) || targetOrigin;
         sendCallbackSafe(commandId, okResult({ tabId: existingTab.id, url: existingUrl, redirected: existingUrl !== params.url }, 'navigate'), existingTab.id, sessionId);
         return;
       }
@@ -368,14 +527,26 @@ async function handleNavigate(commandId, params, sessionId) {
   }
 
   const tab = await chrome.tabs.create({ url: params.url, active: false });
-  await tabManager.injectContentScript(tab.id);
   await tabManager.waitForTabComplete(tab.id, 10000);
   await waitIdle(tab.id);
+  if (!await tabManager.ensureContentScript(tab.id)) {
+    sendCallbackSafe(commandId, failResult('Content script unavailable after navigation', ErrorCategory.INJECT_FAILED), tab.id, sessionId);
+    return;
+  }
   const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
   const finalUrl = finalTab.url || params.url;
+  targetOrigin = originOf(finalUrl) || targetOrigin;
   tabManager.setControlled(tab.id);
   tabManager.groupTab(tab.id);
   sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
+}
+
+function originOf(url) {
+  try {
+    return new URL(url).origin;
+  } catch (e) {
+    return null;
+  }
 }
 
 // --- executeJS: two-tier execution, debugger only for strict-CSP sites ---

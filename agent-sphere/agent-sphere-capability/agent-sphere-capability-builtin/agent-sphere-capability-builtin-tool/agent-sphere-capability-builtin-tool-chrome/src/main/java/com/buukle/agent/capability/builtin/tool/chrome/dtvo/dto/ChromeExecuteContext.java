@@ -97,6 +97,9 @@ public class ChromeExecuteContext extends ExecuteContext {
     @Schema(example = "[\"text\",\".name\",\"@data-id\"]", description = "getContent mode:extract 的字段：text=元素文本；.xxx=相对子选择器取首个子元素文本；@attr=取属性；href/value 为内置字段")
     private List<String> fields;
 
+    @Schema(example = "[\".dropdown-city\",\".degree-condition-ui\"]", description = "getContent mode:containers 的容器选择器列表（跨同源 iframe 探测 present/count/frame），也可用逗号分隔的单个 selector")
+    private List<String> selectors;
+
     @Schema(example = "200", description = "getContent mode:extract / textMax：单字段文本截断长度（默认200）")
     private Integer textMax;
 }

@@ -33,6 +33,9 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         record.setDurationMs(vo.getDurationMs());
         record.setErrorMessage(vo.getErrorMessage());
         record.setSuccess(vo.getSuccess());
+        record.setReasoning(vo.getReasoning());
+        record.setReplyContent(vo.getReplyContent());
+        record.setSubAgentRunId(vo.getSubAgentRunId());
         if (vo.getCreatedBy() != null) {
             record.setCreatedBy(vo.getCreatedBy());
         }
@@ -73,6 +76,9 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         vo.setDurationMs(record.getDurationMs());
         vo.setErrorMessage(record.getErrorMessage());
         vo.setSuccess(record.getSuccess());
+        vo.setReasoning(record.getReasoning());
+        vo.setReplyContent(record.getReplyContent());
+        vo.setSubAgentRunId(record.getSubAgentRunId());
         if (record.getCreatedAt() != null) {
             vo.setCreatedAt(record.getCreatedAt().format(DTF));
         }

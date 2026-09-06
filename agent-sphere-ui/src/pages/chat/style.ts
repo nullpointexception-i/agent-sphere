@@ -87,7 +87,9 @@ export const useStyles = createStyles(({ css, token }) => ({
 
   messages: css`
     flex: 1;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: ${token.paddingMD}px;
     display: flex;
     flex-direction: column;
@@ -96,6 +98,8 @@ export const useStyles = createStyles(({ css, token }) => ({
 
     > * {
       width: 100%;
+      min-width: 0;
+      flex-shrink: 0;
     }
   `,
 

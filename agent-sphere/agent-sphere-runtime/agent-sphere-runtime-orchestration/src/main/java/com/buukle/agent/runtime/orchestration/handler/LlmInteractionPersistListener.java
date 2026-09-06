@@ -31,6 +31,9 @@ public class LlmInteractionPersistListener {
         vo.setModelName(event.getModelName());
         vo.setRequestBody(event.getRequestBody());
         vo.setResponseBody(event.getResponseBody());
+        vo.setReasoning(event.getReasoning());
+        vo.setReplyContent(event.getReply());
+        vo.setSubAgentRunId(event.getSubAgentRunId());
         vo.setDurationMs((int) event.getDurationMs());
         vo.setSuccess(event.isSuccess());
         vo.setErrorMessage(event.getErrorMessage());

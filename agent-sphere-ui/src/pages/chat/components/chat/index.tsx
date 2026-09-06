@@ -1,10 +1,12 @@
 import { useIntl } from '@umijs/max';
 import { Button } from 'antd';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStyles } from '../../style';
 import Footer from './Footer';
 import Header from './Header';
 import MessageList from './MessageList';
+import SubAgentDock from './SubAgentDock';
+import type { SubAgentTimelineItem } from './subAgentTypes';
 
 interface ChatMainProps {
   currentSession: any;
@@ -27,6 +29,11 @@ interface ChatMainProps {
   onExpandOpen: () => void;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
+  subAgentLive: any[];
+  subAgentHistorical: any[];
+  onLoadSubAgentTimeline: (id: number) => Promise<SubAgentTimelineItem[]>;
+  mainTimeline: any[];
+  historyTimeline: any[];
 }
 
 export default function ChatMain({
@@ -50,11 +57,32 @@ export default function ChatMain({
   onExpandOpen,
   sessionPanelOpen,
   onTogglePanel,
+  subAgentLive,
+  subAgentHistorical,
+  onLoadSubAgentTimeline,
+  mainTimeline,
+  historyTimeline,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const intl = useIntl();
   const { styles } = useStyles();
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+
+  // 单一滚动容器（.messages）接手消息滚动：仅在用户已接近底部时滚到底（含子 Agent chip 栏），
+  // 不打断向上回看历史 / 加载更多。
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
+  }, [
+    messages,
+    mainTimeline,
+    historyTimeline,
+    subAgentLive,
+    subAgentHistorical,
+  ]);
 
   const hasMessages = messages.some(
     (m: any) => m.content && m.content !== '{}',
@@ -89,7 +117,7 @@ export default function ChatMain({
         onTogglePanel={onTogglePanel}
       />
       {hasMessages ? (
-        <div className={styles.messages}>
+        <div ref={messagesRef} className={styles.messages}>
           <div ref={loadMoreRef} className={styles.loadMore}>
             {hasMoreHistory && (
               <Button type="link" size="small" onClick={onLoadMoreHistory}>
@@ -105,6 +133,13 @@ export default function ChatMain({
             collapsedKeys={collapsedKeys}
             onCollapsedKeysChange={onCollapsedKeysChange}
             onCancelClarification={onCancelClarification}
+            mainTimeline={mainTimeline}
+            historyTimeline={historyTimeline}
+          />
+          <SubAgentDock
+            live={subAgentLive}
+            historical={subAgentHistorical}
+            loadTimeline={onLoadSubAgentTimeline}
           />
         </div>
       ) : (

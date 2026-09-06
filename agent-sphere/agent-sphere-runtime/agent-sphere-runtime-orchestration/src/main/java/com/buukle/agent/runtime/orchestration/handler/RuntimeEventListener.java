@@ -19,6 +19,7 @@ import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEnvelope;
 import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEvent;
 import com.buukle.agent.runtime.orchestration.sse.SseEventCache;
+import com.buukle.agent.util.TextSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -97,6 +98,7 @@ public class RuntimeEventListener {
                 .setArtifact(src.getArtifact())
                 .setArgumentsJson(src.getArgumentsJson())
                 .setErrorMessage(src.getErrorMessage())
+                .setSubAgentRunId(src.getSubAgentRunId())
                 .setType(src.getType());
 
         String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
@@ -239,7 +241,8 @@ public class RuntimeEventListener {
         if (reasoning.length() > maxChars) {
             reasoning = reasoning.substring(0, maxChars);
         }
-        run.setReasoning(reasoning);
+        // 落库防御：剥 NUL，避免 PG text 列拒绝导致 run 收口更新抛异常
+        run.setReasoning(TextSanitizer.sanitize(reasoning));
     }
 
     private void handleToolCallLifecycle(RuntimeEventDataVO data, ToolCallStatus status) {
@@ -262,7 +265,7 @@ public class RuntimeEventListener {
                 AgentToolCallRecordVO vo = toolCallRecordSpi.createRecord(
                         stepId, callId, data.getRunId(), data.getSessionId(),
                         data.getToolName() != null ? data.getToolName() : "",
-                        data.getDisplayNameCn(), data.getDisplayNameEn(), rawArgs);
+                        data.getDisplayNameCn(), data.getDisplayNameEn(), rawArgs, data.getSubAgentRunId());
                 if (compressedArgs != null) {
                     toolCallRecordSpi.updateCompressedArguments(vo.getId(), compressedArgs);
                 }

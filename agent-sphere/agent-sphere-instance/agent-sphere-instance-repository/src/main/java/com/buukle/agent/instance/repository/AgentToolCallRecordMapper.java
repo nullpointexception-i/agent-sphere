@@ -22,13 +22,13 @@ public interface AgentToolCallRecordMapper extends BaseMapper<AgentToolCallRecor
 
     @Select("""
             SELECT id, activity_type, created_at, session_id,
-                   interaction_type, model_name, request_body, response_body, http_status,
+                   interaction_type, model_name, request_body, response_body, reasoning, reply_content, http_status,
                    duration_ms, llm_error_message, success,
                    step_id, tool_name, display_name_cn, display_name_en,
                    arguments_json, artifact, tool_status, tool_error_message
             FROM (
               SELECT id, 'llm_interaction' AS activity_type, created_at, session_id,
-                     interaction_type, model_name, request_body, response_body, http_status,
+                     interaction_type, model_name, request_body, response_body, reasoning, reply_content, http_status,
                      duration_ms, error_message AS llm_error_message, success,
                      NULL AS step_id, NULL AS tool_name, NULL AS display_name_cn, NULL AS display_name_en,
                      NULL AS arguments_json, NULL AS artifact, NULL AS tool_status, NULL AS tool_error_message
@@ -36,7 +36,7 @@ public interface AgentToolCallRecordMapper extends BaseMapper<AgentToolCallRecor
               WHERE run_id = #{runId} AND delete_flag = 0
               UNION ALL
               SELECT id, 'tool_call', created_at, session_id,
-                     NULL, NULL, NULL, NULL, NULL,
+                     NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                      NULL, NULL, NULL,
                      step_id, tool_name, display_name_cn, display_name_en, arguments_json, artifact, status, error_message
               FROM agent_tool_call_record

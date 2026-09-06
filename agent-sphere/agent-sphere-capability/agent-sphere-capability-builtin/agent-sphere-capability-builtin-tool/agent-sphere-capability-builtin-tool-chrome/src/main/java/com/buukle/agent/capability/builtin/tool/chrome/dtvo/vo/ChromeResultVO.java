@@ -29,6 +29,9 @@ public class ChromeResultVO extends ExecuteResult {
     @Schema(example = "code did not return a value; may not have executed", description = "executeJS执行的可疑提示（如可能被CSP拦截、值不可序列化），agent收到后不应盲目重试")
     private String warning;
 
+    @Schema(example = "0", description = "命令尝试的目标 frameId（0=主框架；null=全部广播）")
+    private Integer attemptedFrameId;
+
     public static ChromeResultVO ok(Object data) {
         ChromeResultVO r = new ChromeResultVO();
         r.success = true;

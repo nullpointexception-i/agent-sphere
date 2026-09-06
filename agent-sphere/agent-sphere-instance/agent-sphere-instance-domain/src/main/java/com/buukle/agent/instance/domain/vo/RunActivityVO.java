@@ -15,6 +15,8 @@ public class RunActivityVO implements Serializable {
     private String modelName;
     private String requestBody;
     private String responseBody;
+    private String reasoning;
+    private String replyContent;
     private Integer httpStatus;
     private Integer durationMs;
     private String llmErrorMessage;

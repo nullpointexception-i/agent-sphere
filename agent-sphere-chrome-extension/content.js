@@ -211,6 +211,10 @@
 
   // --- Listen for browser operation commands from background ---
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'agent_sphere_ping') {
+      sendResponse({ success: true, ready: true, url: location.href });
+      return false;
+    }
     if (msg.type === 'browser_operation') {
       execute(msg.action, msg.params).then(sendResponse);
       return true;
@@ -236,140 +240,64 @@
     try {
       highlightElement(params.selector);
       switch (action) {
-      case 'navigate':
-        return { success: true };
+      // 只读回读输入框当前值（不滚动、不受歧义/在屏约束）。供 type 后核对是否被累加/残留。
+      case 'readInput': {
+          let el = null;
+          if (params.ref != null) el = AS.locateByRef(params.ref, params.frameId);
+          else if (params.selector) el = AS.querySelectorAllCrossFrames(params.selector, params.scope, params.frameId)[0] || null;
+          else if (params.text) el = AS.locateByText(params.text, params.occurrence, params.scope, params.frameId);
+          if (!el) return { success: true, data: { ok: false, found: false } };
+          let value = '';
+          try {
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') value = el.value || '';
+            else if (el.isContentEditable) value = el.textContent || '';
+            else value = el.value || '';
+          } catch (e) { /* ignore */ }
+          return { success: true, data: { ok: true, found: true, value, frame: frameOf(el) } };
+        }
 
-      case 'click': {
-          // 等待元素出现且可交互（动态页面/慢加载）
-          const el = await AS.waitForElement(params, params.waitMs || 3000);
-          if (!el) {
-            return { success: false, error: 'Element not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector || params.text), errorCategory: 'not_found' };
+      // 内部定位：跨帧找到元素并计算主视口坐标，供 background 走 CDP 受信输入。
+      case 'locate': {
+          const t0 = Date.now();
+          const wait = params.waitMs || 3000;
+          let resolved = AS.resolveActionTarget(params);
+          while ((!resolved.ok && resolved.error === 'not_found') && Date.now() - t0 < wait) {
+            await new Promise((r) => setTimeout(r, 150));
+            resolved = AS.resolveActionTarget(params);
           }
-          const isSubmitBtn = (el.tagName === 'BUTTON' && el.type === 'submit')
-            || (el.tagName === 'INPUT' && el.type === 'submit');
-          if (isSubmitBtn && el.form) {
-            const formData = new FormData(el.form);
-            const url = new URL(el.form.action || location.href);
-            for (const [key, val] of formData.entries()) {
-              url.searchParams.set(key, val);
+          if (!resolved.ok) {
+            if (resolved.error === 'ambiguous') {
+              return { success: true, data: { ok: false, error: 'ambiguous', matches: resolved.matches, suggested: resolved.suggested } };
             }
-            return { success: true, data: { _submitUrl: url.href, tag: 'form', text: el.textContent?.trim().slice(0, 100) } };
+            return { success: false, error: 'Element not found', errorCategory: 'not_found' };
           }
-          if (el.tagName === 'FORM') {
-            const formData = new FormData(el);
-            const url = new URL(el.action || location.href);
-            for (const [key, val] of formData.entries()) {
-              url.searchParams.set(key, val);
-            }
-            return { success: true, data: { _submitUrl: url.href, tag: 'form' } };
-          }
-          const anchor = el.closest('a');
-          const newTabExpected = !!(anchor?.target === '_blank')
-            || !!(el.target === '_blank')
-            || !!(el.closest('[onclick*="window.open"]'));
-          const urlBefore = location.href;
-          const domBefore = domFingerprint();
-          // Automa-style synthetic mouse events + click() (React-friendly)
+          const el = resolved.el;
+          // 屏外/离屏元素先拉进视口再算坐标；仍不可点则 not_found（绝不盲点）。
           try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* ignore */ }
-          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, view: window }));
-          el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, view: window }));
-          el.click();
-          let urlAfter = urlBefore;
-          if (!newTabExpected) {
-            for (let i = 0; i < 5; i++) {
-              if (location.href !== urlBefore) { urlAfter = location.href; break; }
-              await new Promise((r) => setTimeout(r, 100));
-            }
-          }
-          // 动作后短 settle，避免 agent 立即重读（可用 params.timeout 覆盖）
-          const settleMs = Math.min(params.timeout && params.timeout > 0 ? params.timeout * 1000 : 250, 5000);
-          await new Promise((r) => setTimeout(r, settleMs));
+          await new Promise((r) => setTimeout(r, 60));
+          const point = AS.mainFramePoint(el);
+          if (!point) return { success: false, error: 'Element not clickable (off-screen)', errorCategory: 'not_found' };
           return {
             success: true,
             data: {
-              tag: el.tagName.toLowerCase(),
-              class: typeof el.className === 'string' ? el.className.trim().slice(0, 60) : '',
-              text: el.textContent?.trim().slice(0, 100),
-              _url: urlAfter,
-              _newTabExpected: newTabExpected,
-              _clickable: AS.isClickable(el),
-              changed: location.href !== urlBefore || domFingerprint() !== domBefore,
-              ...pageHints(),
+              ok: true,
+              point,
+              count: resolved.count,
+              tag: (el.tagName || '').toLowerCase(),
+              text: (el.textContent || el.value || '').trim().slice(0, 100),
             },
           };
         }
 
-        case 'type': {
-          const el = await AS.waitForElement(params, params.waitMs || 3000);
-          if (!el) return { success: false, error: 'Input not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector), errorCategory: 'not_found' };
-          const res = AS.typeInElement(el, params.text, params.append === true);
-          if (!res.success) return res;
-          if (params.submit) {
-            const domBefore = domFingerprint();
-            const urlBefore = location.href;
-            // 派发 Enter（兼容 React 受控输入），等待提交/重渲染
-            el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-            el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-            await new Promise((r) => setTimeout(r, Math.min(params.timeout && params.timeout > 0 ? params.timeout * 1000 : 600, 5000)));
-            return {
-              success: true,
-              data: { method: res.method, _submitted: true, _url: location.href, changed: location.href !== urlBefore || domFingerprint() !== domBefore, ...pageHints() },
-            };
-          }
-          return { success: true, data: { method: res.method } };
-        }
-
-        case 'wait': {
+      case 'wait': {
           // wait(ms) 固定等待；或 wait(selector|text|ref, timeout) 等待元素出现
           if (params.selector || params.text || params.ref != null) {
             const el = await AS.waitForElement(params, params.timeout || 8000, 200);
-            return { success: true, data: { _url: location.href, _title: document.title, found: !!el, changed: false, ...pageHints() } };
+            return { success: true, data: { _url: location.href, _title: document.title, found: !!el, ...pageHints() } };
           }
           const ms = Math.min(params.ms || 1000, 30000);
           await new Promise((r) => setTimeout(r, ms));
-          return { success: true, data: { _url: location.href, _title: document.title, changed: false, ...pageHints() } };
-        }
-
-        case 'hover': {
-          const el = await AS.waitForElement(params, params.waitMs || 3000);
-          if (!el) {
-            return { success: false, error: 'Element not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector || params.text), errorCategory: 'not_found' };
-          }
-          try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* ignore */ }
-          el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, view: window }));
-          el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, view: window }));
-          el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, view: window }));
-          await new Promise((r) => setTimeout(r, 150));
-          return { success: true, data: { tag: el.tagName.toLowerCase(), text: el.textContent?.trim().slice(0, 100) } };
-        }
-
-        case 'wait': {
-          const timeout = params.timeout || 8000;
-          if (params.selector || params.text || params.ref != null) {
-            const el = await AS.waitForElement(params, timeout);
-            return { success: true, data: { found: !!el } };
-          }
-          await new Promise((r) => setTimeout(r, params.ms || 0));
-          return { success: true };
-        }
-
-        case 'key': {
-          const key = params.key || params.keyCode || 'Enter';
-          const target = await AS.waitForElement(params, params.waitMs || 3000);
-          const el = target || document.activeElement || document.body;
-          const code = params.codeKey || key;
-          const opts = { key, code, bubbles: true, cancelable: true, view: window };
-          el.dispatchEvent(new KeyboardEvent('keydown', opts));
-          el.dispatchEvent(new KeyboardEvent('keypress', opts));
-          el.dispatchEvent(new KeyboardEvent('keyup', opts));
-          // 合成键盘事件不触发浏览器默认行为：Enter 时尝试真实表单提交
-          if (key === 'Enter' || key === 'NumpadEnter') {
-            const form = el.form || el.closest('form');
-            if (form) {
-              try { form.requestSubmit(); } catch (e) { /* ignore */ }
-            }
-          }
-          return { success: true, data: { key } };
+          return { success: true, data: { _url: location.href, _title: document.title, ...pageHints() } };
         }
 
         case 'scroll': {
@@ -427,10 +355,11 @@
 
         case 'closeDialogs': {
           let closed = 0;
-          const dialogs = [...document.querySelectorAll('[role="dialog"]')];
+          const DIALOG_SEL = DIALOG_SELECTOR;
+          const dialogs = [...document.querySelectorAll(DIALOG_SEL)];
           for (const d of dialogs) {
             const closeBtn = d.querySelector(
-              '[aria-label="Close"], [aria-label="关闭"], .ant-lpt-modal-close, .ant-modal-close, [class*="-modal-close"]',
+              '[aria-label="Close"], [aria-label="关闭"], [class*="close"], .ant-lpt-modal-close, .ant-modal-close, [class*="-modal-close"]',
             );
             if (closeBtn) {
               closeBtn.click();
@@ -450,16 +379,19 @@
 
         case 'getContent': {
           if (params.mode === 'summary') {
-            const inputs = [...document.querySelectorAll('input, textarea, select, [contenteditable="true"], [role="combobox"]')]
+            // 跨帧扫描（同源 iframe + shadow），每项带 frame；frameId=0 时仅顶层。
+            const qAll = (sel) => AS.querySelectorAllCrossFrames(sel, params.scope, params.frameId);
+            const inputs = qAll('input, textarea, select, [contenteditable="true"], [role="combobox"]')
               .map(el => ({
                 tag: el.tagName.toLowerCase(),
                 type: el.type || '',
                 name: el.name || '',
+                frame: frameOf(el),
                 selector: el.id ? `#${el.id}` : el.name ? `[name="${el.name}"]` : el.className && typeof el.className === 'string' ? `.${el.className.trim().split(/\s+/).filter(Boolean).join('.')}` : '',
                 placeholder: el.placeholder || '',
                 value: el.value || el.textContent?.slice(0, 50) || '',
               })).filter(i => i.selector || i.placeholder || i.name);
-            const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], a[role="button"], [role="button"]')]
+            const buttons = qAll('button, input[type="submit"], input[type="button"], a[role="button"], [role="button"]')
               .map(el => {
                 const name = (
                   el.textContent?.trim() ||
@@ -474,33 +406,35 @@
                   tag: el.tagName.toLowerCase(),
                   type: el.type || '',
                   role: el.getAttribute('role') || (el.tagName === 'BUTTON' ? 'button' : el.tagName === 'A' ? 'link' : ''),
+                  frame: frameOf(el),
                   selector: el.id ? `#${el.id}` : el.className ? `.${el.className.split(' ').filter(Boolean).join('.')}` : '',
                   text: name,
                 };
               }).filter(b => b.text || b.selector);
-            const forms = [...document.querySelectorAll('form')].map(f => ({
+            const forms = qAll('form').map(f => ({
               selector: f.id ? `#${f.id}` : f.className ? `.${f.className.split(' ').filter(Boolean).join('.')}` : '',
               action: f.action || '',
               method: f.method || 'get',
               inputs: [...f.querySelectorAll('input[name], select[name], textarea[name]')].length,
             })).filter(f => f.inputs > 0);
-            const navLinks = [...document.querySelectorAll('nav a, [role="navigation"] a, [role="menubar"] a, [role="menuitem"] a')]
+            const navLinks = qAll('nav a, [role="navigation"] a, [role="menubar"] a, [role="menuitem"] a')
               .map(el => ({
                 text: el.textContent?.trim() || el.getAttribute('aria-label') || '',
                 href: el.href || '',
               })).filter(l => l.text && l.href);
-            const sections = [...document.querySelectorAll('details, [aria-expanded]')]
+            const sections = qAll('details, [aria-expanded]')
               .map(el => ({
                 tag: el.tagName.toLowerCase(),
                 label: el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent?.trim().slice(0, 60) || '',
                 expanded: el.getAttribute('aria-expanded') ?? (el.hasAttribute('open') ? 'true' : null),
               })).filter(s => s.label);
-            const dialogs = [...document.querySelectorAll('[role="dialog"]')]
+            const dialogs = qAll('[role="dialog"]')
               .map(d => {
                 const labelId = d.getAttribute('aria-labelledby');
-                const labelEl = labelId && document.getElementById(labelId);
+                const labelEl = labelId && d.ownerDocument && d.ownerDocument.getElementById(labelId);
                 return {
                   title: labelEl?.textContent?.trim() || d.getAttribute('aria-label') || '',
+                  frame: frameOf(d),
                   inputs: [...d.querySelectorAll('input:not([type="hidden"]), textarea, select')].length,
                   buttons: [...d.querySelectorAll('button, [role="button"]')].map(b => b.textContent?.trim() || b.getAttribute('aria-label') || '').filter(Boolean),
                 };
@@ -512,7 +446,8 @@
             if (!params.selector) return { success: false, error: 'selector required for extract mode' };
             let nodes = [];
             try {
-              nodes = [...document.querySelectorAll(params.selector)];
+              document.querySelector(params.selector); // validate selector before cross-frame traversal
+              nodes = AS.querySelectorAllCrossFrames(params.selector, params.scope, params.frameId);
             } catch (e) {
               return { success: false, error: 'Invalid selector: ' + params.selector, errorCategory: 'not_found' };
             }
@@ -520,7 +455,7 @@
             const textMax = params.textMax || 200;
             const fields = Array.isArray(params.fields) && params.fields.length ? params.fields : ['text'];
             const matches = nodes.slice(0, max).map((el, i) => {
-              const rec = { index: i + 1, tag: el.tagName.toLowerCase() };
+              const rec = { index: i + 1, tag: el.tagName.toLowerCase(), frame: frameOf(el) };
               for (const f of fields) {
                 if (f === 'text') {
                   rec.text = el.textContent?.trim().slice(0, textMax) || '';
@@ -546,13 +481,15 @@
             if (!params.selector) return { success: false, error: 'selector required for query mode' };
             let nodes = [];
             try {
-              nodes = [...document.querySelectorAll(params.selector)];
+              document.querySelector(params.selector); // validate selector before cross-frame traversal
+              nodes = AS.querySelectorAllCrossFrames(params.selector, params.scope, params.frameId);
             } catch (e) {
               return { success: false, error: 'Invalid selector: ' + params.selector, errorCategory: 'not_found' };
             }
             const matches = nodes.slice(0, 50).map((el, i) => ({
               index: i + 1,
               tag: el.tagName.toLowerCase(),
+              frame: frameOf(el),
               class: typeof el.className === 'string' ? el.className.trim() : '',
               id: el.id || '',
               text: el.textContent?.trim().slice(0, 80) || '',
@@ -561,10 +498,37 @@
             }));
             return { success: true, data: { _url: location.href, total: nodes.length, matches } };
           }
+          if (params.mode === 'container' || params.mode === 'containers') {
+            let want = [];
+            if (Array.isArray(params.selectors)) want = params.selectors.filter(Boolean);
+            else if (typeof params.selector === 'string' && params.selector.trim()) want = params.selector.split(',').map(s => s.trim()).filter(Boolean);
+            const docs = AS.collectFrameDocs ? AS.collectFrameDocs(params.scope, params.frameId) : [document];
+            const out = [];
+            for (const sel of want) {
+              let present = false, count = 0, frame = '', sample = '';
+              for (const doc of docs) {
+                let nodes;
+                try { nodes = doc.querySelectorAll(sel); } catch (e) { nodes = []; continue; }
+                if (nodes.length) {
+                  present = true;
+                  count += nodes.length;
+                  if (!frame) {
+                    const el = nodes[0];
+                    frame = frameOf(el) || '';
+                    try {
+                      sample = (el.id ? '#' + el.id : '') + (typeof el.className === 'string' ? '.' + el.className.split(/\s+/).filter(Boolean).slice(0, 4).join('.') : '');
+                    } catch (e2) { /* ignore */ }
+                  }
+                }
+              }
+              out.push({ selector: sel, present, count, frame, sample });
+            }
+            return { success: true, data: { _url: location.href, _title: document.title, containers: out, ...pageHints() } };
+          }
           if (params.mode === 'snapshot') {
             const max = params.max || 200;
-            const els = AS.collectInteractables({ max });
-            const items = els.map((el, i) => AS.snapshotItem(el, i));
+            const els = AS.collectInteractables({ max, frameId: params.frameId });
+            const items = els.map((el, i) => ({ ...AS.snapshotItem(el, i), frame: frameOf(el) }));
             return {
               success: true,
               data: {
@@ -600,6 +564,10 @@
   let __asDomNodes = 0;
   const DOM_NODE_CAP = 2000;
 
+  // 框架型弹层通用选择器（覆盖 Vue v-transfer-dom / 自定义 dialog 渲染到 body 的场景）。
+  const DIALOG_SELECTOR =
+    '[role="dialog"], [role="alertdialog"], .ant-modal, .el-dialog, .antd-fd-modal, [class*="dialog"], [class*="popup"]';
+
   // 轻量 DOM 指纹：动作前后对比，供 agent 判断"是否有实际变化"（避免动作后盲目重读）。
   function domFingerprint() {
     try {
@@ -622,14 +590,14 @@
     try {
       const seen = new Set();
       const titles = [];
-      for (const el of document.querySelectorAll('[role="dialog"], [role="alertdialog"], .ant-modal, .el-dialog, .antd-fd-modal')) {
+      for (const el of document.querySelectorAll(DIALOG_SELECTOR)) {
         const cs = getComputedStyle(el);
         const r = el.getBoundingClientRect();
         if (cs.display === 'none' || cs.visibility === 'hidden' || (r.width <= 0 && r.height <= 0)) continue;
         const t = (
           el.getAttribute('aria-label') ||
           el.getAttribute('aria-labelledby') ||
-          (el.querySelector('.ant-modal-title, .modal-title, [class*="header"]')?.textContent?.trim() || '')
+          (el.querySelector('[class*="title"], [class*="header"]')?.textContent?.trim() || '')
         ).slice(0, 60);
         if (t && !seen.has(t)) {
           seen.add(t);
@@ -686,7 +654,40 @@
     const h = { dialogs: visibleDialogs(), chips: chipsFingerprint() };
     const c = countHint();
     if (c) h.count = c;
+    const fr = frameUrls();
+    if (fr.length) h.frames = fr;
     return { _hints: h };
+  }
+
+  // 元素所在 frame 的 window：同源 iframe 内元素的事件 view 必须用它，否则 iframe 处理器收不到。
+  function winOf(el) {
+    return (el && el.ownerDocument && el.ownerDocument.defaultView) || window;
+  }
+
+  // 元素所在 frame 的 URL（同源 iframe 可读；主文档返回顶层 URL）。用于标注元素所属层。
+  function frameOf(el) {
+    try {
+      const w = winOf(el);
+      return w === window ? location.href : (w.location ? w.location.href : '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // 顶层 + 同源 iframe 当前 URL（便于判定搜索/导航是否真的生效，如 keywords= 参数变化）。
+  function frameUrls() {
+    const out = [];
+    try {
+      const topUrl = location.href;
+      if (topUrl) out.push(topUrl);
+      for (const f of document.querySelectorAll('iframe')) {
+        try {
+          const h = f.contentWindow && f.contentWindow.location && f.contentWindow.location.href;
+          if (h && !out.includes(h)) out.push(h);
+        } catch (e) { /* 跨源 iframe 忽略 */ }
+      }
+    } catch (e) { /* ignore */ }
+    return out;
   }
 
   function domToJSON(node) {

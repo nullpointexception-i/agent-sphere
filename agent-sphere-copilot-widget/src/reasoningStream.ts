@@ -11,9 +11,12 @@
 export interface ReasoningStreamOptions {
   url: string;
   token: string;
-  onReasoning: (runId: string, delta: string) => void;
+  /** @param nodeName 子 Agent（skill）thinking 事件带 nodeName=skill:<id>，用于前端内嵌折叠块 */
+  onReasoning: (runId: string, delta: string, nodeName?: string) => void;
   /** 任务 run 结束（run_completed/run_failed/run_cancelled）时回调，用于复位流式状态。 */
   onRunEnded?: (runId: string) => void;
+  /** 原始 SSE 事件透传：用于子 Agent reply(content_token) / tool_call 等按需路由。 */
+  onEvent?: (parsed: Record<string, unknown>) => void;
   /** 流成功建立（拿到响应体）时回调，便于诊断。 */
   onOpen?: () => void;
   signal: AbortSignal;
@@ -28,7 +31,7 @@ const RUN_ENDED_SUB_TYPES = new Set([
 ]);
 
 export async function connectReasoningStream(options: ReasoningStreamOptions): Promise<void> {
-  const { url, token, onReasoning, onRunEnded, onOpen, signal } = options;
+  const { url, token, onReasoning, onRunEnded, onOpen, onEvent, signal } = options;
   try {
     const response = await fetch(url, {
       headers: {
@@ -60,7 +63,7 @@ export async function connectReasoningStream(options: ReasoningStreamOptions): P
         if (!dataLine) {
           continue;
         }
-        handleLine(dataLine, onReasoning, onRunEnded);
+        handleLine(dataLine, onReasoning, onRunEnded, onEvent);
       }
     }
   } catch (e) {
@@ -87,13 +90,15 @@ function extractDataLine(part: string): string {
 
 function handleLine(
   dataLine: string,
-  onReasoning: (runId: string, delta: string) => void,
+  onReasoning: (runId: string, delta: string, nodeName?: string) => void,
   onRunEnded?: (runId: string) => void,
+  onEvent?: (parsed: Record<string, unknown>) => void,
 ) {
   try {
     const parsed = JSON.parse(dataLine);
     const evtType = parsed.eventType || parsed.type || '';
     if (evtType !== 'reasoning_token') {
+      onEvent?.(parsed);
       return;
     }
     const d = parsed.data || parsed;
@@ -117,7 +122,8 @@ function handleLine(
     if (response.startsWith(I18N_PREFIX)) {
       return;
     }
-    onReasoning(runId, response);
+    const nodeName: unknown = d?.nodeName;
+    onReasoning(runId, response, typeof nodeName === 'string' ? nodeName : undefined);
   } catch {
     // ignore malformed lines
   }

@@ -63,8 +63,10 @@ public final class SkillPromptRenderer {
                 throw new InvalidSkillDefinition("占位符路径非法: {{" + path + "}}");
             }
             node = node.get(segment.trim());
+            // 缺失字段不再中止整个渲染：回填显式标记让 skill 自行处理
+            //（可结合 {{input}} 整段参数自抽取），避免"参数缺失"把整条 skill 判死。
             if (node == null || node instanceof MissingNode) {
-                throw new InvalidSkillDefinition("skill 参数缺少字段: " + path);
+                return "[缺参数:" + path + "]";
             }
         }
         if (node.isTextual()) {

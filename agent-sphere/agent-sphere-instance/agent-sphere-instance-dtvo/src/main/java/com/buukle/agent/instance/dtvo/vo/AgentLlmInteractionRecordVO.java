@@ -17,6 +17,9 @@ public class AgentLlmInteractionRecordVO implements Serializable {
     private Integer durationMs;
     private String errorMessage;
     private Boolean success;
+    private String reasoning;
+    private String replyContent;
+    private Long subAgentRunId;
     private String createdBy;
     private String createdAt;
 }

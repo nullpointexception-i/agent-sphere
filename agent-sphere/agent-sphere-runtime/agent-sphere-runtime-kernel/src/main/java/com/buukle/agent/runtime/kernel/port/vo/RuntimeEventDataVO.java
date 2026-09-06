@@ -30,4 +30,6 @@ public class RuntimeEventDataVO {
     private String publishId;
     private String screenshot;
     private String clarificationId;
+    /** 归属的子 Agent 运行（NULL=主 Agent）。 */
+    private Long subAgentRunId;
 }

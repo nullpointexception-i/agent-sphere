@@ -63,7 +63,16 @@ export class CdpClient {
       return Promise.reject(new Error(`Debugger is not attached to the tab ${tabId}`));
     }
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(`CDP command timed out: ${method}`));
+      }, 15000);
       chrome.debugger.sendCommand({ tabId }, method, params, (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         const err = chrome.runtime.lastError;
         if (err) {
           reject(new Error(err.message || String(err)));
@@ -130,6 +139,107 @@ export class CdpClient {
         throw e;
       }
     });
+  }
+
+  /** 受信鼠标点击（CDP Input）：合成事件在严格 SPA 下常不触发
+   *  Vue/React 处理器；Input.dispatchMouseEvent 走真实输入管线（isTrusted=true）。
+   *  x/y 为主 frame 视口 CSS 像素（见 content-locator 的 mainFramePoint）。 */
+  async nativeClick(tabId, x, y) {
+    return this._serialized(async () => {
+      try {
+        await this.attach(tabId);
+        await this.sendCommand(tabId, 'Input.dispatchMouseEvent', {
+          type: 'mousePressed', x, y, button: 'left', clickCount: 1,
+        });
+        await this.sendCommand(tabId, 'Input.dispatchMouseEvent', {
+          type: 'mouseReleased', x, y, button: 'left', clickCount: 1,
+        });
+      } catch (e) {
+        this._retryDetachOnce(tabId, e, () => this.nativeClick(tabId, x, y));
+      }
+    });
+  }
+
+  /** 受信键盘事件（CDP Input.dispatchKeyEvent）。key 如 Enter/Escape。 */
+  async nativeKeyPress(tabId, key, code, keyCode) {
+    return this._serialized(async () => {
+      try {
+        await this.attach(tabId);
+        await this.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+          type: 'rawKeyDown', key, code,
+          windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode,
+        });
+        await this.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+          type: 'keyUp', key, code,
+          windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode,
+        });
+      } catch (e) {
+        this._retryDetachOnce(tabId, e, () => this.nativeKeyPress(tabId, key, code, keyCode));
+      }
+    });
+  }
+
+  /** 受信文本输入（CDP Input.insertText）：触发输入框自身事件，trusted（含 IME/中文）。 */
+  async insertText(tabId, text) {
+    return this._serialized(async () => {
+      try {
+        await this.attach(tabId);
+        await this.sendCommand(tabId, 'Input.insertText', { text });
+      } catch (e) {
+        this._retryDetachOnce(tabId, e, () => this.insertText(tabId, text));
+      }
+    });
+  }
+
+  /** 受信清空当前输入框（Ctrl+A 全选 + 删除）。insertText 只会追加，
+   *  因此整字段替换前必须先清空（对 iframe 内输入框同样有效）。 */
+  async clearInput(tabId) {
+    return this._serialized(async () => {
+      try {
+        await this.attach(tabId);
+        await this.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+          type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2,
+          windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65, commands: ['selectAll'],
+        });
+        await this.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+          type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2,
+          windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65,
+        });
+        await this.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+          type: 'keyDown', key: 'Backspace', code: 'Backspace',
+          windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8, commands: ['delete'],
+        });
+        await this.sendCommand(tabId, 'Input.dispatchKeyEvent', {
+          type: 'keyUp', key: 'Backspace', code: 'Backspace',
+          windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8,
+        });
+      } catch (e) {
+        this._retryDetachOnce(tabId, e, () => this.clearInput(tabId));
+      }
+    });
+  }
+
+  /** 受信悬停（CDP mouseMoved）：触发 hover 面板。 */
+  async nativeHover(tabId, x, y) {
+    return this._serialized(async () => {
+      try {
+        await this.attach(tabId);
+        await this.sendCommand(tabId, 'Input.dispatchMouseEvent', {
+          type: 'mouseMoved', x, y, button: 'none', clickCount: 0,
+        });
+      } catch (e) {
+        this._retryDetachOnce(tabId, e, () => this.nativeHover(tabId, x, y));
+      }
+    });
+  }
+
+  _retryDetachOnce(tabId, e, rerun) {
+    const msg = String(e && e.message);
+    if (msg.includes('not attached')) {
+      this.sessions.delete(tabId);
+      return rerun();
+    }
+    throw e;
   }
 }
 

@@ -20,6 +20,7 @@ public class AgentToolCallRecordVO implements Serializable {
     private String compressedArtifact;
     private String status;
     private String errorMessage;
+    private Long subAgentRunId;
     private String createdAt;
     private String updatedAt;
 }

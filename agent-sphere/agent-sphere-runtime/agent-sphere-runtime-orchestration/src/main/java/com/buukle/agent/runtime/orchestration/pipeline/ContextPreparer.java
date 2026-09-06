@@ -251,8 +251,32 @@ public class ContextPreparer {
                 .toolRef(ToolRefs.skill(skill.getId()))
                 .displayName(skill.getName())
                 .description(skill.getDescription() != null ? skill.getDescription() : "")
-                .parametersSchemaJson(def.parametersSchemaJson())
+                .parametersSchemaJson(enrichSkillSchema(def.parametersSchemaJson()))
                 .execBinding(binding).build());
+    }
+
+    private static final String SKILL_TASK_PARAM_SCHEMA = """
+            {"type":"object","additionalProperties":true,"properties":{
+              "input":{"type":"string","description":"调用方给定的原始任务指令/任务配置全文（含【任务配置】结构化 JSON 时保留原样），skill 子 Agent 据此自抽取 channel_url/keywords/城市/学历/年限/薪资/评估阈值等任务参数"},
+              "channel_url":{"type":"string","description":"渠道 BOSS直聘牛人搜索地址 https://www.zhipin.com/web/chat/search（任务只允许在该地址内完成，禁止单独打开 /web/frame/search/）"},
+              "keywords":{"type":"array","items":{"type":"string"},"description":"候选检索关键词列表（如 流程管理、IPD、LTC、ITR、变革管理、端到端流程）"},
+              "city":{"type":"string","description":"期望工作城市（Step2 城市控件需设置的目标城市）"},
+              "years":{"type":"string","description":"期望工作年限档（如 3-5年，Step4 年限筛选）"},
+              "degree":{"type":"string","description":"期望学历（如 本科及以上，Step4 学历筛选）"},
+              "salary":{"type":"string","description":"期望薪资区间（如 20K 以上，Step4 薪资筛选）"},
+              "industry":{"type":"string","description":"期望行业（如 物流/电商/供应链）"},
+              "evaluate_rule":{"type":"string","description":"候选人评分阈值/规则（如 匹配度>=75% 才收藏）"}},"description":"Skill 任务执行参数：由调用方上下文提供；传入原始任务配置全文给 input 即可，其余字段按语义辅助模型抽取"}""";
+
+    /**
+     * Skill 工具的入参 schema：默认的空 schema（绝大多数 skill 定义都是空 properties）
+     * 替换为「input/任务参数」通道 schema，避免 LLM 调用 skill 时 argumentsJson 恒为 {}、
+     * 子 Agent 拿不到任务；非空 schema 保持定义原样（允许 skill 自定义入参契约）。
+     */
+    private String enrichSkillSchema(String originalSchema) {
+        if (originalSchema != null && !originalSchema.isBlank() && !DEFAULT_EMPTY_SCHEMA.equals(originalSchema)) {
+            return originalSchema;
+        }
+        return SKILL_TASK_PARAM_SCHEMA;
     }
 
     void resolveMcpTools(McpVO mcp, CapabilityVO cap, List<RuntimeTool> result) {

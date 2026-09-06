@@ -91,6 +91,10 @@ export const agentApi = {
       request<any>(`${BASE}/instance/sessions/${id}/todos`),
     getLatestToolCalls: (id: number) =>
       request<any>(`${BASE}/instance/sessions/${id}/toolcalls/latest`),
+    getSubAgentRuns: (id: number) =>
+      request<any[]>(`${BASE}/instance/sessions/${id}/sub-agent-runs`),
+    getSubAgentTimeline: (id: number) =>
+      request<any[]>(`${BASE}/instance/sub-agent-runs/${id}/timeline`),
     getDocuments: (id: number, page = 1, size = 20) =>
       request<any>(`${BASE}/artifacts/documents?sessionId=${id}&page=${page}&size=${size}`),
     clarify: (sessionId: number, runId: number, response: string, clarificationId?: string) =>
