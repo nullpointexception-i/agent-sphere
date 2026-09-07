@@ -23,9 +23,13 @@
 
 ![ui-chat.png](agent-sphere-readme/ui-chat.png)
 
+多 Agent 编排 —— 主聊天页内联渲染子 Agent 卡片（实时步骤聚合、自动滚底）：
+
+![ui-multi-agent.png](agent-sphere-readme/ui-multi-agent.png)
+
 ![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
 
-可嵌入聊天 Widget（shadow DOM、OIDC SSO、AG-UI 实时流）：
+可嵌入聊天 Widget（shadow DOM、OIDC SSO、REST + SSE timeline 对话）：
 
 ![widget-sso-login.png](agent-sphere-readme/widget-sso-login.png)
 
@@ -40,6 +44,7 @@
 ## 功能特性
 
 - **LLM ReAct 编排** — `SessionRunner` 执行 `Plan → Act → Observe → Learn` 循环，支持单轮超时、取消、自动上下文压缩。
+- **多 Agent 子任务（sub-agent）** — 父 run 可将子任务委托给**子 Agent**（`SessionSubRunner`）：受限工具集的子 LLM 循环，自带推理/回复与工具调用，主聊天与 Widget 都以内联子 Agent 卡片渲染（SSE 实时步骤聚合 + 完成后权威时间线校正）。
 - **多供应商模型路由** — 支持 OpenAI / DeepSeek / 智谱（BigModel）/ 中转站 / OrcaRouter，主路由 + fallback 路由链自动降级。
 - **统一能力层** — MCP Server、内置 SPI 工具、CLI 执行、浏览器自动化、复合技能，通过 `ToolExecutor` 统一分发。
 - **真实浏览器自动化** — Manifest V3 Chrome 扩展桥接，执行 DOM 操作（导航 / 点击 / 输入 / executeJS）并实时执行反馈。
@@ -51,7 +56,7 @@
 - **任务产物（Task Artifact）** — 任务两阶段提炼的结构化输出落库 `agent_task_artifact`，在「产出 → 任务产物」页查看（列表 / 详情 / JSON 格式化 / 一键复制）。
 - **Completions 能力管理** — 提示工程管理页：input/output JSON Schema、运行配置（`temperature` / `max_tokens` / `top_p` / penalties / `stop` / `thinking`）、Prompt 版本管理、调用记录。
 - **浏览器扩展单用户连接** — 扩展仅保留一条用户级 task SSE 流（不再做会话跟随），安装即声明 `<all_urls>` 全站点权限，popup 展示 Task 状态与 `provider@subject` 用户名。
-- **可嵌入聊天 Widget** — 单个 IIFE 脚本挂载进 shadow DOM，通过 AG-UI + SSE 自管 Bearer 鉴权对话（不依赖 CopilotKit 运行时），可嵌入任意第三方页面。
+- **可嵌入聊天 Widget** — 单个 IIFE 脚本挂载进 shadow DOM，通过**类型化 REST + SSE timeline** 自管 Bearer 鉴权对话（不依赖 CopilotKit / AG-UI 运行时），可嵌入任意第三方页面。
 
 ## 1. 开发quick start
 
@@ -92,9 +97,9 @@
 近期架构要点：
 - **不再截图** —— 截图链路已端到端移除（扩展/后端/UI），过程记录为文本/事件方式。
 - **SSE 常驻 offscreen document**（`offscreen.html/js`）—— 免疫 MV3 Service Worker 挂起；浏览器关闭后由后台 alarm 自动重建。
-- **原生 ES Modules** —— 后台 Service Worker（`background.js`，`"type": "module"`）import `lib/cdp-client.js`、`lib/tab-manager.js`、`lib/result.js`、`lib/offscreen-bridge.js`；执行层为 `content.js` + `content-locator.js` + `content-editors.js`（按序注入隔离世界）。
+- **原生 ES Modules** —— 后台 Service Worker（`background.js`，`"type": "module"`）import `lib/cdp-client.js`、`lib/tab-manager.js`、`lib/result.js`、`lib/offscreen-bridge.js`；执行层为 `content.js` + `content-locator.js`（按序注入隔离世界）。
 - **标签分组** —— 插件导航/新开的标签自动聚合到 **`AgentSphere` 标签分组**（`tabGroups` 权限），组被关闭后自动重建。
-- **`executeJS` 分级降级**（debugger 仅兜底）：隔离世界（`chrome.scripting`）→ `inject.js` 主世界 postMessage 桥 → `chrome.scripting` MAIN 世界 → `chrome.debugger` `Runtime.evaluate`（严格 CSP 站点）。
+- **`executeJS` 分级降级**（debugger 仅兜底）：`chrome.scripting` 注入页面 **MAIN 世界** → `chrome.debugger` `Runtime.evaluate`（完全绕过 CSP，严格 CSP 站点落此级）。MV3 扩展 CSP 禁止在隔离世界使用 `eval`，故无隔离世界执行级。
 
 ![Chrome Extension 浏览器桥接结构](agent-sphere-readme/chrome-extension-structure.png)
 
@@ -352,17 +357,24 @@ reasoning_token   → "🤔 用户问天气，我需要打开天气网站"
 | `run_running` | Run 开始 | 状态指示 |
 | `run_completed` | Run 完成 | 完成通知 |
 | `run_failed` | Run 失败 | 错误提示 |
+| `run_cancelled` | Run 被取消 | 取消提示 |
+| `run_awaiting_user` | Run 暂停等待澄清 | 置为 AWAITING_USER |
 | `tool_call_started` | 工具 PENDING | 工具调用列表 |
+| `tool_call_in_progress` | 工具执行中 | 运行图标 |
 | `tool_call_succeeded` | 工具完成 | ✅ 图标 |
 | `tool_call_failed` | 工具失败 | ❌ 图标 |
 | `compaction_running` | 压缩开始 | 推理面板 |
 | `compaction_completed` | 压缩完成 | 推理面板 |
+| `compaction_failed` | 压缩失败 | 推理面板 |
+| `session_updated` | 会话标题变更 | 标题实时同步 |
 | `clarification_pending` | LLM 请求用户输入 | 澄清卡片（confirm/choice/input） |
 | `clarification_responded` | 用户做出回应 | 卡片显示 ✓，run 继续 |
 | `clarification_expired` | 澄清 TTL 到期 | 卡片显示已过期 |
 | `clarification_dismissed` | Run 被取消（等待用户时） | 卡片显示已撤销 |
 
-> 模型推理（`reasoning_token`）在 run 结束时会**持久化**到 `agent_run.reasoning`，因此主站与内嵌 widget 都能在会话历史中回看 thinking（不仅实时）。widget 还通过被动 `/api/v1/runtime/{sessionId}/stream` 实时流式展示任务触发的 run 的 thinking。
+子 Agent 活动复用同一批 `content_token` / `reasoning_token` / `tool_call_*` 事件，通过 payload 上的 `subAgentRunId` 区分；前端将这些实时聚合到内联子 Agent 卡片中。
+
+> 模型推理（`reasoning_token`）在 run 结束时会**持久化**到 `agent_run.reasoning`，因此主站与内嵌 widget 都能在会话历史中回看 thinking（不仅实时）。widget 通过同一条逐会话 `/api/v1/runtime/{sessionId}/stream` SSE 通道驱动实时展示。
 
 #### 4.2.2 Run Activity API
 
@@ -438,8 +450,8 @@ npm run dev
 # Chrome → chrome://extensions → 开发者模式 → 加载已解压的扩展
 # 选择 agent-sphere-chrome-extension 目录
 #（声明 <all_urls>：读取并更改所有网站的数据，安装时授予）
-# 运行时文件：manifest.json、background.js（ESM）+ lib/*、content.js + content-locator.js + content-editors.js、
-# page-script.js / inject.js（主世界桥）、offscreen.html/js（SSE 承载）、popup.html/js。
+# 运行时文件：manifest.json、background.js（ESM）+ lib/*、content.js + content-locator.js、
+# page-script.js（主世界认证/会话桥）、offscreen.html/js（SSE 承载）、popup.html/js。
 # 权限含 `offscreen` 与 `tabGroups`（插件标签自动归入 “AgentSphere” 分组）。
 
 # 5. 配置 URL
@@ -621,7 +633,7 @@ IdP 的 `preferred_username`/`name` 会作为 `display_subject` 存储并在每�
 
 ### 4.11 嵌入聊天 Widget
 
-`agent-sphere-copilot-widget` 是一个**独立可嵌入的聊天组件**，第三方业务系统只需一行脚本即可接入。它把 CopilotKit + AG-UI 打包成单个 IIFE 脚本，挂载进 **shadow DOM**，并通过上述 OIDC SSO 完成认证 —— 不依赖 CopilotKit 云服务/运行时（认证完全自管）。
+`agent-sphere-copilot-widget` 是一个**独立可嵌入的聊天组件**，第三方业务系统只需一行脚本即可接入。它把 React 打包成单个 IIFE 脚本，挂载进 **shadow DOM**，并通过上述 OIDC SSO 完成认证 —— 不依赖 CopilotKit / AG-UI / CopilotKit 云服务（认证与对话完全自管）。对话是**类型化 REST + SSE timeline**（与主站 chat 页面同一形态），由逐会话 SSE 流驱动。
 
 #### 嵌入方式
 
@@ -661,14 +673,15 @@ SSO 登录页（选择身份源）：
 
 #### 工作原理
 
-- **OIDC SSO**：消费 `?otc=` → 换取 token → 存入 `sessionStorage`（`agent-sphere-widget:agent-user`）；处理完成后从 URL 移除 `?otc=`/`?error=`。`autoLogin` 做一次性静默探测（`prompt=none`）；登录页可让用户选择已启用的身份源。
-- **Agent 列表与会话**：来自 `/instance/instances/all` 与 `/instance/sessions`（增删改查）。会话支持新建、行内重命名（✓/✕）、归档（行内两步确认），并带无限滚动分页。
-- **对话（AG-UI）**：每个 Agent 对应一个 `HttpAgent`，请求 `{apiBase}/copilot/agent/{id}/services/chat/run`；后端以 SSE `data:` 行推送 AG-UI 事件（`TEXT_MESSAGE_*`、`REASONING_MESSAGE_*`、`TOOL_CALL_*`、`RUN_*`）。请求携带 `Authorization: Bearer`，不经过 CopilotKit 运行时。
-- **澄清（人工介入）**：Agent 中断暂停时，聊天内即时出现澄清卡片（confirm / choice / input）。回复或取消通过 AG-UI `resume` 恢复执行（`resolved` / `cancelled`）；已答复的卡片也会从会话历史中渲染。
-- **Thinking / 推理展示**：任务触发的 run 的 thinking 通过被动 `/api/v1/runtime/{sessionId}/stream` 实时流入聊天框（注入为 `reasoning` 消息）；持久化的 `agent_run.reasoning` 会在会话历史中渲染。
-- **session 级停止**：停止按钮先中止本地流，再调用 `POST /api/v1/runtime/{sessionId}/stop`（不依赖 runId），因此在 widget 中停止任务 run 同样生效。
-- **实时更新**：会话标题通过 `session_title_updated` 自定义事件实时同步；辅助面板展示当前任务清单（`STATE_SNAPSHOT` todos）与工具调用动态（悬浮查看详情）。
+- **OIDC SSO**：消费 `?otc=` → `POST /auth/sso/exchange` → 将用户+token 存入 `sessionStorage`（`agent-sphere-widget:agent-user`）；处理完成后从 URL 移除 `?otc=`/`?error=`。`autoLogin` 做一次性静默探测（`prompt=none`），通过隐藏同源 iframe 完成、不触发页面跳转；登录页可让用户选择已启用的身份源。
+- **Agent 与会话列表**：实例（启用项）来自 `/instance/instances`（分页），会话来自 `/instance/sessions`（offset 分页）。会话支持新建、行内重命名（✓/✕）、归档（行内两步确认），并带无限滚动分页。
+- **Timeline 通道（REST + SSE）**：Widget 渲染一条*类型化 timeline* —— `GET /instance/sessions/{sid}/timeline`（按 `beforeSeq`/`afterSeq` 翻页，limit 5–50）返回以 `seq` + `kind` 为键的行（`user` / `assistant` / `tool` / `clarification` / `subagent` / `run_status` / `error`）。实时 SSE 流 `GET /runtime/{sid}/stream`（Bearer）驱动同一批行。
+- **SSE 打字机与合并**：`content_token` / `reasoning_token` 就地追加到对应 `seq+kind==='assistant'` 行的 `reply` / `thinking`；子 Agent 行实时聚合步骤（LLM 推理/回复 + `tool_call_*`）。终态 / 工具结束 / 澄清事件（`run_completed`/`failed`/`cancelled`/`awaiting_user`、`tool_call_*`、`clarification_*`）触发 `afterSeq` 补行做权威合并 —— `mergeTimeline` 按 `seq` 去重，子 Agent 占位行用负 `seq<0`，待真实行到达后替换。
+- **发送 / 停止 / 澄清**：发送走 `POST /runtime/{sid}/chat` → `{runId,status}`（其余经 SSE + 补行到达）。运行中显示 RUNNING 圆点，发送按钮变为**停止** → `POST /runtime/{sid}/stop`（session 级，不依赖 runId）。澄清选项行内作答，走 `POST /runtime/{sid}/run/{runId}/clarify`。
+- **WidgetTimeline 渲染**：自研行渲染 —— 用户/助手消息带复制按钮、可折叠模型推理区、工具卡片、行内澄清选项（confirm/choice/input）、可折叠子 Agent 卡片（实时步骤、工具详情单选、自动滚底）、RUNNING 跳动圆点、加载更早分页。
 - **宿主模式**：传入 `mountTo` 后 Widget 静态渲染在你的布局中（如抽屉或区域块），而不是悬浮气泡。
+
+Widget 构建产出**两个** IIFE bundle：`agent-sphere-widget.js`（完整聊天 UI）与 `agent-sphere-auth.js`（轻量、无 React 的静默 SSO 入口，供宿主页在别处已展示聊天时使用）。
 
 #### 开发调试
 
@@ -676,7 +689,7 @@ SSO 登录页（选择身份源）：
 cd agent-sphere-copilot-widget
 npm install
 npm run dev        # vite dev on :5173，/api 代理到 localhost:8080
-npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
+npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js + dist/agent-sphere-auth.js
 ```
 
 > 注意：rollup 4 将各平台二进制声明为可选依赖。**切勿跨机器复制 `node_modules`/`package-lock.json`** —— 若报 `Cannot find module @rollup/rollup-*`，在目标机器上执行 `rm -rf node_modules package-lock.json && npm i`。
@@ -790,7 +803,7 @@ curl -X POST "http://localhost:8080/api/v1/api/tasks/7/stop?code=business&subjec
 | **数据库** | PostgreSQL, Flyway 迁移 |
 | **缓存/分布式锁** | Redis (Redisson) |
 | **前端** | React, UmiJS, Ant Design Pro |
-| **聊天 Widget** | CopilotKit（自管）+ AG-UI, shadow DOM, 单文件 IIFE |
+| **聊天 Widget** | React、shadow DOM、单文件 IIFE —— 自研类型化 **REST + SSE timeline** 对话（无 CopilotKit / AG-UI） |
 | **Chrome 扩展** | Manifest V3, Service Worker, Content Script |
 | **认证** | OIDC 多认证源 SSO（PKCE / JWKS）, RBAC, 审计日志 |
 | **实时通信** | SSE (Server-Sent Events), 多 emitter 广播 |

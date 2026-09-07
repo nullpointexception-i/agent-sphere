@@ -23,9 +23,13 @@ Screenshots
 
 ![ui-chat.png](agent-sphere-readme/ui-chat.png)
 
+Multi-agent orchestration — the main chat renders sub-agent cards inline (live per-sub-agent steps, auto-scroll):
+
+![ui-multi-agent.png](agent-sphere-readme/ui-multi-agent.png)
+
 ![ui-artifact-document.png](agent-sphere-readme/ui-artifact-document.png)
 
-Embeddable chat widget (shadow DOM, OIDC SSO, AG-UI streaming):
+Embeddable chat widget (shadow DOM, OIDC SSO, REST + SSE timeline chat):
 
 ![widget-sso-login.png](agent-sphere-readme/widget-sso-login.png)
 
@@ -40,6 +44,7 @@ Embeddable chat widget (shadow DOM, OIDC SSO, AG-UI streaming):
 ## Features
 
 - **LLM ReAct orchestration** — `SessionRunner` runs a `Plan → Act → Observe → Learn` loop with per-turn timeout, cancellation, and automatic context compaction.
+- **Multi-agent sub-runs** — a parent run can delegate sub-tasks to **sub-agents** (`SessionSubRunner`): a restricted-tool child LLM loop with its own reasoning/reply and tool calls, rendered as inline sub-agent cards in both the main chat and the widget (live step aggregation via SSE + authoritative timeline on completion).
 - **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations / OrcaRouter, with primary + fallback route chains and graceful degradation.
 - **Unified capability layer** — MCP servers, built-in SPI tools, CLI execution, browser automation, and composite skills, dispatched through a single `ToolExecutor`.
 - **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / executeJS) with real-time execution feedback.
@@ -51,7 +56,7 @@ Embeddable chat widget (shadow DOM, OIDC SSO, AG-UI streaming):
 - **Task artifacts** — tasks persist two-phase structured outputs as `agent_task_artifact` rows, reviewable from the **产出 → 任务产物** page (list / detail / JSON view / copy).
 - **Completions management** — 提示工程 admin page with input/output JSON Schema, runtime config (`temperature` / `max_tokens` / `top_p` / penalties / `stop` / `thinking`), prompt versioning, and call records.
 - **Single user-level browser connection** — the Chrome extension keeps one per-user task SSE stream (no per-session following), `<all_urls>` host permission, and shows the user as `provider@subject`.
-- **Embeddable chat widget** — a single IIFE script that mounts into a shadow DOM, talks AG-UI over SSE with self-managed Bearer auth (no CopilotKit runtime), and can be embedded in any third-party page.
+- **Embeddable chat widget** — a single IIFE script that mounts into a shadow DOM and talks a typed **REST + SSE timeline** with self-managed Bearer auth (no CopilotKit / AG-UI runtime), embeddable in any third-party page.
 
 ## 1. Quick Start for Development
 
@@ -92,9 +97,9 @@ The extension bridges the backend with the user's browser for automated operatio
 Recent architecture notes:
 - **No screenshots** — the screenshot pipeline was removed end-to-end (extension, backend, UI). Process recording is text/event based.
 - **SSE lives in an offscreen document** (`offscreen.html/js`) — immune to MV3 service-worker suspension; the background alarm re-creates it if the browser closes it.
-- **Native ES modules** — the background service worker (`background.js`, `"type": "module"`) imports `lib/cdp-client.js`, `lib/tab-manager.js`, `lib/result.js`, `lib/offscreen-bridge.js`; the execution layer is `content.js` + `content-locator.js` + `content-editors.js` (injected in order into the isolated world).
+- **Native ES modules** — the background service worker (`background.js`, `"type": "module"`) imports `lib/cdp-client.js`, `lib/tab-manager.js`, `lib/result.js`, `lib/offscreen-bridge.js`; the execution layer is `content.js` + `content-locator.js` (injected in order into the isolated world).
 - **Tab grouping** — every tab the plugin navigates/opens is auto-grouped under the `AgentSphere` tab group (`tabGroups` permission), recreated if closed.
-- **`executeJS` is tiered** (debugger only as last resort): isolated world (`chrome.scripting`) → `inject.js` MAIN-world postMessage bridge → `chrome.scripting` MAIN world → `chrome.debugger` `Runtime.evaluate` (strict-CSP sites).
+- **`executeJS` is tiered** (debugger only as last resort): `chrome.scripting` into the page **MAIN world** → `chrome.debugger` `Runtime.evaluate` (bypasses CSP entirely; strict-CSP sites land here). MV3's extension CSP forbids `eval()` in an isolated world, so no isolated-world tier exists.
 
 ![Chrome Extension browser bridge structure](agent-sphere-readme/chrome-extension-structure.png)
 
@@ -352,17 +357,24 @@ reasoning_token   → "🤔 The user is asking about weather, I need to open a w
 | `run_running` | Run starts | Status indicator |
 | `run_completed` | Run completes | Completion notification |
 | `run_failed` | Run fails | Error prompt |
+| `run_cancelled` | Run cancelled | Cancellation notice |
+| `run_awaiting_user` | Run pauses for clarification | Set to AWAITING_USER |
 | `tool_call_started` | Tool PENDING | Tool call list |
+| `tool_call_in_progress` | Tool running | Running icon |
 | `tool_call_succeeded` | Tool completes | ✅ icon |
 | `tool_call_failed` | Tool fails | ❌ icon |
 | `compaction_running` | Compaction starts | Reasoning panel |
 | `compaction_completed` | Compaction completes | Reasoning panel |
+| `compaction_failed` | Compaction fails | Reasoning panel |
+| `session_updated` | Session title changes | Live title sync |
 | `clarification_pending` | LLM asks for user input | Clarification card (confirm/choice/input) |
 | `clarification_responded` | User responds | Card shows ✓, run resumes |
 | `clarification_expired` | Clarification TTL expires | Card shows expired |
 | `clarification_dismissed` | Run cancelled while waiting | Card shows dismissed |
 
-> Model reasoning (`reasoning_token`) is **persisted** to `agent_run.reasoning` at run end, so both the main UI and the embeddable widget render the thinking in session history (not only live). The widget also streams task-triggered runs' thinking live via the passive `/api/v1/runtime/{sessionId}/stream`.
+Sub-agent activity reuses the same `content_token` / `reasoning_token` / `tool_call_*` events, distinguished by a `subAgentRunId` on the payload; the frontend aggregates these live into the inline sub-agent cards.
+
+> Model reasoning (`reasoning_token`) is **persisted** to `agent_run.reasoning` at run end, so both the main UI and the embeddable widget render the thinking in session history (not only live). The widget drives it live through the same per-session `/api/v1/runtime/{sessionId}/stream` SSE channel.
 
 #### 4.2.2 Run Activity API
 
@@ -438,8 +450,8 @@ npm run dev
 # Chrome → chrome://extensions → Developer mode → Load unpacked
 # Select the agent-sphere-chrome-extension directory
 # (declares <all_urls>: read & change data on all sites, granted at install)
-# Runtime files: manifest.json, background.js (ESM) + lib/*, content.js + content-locator.js + content-editors.js,
-# page-script.js / inject.js (MAIN-world bridges), offscreen.html/js (SSE host), popup.html/js.
+# Runtime files: manifest.json, background.js (ESM) + lib/*, content.js + content-locator.js,
+# page-script.js (MAIN-world auth/session bridge), offscreen.html/js (SSE host), popup.html/js.
 # Permissions include `offscreen` and `tabGroups` (plugin tabs auto-group under "AgentSphere").
 
 # 5. Configure URLs
@@ -621,7 +633,7 @@ The identity provider's `preferred_username`/`name` is stored as `display_subjec
 
 ### 4.11 Embeddable Chat Widget
 
-`agent-sphere-copilot-widget` is a **standalone embeddable chat widget** that third-party business sites can drop into any page. It bundles CopilotKit + AG-UI into a single IIFE script, mounts into a **shadow DOM**, and authenticates through the OIDC SSO above — no CopilotKit cloud/runtime required (auth is self-managed).
+`agent-sphere-copilot-widget` is a **standalone embeddable chat widget** that third-party business sites can drop into any page. It bundles React into a single IIFE script, mounts into a **shadow DOM**, and authenticates through the OIDC SSO above — no CopilotKit / AG-UI cloud-runtime (auth and chat are fully self-managed). Chat is a **typed REST + SSE timeline** (same shape as the main UI chat page) driven by a per-session SSE stream.
 
 #### Embed
 
@@ -661,14 +673,15 @@ Embedded into a third-party system page (`mountTo`):
 
 #### How It Works
 
-- **OIDC SSO**: consumes `?otc=` → exchanges for a token → stores it in `sessionStorage` (`agent-sphere-widget:agent-user`); `?otc=`/`?error=` are stripped from the URL after handling. `autoLogin` performs a one-shot silent probe (`prompt=none`); the login screen lets the user pick an enabled identity provider.
-- **Agent list & sessions**: loaded from `/instance/instances/all` and `/instance/sessions` (CRUD). Sessions support create, inline rename (✓/✕), and archive (two-step inline confirm), all with infinite-scroll pagination.
-- **Chat (AG-UI)**: one `HttpAgent` per agent posts to `{apiBase}/copilot/agent/{id}/services/chat/run`; the backend streams SSE `data:` lines of AG-UI events (`TEXT_MESSAGE_*`, `REASONING_MESSAGE_*`, `TOOL_CALL_*`, `RUN_*`). Requests carry `Authorization: Bearer` and never go through the CopilotKit runtime.
-- **Clarification (human-in-the-loop)**: when the agent pauses with an interrupt, a clarification card appears inline (confirm / choice / input). Responding or cancelling resumes the run via AG-UI `resume` (`resolved` / `cancelled`); answered cards are also rendered from session history.
-- **Thinking / reasoning**: task-triggered runs' thinking streams live into the chatbox via a passive `/api/v1/runtime/{sessionId}/stream` (injected as a `reasoning` message), and persisted `agent_run.reasoning` is rendered in session history.
-- **Session-level stop**: the stop button aborts the local stream and calls `POST /api/v1/runtime/{sessionId}/stop` (no runId dependency), so stopping a task run works from the widget.
-- **Live updates**: session titles sync in real time via the `session_title_updated` custom event; the auxiliary panel shows the current task list (`STATE_SNAPSHOT` todos) and tool-call activity with hover details.
+- **OIDC SSO**: consumes `?otc=` → `POST /auth/sso/exchange` → stores the user+token in `sessionStorage` (`agent-sphere-widget:agent-user`); `?otc=`/`?error=` are stripped from the URL after handling. `autoLogin` performs a one-shot silent probe (`prompt=none`) via a hidden same-origin iframe (no page redirect); the login screen lets the user pick an enabled identity provider.
+- **Agent & session lists**: instances (enabled) come from `/instance/instances` (paged) and sessions from `/instance/sessions` (offset paged). Sessions support create, inline rename (✓/✕), and archive (two-step inline confirm), all with infinite-scroll pagination.
+- **Timeline channel (REST + SSE)**: the widget renders a *typed timeline* — `GET /instance/sessions/{sid}/timeline` (paged by `beforeSeq`/`afterSeq`, limit 5–50) returns rows keyed by `seq` + `kind` (`user` / `assistant` / `tool` / `clarification` / `subagent` / `run_status` / `error`). A live SSE stream `GET /runtime/{sid}/stream` (Bearer) drives the same rows.
+- **SSE typewriter & merge**: `content_token` / `reasoning_token` push onto the matching `seq+kind==='assistant'` row's `reply` / `thinking`; sub-agent rows aggregate live steps (LLM reasoning/reply + `tool_call_*`). Terminal / tool / clarification events (`run_completed`/`failed`/`cancelled`/`awaiting_user`, `tool_call_*`, `clarification_*`) trigger an `afterSeq` refresh for an authoritative merge — `mergeTimeline` dedupes by `seq`, and placeholder sub-agent rows carry negative `seq<0` until replaced by real rows.
+- **Send / stop / clarify**: sending posts `POST /runtime/{sid}/chat` → `{runId,status}` (the rest arrives via SSE + refresh). A RUNNING dot shows while active and the send button becomes **stop** → `POST /runtime/{sid}/stop` (session-level, no runId). Clarification options are answered inline via `POST /runtime/{sid}/run/{runId}/clarify`.
+- **WidgetTimeline rendering**: self-built row renderer — copy buttons on user/assistant rows, collapsible model-reason sections, tool cards, inline clarification options (confirm/choice/input), collapsible sub-agent cards with live steps (single-open tool detail, auto-scroll), RUNNING wobble dot, and "load older" pagination.
 - **Hosted mode**: passing `mountTo` renders the widget statically inside your layout (e.g. inside a drawer or a section) instead of a floating bubble.
+
+The widget builds **two** IIFE bundles: `agent-sphere-widget.js` (full chat UI) and `agent-sphere-auth.js` (a lightweight, no-React SSO silent-login entry for host pages that already show chat elsewhere).
 
 #### Development
 
@@ -676,7 +689,7 @@ Embedded into a third-party system page (`mountTo`):
 cd agent-sphere-copilot-widget
 npm install
 npm run dev        # vite dev on :5173, proxies /api -> localhost:8080
-npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js
+npm run build      # tsc + vite lib IIFE -> dist/agent-sphere-widget.js + dist/agent-sphere-auth.js
 ```
 
 > Gotcha: rollup 4 ships platform-specific binaries as optional dependencies. Never copy `node_modules`/`package-lock.json` across machines — if `Cannot find module @rollup/rollup-*` appears, run `rm -rf node_modules package-lock.json && npm i` on the target machine.
@@ -790,7 +803,7 @@ The frontend **产出 → 任务产物** page lists them (task goal, type, schem
 | **Database** | PostgreSQL, Flyway migrations |
 | **Cache/Distributed Lock** | Redis (Redisson) |
 | **Frontend** | React, UmiJS, Ant Design Pro |
-| **Chat Widget** | CopilotKit (self-managed) + AG-UI, shadow DOM, single IIFE script |
+| **Chat Widget** | React, shadow DOM, single IIFE script — self-built typed **REST + SSE timeline** chat (no CopilotKit / AG-UI) |
 | **Chrome Extension** | Manifest V3, Service Worker, Content Script |
 | **Auth** | OIDC multi-provider SSO (PKCE / JWKS), RBAC, audit log |
 | **Real-time Communication** | SSE (Server-Sent Events), multi-emitter broadcast |
