@@ -21,7 +21,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
     private final AgentLlmInteractionRecordMapper mapper;
 
     @Override
-    public void createRecord(AgentLlmInteractionRecordVO vo) {
+    public Long createRecord(AgentLlmInteractionRecordVO vo) {
         AgentLlmInteractionRecord record = new AgentLlmInteractionRecord();
         record.setRunId(vo.getRunId());
         record.setSessionId(vo.getSessionId());
@@ -40,6 +40,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
             record.setCreatedBy(vo.getCreatedBy());
         }
         mapper.insert(record);
+        return record.getId();
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.buukle.agent.runtime.orchestration.pipeline;
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.capability.builtin.dtvo.vo.BuiltinToolVO;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
+import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
 import com.buukle.agent.capability.cli.spi.CapabilityCliSpi;
@@ -14,7 +15,7 @@ import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
 import com.buukle.agent.common.skill.SkillDefinition;
 import com.buukle.agent.common.skill.SkillDefinitionParser;
-import com.buukle.agent.common.skill.ToolRefs;
+import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.instance.dtvo.vo.CapabilityFullVO;
 import com.buukle.agent.instance.dtvo.vo.CapabilityVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
@@ -234,7 +235,7 @@ public class ContextPreparer {
         SkillDefinition def;
         try {
             def = SkillDefinitionParser.parse(skill.getDefinition());
-        } catch (com.buukle.agent.common.skill.InvalidSkillDefinition e) {
+        } catch (InvalidSubRunDefinition e) {
             log.warn("Skill {} definition invalid, skipping: {}", skill.getId(), e.getMessage());
             return;
         }

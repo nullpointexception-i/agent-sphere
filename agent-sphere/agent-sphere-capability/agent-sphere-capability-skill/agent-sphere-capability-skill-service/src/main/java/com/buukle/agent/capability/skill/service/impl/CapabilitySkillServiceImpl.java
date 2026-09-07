@@ -12,6 +12,7 @@ import com.buukle.agent.capability.skill.repository.SkillMapper;
 import com.buukle.agent.capability.skill.service.CapabilitySkillService;
 import com.buukle.agent.capability.skill.service.converter.CapabilitySkillConverter;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
@@ -125,7 +126,7 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         }
         try {
             com.buukle.agent.common.skill.SkillDefinitionParser.parse(definition);
-        } catch (com.buukle.agent.common.skill.InvalidSkillDefinition e) {
+        } catch (InvalidSubRunDefinition e) {
             throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID, e.getMessage());
         }
     }

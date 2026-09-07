@@ -20,6 +20,9 @@ let targetOrigin = null;
 // 用时间戳租约：单命令超时（45s）后自动释放，防一条卡死命令锁死整个 session。
 const COMMAND_LEASE_MS = 45000;
 let commandInFlightAt = 0;
+// 当前在跑的命令（动作 + 启动时刻），供守卫拒信说明"正在执行什么、还要多久释放"，
+// 让后端 LLM 决定等待还是先 getContent 复核，而不是连续空发。
+let commandActive = null;
 
 // --- Keep the offscreen document (SSE host) alive / recreate if the browser closed it ---
 function startOffscreenKeepalive() {
@@ -228,23 +231,28 @@ function mapErrorCategory(e) {
 // --- Command execution ---
 async function executeInPage(commandId, action, params, sessionId) {
   if (commandInFlightAt && Date.now() - commandInFlightAt < COMMAND_LEASE_MS) {
-    sendCallbackSafe(
-      commandId,
-      failResult('上一命令仍在执行（并发守卫），请稍候重试', ErrorCategory.UNKNOWN),
-      tabManager.getControlled(),
-      sessionId,
+    const elapsed = Date.now() - commandInFlightAt;
+    const running = (commandActive && commandActive.action) || 'unknown';
+    const retryAfterMs = Math.max(0, COMMAND_LEASE_MS - elapsed);
+    const res = failResult(
+      `上一命令仍在执行（并发守卫）：${running} 已耗时 ${Math.round(elapsed / 1000)}s，约 ${Math.ceil(retryAfterMs / 1000)}s 后释放；请先 getContent 复核当前状态`,
+      ErrorCategory.UNKNOWN,
     );
+    res.data = { _runningAction: running, elapsedMs: elapsed, retryAfterMs };
+    sendCallbackSafe(commandId, res, tabManager.getControlled(), sessionId);
     return;
   }
   if (commandInFlightAt) {
     console.warn('[AgentSphere] command lease expired, releasing stuck guard');
   }
   commandInFlightAt = Date.now();
+  commandActive = { action, at: commandInFlightAt };
   const t0 = Date.now();
   try {
     await executeInPageInner(commandId, action, params, sessionId);
   } finally {
     commandInFlightAt = 0;
+    commandActive = null;
     console.log(`[ChromeCmd] action=${action} tab=${params.tabId || tabManager.getControlled() || '-'} ms=${Date.now() - t0}`);
   }
 }
@@ -299,7 +307,7 @@ async function locatePoint(tabId, params) {
   if (!d) return null;
   if (d.ok === false) return { ok: false, error: d.error, matches: d.matches, suggested: d.suggested };
   if (!d.point || typeof d.point.x !== 'number' || typeof d.point.y !== 'number') return null;
-  return { ok: true, point: d.point, tag: d.tag, text: d.text, count: d.count };
+  return { ok: true, point: d.point, tag: d.tag, text: d.text, count: d.count, preHash: d.preHash, clickable: d.clickable };
 }
 
 async function cdpAct(tabId, action, params, loc) {
@@ -380,6 +388,29 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
   }
   const tabNow = await chrome.tabs.get(targetTabId).catch(() => null);
   data._url = (tabNow && tabNow.url) || '';
+
+  // 写动作后置校验：CDP 派发后 settle 短暂稳定（flyout/SPA 展开），再读回当前状态。
+  // → changed（动作前后跨 frame 指纹差异）、_hints（dialogs/chips/count）、_clickable。
+  try {
+    await new Promise((r) => setTimeout(r, 300));
+    const v = await tabManager.askContent(targetTabId, {
+      type: 'browser_operation',
+      action: 'verify',
+      params: {},
+    }, 2, params.frameId);
+    const vd = v && v.data;
+    if (vd) {
+      if (typeof vd.fp === 'string' && loc && typeof loc.preHash === 'string') {
+        data.changed = loc.preHash !== vd.fp;
+      }
+      if (vd._hints) data._hints = vd._hints;
+      if (vd._url) data._url = vd._url;
+    }
+    if (loc && typeof loc.clickable === 'boolean') data._clickable = loc.clickable;
+  } catch (err) {
+    console.warn('[AgentSphere] post-action verify failed:', err?.message);
+  }
+
   sendCallbackSafe(commandId, okResult(data, 'cdp'), targetTabId, sessionId);
   return data;
 }
@@ -568,7 +599,12 @@ function evalInWorldFunc() {
     }
     try {
       const result = await run();
-      return result === undefined ? '__NO_RETURN__' : result;
+      // 无返回值：一并回读 document.title，供副作用验证（document.title 标记技巧）
+      // 无需再发一轮 getContent —— __NO_RETURN__ 属"执行成功但无返回值"，勿当失败重试。
+      if (result === undefined) {
+        return { __asVoid: true, __asTitle: typeof document !== 'undefined' ? document.title : '' };
+      }
+      return result;
     } catch (e) {
       throw new Error('executeJS runtime error: ' + (e && e.message ? e.message : e));
     }
@@ -583,6 +619,16 @@ async function runScripting(tabId, code) {
     args: [code],
   });
   const value = results?.[0]?.result;
+  if (value && typeof value === 'object' && value.__asVoid === true) {
+    const r = okWarning(
+      'scripting-main',
+      'code executed but did not return a value（__NO_RETURN__ 属正常）；副作用已用 document.title 标记的话，读 _documentTitle 复核',
+      '__NO_RETURN__',
+      'void',
+    );
+    r._documentTitle = value.__asTitle;
+    return r;
+  }
   if (value === undefined) {
     return okWarning('scripting-main', 'code did not return a value; may not have executed', '__NO_RETURN__');
   }

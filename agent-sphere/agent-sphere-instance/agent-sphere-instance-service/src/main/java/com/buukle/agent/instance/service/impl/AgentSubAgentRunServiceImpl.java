@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
 import com.buukle.agent.instance.domain.AgentSubAgentRun;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
-import com.buukle.agent.instance.dtvo.enums.SkillExecutionStatus;
+import com.buukle.agent.instance.dtvo.enums.SubRunStatus;
 import com.buukle.agent.instance.dtvo.vo.AgentSubAgentRunVO;
 import com.buukle.agent.instance.dtvo.vo.SubAgentTimelineItemVO;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
@@ -58,7 +58,7 @@ public class AgentSubAgentRunServiceImpl implements AgentSubAgentRunSpi {
         r.setAgentType(agentType != null ? agentType : "SKILL");
         r.setAgentRef(agentRef != null ? agentRef : "");
         r.setDisplayName(displayName != null ? displayName : "");
-        r.setStatus(SkillExecutionStatus.RUNNING.name());
+        r.setStatus(SubRunStatus.RUNNING.name());
         r.setStartedAt(LocalDateTime.now());
         mapper.insert(r);
         return toVO(r);

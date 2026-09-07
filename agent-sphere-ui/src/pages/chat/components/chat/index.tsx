@@ -1,12 +1,9 @@
-import { useIntl } from '@umijs/max';
-import { Button } from 'antd';
 import { useEffect, useRef } from 'react';
 import { useStyles } from '../../style';
 import Footer from './Footer';
 import Header from './Header';
-import MessageList from './MessageList';
-import SubAgentDock from './SubAgentDock';
-import type { SubAgentTimelineItem } from './subAgentTypes';
+import type { SubAgentLiveMap, SubAgentTimelineItem } from './subAgentTypes';
+import TimelineList from './TimelineList';
 
 interface ChatMainProps {
   currentSession: any;
@@ -16,8 +13,14 @@ interface ChatMainProps {
   modelRoutes: any[];
   sseConnected: boolean;
   messages: any[];
-  collapsedKeys: Set<string>;
-  onCollapsedKeysChange: (keys: Set<string>) => void;
+  /** 统一 Timeline 打平行（替代旧多源拼装渲染）。 */
+  timeline: any[];
+  timelineHasMore: boolean;
+  onLoadOlderTimeline: () => void;
+  onRespondClarify: (row: any, response: string) => void;
+  loadSubAgentSteps: (id: number) => Promise<SubAgentTimelineItem[]>;
+  /** 子 Agent 实时步骤（SSE 纯驱动，按 subAgentRunId 聚合）。 */
+  subAgentLive?: SubAgentLiveMap;
   hasMoreHistory: boolean;
   onLoadMoreHistory: () => void;
   inputValue: string;
@@ -29,11 +32,6 @@ interface ChatMainProps {
   onExpandOpen: () => void;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
-  subAgentLive: any[];
-  subAgentHistorical: any[];
-  onLoadSubAgentTimeline: (id: number) => Promise<SubAgentTimelineItem[]>;
-  mainTimeline: any[];
-  historyTimeline: any[];
 }
 
 export default function ChatMain({
@@ -44,53 +42,64 @@ export default function ChatMain({
   modelRoutes,
   sseConnected,
   messages,
-  collapsedKeys,
-  onCollapsedKeysChange,
-  hasMoreHistory,
-  onLoadMoreHistory,
+  timeline,
+  timelineHasMore,
+  onLoadOlderTimeline,
+  onRespondClarify,
+  onCancelClarification,
+  loadSubAgentSteps,
+  subAgentLive,
   inputValue,
   onInputValueChange,
   sending,
   onSendMessage,
   onCancelSend,
-  onCancelClarification,
   onExpandOpen,
   sessionPanelOpen,
   onTogglePanel,
-  subAgentLive,
-  subAgentHistorical,
-  onLoadSubAgentTimeline,
-  mainTimeline,
-  historyTimeline,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
-  const intl = useIntl();
   const { styles } = useStyles();
-  const loadMoreRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const timelineWrapRef = useRef<HTMLDivElement>(null);
 
-  // 单一滚动容器（.messages）接手消息滚动：仅在用户已接近底部时滚到底（含子 Agent chip 栏），
-  // 不打断向上回看历史 / 加载更多。
+  const hasMessages =
+    messages.some((m: any) => m.content && m.content !== '{}') ||
+    timeline.length > 0;
+
+  // 单一滚动容器（.messages）接手消息滚动：
+  // - stickRef 在 scroll 事件持续记录「用户是否在底部附近」（增长前的位置，解决大块增长 >160px 不自滚）；
+  // - ResizeObserver 观察内容包裹层，任何内容高度变化（子 Agent 展开/异步步骤/SSE 流式/工具块展开/图片加载/大块合并）
+  //   都在「用户原本在底部」时滚到底，不打断向上回看 / 加载更早。
+  const stickRef = useRef(true);
   useEffect(() => {
     const el = messagesRef.current;
-    if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
-  }, [
-    messages,
-    mainTimeline,
-    historyTimeline,
-    subAgentLive,
-    subAgentHistorical,
-  ]);
+    const inner = timelineWrapRef.current;
+    if (!el || !inner) return;
+    const maybeStick = () => {
+      if (stickRef.current) el.scrollTop = el.scrollHeight;
+    };
+    const onScroll = () => {
+      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    };
+    onScroll();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const ro = new ResizeObserver(maybeStick);
+    ro.observe(inner);
+    maybeStick();
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, [hasMessages]);
 
-  const hasMessages = messages.some(
-    (m: any) => m.content && m.content !== '{}',
-  );
-
-  const hasPendingClarifications = messages.some((m: any) =>
-    m.clarifications?.some((c: any) => c.status === 'pending'),
-  );
+  const hasPendingClarifications =
+    messages.some((m: any) =>
+      m.clarifications?.some((c: any) => c.status === 'pending'),
+    ) ||
+    timeline.some(
+      (r: any) => r.kind === 'clarification' && r.state === 'PENDING',
+    );
 
   const footerProps = {
     inputValue,
@@ -118,29 +127,25 @@ export default function ChatMain({
       />
       {hasMessages ? (
         <div ref={messagesRef} className={styles.messages}>
-          <div ref={loadMoreRef} className={styles.loadMore}>
-            {hasMoreHistory && (
-              <Button type="link" size="small" onClick={onLoadMoreHistory}>
-                {intl.formatMessage({
-                  id: 'chat.loadMoreMessages',
-                  defaultMessage: 'Load more messages',
-                })}
-              </Button>
-            )}
+          <div
+            ref={timelineWrapRef}
+            style={{ width: '100%', minWidth: 0, flexShrink: 0 }}
+          >
+            <TimelineList
+              rows={timeline}
+              hasMore={timelineHasMore}
+              onLoadOlder={onLoadOlderTimeline}
+              onRespondClarify={onRespondClarify}
+              onCancelClarification={(row: any) =>
+                onCancelClarification?.({
+                  ...row,
+                  sessionId: currentSession?.id,
+                })
+              }
+              loadSubAgentSteps={loadSubAgentSteps}
+              subAgentLive={subAgentLive}
+            />
           </div>
-          <MessageList
-            messages={messages}
-            collapsedKeys={collapsedKeys}
-            onCollapsedKeysChange={onCollapsedKeysChange}
-            onCancelClarification={onCancelClarification}
-            mainTimeline={mainTimeline}
-            historyTimeline={historyTimeline}
-          />
-          <SubAgentDock
-            live={subAgentLive}
-            historical={subAgentHistorical}
-            loadTimeline={onLoadSubAgentTimeline}
-          />
         </div>
       ) : (
         <div className={styles.footerCenter}>

@@ -12,6 +12,16 @@ import java.util.List;
 @Mapper
 public interface AgentToolCallRecordMapper extends BaseMapper<AgentToolCallRecord> {
 
+    /** Timeline 正文解析：按 run + stepId(publishId hash) 定位工具调用记录。 */
+    @Select("""
+            SELECT * FROM agent_tool_call_record
+            WHERE run_id = #{runId} AND session_id = #{sessionId} AND step_id = #{stepId} AND delete_flag = 0
+            ORDER BY id DESC LIMIT 1
+            """)
+    AgentToolCallRecord selectByRunAndStep(@Param("runId") Long runId,
+                                           @Param("sessionId") Long sessionId,
+                                           @Param("stepId") long stepId);
+
     @Select("""
             SELECT
               (SELECT COUNT(*) FROM agent_llm_interaction_record WHERE run_id = #{runId} AND delete_flag = 0)

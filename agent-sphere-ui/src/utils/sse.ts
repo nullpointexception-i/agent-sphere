@@ -10,6 +10,21 @@ export async function connectSse(
   callbacks: SseCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
+  // 连接超时：初始 fetch 挂起（半开/代理缓冲等）既不 resolve 也不 reject 时，
+  // 必须触发 onError 让上层走重连退避，否则 SSE 永远连不上（只能靠手动刷新恢复）。
+  const CONNECT_TIMEOUT_MS = 12000;
+  const controller = new AbortController();
+  const abortFromExternal = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) return;
+    signal.addEventListener('abort', abortFromExternal, { once: true });
+  }
+  let timedOut = false;
+  const connectTimer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, CONNECT_TIMEOUT_MS);
+
   try {
     const response = await fetch(url, {
       headers: {
@@ -17,7 +32,7 @@ export async function connectSse(
         Accept: 'text/event-stream',
         'Cache-Control': 'no-cache',
       },
-      signal,
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -83,7 +98,14 @@ export async function connectSse(
       clearInterval(watchdog);
     }
   } catch (error: unknown) {
+    if (timedOut) {
+      callbacks.onError?.(new Error('SSE connect timeout'));
+      return;
+    }
     if (error instanceof DOMException && error.name === 'AbortError') return;
     callbacks.onError?.(error as Error);
+  } finally {
+    clearTimeout(connectTimer);
+    if (signal) signal.removeEventListener('abort', abortFromExternal);
   }
 }

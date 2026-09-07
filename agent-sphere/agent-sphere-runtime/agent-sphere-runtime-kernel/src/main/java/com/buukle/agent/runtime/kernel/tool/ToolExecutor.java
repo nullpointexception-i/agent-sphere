@@ -3,7 +3,7 @@ package com.buukle.agent.runtime.kernel.tool;
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
-import com.buukle.agent.common.skill.ToolRefs;
+import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.instance.dtvo.dto.TodowriteResultDTO;
 import com.buukle.agent.instance.dtvo.vo.SessionTodoVO;
 import com.buukle.agent.instance.spi.ClarificationSpi;
@@ -13,22 +13,20 @@ import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.contract.CliExecutionBinding;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
-import com.buukle.agent.runtime.kernel.port.SkillExecutionContext;
+import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
-import com.buukle.agent.runtime.kernel.skill.SkillReActExecutor;
+import com.buukle.agent.runtime.kernel.runner.SessionSubRunner;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -45,7 +43,6 @@ public class ToolExecutor {
     private static final String JSON_ERROR_CLARIFICATION = "{\"error\":\"Failed to process clarification\"}";
     private static final String JSON_ERROR_UNSUPPORTED_TYPE = "{\"error\":\"Unsupported capability type: ";
     private static final String JSON_ERROR_EXECUTION = "{\"error\":\"";
-    private static final String STATUS_AWAITING_USER = "awaiting_user";
 
     private final List<CapabilityMcpSpi> mcpSpis;
     private final CapabilityBuiltinSpi builtinSpi;
@@ -53,15 +50,15 @@ public class ToolExecutor {
     private final SessionTodoSpi sessionTodoSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final ClarificationSpi clarificationSpi;
-    private final org.springframework.beans.factory.ObjectProvider<SkillReActExecutor> skillReActExecutorProvider;
+    private final org.springframework.beans.factory.ObjectProvider<SessionSubRunner> subRunnerProvider;
 
     /** 主循环工具入口：以根上下文执行（主 Agent 无父级限制）。 */
     public String execute(TurnToolCall tc, Long sessionId, Long runId, List<RuntimeTool> tools) {
-        return execute(tc, SkillExecutionContext.root(sessionId, runId, null), tools);
+        return execute(tc, SubRunExecutionContext.root(sessionId, runId, null), tools);
     }
 
     /** 带嵌套上下文执行：Skill 子循环内层工具使用子上下文（深度/栈/白名单）。 */
-    public String execute(TurnToolCall tc, SkillExecutionContext ctx, List<RuntimeTool> tools) {
+    public String execute(TurnToolCall tc, SubRunExecutionContext ctx, List<RuntimeTool> tools) {
         Long sessionId = ctx.getSessionId();
         Long runId = ctx.getRunId();
         RuntimeTool tool = tools.stream()
@@ -89,6 +86,9 @@ public class ToolExecutor {
                     String clarifyType = argsNode.has("type") ? argsNode.get("type").asText() : ChatClarification.CLARIFYING_DEFAULT_TYPE;
                     String optionsJson = argsNode.has("options") ? argsNode.get("options").toString() : null;
                     String clarificationId = java.util.UUID.randomUUID().toString().substring(0, CLARIFICATION_ID_LENGTH);
+                    // 先建库、再发 PENDING 事件：Timeline 建澄清行时需 lookupClarificationRef 查得到记录，
+                    // 否则行 refClarificationId=null，刷新后 resolveContent 取不到 response/options（只剩"已应答"）。
+                    clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType, optionsJson, clarificationId);
                     eventPublisher.publishEvent(new RuntimeEventVO(
                             ClarificationStatus.PENDING,
                             new RuntimeEventDataVO()
@@ -98,7 +98,6 @@ public class ToolExecutor {
                                     .setType(clarifyType)
                                     .setArgumentsJson(optionsJson)
                                     .setClarificationId(clarificationId)));
-                    clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType, optionsJson, clarificationId);
                     return JSON.writeValueAsString(Map.of(
                             ChatClarification.CLARIFYING_JSON_STATUS, ChatClarification.CLARIFYING_STATUS_AWAITING_USER,
                             ChatClarification.CLARIFYING_JSON_CLARIFICATION_ID, clarificationId
@@ -125,14 +124,14 @@ public class ToolExecutor {
                 return cliExecutorService.execute(cliBinding, args);
             }
             if (CAPABILITY_TYPE_SKILL.equals(type)) {
-                SkillReActExecutor skillExecutor = skillReActExecutorProvider.getIfAvailable();
-                if (skillExecutor == null) {
+                SessionSubRunner subRunner = subRunnerProvider.getIfAvailable();
+                if (subRunner == null) {
                     return "{\"error\":\"Skill executor unavailable\"}";
                 }
                 // 携带触发本 skill 的工具调用 id 作为 parentToolCallId（sub_agent_run.parent_tool_call_id 关联回溯）
-                SkillExecutionContext skillCtx = ctx.child(
+                SubRunExecutionContext subRunExecutionContext = ctx.child(
                         ctx.getSkillDepth() + 1, ctx.getSkillStack(), ctx.getInheritedAllowedToolRefs(), tc.id());
-                return skillExecutor.execute(tool, args, skillCtx, tools);
+                return subRunner.execute(tool, args, subRunExecutionContext, tools);
             }
             return JSON_ERROR_UNSUPPORTED_TYPE + type + "\"}";
         } catch (Exception e) {
@@ -161,8 +160,8 @@ public class ToolExecutor {
                 .orElse(toolName);
     }
 
-    /** 判断某个工具调用是否为 skill 工具（toolRef 形如 "skill:<id>"），用于放宽外层 fiber 超时。 */
-    public boolean isSkillTool(String toolName, List<RuntimeTool> tools) {
+    /** 判断某个工具调用是否为 sub-run 工具（toolRef 形如 "skill:<id>"），用于放宽外层 fiber 超时。 */
+    public boolean isSubRunTool(String toolName, List<RuntimeTool> tools) {
         if (toolName == null || tools == null || tools.isEmpty()) return false;
         String prefix = ToolRefs.TYPE_SKILL + ToolRefs.SEPARATOR;
         return tools.stream().anyMatch(t ->

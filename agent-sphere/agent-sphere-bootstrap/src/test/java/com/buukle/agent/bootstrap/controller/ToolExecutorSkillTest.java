@@ -6,10 +6,10 @@ import com.buukle.agent.instance.spi.ClarificationSpi;
 import com.buukle.agent.instance.spi.SessionTodoSpi;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
-import com.buukle.agent.runtime.kernel.port.SkillExecutionContext;
+import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
-import com.buukle.agent.runtime.kernel.skill.SkillReActExecutor;
+import com.buukle.agent.runtime.kernel.runner.SessionSubRunner;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,9 +47,9 @@ class ToolExecutorSkillTest {
     @Mock
     ClarificationSpi clarificationSpi;
     @Mock
-    ObjectProvider<SkillReActExecutor> skillExecutorProvider;
+    ObjectProvider<SessionSubRunner> skillExecutorProvider;
     @Mock
-    SkillReActExecutor skillReActExecutor;
+    SessionSubRunner sessionSubRunner;
 
     ToolExecutor toolExecutor;
 
@@ -71,25 +71,25 @@ class ToolExecutorSkillTest {
                         ExecBindingKeys.SKILL_PROMPT_TEMPLATE, "请按配置执行",
                         ExecBindingKeys.SKILL_ALLOW_TOOLS, List.of()))
                 .build();
-        doReturn(skillReActExecutor).when(skillExecutorProvider).getIfAvailable();
-        given(skillReActExecutor.execute(any(RuntimeTool.class), anyString(),
-                any(SkillExecutionContext.class), anyList())).willReturn("{\"result\":\"ok\"}");
+        doReturn(sessionSubRunner).when(skillExecutorProvider).getIfAvailable();
+        given(sessionSubRunner.execute(any(RuntimeTool.class), anyString(),
+                any(SubRunExecutionContext.class), anyList())).willReturn("{\"result\":\"ok\"}");
 
         String result = toolExecutor.execute(
                 new TurnToolCall("call_1", "skill_8", "{\"keyword\":\"x\"}"),
-                SkillExecutionContext.root(1L, 2L, null),
+                SubRunExecutionContext.root(1L, 2L, null),
                 List.of(skillTool));
 
         assertEquals("{\"result\":\"ok\"}", result);
-        verify(skillReActExecutor).execute(any(RuntimeTool.class), anyString(),
-                any(SkillExecutionContext.class), anyList());
+        verify(sessionSubRunner).execute(any(RuntimeTool.class), anyString(),
+                any(SubRunExecutionContext.class), anyList());
     }
 
     @Test
     void unknownTool_returnsError() {
         String result = toolExecutor.execute(
                 new TurnToolCall("call_1", "nope", "{}"),
-                SkillExecutionContext.root(1L, 2L, null),
+                SubRunExecutionContext.root(1L, 2L, null),
                 List.of());
         assertTrue(result.contains("Unknown tool"));
     }

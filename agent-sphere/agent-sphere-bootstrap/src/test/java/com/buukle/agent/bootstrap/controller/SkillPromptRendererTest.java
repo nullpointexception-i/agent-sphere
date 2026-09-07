@@ -1,6 +1,6 @@
 package com.buukle.agent.bootstrap.controller;
 
-import com.buukle.agent.common.skill.InvalidSkillDefinition;
+import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
 import com.buukle.agent.common.skill.SkillPromptRenderer;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +31,7 @@ class SkillPromptRendererTest {
 
     @Test
     void render_invalidPathStillThrows() {
-        assertThrows(InvalidSkillDefinition.class,
+        assertThrows(InvalidSubRunDefinition.class,
                 () -> SkillPromptRenderer.render("名字 {{}}", "{\"name\":\"x\"}"));
     }
 

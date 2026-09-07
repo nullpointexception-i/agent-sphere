@@ -15,13 +15,14 @@ import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
-import com.buukle.agent.runtime.kernel.port.SkillExecutionContext;
+import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
-import com.buukle.agent.runtime.kernel.skill.SkillReActExecutor;
+import com.buukle.agent.runtime.kernel.runner.SessionSubRunner;
+import com.buukle.agent.runtime.kernel.skill.SkillSubRunPolicy;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,7 +47,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
-class SkillReActExecutorTest {
+class SessionSubRunnerTest {
 
     @Mock
     ModelProviderSpi modelProviderSpi;
@@ -63,7 +64,7 @@ class SkillReActExecutorTest {
     @Mock
     InstanceSpi instanceSpi;
 
-    SkillReActExecutor executor;
+    SessionSubRunner executor;
 
     @BeforeEach
     void setUp() {
@@ -73,10 +74,12 @@ class SkillReActExecutorTest {
         RSet<Object> set = mock(RSet.class);
         org.mockito.Mockito.lenient().when(set.contains(Boolean.TRUE)).thenReturn(false);
         org.mockito.Mockito.lenient().when(redissonClient.getSet(anyString())).thenReturn(set);
-        executor = new SkillReActExecutor(llmService, fallbackRouteExecutor, routeListBuilder, apiKeySpi,
+        executor = new SessionSubRunner(llmService, fallbackRouteExecutor, routeListBuilder, apiKeySpi,
                 toolExecutor, new RunPromptBuilder(), eventPublisher, redissonClient,
                 new AgentRuntimeProperties(),
-                org.mockito.Mockito.mock(com.buukle.agent.instance.spi.AgentSubAgentRunSpi.class));
+                new SkillSubRunPolicy(new AgentRuntimeProperties()),
+                org.mockito.Mockito.mock(com.buukle.agent.instance.spi.AgentSubAgentRunSpi.class),
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class));
     }
 
     private RuntimeTool skillTool() {
@@ -95,8 +98,8 @@ class SkillReActExecutorTest {
                 .build();
     }
 
-    private SkillExecutionContext rootCtx() {
-        return SkillExecutionContext.root(1L, 2L, null);
+    private SubRunExecutionContext rootCtx() {
+        return SubRunExecutionContext.root(1L, 2L, null);
     }
 
     @Test
@@ -128,7 +131,7 @@ class SkillReActExecutorTest {
                 .userMessage(taskMessage)
                 .build();
         String result = executor.execute(skillTool(), "{}",
-                SkillExecutionContext.root(1L, 2L, ctx), List.of());
+                SubRunExecutionContext.root(1L, 2L, ctx), List.of());
 
         assertTrue(result.contains("最终答案"));
     }
@@ -158,7 +161,7 @@ class SkillReActExecutorTest {
                 .userMessage(taskMessage)
                 .build();
         executor.execute(skillTool(), "{\"q\":\"张三\"}",
-                SkillExecutionContext.root(1L, 2L, ctx), List.of());
+                SubRunExecutionContext.root(1L, 2L, ctx), List.of());
     }
 
     @Test
@@ -187,7 +190,7 @@ class SkillReActExecutorTest {
                 .userMessage(taskMessage)
                 .build();
         executor.execute(skillTool(), "{\"q\":\"张三\"}",
-                SkillExecutionContext.root(1L, 2L, ctx), List.of());
+                SubRunExecutionContext.root(1L, 2L, ctx), List.of());
     }
 
     @Test
@@ -225,7 +228,7 @@ class SkillReActExecutorTest {
                 .modelRoute(route())
                 .build();
         String result = executor.execute(tool, "{}",
-                SkillExecutionContext.root(1L, 2L, kctx), List.of(RuntimeTool.builder()
+                SubRunExecutionContext.root(1L, 2L, kctx), List.of(RuntimeTool.builder()
                         .capabilityType("builtin")
                         .capabilityId(5L)
                         .llmToolName("builtin_5")
@@ -260,7 +263,7 @@ class SkillReActExecutorTest {
         }).when(eventPublisher).publishEvent(any(RuntimeEventVO.class));
 
         executor.execute(skillTool(), "{}",
-                SkillExecutionContext.root(1L, 2L, kernelCtx()), List.of());
+                SubRunExecutionContext.root(1L, 2L, kernelCtx()), List.of());
 
         List<RuntimeEventDataVO> withSkillMarker = reasoningEvents.stream()
                 .filter(e -> e.getEventType() instanceof FlowEventType f
@@ -289,7 +292,7 @@ class SkillReActExecutorTest {
     @Test
     void recursiveCall_rejected() {
         // skillId = 5；父栈中已含 5 → 递归拒绝
-        SkillExecutionContext parent = rootCtx().child(1, List.of(5L), null, null);
+        SubRunExecutionContext parent = rootCtx().child(1, List.of(5L), null, null);
         String result = executor.execute(skillTool(), "{}", parent, List.of());
         assertTrue(result.contains("recursive call"));
     }
@@ -297,7 +300,7 @@ class SkillReActExecutorTest {
     @Test
     void depthExceeded_rejected() {
         // 当前深度 3，最大嵌套 3 → 进入即超限
-        SkillExecutionContext parent = rootCtx().child(3, List.of(7L), null, null);
+        SubRunExecutionContext parent = rootCtx().child(3, List.of(7L), null, null);
         String result = executor.execute(skillTool(), "{}", parent, List.of());
         assertTrue(result.contains("nested depth"));
     }

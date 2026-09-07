@@ -127,9 +127,9 @@ buukle:
       execution-enabled: true                      # 是否启用 Skill 嵌套执行 / Enable skill nested execution
       max-sub-loop-count: 128                      # 子循环最大轮次 / Max sub-loop count
       max-nested-depth: 2                          # 最大嵌套深度 / Max nested depth
-      execution-timeout: 10m                       # 单个 Skill 执行超时 / Skill execution timeout
+      execution-timeout: 45m                       # 单个 Skill 执行超时 / Skill execution timeout
       max-prompt-chars: 20000                      # 渲染后 prompt 最大长度 / Max rendered prompt chars
-      max-result-chars: 2000                       # Skill 返回结果最大字符数 / Max result chars
+      max-result-chars: 5000                       # Skill 返回结果最大字符数 / Max result chars
 
       # ---- 网页读取工具 / Web Read Tool ----
       web-read:

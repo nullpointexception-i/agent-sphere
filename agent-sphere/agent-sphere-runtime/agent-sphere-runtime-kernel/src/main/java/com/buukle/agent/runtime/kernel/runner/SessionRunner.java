@@ -30,6 +30,7 @@ import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
+import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
@@ -347,7 +348,7 @@ public class SessionRunner {
             // 否则长 skill（如 boss 寻访多步操作）会在默认 30s 被执行超时打断 → "Tool execution lost"/InterruptedException。
             Duration batchExecutionTimeout = properties.getTool().getExecutionTimeout();
             boolean hasSkillTool = turn.toolCalls().stream()
-                    .anyMatch(tc -> toolExecutor.isSkillTool(tc.name(), tools));
+                    .anyMatch(tc -> toolExecutor.isSubRunTool(tc.name(), tools));
             if (hasSkillTool) {
                 Duration skillBudget = properties.getSkill().getExecutionTimeout();
                 if (skillBudget != null && skillBudget.compareTo(batchExecutionTimeout) > 0) {
@@ -393,7 +394,7 @@ public class SessionRunner {
                 int fi = i;
                 fibers.submit(turn.toolCalls().get(fi).id(),
                         () -> toolExecutor.execute(turn.toolCalls().get(fi),
-                                com.buukle.agent.runtime.kernel.port.SkillExecutionContext.root(sid, rid, ctx), tl));
+                                SubRunExecutionContext.root(sid, rid, ctx), tl));
             }
             var results = fibers.awaitAll(() -> isRunCancelled(rid) || isSessionCancelled(sid));
 

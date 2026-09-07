@@ -285,6 +285,24 @@
               count: resolved.count,
               tag: (el.tagName || '').toLowerCase(),
               text: (el.textContent || el.value || '').trim().slice(0, 100),
+              // 动作前基线：写动作后由 background 对比 → changed；clickable 供判断是否为真实点击目标
+              preHash: domFingerprint(),
+              clickable: AS.isActionable(el),
+            },
+          };
+        }
+
+        // 写动作后置校验（background 在 CDP 派发 + settle 后调用）：回当前指纹与页面提示，
+        // background 据此计算 changed/_hints/_clickable，让动作结果携带真实状态而非空断言。
+        case 'verify': {
+          const hints = pageHints()._hints;
+          return {
+            success: true,
+            data: {
+              _url: location.href,
+              _title: document.title,
+              fp: domFingerprint(),
+              _hints: hints,
             },
           };
         }
@@ -496,7 +514,20 @@
               placeholder: el.getAttribute('placeholder') || '',
               value: el.value || '',
             }));
-            return { success: true, data: { _url: location.href, total: nodes.length, matches } };
+            // 宽度护栏：命中过多说明 selector 过宽（如 [class*=x]）——提示收窄到 containers/scope，避免无决策价值的噪声读取
+            const tooBroad = nodes.length > 100;
+            return {
+              success: true,
+              data: {
+                _url: location.href,
+                total: nodes.length,
+                tooBroad,
+                warning: tooBroad
+                  ? '命中过多(' + nodes.length + ')，selector 过宽：优先用 containers 探测 + 容器 scope 收敛，勿用宽泛选择器扫描'
+                  : undefined,
+                matches,
+              },
+            };
           }
           if (params.mode === 'container' || params.mode === 'containers') {
             let want = [];
@@ -525,10 +556,58 @@
             }
             return { success: true, data: { _url: location.href, _title: document.title, containers: out, ...pageHints() } };
           }
+          // 一次"就绪+建图"：navigate 后一步完成帧图 + 容器探测 + 就绪判定。
+          // 替代"wait 数次 → snapshot → containers"的多轮空探测；ready:false 时应只 wait 再 ready，不重扫。
+          if (params.mode === 'ready') {
+            const waitMs = Math.min(Number(params.waitMs) || 1200, 15000);
+            if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+            const want = [];
+            if (Array.isArray(params.selectors)) want.push(...params.selectors.filter(Boolean));
+            else if (typeof params.selector === 'string' && params.selector.trim()) {
+              want.push(...params.selector.split(',').map(s => s.trim()).filter(Boolean));
+            }
+            const docs = AS.collectFrameDocs ? AS.collectFrameDocs(params.scope, params.frameId) : [document];
+            const containers = [];
+            for (const sel of want) {
+              let present = false, count = 0, frame = '', sample = '';
+              for (const doc of docs) {
+                let nodes;
+                try { nodes = doc.querySelectorAll(sel); } catch (e) { nodes = []; continue; }
+                if (nodes.length) {
+                  present = true;
+                  count += nodes.length;
+                  if (!frame) {
+                    const el = nodes[0];
+                    frame = frameOf(el) || '';
+                    try {
+                      sample = (el.id ? '#' + el.id : '') + (typeof el.className === 'string' ? '.' + el.className.split(/\s+/).filter(Boolean).slice(0, 4).join('.') : '');
+                    } catch (e2) { /* ignore */ }
+                  }
+                }
+              }
+              containers.push({ selector: sel, present, count, frame, sample });
+            }
+            const missing = containers.filter((c) => !c.present).map((c) => c.selector);
+            const hints = pageHints()._hints;
+            return {
+              success: true,
+              data: {
+                _url: location.href,
+                _title: document.title,
+                frames: collectFrames(),
+                containers,
+                ready: missing.length === 0,
+                missing,
+                _hints: hints,
+              },
+            };
+          }
           if (params.mode === 'snapshot') {
             const max = params.max || 200;
             const els = AS.collectInteractables({ max, frameId: params.frameId });
             const items = els.map((el, i) => ({ ...AS.snapshotItem(el, i), frame: frameOf(el) }));
+            // 首屏即暴露 frame 结构（壳页面 + iframe 内容区）：顶层 snapshot 看不到的控件要能直接定位归属
+            const frames = collectFrames();
             return {
               success: true,
               data: {
@@ -537,6 +616,7 @@
                 count: items.length,
                 truncated: items.length >= max,
                 domHash: domFingerprint(),
+                frames,
                 items,
                 ...pageHints(),
               },
@@ -569,18 +649,49 @@
     '[role="dialog"], [role="alertdialog"], .ant-modal, .el-dialog, .antd-fd-modal, [class*="dialog"], [class*="popup"]';
 
   // 轻量 DOM 指纹：动作前后对比，供 agent 判断"是否有实际变化"（避免动作后盲目重读）。
+  // 跨 frame 统计（顶层 + 各同源 iframe 的可交互元素数）：壳页面 + iframe 内容区的
+  // 动作变化（如筛选/搜索区在 iframe 内刷新）才能被 changed 捕获到。
   function domFingerprint() {
     try {
-      return (
-        location.href +
-        '|' +
-        document.title +
-        '|' +
-        document.querySelectorAll('a,button,input,textarea,select,[role]').length
-      );
+      const INTERACTIVE = 'a,button,input,textarea,select,[role]';
+      const parts = [];
+      const topCount = document.querySelectorAll(INTERACTIVE).length;
+      parts.push(location.href + ':0:' + topCount);
+      for (const f of document.querySelectorAll('iframe')) {
+        try {
+          const w = f.contentWindow;
+          if (!w || !w.document) continue;
+          const frUrl = (w.location && w.location.href) || '';
+          const cnt = w.document.querySelectorAll(INTERACTIVE).length;
+          parts.push(frUrl + ':iframe:' + cnt);
+        } catch (e) { /* 跨源 iframe 忽略 */ }
+      }
+      return location.href + '|' + document.title + '|' + parts.join(',');
     } catch (e) {
       return location.href;
     }
+  }
+
+  // 同源 iframe 结构清单（url + 可交互数 + 是否同源可读），供 snapshot 首屏识别"搜索区在哪个 frame"。
+  function collectFrames() {
+    const out = [];
+    try {
+      for (const f of document.querySelectorAll('iframe')) {
+        let url = '';
+        let count = 0;
+        const sameOrigin = true;
+        try {
+          url = (f.contentWindow && f.contentWindow.location && f.contentWindow.location.href) || '';
+          count = f.contentWindow.document
+            ? f.contentWindow.document.querySelectorAll('a,button,input,textarea,select,[role]').length
+            : 0;
+        } catch (e) {
+          continue; // 跨源 iframe：不列入（无法操作）
+        }
+        out.push({ frame: url, interactables: count, sameOrigin });
+      }
+    } catch (e) { /* ignore */ }
+    return out;
   }
 
   // ---- 页面提示（动作结果里附带，减少 agent 重读）----

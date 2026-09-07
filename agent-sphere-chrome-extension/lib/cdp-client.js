@@ -127,7 +127,13 @@ export class CdpClient {
   async evaluate(tabId, expression) {
     return this._serialized(async () => {
       try {
-        return this._toResult(await this._evaluateOnce(tabId, expression));
+        // 包一层：无返回值时一并捕获 document.title（副作用验证技巧），
+        // __NO_RETURN__ 属"执行成功但无返回值"，勿当失败重试。
+        const expr =
+          '(async () => { const __asR = await (async () => { ' +
+          expression +
+          '\n })(); return { __asV: __asR === void 0 ? "__AS_VOID__" : __asR, __asT: (typeof document !== "undefined" ? document.title : "") }; })()';
+        return this._unwrap(await this._evaluateOnce(tabId, expr));
       } catch (e) {
         const msg = String(e.message);
         // Detach raced mid-flight → drop the stale session and retry exactly once.
@@ -139,6 +145,27 @@ export class CdpClient {
         throw e;
       }
     });
+  }
+
+  // 解开 evaluate 的 void-title 包装：未返回值 → __NO_RETURN__ + _documentTitle；正常值原样透传。
+  _unwrap(raw) {
+    if (!raw) return { success: true, data: '__NO_RETURN__', _resultType: 'void', method: 'debugger' };
+    if (raw.unserializableValue) return this._toResult(raw);
+    const v = raw.value;
+    if (v && typeof v === 'object' && v.__asV === '__AS_VOID__') {
+      return {
+        success: true,
+        data: '__NO_RETURN__',
+        _resultType: 'void',
+        method: 'debugger',
+        warning: 'evaluation succeeded but returned no value（__NO_RETURN__ 属正常）；副作用已用 document.title 标记的话，读 _documentTitle 复核',
+        _documentTitle: v.__asT,
+      };
+    }
+    if (v && typeof v === 'object' && Object.prototype.hasOwnProperty.call(v, '__asV')) {
+      return this._toResult({ ...raw, value: v.__asV });
+    }
+    return this._toResult(raw);
   }
 
   /** 受信鼠标点击（CDP Input）：合成事件在严格 SPA 下常不触发

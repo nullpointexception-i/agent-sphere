@@ -1,9 +1,9 @@
 package com.buukle.agent.bootstrap.controller;
 
-import com.buukle.agent.common.skill.InvalidSkillDefinition;
+import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
 import com.buukle.agent.common.skill.SkillDefinition;
 import com.buukle.agent.common.skill.SkillDefinitionParser;
-import com.buukle.agent.common.skill.ToolRefs;
+import com.buukle.agent.common.sub.agent.ToolRefs;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,19 +53,19 @@ class SkillDefinitionParserTest {
 
     @Test
     void parse_missingParametersThrows() {
-        assertThrows(InvalidSkillDefinition.class,
+        assertThrows(InvalidSubRunDefinition.class,
                 () -> SkillDefinitionParser.parse("{\"promptTemplate\":\"todo\"}"));
     }
 
     @Test
     void parse_missingPromptTemplateThrows() {
-        assertThrows(InvalidSkillDefinition.class,
+        assertThrows(InvalidSubRunDefinition.class,
                 () -> SkillDefinitionParser.parse("{\"parameters\":{\"type\":\"object\"}}"));
     }
 
     @Test
     void parse_invalidJsonThrows() {
-        assertThrows(InvalidSkillDefinition.class, () -> SkillDefinitionParser.parse("not json"));
+        assertThrows(InvalidSubRunDefinition.class, () -> SkillDefinitionParser.parse("not json"));
     }
 
     @Test
@@ -76,7 +76,7 @@ class SkillDefinitionParserTest {
 
     @Test
     void parse_invalidAllowToolsRefThrows() {
-        assertThrows(InvalidSkillDefinition.class,
+        assertThrows(InvalidSubRunDefinition.class,
                 () -> SkillDefinitionParser.parse("""
                         {"parameters":{"type":"object"},"promptTemplate":"p","allowTools":["???:1"]}
                         """));

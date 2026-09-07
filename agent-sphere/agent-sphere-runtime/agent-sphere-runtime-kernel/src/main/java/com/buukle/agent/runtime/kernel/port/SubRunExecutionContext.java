@@ -8,7 +8,7 @@ import java.util.Set;
  * 主 Agent 创建 root（depth=0、stack 空、allowedToolRefs=null 表示无父级限制）；
  * 进入 skill 时创建 child。
  */
-public class SkillExecutionContext {
+public class SubRunExecutionContext {
 
     private final Long sessionId;
     private final Long runId;
@@ -21,9 +21,9 @@ public class SkillExecutionContext {
     private final Set<String> inheritedAllowedToolRefs;
     private final String parentToolCallId;
 
-    public SkillExecutionContext(Long sessionId, Long runId, KernelContext kernelContext,
-                                 int skillDepth, List<Long> skillStack,
-                                 Set<String> inheritedAllowedToolRefs, String parentToolCallId) {
+    public SubRunExecutionContext(Long sessionId, Long runId, KernelContext kernelContext,
+                                  int skillDepth, List<Long> skillStack,
+                                  Set<String> inheritedAllowedToolRefs, String parentToolCallId) {
         this.sessionId = sessionId;
         this.runId = runId;
         this.kernelContext = kernelContext;
@@ -33,12 +33,12 @@ public class SkillExecutionContext {
         this.parentToolCallId = parentToolCallId;
     }
 
-    public static SkillExecutionContext root(Long sessionId, Long runId, KernelContext kernelContext) {
-        return new SkillExecutionContext(sessionId, runId, kernelContext, 0, List.of(), null, null);
+    public static SubRunExecutionContext root(Long sessionId, Long runId, KernelContext kernelContext) {
+        return new SubRunExecutionContext(sessionId, runId, kernelContext, 0, List.of(), null, null);
     }
 
-    public SkillExecutionContext child(int depth, List<Long> stack, Set<String> allowed, String parentToolCallId) {
-        return new SkillExecutionContext(sessionId, runId, kernelContext, depth, stack, allowed, parentToolCallId);
+    public SubRunExecutionContext child(int depth, List<Long> stack, Set<String> allowed, String parentToolCallId) {
+        return new SubRunExecutionContext(sessionId, runId, kernelContext, depth, stack, allowed, parentToolCallId);
     }
 
     public Long getSessionId() {

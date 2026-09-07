@@ -1,14 +1,15 @@
-package com.buukle.agent.runtime.kernel.skill;
+package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
-import com.buukle.agent.common.skill.InvalidSkillDefinition;
-import com.buukle.agent.common.skill.SkillPromptRenderer;
-import com.buukle.agent.common.skill.ToolRefs;
-import com.buukle.agent.instance.dtvo.enums.SkillExecutionStatus;
-import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
+import com.buukle.agent.common.sub.agent.ToolRefs;
+import com.buukle.agent.instance.dtvo.enums.SubRunStatus;
 import com.buukle.agent.instance.dtvo.vo.AgentSubAgentRunVO;
 import com.buukle.agent.instance.spi.AgentSubAgentRunSpi;
+import com.buukle.agent.instance.spi.AgentTimelineSpi;
+import com.buukle.agent.instance.dtvo.enums.TimelineKind;
+import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
@@ -20,15 +21,13 @@ import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
-import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
-import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
-import com.buukle.agent.runtime.kernel.port.KernelContext;
-import com.buukle.agent.runtime.kernel.port.SkillExecutionContext;
+import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
+import com.buukle.agent.runtime.kernel.port.SubRunPolicy;
 import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
@@ -39,14 +38,13 @@ import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -57,13 +55,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Skill 嵌套 ReAct 执行器：主循环调用 skill_&lt;id&gt; 时在会话内启动一个子 Agent，
- * 复用会话模型路由与 allowTools 白名单，最终结果作为工具结果返回主循环。
+ * SubRun 嵌套 ReAct 执行器（通用）：主循环调用某一 sub-run 工具 时在会话内
+ * 启动一个子 Agent，复用会话模型路由与策略（{@link SubRunPolicy}）给出的预算/白名单/命名，
+ * 最终结果作为工具结果返回主循环。策略决定宿主差异，本类不做任何宿主耦合。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SkillReActExecutor {
+public class SessionSubRunner {
 
     private final KernelLlmService kernelLlmService;
     private final FallbackRouteExecutor fallbackRouteExecutor;
@@ -74,149 +73,155 @@ public class SkillReActExecutor {
     private final ApplicationEventPublisher eventPublisher;
     private final RedissonClient redissonClient;
     private final AgentRuntimeProperties properties;
+    private final SubRunPolicy subRunPolicy;
     private final AgentSubAgentRunSpi subAgentRunSpi;
+    /** 可选：统一 Timeline 索引（无则跳过子 Agent 头行，不影响功能）。 */
+    private final ObjectProvider<AgentTimelineSpi> timelineSpiProvider;
 
-    /** 子 Agent（skill）thinking 展示事件标记：nodeName 前缀与首帧哨兵行（前端据此区分/内嵌折叠块）。 */
-    private static final String SKILL_REASON_NODE_NAME_PREFIX = "skill:";
-    private static final String SKILL_REASON_MARKER_PREFIX = "▶ Skill ";
+    /** ToolExecutor sub-run 分支入口。 */
+    public String execute(RuntimeTool subRunTool, String argsJson,
+                          SubRunExecutionContext parentCtx, List<RuntimeTool> sessionTools) {
+        SubRunPolicy policy = subRunPolicy;
+        if (policy == null || !policy.isEnabled()) {
+            return policy != null ? policy.errorDisabled() : "{\"error\":\"Sub-run disabled\"}";
+        }
+        long subRunToolId = policy.toolId(subRunTool);
+        String displayName = policy.displayName(subRunTool);
+        // prepare
+        SubRunPolicy.PreparedSubRun prep = policy.prepare(subRunTool, subRunToolId, parentCtx);
+        if (!prep.ready()) {
+            return prep.error();
+        }
+        SubRunExecutionContext childCtx = prep.childCtx();
 
-    /** ToolExecutor skill 分支入口。 */
-    public String execute(RuntimeTool skillTool, String argsJson,
-                          SkillExecutionContext parentCtx, List<RuntimeTool> sessionTools) {
-        AgentRuntimeProperties.SkillConfig cfg = properties.getSkill();
-        if (!cfg.isExecutionEnabled()) {
-            return "{\"error\":\"Skill execution disabled\"}";
+        if (!policy.hasPromptTemplate(subRunTool)) {
+            return policy.errorMissingPrompt();
         }
-        long skillId = skillIdOf(skillTool);
-        int depth = parentCtx.getSkillDepth() + 1;
-        if (depth > cfg.getMaxNestedDepth()) {
-            return "{\"error\":\"Skill max nested depth exceeded (" + cfg.getMaxNestedDepth() + ")\"}";
-        }
-        if (parentCtx.getSkillStack().contains(skillId)) {
-            return "{\"error\":\"Skill recursive call detected: skill " + skillId + "\"}";
-        }
-
-        String promptTemplate = bindingString(skillTool, ExecBindingKeys.SKILL_PROMPT_TEMPLATE);
-        if (!StringUtils.hasText(promptTemplate)) {
-            return "{\"error\":\"Skill definition missing promptTemplate\"}";
-        }
-        String effectiveArgs = effectiveArgsJson(parentCtx, argsJson);
         String rendered;
         try {
-            rendered = SkillPromptRenderer.render(promptTemplate, effectiveArgs);
-        } catch (InvalidSkillDefinition e) {
-            return "{\"error\":\"Skill prompt render failed: " + e.getMessage() + "\"}";
-        }
-        if (rendered.length() > cfg.getMaxPromptChars()) {
-            rendered = rendered.substring(0, cfg.getMaxPromptChars());
+            rendered = policy.renderPrompt(subRunTool, argsJson, parentCtx);
+        } catch (InvalidSubRunDefinition e) {
+            return policy.errorRenderFailed(e.getMessage());
         }
 
-        Set<String> effectiveAllowed = effectiveAllowedRefs(parentCtx, skillTool);
+        Set<String> effectiveAllowed = policy.allowedRefs(subRunTool, parentCtx);
         List<RuntimeTool> subTools = filterTools(sessionTools, effectiveAllowed);
 
-        List<Long> childStack = new ArrayList<>(parentCtx.getSkillStack());
-        childStack.add(skillId);
-        // 第 4 参语义为 parentToolCallId（父工具调用 id），此前误传 effectiveArgs（长 JSON）导致
-        // agent_sub_agent_run.parent_tool_call_id 超长、sub-run 创建失败；effectiveArgs 仅用于 prompt 渲染。
-        SkillExecutionContext childCtx = parentCtx.child(depth, childStack, effectiveAllowed,
-                parentCtx.getParentToolCallId());
-
-        publishReasoning("⚙️ 技能 " + skillTool.getDisplayName() + " 开始执行（深度 " + depth + "）…", skillId);
+        publishReasoning(policy.textStarted(displayName, prep.depth()), subRunToolId);
 
         List<ChatMessageDTO> messages = new ArrayList<>();
         messages.add(new ChatMessageDTO().setRole("system").setContent(buildSystemPrompt(childCtx, subTools)));
         messages.add(new ChatMessageDTO().setRole("user").setContent(rendered));
 
-        // 通用子 Agent 运行：进入时创建（agentType=SKILL），结束更新状态
+        // 通用子 Agent 运行：进入时创建（agentType 由策略给出），结束更新状态
         AgentSubAgentRunVO subRun = null;
         try {
             subRun = subAgentRunSpi.start(childCtx.getSessionId(), childCtx.getRunId(), null,
-                    childCtx.getParentToolCallId(), "SKILL", ToolRefs.skill(skillId), skillTool.getDisplayName());
+                    childCtx.getParentToolCallId(), policy.agentType(), policy.toolRef(subRunToolId), displayName);
         } catch (Exception e) {
             log.warn("Failed to start sub-agent run", e);
         }
         Long subAgentRunId = subRun != null ? subRun.getId() : null;
 
+        // 统一 Timeline：子 Agent 头行（正文按 agent_sub_agent_run 懒解，此处仅标记 + 封口）
+        try {
+            AgentTimelineSpi ts = timelineSpiProvider.getIfAvailable();
+            if (ts != null && subAgentRunId != null) {
+                ts.record(childCtx.getSessionId(), childCtx.getRunId(), TimelineKind.SUBAGENT.getCode(), null,
+                        TimelineState.RUNNING.getCode(), displayName,
+                        null, null, null, subAgentRunId, null);
+            }
+        } catch (Exception e) {
+            log.warn("Timeline sub-agent header row failed: {}", e.getMessage());
+        }
+
         StringBuilder allContent = new StringBuilder();
-        Instant deadline = Instant.now().plus(cfg.getExecutionTimeout().isZero()
-                ? Duration.ofMinutes(10) : cfg.getExecutionTimeout());
+        Duration timeout = policy.executionTimeout();
+        Instant deadline = Instant.now().plus(timeout != null && !timeout.isZero()
+                ? timeout : Duration.ofMinutes(10));
         long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
 
-        for (int loop = 0; loop < cfg.getMaxSubLoopCount(); loop++) {
+        for (int loop = 0; loop < policy.maxSubLoopCount(); loop++) {
             if (cancelled(childCtx) || Thread.interrupted()) {
-                finishSubAgentRun(subAgentRunId, SkillExecutionStatus.CANCELLED.name());
-                return "{\"error\":\"Skill cancelled\"}";
+                finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED.name());
+                return policy.errorCancelled();
             }
             if (Instant.now().isAfter(deadline)) {
-                publishReasoning("⏱️ 技能 " + skillTool.getDisplayName() + " 超时终止", skillId);
-                finishSubAgentRun(subAgentRunId, SkillExecutionStatus.TIMEOUT.name());
-                return "{\"error\":\"Skill execution timeout\"}";
+                publishReasoning(policy.textTimeout(displayName), subRunToolId);
+                finishSubAgentRun(subAgentRunId, SubRunStatus.TIMEOUT.name());
+                return policy.errorTimeout();
             }
-            TurnResult turn = turn(messages, subTools, childCtx, turnTimeout, skillId,
-                    skillTool.getDisplayName(), subAgentRunId);
+            TurnResult turn = turn(messages, subTools, childCtx, turnTimeout, subRunToolId,
+                    subRunTool.getDisplayName(), subAgentRunId);
             if (turn.cancelled()) {
-                finishSubAgentRun(subAgentRunId, SkillExecutionStatus.CANCELLED.name());
-                return "{\"error\":\"Skill cancelled\"}";
+                finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED.name());
+                return policy.errorCancelled();
             }
             if (turn.error() != null) {
-                publishReasoning("❌ 技能 " + skillTool.getDisplayName() + " 执行失败", skillId);
-                finishSubAgentRun(subAgentRunId, SkillExecutionStatus.FAILED.name());
-                return "{\"error\":\"Skill execution failed: " + turn.error() + "\"}";
+                publishReasoning(policy.textFailed(displayName), subRunToolId);
+                finishSubAgentRun(subAgentRunId, SubRunStatus.FAILED.name());
+                return policy.errorExecutionFailed(turn.error());
             }
             if (turn.content() != null) {
                 allContent.append(turn.content());
             }
             if (turn.toolCalls().isEmpty()) {
-                publishReasoning("✅ 技能 " + skillTool.getDisplayName() + " 完成", skillId);
-                finishSubAgentRun(subAgentRunId, SkillExecutionStatus.COMPLETED.name());
-                return truncate(allContent.toString(), cfg.getMaxResultChars());
+                publishReasoning(policy.textCompleted(displayName), subRunToolId);
+                finishSubAgentRun(subAgentRunId, SubRunStatus.COMPLETED.name());
+                return truncate(allContent.toString(), policy.maxResultChars());
             }
             for (TurnToolCall tc : turn.toolCalls()) {
                 if (!containsTool(subTools, tc.name())) {
                     messages.add(assistantToolCall(tc));
                     messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id())
-                            .setContent("{\"error\":\"tool not allowed by skill allowTools: " + tc.name() + "\"}"));
+                            .setContent(policy.errorNotAllowed(tc.name())));
                     continue;
                 }
                 messages.add(assistantToolCallWithReasoning(tc, turn.reasoning()));
-                String publishId = "skill-" + skillId + "-" + tc.id();
+                String publishId = policy.publishIdPrefix() + subRunToolId + "-" + tc.id();
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
                         new RuntimeEventDataVO()
                                 .setSessionId(childCtx.getSessionId())
                                 .setRunId(childCtx.getRunId())
                                 .setToolName(tc.name())
+                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
                                 .setSubAgentRunId(subAgentRunId)
                                 .setArgumentsJson(tc.arguments())
                                 .setPublishId(publishId)));
                 String result;
                 try {
                     result = toolExecutor.execute(tc, childCtx, subTools);
-                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(childCtx.getSessionId())
-                                    .setRunId(childCtx.getRunId())
-                                    .setToolName(tc.name())
-                                    .setSubAgentRunId(subAgentRunId)
-                                    .setArtifact(result)
-                                    .setPublishId(publishId)));
+eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
+                        new RuntimeEventDataVO()
+                                .setSessionId(childCtx.getSessionId())
+                                .setRunId(childCtx.getRunId())
+                                .setToolName(tc.name())
+                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
+                                .setSubAgentRunId(subAgentRunId)
+                                .setArtifact(result)
+                                .setPublishId(publishId)));
                 } catch (Exception e) {
                     result = "{\"error\":\"" + e.getMessage() + "\"}";
-                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(childCtx.getSessionId())
-                                    .setRunId(childCtx.getRunId())
-                                    .setToolName(tc.name())
-                                    .setSubAgentRunId(subAgentRunId)
-                                    .setErrorMessage(e.getMessage())
-                                    .setPublishId(publishId)));
+eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
+                        new RuntimeEventDataVO()
+                                .setSessionId(childCtx.getSessionId())
+                                .setRunId(childCtx.getRunId())
+                                .setToolName(tc.name())
+                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
+                                .setSubAgentRunId(subAgentRunId)
+                                .setErrorMessage(e.getMessage())
+                                .setPublishId(publishId)));
                 }
                 messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id()).setContent(result));
             }
         }
-        publishReasoning("⏹️ 技能 " + skillTool.getDisplayName() + " 达到子循环上限", skillId);
-        finishSubAgentRun(subAgentRunId, SkillExecutionStatus.FAILED.name());
+        publishReasoning(policy.textSubLoopCapped(displayName), subRunToolId);
+        finishSubAgentRun(subAgentRunId, SubRunStatus.FAILED.name());
         return truncate(allContent.length() > 0 ? allContent.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG,
-                cfg.getMaxResultChars());
+                policy.maxResultChars());
     }
 
     private void finishSubAgentRun(Long subAgentRunId, String status) {
@@ -225,13 +230,23 @@ public class SkillReActExecutor {
         }
         try {
             subAgentRunSpi.finish(subAgentRunId, status);
+            AgentTimelineSpi ts = timelineSpiProvider.getIfAvailable();
+            if (ts != null) {
+                String state = switch (status) {
+                    case "COMPLETED" -> TimelineState.COMPLETED.getCode();
+                    case "TIMEOUT" -> TimelineState.TIMEOUT.getCode();
+                    case "CANCELLED" -> TimelineState.CANCELLED.getCode();
+                    default -> TimelineState.FAILED.getCode();
+                };
+                ts.updateBySubAgentRun(subAgentRunId, state);
+            }
         } catch (Exception e) {
             log.warn("Failed to finish sub-agent run {}", subAgentRunId, e);
         }
     }
 
     private TurnResult turn(List<ChatMessageDTO> messages, List<RuntimeTool> subTools,
-                            SkillExecutionContext ctx, long turnTimeout, long skillId, String displayName,
+                            SubRunExecutionContext ctx, long turnTimeout, long subRunToolId, String displayName,
                             Long subAgentRunId) {
         AtomicReference<String> contentRef = new AtomicReference<>("");
         AtomicReference<String> reasoningRef = new AtomicReference<>("");
@@ -250,7 +265,7 @@ public class SkillReActExecutor {
             fallbackRouteExecutor.execute(routes, (i, route) -> {
                 if (cancelled(ctx)) {
                     cancelledRef.set(true);
-                    throw new RuntimeException("Skill cancelled");
+                    throw new RuntimeException("Sub Agent cancelled");
                 }
                 String apiKey = resolveApiKey(route);
                 ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
@@ -273,10 +288,10 @@ public class SkillReActExecutor {
                                             new RuntimeEventDataVO()
                                                     .setSessionId(ctx.getSessionId())
                                                     .setRunId(ctx.getRunId())
-                                                    .setNodeName(SKILL_REASON_NODE_NAME_PREFIX + skillId)
+                                                    .setNodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
                                                     .setSubAgentRunId(subAgentRunId)
                                                     .setResponse(t.text())
-                                                    .setPublishId("skill-" + skillId + "-" + UUID.randomUUID().toString().substring(0, 8))));
+                                                    .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8))));
                                 }
                                 case LLMEvent.ReasoningDelta r -> {
                                     boolean firstDelta = reasoningRef.get().isBlank();
@@ -288,13 +303,15 @@ public class SkillReActExecutor {
                                             .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                             .setPublishId(UUID.randomUUID().toString())
                                             .setSubAgentRunId(subAgentRunId)
-                                            // 子 Agent thinking 全程打 skill 标记：前端按 nodeName 路由到子卡片
-                                            .setNodeName(SKILL_REASON_NODE_NAME_PREFIX + skillId);
-                                    // 首帧加哨兵行，前端据此新建一个 skill 段；次帧原样追加到当前段
+                                            // 子 Agent thinking 全程打 sub-run 标记：前端按 nodeName 路由到子卡片
+                                            .setNodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
+                                            // 首帧标记：前端据此刻新 LLM 轮（避免解析哨兵前缀）
+                                            .setFirstFrame(firstDelta);
+                                    // 首帧加哨兵行，前端据此新建一个 sub-run 段；次帧原样追加到当前段
                                     if (firstDelta) {
                                         String name = displayName != null && !displayName.isBlank()
-                                                ? displayName : String.valueOf(skillId);
-                                        data.setResponse(SKILL_REASON_MARKER_PREFIX + skillId + ": " + name + "\n" + r.text());
+                                                ? displayName : String.valueOf(subRunToolId);
+                                        data.setResponse(subRunPolicy.markerPrefix() + subRunToolId + ": " + name + "\n" + r.text());
                                     } else {
                                         data.setResponse(r.text());
                                     }
@@ -307,9 +324,11 @@ public class SkillReActExecutor {
                                                     .setSessionId(ctx.getSessionId())
                                                     .setRunId(ctx.getRunId())
                                                     .setToolName(tc.name())
+                                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
                                                     .setArgumentsJson(tc.arguments())
                                                     .setSubAgentRunId(subAgentRunId)
-                                                    .setPublishId("skill-" + skillId + "-" + tc.id())));
+                                                    .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + tc.id())));
                                 }
                                 case LLMEvent.Error e -> errorRef.set(e.message());
                                 default -> {
@@ -318,7 +337,7 @@ public class SkillReActExecutor {
                         },
                         new LlmInteractionMeta().setRunId(ctx.getRunId()).setSessionId(ctx.getSessionId())
                                 .setSubAgentRunId(subAgentRunId)
-                                .setInteractionType(LlmInteractionType.SKILL_EXECUTION));
+                                .setInteractionType(subRunPolicy.interactionType()));
                 future.whenComplete((v, ex) -> done.countDown());
                 try {
                     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
@@ -326,11 +345,11 @@ public class SkillReActExecutor {
                         if (cancelled(ctx) || Thread.interrupted()) {
                             cancelledRef.set(true);
                             future.cancel(true);
-                            throw new RuntimeException("Skill cancelled");
+                            throw new RuntimeException("Sub Agent cancelled");
                         }
                         if (System.nanoTime() >= deadline) {
                             future.cancel(true);
-                            throw new RuntimeException("Skill turn timed out after " + turnTimeout + "s");
+                            throw new RuntimeException("Sub Agent turn timed out after " + turnTimeout + "s");
                         }
                     }
                 } catch (InterruptedException e) {
@@ -339,7 +358,7 @@ public class SkillReActExecutor {
                 }
                 String error = errorRef.get();
                 if (error != null) {
-                    throw new RuntimeException("Skill LLM error: " + error);
+                    throw new RuntimeException("Sub Agent LLM error: " + error);
                 }
                 return null;
             });
@@ -354,7 +373,7 @@ public class SkillReActExecutor {
         return new TurnResult(contentRef.get(), toolCalls, errorRef.get(), false, reasoningRef.get());
     }
 
-    private String buildSystemPrompt(SkillExecutionContext ctx, List<RuntimeTool> subTools) {
+    private String buildSystemPrompt(SubRunExecutionContext ctx, List<RuntimeTool> subTools) {
         StringBuilder sb = new StringBuilder();
         if (ctx.getKernelContext() != null && ctx.getKernelContext().getAgentInstance() != null
                 && ctx.getKernelContext().getAgentInstance().getSystemPrompt() != null) {
@@ -397,7 +416,7 @@ public class SkillReActExecutor {
         return msg;
     }
 
-    private boolean cancelled(SkillExecutionContext ctx) {
+    private boolean cancelled(SubRunExecutionContext ctx) {
         Long runId = ctx.getRunId();
         Long sessionId = ctx.getSessionId();
         boolean runCancelled = runId != null && redissonClient
@@ -407,95 +426,13 @@ public class SkillReActExecutor {
         return runCancelled || sessionCancelled;
     }
 
-    private void publishReasoning(String text, long skillId) {
+    private void publishReasoning(String text, long subRunToolId) {
         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
                 new RuntimeEventDataVO()
                         .setResponse(text)
                         .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                         .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                        .setPublishId("skill-" + skillId + "-" + UUID.randomUUID().toString().substring(0, 8))));
-    }
-
-    /**
-     * 子 Agent 实际入参：LLM 调用 skill 时的 argumentsJson 常为空（schema 缺字段）
-     * 或仅含少量参数。为保证 skill 按任务严格执行，把根上下文里的「本轮用户消息全文」
-     * （已含【任务配置】结构化 JSON）作为 {@code input} 合并进入参：
-     * - {@code {{input}}} 占位符展开为完整任务上下文，而非空对象；
-     * - 其余 {@code {{path}}} 仍从 argumentsJson 解析（缺失会自动回填 [缺参数:...] 占位标记）。
-     */
-    private String effectiveArgsJson(SkillExecutionContext parentCtx, String argsJson) {
-        KernelContext kernelContext = parentCtx.getKernelContext();
-        String userMessage = kernelContext != null ? kernelContext.getUserMessage() : null;
-        if (userMessage == null || userMessage.isBlank()) {
-            RunVO run = kernelContext != null ? kernelContext.getRun() : null;
-            if (run != null) {
-                userMessage = run.getUserMessage();
-            }
-        }
-        if (userMessage == null || userMessage.isBlank()) {
-            return argsJson;
-        }
-        // 合并入参：保留原 argumentsJson 的顶层字段（{{path}} 兼容），另加 input 通道（{{input}} 全文展开）
-        StringBuilder merged = new StringBuilder();
-        merged.append('{');
-        String argsBody = null;
-        if (argsJson != null && !argsJson.isBlank() && !RunnerConstants.EMPTY_JSON_ARGS.equals(argsJson)) {
-            String trimmed = argsJson.trim();
-            if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-                argsBody = trimmed.substring(1, trimmed.length() - 1);
-            }
-        }
-        if (argsBody != null && !argsBody.isBlank()) {
-            merged.append(argsBody.trim()).append(',');
-        }
-        merged.append("\"input\":\"").append(escapeJson(userMessage)).append('"');
-        merged.append('}');
-        return merged.toString();
-    }
-
-    private static String escapeJson(String s) {
-        StringBuilder sb = new StringBuilder(s.length() + 32);
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-
-    /** 父链交集：父无限制（null）→ 直接用本 skill allowTools；否则取交集。 */
-    private Set<String> effectiveAllowedRefs(SkillExecutionContext parentCtx, RuntimeTool skillTool) {
-        Set<String> own = bindingAllowTools(skillTool);
-        if (parentCtx.getInheritedAllowedToolRefs() == null) {
-            return own;
-        }
-        Set<String> result = new HashSet<>();
-        for (String ref : own) {
-            if (parentCtx.getInheritedAllowedToolRefs().contains(ref)) {
-                result.add(ref);
-            }
-        }
-        return result;
-    }
-
-    private Set<String> bindingAllowTools(RuntimeTool skillTool) {
-        Set<String> refs = new HashSet<>();
-        Object raw = skillTool.getExecBinding() != null
-                ? skillTool.getExecBinding().get(ExecBindingKeys.SKILL_ALLOW_TOOLS) : null;
-        if (raw instanceof List<?> list) {
-            for (Object o : list) {
-                if (o != null) {
-                    refs.add(String.valueOf(o));
-                }
-            }
-        }
-        return refs;
+                        .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8))));
     }
 
     private List<RuntimeTool> filterTools(List<RuntimeTool> sessionTools, Set<String> allowedRefs) {
@@ -504,7 +441,7 @@ public class SkillReActExecutor {
         }
         List<RuntimeTool> result = new ArrayList<>();
         for (RuntimeTool tool : sessionTools) {
-            // 嵌套 Skill 禁止 ask_clarification：子 Agent 不得向用户提问
+            // 嵌套 Sub run 禁止 ask_clarification：子 Agent 不得向用户提问
             if (tool.getToolRef() != null
                     && tool.getToolRef().equals(ToolRefs.builtin(ChatClarification.INTERNAL_NAME))) {
                 continue;
@@ -542,22 +479,6 @@ public class SkillReActExecutor {
             }
         }
         return false;
-    }
-
-    private long skillIdOf(RuntimeTool skillTool) {
-        if (skillTool.getToolRef() != null && skillTool.getToolRef().startsWith(ToolRefs.TYPE_SKILL + ToolRefs.SEPARATOR)) {
-            try {
-                return Long.parseLong(skillTool.getToolRef().substring(ToolRefs.TYPE_SKILL.length() + 1));
-            } catch (NumberFormatException ignored) {
-                // fallthrough
-            }
-        }
-        return skillTool.getCapabilityId() != null ? skillTool.getCapabilityId() : -1L;
-    }
-
-    private String bindingString(RuntimeTool tool, String key) {
-        Object v = tool.getExecBinding() != null ? tool.getExecBinding().get(key) : null;
-        return v == null ? "" : String.valueOf(v);
     }
 
     private String resolveApiKey(ModelRouteFullVO route) {

@@ -144,6 +144,41 @@ export const useStyles = createStyles(({ css, token }) => ({
     display: inline-block;
   `,
 
+  // 助手行 RUNNING 状态：来回晃动的小球（完成后该位不渲染，直接消失）
+  runningDot: css`
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: ${token.colorPrimary};
+    display: inline-block;
+    flex-shrink: 0;
+    animation: asDotWobble 0.7s ease-in-out infinite;
+
+    @keyframes asDotWobble {
+      0%,
+      100% {
+        transform: translateX(-3px);
+      }
+      50% {
+        transform: translateX(3px);
+      }
+    }
+  `,
+
+  // 消息卡悬浮显示复制按钮：默认隐藏，hover 时显现
+  copyHover: css`
+    .copy-btn {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+
+    &:hover .copy-btn {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  `,
+
   sidebarAction: css`
     padding: ${token.paddingSM}px;
     border-bottom: 1px solid ${token.colorBorderSecondary};

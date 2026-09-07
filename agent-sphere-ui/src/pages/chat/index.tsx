@@ -19,6 +19,7 @@ import { agentApi } from '@/services/agentSphere/api';
 import { getToken } from '@/utils/auth';
 import { connectSse } from '@/utils/sse';
 import ChatMain from './components/chat';
+import type { SubAgentLiveMap } from './components/chat/subAgentTypes';
 import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
 import Landing from './components/Landing';
@@ -41,75 +42,6 @@ function toTs(v: any): number {
   return new Date(y, mo - 1, d, h, mi, s).getTime();
 }
 
-/** 子 Agent live 唯一身份：后端对同一 skill 执行全程下发同一 subAgentRunId，
- *  统一用它做 key（缺失才回退 nodeName 的 skill: 后缀）；两者皆无 → 非真实子 Agent 事件，返回 null。 */
-function subAgentIdentity(runId: any, subRunId: any, nodeName: any) {
-  const rid = runId != null ? String(runId) : '';
-  if (subRunId != null) {
-    return { key: `s-${rid}-${subRunId}`, skillId: String(subRunId) };
-  }
-  const n = String(nodeName || '');
-  if (n.startsWith('skill:')) {
-    const sid = n.slice('skill:'.length);
-    return { key: `s-${rid}-${sid}`, skillId: sid };
-  }
-  return null;
-}
-
-/** 把 run 的 activities（llm_interaction + tool_call，倒序）归组成 interaction 级 timeline 条目。
- *  runId 为所属回合（后端单调），供 MessageList 按 run 锚定排序（后端为准，避免跨回合墙钟比较错序）。 */
-function buildTimelineFromActivities(
-  activities: any[],
-  dir: 'asc' | 'desc' = 'asc',
-  runId?: number,
-): any[] {
-  if (!Array.isArray(activities) || activities.length === 0) return [];
-  const list = [...activities];
-  if (dir === 'desc') list.reverse(); // 转正序；接口返回 created_at DESC
-  const entries: any[] = [];
-  for (const act of list) {
-    if (!act) continue;
-    if (act.activityType === 'llm_interaction') {
-      entries.push({
-        key: `${act.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        activityId: act.id,
-        runId: runId ?? null,
-        seq: entries.length,
-        reason: act.reasoning || '',
-        reply: act.replyContent || act.reply || '',
-        tools: [],
-        status: act.success === false ? 'FAILED' : 'COMPLETED',
-        createdAt: act.createdAt,
-      });
-    } else if (act.activityType === 'tool_call') {
-      const cur = entries[entries.length - 1];
-      const tool = {
-        callId: `h-${act.stepId ?? act.id}`,
-        name: act.displayNameCn || act.toolName || 'tool',
-        args: act.argumentsJson || '',
-        artifact: act.artifact || '',
-        status: act.toolStatus || 'PENDING',
-      };
-      if (cur) {
-        cur.tools = [...cur.tools, tool];
-      } else {
-        entries.push({
-          key: `h${act.stepId ?? act.id}-${Date.now()}`,
-          activityId: act.stepId,
-          runId: runId ?? null,
-          seq: entries.length,
-          reason: '',
-          reply: '',
-          tools: [tool],
-          status: 'COMPLETED',
-          createdAt: act.createdAt,
-        });
-      }
-    }
-  }
-  return entries;
-}
-
 export default function Chat() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -123,6 +55,11 @@ export default function Chat() {
   const [hasMoreSessions, setHasMoreSessions] = useState(true);
   const [currentSession, setCurrentSession] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [timelineHasMore, setTimelineHasMore] = useState(false);
+  const [subAgentLive, setSubAgentLive] = useState<SubAgentLiveMap>({});
+  const oldestSeqRef = useRef<number | null>(null);
+  const newestSeqRef = useRef<number | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [sending, setSending] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
@@ -134,7 +71,6 @@ export default function Chat() {
   const [selectedModelRouteId, setSelectedModelRouteId] = useState<
     number | undefined
   >(undefined);
-  const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
   const [expandOpen, setExpandOpen] = useState(false);
   const [expandText, setExpandText] = useState('');
   const [instanceDrawerOpen, setInstanceDrawerOpen] = useState(false);
@@ -143,20 +79,11 @@ export default function Chat() {
   const [todos, setTodos] = useState<any[]>([]);
   const [toolCalls, setToolCalls] = useState<any[]>([]);
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
-  // 子 Agent 实时聚合（SSE）与历史运行
-  const [subAgentLive, setSubAgentLive] = useState<any[]>([]);
-  const [subAgentHistorical, setSubAgentHistorical] = useState<any[]>([]);
-  // 主 Agent live interaction 级 timeline：每个 interaction 一组成 [reason/reply/tool]
-  const [mainTimeline, setMainTimeline] = useState<any[]>([]);
-  // 主 Agent 历史 interaction 级 timeline（loadHistory 组装）
-  const [historyTimeline, setHistoryTimeline] = useState<any[]>([]);
-  const mainTimelineSeqRef = useRef<Record<number, number>>({});
 
   const historyPageRef = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
   const currentSessionIdRef = useRef<number | null>(null);
   const reconnectCountRef = useRef(0);
-  const seenReplyRunIdsRef = useRef<Set<number>>(new Set());
   const runUserMessageRef = useRef<Map<number, string>>(new Map());
   const currentRunIdRef = useRef<number | null>(null);
   const stopFallbackRef = useRef<number | null>(null);
@@ -219,55 +146,8 @@ export default function Chat() {
       if (runs.length < (page === 1 ? 10 : 3)) setHasMoreHistory(false);
       historyPageRef.current = page + 1;
 
-      // 并行：reasoning 补拉 + 子 Agent 历史（仅首屏） + 各 run activities
-      const [timelineEntries] = await Promise.all([
-        (async () => {
-          const entries: any[] = [];
-          await Promise.all(
-            runs
-              .filter(
-                (r: any) =>
-                  !(r.assistantReply && seenReplyRunIdsRef.current.has(r.id)),
-              )
-              .map(async (r: any) => {
-                try {
-                  const activitiesRes = await agentApi.activities.listByRun(
-                    r.id,
-                    sid,
-                    0,
-                    100,
-                  );
-                  if (activitiesRes && Array.isArray(activitiesRes.records)) {
-                    entries.push(
-                      ...buildTimelineFromActivities(
-                        activitiesRes.records,
-                        'desc',
-                        r.id,
-                      ),
-                    );
-                  }
-                } catch {
-                  // activities 拉取失败：降级为无 timeline
-                }
-              }),
-          );
-          return entries;
-        })(),
-        (async () => {
-          if (page !== 1) return;
-          try {
-            const subRuns = await agentApi.sessions.getSubAgentRuns(sid);
-            if (Array.isArray(subRuns)) setSubAgentHistorical(subRuns);
-          } catch {
-            // 子 Agent 历史拉取失败不影响主消息
-          }
-        })(),
-      ]);
-
       const historyMsgs: any[] = [];
-      const historyKeys: string[] = [];
       for (const r of runs) {
-        if (r.assistantReply && seenReplyRunIdsRef.current.has(r.id)) continue;
         // 澄清应答 run：回复已展示在澄清卡片里，跳过独立用户气泡
         if (
           !r.clarificationResponse &&
@@ -312,23 +192,266 @@ export default function Chat() {
             ts: toTs(r.createdAt),
             clarifications,
           });
-          historyKeys.push(`run-${r.id}`);
         }
       }
-      if (timelineEntries.length > 0) {
-        setHistoryTimeline((prev) => [...timelineEntries, ...prev]);
-      }
-      setCollapsedKeys((prev) => {
-        const next = new Set(prev);
-        for (const k of historyKeys) next.add(k);
-        return next;
-      });
       if (page === 1) {
         setMessages(historyMsgs);
       } else {
         setMessages((prev) => [...historyMsgs, ...prev]);
       }
     } catch {}
+  }, []);
+
+  const mergeTimeline = (rows: any[]) => {
+    if (!Array.isArray(rows)) return;
+    setTimeline((prev) => {
+      const m = new Map<number, any>(prev.map((r) => [r.seq, r]));
+      for (const r of rows) {
+        if (r && r.seq != null) {
+          // 子 Agent 权威行到达时移除 SS E 占位行（seq<0），避免同 subId 出现双行
+          if (r.kind === 'subagent' && r.refSubAgentRunId != null) {
+            const pid = Number(r.refSubAgentRunId);
+            for (const [seq, row] of m) {
+              if (
+                row &&
+                row.kind === 'subagent' &&
+                Number(row.seq) < 0 &&
+                Number(row.refSubAgentRunId) === pid
+              ) {
+                m.delete(seq);
+              }
+            }
+          }
+          m.set(r.seq, { ...(m.get(r.seq) || {}), ...r });
+        }
+      }
+      return [...m.values()].sort((a, b) => a.seq - b.seq);
+    });
+  };
+
+  const bumpCursors = (rows: any[]) => {
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    const seqs = rows.map((r) => Number(r.seq));
+    const min = Math.min(...seqs);
+    const max = Math.max(...seqs);
+    oldestSeqRef.current =
+      oldestSeqRef.current == null ? min : Math.min(oldestSeqRef.current, min);
+    newestSeqRef.current =
+      newestSeqRef.current == null ? max : Math.max(newestSeqRef.current, max);
+  };
+
+  const loadInitialTimeline = async (sid: number, limit = 10) => {
+    try {
+      const page = await agentApi.sessions.getTimeline(sid, { limit });
+      const rows = Array.isArray(page?.rows) ? page.rows : [];
+      mergeTimeline(rows);
+      bumpCursors(rows);
+      setTimelineHasMore(Boolean(page?.hasMore));
+    } catch {
+      // 后端未启用/异常：忽略
+    }
+  };
+
+  const loadOlderTimeline = async () => {
+    if (!sessionId || oldestSeqRef.current == null) return;
+    try {
+      const page = await agentApi.sessions.getTimeline(Number(sessionId), {
+        beforeSeq: oldestSeqRef.current,
+        limit: 5,
+      });
+      const rows = Array.isArray(page?.rows) ? page.rows : [];
+      mergeTimeline(rows);
+      bumpCursors(rows);
+      setTimelineHasMore(Boolean(page?.hasMore));
+    } catch {
+      // ignore
+    }
+  };
+
+  const refreshLatest = async (sid: number) => {
+    try {
+      // 空游标（新会话首条消息）→ 直接拉尾页；否则按 afterSeq 增量补行
+      const page = await agentApi.sessions.getTimeline(
+        sid,
+        newestSeqRef.current != null
+          ? { afterSeq: newestSeqRef.current, limit: 10 }
+          : { limit: 10 },
+      );
+      const rows = Array.isArray(page?.rows) ? page.rows : [];
+      if (rows.length) {
+        mergeTimeline(rows);
+        bumpCursors(rows);
+      }
+      if (page?.hasMore) setTimelineHasMore(true);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleTimelineClarify = (row: any, response: string) => {
+    if (!currentSession?.id || !row?.runId) return;
+    agentApi.sessions
+      .clarify(currentSession.id, row.runId, response, row.clarificationId)
+      .catch(() => {});
+    // 乐观回显：立即将澄清行置为已应答并显示用户提交内容。
+    // 以 runId 为主匹配键（clarificationId 可能缺失/经 wrapReasoning 丢失），保证能命中。
+    if (row.runId != null) {
+      setTimeline((prev) =>
+        prev.map((r) => {
+          if (
+            r.kind === 'clarification' &&
+            Number(r.runId) === Number(row.runId) &&
+            (row.clarificationId == null ||
+              r.content?.clarificationId == null ||
+              String(r.content.clarificationId) === String(row.clarificationId))
+          ) {
+            return {
+              ...r,
+              state: 'ANSWERED',
+              content: { ...r.content, response },
+            };
+          }
+          return r;
+        }),
+      );
+    }
+  };
+
+  // 子 Agent 实时步骤：由 SSE 事件增量构建（纯驱动，无需轮询/节流拉接口）。
+  // - reasoning_token 首帧(firstFrame) → 切新 LLM 轮；其余 → 追加当前轮思考；
+  // - content_token → 追加当前轮回复；
+  // - tool_call_{started,in_progress,succeeded,failed} → 按 publishId 就地更新工具步骤。
+  const handleSubAgentLiveEvent = useCallback((evtType: string, d: any) => {
+    const subId = Number(d.subAgentRunId);
+    if (!Number.isFinite(subId)) return;
+    const delta = String(d?.response ?? '');
+    if (evtType === 'content_token') {
+      setSubAgentLive((prev) => {
+        const arr: any[] = prev[subId] || [];
+        if (!arr.length) {
+          return {
+            ...prev,
+            [subId]: [
+              { type: 'llm', reasoning: '', reply: delta, running: true },
+            ],
+          };
+        }
+        const last = arr[arr.length - 1];
+        if (last.type !== 'llm' || !last.running) {
+          return {
+            ...prev,
+            [subId]: [
+              ...arr,
+              { type: 'llm', reasoning: '', reply: delta, running: true },
+            ],
+          };
+        }
+        const idx = arr.length - 1;
+        return {
+          ...prev,
+          [subId]: arr.map((it, i) =>
+            i === idx ? { ...it, reply: it.reply + delta } : it,
+          ),
+        };
+      });
+      return;
+    }
+    if (evtType === 'reasoning_token') {
+      const subType = String(d?.reasoningSubType || '');
+      if (
+        subType === 'tool_call_started' ||
+        subType === 'tool_call_in_progress' ||
+        subType === 'tool_call_succeeded' ||
+        subType === 'tool_call_failed'
+      ) {
+        const status: 'pending' | 'in_progress' | 'succeeded' | 'failed' =
+          subType === 'tool_call_started'
+            ? 'pending'
+            : subType === 'tool_call_in_progress'
+              ? 'in_progress'
+              : subType === 'tool_call_succeeded'
+                ? 'succeeded'
+                : 'failed';
+        const update: any = {
+          type: 'tool_call',
+          publishId: String(d?.publishId || ''),
+          displayNameCn: d?.displayNameCn || d?.displayName,
+          displayNameEn: d?.displayNameEn,
+          toolName: d?.toolName,
+        };
+        if (d?.argumentsJson) update.argumentsJson = d.argumentsJson;
+        if (d?.artifact) update.artifact = d.artifact;
+        setSubAgentLive((prev) => {
+          const arr: any[] = prev[subId] || [];
+          const idx = arr.findIndex(
+            (it) =>
+              it.type === 'tool_call' && it.publishId === update.publishId,
+          );
+          if (idx >= 0) {
+            return {
+              ...prev,
+              [subId]: arr.map((it, i) =>
+                i === idx ? { ...it, ...update, status } : it,
+              ),
+            };
+          }
+          return {
+            ...prev,
+            [subId]: [...arr, { ...update, status }],
+          };
+        });
+        return;
+      }
+      if (subType === 'model_reason') {
+        if (d?.firstFrame) {
+          // 新 LLM 轮：剥离首帧哨兵行（"<marker>id: name\n"），旧轮标记结束
+          const nl = delta.indexOf('\n');
+          const body = nl >= 0 ? delta.slice(nl + 1) : delta;
+          setSubAgentLive((prev) => {
+            const arr: any[] = prev[subId] || [];
+            const closed = arr.map((it) =>
+              it.type === 'llm' && it.running ? { ...it, running: false } : it,
+            );
+            return {
+              ...prev,
+              [subId]: [
+                ...closed,
+                { type: 'llm', reasoning: body, reply: '', running: true },
+              ],
+            };
+          });
+        } else {
+          setSubAgentLive((prev) => {
+            const arr: any[] = prev[subId] || [];
+            if (!arr.length) {
+              return {
+                ...prev,
+                [subId]: [
+                  { type: 'llm', reasoning: delta, reply: '', running: true },
+                ],
+              };
+            }
+            const last = arr[arr.length - 1];
+            if (last.type !== 'llm' || !last.running) {
+              return {
+                ...prev,
+                [subId]: [
+                  ...arr,
+                  { type: 'llm', reasoning: delta, reply: '', running: true },
+                ],
+              };
+            }
+            const idx = arr.length - 1;
+            return {
+              ...prev,
+              [subId]: arr.map((it, i) =>
+                i === idx ? { ...it, reasoning: it.reasoning + delta } : it,
+              ),
+            };
+          });
+        }
+      }
+    }
   }, []);
 
   const connectSSE = useCallback((sid: number) => {
@@ -340,7 +463,13 @@ export default function Chat() {
     const controller = new AbortController();
     abortRef.current = controller;
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+      // token 瞬时为空时不要静默放弃：1s 后重试，避免 SSE 永久不建连
+      setTimeout(() => {
+        if (currentSessionIdRef.current === sid) connectSSE(sid);
+      }, 1000);
+      return;
+    }
 
     connectSse(
       `/api/v1/runtime/${sid}/stream`,
@@ -360,6 +489,115 @@ export default function Chat() {
             // 会话守卫：忽略非当前会话的事件，防止旧会话仍在流式时污染当前 messages/timeline（串台/重复）
             if (currentSessionIdRef.current !== sid) return;
 
+            // 子 Agent 实时：纯 SSE 驱动逐步构建（content/reasoning/tool 事件均带 subAgentRunId）
+            if (d?.subAgentRunId != null) {
+              handleSubAgentLiveEvent(evtType, d);
+              // 头行兜底：纯 LLM 式子 run 期间没有 run 终态/tool 结束事件触发 refreshLatest，
+              // 若子 Agent 头行还没进 timeline，SubAgentCard 就不会挂载 → live 无从渲染。
+              // 此处就地插入 RUNNING 占位行（后续 refreshLatest/终态合并自动替换为权威行）。
+              const liveSubId = Number(d.subAgentRunId);
+              if (Number.isFinite(liveSubId)) {
+                setTimeline((prev) => {
+                  const exists = prev.some(
+                    (r) =>
+                      r.kind === 'subagent' &&
+                      Number(r.refSubAgentRunId) === liveSubId,
+                  );
+                  if (exists) return prev;
+                  return [
+                    ...prev,
+                    {
+                      seq: -1,
+                      kind: 'subagent',
+                      refSubAgentRunId: liveSubId,
+                      status: 'RUNNING',
+                      title: d?.displayNameCn || d?.displayName || '子 Agent',
+                      content: {
+                        displayName: d?.displayNameCn || d?.displayName,
+                        state: 'RUNNING',
+                      },
+                    },
+                  ].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+                });
+              }
+            }
+
+            // 统一 Timeline 流式/补行（后端信封已带 seq/kind）：
+            // - assistant 容器 token（content/reasoning）→ 按 seq 就地追加打则字；
+            // - run 终态/工具结束/澄清 → 按 afterSeq 拉最新页补行（工具/澄清行暂无 seq 打标）。
+            const tlSubType = String(
+              d?.reasoningSubType || d?.status || evtType,
+            );
+
+            // 诊断（仅 dev）：打印带 seq 的流式事件与 run/tool 终态，用于定位"agent 消息不实时显示"
+            if (
+              process.env.NODE_ENV === 'development' &&
+              (d?.seq != null ||
+                /^run_|tool_call_succeeded|tool_call_failed|^clarification_/.test(
+                  tlSubType,
+                ))
+            ) {
+              console.log(
+                '[SSE-EVT]',
+                JSON.stringify({
+                  eventType: evtType,
+                  seq: d?.seq,
+                  kind: d?.kind,
+                  subType: tlSubType,
+                  runId: d?.runId,
+                  resp: String(d?.response || '').slice(0, 40),
+                }),
+              );
+            }
+
+            if (
+              d?.seq != null &&
+              d?.kind === 'assistant' &&
+              d?.response &&
+              (evtType === 'content_token' || evtType === 'reasoning_token')
+            ) {
+              const field = evtType === 'content_token' ? 'reply' : 'thinking';
+              const delta = String(d.response);
+              setTimeline((prev) => {
+                const m = new Map<number, any>(prev.map((r) => [r.seq, r]));
+                const seq = Number(d.seq);
+                const existing = m.get(seq);
+                if (existing) {
+                  m.set(seq, {
+                    ...existing,
+                    content: {
+                      ...(existing.content || {}),
+                      [field]:
+                        ((existing.content && existing.content[field]) || '') +
+                        delta,
+                    },
+                  });
+                } else {
+                  // 行尚不存在（新会话首条消息等，refreshLatest 此前空游标直接返回）
+                  // → 插入占位 assistant 行，后续按 afterSeq 拉取/终态时 mergeTimeline 补齐全文
+                  m.set(seq, {
+                    seq,
+                    kind: 'assistant',
+                    status: 'RUNNING',
+                    content: { [field]: delta },
+                  });
+                }
+                return [...m.values()].sort((a, b) => a.seq - b.seq);
+              });
+            } else if (
+              [
+                'run_completed',
+                'run_failed',
+                'run_cancelled',
+                'run_awaiting_user',
+                'tool_call_succeeded',
+                'tool_call_failed',
+              ].includes(tlSubType) ||
+              String(evtType).startsWith('clarification_')
+            ) {
+              void refreshLatest(sid);
+            }
+
             // 始终跟踪当前 runId（含任务系统发起的 run），保证停止能命中正确 run
             const msgRunId = Number(d?.runId);
             if (Number.isFinite(msgRunId)) {
@@ -367,63 +605,9 @@ export default function Chat() {
             }
 
             if (evtType === 'reasoning_token') {
-              const raw = d?.response || '';
               const subType = d?.reasoningSubType || '';
               const publishId = d?.publishId;
               const runId = d?.runId;
-
-              // 子 Agent（nodeName=skill: 或 subAgentRunId）→ 路由进子 Agent 实时卡片
-              const subRunId = d?.subAgentRunId;
-              const isSubAgent =
-                subRunId != null ||
-                String(d?.nodeName || '').startsWith('skill:');
-              if (isSubAgent) {
-                const identity = subAgentIdentity(runId, subRunId, d?.nodeName);
-                if (!identity) return;
-                const skillId = identity.skillId;
-                if (
-                  raw &&
-                  subType !== 'tool_call_started' &&
-                  subType !== 'tool_call_in_progress' &&
-                  subType !== 'tool_call_succeeded' &&
-                  subType !== 'tool_call_failed'
-                ) {
-                  const skillName = raw.startsWith('▶')
-                    ? raw.replace('▶ Skill', '⚙️ Skill').split('\n')[0]
-                    : '';
-                  setSubAgentLive((prev) => {
-                    const key = identity.key;
-                    const exists = prev.find((s) => s.key === key);
-                    if (exists) {
-                      return prev.map((s) =>
-                        s.key === key
-                          ? {
-                              ...s,
-                              reasoning: s.reasoning + raw,
-                              // 推理首帧解析出的 marker 名最完整，覆盖此前的内容/工具事件回退名
-                              name: skillName ? skillName : s.name,
-                            }
-                          : s,
-                      );
-                    }
-                    return [
-                      ...prev,
-                      {
-                        key,
-                        runId: runId ?? null,
-                        skillId,
-                        subAgentRunId: subRunId ?? null,
-                        name: skillName ? skillName : `Skill ${skillId}`,
-                        status: 'RUNNING',
-                        reasoning: raw,
-                        reply: '',
-                        toolCalls: [],
-                      },
-                    ];
-                  });
-                  return; // 子 Agent reasoning 不进主推理气泡
-                }
-              }
 
               if (
                 subType === 'tool_call_in_progress' ||
@@ -439,58 +623,6 @@ export default function Chat() {
                     : subType === 'tool_call_succeeded'
                       ? 'succeeded'
                       : 'failed';
-                // 子 Agent tool call → 路由进子 Agent 卡片
-                const subRunId = d?.subAgentRunId;
-                const isSubTool =
-                  subRunId != null ||
-                  String(d?.publishId || '').startsWith('skill-') ||
-                  String(d?.nodeName || '').startsWith('skill:');
-                if (isSubTool) {
-                  const rid = d?.runId;
-                  // 统一 identity：key 由 subAgentRunId（或 skill: 后缀）唯一决定，避免同一 skill 拆成多个 tab
-                  const identity = subAgentIdentity(rid, subRunId, d?.nodeName);
-                  if (!identity) return;
-                  const skillId = identity.skillId;
-                  const key = identity.key;
-                  setSubAgentLive((prev) => {
-                    const exists = prev.find((s) => s.key === key);
-                    const tool = {
-                      callId: publishId || `${key}-${Date.now()}`,
-                      toolName: d?.toolName || name || 'tool',
-                      args: d?.argumentsJson || '',
-                      status,
-                    };
-                    if (!exists) {
-                      return [
-                        ...prev,
-                        {
-                          key,
-                          runId: rid ?? null,
-                          skillId,
-                          subAgentRunId: subRunId ?? null,
-                          name: `Skill ${skillId}`,
-                          status: 'RUNNING',
-                          reasoning: '',
-                          reply: '',
-                          toolCalls: [tool],
-                        },
-                      ];
-                    }
-                    return prev.map((s) => {
-                      if (s.key !== key) return s;
-                      const idx = s.toolCalls.findIndex(
-                        (t: any) => t.callId === tool.callId,
-                      );
-                      if (idx >= 0) {
-                        const next = [...s.toolCalls];
-                        next[idx] = { ...next[idx], ...tool };
-                        return { ...s, toolCalls: next };
-                      }
-                      return { ...s, toolCalls: [...s.toolCalls, tool] };
-                    });
-                  });
-                  return;
-                }
                 setToolCalls((prev) =>
                   prev.map((tc) =>
                     tc._publishId === publishId
@@ -606,63 +738,6 @@ export default function Chat() {
                 const name =
                   d?.displayNameCn || d?.displayName || d?.toolName || '';
                 const nameEn = d?.displayNameEn || name;
-                // 子 Agent tool call → 路由进子 Agent 卡片
-                const subRunId = d?.subAgentRunId;
-                const isSubTool =
-                  subRunId != null ||
-                  String(d?.publishId || '').startsWith('skill-') ||
-                  String(d?.nodeName || '').startsWith('skill:');
-                if (isSubTool) {
-                  const rid = d?.runId;
-                  // 统一 identity：skillId 仅用于显示，key 由 subAgentRunId（或 skill: 后缀）唯一决定
-                  const identity = subAgentIdentity(rid, subRunId, d?.nodeName);
-                  if (!identity) return;
-                  const skillId = identity.skillId;
-                  const key = identity.key;
-                  setSubAgentLive((prev) => {
-                    const exists = prev.find((s) => s.key === key);
-                    if (exists) {
-                      return prev.map((s) =>
-                        s.key === key
-                          ? {
-                              ...s,
-                              toolCalls: [
-                                ...s.toolCalls,
-                                {
-                                  callId: publishId || `${key}-${Date.now()}`,
-                                  toolName: d?.toolName || name || 'tool',
-                                  args: d?.argumentsJson || '',
-                                  status: 'started',
-                                },
-                              ],
-                            }
-                          : s,
-                      );
-                    }
-                    return [
-                      ...prev,
-                      {
-                        key,
-                        runId: rid ?? null,
-                        skillId,
-                        subAgentRunId: subRunId ?? null,
-                        name: `Skill ${skillId}`,
-                        status: 'RUNNING',
-                        reasoning: '',
-                        reply: '',
-                        toolCalls: [
-                          {
-                            callId: publishId || `${key}-${Date.now()}`,
-                            toolName: d?.toolName || name || 'tool',
-                            args: d?.argumentsJson || '',
-                            status: 'started',
-                          },
-                        ],
-                      },
-                    ];
-                  });
-                  return;
-                }
                 setToolCalls((prev) => [
                   ...prev,
                   {
@@ -675,52 +750,6 @@ export default function Chat() {
                     ts: Date.now(),
                   },
                 ]);
-                // 主 Agent tool started → 同步进 interaction timeline 的 tools
-                if (runId) {
-                  const rid = Number(runId);
-                  setMainTimeline((prev) => {
-                    const cur = mainTimelineSeqRef.current[rid] ?? 0;
-                    const hasCur = prev.some(
-                      (it) => Number(it.runId) === rid && it.seq === cur,
-                    );
-                    let seq = cur;
-                    let base: any[] = prev;
-                    if (!hasCur) {
-                      seq = 0;
-                      base = [
-                        ...prev,
-                        {
-                          key: `m-${rid}-0`,
-                          runId: rid,
-                          seq: 0,
-                          reason: '',
-                          reply: '',
-                          tools: [],
-                          status: 'RUNNING',
-                          ts: Date.now(),
-                        },
-                      ];
-                      mainTimelineSeqRef.current[rid] = 0;
-                    }
-                    const key = `m-${rid}-${seq}`;
-                    return base.map((it) =>
-                      it.key === key
-                        ? {
-                            ...it,
-                            tools: [
-                              ...it.tools,
-                              {
-                                callId: publishId || `${key}-${Date.now()}`,
-                                name: name || d?.toolName || 'tool',
-                                args: d?.argumentsJson || '',
-                                status: 'started',
-                              },
-                            ],
-                          }
-                        : it,
-                    );
-                  });
-                }
                 setSending(true);
                 setSessionPanelOpen(true);
                 return;
@@ -738,34 +767,6 @@ export default function Chat() {
                   stopFallbackRef.current = null;
                 }
                 const runId = d?.runId;
-                // 该 run 已在 live 展示 → 后续 loadHistory 不再重复重建它的回复（修复“最新一条重复展示”）
-                if (runId != null)
-                  seenReplyRunIdsRef.current.add(Number(runId));
-                // 主 Agent run 终态：同 run 的子 Agent activity 标记为对应状态
-                if (runId) {
-                  const finalStatus =
-                    subType === 'run_completed'
-                      ? 'COMPLETED'
-                      : subType === 'run_cancelled'
-                        ? 'CANCELLED'
-                        : 'FAILED';
-                  setSubAgentLive((prev) =>
-                    prev.map((s) =>
-                      Number(s.runId) === Number(runId)
-                        ? { ...s, status: finalStatus }
-                        : s,
-                    ),
-                  );
-                  // 主 Agent timeline 同样收口
-                  setMainTimeline((prev) =>
-                    prev.map((it) =>
-                      Number(it.runId) === Number(runId)
-                        ? { ...it, status: finalStatus }
-                        : it,
-                    ),
-                  );
-                }
-
                 // 展示 LLM 错误消息（429/502/其他）
                 if (subType === 'run_failed') {
                   const errorMsg = d?.errorMessage;
@@ -813,60 +814,8 @@ export default function Chat() {
                 return;
               }
 
-              // 主 Agent 模型推理（llm）→ interaction 级 timeline（非子、非系统状态行）
-              if (
-                d?.reasoningType === 'llm' &&
-                subType === 'model_reason' &&
-                runId &&
-                raw
-              ) {
-                const rid = Number(runId);
-                setMainTimeline((prev) => {
-                  const cur = mainTimelineSeqRef.current[rid] ?? 0;
-                  // 当前 seq 已有 tool 或不存在 → 新开 interaction
-                  const hasCur = prev.some(
-                    (it) => Number(it.runId) === rid && it.seq === cur,
-                  );
-                  const curHasTool =
-                    hasCur &&
-                    prev
-                      .filter(
-                        (it) => Number(it.runId) === rid && it.seq === cur,
-                      )
-                      .some((it) => it.tools?.length > 0);
-                  let seq = cur;
-                  if (!hasCur || curHasTool) {
-                    seq = cur + 1;
-                    mainTimelineSeqRef.current[rid] = seq;
-                  }
-                  const key = `m-${rid}-${seq}`;
-                  const existing = prev.find((it) => it.key === key);
-                  if (existing) {
-                    // 追加推理内容，但保持条目的原始时间戳（ts 不随 delta 刷新，
-                    // 避免模型输出中被置于用户下一条消息之后的排序错位）
-                    return prev.map((it) =>
-                      it.key === key ? { ...it, reason: it.reason + raw } : it,
-                    );
-                  }
-                  return [
-                    ...prev,
-                    {
-                      key,
-                      runId: rid,
-                      seq,
-                      reason: raw,
-                      reply: '',
-                      tools: [] as any[],
-                      status: 'RUNNING',
-                      ts: Date.now(),
-                    },
-                  ];
-                });
-                return; // 主推理进 timeline，不再进单个 reasoning 气泡
-              }
-
-              // 推理已改为 interaction timeline 展示，不再 push 独立 reasoning 气泡；
-              // 剩余的 isSystem 状态行（run_pending 等）忽略；intent_retry 时清理空 ai 消息。
+              // 推理已改为后端 Timeline/TimelineList 展示，不再维护 interaction timeline 拼装；
+              // 剩余 isSystem 状态行（run_pending 等）忽略；intent_retry 时清理空 ai 消息。
               if (subType === 'intent_retry') {
                 setMessages((prev) =>
                   prev.filter(
@@ -950,82 +899,35 @@ export default function Chat() {
                       : m,
                   ),
                 );
+                // 兜底：Timeline 澄清行同步置为已应答并回显用户提交内容（按 runId 匹配，clarificationId 缺失时仍命中）
+                setTimeline((prev) =>
+                  prev.map((r) => {
+                    if (
+                      r.kind === 'clarification' &&
+                      Number(r.runId) === Number(d?.runId) &&
+                      (d?.clarificationId == null ||
+                        r.content?.clarificationId == null ||
+                        String(r.content.clarificationId) ===
+                          String(d.clarificationId))
+                    ) {
+                      return {
+                        ...r,
+                        state: 'ANSWERED',
+                        content: {
+                          ...r.content,
+                          response: d?.response ?? r.content.response,
+                        },
+                      };
+                    }
+                    return r;
+                  }),
+                );
               }
               return;
             }
             if (evtType === 'content_token') {
-              const rid = d?.runId;
-              const delta = d?.response || '';
-              // 子 Agent reply → 路由进子 Agent 卡片（不进主 reply 气泡）
-              const subRunId = d?.subAgentRunId;
-              const isSubReply =
-                subRunId != null ||
-                String(d?.nodeName || '').startsWith('skill:');
-              if (isSubReply) {
-                const identity = subAgentIdentity(rid, subRunId, d?.nodeName);
-                if (!identity) return;
-                const skillId = identity.skillId;
-                if (rid && delta) {
-                  setSubAgentLive((prev) => {
-                    const key = identity.key;
-                    const exists = prev.find((s) => s.key === key);
-                    if (exists) {
-                      return prev.map((s) =>
-                        s.key === key ? { ...s, reply: s.reply + delta } : s,
-                      );
-                    }
-                    return [
-                      ...prev,
-                      {
-                        key,
-                        runId: rid,
-                        skillId,
-                        subAgentRunId: subRunId ?? null,
-                        name: `Skill ${skillId}`,
-                        status: 'RUNNING',
-                        reasoning: '',
-                        reply: delta,
-                        toolCalls: [],
-                      },
-                    ];
-                  });
-                }
-                return;
-              }
-              // 主 Agent reply → interaction 级 timeline（不进单个 ai 气泡，防止重复）
-              if (rid && delta) {
-                const ridN = Number(rid);
-                setMainTimeline((prev) => {
-                  const cur = mainTimelineSeqRef.current[ridN] ?? 0;
-                  const hasCur = prev.some(
-                    (it) => Number(it.runId) === ridN && it.seq === cur,
-                  );
-                  let seq = cur;
-                  let base: any[] = prev;
-                  if (!hasCur) {
-                    seq = 0;
-                    base = [
-                      ...prev,
-                      {
-                        key: `m-${ridN}-0`,
-                        runId: ridN,
-                        seq: 0,
-                        reason: '',
-                        reply: '',
-                        tools: [],
-                        status: 'RUNNING',
-                        ts: Date.now(),
-                      },
-                    ];
-                    mainTimelineSeqRef.current[ridN] = 0;
-                  }
-                  const key = `m-${ridN}-${seq}`;
-                  return base.map((it) =>
-                    it.key === key ? { ...it, reply: it.reply + delta } : it,
-                  );
-                });
-                return;
-              }
+              // 主 Agent 回复文本：由统一 Timeline 打字机在流式分支（seq+assistant）处理，
+              // 此处不再维护独立主 timeline/回复气泡。
               return;
             }
           } catch {}
@@ -1104,6 +1006,9 @@ export default function Chat() {
                 );
               });
             }
+            // chat 成功后立即拉一次最新 timeline（用户行 + assistant 容器行），
+            // 避免依赖单靠 SSE/终态事件（空游标此前会被跳过）
+            void refreshLatest(sid);
           } catch (e) {
             setSending(false);
             setMessages((prev) => [
@@ -1128,17 +1033,17 @@ export default function Chat() {
         setHasMoreHistory(true);
         historyPageRef.current = 1;
         setMessages([]);
-        setCollapsedKeys(new Set());
-        seenReplyRunIdsRef.current = new Set();
         reconnectCountRef.current = 0;
         runUserMessageRef.current = new Map();
         setTodos([]);
         setToolCalls([]);
-        // 切换会话时清空 interaction timeline，避免跨会话残留旧数据
-        setHistoryTimeline([]);
-        setMainTimeline([]);
-        mainTimelineSeqRef.current = {};
         setSessionPanelOpen(true);
+        // 统一 Timeline：重置并加载首尾一页（每页由后端 keyset 控制）
+        setTimeline([]);
+        oldestSeqRef.current = null;
+        newestSeqRef.current = null;
+        setTimelineHasMore(false);
+        void loadInitialTimeline(sid);
         agentApi.sessions
           .getTodos(sid)
           .then((data: any) => {
@@ -1264,6 +1169,8 @@ export default function Chat() {
             i === idx ? { ...(m as any), runId: rid } : m,
           );
         });
+        // 统一 Timeline：拉最新页补用户行/助手容器
+        if (currentSession?.id) void refreshLatest(Number(currentSession.id));
       }
     } catch (err) {
       setSending(false);
@@ -1413,8 +1320,6 @@ export default function Chat() {
               modelRoutes={modelRoutes}
               sseConnected={sseConnected}
               messages={messages}
-              collapsedKeys={collapsedKeys}
-              onCollapsedKeysChange={setCollapsedKeys}
               hasMoreHistory={hasMoreHistory}
               onLoadMoreHistory={loadMoreHistory}
               inputValue={inputValue}
@@ -1462,11 +1367,12 @@ export default function Chat() {
               }}
               sessionPanelOpen={sessionPanelOpen}
               onTogglePanel={() => setSessionPanelOpen(!sessionPanelOpen)}
+              timeline={timeline}
+              timelineHasMore={timelineHasMore}
+              onLoadOlderTimeline={loadOlderTimeline}
+              onRespondClarify={handleTimelineClarify}
               subAgentLive={subAgentLive}
-              subAgentHistorical={subAgentHistorical}
-              mainTimeline={mainTimeline}
-              historyTimeline={historyTimeline}
-              onLoadSubAgentTimeline={async (id: number) => {
+              loadSubAgentSteps={async (id: number) => {
                 try {
                   return await agentApi.sessions.getSubAgentTimeline(id);
                 } catch {

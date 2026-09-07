@@ -28,8 +28,14 @@ public class RuntimeEventDataVO {
     private String reasoningType;
     private String reasoningSubType;
     private String publishId;
+    /** 子 Agent LLM 轮首帧 reasoning 标记（前端据此切新 LLM 轮，替代解析 ▶ 哨兵）。 */
+    private Boolean firstFrame;
     private String screenshot;
     private String clarificationId;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
+    /** 统一 Timeline 行 seq（会话级单调）——SSE 打字机/打平渲染的目标键。 */
+    private Long seq;
+    /** 统一 Timeline 行展示类型（user|assistant|tool|clarification|subagent|run_status|error）。 */
+    private String kind;
 }

@@ -13,6 +13,6 @@ public class CreateSkillDTO implements Serializable {
     private String name;
     @Size(max = 255)
     private String description;
-    @Size(max = 9000)
+    @Size(max = 10000)
     private String definition;
 }

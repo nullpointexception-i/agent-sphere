@@ -53,3 +53,24 @@ export interface SubAgentLive {
     status?: string;
   }[];
 }
+
+/** 纯 SSE 驱动的子 Agent 实时步骤（按 subAgentRunId 聚合；终态由一次性历史拉取校正）。 */
+export type SubAgentLiveStep =
+  | {
+      type: 'llm';
+      reasoning: string;
+      reply: string;
+      running: boolean;
+    }
+  | {
+      type: 'tool_call';
+      publishId: string;
+      toolName?: string;
+      displayNameCn?: string;
+      displayNameEn?: string;
+      status: 'pending' | 'in_progress' | 'succeeded' | 'failed';
+      argumentsJson?: string;
+      artifact?: string;
+    };
+
+export type SubAgentLiveMap = Record<number, SubAgentLiveStep[]>;

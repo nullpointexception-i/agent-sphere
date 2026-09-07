@@ -6,6 +6,7 @@ import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentUserInLoopRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.AgentUserInLoopRecordSpi;
@@ -39,6 +40,7 @@ public class RuntimeEventListener {
     private final SessionSpi sessionSpi;
     private final AgentRuntimeProperties runtimeProperties;
     private final ReasoningBufferStore reasoningBufferStore;
+    private final TimelineRecorder timelineRecorder;
 
     private static RuntimeEventVO transformForFrontend(RuntimeEventVO event) {
         EventType type = event.getEventType();
@@ -99,7 +101,12 @@ public class RuntimeEventListener {
                 .setArgumentsJson(src.getArgumentsJson())
                 .setErrorMessage(src.getErrorMessage())
                 .setSubAgentRunId(src.getSubAgentRunId())
-                .setType(src.getType());
+                .setNodeName(src.getNodeName())
+                .setSeq(src.getSeq())
+                .setKind(src.getKind())
+                .setType(src.getType())
+                .setClarificationId(src.getClarificationId())
+                .setPrompt(src.getPrompt());
 
         String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
                 : (src.getToolName() != null ? src.getToolName() : "");
@@ -143,7 +150,7 @@ public class RuntimeEventListener {
             case SessionStatus s -> handleSessionLifecycle(data, s);
             case FlowEventType f -> handleFlow(data, f);
             case ChromeCommandEventType s -> handleChromeCommand(event, data);
-            case ClarificationStatus s -> { /* handled via SSE passthrough */ }
+            case ClarificationStatus s -> handleClarification(data, s);
         }
 
         Long sessionId = data != null ? data.getSessionId() : null;
@@ -195,31 +202,49 @@ public class RuntimeEventListener {
                 if (data.getAssistantReply() != null) run.setAssistantReply(data.getAssistantReply());
                 flushReasoning(run);
                 runSpi.updateRun(run);
+                timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.COMPLETED.getCode());
+                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
             }
             case FAILED -> {
                 run.setStatus(status.value());
                 flushReasoning(run);
                 runSpi.updateRun(run);
+                timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.FAILED.getCode());
+                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
             }
             case CANCELLED -> {
                 run.setStatus(status.value());
                 flushReasoning(run);
                 runSpi.updateRun(run);
+                timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.CANCELLED.getCode());
+                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
             }
             case AWAITING_USER -> {
                 run.setStatus(status.value());
                 runSpi.updateRun(run);
+                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
             }
         }
     }
 
-    /** 累积该 run 的模型推理（thinking）文本：仅 llm 类型，排除系统状态行；终态一次性写入 run。 */
+    /** 累积该 run 的模型推理（thinking）文本：仅 llm 类型，排除系统状态行；终态一次性写入 run。
+ *  同时：主 Agent 首 token 打开统一 Timeline 助手容器行并回填 seq（打字机目标）。 */
     private void handleFlow(RuntimeEventDataVO data, FlowEventType flow) {
-        if (flow != FlowEventType.REASONING_TOKEN) {
-            return;
-        }
         Long runId = data.getRunId();
         if (runId == null) {
+            return;
+        }
+        boolean isReasoning = flow == FlowEventType.REASONING_TOKEN;
+        boolean isContent = flow == FlowEventType.CONTENT_TOKEN;
+        if (!isReasoning && !isContent) {
+            return;
+        }
+        // 主 Agent 流式容器：仅主 agent（子 Agent 与其头行由 SkillReActExecutor 管理，卡内按 sub_agent_run_id 实时订阅）
+        if (data.getSubAgentRunId() == null
+                && (isContent || RuntimeEventTypeConstant.REASONING_TYPE_LLM.equals(data.getReasoningType()))) {
+            timelineRecorder.stampStreamingSeq(data.getSessionId(), runId, data);
+        }
+        if (!isReasoning) {
             return;
         }
         String response = data.getResponse();
@@ -230,6 +255,19 @@ public class RuntimeEventListener {
             return;
         }
         reasoningBufferStore.accumulate(runId, response);
+    }
+
+    private void handleClarification(RuntimeEventDataVO data, ClarificationStatus status) {
+        if (data.getRunId() == null) {
+            return;
+        }
+        String state = switch (status) {
+            case PENDING -> TimelineState.PENDING.getCode();
+            case RESPONDED -> TimelineState.ANSWERED.getCode();
+            case DISMISSED -> TimelineState.CANCELLED.getCode();
+        };
+        timelineRecorder.recordClarification(data.getSessionId(), data.getRunId(),
+                data.getClarificationId(), state, data.getPrompt());
     }
 
     private void flushReasoning(RunVO run) {
@@ -272,7 +310,14 @@ public class RuntimeEventListener {
             }
             case RUNNING -> {
                 AgentToolCallRecordVO vo = toolCallRecordSpi.getLatestByStepId(stepId);
-                if (vo != null) toolCallRecordSpi.updateStatus(vo.getId(), status.name(), null, null);
+                if (vo != null) {
+                    toolCallRecordSpi.updateStatus(vo.getId(), status.name(), null, null);
+                    if (data.getSubAgentRunId() == null) {
+                        timelineRecorder.recordTool(data.getSessionId(), data.getRunId(), String.valueOf(stepId),
+                                vo.getId(), TimelineState.IN_PROGRESS.getCode(),
+                                data.getDisplayNameCn() != null ? data.getDisplayNameCn() : data.getToolName());
+                    }
+                }
             }
             case SUCCEEDED -> {
                 AgentToolCallRecordVO vo = toolCallRecordSpi.getLatestByStepId(stepId);
@@ -282,6 +327,12 @@ public class RuntimeEventListener {
                 toolCallRecordSpi.updateStatus(vo.getId(), status.name(), raw, null);
                 if (compressed != null) {
                     toolCallRecordSpi.updateCompressedArtifact(vo.getId(), compressed);
+                }
+                if (data.getSubAgentRunId() == null) {
+                    timelineRecorder.recordTool(data.getSessionId(), data.getRunId(), String.valueOf(stepId),
+                            vo.getId(), TimelineState.SUCCEEDED.getCode(),
+                            data.getDisplayNameCn() != null ? data.getDisplayNameCn() : data.getToolName());
+                    timelineRecorder.removeTool(data.getRunId(), String.valueOf(stepId));
                 }
             }
             case FAILED -> {
@@ -293,6 +344,12 @@ public class RuntimeEventListener {
                 toolCallRecordSpi.updateStatus(vo.getId(), status.name(), data.getArtifact(), errorMsg);
                 if (compressed != null) {
                     toolCallRecordSpi.updateCompressedArtifact(vo.getId(), compressed);
+                }
+                if (data.getSubAgentRunId() == null) {
+                    timelineRecorder.recordTool(data.getSessionId(), data.getRunId(), String.valueOf(stepId),
+                            vo.getId(), TimelineState.FAILED.getCode(),
+                            data.getDisplayNameCn() != null ? data.getDisplayNameCn() : data.getToolName());
+                    timelineRecorder.removeTool(data.getRunId(), String.valueOf(stepId));
                 }
             }
         }

@@ -1,5 +1,6 @@
 package com.buukle.agent.common.skill;
 
+import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.MissingNode;
@@ -27,10 +28,10 @@ public final class SkillPromptRenderer {
         try {
             args = JSON.readTree(argsJson == null || argsJson.isBlank() ? "{}" : argsJson);
         } catch (Exception e) {
-            throw new InvalidSkillDefinition("skill 参数不是合法 JSON: " + e.getMessage());
+            throw new InvalidSubRunDefinition("skill 参数不是合法 JSON: " + e.getMessage());
         }
         if (args == null || !args.isObject()) {
-            throw new InvalidSkillDefinition("skill 参数必须是 JSON 对象");
+            throw new InvalidSubRunDefinition("skill 参数必须是 JSON 对象");
         }
         StringBuilder out = new StringBuilder();
         int idx = 0;
@@ -60,7 +61,7 @@ public final class SkillPromptRenderer {
         JsonNode node = args;
         for (String segment : path.split("\\.")) {
             if (segment.isBlank()) {
-                throw new InvalidSkillDefinition("占位符路径非法: {{" + path + "}}");
+                throw new InvalidSubRunDefinition("占位符路径非法: {{" + path + "}}");
             }
             node = node.get(segment.trim());
             // 缺失字段不再中止整个渲染：回填显式标记让 skill 自行处理

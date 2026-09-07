@@ -8,6 +8,8 @@ import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
+import com.buukle.agent.instance.dtvo.enums.TimelineKind;
+import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
@@ -24,6 +26,7 @@ import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.orchestrator.RuntimeOrchestrator;
+import com.buukle.agent.runtime.orchestration.handler.TimelineRecorder;
 import com.buukle.agent.util.TextSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,12 +46,21 @@ public class ChatRuntimeService {
     private final ApplicationEventPublisher eventPublisher;
     private final AgentPendingClarificationMapper clarificationMapper;
     private final SessionRunner sessionRunner;
+    private final TimelineRecorder timelineRecorder;
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
 
         RunVO run = createRun(sessionId, dto);
         startRun(run, sessionId, dto, false);
+
+        // 统一 Timeline：记录用户消息行（正文在读取时按 run 解析）
+        try {
+            timelineRecorder.record(sessionId, run.getId(), TimelineKind.USER.getCode(), null,
+                TimelineState.COMPLETED.getCode(), null, run.getId(), null, null, null, null);
+        } catch (Exception e) {
+            log.warn("Timeline user row failed: {}", e.getMessage());
+        }
 
         ChatMessageResponseVO response = new ChatMessageResponseVO();
         response.setRunId(run.getId());
