@@ -71,3 +71,17 @@ if (params.has('otc') || params.has('error')) {
   openDrawer();
   setTimeout(ensureWidget, 0);
 }
+
+// 已通过 dev-token 面板注入过用户（或重定向返回时）→ 自动打开抽屉并挂载，
+// 省去手动点击；配合 token 面板的 401 登出提示可立刻看到结果。
+const hasStoredUser = (() => {
+  try {
+    return !!sessionStorage.getItem('agent-sphere-widget:agent-user');
+  } catch {
+    return false;
+  }
+})();
+if (hasStoredUser) {
+  openDrawer();
+  setTimeout(ensureWidget, 0);
+}

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Markdown } from '../markdown';
+import { CheckIcon, CopyIcon } from '../icons';
 import type { SubAgentTimelineItemVO, TimelineRow } from '../types';
 import type { SubAgentLiveMap } from '../useTimelineStream';
 
@@ -8,6 +10,8 @@ export interface WidgetTimelineProps {
   hasMore: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
+  /** 乐观插入、等待后端权威行替换的用户消息（渲染在末尾）。 */
+  pendingUserRows?: TimelineRow[];
   subAgentLiveMap: SubAgentLiveMap;
   loadSubAgentSteps: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
   onRespondClarify: (runId: number, clarificationId: string, response: string) => void;
@@ -80,68 +84,8 @@ function parseOptions(raw?: string | null): string[] {
   return [];
 }
 
-function inlineMd(line: string): ReactNode {
-  const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  return (
-    <>
-      {parts.map((p, i) => {
-        if (p.startsWith('**') && p.endsWith('**') && p.length > 4) {
-          return <strong key={i}>{p.slice(2, -2)}</strong>;
-        }
-        if (p.startsWith('`') && p.endsWith('`') && p.length > 2) {
-          return (
-            <code
-              key={i}
-              style={{
-                background: '#f5f5f5',
-                padding: '0 3px',
-                borderRadius: 3,
-                fontSize: '0.95em',
-              }}
-            >
-              {p.slice(1, -1)}
-            </code>
-          );
-        }
-        return <span key={i}>{p}</span>;
-      })}
-    </>
-  );
-}
-
 function Md({ text }: { text: string }) {
-  const nodes: ReactNode[] = [];
-  const blocks = text.split(/```/);
-  for (let i = 0; i < blocks.length; i++) {
-    if (i % 2 === 1) {
-      const code = blocks[i].replace(/^[^\n]*\n/, '').replace(/\n$/, '');
-      nodes.push(
-        <pre
-          key={`code-${i}`}
-          style={{
-            background: '#f5f5f5',
-            borderRadius: 6,
-            padding: '6px 8px',
-            overflow: 'auto',
-            fontSize: 11.5,
-          }}
-        >
-          {code}
-        </pre>,
-      );
-    } else {
-      const lines = blocks[i].split('\n');
-      for (let j = 0; j < lines.length; j++) {
-        if (!lines[j].trim()) continue;
-        nodes.push(
-          <div key={`line-${i}-${j}`} style={{ minHeight: 18 }}>
-            {inlineMd(lines[j])}
-          </div>,
-        );
-      }
-    }
-  }
-  return <>{nodes}</>;
+  return <Markdown text={text} />;
 }
 
 function CopyBtn({ text }: { text: string }) {
@@ -157,8 +101,14 @@ function CopyBtn({ text }: { text: string }) {
     }
   };
   return (
-    <button type="button" className="aw-copy-btn" onClick={onCopy}>
-      {copied ? '已复制' : '复制'}
+    <button
+      type="button"
+      className="aw-copy-btn"
+      title={copied ? '已复制' : '复制'}
+      aria-label={copied ? '已复制' : '复制'}
+      onClick={onCopy}
+    >
+      {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
     </button>
   );
 }
@@ -326,7 +276,7 @@ function SubAgentLlmItem({ s }: { s: any }) {
               background: '#1677ff12',
               borderRadius: 4,
               padding: '0 4px',
-              fontSize: 11,
+fontSize: 11,
             }}
           >
             {s.modelName}
@@ -480,7 +430,7 @@ function SubAgentCard({
         <strong>{row.content?.displayName || row.title || '子 Agent'}</strong>
         <StateTag state={row.state} />
         {open && isRunning ? (
-          <span style={{ color: '#9ca3af', fontSize: 12 }}>⟳ 实时更新中</span>
+          <span style={{ color: '#9ca3af', fontSize: 11 }}>⟳ 实时更新中</span>
         ) : null}
       </div>
       <div style={{ marginTop: 4 }}>
@@ -604,6 +554,7 @@ export function WidgetTimeline({
   hasMore,
   loadingOlder,
   onLoadOlder,
+  pendingUserRows = [],
   subAgentLiveMap,
   loadSubAgentSteps,
   onRespondClarify,
@@ -620,28 +571,38 @@ export function WidgetTimeline({
           {loadingOlder ? '正在加载更早消息…' : '加载更早消息'}
         </button>
       ) : null}
-      {rows.length === 0 ? (
-        <div style={{ color: '#9ca3af', fontSize: 12, padding: '8px 0' }}>
-          （暂无消息）
-        </div>
+      {rows.length === 0 && pendingUserRows.length === 0 ? (
+        <div className="aw-tl-empty">（暂无消息）</div>
       ) : (
-        rows.map((row) => (
-          <div
-            key={
-              row.seq < 0
-                ? `p-${row.refSubAgentRunId ?? 'x'}`
-                : String(row.seq)
-            }
-            className="aw-tl-row"
-          >
-            <RowView
-              row={row}
-              subAgentLiveMap={subAgentLiveMap}
-              loadSubAgentSteps={loadSubAgentSteps}
-              onRespondClarify={onRespondClarify}
-            />
-          </div>
-        ))
+        <>
+          {rows.map((row) => (
+            <div
+              key={
+                row.seq < 0
+                  ? `p-${row.refSubAgentRunId ?? 'x'}`
+                  : String(row.seq)
+              }
+              className="aw-tl-row"
+            >
+              <RowView
+                row={row}
+                subAgentLiveMap={subAgentLiveMap}
+                loadSubAgentSteps={loadSubAgentSteps}
+                onRespondClarify={onRespondClarify}
+              />
+            </div>
+          ))}
+          {pendingUserRows.map((row) => (
+            <div key={`local-${row.seq}`} className="aw-tl-row">
+              <RowView
+                row={row}
+                subAgentLiveMap={subAgentLiveMap}
+                loadSubAgentSteps={loadSubAgentSteps}
+                onRespondClarify={onRespondClarify}
+              />
+            </div>
+          ))}
+        </>
       )}
     </div>
   );

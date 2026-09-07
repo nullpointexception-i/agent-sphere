@@ -4,6 +4,7 @@ import { ApiError, createApi, stopSession } from '../api';
 import type { WidgetConfig } from '../config';
 import type { InstanceVO, SessionVO, UserVO } from '../types';
 import { useTimelineStream } from '../useTimelineStream';
+import { SendIcon, StopIcon } from '../icons';
 import { WidgetTimeline } from './WidgetTimeline';
 
 const AGENT_PAGE_SIZE = 5;
@@ -109,6 +110,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const agentListRef = useRef<HTMLDivElement>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const loadAgents = useCallback(
     async (page: number) => {
@@ -295,13 +297,30 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, user.token]);
 
-  // 有进行中的 run 时自动滚到底
+  // 进入会话先滚到底一次；随后流式/刚发送时保持钉底（翻旧页 prepend 不动）
+  const initialScrollDoneRef = useRef(false);
+  useEffect(() => {
+    initialScrollDoneRef.current = false;
+  }, [selectedSessionId]);
+
   useEffect(() => {
     const el = chatBodyRef.current;
-    if (el && timeline.rows.length > 0 && timeline.rows[timeline.rows.length - 1].state === 'RUNNING') {
+    if (!el) return;
+    const lastRow = timeline.rows[timeline.rows.length - 1];
+    const hasPending = timeline.pendingUserRows.length > 0;
+    if (!initialScrollDoneRef.current && (timeline.rows.length > 0 || hasPending)) {
+      initialScrollDoneRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+    if (hasPending) {
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+    if (lastRow && (lastRow.state === 'RUNNING' || lastRow.kind === 'user')) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [timeline.rows]);
+  }, [selectedSessionId, timeline.rows, timeline.pendingUserRows]);
 
   const respondTimelineClarify = useCallback(
     (runId: number, clarificationId: string, response: string) => {
@@ -317,18 +336,19 @@ export function CopilotView({ config, user }: CopilotViewProps) {
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || sending || selectedSessionId === null) {
+    if (!text || inputLocked || selectedSessionId === null) {
       return;
     }
     setSending(true);
     setInputText('');
+    timeline.addUserMessage(text);
     try {
       await api.sendMessage(selectedSessionId, text);
-      const el = chatBodyRef.current;
-      if (el) {
-        el.scrollTop = el.scrollHeight;
-      }
+      // POST 成功立即补拉权威行（用户行 + assistant 容器 + run 状态），无需等终态事件
+      void timeline.refreshLatest(selectedSessionId);
     } catch (err) {
+      timeline.removeUserMessage(text);
+      timeline.markRunInactive();
       setError((err as ApiError).message);
     } finally {
       setSending(false);
@@ -347,8 +367,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
 
   const handleChatBodyScroll = (event: UIEvent<HTMLDivElement>) => {
     const el = event.currentTarget;
+    // 靠近顶部才加载更早消息；滚到底部时不能触发加载（否则会翻出全量）
     if (
-      el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_END_THRESHOLD &&
+      el.scrollTop < SCROLL_END_THRESHOLD &&
       timeline.hasMore &&
       !timeline.loadingOlder
     ) {
@@ -385,10 +406,19 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const visibleSessions = selectedAgentId
     ? sessions.filter((s) => s.agentInstanceId === selectedAgentId)
     : [];
-  const hasRunning = timeline.rows.some((r) => r.state === 'RUNNING');
-  const runningDividerPresent = timeline.rows.some(
-    (r) => r.kind === 'run_status' && r.state === 'RUNNING',
-  );
+  // 输入锁定：发送中 / run 进行中（事件驱动）/ 用户消息刚上墙未替换。
+  // runActive 由 useTimelineStream 事件驱动：点击发送（addUserMessage）即 true，
+  // 终态 SSE（完成/失败/取消/等待澄清）为 false —— 不再扫描 rows，避免历史残留行干扰。
+  const runActive = timeline.runActive;
+  const inputLocked =
+    sending || runActive || timeline.pendingUserRows.length > 0;
+
+  // 解锁后把焦点还给输入框，方便连发
+  useEffect(() => {
+    if (!inputLocked && selectedSessionId != null) {
+      inputRef.current?.focus();
+    }
+  }, [inputLocked, selectedSessionId]);
 
   return (
     <div className="aw-view">
@@ -621,13 +651,14 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     void timeline.loadOlder(selectedSessionId);
                   }
                 }}
+                pendingUserRows={timeline.pendingUserRows}
                 subAgentLiveMap={timeline.subAgentLiveMap}
                 loadSubAgentSteps={timeline.loadSubAgentSteps}
                 onRespondClarify={respondTimelineClarify}
               />
             </div>
             <div className="aw-chat-input">
-              {hasRunning && !runningDividerPresent ? (
+              {runActive ? (
                 <div className="aw-tl-divider">
                   <span className="aw-running-dot" />
                   Agent 运行中…
@@ -635,11 +666,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
               ) : null}
               <div className="aw-chat-input-row">
                 <textarea
+                  ref={inputRef}
                   className="aw-chat-textarea"
                   rows={1}
                   value={inputText}
-                  disabled={sending}
-                  placeholder="输入消息…（Enter 发送，Shift+Enter 换行）"
+                  disabled={inputLocked}
+                  placeholder={inputLocked ? '回复中…' : '输入消息…（Enter 发送，Shift+Enter 换行）'}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey && inputText.trim()) {
@@ -648,22 +680,26 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     }
                   }}
                 />
-                {hasRunning ? (
+                {runActive ? (
                   <button
                     type="button"
                     className="aw-chat-stop"
+                    title="停止回复"
+                    aria-label="停止回复"
                     onClick={() => void handleStop()}
                   >
-                    停止
+                    <StopIcon size={16} />
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="aw-chat-send"
-                    disabled={!inputText.trim() || sending}
+                    title="发送"
+                    aria-label="发送"
+                    disabled={!inputText.trim() || inputLocked}
                     onClick={() => void handleSend()}
                   >
-                    {sending ? '发送中…' : '发送'}
+                    <SendIcon size={16} />
                   </button>
                 )}
               </div>

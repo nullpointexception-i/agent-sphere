@@ -32,6 +32,7 @@ export type SubAgentLiveStep =
 export type SubAgentLiveMap = Record<number, SubAgentLiveStep[]>;
 
 const PULL_TRIGGER_SUB_TYPES = [
+  'run_running',
   'run_completed',
   'run_failed',
   'run_cancelled',
@@ -40,14 +41,31 @@ const PULL_TRIGGER_SUB_TYPES = [
   'tool_call_failed',
 ];
 
+/** run 终态子类型：到达即代表当前 run 结束（解锁输入/恢复发送按钮）。 */
+const RUN_TERMINAL_SUB_TYPES = [
+  'run_completed',
+  'run_failed',
+  'run_cancelled',
+  'run_awaiting_user',
+] as const;
+
 interface TimelineStream {
   rows: TimelineRow[];
   hasMore: boolean;
   loadingOlder: boolean;
   subAgentLiveMap: SubAgentLiveMap;
+  /** 乐观插入、尚未被后端权威行替换的用户消息（seq<0，渲染在 timeline 末尾）。 */
+  pendingUserRows: TimelineRow[];
+  /** 事件驱动的“当前会话是否有 run 在跑”（run_running/打字机=true；终态=false）。 */
+  runActive: boolean;
   loadInitial: (sessionId: number) => Promise<void>;
   loadOlder: (sessionId: number) => Promise<void>;
   refreshLatest: (sessionId: number) => Promise<void>;
+  /** 传播中的用户消息：不入库，先本地上墙，等权威行到达后移除；同时置 runActive=true（点击即锁输入）。 */
+  addUserMessage: (text: string) => void;
+  removeUserMessage: (text: string) => void;
+  /** 发送失败等场景手动复位 runActive。 */
+  markRunInactive: () => void;
   /** 整包 SSE 事件（RuntimeEventVO {eventType, data}）→ timeline 打字机/子 Agent live/拉新。 */
   handleSseEvent: (parsed: Record<string, unknown>) => void;
   /** 子 Agent 权威时间线拉取（终态校正）。 */
@@ -66,6 +84,9 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [subAgentLiveMap, setSubAgentLiveMap] = useState<SubAgentLiveMap>({});
+  const [pendingUserRows, setPendingUserRows] = useState<TimelineRow[]>([]);
+  const [runActive, setRunActiveState] = useState(false);
+  const pendingSeqRef = useRef(0);
   const cursorsRef = useRef<TimelineCursors>({ oldestSeq: null, newestSeq: null });
   const sessionIdRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -76,6 +97,46 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     [api],
   );
 
+  /** 权威行到达后，清掉文本匹配的乐观用户行（避免重复气泡）。 */
+  const reconcilePendingUserRows = useCallback((freshRows: TimelineRow[]) => {
+    const authoritativeTexts = new Set<string>();
+    for (const r of freshRows) {
+      if (r.kind === 'user' && r.seq >= 0 && r.content?.text) {
+        authoritativeTexts.add(r.content.text.trim());
+      }
+    }
+    if (authoritativeTexts.size === 0) return;
+    setPendingUserRows((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev.filter(
+        (p) => !authoritativeTexts.has((p.content?.text ?? '').trim()),
+      );
+      return next.length === prev.length ? prev : next;
+    });
+  }, []);
+
+  const addUserMessage = useCallback((text: string) => {
+    pendingSeqRef.current -= 1;
+    const seq = pendingSeqRef.current;
+    setPendingUserRows((prev) => [
+      ...prev,
+      { seq, kind: 'user', state: 'COMPLETED', content: { text } },
+    ]);
+    // 发送即锁定输入（无需等 run_running）——事件驱动锁定的“即时”来源
+    setRunActiveState(true);
+  }, []);
+
+  const removeUserMessage = useCallback((text: string) => {
+    const wanted = String(text).trim();
+    setPendingUserRows((prev) =>
+      prev.filter((p) => (p.content?.text ?? '').trim() !== wanted),
+    );
+  }, []);
+
+  const markRunInactive = useCallback(() => {
+    setRunActiveState(false);
+  }, []);
+
   const loadInitial = useCallback(
     async (sessionId: number) => {
       try {
@@ -85,10 +146,22 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         cursorsRef.current = cursors;
         setRows(pageRows);
         setHasMore(m);
+        reconcilePendingUserRows(pageRows);
+        // 兜底：刷新会话时若“最新”一条 run_status 仍是 RUNNING → 视为有 run 在跑（事件会随后校正）
+        for (let i = pageRows.length - 1; i >= 0; i--) {
+          const r = pageRows[i];
+          if (r.kind === 'run_status') {
+            if (r.state === 'RUNNING') {
+              setRunActiveState(true);
+            }
+            break;
+          }
+        }
       } catch {
         // 加载失败保持空态，SSE 终态事件仍会触发 refreshLatest 尝试补
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [getPage],
   );
 
@@ -123,11 +196,12 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
           10,
         );
         setRows((prev) => mergeTimeline(prev, fresh));
+        reconcilePendingUserRows(fresh);
       } catch {
         // 补拉失败忽略（SSE 打字机仍会就地更新）
       }
     },
-    [getPage],
+    [getPage, reconcilePendingUserRows],
   );
 
   // ---- 子 Agent 实时步骤聚合（主站 handleSubAgentLiveEvent 移植） ----
@@ -316,6 +390,23 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
 
       // 终态/工具结束/澄清 → 按 afterSeq 补行（权威合并）
       const tlSubType = String(d?.reasoningSubType || d?.status || evtType);
+
+      // 事件驱动 runActive：run_running/主助手打字机=在跑；终态=结束
+      if (tlSubType === 'run_running') {
+        setRunActiveState(true);
+      } else if (
+        (RUN_TERMINAL_SUB_TYPES as readonly string[]).includes(tlSubType)
+      ) {
+        setRunActiveState(false);
+      } else if (
+        (evtType === 'content_token' || evtType === 'reasoning_token') &&
+        d?.seq != null &&
+        d?.kind === 'assistant'
+      ) {
+        // 澄清续跑等场景可能不重发 run_running，用主助手打字机兜底
+        setRunActiveState(true);
+      }
+
       if (
         PULL_TRIGGER_SUB_TYPES.includes(tlSubType) ||
         String(evtType).startsWith('clarification_')
@@ -332,8 +423,11 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       if (abortRef.current) abortRef.current.abort();
       sessionIdRef.current = sessionId;
       cursorsRef.current = { oldestSeq: null, newestSeq: null };
+      pendingSeqRef.current = 0;
       setRows([]);
       setSubAgentLiveMap({});
+      setPendingUserRows([]);
+      setRunActiveState(false);
       setHasMore(false);
       setLoadingOlder(false);
 
@@ -381,9 +475,14 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     hasMore,
     loadingOlder,
     subAgentLiveMap,
+    pendingUserRows,
+    runActive,
     loadInitial,
     loadOlder,
     refreshLatest,
+    addUserMessage,
+    removeUserMessage,
+    markRunInactive,
     handleSseEvent,
     loadSubAgentSteps,
     connect,

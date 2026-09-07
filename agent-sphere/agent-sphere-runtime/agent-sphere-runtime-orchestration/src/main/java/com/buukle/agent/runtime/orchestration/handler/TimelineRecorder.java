@@ -32,6 +32,7 @@ public class TimelineRecorder {
     private final ConcurrentHashMap<Long, Long> assistantSeqByRun = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> toolSeqByRunStep = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> clarificationSeqByRun = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Long> runStatusSeqByRun = new ConcurrentHashMap<>();
 
     /** run 终态展示文案。成功 run 展示完成时间 yyyy-MM-dd HH:mm:ss（不再显示「任务完成」）。 */
     private static final DateTimeFormatter RUN_TERMINAL_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -121,13 +122,22 @@ public class TimelineRecorder {
         toolSeqByRunStep.remove(runId + ":" + stepKey);
     }
 
-    /** run 终态行。 */
+    /** run 状态行：同一 run 复用一行（RUNNING 建行，终态原地更新），避免历史残留「运行中」行。 */
     public void recordRunStatus(Long sessionId, Long runId, String state, String title) {
-        timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
-                runId, null, null, null, null);
+        if (runId == null) {
+            return;
+        }
+        Long seq = runStatusSeqByRun.get(runId);
+        if (seq == null) {
+            seq = timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
+                    runId, null, null, null, null);
+            runStatusSeqByRun.put(runId, seq);
+        } else {
+            timelineSpi.update(sessionId, seq, state, state, title);
+        }
     }
 
-    /** run 终态：状态/title 由 RunStatus 映射（避免魔法值散落）。 */
+    /** run 终态：状态/title 由 RunStatus 映射（避免魔法值散落）；更新同一行并释放该 run 的占位。 */
     public void recordRunTerminal(Long sessionId, Long runId, RunStatus status) {
         if (runId == null) {
             return;
@@ -146,8 +156,18 @@ public class TimelineRecorder {
             case AWAITING_USER -> TITLE_RUN_AWAITING;
             default -> throw new IllegalStateException("unexpected run status " + status);
         };
-        timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
-                runId, null, null, null, null);
+        Long seq = runStatusSeqByRun.get(runId);
+        if (seq != null) {
+            timelineSpi.update(sessionId, seq, state, state, title);
+            // AWAITING_USER 之后还可能续跑同一行；仅真正终态释放 map 条目
+            if (!"AWAITING_USER".equals(state)) {
+                runStatusSeqByRun.remove(runId, seq);
+            }
+        } else {
+            // 兜底：没有 RUNNING 行则新建终态行（极端路径）
+            timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
+                    runId, null, null, null, null);
+        }
     }
 
     /** 澄清行：pending→answered 复用同一行。 */
