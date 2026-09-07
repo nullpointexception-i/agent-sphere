@@ -3,7 +3,6 @@ import { DEFAULT_CONFIG, type WidgetConfig } from './config';
 import { clearUser, clearWidgetSession } from './auth';
 import { Root } from './Root';
 import styles from './styles.css?inline';
-import copilotStyles from '@copilotkit/react-core/v2/styles.css?inline';
 
 export interface WidgetHandle {
   unmount: () => void;
@@ -77,7 +76,7 @@ function mountWidget(options: WidgetConfig = {}): WidgetHandle {
   shadow.appendChild(link);
 
   const style = document.createElement('style');
-  style.textContent = `${copilotStyles}\n${styles}`;
+  style.textContent = styles;
   shadow.appendChild(style);
 
   const host = document.createElement('div');

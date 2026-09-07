@@ -45,53 +45,6 @@ export interface SessionVO {
   updatedAt: string;
 }
 
-export interface ClarificationVO {
-  clarificationId: string;
-  runId: number;
-  sessionId: number;
-  messageId: number;
-  title: string;
-  type: string;
-  options: string;
-  userResponse: string;
-  status: string;
-}
-
-export interface RunVO {
-  id: number;
-  sessionId: number;
-  userMessage: string;
-  assistantReply: string;
-  reasoning?: string;
-  createdAt: string;
-  clarificationResponse?: boolean;
-  clarifications?: ClarificationVO[];
-}
-
-export interface SessionTodoVO {
-  id: number;
-  sessionId: number;
-  runId: number;
-  content: string;
-  status: string;
-  priority: string;
-  sortOrder: number;
-}
-
-export interface SubAgentRunVO {
-  id: number;
-  sessionId: number;
-  runId?: number | null;
-  parentToolCallId?: string | null;
-  agentType?: string;
-  agentRef?: string;
-  displayName: string;
-  status?: string;
-  startedAt?: string;
-  finishedAt?: string;
-  createdAt?: string;
-}
-
 export interface SubAgentTimelineItemVO {
   activityType: 'llm_interaction' | 'tool_call';
   createdAt?: string;
@@ -109,4 +62,45 @@ export interface SubAgentTimelineItemVO {
   artifact?: string | null;
   toolStatus?: string;
   toolErrorMessage?: string;
+}
+
+/** GET /instance/sessions/{sid}/timeline 单行（AgentTimelineVO，content 已在后端 resolve）。 */
+export interface TimelineRow {
+  seq: number;
+  runId?: number | null;
+  kind: string;
+  subtype?: string | null;
+  state?: string | null;
+  groupId?: number | null;
+  title?: string | null;
+  refRunId?: number | null;
+  refInteractionId?: number | null;
+  refToolCallId?: number | null;
+  refSubAgentRunId?: number | null;
+  refClarificationId?: number | null;
+  content: {
+    text?: string;
+    thinking?: string;
+    reply?: string;
+    displayName?: string;
+    status?: string;
+    args?: string;
+    artifact?: string;
+    clarificationId?: string;
+    options?: string;
+    response?: string;
+    state?: string;
+    startedAt?: string;
+    durationMs?: number;
+    modelName?: string;
+    [key: string]: unknown;
+  };
+}
+
+/** GET /instance/sessions/{sid}/timeline 分页响应。 */
+export interface SessionTimelinePageVO {
+  rows: TimelineRow[];
+  hasMore: boolean;
+  oldestSeq: number | null;
+  newestSeq: number | null;
 }

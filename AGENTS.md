@@ -3,7 +3,7 @@
 Git root holds four **independent** projects (no shared root build/lockfile):
 - `agent-sphere/` — Java 21 / Spring Boot backend. **See `agent-sphere/AGENTS.md`** for module layout, Maven commands, Flyway, MyBatis-Plus, and code-style rules.
 - `agent-sphere-ui/` — React 19 / UmiJS Max frontend (Ant Design Pro base).
-- `agent-sphere-copilot-widget/` — embeddable chat widget (Vite lib IIFE + CopilotKit/AG-UI), see below.
+- `agent-sphere-copilot-widget/` — embeddable chat widget (Vite lib IIFE + self-built REST/SSE timeline chat), see below.
 - `agent-sphere-chrome-extension/` — Manifest V3 Chrome extension (bridges backend with the browser for automated ops). **See `agent-sphere-chrome-extension/AGENTS.md`**. No build step: background is native ESM (`background.js` + `lib/*.js`), execution layer is `content.js`/`content-locator.js`/`content-editors.js`, SSE lives in `offscreen.js`, MAIN-world bridges are `page-script.js`/`inject.js`. `src/` is empty stubs and `npm run build` has no `build.js` — edit files directly and load unpacked. **No screenshots**; plugin tabs auto-group under `AgentSphere`; `chrome.debugger` is used only as the last-resort executeJS tier.
 
 GitHub flow off `main`. **No test CI** — run each project's tests before pushing. The only workflow is a deploy pipeline (see Deploy below).
@@ -28,7 +28,7 @@ GitHub flow off `main`. **No test CI** — run each project's tests before pushi
 
 ## agent-sphere-copilot-widget (chat widget)
 
-Independent package — install/build only from inside `agent-sphere-copilot-widget/`. Stack: Vite 6 (lib mode, IIFE `AgentSphereWidget`), React 19, TypeScript (strict), CopilotKit `@copilotkit/react-core@1.66.2` (**import from `/v2` entry**, e.g. `@copilotkit/react-core/v2`), AG-UI `@ag-ui/client@0.0.57`, zod.
+Independent package — install/build only from inside `agent-sphere-copilot-widget/`. Stack: Vite 6 (lib mode, IIFE `AgentSphereWidget`), React 19, TypeScript (strict). **No CopilotKit / AG-UI** — chat renders a typed REST+SSE timeline (same shape as the main UI `chat` page).
 
 Commands (run inside `agent-sphere-copilot-widget/`):
 ```bash
@@ -38,16 +38,17 @@ npm run typecheck  # tsc --noEmit
 ```
 
 How it works:
-- `AgentSphereWidget.init({ apiBase?, provider?, autoLogin?, title? })` mounts into a **shadow DOM** root; CSS inlined via Vite `?inline` (`src/styles.css` + CopilotKit v2 styles).
+- `AgentSphereWidget.init({ apiBase?, provider?, autoLogin?, title? })` mounts into a **shadow DOM** root; CSS inlined via Vite `?inline` (`src/styles.css`).
 - OIDC SSO: consumes `?otc=` → `POST /auth/sso/exchange` → token in `sessionStorage` (`agent-sphere-widget:agent-user`); `autoLogin` does a one-shot silent probe (`prompt=none`); `?otc=`/`?error=` stripped after handling.
-- AG-UI wire: one `HttpAgent` per agent, `url = {apiBase}/copilot/agent/{id}/services/chat/run`, `Authorization: Bearer` header; requests do **not** go through the CopilotKit runtime (self-managed auth). Backend returns SSE `data:` lines of AG-UI JSON events (`type` uppercase, aligned with `@ag-ui/core` `EventType`).
-- Vite proxy strips `Accept-Encoding` for `/services/chat/` routes and sets `Cache-Control: no-transform` — SSE breaks without this. Preserve it.
-- Bundling: `@segment/analytics-node` (telemetry from `@copilotkit/shared`) is aliased to `src/stubs/segment-analytics.ts` and `process.env` defined to `{}` in `vite.config.ts` — do not remove.
+- **Timeline channel** (`useTimelineStream`): `GET {apiBase}/instance/sessions/{sid}/timeline` (paged by `beforeSeq`/`afterSeq`, limit 5–50) + SSE `{apiBase}/runtime/{sid}/stream` (Bearer). SSE drives an `assistant` typewriter (push `content_token`/`reasoning_token` onto `seq+kind==='assistant'` rows) and sub-agent live aggregation; `run_completed/failed/cancelled/awaiting_user`, `tool_call_*`, `clarification_*` trigger an `afterSeq` refresh for authoritative merge (`mergeTimeline` dedupes by `seq`, placeholder sub-agent rows carry `seq<0`).
+- Send: `POST {apiBase}/runtime/{sid}/chat` → `{runId}`; clarify: `POST /runtime/{sid}/run/{runId}/clarify`.
+- Chat input is self-built (textarea + send/stop); stop calls `POST /runtime/{sid}/stop`. `WidgetTimeline` renders user/assistant/tool/clarification/subagent/run_status rows with copy buttons, RUNNING wobble dot, inline sub-agent cards (tool detail single-open, auto-scroll), inline clarification options.
+- Vite proxy strips `Accept-Encoding` for `/stream` routes and sets `Cache-Control: no-transform` — SSE breaks without this. Preserve it.
 
 Gotchas:
 - **Never copy `node_modules` / `package-lock.json` across machines.** rollup 4 declares platform binaries as optionalDependencies (`@rollup/rollup-darwin-x64`, `-linux-x64-gnu`, …). Reusing a `node_modules`/lockfile generated on another OS/arch (e.g. Linux container) on macOS makes npm skip the current platform's binary → `npm run dev` fails with `Cannot find module @rollup/rollup-darwin-x64` (npm/cli#4828). Fix on the target machine: `rm -rf node_modules package-lock.json && npm i`. `package-lock.json` is gitignored — keep it machine-local.
-- `message.content` on the AG-UI wire is a plain string for normal text input; the backend `AguiMessageVO.content` is `String` — don't switch to content-part arrays unless the backend DTO is updated to match.
-- `threadId` passed to `CopilotChat` is the session id (`String(session.id)`); the backend `resolveSessionId` maps it to a session (creating one if needed).
+- Timeline `rows` on the SSE wire: backend `AgentTimelineVO.content` is a resolve `String`-keyed object (not part arrays) — don't switch unless the backend DTO is updated. `sendMessage` returns `{runId,status}` synchronously; the rest arrives via SSE + `afterSeq` pulls.
+- `useTimelineStream.connect(sessionId, token)` replaces state on session switch — call it in an effect keyed on the selected session id.
 
 ## Backend conventions (apply when touching `agent-sphere/`)
 

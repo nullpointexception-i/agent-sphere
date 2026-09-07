@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Embeddable chat widget that connects to the AgentSphere backend via OIDC SSO + AG-UI (CopilotKit chatbox).",
+  "description": "Embeddable chat widget that connects to the AgentSphere backend via OIDC SSO + REST timeline (typed log: user/assistant/tool/clarification/subagent/run_status) streamed over SSE.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && vite build --config vite.auth.config.ts",
@@ -11,15 +11,8 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@ag-ui/client": "0.0.57",
-    "@copilotkit/react-core": "1.67.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "zod": "^3.24.0"
-  },
-  "overrides": {
-    "@ag-ui/client": "0.0.57",
-    "@ag-ui/core": "0.0.57"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

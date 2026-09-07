@@ -4,7 +4,14 @@ import {
   SSO_EXCHANGE_PATH,
   type WidgetConfig,
 } from './config';
-import type { InstancePageVO, InstanceVO, RunVO, SessionTodoVO, SessionVO, SubAgentRunVO, SubAgentTimelineItemVO, SsoIdentityVO, UserVO } from './types';
+import type {
+  InstancePageVO,
+  SessionTimelinePageVO,
+  SessionVO,
+  SsoIdentityVO,
+  SubAgentTimelineItemVO,
+  UserVO,
+} from './types';
 
 export interface ErrorBody {
   errorCode?: string;
@@ -97,10 +104,6 @@ export function ssoMe(base: string): Promise<SsoIdentityVO> {
   return request<SsoIdentityVO>(base, '/sso/me');
 }
 
-export function listInstances(base: string): Promise<InstanceVO[]> {
-  return request(base, '/instance/instances/all');
-}
-
 export function listInstancesPage(
   base: string,
   page = 1,
@@ -109,10 +112,6 @@ export function listInstancesPage(
   return request(base, '/instance/instances', {
     params: { page: String(page), size: String(size) },
   });
-}
-
-export function getTodos(base: string, sessionId: number): Promise<SessionTodoVO[]> {
-  return request(base, `/instance/sessions/${sessionId}/todos`);
 }
 
 export function listSessions(
@@ -150,49 +149,9 @@ export function closeSession(base: string, id: number): Promise<void> {
   return request(base, `/instance/sessions/${id}`, { method: 'DELETE' });
 }
 
-export function listRuns(
-  base: string,
-  sessionId: number,
-  page = 1,
-  size = 3,
-): Promise<{ records: RunVO[]; total: number }> {
-  return request(base, '/instance/runs', {
-    params: { sessionId: String(sessionId), page: String(page), size: String(size) },
-  });
-}
-
-/** 按需批量补拉推理：列表默认离行（不含 reasoning），历史回看时定点填充。 */
-export function runsReasoning(base: string, runIds: number[]): Promise<Record<string, string>> {
-  return request(base, '/instance/runs/reasoning', {
-    params: { runIds: runIds.join(',') },
-  });
-}
-
-/** 子 Agent 历史运行列表（agent_sub_agent_run）。 */
-export function listSubAgentRuns(base: string, sessionId: number): Promise<SubAgentRunVO[]> {
-  return request(base, `/instance/sessions/${sessionId}/sub-agent-runs`);
-}
-
 /** 子 Agent 时间线（interactions + tool_calls 按时序）。 */
 export function subAgentTimeline(base: string, subAgentRunId: number): Promise<SubAgentTimelineItemVO[]> {
   return request(base, `/instance/sub-agent-runs/${subAgentRunId}/timeline`);
-}
-
-/** run 活动流（llm_interaction + tool_call 交错，含 reasoning/replyContent）。 */
-export function runActivities(
-  base: string,
-  runId: number,
-  sessionId: number,
-  offset = 0,
-  limit = 100,
-): Promise<{ total: number; records: any[] }> {
-  return request(base, `/instance/runs/${runId}/activities`, {
-    params: {
-      sessionId: String(sessionId),
-      offset: String(offset),
-      limit: String(limit),
-    },
-  });
 }
 
 /** 公开配置读取（免鉴权）：当前支持 plugin.download-url（插件安装包下载地址）。 */
@@ -207,33 +166,71 @@ export function stopSession(base: string, sessionId: number): Promise<void> {
   return request(base, `/runtime/${sessionId}/stop`, { method: 'POST' });
 }
 
+export interface TimelineQuery {
+  beforeSeq?: number;
+  afterSeq?: number;
+  limit?: number;
+}
+
+/** 会话 timeline 分页（typed log：user/assistant/tool/clarification/subagent/run_status）。 */
+export function getTimeline(
+  base: string,
+  sessionId: number,
+  query: TimelineQuery = {},
+): Promise<SessionTimelinePageVO> {
+  const params: Record<string, string> = {};
+  if (query.beforeSeq != null) params.beforeSeq = String(query.beforeSeq);
+  if (query.afterSeq != null) params.afterSeq = String(query.afterSeq);
+  params.limit = String(query.limit ?? 10);
+  return request(base, `/instance/sessions/${sessionId}/timeline`, { params });
+}
+
+/** 发送消息（REST 方式，SSE 通道负责后续打字机/补行）。 */
+export function sendMessage(
+  base: string,
+  sessionId: number,
+  message: string,
+): Promise<{ runId: number; status: string }> {
+  return request(base, `/runtime/${sessionId}/chat`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+}
+
+/** 澄清应答。 */
+export function clarify(
+  base: string,
+  sessionId: number,
+  runId: number,
+  response: string,
+  clarificationId?: string,
+): Promise<unknown> {
+  return request(base, `/runtime/${sessionId}/run/${runId}/clarify`, {
+    method: 'POST',
+    body: JSON.stringify({ response, clarificationId }),
+  });
+}
+
 export interface ApiClient {
   ssoAuthorize: (provider: string, redirectUri: string, prompt?: string) => Promise<string>;
   ssoExchange: (otc: string) => Promise<UserVO>;
   ssoMe: () => Promise<SsoIdentityVO>;
-  listInstances: () => Promise<InstanceVO[]>;
   listSessions: (offset?: number, limit?: number, keyword?: string) => Promise<SessionVO[]>;
   createSession: (agentInstanceId: number, title: string) => Promise<SessionVO>;
   renameSession: (id: number, title: string) => Promise<SessionVO>;
   closeSession: (id: number) => Promise<void>;
-  listRuns: (
-    sessionId: number,
-    page?: number,
-    size?: number,
-  ) => Promise<{ records: RunVO[]; total: number }>;
-  runsReasoning: (runIds: number[]) => Promise<Record<string, string>>;
   publicConfig: (keys: string[]) => Promise<Record<string, string>>;
   stopSession: (sessionId: number) => Promise<void>;
   listInstancesPage: (page?: number, size?: number) => Promise<InstancePageVO>;
-  getTodos: (sessionId: number) => Promise<SessionTodoVO[]>;
-  listSubAgentRuns: (sessionId: number) => Promise<SubAgentRunVO[]>;
   subAgentTimeline: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
-  runActivities: (
-    runId: number,
+  getTimeline: (sessionId: number, query?: TimelineQuery) => Promise<SessionTimelinePageVO>;
+  sendMessage: (sessionId: number, message: string) => Promise<{ runId: number; status: string }>;
+  clarify: (
     sessionId: number,
-    offset?: number,
-    limit?: number,
-  ) => Promise<{ total: number; records: any[] }>;
+    runId: number,
+    response: string,
+    clarificationId?: string,
+  ) => Promise<unknown>;
 }
 
 export function createApi(config: WidgetConfig): ApiClient {
@@ -243,20 +240,17 @@ export function createApi(config: WidgetConfig): ApiClient {
       ssoAuthorize(base, provider, redirectUri, prompt).then((v) => v.authorizeUrl),
     ssoExchange: (otc) => ssoExchange(base, otc),
     ssoMe: () => ssoMe(base),
-    listInstances: () => listInstances(base),
     listSessions: (offset, limit, keyword) => listSessions(base, offset, limit, keyword),
     createSession: (agentInstanceId, title) => createSession(base, agentInstanceId, title),
     renameSession: (id, title) => renameSession(base, id, title),
     closeSession: (id) => closeSession(base, id),
-    listRuns: (sessionId, page, size) => listRuns(base, sessionId, page, size),
-    runsReasoning: (runIds) => runsReasoning(base, runIds),
     publicConfig: (keys) => publicConfig(base, keys),
     stopSession: (sessionId) => stopSession(base, sessionId),
     listInstancesPage: (page, size) => listInstancesPage(base, page, size),
-    getTodos: (sessionId) => getTodos(base, sessionId),
-    listSubAgentRuns: (sessionId) => listSubAgentRuns(base, sessionId),
     subAgentTimeline: (subAgentRunId) => subAgentTimeline(base, subAgentRunId),
-    runActivities: (runId, sessionId, offset, limit) =>
-      runActivities(base, runId, sessionId, offset, limit),
+    getTimeline: (sessionId, query) => getTimeline(base, sessionId, query),
+    sendMessage: (sessionId, message) => sendMessage(base, sessionId, message),
+    clarify: (sessionId, runId, response, clarificationId) =>
+      clarify(base, sessionId, runId, response, clarificationId),
   };
 }
