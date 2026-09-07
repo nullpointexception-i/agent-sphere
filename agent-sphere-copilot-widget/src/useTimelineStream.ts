@@ -70,8 +70,8 @@ interface TimelineStream {
   handleSseEvent: (parsed: Record<string, unknown>) => void;
   /** 子 Agent 权威时间线拉取（终态校正）。 */
   loadSubAgentSteps: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
-  /** 建立会话 SSE 连接（会话切换时调用）。 */
-  connect: (sessionId: number, token: string) => void;
+  /** 建立会话 SSE 连接（会话切换时调用）；需传 apiBase 以构造正确的流地址（同源相对或跨域绝对）。 */
+  connect: (sessionId: number, token: string, apiBase: string) => void;
 }
 
 /** 子 Agent LIVE 占位行 seq：负且按 subAgentRunId 唯一（避免同 seq 冲突）。 */
@@ -419,7 +419,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
 
   // 会话切换即重建：先断开旧流、清空状态；由 CopilotView 在选会话时调用 connect()。
   const connect = useCallback(
-    (sessionId: number, token: string) => {
+    (sessionId: number, token: string, apiBase: string) => {
       if (abortRef.current) abortRef.current.abort();
       sessionIdRef.current = sessionId;
       cursorsRef.current = { oldestSeq: null, newestSeq: null };
@@ -435,8 +435,9 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
 
       const controller = new AbortController();
       abortRef.current = controller;
+      const base = String(apiBase ?? '/api/v1').replace(/\/+$/, '');
       void connectSse(
-        `/api/v1/runtime/${sessionId}/stream`,
+        `${base}/runtime/${sessionId}/stream`,
         token,
         {
           onOpen: () => {},

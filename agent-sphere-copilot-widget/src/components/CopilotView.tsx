@@ -293,9 +293,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     if (selectedSessionId === null) {
       return;
     }
-    timeline.connect(selectedSessionId, user.token);
+    timeline.connect(selectedSessionId, user.token, apiBase);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSessionId, user.token]);
+  }, [selectedSessionId, user.token, apiBase]);
 
   // 进入会话先滚到底一次；随后流式/刚发送时保持钉底（翻旧页 prepend 不动）
   const initialScrollDoneRef = useRef(false);
