@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     visualizer({ filename: 'dist/analyze.html', gzipSize: true, brotliSize: true }),
@@ -13,6 +13,11 @@ export default defineConfig({
       brotliSize: true,
     }),
   ],
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(
+      mode === 'production' ? 'production' : 'development',
+    ),
+  },
   build: {
     lib: {
       entry: 'src/main.tsx',
@@ -50,4 +55,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
