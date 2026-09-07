@@ -529,27 +529,6 @@ export default function Chat() {
               d?.reasoningSubType || d?.status || evtType,
             );
 
-            // 诊断（仅 dev）：打印带 seq 的流式事件与 run/tool 终态，用于定位"agent 消息不实时显示"
-            if (
-              process.env.NODE_ENV === 'development' &&
-              (d?.seq != null ||
-                /^run_|tool_call_succeeded|tool_call_failed|^clarification_/.test(
-                  tlSubType,
-                ))
-            ) {
-              console.log(
-                '[SSE-EVT]',
-                JSON.stringify({
-                  eventType: evtType,
-                  seq: d?.seq,
-                  kind: d?.kind,
-                  subType: tlSubType,
-                  runId: d?.runId,
-                  resp: String(d?.response || '').slice(0, 40),
-                }),
-              );
-            }
-
             if (
               d?.seq != null &&
               d?.kind === 'assistant' &&
@@ -932,9 +911,12 @@ export default function Chat() {
             }
           } catch {}
         },
-        onError: () => {
+        onError: (err: unknown) => {
           setSseConnected(false);
+          // 诊断：打印断开原因（stream ended / connect timeout / HTTP 状态 / 底层 read 错误）
+          const reason = err instanceof Error ? err.message : String(err || '');
           if (currentSessionIdRef.current === sid) {
+            console.warn('[SSE] error:', reason);
             const delay = Math.min(
               1000 * 2 ** reconnectCountRef.current,
               30000,

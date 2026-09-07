@@ -7,7 +7,7 @@ import {
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { App, Button, Divider, Input, Tag, Typography } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStyles } from '../../style';
 import type { SubAgentLiveMap } from './subAgentTypes';
 
@@ -365,7 +365,7 @@ function SubAgentLlmItem({ s }: any) {
 }
 
 /** 子 Agent 单步：工具调用对齐主 Agent 工具卡（🛠️ 显示名 + 状态 + 详情）。 */
-function SubAgentToolItem({ s }: any) {
+function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
   const argsJson = s.argumentsJson
     ? JSON.stringify(JSON.parse(s.argumentsJson), null, 2)
     : s.argumentsJson;
@@ -378,7 +378,8 @@ function SubAgentToolItem({ s }: any) {
         </Typography.Text>
         <StateTag state={s.toolStatus || s.status} />
       </div>
-      <Block title="详情">
+      {/* 受控：最新一条 Tool 详情默认展开，下一条到来时关闭之前的（单一展开） */}
+      <Block title="详情" open={detailOpen} onToggle={onDetailToggle}>
         {argsJson && (
           <pre
             style={{
@@ -417,9 +418,54 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   const [open, setOpen] = useState(false);
   const [steps, setSteps] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activeToolKey, setActiveToolKey] = useState<string | null>(null);
+  const stepsBoxRef = useRef<HTMLDivElement | null>(null);
   const subId = row.refSubAgentRunId;
   const isRunning = row.state === 'RUNNING';
   const live = subId != null && isRunning ? (subAgentLive?.[subId] ?? []) : [];
+
+  // 与 list.map 的 key 一致：历史步走主键，SSE 实时步走 publishId/序号
+  const stepKey = (s: any, i: number) =>
+    String(
+      s?.interactionId ??
+        s?.id ??
+        s?.stepId ??
+        (s?.type === 'tool_call'
+          ? `live-tool-${s?.publishId}`
+          : `live-llm-${i}`),
+    );
+
+  const list = useMemo<readonly any[]>(() => {
+    const displaySteps = steps ?? (isRunning && live.length ? live : null);
+    return displaySteps ?? [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steps, isRunning, live]);
+
+  // 最新一条 Tool 详情默认展开；下一条到来时自动切换过去（关掉上一条）
+  const latestToolKey = useMemo(() => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const s = list[i];
+      if (s?.activityType === 'tool_call' || s?.type === 'tool_call') {
+        return stepKey(s, i);
+      }
+    }
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list]);
+
+  useEffect(() => {
+    if (latestToolKey && latestToolKey !== activeToolKey) {
+      setActiveToolKey(latestToolKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestToolKey]);
+
+  // 最新内容自动滚到容器底部（流式推理/artifact 增长时持续贴底）
+  useEffect(() => {
+    if (!open) return;
+    const el = stepsBoxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [open, live, steps]);
 
   // 一次性权威同步：已结束子 Agent 展开 / 终态校正时静默拉取，替换 live 展示
   const stepsRef = useRef<any[] | null>(null);
@@ -450,12 +496,15 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.state]);
 
-  // 渲染源：权威 steps 优先（终态/已结束），运行中走 SSE live
-  const displaySteps = steps ?? (isRunning && live.length ? live : null);
-  const list = displaySteps ?? [];
-
   return (
-    <div>
+    <div
+      style={{
+        background: '#f4f7fb',
+        border: '1px solid #e6edf5',
+        borderRadius: 8,
+        padding: '6px 10px 8px',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span>⚙️</span>
         <Typography.Text strong>
@@ -480,6 +529,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
         </Button>
         {open && (
           <div
+            ref={stepsBoxRef}
             style={{
               marginTop: 4,
               maxHeight: 260,
@@ -493,16 +543,10 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
               list.map((s: any, i: number) => {
                 const isTool =
                   s?.activityType === 'tool_call' || s?.type === 'tool_call';
+                const key = stepKey(s, i);
                 return (
                   <div
-                    key={String(
-                      s?.interactionId ??
-                        s?.id ??
-                        s?.stepId ??
-                        (s?.type === 'tool_call'
-                          ? `live-tool-${s?.publishId}`
-                          : `live-llm-${i}`),
-                    )}
+                    key={key}
                     style={{
                       borderTop: '1px solid #f0f0f0',
                       padding: '6px 0',
@@ -510,7 +554,13 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
                     }}
                   >
                     {isTool ? (
-                      <SubAgentToolItem s={s} />
+                      <SubAgentToolItem
+                        s={s}
+                        detailOpen={activeToolKey === key}
+                        onDetailToggle={() =>
+                          setActiveToolKey((cur) => (cur === key ? null : key))
+                        }
+                      />
                     ) : (
                       <SubAgentLlmItem s={s} />
                     )}

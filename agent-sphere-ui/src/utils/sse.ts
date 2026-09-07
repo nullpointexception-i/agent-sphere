@@ -12,7 +12,7 @@ export async function connectSse(
 ): Promise<void> {
   // 连接超时：初始 fetch 挂起（半开/代理缓冲等）既不 resolve 也不 reject 时，
   // 必须触发 onError 让上层走重连退避，否则 SSE 永远连不上（只能靠手动刷新恢复）。
-  const CONNECT_TIMEOUT_MS = 12000;
+  const CONNECT_TIMEOUT_MS = 20000;
   const controller = new AbortController();
   const abortFromExternal = () => controller.abort();
   if (signal) {
@@ -41,6 +41,10 @@ export async function connectSse(
       );
       return;
     }
+
+    // 连接已建立（headers 到手）：解除初始 fetch 守卫。此定时器若拖到 finally 才清，
+    // 会对存活 >20s 的正常流误触发 abort，把好端端的 SSE 连接杀掉并反复重连。
+    clearTimeout(connectTimer);
 
     const reader = response.body?.getReader();
     if (!reader) {

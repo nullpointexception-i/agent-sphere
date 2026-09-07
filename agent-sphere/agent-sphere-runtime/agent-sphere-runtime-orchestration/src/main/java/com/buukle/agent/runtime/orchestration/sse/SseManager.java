@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.orchestration.sse;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -18,6 +19,7 @@ import java.util.concurrent.*;
  * {@link #sendBySession}/{@link #sendByUser} 投本地 emitter；缓存/回放由 {@link SseEventCache}
  * 承担（origin 写、注册时 flush）。
  */
+@Slf4j
 @Component
 public class SseManager {
 
@@ -25,6 +27,8 @@ public class SseManager {
     private final ConcurrentHashMap<String, List<SseEmitter>> userEmitters = new ConcurrentHashMap<>();
     private final SseEventCache sseEventCache;
     private final ScheduledExecutorService heartbeats;
+    /** 缓存回放专用线程：回归放不阻塞连接建立（避免 register 因 Redis 慢卡住 → 前端连接超时）。 */
+    private final ExecutorService cacheFlushes;
 
     public SseManager(AgentRuntimeProperties properties, SseEventCache sseEventCache) {
         this.sseEventCache = sseEventCache;
@@ -35,6 +39,11 @@ public class SseManager {
             return t;
         });
         heartbeats.scheduleAtFixedRate(this::heartbeatTask, heartbeatInterval, heartbeatInterval, TimeUnit.SECONDS);
+        this.cacheFlushes = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "sse-cache-flush");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     private void heartbeatTask() {
@@ -78,11 +87,27 @@ public class SseManager {
     @PreDestroy
     public void shutdown() {
         heartbeats.shutdown();
+        cacheFlushes.shutdown();
         try {
             if (!heartbeats.awaitTermination(5, TimeUnit.SECONDS)) heartbeats.shutdownNow();
         } catch (InterruptedException e) {
             heartbeats.shutdownNow();
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /** 缓存回放 fire-and-forget：失败不影响连接建立，只留日志（Redis 抖动降级为空回放）。 */
+    private void asyncFlush(Runnable task) {
+        try {
+            cacheFlushes.execute(() -> {
+                try {
+                    task.run();
+                } catch (Exception e) {
+                    log.warn("SSE cache-flush failed: {}", e.getMessage());
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            log.warn("SSE cache-flush rejected (shutting down): {}", e.getMessage());
         }
     }
 
@@ -95,8 +120,8 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
-        // 跨副本重连：回放 Redis 缓存中该 session 的近端事件
-        sseEventCache.flushSessionEvents(sessionId, emitter);
+        // 跨副本重连：回放 Redis 缓存中该 session 的近端事件（异步，不阻塞连接建立）
+        asyncFlush(() -> sseEventCache.flushSessionEvents(sessionId, emitter));
         return emitter;
     }
 
@@ -142,7 +167,8 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
-        sseEventCache.flushUserEvents(username, emitter);
+        // 用户级缓存回放（异步，不阻塞连接建立）
+        asyncFlush(() -> sseEventCache.flushUserEvents(username, emitter));
         return emitter;
     }
 
