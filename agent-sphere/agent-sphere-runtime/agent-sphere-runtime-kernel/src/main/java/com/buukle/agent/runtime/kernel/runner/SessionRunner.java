@@ -460,11 +460,16 @@ public class SessionRunner {
                         .setRole(LlmApiConstant.ROLE_TOOL)
                         .setToolCallId(tc.id())
                         .setContent(toolMessage));
-                // 浏览器截图工具：检测结果中的截图 ref，注入带图 USER 观察消息（下一轮模型就能"看到"页面）
-                if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.CHROME.getId())) {
-                    injectScreenshotObservation(sessionId, currentRunId, messages, toolResult);
-                }
                 // SUCCEEDED 事件已在 onEachResult 回调中发布，此处不再重复
+            }
+
+            // 先追加全部 tool 结果消息，再统一注入截图观察，保证
+            // assistant(tool_calls) → tool* 连续 → user 观察 的合法 OpenAI 序列（多 tool 批次不被打断）
+            for (TurnToolCall tc : turn.toolCalls()) {
+                if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.CHROME.getId())) {
+                    injectScreenshotObservation(sessionId, currentRunId, messages,
+                            results.getOrDefault(tc.id(), RunnerConstants.JSON_ERROR_TOOL_LOST));
+                }
             }
 
             boolean todowriteCalled = turn.toolCalls().stream().anyMatch(tc ->

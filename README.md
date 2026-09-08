@@ -48,6 +48,8 @@ Embeddable chat widget (shadow DOM, OIDC SSO, REST + SSE timeline chat):
 - **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations / OrcaRouter, with primary + fallback route chains and graceful degradation.
 - **Unified capability layer** — MCP servers, built-in SPI tools, CLI execution, browser automation, and composite skills, dispatched through a single `ToolExecutor`.
 - **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / executeJS) with real-time execution feedback.
+- **Vision-based browser operation** — the extension captures page screenshots (viewport + full-page) and feeds them back into the model as a **visual observation** (main agent, sub-agents and embeddable widget all render them inline); `clickAt(x, y)` performs pixel-targeted trusted clicks at screenshot coordinates.
+- **Image recognition (chat images)** — upload images with a chat message (`/api/v1/files/upload` → `fileKey`), rendered inline in the conversation as thumbnails with a click-to-zoom preview (main UI + widget); routes gate image support via `supports-attachment` and degrade to plain text when unavailable.
 - **Multi-level memory** — persistent runs, tool-call records with write-time JSON compression, and token-budget based context compaction.
 - **Human-in-the-loop clarification** — the LLM pauses with a `ask_clarification` tool and resumes via AG-UI interrupt/resume (`confirm` / `choice` / `input`).
 - **OIDC multi-provider SSO** — PKCE + JWKS-verified logins from any IdP, JIT user provisioning, plus full RBAC and audit logging.
@@ -86,7 +88,7 @@ Manages the complete execution lifecycle of an AI session, implementing the **Pl
 |-----------------|----------------|-------------|----------|
 | **MCP (Model Context Protocol)** | MCP Server client | Standard protocol, connects to any MCP Server | Jira, GitHub, Slack, databases |
 | **Builtin (built-in tools)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI extension | WebFetch, WebRead, Chrome, Todowrite, DocWrite |
-| **Chrome Browser** | Chrome Extension bridge | DOM operations + real-time execution feedback | Navigate, click, fill forms, executeJS |
+| **Chrome Browser** | Chrome Extension bridge | DOM operations + real-time execution feedback | Navigate, click, fill forms, executeJS, **screenshot, clickAt** |
 | **CLI (command line)** | `ProcessBuilder` execution | Local or remote shell | Git operations, build/deploy, system administration |
 | **Skill (composite skills)** | Multi-step task orchestration | LLM-driven task decomposition | Cross-system workflows |
 
@@ -95,7 +97,7 @@ Manages the complete execution lifecycle of an AI session, implementing the **Pl
 The extension bridges the backend with the user's browser for automated operations. It keeps a **single user-level task SSE connection** (`/api/v1/runtime/user/task/stream`) that delivers `browser_operation` commands for any of the user's sessions/runs — no per-session following. It declares `<all_urls>` host permission (granted at install) so it can inject a content script into any page the agent operates on.
 
 Recent architecture notes:
-- **Screenshots for vision operation** — the extension captures page screenshots (viewport + full-page) and `clickAt(x, y)` clicks at screenshot pixel coordinates; the screenshot is stored via `/api/v1/browser/screenshot` and injected into the model as a vision observation (route must have attachments enabled).
+- **Screenshots for vision operation** — the extension captures page screenshots (`Page.captureScreenshot`, viewport via `screenshot(scope=viewport)`, full-page via `scope=full`) with `cdp-client.js` (the only place allowed to touch `chrome.debugger`). The base64 is stored via `POST /api/v1/browser/screenshot` and only the `fileKey` travels on the callback, then the runtime injects a USER observation message (`text + image_url`) into the model context so vision-equipped models can plan from the real page (main and sub-agent loops share the same injection support, capped by `runner.max-screenshots-per-run`). `clickAt(x, y)` clicks at the device pixels of the last **viewport** screenshot (converted to CSS px via `devicePixelRatio`); non-interactive points click through with a warning. Screenshots are echoed back in the chat timeline as tool-card thumbnails (click-to-zoom), persisted from the tool artifact — live refresh and session reload both show them.
 - **SSE lives in an offscreen document** (`offscreen.html/js`) — immune to MV3 service-worker suspension; the background alarm re-creates it if the browser closes it.
 - **Native ES modules** — the background service worker (`background.js`, `"type": "module"`) imports `lib/cdp-client.js`, `lib/tab-manager.js`, `lib/result.js`, `lib/offscreen-bridge.js`; the execution layer is `content.js` + `content-locator.js` (injected in order into the isolated world).
 - **Tab grouping** — every tab the plugin navigates/opens is auto-grouped under the `AgentSphere` tab group (`tabGroups` permission), recreated if closed.
@@ -252,6 +254,17 @@ Dynamic adjustment:
 
 > Delivery note: `browser_operation` commands are pushed **once** on the user-level task stream (keyed by the session owner), never duplicated on a per-session stream — the extension executes each `commandId` exactly once and reports back via `/api/v1/chrome/callback?sessionId=<cmd.sessionId>`.
 
+### 3.4a Image Recognition & Vision
+
+Two vision paths share the same image part (`text + image_url` with a base64 data URL) understood by OpenAI-compatible providers:
+
+- **Chat image attachments** — `POST /api/v1/files/upload` stores the file (`chat-attachment` bucket) and returns a `fileKey`; the send payload carries it, the run persists the reference (`agent_run.attachments`), and the timeline echoes `content.images` so the main UI and widget render thumbnails with a click-to-zoom preview. Routes gate image support: only `supports-attachment=true` routes carry image parts; when no capable route exists the message degrades to plain text (with a `REASONING_TOKEN` notice) instead of failing.
+- **Browser screenshots** — after `screenshot` the tool result stores the image under the `browser-screenshot` bucket and its `fileKey` is injected as a USER observation message into the model's content, letting vision-equipped models plan the next action; the same `fileKey` is parsed back from the tool artifact into the timeline tool card. `GET /api/v1/files/{fileKey}` resolves either bucket for the frontends.
+
+![Browser screenshot (vision operation)](agent-sphere-readme/ui-snapshot-broswer.png)
+
+![Chat image recognition](agent-sphere-readme/ui-picture-in-chat.png)
+
 ### 3.5 Multi-tab Management
 
 Every tab the plugin navigates, opens, or follows (target=_blank / window.open) is aggregated into a single **`AgentSphere` tab group** (created once, recreated if the group is closed), so the browser stays organized during automation. Multi-tab following still auto-switches control to newly opened tabs.
@@ -320,6 +333,7 @@ Users can cancel a pending clarification at any time:
 | `session.idle-timeout` | 30m | Session idle timeout |
 | `session.max-concurrent-runs` | 10 | Maximum concurrent executions |
 | `runner.max-loop-count` | 128 | Maximum loop count per run |
+| `runner.max-screenshots-per-run` | 20 | Max screenshot observations injected into the model context per run |
 | `runner.turn-timeout` | 180s | Single LLM turn timeout |
 | `runner.compaction.budget-ratio` | 0.7 | Compaction trigger threshold (ratio of maxInputTokens) |
 | `llm.connect-timeout` | 30s | LLM API connection timeout |
@@ -678,7 +692,7 @@ Embedded into a third-party system page (`mountTo`):
 - **Timeline channel (REST + SSE)**: the widget renders a *typed timeline* — `GET /instance/sessions/{sid}/timeline` (paged by `beforeSeq`/`afterSeq`, limit 5–50) returns rows keyed by `seq` + `kind` (`user` / `assistant` / `tool` / `clarification` / `subagent` / `run_status` / `error`). A live SSE stream `GET /runtime/{sid}/stream` (Bearer) drives the same rows.
 - **SSE typewriter & merge**: `content_token` / `reasoning_token` push onto the matching `seq+kind==='assistant'` row's `reply` / `thinking`; sub-agent rows aggregate live steps (LLM reasoning/reply + `tool_call_*`). Terminal / tool / clarification events (`run_completed`/`failed`/`cancelled`/`awaiting_user`, `tool_call_*`, `clarification_*`) trigger an `afterSeq` refresh for an authoritative merge — `mergeTimeline` dedupes by `seq`, and placeholder sub-agent rows carry negative `seq<0` until replaced by real rows.
 - **Send / stop / clarify**: sending posts `POST /runtime/{sid}/chat` → `{runId,status}` (the rest arrives via SSE + refresh). A RUNNING dot shows while active and the send button becomes **stop** → `POST /runtime/{sid}/stop` (session-level, no runId). Clarification options are answered inline via `POST /runtime/{sid}/run/{runId}/clarify`.
-- **WidgetTimeline rendering**: self-built row renderer — copy buttons on user/assistant rows, collapsible model-reason sections, tool cards, inline clarification options (confirm/choice/input), collapsible sub-agent cards with live steps (single-open tool detail, auto-scroll), RUNNING wobble dot, and "load older" pagination.
+- **WidgetTimeline rendering**: self-built row renderer — copy buttons on user/assistant rows, collapsible model-reason sections, tool cards (browser screenshots render inline, click-to-zoom lightbox), inline clarification options (confirm/choice/input), collapsible sub-agent cards with live steps (single-open tool detail, auto-scroll), RUNNING wobble dot, and "load older" pagination. Chat image attachments render as thumbnails with a click-to-zoom preview.
 - **Hosted mode**: passing `mountTo` renders the widget statically inside your layout (e.g. inside a drawer or a section) instead of a floating bubble.
 
 The widget builds **two** IIFE bundles: `agent-sphere-widget.js` (full chat UI) and `agent-sphere-auth.js` (a lightweight, no-React SSO silent-login entry for host pages that already show chat elsewhere).

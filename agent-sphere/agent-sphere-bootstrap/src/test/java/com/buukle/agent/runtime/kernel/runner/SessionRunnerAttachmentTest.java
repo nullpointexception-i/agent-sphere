@@ -6,6 +6,8 @@ import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
+import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
@@ -443,6 +445,35 @@ class SessionRunnerAttachmentTest {
             }
         }
         assertTrue(false, "应在 20 次后触发上限");
+    }
+
+    @Test
+    void multiToolBatch_injectsObservationOnlyAfterAllToolMessages() throws Exception {
+        // 复现主 Runner 的批次组装顺序：assistant(tool_calls:[c1,c2]) → tool(c1) → tool(c2) → 延后注入 user(截图观察)
+        given(attachmentResolver.toDataUrl("shot-1")).willReturn("data:image/jpeg;base64,BBBB");
+
+        List<ToolCallDTO> toolCalls = List.of(
+                ToolCallDTO.builder().id("c1").type("function")
+                        .function(FunctionDefinitionDTO.builder().name("builtin_5").arguments("{}").build()).build(),
+                ToolCallDTO.builder().id("c2").type("function")
+                        .function(FunctionDefinitionDTO.builder().name("builtin_2").arguments("{}").build()).build());
+        List<ChatMessageDTO> messages = new ArrayList<>(List.of(
+                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_ASSISTANT).setToolCalls(toolCalls),
+                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_TOOL).setToolCallId("c1").setContent("tool-res-c1"),
+                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_TOOL).setToolCallId("c2").setContent("tool-res-c2")));
+
+        // 与 Runner 修复后一致的延后注入：全部 tool 消息已追加，观察消息追加在批次末尾
+        invokeInjectScreenshot(messages,
+                "{\"success\":true,\"data\":{\"screenshot\":{\"fileKey\":\"shot-1\",\"width\":100,\"height\":200}}}");
+
+        assertEquals(4, messages.size());
+        ChatMessageDTO last = messages.get(3);
+        assertEquals(LlmApiConstant.ROLE_USER, last.getRole());
+        assertTrue(last.getContent() instanceof List<?>, "截图观察应以 parts 追加在全部 tool 消息之后");
+        // 前三条顺序不变：assistant + 两个连续 tool 消息（无任何 USER 混插）
+        assertEquals(LlmApiConstant.ROLE_ASSISTANT, messages.get(0).getRole());
+        assertEquals(LlmApiConstant.ROLE_TOOL, messages.get(1).getRole());
+        assertEquals(LlmApiConstant.ROLE_TOOL, messages.get(2).getRole());
     }
 
     private void invokeInjectScreenshot(List<ChatMessageDTO> messages, String toolResult) throws Exception {

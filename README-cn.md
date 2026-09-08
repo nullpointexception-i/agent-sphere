@@ -48,6 +48,8 @@
 - **多供应商模型路由** — 支持 OpenAI / DeepSeek / 智谱（BigModel）/ 中转站 / OrcaRouter，主路由 + fallback 路由链自动降级。
 - **统一能力层** — MCP Server、内置 SPI 工具、CLI 执行、浏览器自动化、复合技能，通过 `ToolExecutor` 统一分发。
 - **真实浏览器自动化** — Manifest V3 Chrome 扩展桥接，执行 DOM 操作（导航 / 点击 / 输入 / executeJS）并实时执行反馈。
+- **基于视觉的浏览器操作** — 扩展可截取页面（viewport 视口与全页），以**视觉观察**注入模型上下文（主 Agent、子 Agent、可嵌入 Widget 均内联展示）；`clickAt(x, y)` 按截图设备像素坐标做像素级受信点击。
+- **图片识别（聊天图片）** — 聊天消息可携带图片（`/api/v1/files/upload` 上传拿 `fileKey`），会话中以缩略图 + 点击放大预览展示（主 UI 与 Widget 均支持）；路由通过 `supports-attachment` 门控图片能力，无可用图片路由时自动降级为纯文本继续。
 - **多级记忆** — 持久化 run、工具调用记录（写时 JSON 压缩）、基于 token 预算的上下文压缩。
 - **人工介入澄清（Human-in-the-loop）** — LLM 通过 `ask_clarification` 工具暂停提问，AG-UI interrupt/resume 恢复执行（`confirm` / `choice` / `input`）。
 - **OIDC 多认证源 SSO** — PKCE + JWKS 验签，任意 IdP 登录、JIT 开通本地用户，配合完整 RBAC 与审计日志。
@@ -86,7 +88,7 @@
 |---------|------|------|------|
 | **MCP (Model Context Protocol)** | MCP Server 客户端 | 标准协议，接入任意 MCP Server | Jira、GitHub、Slack、数据库 |
 | **Builtin (内置工具)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI 扩展 | WebFetch、WebRead、Chrome、Todowrite、DocWrite |
-| **Chrome 浏览器** | Chrome Extension 桥接 | DOM 操作 + 实时执行反馈 | 导航、点击、填表、executeJS |
+| **Chrome 浏览器** | Chrome Extension 桥接 | DOM 操作 + 实时执行反馈 | 导航、点击、填表、executeJS、**截图 screenshot、clickAt** |
 | **CLI (命令行)** | `ProcessBuilder` 执行 | 本地或远程 Shell | Git 操作、构建部署、系统管理 |
 | **Skill (复合技能)** | 多步任务编排 | LLM 驱动的任务分解 | 跨系统工作流 |
 
@@ -95,7 +97,7 @@
 扩展在用户浏览器中桥接后端自动化操作。它只维持**一条用户级 task SSE 连接**（`/api/v1/runtime/user/task/stream`），为该用户的所有会话/任务投递 `browser_operation` 指令（不做会话跟随）。安装时声明 `<all_urls>` 宿主权限，可在 agent 操作的任意页面注入内容脚本。
 
 近期架构要点：
-- **不再截图** —— 截图链路已端到端移除（扩展/后端/UI），过程记录为文本/事件方式。
+- **截图支持视觉操作** —— 扩展经 `cdp-client.js`（唯一允许调用 `chrome.debugger` 的位置）执行 `Page.captureScreenshot`：`screenshot(scope=viewport)` 截视口、`scope=full` 截全页。base64 走 `POST /api/v1/browser/screenshot` 落库（`browser-screenshot` 桶），回调只回传 `fileKey`；运行时把截图作为 **USER 观察消息（text + image_url）** 注入模型上下文，具备视觉能力的模型可基于真实页面规划下一步（主/子 Agent 共用同一注入支持，受 `runner.max-screenshots-per-run` 上限约束）。`clickAt(x, y)` 按**最后一次 viewport 截图**的设备像素坐标点击（经 `devicePixelRatio` 换算为 CSS px）；点中非交互区域仍会点击并返回 warning。截图同时从工具 artifact 解析回填到聊天时间线工具卡（缩略图 + 点击放大），live 即时刷新与重载会话均能显示。
 - **SSE 常驻 offscreen document**（`offscreen.html/js`）—— 免疫 MV3 Service Worker 挂起；浏览器关闭后由后台 alarm 自动重建。
 - **原生 ES Modules** —— 后台 Service Worker（`background.js`，`"type": "module"`）import `lib/cdp-client.js`、`lib/tab-manager.js`、`lib/result.js`、`lib/offscreen-bridge.js`；执行层为 `content.js` + `content-locator.js`（按序注入隔离世界）。
 - **标签分组** —— 插件导航/新开的标签自动聚合到 **`AgentSphere` 标签分组**（`tabGroups` 权限），组被关闭后自动重建。
@@ -252,6 +254,17 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 
 > 投递说明：`browser_operation` 指令**只**在用户级 task 流上投递一次（按会话归属用户分发），不在会话流上重复——扩展对每个 `commandId` 只执行一次，并通过 `/api/v1/chrome/callback?sessionId=<cmd.sessionId>` 回报结果。
 
+### 3.4a 图片识别与视觉
+
+两条视觉路径共用同一种图片 content part（`text + image_url`，base64 data URL，OpenAI 兼容各厂商一致识别）：
+
+- **聊天图片附件** —— 前端 `POST /api/v1/files/upload` 落库（`chat-attachment` 桶）取 `fileKey`，发送报文携带该 fileKey；run 持久化附件引用（`agent_run.attachments`），timeline 回填 `content.images`，主 UI 与 Widget 渲染缩略图并支持点击放大预览。路由通过 `supports-attachment` 门控：只有开启的模型路由才携带图片 part；无可用图片路由时消息自动降级为纯文本（附 `REASONING_TOKEN` 提示）而非报错。
+- **浏览器截图** —— `screenshot` 工具执行后图片落 `browser-screenshot` 桶，`fileKey` 作为 **USER 观察消息** 注入模型上下文，具备视觉能力的模型据此规划下一步；同一 `fileKey` 从工具 artifact 解析回填到聊天时间线工具卡。前端 `GET /api/v1/files/{fileKey}` 同时查询两个桶。
+
+![浏览器截图（视觉操作）](agent-sphere-readme/ui-snapshot-broswer.png)
+
+![聊天图片识别](agent-sphere-readme/ui-picture-in-chat.png)
+
 ### 3.5 多标签页管理
 
 插件导航、打开或跟随（target=_blank / window.open）的所有标签自动聚合到**单个 `AgentSphere` 标签分组**（首次创建，组被关闭后自动重建），自动化过程中浏览器保持整洁。多标签跟随仍会自动把控制切换到新开的标签。
@@ -320,6 +333,7 @@ AgentSphere 支持 **用户澄清（User Clarification）** 机制，使 LLM 在
 | `session.idle-timeout` | 30m | 会话空闲超时 |
 | `session.max-concurrent-runs` | 10 | 最大并发执行数 |
 | `runner.max-loop-count` | 128 | 单次 run 最大循环次数 |
+| `runner.max-screenshots-per-run` | 20 | 单 run 注入模型上下文的截图观察次数上限 |
 | `runner.turn-timeout` | 180s | 单轮 LLM 调用超时 |
 | `runner.compaction.budget-ratio` | 0.7 | 压缩触发阈值（maxInputTokens 比例） |
 | `llm.connect-timeout` | 30s | LLM API 连接超时 |
@@ -678,7 +692,7 @@ SSO 登录页（选择身份源）：
 - **Timeline 通道（REST + SSE）**：Widget 渲染一条*类型化 timeline* —— `GET /instance/sessions/{sid}/timeline`（按 `beforeSeq`/`afterSeq` 翻页，limit 5–50）返回以 `seq` + `kind` 为键的行（`user` / `assistant` / `tool` / `clarification` / `subagent` / `run_status` / `error`）。实时 SSE 流 `GET /runtime/{sid}/stream`（Bearer）驱动同一批行。
 - **SSE 打字机与合并**：`content_token` / `reasoning_token` 就地追加到对应 `seq+kind==='assistant'` 行的 `reply` / `thinking`；子 Agent 行实时聚合步骤（LLM 推理/回复 + `tool_call_*`）。终态 / 工具结束 / 澄清事件（`run_completed`/`failed`/`cancelled`/`awaiting_user`、`tool_call_*`、`clarification_*`）触发 `afterSeq` 补行做权威合并 —— `mergeTimeline` 按 `seq` 去重，子 Agent 占位行用负 `seq<0`，待真实行到达后替换。
 - **发送 / 停止 / 澄清**：发送走 `POST /runtime/{sid}/chat` → `{runId,status}`（其余经 SSE + 补行到达）。运行中显示 RUNNING 圆点，发送按钮变为**停止** → `POST /runtime/{sid}/stop`（session 级，不依赖 runId）。澄清选项行内作答，走 `POST /runtime/{sid}/run/{runId}/clarify`。
-- **WidgetTimeline 渲染**：自研行渲染 —— 用户/助手消息带复制按钮、可折叠模型推理区、工具卡片、行内澄清选项（confirm/choice/input）、可折叠子 Agent 卡片（实时步骤、工具详情单选、自动滚底）、RUNNING 跳动圆点、加载更早分页。
+- **WidgetTimeline 渲染**：自研行渲染 —— 用户/助手消息带复制按钮、可折叠模型推理区、工具卡片（浏览器截图内联展示，点击放大查看）、行内澄清选项（confirm/choice/input）、可折叠子 Agent 卡片（实时步骤、工具详情单选、自动滚底）、RUNNING 跳动圆点、加载更早分页。聊天图片附件以缩略图渲染并支持点击放大预览。
 - **宿主模式**：传入 `mountTo` 后 Widget 静态渲染在你的布局中（如抽屉或区域块），而不是悬浮气泡。
 
 Widget 构建产出**两个** IIFE bundle：`agent-sphere-widget.js`（完整聊天 UI）与 `agent-sphere-auth.js`（轻量、无 React 的静默 SSO 入口，供宿主页在别处已展示聊天时使用）。

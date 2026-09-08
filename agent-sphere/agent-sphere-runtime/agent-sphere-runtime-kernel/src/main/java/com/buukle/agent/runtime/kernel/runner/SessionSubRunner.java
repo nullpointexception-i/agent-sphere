@@ -48,6 +48,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -193,6 +194,8 @@ public class SessionSubRunner {
                 finishSubAgentRun(subAgentRunId, SubRunStatus.COMPLETED.name());
                 return truncate(allContent.toString(), policy.maxResultChars());
             }
+            // 记录本轮每个工具结果（截图观察在全部 tool 消息追加后再统一注入，避免打断 assistant.tool_calls ↔ tool 配对）
+            Map<String, String> toolResults = new java.util.HashMap<>();
             for (TurnToolCall tc : turn.toolCalls()) {
                 if (!containsTool(subTools, tc.name())) {
                     messages.add(assistantToolCall(tc));
@@ -239,8 +242,12 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 .setPublishId(publishId)));
                 }
                 messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id()).setContent(result));
-                // 浏览器截图工具：检测结果中的截图 ref，注入带图 USER 观察消息（子 Agent 模型也能"看到"页面）
-                screenshotSupport().injectScreenshotObservation(childCtx.getSessionId(), subAgentRunId, messages, result);
+                toolResults.put(tc.id(), result);
+            }
+            // 先追加全部 tool 结果消息，再统一注入截图观察，保证 tool 消息紧贴各自 assistant.tool_calls 且不互相打断
+            for (TurnToolCall tc : turn.toolCalls()) {
+                screenshotSupport().injectScreenshotObservation(childCtx.getSessionId(), subAgentRunId, messages,
+                        toolResults.getOrDefault(tc.id(), ""));
             }
         }
         publishReasoning(policy.textSubLoopCapped(displayName), subRunToolId);
