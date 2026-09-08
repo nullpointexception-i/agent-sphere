@@ -82,10 +82,18 @@ export const agentApi = {
         method: 'DELETE',
         data: ids,
       }),
-    chat: (id: number, message: string, modelRouteId?: number) =>
+    chat: (
+      id: number,
+      message: string,
+      modelRouteId?: number,
+      attachmentKeys?: string[],
+    ) =>
       request<{ runId: number; status: string; assistantReply?: string }>(
         `${BASE}/runtime/${id}/chat`,
-        { method: 'POST', data: { message, modelRouteId } },
+        {
+          method: 'POST',
+          data: { message, modelRouteId, attachmentKeys },
+        },
       ),
     getTodos: (id: number) =>
       request<any>(`${BASE}/instance/sessions/${id}/todos`),
@@ -109,6 +117,17 @@ export const agentApi = {
       request<any>(`${BASE}/runtime/${sessionId}/run/${runId}/clarify`, {
         method: 'POST', data: { response, clarificationId },
       }),
+  },
+
+  files: {
+    upload: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return request<{ fileKey: string; contentType: string; sizeBytes: number }>(
+        `${BASE}/files/upload`,
+        { method: 'POST', data: formData },
+      );
+    },
   },
 
   runs: {

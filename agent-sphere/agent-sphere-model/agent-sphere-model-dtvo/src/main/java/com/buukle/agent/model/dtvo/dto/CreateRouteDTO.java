@@ -20,4 +20,5 @@ public class CreateRouteDTO implements Serializable {
     private Long maxInputTokens;
     private Long maxOutputTokens;
     private String company;
+    private Boolean supportsAttachment;
 }

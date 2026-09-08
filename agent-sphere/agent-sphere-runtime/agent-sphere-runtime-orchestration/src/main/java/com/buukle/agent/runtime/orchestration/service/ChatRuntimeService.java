@@ -47,6 +47,7 @@ public class ChatRuntimeService {
     private final AgentPendingClarificationMapper clarificationMapper;
     private final SessionRunner sessionRunner;
     private final TimelineRecorder timelineRecorder;
+    private final ChatAttachmentService chatAttachmentService;
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
@@ -98,7 +99,8 @@ public class ChatRuntimeService {
                         .setRunId(run.getId())
                         .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
 
-        orchestrator.asyncHandleUserMessage(run, sessionId, dto.getMessage(), dto.getModelRouteId(), isClarificationResume);
+        orchestrator.asyncHandleUserMessage(run, sessionId, dto.getMessage(), dto.getModelRouteId(),
+                isClarificationResume, chatAttachmentService.resolve(dto.getAttachmentKeys()));
         log.info("Async execution started for runId={}", run.getId());
     }
 

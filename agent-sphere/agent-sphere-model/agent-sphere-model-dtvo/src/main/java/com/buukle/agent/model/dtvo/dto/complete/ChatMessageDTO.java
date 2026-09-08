@@ -13,7 +13,8 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ChatMessageDTO implements Serializable {
     private String role;
-    private String content;
+    /** 纯文本时是 String；含附件（图片）时是 {@link ChatMessagePartDTO} 列表。 */
+    private Object content;
     private String name;
     @JsonProperty("tool_call_id")
     private String toolCallId;

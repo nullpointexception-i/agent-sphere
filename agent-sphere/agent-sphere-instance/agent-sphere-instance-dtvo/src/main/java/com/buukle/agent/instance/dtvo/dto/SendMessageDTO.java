@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 public class SendMessageDTO implements Serializable {
@@ -14,4 +15,5 @@ public class SendMessageDTO implements Serializable {
     private Long modelRouteId;
     private String delivery;
     private Boolean noClarification;
+    private List<String> attachmentKeys;
 }

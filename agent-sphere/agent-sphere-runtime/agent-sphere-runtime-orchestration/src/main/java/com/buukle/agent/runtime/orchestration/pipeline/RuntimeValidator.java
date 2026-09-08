@@ -118,6 +118,7 @@ public class RuntimeValidator {
         full.setStatus(route.getStatus());
         full.setCreatedAt(route.getCreatedAt());
         full.setCompany(route.getCompany());
+        full.setSupportsAttachment(route.getSupportsAttachment());
 
         if (route.getProviderId() != null) {
             try {

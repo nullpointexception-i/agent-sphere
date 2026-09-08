@@ -5,7 +5,18 @@ import {
   PlusOutlined,
 } from '@ant-design/icons';
 import { getLocale, useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, Modal, Select, Table } from 'antd';
+import {
+  App,
+  Button,
+  Drawer,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Switch,
+  Table,
+  Tag,
+} from 'antd';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
@@ -69,6 +80,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
         maxOutputTokens: values.maxOutputTokens
           ? Number(values.maxOutputTokens) * 1000
           : null,
+        supportsAttachment: !!values.supportsAttachment,
       };
       if (editingRoute) {
         await agentApi.routes.update(editingRoute.id, payload);
@@ -113,6 +125,23 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
       dataIndex: 'fallbackNames',
       key: 'fallbackNames',
       ellipsis: true,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.models.supportsAttachment',
+        defaultMessage: 'Attachment',
+      }),
+      dataIndex: 'supportsAttachment',
+      key: 'supportsAttachment',
+      width: 100,
+      render: (v: boolean) =>
+        v ? (
+          <Tag color="blue">
+            {intl.formatMessage({ id: 'pages.table.enabled' })}
+          </Tag>
+        ) : (
+          <Tag>{intl.formatMessage({ id: 'pages.table.disabled' })}</Tag>
+        ),
     },
     {
       title: intl.formatMessage({ id: 'pages.table.actions' }),
@@ -269,6 +298,24 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
             <Input maxLength={64} />
           </Form.Item>
           <Form.Item
+            name="supportsAttachment"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.models.supportsAttachment',
+                defaultMessage: 'Attachment',
+              }),
+              intl.formatMessage({
+                id: 'pages.models.supportsAttachmentHint',
+                defaultMessage:
+                  'Allow this route to accept image attachments in chat',
+              }),
+            )}
+            valuePropName="checked"
+            initialValue={false}
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
             name="weight"
             label={intl.formatMessage({ id: 'pages.table.weight' })}
             initialValue="100"
@@ -372,6 +419,15 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
               {
                 label: intl.formatMessage({ id: 'pages.table.weight' }),
                 value: viewRoute?.weight,
+              },
+              {
+                label: intl.formatMessage({
+                  id: 'pages.models.supportsAttachment',
+                  defaultMessage: 'Attachment',
+                }),
+                value: viewRoute?.supportsAttachment
+                  ? intl.formatMessage({ id: 'pages.table.enabled' })
+                  : intl.formatMessage({ id: 'pages.table.disabled' }),
               },
               {
                 label: intl.formatMessage({

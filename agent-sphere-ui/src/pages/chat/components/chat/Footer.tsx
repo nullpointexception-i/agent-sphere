@@ -1,4 +1,9 @@
-import { AudioOutlined, FullscreenOutlined } from '@ant-design/icons';
+import {
+  AudioOutlined,
+  CloseOutlined,
+  FullscreenOutlined,
+  PictureOutlined,
+} from '@ant-design/icons';
 import { Sender } from '@ant-design/x';
 import type { SenderRef } from '@ant-design/x/es/sender/interface';
 import { useIntl } from '@umijs/max';
@@ -12,11 +17,17 @@ interface FooterProps {
   onInputValueChange: (v: string) => void;
   sending: boolean;
   hasPendingClarifications?: boolean;
-  onSendMessage: () => void;
+  onSendMessage: (attachmentKeys?: string[]) => void;
   onCancel: () => void;
   onExpandOpen: () => void;
   sessionKey?: string;
   sessionId?: number;
+}
+
+interface PendingAttachment {
+  fileKey: string;
+  contentType: string;
+  previewUrl: string;
 }
 
 export default function Footer({
@@ -35,6 +46,9 @@ export default function Footer({
   const [historyRunId, setHistoryRunId] = useState<number | null>(null);
   const [savedInput, setSavedInput] = useState('');
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef(inputValue);
   const historyRunIdRef = useRef(historyRunId);
   const savedInputRef = useRef(savedInput);
@@ -136,14 +150,75 @@ export default function Footer({
     return () => textarea.removeEventListener('keydown', onKeyDown);
   }, [sessionId, sending, loadingHistory, onInputValueChange]);
 
+  const handlePickImage = () => {
+    if (attachments.length > 0 || uploadingAttachment || sending) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.chat.attachmentTypeHint',
+          defaultMessage: '仅支持 jpeg/png/webp/gif 图片',
+        }),
+      );
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.chat.attachmentSizeHint',
+          defaultMessage: '图片不能超过 5MB',
+        }),
+      );
+      return;
+    }
+    try {
+      setUploadingAttachment(true);
+      const res = await agentApi.files.upload(file);
+      const previewUrl = URL.createObjectURL(file);
+      setAttachments([
+        {
+          fileKey: res.fileKey,
+          contentType: res.contentType,
+          previewUrl,
+        },
+      ]);
+    } catch (err) {
+      message.error(
+        intl.formatMessage({
+          id: 'pages.chat.attachmentUploadFailed',
+          defaultMessage: '附件上传失败',
+        }),
+      );
+      console.warn('[attachment] upload failed:', err);
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const handleSubmitAttachment = () => {
+    if (attachments.length === 0) {
+      onSendMessage();
+      return;
+    }
+    const keys = attachments.map((a) => a.fileKey);
+    setAttachments([]);
+    onSendMessage(keys);
+  };
+
   return (
     <div
       style={{
         display: 'flex',
+        flexDirection: 'column',
         gap: 8,
         maxWidth: 940,
         width: '100%',
-        alignItems: 'center',
       }}
     >
       <style>{`
@@ -157,79 +232,160 @@ export default function Footer({
           border-radius: 50%;
         }
       `}</style>
-      <Sender
-        ref={senderRef}
-        value={inputValue}
-        onChange={onInputValueChange}
-        loading={sending || hasPendingClarifications}
-        submitType="enter"
-        onSubmit={onSendMessage}
-        onCancel={onCancel}
-        placeholder={intl.formatMessage({
-          id: 'pages.chat.typeMessageHint',
-          defaultMessage: 'Type a message... (Shift+Enter for new line)',
-        })}
-        maxLength={5000}
-        style={{ flex: 1 }}
-        autoSize={false}
-        suffix={(oriNode) => (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              transform: 'translateY(-3px)',
-            }}
-          >
-            <Tooltip
-              title={intl.formatMessage({
-                id: isRecording
-                  ? 'pages.chat.voiceInputStop'
-                  : 'pages.chat.voiceInput',
-              })}
-            >
-              <AudioOutlined
-                className={isRecording ? 'voice-pulse' : ''}
-                style={{
-                  fontSize: 16,
-                  cursor: 'pointer',
-                  color: isRecording ? '#ff4d4f' : '#8c8c8c',
-                }}
-                onClick={toggleRecording}
-              />
-            </Tooltip>
-            <Tooltip
-              title={intl.formatMessage({
-                id: 'pages.chat.expandInput',
-                defaultMessage: 'Expand Input',
-              })}
-            >
-              <FullscreenOutlined
-                style={{ fontSize: 16, cursor: 'pointer', color: '#8c8c8c' }}
-                onClick={onExpandOpen}
-              />
-            </Tooltip>
-            {oriNode}
-          </span>
-        )}
-        styles={{
-          root: {
-            height: 60,
-            borderRadius: 24,
-            display: 'flex',
-            flexDirection: 'column',
-          },
-          content: { flex: 1, alignItems: 'center', paddingBlock: 8 },
-          input: {
+      {attachments.length > 0 && (
+        <div
+          style={{
             display: 'flex',
             alignItems: 'center',
-            paddingTop: 6,
-            overflowY: 'auto',
-            resize: 'none',
-            outline: 'none',
-          },
-          suffix: { alignItems: 'center' },
+            gap: 8,
+            paddingLeft: 8,
+          }}
+        >
+          {attachments.map((a, idx) => (
+            <div
+              key={a.fileKey}
+              style={{
+                position: 'relative',
+                width: 64,
+                height: 64,
+                borderRadius: 8,
+                overflow: 'hidden',
+                border: '1px solid #e5e5e5',
+              }}
+            >
+              <img
+                src={a.previewUrl}
+                alt="attachment"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              <CloseOutlined
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  fontSize: 12,
+                  color: '#fff',
+                  background: 'rgba(0,0,0,0.5)',
+                  borderRadius: '50%',
+                  padding: 2,
+                  cursor: 'pointer',
+                }}
+                onClick={() =>
+                  setAttachments((prev) => prev.filter((_, i) => i !== idx))
+                }
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          maxWidth: 940,
+          width: '100%',
+          alignItems: 'center',
         }}
+      >
+        <Sender
+          ref={senderRef}
+          value={inputValue}
+          onChange={onInputValueChange}
+          loading={sending || hasPendingClarifications}
+          submitType="enter"
+          onSubmit={handleSubmitAttachment}
+          onCancel={onCancel}
+          placeholder={intl.formatMessage({
+            id: 'pages.chat.typeMessageHint',
+            defaultMessage: 'Type a message... (Shift+Enter for new line)',
+          })}
+          maxLength={5000}
+          style={{ flex: 1 }}
+          autoSize={false}
+          suffix={(oriNode) => (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                transform: 'translateY(-3px)',
+              }}
+            >
+              <Tooltip
+                title={intl.formatMessage({
+                  id: 'pages.chat.attachImage',
+                  defaultMessage: 'Attach image',
+                })}
+              >
+                <PictureOutlined
+                  style={{
+                    fontSize: 16,
+                    cursor:
+                      attachments.length > 0 || uploadingAttachment || sending
+                        ? 'not-allowed'
+                        : 'pointer',
+                    color: uploadingAttachment ? '#bfbfbf' : '#8c8c8c',
+                  }}
+                  onClick={handlePickImage}
+                />
+              </Tooltip>
+              <Tooltip
+                title={intl.formatMessage({
+                  id: isRecording
+                    ? 'pages.chat.voiceInputStop'
+                    : 'pages.chat.voiceInput',
+                })}
+              >
+                <AudioOutlined
+                  className={isRecording ? 'voice-pulse' : ''}
+                  style={{
+                    fontSize: 16,
+                    cursor: 'pointer',
+                    color: isRecording ? '#ff4d4f' : '#8c8c8c',
+                  }}
+                  onClick={toggleRecording}
+                />
+              </Tooltip>
+              <Tooltip
+                title={intl.formatMessage({
+                  id: 'pages.chat.expandInput',
+                  defaultMessage: 'Expand Input',
+                })}
+              >
+                <FullscreenOutlined
+                  style={{ fontSize: 16, cursor: 'pointer', color: '#8c8c8c' }}
+                  onClick={onExpandOpen}
+                />
+              </Tooltip>
+              {oriNode}
+            </span>
+          )}
+          styles={{
+            root: {
+              height: 60,
+              borderRadius: 24,
+              display: 'flex',
+              flexDirection: 'column',
+            },
+            content: { flex: 1, alignItems: 'center', paddingBlock: 8 },
+            input: {
+              display: 'flex',
+              alignItems: 'center',
+              paddingTop: 6,
+              overflowY: 'auto',
+              resize: 'none',
+              outline: 'none',
+            },
+            suffix: { alignItems: 'center' },
+          }}
+        />
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
       />
     </div>
   );

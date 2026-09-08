@@ -1107,8 +1107,12 @@ export default function Chat() {
     [currentSession],
   );
 
-  const sendMessage = async () => {
-    if (!inputValue.trim() || !currentSession || sending) return;
+  const sendMessage = async (attachmentKeys?: string[]) => {
+    const hasAttachment =
+      Array.isArray(attachmentKeys) && attachmentKeys.length > 0;
+    if ((!inputValue.trim() && !hasAttachment) || !currentSession || sending) {
+      return;
+    }
 
     // Auto-cancel any pending clarifications before sending a new message
     for (const m of messages) {
@@ -1136,6 +1140,7 @@ export default function Chat() {
         currentSession.id,
         msg,
         selectedModelRouteId,
+        attachmentKeys,
       );
       if (res?.runId) {
         currentRunIdRef.current = res.runId;

@@ -30,6 +30,7 @@ import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
+import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
@@ -57,6 +58,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SessionRunner {
 
     private static final Duration CONTEXT_TTL = Duration.ofMinutes(30);
+    /** 单轮用户消息最多注入的附件（图片）数。 */
+    private static final int MAX_USER_ATTACHMENTS = 4;
     /** Redis 取消 RSet 的占位标记（RSet 用作布尔标志，contains/add 均为该值）。 */
     private static final Object CANCEL_MARKER = Boolean.TRUE;
     private final AgentRuntimeProperties properties;
@@ -75,6 +78,7 @@ public class SessionRunner {
     private final TitleService titleService;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final RedissonClient redissonClient;
+    private final ChatAttachmentResolver attachmentResolver;
 
     /** run 级取消：写 Redis RSet（任意副本可调），执行副本 loop 读取并消费。 */
     public void cancelRun(Long runId) {
@@ -226,7 +230,7 @@ public class SessionRunner {
                     }
                     messages.addAll(historyLoader.load(sessionId, currentRunId, input.isClarificationResume()));
                 }
-                messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(input.text()));
+                messages.add(buildUserMessage(input, attachmentResolver));
             }
 
             List<RuntimeTool> tools = ctx != null ? ctx.getTools() : List.of();
@@ -236,8 +240,10 @@ public class SessionRunner {
             boolean isLastLoop = loopCount >= maxLoopCount - 1;
             if (isLastLoop && !messages.isEmpty() && LlmApiConstant.ROLE_SYSTEM.equals(messages.get(0).getRole())) {
                 ChatMessageDTO sysMsg = messages.get(0);
-                sysMsg.setContent(sysMsg.getContent()
-                        + "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**");
+                if (sysMsg.getContent() instanceof String sysText) {
+                    sysMsg.setContent(sysText
+                            + "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**");
+                }
             }
 
             AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
@@ -274,7 +280,7 @@ public class SessionRunner {
                             messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                         }
                         messages.addAll(historyLoader.load(sessionId, currentRunId));
-                        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(userText));
+                        messages.add(buildUserMessage(input, attachmentResolver));
                         hasToolCalls = true;
                         continue;
                     }
@@ -548,6 +554,24 @@ public class SessionRunner {
             try {
                 List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
 
+                // 图片附件请求：仅允许能处理附件的路由，避免落到纯文本模型（400/静默忽略）
+                if (hasAttachmentImage(messages) && !routes.isEmpty()) {
+                    List<ModelRouteFullVO> capable = routes.stream()
+                            .filter(r -> Boolean.TRUE.equals(r.getSupportsAttachment()))
+                            .toList();
+                    if (capable.isEmpty()) {
+                        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                new RuntimeEventDataVO()
+                                        .setSessionId(sessionId).setRunId(runId)
+                                        .setResponse("⚠️ 当前路由均未开启附件输入，请在路由「支持附件」开启后重试")
+                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                        .setPublishId(UUID.randomUUID().toString())));
+                        return TurnResult.error("当前路由均不支持附件输入");
+                    }
+                    routes = capable;
+                }
+
                 fallbackRouteExecutor.execute(routes, (i, route) -> {
                     if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
                         cancelled.set(true);
@@ -684,6 +708,61 @@ public class SessionRunner {
 
     private static String getTurnContent(AtomicReference<String> contentRef) {
         return contentRef.get();
+    }
+
+    /**
+     * 构建 user 消息：无附件为纯文本，有附件按 OpenAI 兼容 content parts（文本+图片）注入。
+     * 附件仅携带 fileKey，data URL 在组消息时才经 {@code attachmentResolver} 惰性回读。
+     */
+    static ChatMessageDTO buildUserMessage(SessionInputManager.InputMessage input,
+                                           ChatAttachmentResolver attachmentResolver) {
+        ChatMessageDTO msg = new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER);
+        if (input == null || input.attachments() == null || input.attachments().isEmpty()) {
+            String text = input != null && input.text() != null ? input.text() : "";
+            return msg.setContent(text);
+        }
+        List<ChatMessagePartDTO> parts = new ArrayList<>();
+        if (input.text() != null && !input.text().isBlank()) {
+            parts.add(new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_TEXT).setText(input.text()));
+        }
+        int count = 0;
+        for (PreparedAttachment att : input.attachments()) {
+            if (att == null || att.fileKey() == null || att.fileKey().isBlank()) {
+                continue;
+            }
+            if (count >= MAX_USER_ATTACHMENTS) {
+                break;
+            }
+            String dataUrl = attachmentResolver.toDataUrl(att.fileKey());
+            if (dataUrl == null || dataUrl.isBlank()) {
+                continue;
+            }
+            ChatMessagePartDTO.ImageUrl imageUrl = new ChatMessagePartDTO.ImageUrl().setUrl(dataUrl);
+            parts.add(new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_IMAGE_URL).setImageUrl(imageUrl));
+            count++;
+        }
+        return msg.setContent(parts);
+    }
+
+    /** 当前轮是否含图片附件：末条 USER 消息 content 为 parts 且含 image_url。 */
+    static boolean hasAttachmentImage(List<ChatMessageDTO> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return false;
+        }
+        ChatMessageDTO last = messages.get(messages.size() - 1);
+        if (last == null || !LlmApiConstant.ROLE_USER.equals(last.getRole())) {
+            return false;
+        }
+        Object content = last.getContent();
+        if (!(content instanceof List<?> parts)) {
+            return false;
+        }
+        for (Object part : parts) {
+            if (part instanceof ChatMessagePartDTO p && ChatMessagePartDTO.TYPE_IMAGE_URL.equals(p.getType())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<ModelRouteFullVO> resolveRoutes(Long sessionId, KernelContext ctx) {

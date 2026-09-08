@@ -1,12 +1,16 @@
 package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
+import com.buukle.agent.runtime.kernel.port.vo.PreparedAttachment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
 import org.redisson.api.RList;
 import org.redisson.api.RedissonClient;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.Collections;
 
 /**
  * 会话输入（steer 槽位 / 排队输入）分布式存储。
@@ -19,22 +23,19 @@ public class SessionInputManager {
 
     private final RedissonClient redissonClient;
 
-    public void steer(Long sessionId, String text, Long modelRouteId) {
-        steer(sessionId, text, modelRouteId, false);
-    }
-
-    public void steer(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume) {
-        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(), isClarificationResume);
+    public void steer(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume,
+                      List<PreparedAttachment> attachments) {
+        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(),
+                isClarificationResume, attachments != null ? attachments : Collections.emptyList());
         steerBucket(sessionId).set(msg);
         log.debug("Steer input set for session {}", sessionId);
     }
 
-    public void queue(Long sessionId, String text, Long modelRouteId) {
-        queue(sessionId, text, modelRouteId, false);
-    }
 
-    public void queue(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume) {
-        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(), isClarificationResume);
+    public void queue(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume,
+                      List<PreparedAttachment> attachments) {
+        InputMessage msg = new InputMessage(text, modelRouteId, System.currentTimeMillis(),
+                isClarificationResume, attachments != null ? attachments : Collections.emptyList());
         queueList(sessionId).add(msg);
         log.debug("Queued input for session {}", sessionId);
     }
@@ -58,9 +59,6 @@ public class SessionInputManager {
         return !queueList(sessionId).isEmpty();
     }
 
-    public boolean hasQueued(Long sessionId) {
-        return !queueList(sessionId).isEmpty();
-    }
 
     public void clear(Long sessionId) {
         steerBucket(sessionId).delete();
@@ -75,6 +73,10 @@ public class SessionInputManager {
         return redissonClient.getList(DistributedRuntimeConstants.sessionQueueKey(sessionId));
     }
 
-    public record InputMessage(String text, Long modelRouteId, long timestamp, boolean isClarificationResume) {
+    public record InputMessage(String text, Long modelRouteId, long timestamp, boolean isClarificationResume,
+                               List<PreparedAttachment> attachments) {
+        public InputMessage {
+            attachments = attachments != null ? attachments : Collections.emptyList();
+        }
     }
 }

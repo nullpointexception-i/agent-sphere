@@ -47,6 +47,7 @@ public class RouteConverter {
         vo.setMaxOutputTokens(route.getMaxOutputTokens());
         vo.setStatus(route.getStatus());
         vo.setCompany(route.getCompany());
+        vo.setSupportsAttachment(route.getSupportsAttachment());
         vo.setCreatedAt(route.getCreatedAt() != null ? route.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(route.getCreatedBy());
         vo.setUpdatedBy(route.getUpdatedBy());
@@ -64,6 +65,9 @@ public class RouteConverter {
         route.setMaxOutputTokens(dto.getMaxOutputTokens());
         route.setStatus(RouteEnum.STATUS_ACTIVE);
         route.setCompany(dto.getCompany());
+        if (dto.getSupportsAttachment() != null) {
+            route.setSupportsAttachment(dto.getSupportsAttachment());
+        }
         return route;
     }
 }

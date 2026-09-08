@@ -18,6 +18,7 @@ public class AgentModelRoute {
     private Long maxOutputTokens;
     private String status;
     private String company;
+    private Boolean supportsAttachment;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

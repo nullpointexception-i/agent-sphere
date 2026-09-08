@@ -4,6 +4,7 @@ import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.runtime.kernel.SessionRunCoordinator;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
+import com.buukle.agent.runtime.kernel.port.vo.PreparedAttachment;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
@@ -17,6 +18,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.List;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -28,13 +32,15 @@ public class RuntimeOrchestrator {
     private final SessionRunCoordinator coordinator;
     private final SessionInputManager inputManager;
 
-    @Async("runtimeAsyncExecutor")
-    public void asyncHandleUserMessage(RunVO run, Long sessionId, String message, Long overrideRouteId) {
-        asyncHandleUserMessage(run, sessionId, message, overrideRouteId, false);
-    }
 
     @Async("runtimeAsyncExecutor")
     public void asyncHandleUserMessage(RunVO run, Long sessionId, String message, Long overrideRouteId, boolean isClarificationResume) {
+        asyncHandleUserMessage(run, sessionId, message, overrideRouteId, isClarificationResume, Collections.emptyList());
+    }
+
+    @Async("runtimeAsyncExecutor")
+    public void asyncHandleUserMessage(RunVO run, Long sessionId, String message, Long overrideRouteId,
+                                       boolean isClarificationResume, List<PreparedAttachment> attachments) {
         log.info("Async execution start: runId={}, sessionId={}", run.getId(), sessionId);
         try {
             ValidationResult validated = validator.validate(sessionId, overrideRouteId);
@@ -45,9 +51,9 @@ public class RuntimeOrchestrator {
             log.info("Context prepared, starting runner: runId={}", run.getId());
 
             if (run.getDelivery() != null && "queue".equals(run.getDelivery())) {
-                inputManager.queue(sessionId, message, overrideRouteId, isClarificationResume);
+                inputManager.queue(sessionId, message, overrideRouteId, isClarificationResume, attachments);
             } else {
-                inputManager.steer(sessionId, message, overrideRouteId, isClarificationResume);
+                inputManager.steer(sessionId, message, overrideRouteId, isClarificationResume, attachments);
             }
 
             coordinator.wake(sessionId, ctx, run.getId());

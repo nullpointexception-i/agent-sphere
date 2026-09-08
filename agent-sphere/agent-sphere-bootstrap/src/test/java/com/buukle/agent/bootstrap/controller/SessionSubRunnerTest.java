@@ -112,7 +112,7 @@ class SessionSubRunnerTest {
             ChatCompletionRequestDTO request = inv.getArgument(4);
             String userContent = request.getMessages().stream()
                     .filter(m -> "user".equals(m.getRole()))
-                    .map(m -> m.getContent() != null ? m.getContent() : "")
+                    .map(m -> m.getContent() != null ? String.valueOf(m.getContent()) : "")
                     .reduce("", (a, b) -> a + b);
             assertTrue(userContent.contains("流程管理"));
             assertTrue(userContent.contains("【任务配置】"));
@@ -145,7 +145,7 @@ class SessionSubRunnerTest {
             ChatCompletionRequestDTO request = inv.getArgument(4);
             String userContent = request.getMessages().stream()
                     .filter(m -> "user".equals(m.getRole()))
-                    .map(m -> m.getContent() != null ? m.getContent() : "")
+                    .map(m -> m.getContent() != null ? String.valueOf(m.getContent()) : "")
                     .reduce("", (a, b) -> a + b);
             assertTrue(userContent.contains("流程管理"));
             Runnable done = inv.getArgument(6);
@@ -173,7 +173,7 @@ class SessionSubRunnerTest {
             ChatCompletionRequestDTO request = inv.getArgument(4);
             String userContent = request.getMessages().stream()
                     .filter(m -> "user".equals(m.getRole()))
-                    .map(m -> m.getContent() != null ? m.getContent() : "")
+                    .map(m -> m.getContent() != null ? String.valueOf(m.getContent()) : "")
                     .reduce("", (a, b) -> a + b);
             assertTrue(userContent.contains("张三"), "{{q}} 占位符必须解析为 张三");
             assertTrue(userContent.contains("【任务配置】"), "{{input}} 必须注入任务上下文");

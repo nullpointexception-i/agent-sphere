@@ -13,6 +13,7 @@ import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -193,7 +194,15 @@ public class CompactionService {
     private long estimateMessagesTokens(List<ChatMessageDTO> messages) {
         int len = 0;
         for (ChatMessageDTO msg : messages) {
-            if (msg.getContent() != null) len += msg.getContent().length();
+            if (msg.getContent() instanceof String text) {
+                len += text.length();
+            } else if (msg.getContent() instanceof List<?> parts) {
+                for (Object part : parts) {
+                    if (part instanceof ChatMessagePartDTO p && p.getText() != null) {
+                        len += p.getText().length();
+                    }
+                }
+            }
             if (msg.getToolCalls() != null) {
                 for (ToolCallDTO tc : msg.getToolCalls()) {
                     if (tc.getFunction() != null && tc.getFunction().getArguments() != null) {
