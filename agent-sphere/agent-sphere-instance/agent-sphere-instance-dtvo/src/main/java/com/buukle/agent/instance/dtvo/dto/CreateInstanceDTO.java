@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.dtvo.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -22,4 +23,7 @@ public class CreateInstanceDTO implements Serializable {
     private String image;
     @Size(max = 64)
     private String businessType;
+    /** 单次 run 最大循环次数；NULL=未配置，0=清除覆盖，>0 覆盖系统默认。 */
+    @Min(value = 0, message = "maxLoopCount must be >= 0 when configured")
+    private Integer maxLoopCount;
 }

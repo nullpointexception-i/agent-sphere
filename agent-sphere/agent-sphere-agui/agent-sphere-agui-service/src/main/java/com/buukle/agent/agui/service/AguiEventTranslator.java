@@ -383,6 +383,10 @@ public class AguiEventTranslator {
         if (artifact == null || artifact.isBlank()) {
             return;
         }
+        // 非 JSON 对象产物（skill/cli/浏览器等纯文本工具结果），跳过解析，避免无谓的 parse error 日志
+        if (!artifact.trim().startsWith("{")) {
+            return;
+        }
         try {
             JsonNode node = JsonUtils.parse(artifact, JsonNode.class);
             JsonNode todos = node != null ? node.get(AguiConstants.FIELD_TODOS) : null;

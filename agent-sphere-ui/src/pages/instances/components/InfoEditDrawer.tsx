@@ -1,6 +1,6 @@
 import { UploadOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, Upload } from 'antd';
+import { App, Button, Drawer, Form, Input, InputNumber, Upload } from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -26,7 +26,10 @@ export default function InfoEditDrawer({
   useEffect(() => {
     if (!open) return;
     setImagePreview(record.image || '');
-    form.setFieldsValue(record);
+    form.setFieldsValue({
+      ...record,
+      maxLoopCount: record.maxLoopCount ?? 0,
+    });
   }, [open, record]);
 
   const submit = async () => {
@@ -134,6 +137,27 @@ export default function InfoEditDrawer({
           )}
         >
           <Input maxLength={64} placeholder="sourcing" />
+        </Form.Item>
+        <Form.Item
+          name="maxLoopCount"
+          label={labelWithRule(
+            intl.formatMessage({
+              id: 'pages.instances.maxLoopCount',
+              defaultMessage: '最大循环次数',
+            }),
+            intl.formatMessage({
+              id: 'pages.instances.maxLoopCount.extra',
+              defaultMessage: '单次 run 最大循环数；0=系统默认，>0=覆盖，必填',
+            }),
+          )}
+          rules={[{ required: true, message: '请输入最大循环次数' }]}
+        >
+          <InputNumber
+            min={0}
+            max={2000}
+            placeholder="系统默认"
+            style={{ width: '100%' }}
+          />
         </Form.Item>
       </Form>
     </Drawer>

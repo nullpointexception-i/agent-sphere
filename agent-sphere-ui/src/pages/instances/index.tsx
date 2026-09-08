@@ -23,6 +23,7 @@ import {
   Descriptions,
   Form,
   Input,
+  InputNumber,
   Modal,
   Pagination,
   Select,
@@ -166,6 +167,21 @@ export default function InstanceList() {
       render: (v: any) =>
         v ? (
           <Tag>{v}</Tag>
+        ) : (
+          <span style={{ color: 'rgba(0,0,0,0.25)' }}>-</span>
+        ),
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.instances.maxLoopCount',
+        defaultMessage: '最大循环次数',
+      }),
+      dataIndex: 'maxLoopCount',
+      key: 'maxLoopCount',
+      width: 120,
+      render: (v: any) =>
+        v ? (
+          <span>{v}</span>
         ) : (
           <span style={{ color: 'rgba(0,0,0,0.25)' }}>-</span>
         ),
@@ -802,7 +818,7 @@ export default function InstanceList() {
         confirmLoading={submitting}
         width={560}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" initialValues={{ maxLoopCount: 0 }}>
           <Form.Item
             name="name"
             label={labelWithRule(
@@ -886,6 +902,28 @@ export default function InstanceList() {
             )}
           >
             <Input maxLength={64} placeholder="sourcing" />
+          </Form.Item>
+          <Form.Item
+            name="maxLoopCount"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.instances.maxLoopCount',
+                defaultMessage: '最大循环次数',
+              }),
+              intl.formatMessage({
+                id: 'pages.instances.maxLoopCount.extra',
+                defaultMessage:
+                  '单次 run 最大循环数；0=系统默认，>0=覆盖，必填',
+              }),
+            )}
+            rules={[{ required: true, message: '请输入最大循环次数' }]}
+          >
+            <InputNumber
+              min={0}
+              max={2000}
+              placeholder="系统默认"
+              style={{ width: '100%' }}
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -973,6 +1011,14 @@ export default function InstanceList() {
                       })}
                     >
                       {viewing?.businessType || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item
+                      label={intl.formatMessage({
+                        id: 'pages.instances.maxLoopCount',
+                        defaultMessage: '最大循环次数',
+                      })}
+                    >
+                      {viewing?.maxLoopCount || '-'}
                     </Descriptions.Item>
                     <Descriptions.Item
                       label={intl.formatMessage({

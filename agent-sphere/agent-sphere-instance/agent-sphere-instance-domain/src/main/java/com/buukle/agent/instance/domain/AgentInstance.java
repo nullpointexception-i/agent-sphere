@@ -18,6 +18,8 @@ public class AgentInstance {
     private String image;
     private String status;
     private String businessType;
+    /** 单次 run 最大循环次数（覆盖系统 runner/task 上限；NULL/0=未配置走系统默认）。 */
+    private Integer maxLoopCount;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

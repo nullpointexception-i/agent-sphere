@@ -51,9 +51,17 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
                 throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID, "Image too large, max 2MB");
             }
         }
+        boolean clearLoop = dto.getMaxLoopCount() != null && dto.getMaxLoopCount() == 0;
         AgentInstance instance = instanceConverter.toDO(dto);
         instance.setId(id);
         updateById(instance);
+        if (clearLoop) {
+            // 0 = 清除覆盖（置 NULL）；updateById 忽略 null 字段，需显式 set
+            lambdaUpdate()
+                    .eq(AgentInstance::getId, id)
+                    .set(AgentInstance::getMaxLoopCount, null)
+                    .update();
+        }
         AgentInstance saved = getById(id);
         return instanceConverter.toVO(saved);
     }

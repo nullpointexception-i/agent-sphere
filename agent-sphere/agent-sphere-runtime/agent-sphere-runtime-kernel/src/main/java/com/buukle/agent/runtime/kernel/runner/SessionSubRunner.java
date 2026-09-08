@@ -141,7 +141,16 @@ public class SessionSubRunner {
                 ? timeout : Duration.ofMinutes(10));
         long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
 
-        for (int loop = 0; loop < policy.maxSubLoopCount(); loop++) {
+        // 子 Agent 复用同一实例级循环上限（与主循环一致，最高优先）；未配置则按 skill 配置回落，不继承任务提额
+        Integer instanceLoopLimit = childCtx.getKernelContext() != null
+                && childCtx.getKernelContext().getAgentInstance() != null
+                ? childCtx.getKernelContext().getAgentInstance().getMaxLoopCount() : null;
+        LoopLimitResolver.ResolvedLoopLimit loopLimit = LoopLimitResolver.resolveSub(
+                instanceLoopLimit, properties.getSkill().getMaxSubLoopCount());
+        log.info("Sub-run session={} run={} source={}, effective loop limit={}",
+                childCtx.getSessionId(), childCtx.getRunId(), loopLimit.source(), loopLimit.limit());
+
+        for (int loop = 0; loop < loopLimit.limit(); loop++) {
             if (cancelled(childCtx) || Thread.interrupted()) {
                 finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED.name());
                 return policy.errorCancelled();

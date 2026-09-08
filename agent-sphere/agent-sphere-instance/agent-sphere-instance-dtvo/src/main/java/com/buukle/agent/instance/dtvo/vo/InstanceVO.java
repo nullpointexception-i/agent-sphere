@@ -15,6 +15,8 @@ public class InstanceVO implements Serializable {
     private String image;
     private String status;
     private String businessType;
+    /** 单次 run 最大循环次数（NULL=未配置走系统默认）。 */
+    private Integer maxLoopCount;
     private String createdAt;
     private String createdBy;
     private String updatedBy;

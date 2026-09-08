@@ -24,6 +24,7 @@ public class InstanceConverter {
         vo.setImage(instance.getImage());
         vo.setStatus(instance.getStatus());
         vo.setBusinessType(instance.getBusinessType());
+        vo.setMaxLoopCount(instance.getMaxLoopCount());
         vo.setCreatedAt(instance.getCreatedAt() != null ? instance.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(instance.getCreatedBy());
         vo.setUpdatedBy(instance.getUpdatedBy());
@@ -40,7 +41,13 @@ public class InstanceConverter {
         instance.setCustomInstructions(dto.getCustomInstructions());
         instance.setImage(dto.getImage());
         instance.setBusinessType(dto.getBusinessType());
+        instance.setMaxLoopCount(normalizeLoop(dto.getMaxLoopCount()));
         instance.setStatus(InstanceEnum.STATUS_ENABLED);
         return instance;
+    }
+
+    /** ≤0 / null 归一到 null（null=未配置，0 仅作为 update 的“清除”信号在 service 层单独处理）。 */
+    private Integer normalizeLoop(Integer maxLoopCount) {
+        return maxLoopCount != null && maxLoopCount > 0 ? maxLoopCount : null;
     }
 }

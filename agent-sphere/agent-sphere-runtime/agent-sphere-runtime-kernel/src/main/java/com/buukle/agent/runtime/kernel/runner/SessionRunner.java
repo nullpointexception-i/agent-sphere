@@ -165,14 +165,18 @@ public class SessionRunner {
         boolean hasToolCalls = false;
         StringBuilder allContent = new StringBuilder();
 
-        int maxLoopCount = properties.getRunner().getMaxLoopCount();
-        Integer taskLoopLimit = TaskLoopLimitHolder.get();
-        if (taskLoopLimit != null && taskLoopLimit > 0) {
-            maxLoopCount = taskLoopLimit;
-            log.info("Session {} uses task loop limit {}", sessionId, taskLoopLimit);
-        }
-        log.info("Run {} execution source={}, effective loop limit={}", currentRunId,
-                taskLoopLimit != null ? "TASK" : "CHAT", maxLoopCount);
+        // 实例级覆盖（最高优先）：KernelContext 已携带 agentInstance，随 run 执行副本走，天然跨副本一致
+        KernelContext topCtx = getContext(sessionId);
+        Integer instanceLoopLimit = topCtx != null && topCtx.getAgentInstance() != null
+                && topCtx.getAgentInstance().getMaxLoopCount() != null
+                && topCtx.getAgentInstance().getMaxLoopCount() > 0
+                ? topCtx.getAgentInstance().getMaxLoopCount() : null;
+
+        LoopLimitResolver.ResolvedLoopLimit loopLimit = LoopLimitResolver.resolveMain(
+                instanceLoopLimit, TaskLoopLimitHolder.get(), properties.getRunner().getMaxLoopCount());
+        int maxLoopCount = loopLimit.limit();
+        LoopLimitSource loopSource = loopLimit.source();
+        log.info("Run {} execution source={}, effective loop limit={}", currentRunId, loopSource, maxLoopCount);
         int compactionRetries = 0;
         loop:
         while (loopCount < maxLoopCount) {
