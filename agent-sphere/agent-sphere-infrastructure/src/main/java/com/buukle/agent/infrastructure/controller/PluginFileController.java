@@ -1,7 +1,8 @@
-package com.buukle.agent.infrastructure.config;
+package com.buukle.agent.infrastructure.controller;
 
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
+import com.buukle.agent.infrastructure.service.PluginFileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

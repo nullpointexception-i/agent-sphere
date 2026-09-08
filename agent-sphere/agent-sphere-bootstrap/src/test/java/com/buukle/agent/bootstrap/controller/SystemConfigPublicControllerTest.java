@@ -3,8 +3,8 @@ package com.buukle.agent.bootstrap.controller;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.security.CryptoService;
-import com.buukle.agent.infrastructure.config.SystemConfigController;
-import com.buukle.agent.infrastructure.config.SystemConfigServiceImpl;
+import com.buukle.agent.infrastructure.controller.SystemConfigController;
+import com.buukle.agent.infrastructure.service.SystemConfigServiceImpl;
 import com.buukle.agent.model.repository.ApiKeyMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,7 +14,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;

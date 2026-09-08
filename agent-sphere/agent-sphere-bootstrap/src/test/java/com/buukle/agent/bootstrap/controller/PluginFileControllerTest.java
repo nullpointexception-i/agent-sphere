@@ -1,7 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
-import com.buukle.agent.infrastructure.config.PluginFileController;
-import com.buukle.agent.infrastructure.config.PluginFileService;
+import com.buukle.agent.infrastructure.controller.PluginFileController;
+import com.buukle.agent.infrastructure.service.PluginFileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

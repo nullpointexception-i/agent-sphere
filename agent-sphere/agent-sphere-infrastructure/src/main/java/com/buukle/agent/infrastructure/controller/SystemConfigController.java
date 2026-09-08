@@ -1,4 +1,4 @@
-package com.buukle.agent.infrastructure.config;
+package com.buukle.agent.infrastructure.controller;
 
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -7,11 +7,11 @@ import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.config.UpdateConfigDTO;
 import com.buukle.agent.common.security.CryptoService;
 import com.buukle.agent.common.util.BaseController;
+import com.buukle.agent.infrastructure.controller.dtvo.ConfigUpdateResult;
+import com.buukle.agent.infrastructure.service.SystemConfigServiceImpl;
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.repository.ApiKeyMapper;
 import jakarta.validation.Valid;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -127,8 +127,3 @@ public class SystemConfigController extends BaseController {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SystemConfigController.class);
 }
 
-@Data
-@AllArgsConstructor
-class ConfigUpdateResult {
-    private String message;
-}

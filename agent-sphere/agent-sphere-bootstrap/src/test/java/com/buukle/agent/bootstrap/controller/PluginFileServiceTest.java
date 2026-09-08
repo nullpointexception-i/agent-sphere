@@ -2,8 +2,8 @@ package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
-import com.buukle.agent.infrastructure.config.PluginFileService;
-import com.buukle.agent.infrastructure.config.SystemConfigServiceImpl;
+import com.buukle.agent.infrastructure.service.PluginFileService;
+import com.buukle.agent.infrastructure.service.SystemConfigServiceImpl;
 import com.buukle.agent.infrastructure.file.GenericFileService;
 import com.buukle.agent.infrastructure.file.StoredFile;
 import org.junit.jupiter.api.BeforeEach;

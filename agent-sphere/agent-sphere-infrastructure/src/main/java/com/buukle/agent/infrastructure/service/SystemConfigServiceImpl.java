@@ -1,4 +1,4 @@
-package com.buukle.agent.infrastructure.config;
+package com.buukle.agent.infrastructure.service;
 
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
