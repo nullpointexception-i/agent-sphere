@@ -23,7 +23,6 @@
         <module>agent-sphere-infrastructure</module>
         <module>agent-sphere-admin</module>
         <module>agent-sphere-sso</module>
-        <module>agent-sphere-agui</module>
         <module>agent-sphere-completions</module>
         <module>agent-sphere-tasks</module>
         <module>agent-sphere-resource-template</module>
@@ -364,21 +363,6 @@
             <dependency>
                 <groupId>com.buukle.agent</groupId>
                 <artifactId>agent-sphere-sso-controller</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.buukle.agent</groupId>
-                <artifactId>agent-sphere-agui-dtvo</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.buukle.agent</groupId>
-                <artifactId>agent-sphere-agui-service</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.buukle.agent</groupId>
-                <artifactId>agent-sphere-agui-controller</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

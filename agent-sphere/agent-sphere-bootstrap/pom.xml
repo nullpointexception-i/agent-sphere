@@ -62,10 +62,6 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
-            <artifactId>agent-sphere-agui-controller</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-admin-controller</artifactId>
         </dependency>
         <dependency>
