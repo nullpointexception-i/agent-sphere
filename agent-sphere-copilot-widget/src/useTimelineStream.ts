@@ -81,7 +81,7 @@ interface TimelineStream {
   /** 工具事件后整页覆盖刷新（补迟到落库的截图 images 等）。 */
   refreshTail: (sessionId: number) => Promise<void>;
   /** 传播中的用户消息：不入库，先本地上墙，等权威行到达后移除；同时置 runActive=true（点击即锁输入）。 */
-  addUserMessage: (text: string) => void;
+  addUserMessage: (text: string, images?: { fileKey: string; contentType?: string }[]) => void;
   removeUserMessage: (text: string) => void;
   /** 发送失败等场景手动复位 runActive。 */
   markRunInactive: () => void;
@@ -134,16 +134,26 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     });
   }, []);
 
-  const addUserMessage = useCallback((text: string) => {
-    pendingSeqRef.current -= 1;
-    const seq = pendingSeqRef.current;
-    setPendingUserRows((prev) => [
-      ...prev,
-      { seq, kind: 'user', state: 'COMPLETED', content: { text } },
-    ]);
-    // 发送即锁定输入（无需等 run_running）——事件驱动锁定的“即时”来源
-    setRunActiveState(true);
-  }, []);
+  const addUserMessage = useCallback(
+    (text: string, images?: { fileKey: string; contentType?: string }[]) => {
+      pendingSeqRef.current -= 1;
+      const seq = pendingSeqRef.current;
+      // 纯图片发送时给非空占位文本，兼容 reconcile 按 text 去重的既有逻辑（权威行到达后替换）
+      const displayText = text.trim() ? text : '[图片]';
+      setPendingUserRows((prev) => [
+        ...prev,
+        {
+          seq,
+          kind: 'user',
+          state: 'COMPLETED',
+          content: { text: displayText, ...(images && images.length ? { images } : {}) },
+        },
+      ]);
+      // 发送即锁定输入（无需等 run_running）——事件驱动锁定的“即时”来源
+      setRunActiveState(true);
+    },
+    [],
+  );
 
   const removeUserMessage = useCallback((text: string) => {
     const wanted = String(text).trim();

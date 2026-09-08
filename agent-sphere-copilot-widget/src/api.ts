@@ -98,6 +98,36 @@ export async function loadFileObjectUrl(
   return URL.createObjectURL(blob);
 }
 
+/** 上传聊天图片附件（FormData，Bearer 鉴权），返回 fileKey 供随消息发送。 */
+export async function uploadFile(
+  base: string,
+  file: File,
+): Promise<{ fileKey: string; contentType: string; sizeBytes: number }> {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  // 勿设 Content-Type，浏览器自动带 multipart boundary
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(buildUrl(base, '/files/upload'), {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!response.ok) {
+    let body: ErrorBody = {};
+    try {
+      body = (await response.json()) as ErrorBody;
+    } catch {
+      body = { message: response.statusText };
+    }
+    throw new ApiError(response.status, body);
+  }
+  return (await response.json()) as { fileKey: string; contentType: string; sizeBytes: number };
+}
+
 export function ssoAuthorize(
   base: string,
   provider: string,
@@ -208,10 +238,11 @@ export function sendMessage(
   base: string,
   sessionId: number,
   message: string,
+  attachmentKeys?: string[],
 ): Promise<{ runId: number; status: string }> {
   return request(base, `/runtime/${sessionId}/chat`, {
     method: 'POST',
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, attachmentKeys }),
   });
 }
 
@@ -243,7 +274,12 @@ export interface ApiClient {
   subAgentTimeline: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
   getTimeline: (sessionId: number, query?: TimelineQuery) => Promise<SessionTimelinePageVO>;
   loadFile: (fileKey: string) => Promise<string>;
-  sendMessage: (sessionId: number, message: string) => Promise<{ runId: number; status: string }>;
+  uploadFile: (file: File) => Promise<{ fileKey: string; contentType: string; sizeBytes: number }>;
+  sendMessage: (
+    sessionId: number,
+    message: string,
+    attachmentKeys?: string[],
+  ) => Promise<{ runId: number; status: string }>;
   clarify: (
     sessionId: number,
     runId: number,
@@ -269,7 +305,9 @@ export function createApi(config: WidgetConfig): ApiClient {
     subAgentTimeline: (subAgentRunId) => subAgentTimeline(base, subAgentRunId),
     getTimeline: (sessionId, query) => getTimeline(base, sessionId, query),
     loadFile: (fileKey) => loadFileObjectUrl(base, fileKey),
-    sendMessage: (sessionId, message) => sendMessage(base, sessionId, message),
+    uploadFile: (file) => uploadFile(base, file),
+    sendMessage: (sessionId, message, attachmentKeys) =>
+      sendMessage(base, sessionId, message, attachmentKeys),
     clarify: (sessionId, runId, response, clarificationId) =>
       clarify(base, sessionId, runId, response, clarificationId),
   };

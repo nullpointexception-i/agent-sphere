@@ -4,7 +4,7 @@ import { ApiError, createApi, stopSession } from '../api';
 import type { WidgetConfig } from '../config';
 import type { InstanceVO, SessionVO, UserVO } from '../types';
 import { useTimelineStream } from '../useTimelineStream';
-import { SendIcon, StopIcon } from '../icons';
+import { PictureIcon, SendIcon, StopIcon } from '../icons';
 import { WidgetTimeline } from './WidgetTimeline';
 
 const AGENT_PAGE_SIZE = 5;
@@ -76,6 +76,13 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   // 输入区
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+  const [attachment, setAttachment] = useState<{
+    fileKey: string;
+    contentType: string;
+    previewUrl: string;
+  } | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const resolveUrl = async () => {
@@ -334,20 +341,60 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     [api, selectedSessionId],
   );
 
+  const handlePickImage = () => {
+    if (attachment || uploadingAttachment || sending || inputLocked) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) {
+      setError('仅支持 jpeg/png/webp/gif 图片');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('图片不能超过 5MB');
+      return;
+    }
+    try {
+      setUploadingAttachment(true);
+      const res = await api.uploadFile(file);
+      setAttachment({
+        fileKey: res.fileKey,
+        contentType: res.contentType,
+        previewUrl: URL.createObjectURL(file),
+      });
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || inputLocked || selectedSessionId === null) {
+    const keys = attachment ? [attachment.fileKey] : undefined;
+    const hasAttachment = !!attachment;
+    if ((!text && !hasAttachment) || inputLocked || selectedSessionId === null) {
       return;
     }
     setSending(true);
     setInputText('');
-    timeline.addUserMessage(text);
+    const discText = text || '[图片]';
+    timeline.addUserMessage(discText, attachment
+      ? [{ fileKey: attachment.fileKey, contentType: attachment.contentType }]
+      : undefined);
+    const sentKeys = keys;
+    const sentText = text;
+    setAttachment(null);
     try {
-      await api.sendMessage(selectedSessionId, text);
+      await api.sendMessage(selectedSessionId, sentText, sentKeys);
       // POST 成功立即补拉权威行（用户行 + assistant 容器 + run 状态），无需等终态事件
       void timeline.refreshLatest(selectedSessionId);
     } catch (err) {
-      timeline.removeUserMessage(text);
+      timeline.removeUserMessage(discText);
       timeline.markRunInactive();
       setError((err as ApiError).message);
     } finally {
@@ -665,6 +712,27 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   Agent 运行中…
                 </div>
               ) : null}
+              {attachment ? (
+                <div className="aw-attach-preview">
+                  <img src={attachment.previewUrl} alt="attachment" className="aw-attach-preview-img" />
+                  <button
+                    type="button"
+                    className="aw-attach-remove"
+                    title="移除图片"
+                    aria-label="移除图片"
+                    onClick={() => setAttachment(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : null}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
               <div className="aw-chat-input-row">
                 <textarea
                   ref={inputRef}
@@ -675,12 +743,26 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   placeholder={inputLocked ? '回复中…' : '输入消息…（Enter 发送，Shift+Enter 换行）'}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && inputText.trim()) {
+                    if (
+                      e.key === 'Enter' &&
+                      !e.shiftKey &&
+                      (inputText.trim() || attachment)
+                    ) {
                       e.preventDefault();
                       void handleSend();
                     }
                   }}
                 />
+                <button
+                  type="button"
+                  className="aw-chat-attach"
+                  title="添加图片"
+                  aria-label="添加图片"
+                  disabled={!!attachment || uploadingAttachment || sending || inputLocked}
+                  onClick={handlePickImage}
+                >
+                  <PictureIcon size={16} />
+                </button>
                 {runActive ? (
                   <button
                     type="button"
@@ -697,7 +779,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     className="aw-chat-send"
                     title="发送"
                     aria-label="发送"
-                    disabled={!inputText.trim() || inputLocked}
+                    disabled={
+                      (!inputText.trim() && !attachment) || inputLocked
+                    }
                     onClick={() => void handleSend()}
                   >
                     <SendIcon size={16} />

@@ -111,7 +111,7 @@ class ResourceTemplateCoordinatorTest {
             assertTrue(c.hasNonNull("promptUser"));
             assertTrue(c.hasNonNull("inputSchema"));
             assertTrue(c.hasNonNull("outputSchema"));
-            assertEquals("deepseek-v4-flash", c.path("route").asText());
+            assertEquals("deepseek-v4-flash-vision-exp", c.path("route").asText());
             JsonNode config = JsonUtils.getMapper().readTree(c.path("config").asText());
             assertEquals(false, config.path("thinking").asBoolean());
         }
@@ -131,7 +131,7 @@ class ResourceTemplateCoordinatorTest {
         assertEquals("Headhunter Assist", instance.path("name").asText());
         assertEquals("Headhunter Assist", instance.path("description").asText());
         assertEquals("task", instance.path("businessType").asText());
-        assertEquals("deepseek-v4-flash", instance.path("route").asText());
+        assertEquals("deepseek-v4-flash-vision-exp", instance.path("route").asText());
         assertTrue(instance.hasNonNull("systemPrompt"));
         assertTrue(instance.path("systemPrompt").asText().contains("Strict rules"));
     }

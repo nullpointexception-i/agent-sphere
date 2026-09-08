@@ -42,6 +42,7 @@ public class RouteInitializer implements ResourceInitializer {
         dto.setModelName(modelName);
         dto.setCompany(descriptor.path("company").asText("deepseek"));
         dto.setWeight(descriptor.path("weight").asInt(100));
+        dto.setSupportsAttachment(descriptor.path("supportsAttachment").asBoolean(false));
         ModelRouteVO vo = routeSpi.createRoute(dto);
         ctx.put(TYPE, modelName, vo.getId());
     }

@@ -66,7 +66,7 @@ class InstanceInitializerTest {
     }
 
     private JsonNode descriptor() throws Exception {
-        return mapper.readTree("{\"type\":\"instance\",\"name\":\"招聘助手\",\"businessType\":\"sourcing\",\"route\":\"deepseek-v4-flash\"}");
+        return mapper.readTree("{\"type\":\"instance\",\"name\":\"招聘助手\",\"businessType\":\"sourcing\",\"route\":\"deepseek-v4-flash-vision-exp\"}");
     }
 
     @Test
@@ -93,7 +93,7 @@ class InstanceInitializerTest {
         when(capabilityBuiltinSpi.listBuiltinTools()).thenReturn(List.of(tool((long) BuiltinToolEnum.CHROME.getId())));
         JsonNode desc = mapper.readTree("""
                 {"type":"instance","name":"Headhunter Assist","description":"Headhunter Assist",
-                 "businessType":"task","route":"deepseek-v4-flash",
+                 "businessType":"task","route":"deepseek-v4-flash-vision-exp",
                  "systemPrompt":"You are Headhunter Assist.\\nStrict rules:\\n- Only answer business questions."}
                 """);
 
