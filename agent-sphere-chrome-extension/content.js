@@ -292,6 +292,18 @@
           };
         }
 
+        // clickAt 坐标解析：设备像素（截图）→ CSS px → 最近可交互元素中心（background 据此受信点击）
+        case 'locatePoint': {
+          if (params.x == null || params.y == null) {
+            return { success: false, error: 'x/y required', errorCategory: 'not_found' };
+          }
+          const res = AS.locatePoint(params.x, params.y, params.frameId);
+          if (!res.ok) {
+            return { success: false, error: res.error || 'locatePoint failed', errorCategory: 'not_found' };
+          }
+          return { success: true, data: res };
+        }
+
         // 写动作后置校验（background 在 CDP 派发 + settle 后调用）：回当前指纹与页面提示，
         // background 据此计算 changed/_hints/_clickable，让动作结果携带真实状态而非空断言。
         case 'verify': {

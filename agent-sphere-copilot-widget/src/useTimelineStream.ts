@@ -5,7 +5,9 @@ import {
   fetchInitialTimeline,
   fetchLatestTimeline,
   fetchOlderTimeline,
+  fetchTailTimeline,
   mergeTimeline,
+  updateCursors,
   type TimelineCursors,
 } from './timeline';
 import type { SubAgentTimelineItemVO, TimelineRow } from './types';
@@ -27,6 +29,8 @@ export type SubAgentLiveStep =
       status: 'pending' | 'in_progress' | 'succeeded' | 'failed';
       argumentsJson?: string;
       artifact?: string;
+      /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），live 步骤回显用。 */
+      images?: { fileKey: string; contentType?: string }[];
     };
 
 export type SubAgentLiveMap = Record<number, SubAgentLiveStep[]>;
@@ -40,6 +44,19 @@ const PULL_TRIGGER_SUB_TYPES = [
   'tool_call_succeeded',
   'tool_call_failed',
 ];
+
+/** 从工具结果 artifact JSON 解析浏览器截图引用（data.screenshot.fileKey/contentType）。 */
+function parseScreenshotRef(artifact?: string | null): { fileKey: string; contentType?: string } | null {
+  if (!artifact) return null;
+  try {
+    const root = JSON.parse(artifact);
+    const shot = root?.data?.screenshot;
+    if (!shot?.fileKey) return null;
+    return { fileKey: String(shot.fileKey), contentType: shot.contentType || 'image/jpeg' };
+  } catch {
+    return null;
+  }
+}
 
 /** run 终态子类型：到达即代表当前 run 结束（解锁输入/恢复发送按钮）。 */
 const RUN_TERMINAL_SUB_TYPES = [
@@ -61,6 +78,8 @@ interface TimelineStream {
   loadInitial: (sessionId: number) => Promise<void>;
   loadOlder: (sessionId: number) => Promise<void>;
   refreshLatest: (sessionId: number) => Promise<void>;
+  /** 工具事件后整页覆盖刷新（补迟到落库的截图 images 等）。 */
+  refreshTail: (sessionId: number) => Promise<void>;
   /** 传播中的用户消息：不入库，先本地上墙，等权威行到达后移除；同时置 runActive=true（点击即锁输入）。 */
   addUserMessage: (text: string) => void;
   removeUserMessage: (text: string) => void;
@@ -204,6 +223,28 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     [getPage, reconcilePendingUserRows],
   );
 
+  const refreshTail = useCallback(
+    async (sessionId: number) => {
+      try {
+        const { rows: fresh } = await fetchTailTimeline(getPage(sessionId), 30);
+        if (fresh.length) {
+          setRows((prev) => mergeTimeline(prev, fresh));
+          // 更新游标：尾窗视作权威最新，推动 afterSeq
+          updateCursors(cursorsRef.current, {
+            rows: fresh,
+            hasMore: false,
+            oldestSeq: null,
+            newestSeq: null,
+          });
+        }
+        reconcilePendingUserRows(fresh);
+      } catch {
+        // 补拉失败忽略
+      }
+    },
+    [getPage, reconcilePendingUserRows],
+  );
+
   // ---- 子 Agent 实时步骤聚合（主站 handleSubAgentLiveEvent 移植） ----
   const handleSubAgentLiveEvent = useCallback((evtType: string, d: any) => {
     const subId = Number(d.subAgentRunId);
@@ -260,6 +301,9 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         };
         if (d?.argumentsJson) update.argumentsJson = d.argumentsJson;
         if (d?.artifact) update.artifact = d.artifact;
+        // 工具结果含浏览器截图 → live 步骤直接带 images（刷新后走后端 timeline 一致）
+        const shot = parseScreenshotRef(update.artifact);
+        if (shot) update.images = [shot];
         setSubAgentLiveMap((prev) => {
           const arr: SubAgentLiveStep[] = prev[subId] || [];
           const idx = arr.findIndex(
@@ -408,13 +452,19 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       }
 
       if (
+        tlSubType === 'tool_call_succeeded' ||
+        tlSubType === 'tool_call_failed'
+      ) {
+        // 工具事件：整页覆盖刷新（补迟到落库的截图 images 等），避免 afterSeq 增量跳过既有工具行
+        void refreshTail(sid);
+      } else if (
         PULL_TRIGGER_SUB_TYPES.includes(tlSubType) ||
         String(evtType).startsWith('clarification_')
       ) {
         void refreshLatest(sid);
       }
     },
-    [handleSubAgentLiveEvent, refreshLatest],
+    [handleSubAgentLiveEvent, refreshLatest, refreshTail],
   );
 
   // 会话切换即重建：先断开旧流、清空状态；由 CopilotView 在选会话时调用 connect()。
@@ -481,6 +531,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     loadInitial,
     loadOlder,
     refreshLatest,
+    refreshTail,
     addUserMessage,
     removeUserMessage,
     markRunInactive,

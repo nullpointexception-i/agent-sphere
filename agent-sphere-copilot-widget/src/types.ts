@@ -62,6 +62,8 @@ export interface SubAgentTimelineItemVO {
   artifact?: string | null;
   toolStatus?: string;
   toolErrorMessage?: string;
+  /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），子 Agent 卡片回显用。 */
+  images?: { fileKey: string; contentType?: string }[];
 }
 
 /** GET /instance/sessions/{sid}/timeline 单行（AgentTimelineVO，content 已在后端 resolve）。 */
@@ -93,6 +95,8 @@ export interface TimelineRow {
     startedAt?: string;
     durationMs?: number;
     modelName?: string;
+    /** 用户消息附图（[{fileKey, contentType}]，按 fileKey 拉字节回显）。 */
+    images?: { fileKey: string; contentType?: string }[];
     [key: string]: unknown;
   };
 }

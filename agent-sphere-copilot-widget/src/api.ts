@@ -80,6 +80,24 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
+/** 按 fileKey 回读附件字节（聊天历史图片回显），转 objectURL 交给 <img> 渲染。 */
+export async function loadFileObjectUrl(
+  base: string,
+  fileKey: string,
+): Promise<string> {
+  const token = getToken();
+  const headers = new Headers();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  const response = await fetch(buildUrl(base, `/files/${fileKey}`), { headers });
+  if (!response.ok) {
+    throw new ApiError(response.status, { message: response.statusText });
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
 export function ssoAuthorize(
   base: string,
   provider: string,
@@ -224,6 +242,7 @@ export interface ApiClient {
   listInstancesPage: (page?: number, size?: number) => Promise<InstancePageVO>;
   subAgentTimeline: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
   getTimeline: (sessionId: number, query?: TimelineQuery) => Promise<SessionTimelinePageVO>;
+  loadFile: (fileKey: string) => Promise<string>;
   sendMessage: (sessionId: number, message: string) => Promise<{ runId: number; status: string }>;
   clarify: (
     sessionId: number,
@@ -249,6 +268,7 @@ export function createApi(config: WidgetConfig): ApiClient {
     listInstancesPage: (page, size) => listInstancesPage(base, page, size),
     subAgentTimeline: (subAgentRunId) => subAgentTimeline(base, subAgentRunId),
     getTimeline: (sessionId, query) => getTimeline(base, sessionId, query),
+    loadFile: (fileKey) => loadFileObjectUrl(base, fileKey),
     sendMessage: (sessionId, message) => sendMessage(base, sessionId, message),
     clarify: (sessionId, runId, response, clarificationId) =>
       clarify(base, sessionId, runId, response, clarificationId),

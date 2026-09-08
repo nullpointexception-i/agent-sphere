@@ -3,6 +3,7 @@ package com.buukle.agent.instance.dtvo.vo;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 子 Agent 运行时间线条目：LLM interaction（含 reasoning/reply）或 tool_call，
@@ -26,4 +27,6 @@ public class SubAgentTimelineItemVO implements Serializable {
     private String artifact;
     private String toolStatus;
     private String toolErrorMessage;
+    /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），容器卡片回显用。 */
+    private List<RunAttachment> images;
 }

@@ -288,6 +288,22 @@ export default function Chat() {
     }
   };
 
+  // 工具事件后的整页覆盖刷新：按 seq 覆盖同 seq 行，补齐迟到落库的 content（如截图 images）。
+  // afterSeq 增量会跳过 seq ≤ newest 的既有行（工具行），导致 live 阶段看不到截图；此处拉尾窗覆盖修正。
+  const refreshTail = async (sid: number) => {
+    try {
+      const page = await agentApi.sessions.getTimeline(sid, { limit: 30 });
+      const rows = Array.isArray(page?.rows) ? page.rows : [];
+      if (rows.length) {
+        mergeTimeline(rows);
+        bumpCursors(rows);
+      }
+      if (page?.hasMore) setTimelineHasMore(true);
+    } catch {
+      // ignore
+    }
+  };
+
   const handleTimelineClarify = (row: any, response: string) => {
     if (!currentSession?.id || !row?.runId) return;
     agentApi.sessions
@@ -321,6 +337,22 @@ export default function Chat() {
   // - reasoning_token 首帧(firstFrame) → 切新 LLM 轮；其余 → 追加当前轮思考；
   // - content_token → 追加当前轮回复；
   // - tool_call_{started,in_progress,succeeded,failed} → 按 publishId 就地更新工具步骤。
+  /** 从工具结果 artifact JSON 解析浏览器截图引用（data.screenshot.fileKey/contentType）。 */
+  const parseScreenshotRef = (artifact?: string) => {
+    if (!artifact) return null;
+    try {
+      const root = JSON.parse(artifact);
+      const shot = root?.data?.screenshot;
+      if (!shot?.fileKey) return null;
+      return {
+        fileKey: String(shot.fileKey),
+        contentType: shot.contentType || 'image/jpeg',
+      };
+    } catch {
+      return null;
+    }
+  };
+
   const handleSubAgentLiveEvent = useCallback((evtType: string, d: any) => {
     const subId = Number(d.subAgentRunId);
     if (!Number.isFinite(subId)) return;
@@ -381,6 +413,9 @@ export default function Chat() {
         };
         if (d?.argumentsJson) update.argumentsJson = d.argumentsJson;
         if (d?.artifact) update.artifact = d.artifact;
+        // 工具结果含浏览器截图 → live 步骤直接带 images（刷新后走后端 timeline 一致）
+        const shot = parseScreenshotRef(update.artifact);
+        if (shot) update.images = [shot];
         setSubAgentLive((prev) => {
           const arr: any[] = prev[subId] || [];
           const idx = arr.findIndex(
@@ -574,7 +609,15 @@ export default function Chat() {
               ].includes(tlSubType) ||
               String(evtType).startsWith('clarification_')
             ) {
-              void refreshLatest(sid);
+              // 工具事件：整页覆盖刷新（补迟到落库的截图 images 等），避免 afterSeq 增量跳过既有工具行
+              if (
+                tlSubType === 'tool_call_succeeded' ||
+                tlSubType === 'tool_call_failed'
+              ) {
+                void refreshTail(sid);
+              } else {
+                void refreshLatest(sid);
+              }
             }
 
             // 始终跟踪当前 runId（含任务系统发起的 run），保证停止能命中正确 run

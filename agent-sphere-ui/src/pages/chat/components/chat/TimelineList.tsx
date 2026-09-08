@@ -6,8 +6,9 @@ import {
 } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
-import { App, Button, Divider, Input, Tag, Typography } from 'antd';
+import { App, Button, Divider, Image, Input, Tag, Typography } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
 import type { SubAgentLiveMap } from './subAgentTypes';
 
@@ -195,6 +196,9 @@ function ToolCard({ row }: any) {
         </Typography.Text>
         <StateTag state={row.state} small />
       </div>
+      {Array.isArray(content.images) && content.images.length > 0 && (
+        <UserImages images={content.images} />
+      )}
       <Block title={'详情'} faint>
         {args && (
           <pre
@@ -378,6 +382,9 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
         </Typography.Text>
         <StateTag state={s.toolStatus || s.status} />
       </div>
+      {Array.isArray(s.images) && s.images.length > 0 && (
+        <UserImages images={s.images} />
+      )}
       {/* 受控：最新一条 Tool 详情默认展开，下一条到来时关闭之前的（单一展开） */}
       <Block title="详情" open={detailOpen} onToggle={onDetailToggle}>
         {argsJson && (
@@ -579,6 +586,69 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   );
 }
 
+function UserImages({ images }: any) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const currentUrlsRef = useRef<Record<string, string>>({});
+  const imagesKey = (images || [])
+    .map((im: any) => im?.fileKey || '')
+    .join(',');
+  useEffect(() => {
+    // 按 fileKey 集合变化响应式重取：live 刷新迟到补上的 images 也能加载
+    const list = (images || []).filter((im: any) => im?.fileKey);
+    if (list.length === 0) return;
+    let alive = true;
+    const next: Record<string, string> = {};
+    Promise.all(
+      list.map(async (im: any) => {
+        try {
+          const blob = await agentApi.files.get(im.fileKey);
+          if (alive) next[im.fileKey] = URL.createObjectURL(blob);
+        } catch (err) {
+          console.warn('[attachment] load failed', im.fileKey, err);
+        }
+      }),
+    ).then(() => {
+      if (!alive) return;
+      // 新 URL 就绪后再释放旧 URL，避免短暂渲染破损图
+      Object.values(currentUrlsRef.current).forEach((u) => {
+        if (u) URL.revokeObjectURL(u);
+      });
+      currentUrlsRef.current = next;
+      setUrls(next);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imagesKey]);
+  const list = (images || []).filter(
+    (im: any) => im?.fileKey && urls[im.fileKey],
+  );
+  if (list.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+      <Image.PreviewGroup>
+        {list.map((im: any, idx: number) => (
+          <Image
+            key={im.fileKey || idx}
+            src={urls[im.fileKey]}
+            alt="attachment"
+            style={{
+              maxWidth: 240,
+              maxHeight: 240,
+              borderRadius: 8,
+              border: '1px solid #e5e5e5',
+              objectFit: 'cover',
+              cursor: 'pointer',
+            }}
+            preview={{ mask: '查看大图' }}
+          />
+        ))}
+      </Image.PreviewGroup>
+    </div>
+  );
+}
+
 function RowCard({
   row,
   onRespondClarify,
@@ -617,7 +687,12 @@ function RowCard({
     switch (row.kind) {
       case 'user':
         return (
-          <Typography.Text>{row.content?.text || row.title}</Typography.Text>
+          <>
+            {Array.isArray(row.content?.images) && (
+              <UserImages images={row.content.images} />
+            )}
+            <Typography.Text>{row.content?.text || row.title}</Typography.Text>
+          </>
         );
       case 'assistant':
         return <AssistantCard row={row} />;
@@ -674,7 +749,7 @@ function RowCard({
             whiteSpace: 'pre-wrap',
           }}
         >
-          {row.content?.text || row.title}
+          {body}
         </div>
       ) : (
         <>

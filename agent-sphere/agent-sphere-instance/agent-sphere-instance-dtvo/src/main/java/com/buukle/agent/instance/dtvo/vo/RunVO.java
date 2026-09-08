@@ -16,6 +16,8 @@ public class RunVO implements Serializable {
     /** 累积的模型推理/thinking 文本（终态 run 落库，历史回看渲染用） */
     private String reasoning;
     private String intentClassification;
+    /** 聊图片附件引用（[{"fileKey","contentType"}]）：Timeline USER 行回显用 */
+    private List<RunAttachment> attachments;
     private String status;
     /** 命中循环次数上限被强收口（任务守卫据此判失败） */
     private Boolean loopCapped;

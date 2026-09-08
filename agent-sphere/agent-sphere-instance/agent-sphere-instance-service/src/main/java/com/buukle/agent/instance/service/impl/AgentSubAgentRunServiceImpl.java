@@ -10,6 +10,7 @@ import com.buukle.agent.instance.dtvo.vo.SubAgentTimelineItemVO;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.AgentSubAgentRunMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
+import com.buukle.agent.instance.service.util.ScreenshotRefParser;
 import com.buukle.agent.instance.spi.AgentSubAgentRunSpi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -128,6 +129,7 @@ public class AgentSubAgentRunServiceImpl implements AgentSubAgentRunSpi {
             item.setDisplayNameEn(t.getDisplayNameEn());
             item.setArgumentsJson(t.getArgumentsJson());
             item.setArtifact(t.getArtifact());
+            item.setImages(ScreenshotRefParser.extractScreenshotImages(t.getArtifact()));
             item.setToolStatus(t.getStatus());
             item.setToolErrorMessage(t.getErrorMessage());
             item.setCreatedAt(t.getCreatedAt() != null ? t.getCreatedAt().format(DTF) : null);

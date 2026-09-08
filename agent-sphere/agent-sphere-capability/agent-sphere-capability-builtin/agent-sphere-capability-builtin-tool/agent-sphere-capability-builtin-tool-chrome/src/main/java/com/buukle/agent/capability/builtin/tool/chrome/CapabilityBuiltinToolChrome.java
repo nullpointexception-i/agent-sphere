@@ -55,6 +55,8 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             + "17. Filter conditions (city/salary/education/experience on job sites) — SET-THEN-VERIFY per filter. After setting each one, confirm via getContent(query, '.salary-container, [class*=salary], .degree-item.active, .exp-item.active, [aria-selected=true]') or read `_hints.chips`; salary pickers often allow 'XK-不限' — confirm the container text equals exactly what you set. `_hints.count` ('共有 N 份简历') updates asynchronously — wait 1-2s before concluding a filter had no effect. Do NOT batch-set several filters before checking; leftover panel state pollutes later steps.\n"
             + "18. Concurrency guard: the extension runs ONE command at a time. '上一命令仍在执行（并发守卫）' responses carry `_runningAction`/`elapsedMs`/`retryAfterMs` — wait ~retryAfterMs (or verify current state via getContent) before the NEXT command; never burst the same command.\n"
             + "19. Repeated-failure guard: the same action+selector/text failing 2 times consecutively returns errorCategory='repeated_failure' — stop and switch strategy (snapshot ref / other selector / scope / drop the step).\n"
+            + "20. screenshot(scope=viewport|full, format=jpeg|png, quality 0-100) — capture the controlled tab. Only viewport screenshots can be used as clickAt targets (no scroll offset for full-page). After a screenshot succeeds, a USER observation message with the image is injected into the conversation on your next turn — use it to reason about layout/state. full-page screenshots are for observation only, NOT clickAt targets.\n"
+            + "21. clickAt(x, y) — trusted click at device-pixel coordinates of the LAST viewport screenshot (the execution layer converts to CSS px using dpr, so pass raw screenshot pixels). If the point lands on a non-interactive area the click still executes and a warning is returned — always check `changed`/`_clickable` before concluding, and never assume a click on a container div succeeded. Prefer snapshot refs when precision matters; use clickAt for pixel-targeted vision operation.\n"
             + "Rules: prefer getContent(snapshot)+ref for everything. Use `_hints.dialogs` to know a modal opened (framework dialogs transferred into the top-frame body are reported too) and close it via closeDialogs or its 确定/取消 button (scoped). `_hints.chips` = active filter-chip fingerprint — read it to confirm filter toggles. If an action returns not_found/not_interactable, wait() for dynamic content or re-read the snapshot (refs may shift after DOM changes). Never blindly retry after csp_blocked/detached; a blocked frame only means THAT frame's JS is blocked — top DOM still operates, switch frameId=0 and continue. 写动作(click/type/hover/key)统一走 CDP 受信输入（isTrusted=true）：定位由内容脚本跨同源 iframe 计算主视口坐标后派发；动作结果带真实 changed/_hints/_clickable，先看结果再决定下一步，不要假设已生效。same 定位多个可见命中且未给 index/occurrence/scope → ambiguous（带 suggested scope），补 index/scope 重试。wrong_site 表示受控 tab 已离开目标站点，先 navigate 回主站并重建 frame/容器 map。\n"
             + "When a strict filter combination returns 0 results, loosen filters stepwise (remove the most specific first) and evaluate candidates per-item against ALL criteria — do not settle for a zero-result dead end.\n"
             + "Results include `errorCategory` (not_found / csp_blocked / detached / inject_failed / timeout / no_tab / wrong_site / ambiguous / unknown), `method`, `warning`.";
@@ -67,6 +69,8 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
     private static final String ACTION_WAIT = "wait";
     private static final String ACTION_CLICK = "click";
     private static final String ACTION_TYPE = "type";
+    private static final String ACTION_SCREENSHOT = "screenshot";
+    private static final String ACTION_CLICK_AT = "clickAt";
 
     private static final String ERR_NAVIGATE_URL = "url is required for navigate action. Example: {\"action\":\"navigate\",\"url\":\"https://example.com\"}";
     private static final String ERR_SELECTOR_REQUIRED = "selector is required for %s action";
@@ -146,6 +150,11 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
         }
         if (ACTION_TYPE.equals(action) && (cec.getSelector() == null || cec.getSelector().isBlank())) {
             return failed(String.format(ERR_SELECTOR_REQUIRED, ACTION_TYPE),
+                    ERROR_CATEGORY_INVALID_REQUEST, cec.getFrameId());
+        }
+        if (ACTION_CLICK_AT.equals(action)
+                && (cec.getX() == null || cec.getY() == null)) {
+            return failed("clickAt 需要 x/y（最后一张 viewport 截图的设备像素坐标）",
                     ERROR_CATEGORY_INVALID_REQUEST, cec.getFrameId());
         }
 
@@ -265,7 +274,11 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
                 .withSubmit(cec.getSubmit())
                 .withFields(cec.getFields())
                 .withSelectors(cec.getSelectors())
-                .withTextMax(cec.getTextMax());
+                .withTextMax(cec.getTextMax())
+                .withX(cec.getX())
+                .withY(cec.getY())
+                .withFormat(cec.getFormat())
+                .withQuality(cec.getQuality());
     }
 
     private String failKey(ChromeExecuteContext cec) {
@@ -277,6 +290,7 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
         if (cec.getSelector() != null && !cec.getSelector().isBlank()) sb.append(cec.getSelector());
         else if (cec.getText() != null && !cec.getText().isBlank()) sb.append(cec.getText());
         else if (cec.getRef() != null) sb.append("ref:").append(cec.getRef());
+        else if (ACTION_CLICK_AT.equals(cec.getAction())) sb.append("x:").append(cec.getX()).append(",y:").append(cec.getY());
         return sb.toString();
     }
 

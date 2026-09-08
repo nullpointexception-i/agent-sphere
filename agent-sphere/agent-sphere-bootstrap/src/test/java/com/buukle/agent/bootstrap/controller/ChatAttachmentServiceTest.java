@@ -2,6 +2,7 @@ package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.infrastructure.service.AttachmentFileService;
+import com.buukle.agent.infrastructure.service.ScreenshotFileService;
 import com.buukle.agent.runtime.kernel.port.vo.PreparedAttachment;
 import com.buukle.agent.runtime.orchestration.service.ChatAttachmentService;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,9 @@ class ChatAttachmentServiceTest {
 
     @Mock
     AttachmentFileService attachmentFileService;
+
+    @Mock
+    ScreenshotFileService screenshotFileService;
 
     @InjectMocks
     ChatAttachmentService chatAttachmentService;
@@ -72,5 +76,13 @@ class ChatAttachmentServiceTest {
         given(attachmentFileService.toDataUrl("k1")).willReturn("data:image/png;base64,AAAA");
 
         assertEquals("data:image/png;base64,AAAA", chatAttachmentService.toDataUrl("k1"));
+    }
+
+    @Test
+    void toDataUrl_fallsBackToScreenshotStoreWhenNotChatAttachment() {
+        given(attachmentFileService.toDataUrl("shot-1")).willReturn(null);
+        given(screenshotFileService.toDataUrl("shot-1")).willReturn("data:image/jpeg;base64,BBBB");
+
+        assertEquals("data:image/jpeg;base64,BBBB", chatAttachmentService.toDataUrl("shot-1"));
     }
 }

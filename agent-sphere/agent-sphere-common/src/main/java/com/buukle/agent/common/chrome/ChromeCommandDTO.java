@@ -37,6 +37,10 @@ public class ChromeCommandDTO {
     private java.util.List<String> fields;
     private java.util.List<String> selectors;
     private Integer textMax;
+    private Integer x;
+    private Integer y;
+    private String format;
+    private Integer quality;
 
     public ChromeCommandDTO() {
     }
@@ -189,6 +193,26 @@ public class ChromeCommandDTO {
 
     public ChromeCommandDTO withTextMax(Integer textMax) {
         this.textMax = textMax;
+        return this;
+    }
+
+    public ChromeCommandDTO withX(Integer x) {
+        this.x = x;
+        return this;
+    }
+
+    public ChromeCommandDTO withY(Integer y) {
+        this.y = y;
+        return this;
+    }
+
+    public ChromeCommandDTO withFormat(String format) {
+        this.format = format;
+        return this;
+    }
+
+    public ChromeCommandDTO withQuality(Integer quality) {
+        this.quality = quality;
         return this;
     }
 }

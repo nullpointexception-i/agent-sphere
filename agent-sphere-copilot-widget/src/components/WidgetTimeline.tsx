@@ -14,6 +14,8 @@ export interface WidgetTimelineProps {
   pendingUserRows?: TimelineRow[];
   subAgentLiveMap: SubAgentLiveMap;
   loadSubAgentSteps: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
+  /** 按 fileKey 拉附件字节转 objectURL（用户消息图片回显）。 */
+  loadFile: (fileKey: string) => Promise<string>;
   onRespondClarify: (runId: number, clarificationId: string, response: string) => void;
 }
 
@@ -153,7 +155,13 @@ function AssistantRow({ row }: { row: TimelineRow }) {
   );
 }
 
-function ToolRow({ row }: { row: TimelineRow }) {
+function ToolRow({
+  row,
+  loadFile,
+}: {
+  row: TimelineRow;
+  loadFile: (fileKey: string) => Promise<string>;
+}) {
   const c = row.content || {};
   const [open, setOpen] = useState(false);
   return (
@@ -163,6 +171,9 @@ function ToolRow({ row }: { row: TimelineRow }) {
         <TypographyStrong>{c.displayName || row.title || 'tool'}</TypographyStrong>
         <StateTag state={row.state} />
       </div>
+      {Array.isArray(c.images) && c.images.length > 0 && (
+        <UserImages images={c.images} loadFile={loadFile} />
+      )}
       <div>
         <button
           type="button"
@@ -309,10 +320,12 @@ function SubAgentToolItem({
   s,
   detailOpen,
   onDetailToggle,
+  loadFile,
 }: {
   s: any;
   detailOpen: boolean;
   onDetailToggle: () => void;
+  loadFile: (fileKey: string) => Promise<string>;
 }) {
   return (
     <div>
@@ -323,6 +336,9 @@ function SubAgentToolItem({
         </TypographyStrong>
         <StateTag state={s.toolStatus || s.status} />
       </div>
+      {Array.isArray(s.images) && s.images.length > 0 && (
+        <UserImages images={s.images} loadFile={loadFile} />
+      )}
       <button className="aw-tl-detail-toggle" onClick={onDetailToggle}>
         {detailOpen ? '▾' : '▸'} 详情
       </button>
@@ -345,10 +361,12 @@ function SubAgentCard({
   row,
   subAgentLiveMap,
   loadSubAgentSteps,
+  loadFile,
 }: {
   row: TimelineRow;
   subAgentLiveMap: SubAgentLiveMap;
   loadSubAgentSteps: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
+  loadFile: (fileKey: string) => Promise<string>;
 }) {
   const [open, setOpen] = useState(false);
   const [steps, setSteps] = useState<SubAgentTimelineItemVO[] | null>(null);
@@ -455,6 +473,7 @@ function SubAgentCard({
                         onDetailToggle={() =>
                           setActiveToolKey((cur) => (cur === key ? null : key))
                         }
+                        loadFile={loadFile}
                       />
                     ) : (
                       <SubAgentLlmItem s={s} />
@@ -476,15 +495,88 @@ function SubAgentCard({
 
 // ---------------------------------------------------------------- shell
 
+function UserImages({
+  images,
+  loadFile,
+}: {
+  images?: { fileKey: string; contentType?: string }[];
+  loadFile: (fileKey: string) => Promise<string>;
+}) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const currentUrlsRef = useRef<Record<string, string>>({});
+  const imagesKey = (images || [])
+    .map((im) => im.fileKey || '')
+    .join(',');
+  useEffect(() => {
+    // 按 fileKey 集合变化响应式重取：权威行替换乐观行时迟到补上的 images 也能加载
+    const list = (images || []).filter((im) => im.fileKey);
+    if (list.length === 0) return;
+    let alive = true;
+    const next: Record<string, string> = {};
+    Promise.all(
+      list.map(async (im) => {
+        try {
+          next[im.fileKey] = await loadFile(im.fileKey);
+        } catch (err) {
+          console.warn('[widget] load image failed', im.fileKey, err);
+        }
+      }),
+    ).then(() => {
+      if (!alive) return;
+      // 新 URL 就绪后再释放旧 URL，避免短暂渲染破损图
+      Object.values(currentUrlsRef.current).forEach((u) => {
+        try {
+          URL.revokeObjectURL(u);
+        } catch {
+          /* 忽略 */
+        }
+      });
+      currentUrlsRef.current = next;
+      setUrls(next);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imagesKey, loadFile]);
+  const list = (images || []).filter((im) => im.fileKey && urls[im.fileKey]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  if (list.length === 0) return null;
+  return (
+    <div className="aw-tl-user-images">
+      {list.map((im, idx) => (
+        <img
+          key={im.fileKey || idx}
+          src={urls[im.fileKey]}
+          alt="attachment"
+          className="aw-tl-user-img"
+          style={{ cursor: 'pointer' }}
+          onClick={() => setPreviewUrl(urls[im.fileKey])}
+        />
+      ))}
+      {previewUrl ? (
+        <div className="aw-tl-image-preview" onClick={() => setPreviewUrl(null)}>
+          <img src={previewUrl} alt="preview" className="aw-tl-image-preview-img" />
+          <button type="button" className="aw-tl-image-preview-close" aria-label="关闭">
+            ✕
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RowView({
   row,
   subAgentLiveMap,
   loadSubAgentSteps,
+  loadFile,
   onRespondClarify,
 }: {
   row: TimelineRow;
   subAgentLiveMap: SubAgentLiveMap;
   loadSubAgentSteps: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
+  loadFile: (fileKey: string) => Promise<string>;
   onRespondClarify: (runId: number, clarificationId: string, response: string) => void;
 }) {
   const c = row.content || {};
@@ -507,11 +599,16 @@ function RowView({
   const body = (() => {
     switch (row.kind) {
       case 'user':
-        return <span>{c.text || row.title || ''}</span>;
+        return (
+          <span className="aw-tl-user-body">
+            <UserImages images={c.images} loadFile={loadFile} />
+            <span>{c.text || row.title || ''}</span>
+          </span>
+        );
       case 'assistant':
         return <AssistantRow row={row} />;
       case 'tool':
-        return <ToolRow row={row} />;
+        return <ToolRow row={row} loadFile={loadFile} />;
       case 'clarification':
         return <ClarifyRow row={row} onRespondClarify={onRespondClarify} />;
       case 'subagent':
@@ -520,6 +617,7 @@ function RowView({
             row={row}
             subAgentLiveMap={subAgentLiveMap}
             loadSubAgentSteps={loadSubAgentSteps}
+            loadFile={loadFile}
           />
         );
       case 'error':
@@ -557,6 +655,7 @@ export function WidgetTimeline({
   pendingUserRows = [],
   subAgentLiveMap,
   loadSubAgentSteps,
+  loadFile,
   onRespondClarify,
 }: WidgetTimelineProps) {
   return (
@@ -588,6 +687,7 @@ export function WidgetTimeline({
                 row={row}
                 subAgentLiveMap={subAgentLiveMap}
                 loadSubAgentSteps={loadSubAgentSteps}
+                loadFile={loadFile}
                 onRespondClarify={onRespondClarify}
               />
             </div>
@@ -598,6 +698,7 @@ export function WidgetTimeline({
                 row={row}
                 subAgentLiveMap={subAgentLiveMap}
                 loadSubAgentSteps={loadSubAgentSteps}
+                loadFile={loadFile}
                 onRespondClarify={onRespondClarify}
               />
             </div>

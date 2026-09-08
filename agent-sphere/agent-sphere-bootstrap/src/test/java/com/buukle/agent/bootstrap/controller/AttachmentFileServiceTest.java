@@ -149,4 +149,23 @@ class AttachmentFileServiceTest {
                 new StoredFile(AttachmentFileService.BIZ_KEY, "k", "a.bmp", "image/bmp", 1, new byte[]{1}));
         assertFalse(attachmentFileService.isSupportedImage("k"));
     }
+
+    @Test
+    void load_presentReturnsStoredFile() {
+        StoredFile stored = new StoredFile(
+                AttachmentFileService.BIZ_KEY, "k", "a.png", "image/png", 3, new byte[]{1, 2, 3});
+        given(genericFileService.get(AttachmentFileService.BIZ_KEY, "k")).willReturn(stored);
+
+        StoredFile result = attachmentFileService.load("k");
+
+        assertEquals(stored, result);
+        assertEquals("image/png", result.contentType());
+    }
+
+    @Test
+    void load_absentReturnsNull() {
+        given(genericFileService.get(AttachmentFileService.BIZ_KEY, "missing")).willReturn(null);
+
+        assertNull(attachmentFileService.load("missing"));
+    }
 }

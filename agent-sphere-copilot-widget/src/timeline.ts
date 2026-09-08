@@ -105,3 +105,16 @@ export async function fetchLatestTimeline(
   updateCursors(cursors, res);
   return { rows: res.rows, hasMore: res.hasMore };
 }
+
+/**
+ * 工具事件后的整页覆盖刷新：拉尾窗（无 afterSeq）。afterSeq 增量会跳过 seq ≤ newest 的
+ * 既有行（工具行），导致 live 阶段看不到迟到落库的 content（如浏览器截图 images）；
+ * 以尾窗覆盖修正同 seq 行。
+ */
+export async function fetchTailTimeline(
+  page: (q: TimelineQuery) => Promise<SessionTimelinePageVO>,
+  limit = 30,
+): Promise<{ rows: TimelineRow[]; hasMore: boolean }> {
+  const res = await page({ limit });
+  return { rows: res.rows, hasMore: res.hasMore };
+}

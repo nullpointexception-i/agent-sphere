@@ -87,4 +87,9 @@ public class AttachmentFileService {
     public boolean isSupportedImage(String fileKey) {
         return supportedContentTypeOf(fileKey) != null;
     }
+
+    /** 读取附件原始文件；不存在返回 null（前端按 fileKey 拉字节回显用）。 */
+    public StoredFile load(String fileKey) {
+        return genericFileService.get(BIZ_KEY, fileKey);
+    }
 }

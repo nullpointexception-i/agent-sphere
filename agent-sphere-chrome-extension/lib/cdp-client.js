@@ -268,6 +268,57 @@ export class CdpClient {
     }
     throw e;
   }
+
+  /** 截图（CDP Page.captureScreenshot，唯一 debugger 入口）。
+   *  fullPage 用 captureBeyondViewport 截全页；返回值含 base64、CSS 视口尺寸与 dpr
+   *  （clickAt 的 x/y 是设备像素，换算 CSS px 用 dpr）。 */
+  async captureScreenshot(tabId, { format = 'jpeg', quality = 60, fullPage = false } = {}) {
+    return this._serialized(async () => {
+      try {
+        await this.attach(tabId);
+        const params = { format, quality };
+        if (fullPage) params.captureBeyondViewport = true;
+        const { data } = await this.sendCommand(tabId, 'Page.captureScreenshot', params);
+        if (!data) {
+          throw new Error('No screenshot data returned');
+        }
+        // 直接用 sendCommand 发 Runtime.evaluate，避免 evaluate() 二次入队自锁
+        let w = 0, h = 0, dpr = 1;
+        try {
+          const ev = await this.sendCommand(tabId, 'Runtime.evaluate', {
+            expression:
+              '({ w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 })',
+            returnByValue: true,
+            awaitPromise: true,
+          });
+          const v = ev && ev.result && ev.result.value;
+          if (v) {
+            w = v.w || 0;
+            h = v.h || 0;
+            dpr = v.dpr || 1;
+          }
+        } catch (e) {
+          console.warn('[CdpClient] viewport probe failed, fallback 0/0', e?.message);
+        }
+        return {
+          base64: data,
+          contentType: format === 'png' ? 'image/png' : 'image/jpeg',
+          width: Math.round(w * dpr),
+          height: Math.round(h * dpr),
+          viewportWidth: w,
+          viewportHeight: h,
+          dpr,
+        };
+      } catch (e) {
+        const msg = String(e && e.message);
+        if (msg.includes('not attached')) {
+          this.sessions.delete(tabId);
+          throw new Error('Screenshot failed: debugger detached');
+        }
+        throw e;
+      }
+    });
+  }
 }
 
 export const cdpClient = new CdpClient();

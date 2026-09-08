@@ -94,6 +94,8 @@ class SessionRunnerAttachmentTest {
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient()
+                .when(properties.getRunner()).thenReturn(new AgentRuntimeProperties.RunnerConfig());
         runner = new SessionRunner(properties, runSpi, sessionSpi, kernelLlmService, apiKeySpi,
                 eventPublisher, routeListBuilder, fallbackRouteExecutor, historyLoader,
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
@@ -212,13 +214,70 @@ class SessionRunnerAttachmentTest {
         assertEquals(4, images, "最多注入 4 个图片 parts");
     }
 
+    // ---------- stripImageParts（无图片路由时降级为纯文本） ----------
+
+    @Test
+    void stripImageParts_textWithImage_collapsesToTextOnly() {
+        List<ChatMessageDTO> messages = new ArrayList<>(List.of(new ChatMessageDTO()
+                .setRole(LlmApiConstant.ROLE_USER)
+                .setContent(List.of(
+                        new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_TEXT).setText("看图"),
+                        new ChatMessagePartDTO()
+                                .setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
+                                .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl("data:image/png;base64,AAAA"))))));
+
+        SessionRunner.stripImageParts(messages);
+
+        assertEquals("看图", messages.get(0).getContent());
+    }
+
+    @Test
+    void stripImageParts_imageOnly_fallsBackToPlaceholder() {
+        List<ChatMessageDTO> messages = new ArrayList<>(List.of(new ChatMessageDTO()
+                .setRole(LlmApiConstant.ROLE_USER)
+                .setContent(List.of(new ChatMessagePartDTO()
+                        .setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
+                        .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl("data:image/png;base64,AAAA"))))));
+
+        SessionRunner.stripImageParts(messages);
+
+        assertEquals("[图片]", messages.get(0).getContent());
+    }
+
+    @Test
+    void stripImageParts_noUserParts_unchanged() {
+        List<ChatMessageDTO> messages = new ArrayList<>(List.of(new ChatMessageDTO()
+                .setRole(LlmApiConstant.ROLE_USER)
+                .setContent("纯文本")));
+
+        SessionRunner.stripImageParts(messages);
+
+        assertEquals("纯文本", messages.get(0).getContent());
+    }
+
+    @Test
+    void stripImageParts_lastNotUser_unchanged() {
+        List<ChatMessageDTO> messages = new ArrayList<>(List.of(
+                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(
+                        List.of(new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
+                                .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl("data:image/png;base64,AAAA")))),
+                new ChatMessageDTO().setRole("tool").setContent("done")));
+
+        SessionRunner.stripImageParts(messages);
+
+        assertEquals("done", messages.get(1).getContent());
+    }
+
     // ---------- runTurn gating ----------
 
     @Test
-    void runTurn_allRoutesUnsupported_publishesSystemEventAndErrors() throws Exception {
+    void runTurn_allRoutesUnsupported_degradesToTextAndContinues() throws Exception {
         given(properties.getRunner()).willReturn(new AgentRuntimeProperties.RunnerConfig());
         List<ModelRouteFullVO> routes = List.of(route(1L, false), route(2L, false));
         given(routeListBuilder.fromContext(any())).willReturn(routes);
+        // 不真正走 LLM：仅验证 execute 收到全部路由且未阻断
+        org.mockito.Mockito.doReturn(null)
+                .when(fallbackRouteExecutor).execute(any(), any());
 
         List<RuntimeEventVO> events = new ArrayList<>();
         doAnswer(inv -> {
@@ -226,17 +285,25 @@ class SessionRunnerAttachmentTest {
             return null;
         }).when(eventPublisher).publishEvent(any(RuntimeEventVO.class));
 
-        TurnResult result = invokeRunTurn(imagePartsMessages(), ctxWithModelRoute(routes));
+        List<ChatMessageDTO> messages = imagePartsMessages();
+        TurnResult result = invokeRunTurn(messages, ctxWithModelRoute(routes));
 
-        assertEquals(TurnOutcome.ERROR, result.outcome());
-        assertEquals("当前路由均不支持附件输入", result.errorMessage());
-        verify(fallbackRouteExecutor, never()).execute(any(), any());
+        assertEquals(TurnOutcome.COMPLETE, result.outcome());
+        // 图片被剥离：最后一条 USER 消息降级为纯文本
+        ChatMessageDTO last = messages.get(messages.size() - 1);
+        assertEquals(LlmApiConstant.ROLE_USER, last.getRole());
+        assertEquals("看图", last.getContent());
+        // 全部路由仍被执行（未过滤、未报错）
+        ArgumentCaptor<List<ModelRouteFullVO>> captor = ArgumentCaptor.forClass(List.class);
+        verify(fallbackRouteExecutor).execute(captor.capture(), any());
+        assertEquals(2, captor.getValue().size());
+        // 发布非阻塞降级提示事件（不再是阻断错误）
         assertTrue(events.stream().anyMatch(e ->
                         e.getEventType() instanceof FlowEventType
                                 && e.getEventType() == FlowEventType.REASONING_TOKEN
                                 && e.getData().getResponse() != null
-                                && e.getData().getResponse().contains("当前路由均未开启附件输入")),
-                "应发布 REASONING_TOKEN 系统事件提示开启「支持附件」");
+                                && e.getData().getResponse().contains("已按纯文本继续处理")),
+                "应发布 REASONING_TOKEN 系统事件提示已降级为纯文本");
     }
 
     @Test
@@ -313,5 +380,75 @@ class SessionRunnerAttachmentTest {
         route.setApiKeyId(1L);
         route.setSupportsAttachment(supportsAttachment);
         return route;
+    }
+
+    // ---------- 浏览器截图观察注入 ----------
+
+    @Test
+    void injectScreenshotObservation_appendsUserMessageWithImage() throws Exception {
+        given(attachmentResolver.toDataUrl("shot-1")).willReturn("data:image/jpeg;base64,BBBB");
+        String toolResult = "{\"success\":true,\"data\":{\"screenshot\":{\"fileKey\":\"shot-1\","
+                + "\"width\":1280,\"height\":800}}}";
+
+        List<ChatMessageDTO> messages = new ArrayList<>();
+        invokeInjectScreenshot(messages, toolResult);
+
+        assertEquals(1, messages.size());
+        assertEquals(LlmApiConstant.ROLE_USER, messages.get(0).getRole());
+        List<?> parts = (List<?>) messages.get(0).getContent();
+        assertEquals(2, parts.size());
+        ChatMessagePartDTO text = (ChatMessagePartDTO) parts.get(0);
+        assertEquals(ChatMessagePartDTO.TYPE_TEXT, text.getType());
+        assertTrue(text.getText().contains("1280x800"));
+        ChatMessagePartDTO img = (ChatMessagePartDTO) parts.get(1);
+        assertEquals(ChatMessagePartDTO.TYPE_IMAGE_URL, img.getType());
+        assertEquals("data:image/jpeg;base64,BBBB", img.getImageUrl().getUrl());
+    }
+
+    @Test
+    void injectScreenshotObservation_noScreenshotField_skips() throws Exception {
+        List<ChatMessageDTO> messages = new ArrayList<>();
+        invokeInjectScreenshot(messages, "{\"success\":true,\"data\":{\"fileKey\":\"x\"}}");
+        assertTrue(messages.isEmpty(), "无 data.screenshot 时不注入观察消息");
+    }
+
+    @Test
+    void injectScreenshotObservation_resolvedNull_dropsImagePart() throws Exception {
+        given(attachmentResolver.toDataUrl("shot-1")).willReturn(null);
+        String toolResult = "{\"success\":true,\"data\":{\"screenshot\":{\"fileKey\":\"shot-1\"}}}";
+
+        List<ChatMessageDTO> messages = new ArrayList<>();
+        invokeInjectScreenshot(messages, toolResult);
+
+        assertEquals(1, messages.size());
+        List<?> parts = (List<?>) messages.get(0).getContent();
+        assertEquals(1, parts.size(), "fileKey 无字节时仅保留文本观察");
+    }
+
+    @Test
+    void injectScreenshotObservation_capsPerRun() throws Exception {
+        given(attachmentResolver.toDataUrl("shot-1")).willReturn("data:image/jpeg;base64,BBBB");
+        String toolResult = "{\"success\":true,\"data\":{\"screenshot\":{\"fileKey\":\"shot-1\"}}}";
+
+        // 连灌超过上限
+        for (int i = 0; i < 25; i++) {
+            List<ChatMessageDTO> messages = new ArrayList<>();
+            invokeInjectScreenshot(messages, toolResult);
+            if (messages.isEmpty()) {
+                // 已达每 run 上限
+                List<ChatMessageDTO> probe = new ArrayList<>();
+                invokeInjectScreenshot(probe, toolResult);
+                assertTrue(probe.isEmpty(), "超过上限后不再注入");
+                return;
+            }
+        }
+        assertTrue(false, "应在 20 次后触发上限");
+    }
+
+    private void invokeInjectScreenshot(List<ChatMessageDTO> messages, String toolResult) throws Exception {
+        Method m = SessionRunner.class.getDeclaredMethod(
+                "injectScreenshotObservation", Long.class, Long.class, List.class, String.class);
+        m.setAccessible(true);
+        m.invoke(runner, 1L, 2L, messages, toolResult);
     }
 }

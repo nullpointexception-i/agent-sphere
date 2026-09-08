@@ -297,6 +297,83 @@ function hasLocator(params) {
   return !!(params && (params.selector || params.text || params.ref != null));
 }
 
+async function uploadScreenshotToBackend(base64, contentType) {
+  const res = await fetch(`${baseUrl}/api/v1/browser/screenshot`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ contentType, base64 }),
+  });
+  if (!res.ok) {
+    throw new Error(`Screenshot upload failed: HTTP ${res.status}`);
+  }
+  const body = await res.json();
+  if (!body || !body.fileKey) {
+    throw new Error('Screenshot upload returned no fileKey');
+  }
+  return body;
+}
+
+// 坐标点击：基于最后一张 viewport 截图的设备像素 → CSS px → CDP 受信点击；
+// 未命中交互元素时裸点并带 warning（真实点击语义，忠实于视觉操作）。
+async function clickAtPoint(commandId, params, targetTabId, sessionId) {
+  const x = Number(params.x);
+  const y = Number(params.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    sendCallbackSafe(commandId, failResult('clickAt requires numeric x/y', ErrorCategory.NOT_FOUND), targetTabId, sessionId);
+    return null;
+  }
+  let point = { x, y };
+  let warning = null;
+  try {
+    const mapped = await tabManager.askContent(targetTabId, {
+      type: 'browser_operation',
+      action: 'locatePoint',
+      params: { x, y, frameId: params.frameId || 0 },
+    }, 2, params.frameId || 0);
+    const d = mapped && mapped.data;
+    if (d && d.ok && d.x != null && d.y != null) {
+      point = { x: d.x, y: d.y };
+      if (d.interactive === false) {
+        warning = '坐标点未命中可交互元素，已按原生坐标裸点';
+      }
+    } else if (d && d.ok === false) {
+      warning = d.error || '坐标点解析失败，改用裸点';
+    }
+  } catch (e) {
+    warning = 'locatePoint 异常，改用裸点: ' + (e && e.message);
+  }
+  try {
+    await cdpClient.nativeClick(targetTabId, point.x, point.y);
+  } catch (e) {
+    console.warn('[AgentSphere] clickAt failed:', e?.message);
+    sendCallbackSafe(commandId, failResult('clickAt failed: ' + e.message, mapErrorCategory(e)), targetTabId, sessionId);
+    return null;
+  }
+  const data = { action: 'clickAt', x: point.x, y: point.y, _executed: true };
+  if (warning) data.warning = warning;
+  // post-action 状态：回读 _url/_title/_hints（无 preHash 基线，不虚构 changed）
+  try {
+    const v = await tabManager.askContent(targetTabId, {
+      type: 'browser_operation',
+      action: 'verify',
+      params: { preHash: null, frameId: params.frameId || 0 },
+    }, 2, params.frameId || 0);
+    const vd = v && v.data;
+    if (vd) {
+      if (vd._url) data._url = vd._url;
+      if (vd._title) data._title = vd._title;
+      if (vd._hints) Object.assign(data, vd._hints);
+    }
+  } catch (e) {
+    console.warn('[AgentSphere] clickAt verify failed:', e?.message);
+  }
+  sendCallbackSafe(commandId, okResult(data, 'clickAt'), targetTabId, sessionId);
+  return data;
+}
+
 async function locatePoint(tabId, params) {
   const loc = await tabManager.askContent(tabId, {
     type: 'browser_operation',
@@ -478,6 +555,60 @@ async function executeInPageInner(commandId, action, params, sessionId) {
         }, targetTabId, sessionId);
       } catch (e) {
         sendCallbackSafe(commandId, failResult(e.message, ErrorCategory.UNKNOWN), targetTabId, sessionId);
+      }
+      return;
+    }
+
+    // writeAction 入口：clickAt 走坐标裸点（CDP），与其他写动作并列
+    if (action === 'clickAt') {
+      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+      if (!targetTabId) {
+        sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
+        return;
+      }
+      const hostErr = await assertControlledHost(targetTabId);
+      if (hostErr) {
+        sendCallbackSafe(commandId, failResult(hostErr, ErrorCategory.WRONG_SITE), targetTabId, sessionId);
+        return;
+      }
+      await clickAtPoint(commandId, params, targetTabId, sessionId);
+      return;
+    }
+
+    // screenshot：CDP 截图 → 上报后端 → 回调带 fileKey（不发字节过大回调）
+    if (action === 'screenshot') {
+      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+      if (!targetTabId) {
+        sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
+        return;
+      }
+      const hostErr = await assertControlledHost(targetTabId);
+      if (hostErr) {
+        sendCallbackSafe(commandId, failResult(hostErr, ErrorCategory.WRONG_SITE), targetTabId, sessionId);
+        return;
+      }
+      try {
+        const format = params.format === 'png' ? 'png' : 'jpeg';
+        const quality = Number.isFinite(Number(params.quality))
+          ? Math.max(1, Math.min(100, Math.round(Number(params.quality))))
+          : 60;
+        const fullPage = params.scope === 'full';
+        const shot = await cdpClient.captureScreenshot(targetTabId, { format, quality, fullPage });
+        const uploaded = await uploadScreenshotToBackend(shot.base64, shot.contentType);
+        sendCallbackSafe(commandId, okResult({
+          screenshot: {
+            fileKey: uploaded.fileKey,
+            contentType: shot.contentType,
+            width: shot.width,
+            height: shot.height,
+            dpr: shot.dpr,
+            viewportWidth: shot.viewportWidth,
+            viewportHeight: shot.viewportHeight,
+          },
+        }, 'screenshot'), targetTabId, sessionId);
+      } catch (e) {
+        console.warn('[AgentSphere] screenshot failed:', e?.message);
+        sendCallbackSafe(commandId, failResult('Screenshot failed: ' + e.message, mapErrorCategory(e)), targetTabId, sessionId);
       }
       return;
     }

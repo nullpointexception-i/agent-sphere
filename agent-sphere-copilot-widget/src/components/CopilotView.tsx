@@ -654,6 +654,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 pendingUserRows={timeline.pendingUserRows}
                 subAgentLiveMap={timeline.subAgentLiveMap}
                 loadSubAgentSteps={timeline.loadSubAgentSteps}
+                loadFile={(fileKey) => api.loadFile(fileKey)}
                 onRespondClarify={respondTimelineClarify}
               />
             </div>

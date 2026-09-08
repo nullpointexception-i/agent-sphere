@@ -18,6 +18,8 @@ public class AgentRun {
     private String intentClassification;
     private Long taskId;
     private String status;
+    /** 聊天图片附件引用 JSON（[{"fileKey","contentType"}]）；Timeline USER 行回显用。 */
+    private String attachments;
     /** 命中循环次数上限被强收口（任务守卫据此判失败，避免"半成品"冒充完成）。 */
     private Boolean loopCapped;
     @TableLogic

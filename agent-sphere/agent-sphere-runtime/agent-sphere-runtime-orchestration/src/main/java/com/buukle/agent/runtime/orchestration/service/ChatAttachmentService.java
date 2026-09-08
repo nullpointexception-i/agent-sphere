@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.orchestration.service;
 
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.infrastructure.service.AttachmentFileService;
+import com.buukle.agent.infrastructure.service.ScreenshotFileService;
 import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.port.vo.PreparedAttachment;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class ChatAttachmentService implements ChatAttachmentResolver {
     public static final int MAX_ATTACHMENTS = 4;
 
     private final AttachmentFileService attachmentFileService;
+    private final ScreenshotFileService screenshotFileService;
 
     /** 校验并转换为队列轻量描述；缺失/非图片附件即时 400。 */
     public List<PreparedAttachment> resolve(List<String> attachmentKeys) {
@@ -50,8 +52,14 @@ public class ChatAttachmentService implements ChatAttachmentResolver {
         return result;
     }
 
+    /** 附件/截图 data URL：聊天附件优先，查不到兜底浏览器截图（同 fileKey 空间不冲突）。 */
     @Override
     public String toDataUrl(String fileKey) {
-        return attachmentFileService.toDataUrl(fileKey);
+        String url = attachmentFileService.toDataUrl(fileKey);
+        if (url != null) {
+            return url;
+        }
+        // 浏览器截图（browser-screenshot bizKey）：聊天附件查不到时兜底截图
+        return screenshotFileService.toDataUrl(fileKey);
     }
 }

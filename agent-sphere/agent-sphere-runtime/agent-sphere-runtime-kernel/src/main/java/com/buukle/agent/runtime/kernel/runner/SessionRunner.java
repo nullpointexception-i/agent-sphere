@@ -37,6 +37,7 @@ import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
+import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RMapCache;
@@ -79,6 +80,9 @@ public class SessionRunner {
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final RedissonClient redissonClient;
     private final ChatAttachmentResolver attachmentResolver;
+
+    /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
+    private volatile ScreenshotObservationSupport screenshotObservationSupport;
 
     /** run 级取消：写 Redis RSet（任意副本可调），执行副本 loop 读取并消费。 */
     public void cancelRun(Long runId) {
@@ -456,6 +460,10 @@ public class SessionRunner {
                         .setRole(LlmApiConstant.ROLE_TOOL)
                         .setToolCallId(tc.id())
                         .setContent(toolMessage));
+                // 浏览器截图工具：检测结果中的截图 ref，注入带图 USER 观察消息（下一轮模型就能"看到"页面）
+                if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.CHROME.getId())) {
+                    injectScreenshotObservation(sessionId, currentRunId, messages, toolResult);
+                }
                 // SUCCEEDED 事件已在 onEachResult 回调中发布，此处不再重复
             }
 
@@ -506,6 +514,10 @@ public class SessionRunner {
         boolean sessionCancelled = isSessionCancelled(sessionId);
         if (sessionCancelled) {
             clearSessionCancelled(sessionId);
+        }
+        ScreenshotObservationSupport support = screenshotObservationSupport;
+        if (support != null) {
+            support.clear(currentRunId);
         }
         if ((runCancelled || sessionCancelled) && currentRun != null) {
             currentRun.setStatus(RunStatus.CANCELLED.name());
@@ -560,16 +572,19 @@ public class SessionRunner {
                             .filter(r -> Boolean.TRUE.equals(r.getSupportsAttachment()))
                             .toList();
                     if (capable.isEmpty()) {
+                        // 没有能处理图片的路由：剥离图片降级为纯文本继续（不阻断 run）
+                        log.info("No attachment-capable route, degrading to text: session={}, run={}", sessionId, runId);
+                        stripImageParts(messages);
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
                                 new RuntimeEventDataVO()
                                         .setSessionId(sessionId).setRunId(runId)
-                                        .setResponse("⚠️ 当前路由均未开启附件输入，请在路由「支持附件」开启后重试")
+                                        .setResponse("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
                                         .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                         .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                         .setPublishId(UUID.randomUUID().toString())));
-                        return TurnResult.error("当前路由均不支持附件输入");
+                    } else {
+                        routes = capable;
                     }
-                    routes = capable;
                 }
 
                 fallbackRouteExecutor.execute(routes, (i, route) -> {
@@ -746,23 +761,29 @@ public class SessionRunner {
 
     /** 当前轮是否含图片附件：末条 USER 消息 content 为 parts 且含 image_url。 */
     static boolean hasAttachmentImage(List<ChatMessageDTO> messages) {
-        if (messages == null || messages.isEmpty()) {
-            return false;
+        return ScreenshotObservationSupport.hasAttachmentImage(messages);
+    }
+
+    /**
+     * 无支持图片的路由时降级：把最后一条 USER 消息的 parts 折叠为纯文本 String
+     * （拼接 text parts，空则用 "[图片]" 占位，避免纯图片消息变成空 content 发往模型）。
+     */
+    static void stripImageParts(List<ChatMessageDTO> messages) {
+        ScreenshotObservationSupport.stripImageParts(messages);
+    }
+
+    /**
+     * 浏览器截图工具结果含 data.screenshot → 追加一条 USER 观察消息（text + image_url dataURL）。
+     * 委托 {@link ScreenshotObservationSupport}（与子 Agent 共用逻辑与次数上限）。
+     */
+    private void injectScreenshotObservation(Long sessionId, Long runId,
+                                             List<ChatMessageDTO> messages, String toolResult) {
+        ScreenshotObservationSupport support = screenshotObservationSupport;
+        if (support == null) {
+            support = new ScreenshotObservationSupport(properties.getRunner().getMaxScreenshotsPerRun(), attachmentResolver);
+            screenshotObservationSupport = support;
         }
-        ChatMessageDTO last = messages.get(messages.size() - 1);
-        if (last == null || !LlmApiConstant.ROLE_USER.equals(last.getRole())) {
-            return false;
-        }
-        Object content = last.getContent();
-        if (!(content instanceof List<?> parts)) {
-            return false;
-        }
-        for (Object part : parts) {
-            if (part instanceof ChatMessagePartDTO p && ChatMessagePartDTO.TYPE_IMAGE_URL.equals(p.getType())) {
-                return true;
-            }
-        }
-        return false;
+        support.injectScreenshotObservation(sessionId, runId, messages, toolResult);
     }
 
     private List<ModelRouteFullVO> resolveRoutes(Long sessionId, KernelContext ctx) {

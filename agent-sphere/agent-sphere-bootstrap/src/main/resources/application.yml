@@ -108,6 +108,7 @@ buukle:
       max-reasoning-chars: 500000                   # 单 run 推理落库长度上限（字符） / Max persisted reasoning chars
       turn-timeout: 180s                           # 单轮 LLM 调用超时 / Single LLM turn timeout
       llm-turn-max-retries: 1                      # 单轮 LLM 失败(非取消)重试次数 / Per-turn LLM retries
+      max-screenshots-per-run: 20                  # 单 run 浏览器截图观察注入上限（防烧 token） / Max screenshot observations per run
       compaction:
         budget-ratio: 0.7                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio
 

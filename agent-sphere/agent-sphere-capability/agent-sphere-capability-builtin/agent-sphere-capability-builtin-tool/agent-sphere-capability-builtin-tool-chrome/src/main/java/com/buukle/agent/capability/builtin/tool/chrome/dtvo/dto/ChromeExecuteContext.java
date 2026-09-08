@@ -102,4 +102,16 @@ public class ChromeExecuteContext extends ExecuteContext {
 
     @Schema(example = "200", description = "getContent mode:extract / textMax：单字段文本截断长度（默认200）")
     private Integer textMax;
+
+    @Schema(example = "320", description = "clickAt动作：最后一张 viewport 截图的设备像素 X 坐标（视觉操作，与 dpr 无关，执行层换算）")
+    private Integer x;
+
+    @Schema(example = "560", description = "clickAt动作：最后一张 viewport 截图的设备像素 Y 坐标（视觉操作，与 dpr 无关，执行层换算）")
+    private Integer y;
+
+    @Schema(example = "jpeg", description = "screenshot动作：图片格式 jpeg/png，默认 jpeg")
+    private String format;
+
+    @Schema(example = "60", description = "screenshot动作：jpeg 质量 0-100，默认 60")
+    private Integer quality;
 }

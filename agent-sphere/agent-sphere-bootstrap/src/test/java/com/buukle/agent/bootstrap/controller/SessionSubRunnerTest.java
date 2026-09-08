@@ -79,7 +79,8 @@ class SessionSubRunnerTest {
                 new AgentRuntimeProperties(),
                 new SkillSubRunPolicy(new AgentRuntimeProperties()),
                 org.mockito.Mockito.mock(com.buukle.agent.instance.spi.AgentSubAgentRunSpi.class),
-                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class));
+                org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class),
+                org.mockito.Mockito.mock(com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver.class));
     }
 
     private RuntimeTool skillTool() {

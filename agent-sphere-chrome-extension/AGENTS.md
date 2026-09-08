@@ -32,7 +32,7 @@ Files:
 
 ## Key behaviors
 
-- **No screenshots.** The screenshot pipeline was removed end-to-end (extension, backend `ChromeCallbackController`, UI PiP). Do not reintroduce `Page.captureScreenshot`/`captureVisibleTab` without an explicit requirement.
+- **Screenshots (vision operation)**: `screenshot` action (viewport via `Page.captureScreenshot`, `scope=full` uses `captureBeyondViewport`) lives **only** in `lib/cdp-client.js#captureScreenshot` — the one place allowed to call `chrome.debugger`. The base64 is POSTed to `POST /api/v1/browser/screenshot` (Bearer) and the callback carries only the `fileKey` + dimensions (no large base64 over the callback/Redis). `clickAt(x, y)` clicks at the device pixels of the **last viewport screenshot** (converted to CSS px via `devicePixelRatio`); non-interactive points click through with a `warning`. Snapshot items carry `bounds` (top-frame CSS px rect) for screenshot↔ref alignment. Full-page screenshots are observation-only — no coordinate clicking.
 - **executeJS is two-tier, debugger is the strict-CSP fallback** (in `background.js#executeJsOnTab`):
   1. MAIN world via `chrome.scripting` (`world:'MAIN'`) — the page CSP applies, so this works on most sites and fails fast on strict-CSP origins (cached in `cspBlockedOrigins`).
   2. `chrome.debugger` `Runtime.evaluate` (bypasses CSP; strict sites like 猎聘 land here).

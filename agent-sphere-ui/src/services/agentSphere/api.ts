@@ -128,6 +128,9 @@ export const agentApi = {
         { method: 'POST', data: formData },
       );
     },
+    // 按 fileKey 回读附件字节（聊天历史图片回显）；返回 Blob，展示侧自行生成 objectURL
+    get: (fileKey: string) =>
+      request<Blob>(`${BASE}/files/${fileKey}`, { responseType: 'blob' }),
   },
 
   runs: {

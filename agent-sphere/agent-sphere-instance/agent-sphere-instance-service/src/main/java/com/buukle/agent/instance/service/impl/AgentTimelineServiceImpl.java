@@ -12,6 +12,7 @@ import com.buukle.agent.instance.dtvo.enums.TimelineContentKey;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.dtvo.vo.AgentTimelineVO;
+import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.SessionTimelinePageVO;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
@@ -19,6 +20,7 @@ import com.buukle.agent.instance.repository.AgentSubAgentRunMapper;
 import com.buukle.agent.instance.repository.AgentTimelineMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.repository.RunMapper;
+import com.buukle.agent.instance.service.util.ScreenshotRefParser;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import com.buukle.agent.util.json.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
  * 统一 Timeline 打平展示索引实现：
@@ -222,7 +227,12 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             switch (kindEnum) {
                 case USER -> {
                     AgentRun r = runs.get(row.getRefRunId() != null ? row.getRefRunId() : row.getRunId());
-                    if (r != null) content.put(TimelineContentKey.TEXT.getCode(), cap(r.getUserMessage(), CONTENT_CAP));
+                    if (r != null) {
+                        content.put(TimelineContentKey.TEXT.getCode(), cap(r.getUserMessage(), CONTENT_CAP));
+                        if (r.getAttachments() != null && !r.getAttachments().isBlank()) {
+                            content.put(TimelineContentKey.IMAGES.getCode(), parseAttachments(r.getAttachments()));
+                        }
+                    }
                 }
                 case ASSISTANT -> {
                     // 每轮 LLM 调用行：正文直接引用该轮 interaction 记录的 reasoning/reply_content（response_body 兜底）
@@ -260,7 +270,14 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                             content.put(TimelineContentKey.DISPLAY_NAME.getCode(), rec.getDisplayNameCn() != null ? rec.getDisplayNameCn() : rec.getToolName());
                             content.put(TimelineContentKey.STATUS.getCode(), rec.getStatus());
                             if (rec.getArgumentsJson() != null) content.put(TimelineContentKey.ARGS.getCode(), cap(rec.getCompressedArguments() != null ? rec.getCompressedArguments() : rec.getArgumentsJson(), CONTENT_CAP));
-                            if (rec.getArtifact() != null) content.put(TimelineContentKey.ARTIFACT.getCode(), cap(rec.getCompressedArtifact() != null ? rec.getCompressedArtifact() : rec.getArtifact(), CONTENT_CAP));
+                            if (rec.getArtifact() != null) {
+                                content.put(TimelineContentKey.ARTIFACT.getCode(), cap(rec.getCompressedArtifact() != null ? rec.getCompressedArtifact() : rec.getArtifact(), CONTENT_CAP));
+                                // 浏览器截图：工具结果含 data.screenshot → 主面板工具卡回显图片
+                                List<RunAttachment> images = ScreenshotRefParser.extractScreenshotImages(rec.getArtifact());
+                                if (!images.isEmpty()) {
+                                    content.put(TimelineContentKey.IMAGES.getCode(), images);
+                                }
+                            }
                         }
                     }
                     content.putIfAbsent(TimelineContentKey.DISPLAY_NAME.getCode(), row.getTitle());
@@ -330,7 +347,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         List<AgentRun> runs = runMapper.selectList(new LambdaQueryWrapper<AgentRun>()
                 .in(AgentRun::getId, runIds)
                 .select(AgentRun::getId, AgentRun::getUserMessage, AgentRun::getAssistantReply,
-                        AgentRun::getReasoning, AgentRun::getStatus,
+                        AgentRun::getReasoning, AgentRun::getAttachments, AgentRun::getStatus,
                         AgentRun::getCreatedAt, AgentRun::getUpdatedAt));
         Map<Long, AgentRun> map = runs.stream().collect(Collectors.toMap(AgentRun::getId, Function.identity(), (a, b) -> a));
         return map;
@@ -341,5 +358,20 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             return null;
         }
         return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    /** 解析 USER 行附件引用 JSON；失败返回空列表（不阻断正文渲染）。 */
+    public static List<RunAttachment> parseAttachments(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            List<RunAttachment> list = JsonUtils.parse(json, new TypeReference<List<RunAttachment>>() {
+            });
+            return list != null ? list : Collections.emptyList();
+        } catch (Exception e) {
+            log.warn("Run attachments parse failed: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 }

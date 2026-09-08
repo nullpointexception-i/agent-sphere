@@ -48,6 +48,8 @@ public class AgentRuntimeProperties {
         private int maxLoopCount = 25;
         /** 任务触发的 run 使用更高轮次上限（覆盖 maxLoopCount），缺省回落 maxLoopCount。 */
         private Integer taskMaxLoopCount;
+        /** 单个 run 内允许注入的浏览器截图观察次数上限（防模型无限截图烧 token）。 */
+        private int maxScreenshotsPerRun = 20;
         /** 单 run 推理落库长度上限（数据完整兜底，默认 50 万字符）。 */
         private int maxReasoningChars = 500000;
         private Duration turnTimeout = Duration.ofSeconds(180);

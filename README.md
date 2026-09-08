@@ -95,7 +95,7 @@ Manages the complete execution lifecycle of an AI session, implementing the **Pl
 The extension bridges the backend with the user's browser for automated operations. It keeps a **single user-level task SSE connection** (`/api/v1/runtime/user/task/stream`) that delivers `browser_operation` commands for any of the user's sessions/runs — no per-session following. It declares `<all_urls>` host permission (granted at install) so it can inject a content script into any page the agent operates on.
 
 Recent architecture notes:
-- **No screenshots** — the screenshot pipeline was removed end-to-end (extension, backend, UI). Process recording is text/event based.
+- **Screenshots for vision operation** — the extension captures page screenshots (viewport + full-page) and `clickAt(x, y)` clicks at screenshot pixel coordinates; the screenshot is stored via `/api/v1/browser/screenshot` and injected into the model as a vision observation (route must have attachments enabled).
 - **SSE lives in an offscreen document** (`offscreen.html/js`) — immune to MV3 service-worker suspension; the background alarm re-creates it if the browser closes it.
 - **Native ES modules** — the background service worker (`background.js`, `"type": "module"`) imports `lib/cdp-client.js`, `lib/tab-manager.js`, `lib/result.js`, `lib/offscreen-bridge.js`; the execution layer is `content.js` + `content-locator.js` (injected in order into the isolated world).
 - **Tab grouping** — every tab the plugin navigates/opens is auto-grouped under the `AgentSphere` tab group (`tabGroups` permission), recreated if closed.

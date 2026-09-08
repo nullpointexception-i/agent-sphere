@@ -1,6 +1,5 @@
 package com.buukle.agent.instance.dtvo.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -9,8 +8,8 @@ import java.util.List;
 
 @Data
 public class SendMessageDTO implements Serializable {
-    @NotBlank(message = "message can't be blank")
-    @Size(min = 1, max = 5000)
+    /** 纯图片发送时可为空；与 attachmentKeys 同时为空由服务层校验。 */
+    @Size(max = 5000)
     private String message;
     private Long modelRouteId;
     private String delivery;

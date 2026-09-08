@@ -10,6 +10,7 @@ import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
+import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
@@ -51,6 +52,7 @@ public class ChatRuntimeService {
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
+        assertMessageOrAttachment(dto);
 
         RunVO run = createRun(sessionId, dto);
         startRun(run, sessionId, dto, false);
@@ -80,12 +82,32 @@ public class ChatRuntimeService {
         createRunDTO.setUserMessage(TextSanitizer.sanitize(dto.getMessage()));
         createRunDTO.setType(RunEnum.TYPE_AUTO);
         createRunDTO.setNoClarification(dto.getNoClarification());
+        createRunDTO.setAttachments(resolveRunAttachments(dto));
         RunVO run = runSpi.createRun(createRunDTO);
         if (dto.getDelivery() != null) {
             run.setDelivery(dto.getDelivery());
         }
         log.info("Run created: runId={}, type={}", run.getId(), run.getType());
         return run;
+    }
+
+    /** 附件引用随 run 落库（仅 fileKey+contentType，字节留 agent_file_store），Timeline 回显用。 */
+    private List<RunAttachment> resolveRunAttachments(SendMessageDTO dto) {
+        if (dto.getAttachmentKeys() == null || dto.getAttachmentKeys().isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        return chatAttachmentService.resolve(dto.getAttachmentKeys()).stream()
+                .map(a -> new RunAttachment(a.fileKey(), a.contentType()))
+                .toList();
+    }
+
+    /** 消息与附件不可同时为空（纯图片发送允许空文本）。 */
+    private static void assertMessageOrAttachment(SendMessageDTO dto) {
+        boolean blankMessage = dto.getMessage() == null || dto.getMessage().isBlank();
+        boolean hasAttachment = dto.getAttachmentKeys() != null && !dto.getAttachmentKeys().isEmpty();
+        if (blankMessage && !hasAttachment) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "消息内容和附件不能同时为空");
+        }
     }
 
     /**

@@ -147,7 +147,8 @@ export default {
   'pages.chat.typeMessage': 'Type a message...',
   'pages.chat.typeMessageHint': 'Type a message... (Shift+Enter for new line)',
   'pages.chat.attachImage': 'Attach image',
-  'pages.chat.attachmentTypeHint': 'Only jpeg/png/webp/gif images are supported',
+  'pages.chat.attachmentTypeHint':
+    'Only jpeg/png/webp/gif images are supported',
   'pages.chat.attachmentSizeHint': 'Image must not exceed 5MB',
   'pages.chat.attachmentUploadFailed': 'Attachment upload failed',
   'pages.chat.userMessage': 'User Message',

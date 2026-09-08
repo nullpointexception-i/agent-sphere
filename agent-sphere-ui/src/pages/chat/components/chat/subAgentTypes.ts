@@ -31,6 +31,8 @@ export interface SubAgentTimelineItem {
   artifact?: string | null;
   toolStatus?: string;
   toolErrorMessage?: string;
+  /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），子 Agent 卡片回显用。 */
+  images?: { fileKey: string; contentType?: string }[];
 }
 
 /** 实时聚合的单个子 Agent 当前状态（SSE 流式更新）。 */
@@ -71,6 +73,8 @@ export type SubAgentLiveStep =
       status: 'pending' | 'in_progress' | 'succeeded' | 'failed';
       argumentsJson?: string;
       artifact?: string;
+      /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），live 步骤回显用。 */
+      images?: { fileKey: string; contentType?: string }[];
     };
 
 export type SubAgentLiveMap = Record<number, SubAgentLiveStep[]>;

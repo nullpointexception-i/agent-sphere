@@ -463,6 +463,8 @@ window.__asContent = window.__asContent || {};
     const st = asStateOf(el);
     if (st) item.state = st;
     if (el.tagName === 'A' && el.href) item.href = el.href;
+    const bounds = AS.mainFrameBounds(el);
+    if (bounds) item.bounds = bounds;
     return item;
   };
 
@@ -521,6 +523,76 @@ window.__asContent = window.__asContent || {};
     const vh = Math.max(window.innerHeight || 1, 1);
     if (x < 0 || y < 0 || x >= vw || y >= vh) return null;
     return { x: Math.round(x), y: Math.round(y) };
+  };
+
+  /** 元素在顶层视口的边界盒（CSS px）：点击坐标对齐用。iframe 内沿 frameElement 链累加偏移。 */
+  AS.mainFrameBounds = function (el) {
+    if (!el) return null;
+    let r;
+    try {
+      r = el.getBoundingClientRect();
+    } catch (e) {
+      return null;
+    }
+    if (r.width <= 0 && r.height <= 0) return null;
+    let left = r.left;
+    let top = r.top;
+    let win = ownerWin(el);
+    let guard = 0;
+    while (win && win !== window.top && guard++ < 10) {
+      const fe = win.frameElement;
+      if (!fe) break;
+      let fr;
+      try {
+        fr = fe.getBoundingClientRect();
+      } catch (e) {
+        break;
+      }
+      left += fr.left;
+      top += fr.top;
+      win = fe.ownerDocument && fe.ownerDocument.defaultView;
+    }
+    return { x: Math.round(left), y: Math.round(top), width: Math.round(r.width), height: Math.round(r.height) };
+  };
+
+  /**
+   * clickAt 坐标解析：设备像素（截图）→ CSS px（÷ dpr）→ elementFromPoint 找最近可交互祖先。
+   * 返回 {ok, x, y, interactive, tag, text}；interactive=false 表示点中非交互区域（调用方裸点 + warning）。
+   */
+  AS.locatePoint = function (x, y, frameId) {
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const cssX = x / dpr;
+    const cssY = y / dpr;
+    const doc = document;
+    let top = null;
+    try {
+      top = doc.elementFromPoint(cssX, cssY);
+    } catch (e) {
+      return { ok: false, error: 'elementFromPoint failed' };
+    }
+    if (!top) return { ok: true, x: cssX, y: cssY, interactive: false };
+    let el = top;
+    let guard = 0;
+    while (el && el.nodeType === 1 && guard++ < 20) {
+      if (el.matches && el.matches(AS_INTERACTIVE_SELECTOR)) break;
+      el = el.parentElement;
+    }
+    if (!el || el === document.documentElement) {
+      return { ok: true, x: cssX, y: cssY, interactive: false };
+    }
+    const point = AS.mainFramePoint(el);
+    if (!point) {
+      return { ok: true, x: cssX, y: cssY, interactive: false };
+    }
+    return {
+      ok: true,
+      x: point.x,
+      y: point.y,
+      interactive: true,
+      tag: el.tagName.toLowerCase(),
+      text: (el.innerText || el.textContent || '').trim().slice(0, 60),
+      ref: el.__asRef != null ? el.__asRef : undefined,
+    };
   };
 
   // 文本候选：跨同源 iframe + shadow 收集（exact/contains/属性兜底），保持 DOM 序。

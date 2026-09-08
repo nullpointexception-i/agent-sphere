@@ -26,6 +26,7 @@ import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
+import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.SubRunPolicy;
 import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
@@ -35,6 +36,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
+import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
@@ -77,6 +79,18 @@ public class SessionSubRunner {
     private final AgentSubAgentRunSpi subAgentRunSpi;
     /** 可选：统一 Timeline 索引（无则跳过子 Agent 头行，不影响功能）。 */
     private final ObjectProvider<AgentTimelineSpi> timelineSpiProvider;
+    private final ChatAttachmentResolver attachmentResolver;
+    /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
+    private volatile ScreenshotObservationSupport screenshotObservationSupport;
+
+    private ScreenshotObservationSupport screenshotSupport() {
+        ScreenshotObservationSupport support = screenshotObservationSupport;
+        if (support == null) {
+            support = new ScreenshotObservationSupport(properties.getRunner().getMaxScreenshotsPerRun(), attachmentResolver);
+            screenshotObservationSupport = support;
+        }
+        return support;
+    }
 
     /** ToolExecutor sub-run 分支入口。 */
     public String execute(RuntimeTool subRunTool, String argsJson,
@@ -225,6 +239,8 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 .setPublishId(publishId)));
                 }
                 messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id()).setContent(result));
+                // 浏览器截图工具：检测结果中的截图 ref，注入带图 USER 观察消息（子 Agent 模型也能"看到"页面）
+                screenshotSupport().injectScreenshotObservation(childCtx.getSessionId(), subAgentRunId, messages, result);
             }
         }
         publishReasoning(policy.textSubLoopCapped(displayName), subRunToolId);
@@ -269,6 +285,31 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         }
         if (routes.isEmpty()) {
             return TurnResult.errorResult("no model route available");
+        }
+        // 图片附件/截图观察：无支持图片的路由 → 剥离图片降级为纯文本继续（与主 Agent 一致，不阻断）
+        if (ScreenshotObservationSupport.hasAttachmentImage(messages)) {
+            boolean anyCapable = false;
+            for (ModelRouteFullVO r : routes) {
+                if (Boolean.TRUE.equals(r.getSupportsAttachment())) {
+                    anyCapable = true;
+                    break;
+                }
+            }
+            if (!anyCapable) {
+                log.info("No attachment-capable sub-route, degrading to text: session={}, sub={}",
+                        ctx.getSessionId(), subAgentRunId);
+                ScreenshotObservationSupport.stripImageParts(messages);
+                eventPublisher.publishEvent(new RuntimeEventVO(
+                        FlowEventType.REASONING_TOKEN,
+                        new RuntimeEventDataVO()
+                                .setSessionId(ctx.getSessionId())
+                                .setRunId(ctx.getRunId())
+                                .setSubAgentRunId(subAgentRunId)
+                                .setResponse("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
+                                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                .setPublishId(UUID.randomUUID().toString())));
+            }
         }
         try {
             fallbackRouteExecutor.execute(routes, (i, route) -> {
