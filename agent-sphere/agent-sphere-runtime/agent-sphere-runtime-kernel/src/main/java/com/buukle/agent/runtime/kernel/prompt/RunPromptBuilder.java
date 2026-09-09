@@ -34,12 +34,12 @@ public class RunPromptBuilder {
             sb.append(ctx.getAgentInstance().getSystemPrompt() != null
                     ? ctx.getAgentInstance().getSystemPrompt() : "");
         }
-        sb.append(RunnerConstants.PROMPT_CURRENT_TIME)
-                .append(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         List<RuntimeTool> tools = ctx != null ? ctx.getTools() : null;
         if (tools != null && !tools.isEmpty()) {
+            List<RuntimeTool> sorted = new ArrayList<>(tools);
+            sorted.sort(java.util.Comparator.comparing(RuntimeTool::getLlmToolName, String::compareTo));
             sb.append(RunnerConstants.PROMPT_TOOLS_HEADER);
-            for (RuntimeTool t : tools) {
+            for (RuntimeTool t : sorted) {
                 sb.append("- ").append(t.getLlmToolName());
                 if (t.getDescription() != null && !t.getDescription().isBlank()) {
                     sb.append(": ").append(t.getDescription());
@@ -56,10 +56,23 @@ public class RunPromptBuilder {
         return sb.toString();
     }
 
+    /**
+     * 当前服务器时间（独立小段文本，供组装侧追加到消息尾部）。
+     * 放在 system prompt 头部会破坏前缀缓存，故由调用方追加为最末一条 system 消息，
+     * 保证 messages[0] 及历史前缀字节稳定。
+     */
+    public String currentTimeText() {
+        return RunnerConstants.PROMPT_CURRENT_TIME
+                + LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+    }
+
     public List<ToolDefinitionDTO> buildToolDefinitions(List<RuntimeTool> tools) {
         if (tools == null) tools = List.of();
+        // 稳定排序：tools 数组参与请求前缀缓存，名称排序可避免能力遍历顺序变动导致的缓存失效
+        List<RuntimeTool> sorted = new ArrayList<>(tools);
+        sorted.sort(java.util.Comparator.comparing(RuntimeTool::getLlmToolName, String::compareTo));
         List<ToolDefinitionDTO> defs = new ArrayList<>();
-        for (RuntimeTool tool : tools) {
+        for (RuntimeTool tool : sorted) {
             try {
                 Map<String, Object> params = JSON.readValue(tool.getParametersSchemaJson(), MAP_TYPE);
                 defs.add(ToolDefinitionDTO.builder()

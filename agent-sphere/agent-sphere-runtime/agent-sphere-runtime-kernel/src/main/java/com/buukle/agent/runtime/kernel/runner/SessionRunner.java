@@ -235,18 +235,24 @@ public class SessionRunner {
                     messages.addAll(historyLoader.load(sessionId, currentRunId, input.isClarificationResume()));
                 }
                 messages.add(buildUserMessage(input, attachmentResolver));
+                // 当前时间追加在消息尾部（独立小段 system，不污染 messages[0] 前缀，命中缓存）
+                messages.add(new ChatMessageDTO()
+                        .setRole(LlmApiConstant.ROLE_SYSTEM)
+                        .setContent(runPromptBuilder.currentTimeText()));
             }
 
             List<RuntimeTool> tools = ctx != null ? ctx.getTools() : List.of();
             List<ToolDefinitionDTO> toolDefs = runPromptBuilder.buildToolDefinitions(tools);
 
-            // 最后一轮：注入强制总结指令
+            // 最后一轮：收口指令以尾部 system 消息追加（不修改 index 0，保持 messages[0]+历史前缀字节稳定以命中缓存）
             boolean isLastLoop = loopCount >= maxLoopCount - 1;
-            if (isLastLoop && !messages.isEmpty() && LlmApiConstant.ROLE_SYSTEM.equals(messages.get(0).getRole())) {
-                ChatMessageDTO sysMsg = messages.get(0);
-                if (sysMsg.getContent() instanceof String sysText) {
-                    sysMsg.setContent(sysText
-                            + "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**");
+            if (isLastLoop && !messages.isEmpty()) {
+                ChatMessageDTO tail = messages.get(messages.size() - 1);
+                String tailText = tail.getContent() instanceof String s ? s : null;
+                if (!RunnerConstants.FINAL_TURN_INSTRUCTION.equals(tailText)) {
+                    messages.add(new ChatMessageDTO()
+                            .setRole(LlmApiConstant.ROLE_SYSTEM)
+                            .setContent(RunnerConstants.FINAL_TURN_INSTRUCTION));
                 }
             }
 
@@ -285,6 +291,9 @@ public class SessionRunner {
                         }
                         messages.addAll(historyLoader.load(sessionId, currentRunId));
                         messages.add(buildUserMessage(input, attachmentResolver));
+                        messages.add(new ChatMessageDTO()
+                                .setRole(LlmApiConstant.ROLE_SYSTEM)
+                                .setContent(runPromptBuilder.currentTimeText()));
                         hasToolCalls = true;
                         continue;
                     }

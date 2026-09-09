@@ -67,6 +67,9 @@ public final class RunnerConstants {
     public static final String COMPACTION_ASSISTANT_PREFIX = "Assistant: ";
     public static final String COMPACTION_NEWLINE = "\n";
     public static final String HISTORY_SUMMARY_PREFIX = "[Conversation summary]\n";
+    /** 终态轮收口指令：作为尾部 system 消息追加（不修改 index 0，保持前缀缓存稳定）。 */
+    public static final String FINAL_TURN_INSTRUCTION =
+            "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**";
 
     // ---- SessionRunner magic strings ----
     public static final String JSON_ERROR_TOOL_LOST = "{\"error\":\"Tool execution lost\"}";
