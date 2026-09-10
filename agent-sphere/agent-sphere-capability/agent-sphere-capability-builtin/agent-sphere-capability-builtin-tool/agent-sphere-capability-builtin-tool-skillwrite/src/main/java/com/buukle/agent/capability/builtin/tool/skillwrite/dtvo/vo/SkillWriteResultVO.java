@@ -17,9 +17,11 @@ public class SkillWriteResultVO extends ExecuteResult {
     private String name;
     private String description;
     private String preview;
+    private String content;
     private List<SkillSummaryVO> skills;
     private List<HeadingInfo> headings;
     private Integer totalLines;
+    private Integer total;
 
     @Data
     @NoArgsConstructor

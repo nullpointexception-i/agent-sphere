@@ -251,6 +251,183 @@ class CapabilityBuiltinToolSkillOperationTest {
         verify(skillSpi, never()).updateSkill(any(), any(), any());
     }
 
+    @Test
+    void get_structure_true_returnsPromptTemplateOutline() {
+        String definition = """
+                {"version":1,"parameters":{"type":"object","properties":{}},"promptTemplate":"## 任务\\n按 JD 分析候选人\\n\\n## 输出\\n返回 JSON"}""";
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("get");
+        ctx.setSkillId(100L);
+        ctx.setStructure(true);
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertNotNull(r.getHeadings());
+        assertEquals(2, r.getHeadings().size());
+        assertEquals(1, r.getHeadings().get(0).getLine());
+        assertEquals("任务", r.getHeadings().get(0).getText());
+        assertEquals(4, r.getHeadings().get(1).getLine());
+        assertEquals(Integer.valueOf(5), r.getTotalLines());
+        assertEquals(Integer.valueOf(2), r.getTotal());
+    }
+
+    @Test
+    void get_sectionHeading_returnsSectionContent() {
+        String definition = """
+                {"version":1,"parameters":{"type":"object","properties":{}},"promptTemplate":"## 任务\\n按 JD 分析候选人\\n\\n## 输出\\n返回 JSON"}""";
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("get");
+        ctx.setSkillId(100L);
+        ctx.setSectionHeading("任务");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertNotNull(r.getContent());
+        assertTrue(r.getContent().contains("按 JD 分析候选人"));
+        assertFalse(r.getContent().contains("返回 JSON"));
+    }
+
+    @Test
+    void get_sectionHeading_notFound_returnsHeadingsHint() {
+        String definition = """
+                {"version":1,"parameters":{"type":"object","properties":{}},"promptTemplate":"## 任务\\nbody"}""";
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("get");
+        ctx.setSkillId(100L);
+        ctx.setSectionHeading("不存在的标题");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertTrue(r.getPreview().contains("Section not found"));
+        assertNotNull(r.getHeadings());
+        assertFalse(r.getHeadings().isEmpty());
+        assertNotNull(r.getTotalLines());
+    }
+
+    @Test
+    void get_startLineEndLine_returnsLineRange() {
+        String definition = """
+                {"version":1,"parameters":{"type":"object","properties":{}},"promptTemplate":"## 任务\\n按 JD 分析候选人\\n\\n## 输出\\n返回 JSON"}""";
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("get");
+        ctx.setSkillId(100L);
+        ctx.setStartLine(2);
+        ctx.setEndLine(2);
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertEquals("按 JD 分析候选人", r.getContent());
+    }
+
+    @Test
+    void get_full_returnsCompleteDefinitionAsContent() {
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, VALID_DEFINITION));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("get");
+        ctx.setSkillId(100L);
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertEquals(VALID_DEFINITION, r.getContent());
+        assertNotNull(r.getPreview());
+        assertNotNull(r.getTotalLines());
+    }
+
+    @Test
+    void count_returnsTotalBoundSkills() {
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(
+                cap("skill", 100L), cap("skill", 200L), cap("builtin", 5L)));
+        when(skillSpi.listSkillsByIds(List.of(100L, 200L)))
+                .thenReturn(List.of(skill(100L, "a", null, null), skill(200L, "b", null, null)));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("count");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertEquals("count", r.getAction());
+        assertEquals(Integer.valueOf(2), r.getTotal());
+        assertTrue(r.getPreview().contains("2"));
+    }
+
+    @Test
+    void search_byTitle_filtersBoundSkillsByName() {
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(
+                cap("skill", 100L), cap("skill", 200L)));
+        when(skillSpi.listSkillsByIds(List.of(100L, 200L)))
+                .thenReturn(List.of(skill(100L, "fetchCandidate", null, null), skill(200L, "resumeParser", null, null)));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("search_by_title");
+        ctx.setKeyword("fetch");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertEquals("search_by_title", r.getAction());
+        assertEquals(1, r.getSkills().size());
+        assertEquals(100L, r.getSkills().get(0).getSkillId());
+        assertEquals(Integer.valueOf(1), r.getTotal());
+    }
+
+    @Test
+    void append_appendsToPromptTemplateAndPreservesParametersAndAllowTools() {
+        String definition = """
+                {"version":1,
+                 "parameters":{"type":"object","properties":{"keyword":{"type":"string"}}},
+                 "allowTools":["builtin:docwrite"],
+                 "promptTemplate":"## 任务\\nold body"}""";
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
+        when(skillSpi.updateSkill(eq(100L), any(CreateSkillDTO.class), eq("alice")))
+                .thenReturn(skill(100L, "a", null, definition));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("append");
+        ctx.setSkillId(100L);
+        ctx.setContent("## 补充\nextra notes");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+
+        assertEquals("append", r.getAction());
+        org.mockito.ArgumentCaptor<CreateSkillDTO> captor = org.mockito.ArgumentCaptor.forClass(CreateSkillDTO.class);
+        verify(skillSpi).updateSkill(eq(100L), captor.capture(), eq("alice"));
+        String appended = captor.getValue().getDefinition();
+        assertTrue(appended.contains("## 补充"), "appended content should be present");
+        assertTrue(appended.contains("\"keyword\""), "parameters should be preserved");
+        assertTrue(appended.contains("allowTools"), "allowTools should be preserved");
+        assertTrue(appended.contains("old body"), "original promptTemplate should be preserved");
+    }
+
     private SessionVO sessionOf(Long instanceId, String createdBy) {
         SessionVO vo = new SessionVO();
         vo.setId(1L);

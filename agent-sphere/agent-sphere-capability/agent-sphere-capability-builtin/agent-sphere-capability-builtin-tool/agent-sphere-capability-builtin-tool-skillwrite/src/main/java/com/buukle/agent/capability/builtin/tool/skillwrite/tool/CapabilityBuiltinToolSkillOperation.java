@@ -40,7 +40,10 @@ import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.STATUS
 public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToolSpi {
 
     static final String ACTION_CREATE = "create";
+    static final String ACTION_APPEND = "append";
     static final String ACTION_LIST = "list";
+    static final String ACTION_COUNT = "count";
+    static final String ACTION_SEARCH_TITLE = "search_by_title";
     static final String ACTION_GET = "get";
     static final String ACTION_UPDATE = "update";
 
@@ -52,15 +55,24 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
     static final String MARKDOWN_FENCE = "```json";
 
     private static final String TOOL_DESCRIPTION = """
-            Create, list, read, or update skills bound to the current agent instance.
+            Create, append, list, count, search, read, or update skills bound to the current agent instance.
             A skill wraps a nested agent task: your definition must be a JSON object with:
               version: 1 (optional)
               parameters: JSON Schema describing the arguments the LLM passes when invoking this skill
               promptTemplate: markdown instructions for the nested task agent (the skill's documentation)
               allowTools: optional array of tool references the nested agent may call (e.g. ["builtin:chrome", "builtin:docwrite"])
             action=create: create a new skill AND bind it to the current agent instance (requires name, definition; optional description).
-            action=list: list skills bound to the current agent instance (returns id, name, description, status per skill).
-            action=get: get an existing skill bound to the current agent instance (requires skillId; returns full definition).
+            action=append: append markdown content to the end of an existing skill's promptTemplate (requires skillId, content; keeps parameters/allowTools intact).
+            action=list: list skills bound to the current agent instance (supports page/pageSize; returns id, name, description, status per skill).
+            action=count: count skills bound to the current agent instance.
+            action=search_by_title: search bound skills by name keyword (requires keyword, supports page/pageSize).
+            action=get: read an existing skill bound to the current agent instance (requires skillId).
+              Optional modes control what to fetch from the skill's promptTemplate markdown:
+              - structure=true: return only the outline (headings with line numbers)
+              - sectionHeading=text: return the section under the matching heading
+              - startLine=n (with optional endLine=m): return specific line range
+              Default (no options): return the full definition (JSON with parameters + promptTemplate).
+              If a section/heading/line mode does not match, returns the available headings as a hint.
             action=update: edit a skill already bound to the current agent instance (requires skillId).
               Full mode (no operation): replace name/description/definition with the provided fields.
               Patch mode (operation given): edit the skill's promptTemplate markdown without rewriting everything:
@@ -122,7 +134,10 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
             Long skillId = swCtx.getSkillId();
             return switch (action) {
             case ACTION_CREATE -> handleCreate(swCtx);
+            case ACTION_APPEND -> handleAppend(swCtx, skillId);
             case ACTION_LIST -> handleList(swCtx);
+            case ACTION_COUNT -> handleCount(swCtx);
+            case ACTION_SEARCH_TITLE -> handleSearchByTitle(swCtx);
             case ACTION_GET -> handleGet(swCtx, skillId);
             case ACTION_UPDATE -> handleUpdate(swCtx, skillId);
             default -> {
@@ -181,19 +196,120 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
         return r;
     }
 
+    private SkillWriteResultVO handleAppend(SkillWriteExecuteContext ctx, Long skillId) {
+        if (skillId == null) {
+            return error(ACTION_APPEND, "skillId is required for append");
+        }
+        if (ctx.getContent() == null || ctx.getContent().isBlank()) {
+            return error(ACTION_APPEND, "content is required for append");
+        }
+        SessionContext session = resolveSession(ctx.getSessionId());
+        if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
+            return error(ACTION_APPEND, "sessionId is required and must resolve to an agent instance");
+        }
+        if (!isSkillBound(session.instanceId(), skillId)) {
+            return error(ACTION_APPEND, "Skill " + skillId + " is not bound to the current agent instance");
+        }
+        SkillVO existing = skillSpi.getSkill(skillId);
+        if (existing == null) {
+            return error(ACTION_APPEND, "Skill not found: " + skillId);
+        }
+        String definition = existing.getDefinition();
+        String prompt = extractPromptTemplate(definition);
+        if (prompt == null) {
+            return error(ACTION_APPEND, "Skill has no textual 'promptTemplate' to append to");
+        }
+        JsonNode root;
+        try {
+            root = readDefinitionJson(definition);
+        } catch (Exception e) {
+            return error(ACTION_APPEND, "Invalid definition JSON: " + e.getMessage());
+        }
+        if (root == null || !root.isObject()) {
+            return error(ACTION_APPEND, "definition must be a JSON object");
+        }
+        ObjectNode rebuilt = root.deepCopy();
+        String appended = prompt.endsWith("\n") ? prompt + ctx.getContent().trim() : prompt + "\n\n" + ctx.getContent().trim();
+        rebuilt.put("promptTemplate", appended);
+        CreateSkillDTO dto = new CreateSkillDTO();
+        dto.setName(existing.getName());
+        dto.setDescription(existing.getDescription());
+        dto.setDefinition(rebuilt.toString());
+        SkillVO updated = skillSpi.updateSkill(skillId, dto, session.createdBy());
+        SkillWriteResultVO r = new SkillWriteResultVO();
+        r.setAction(ACTION_APPEND);
+        r.setSkillId(updated.getId());
+        r.setName(updated.getName());
+        r.setDescription(updated.getDescription());
+        r.setPreview(truncate(appended));
+        return r;
+    }
+
     private SkillWriteResultVO handleList(SkillWriteExecuteContext ctx) {
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
             return error(ACTION_LIST, "sessionId is required and must resolve to an agent instance");
         }
+        List<SkillVO> skills = boundSkills(session.instanceId());
+        int page = Math.max(1, ctx.getPage());
+        int pageSize = Math.max(1, ctx.getPageSize());
+        List<SkillWriteResultVO.SkillSummaryVO> summaries = skillSummaries(paginate(skills, page, pageSize));
+        SkillWriteResultVO r = new SkillWriteResultVO();
+        r.setAction(ACTION_LIST);
+        r.setSkills(summaries);
+        r.setTotal(skills.size());
+        r.setPreview("Found " + skills.size() + " skill(s) bound to the current agent instance");
+        return r;
+    }
+
+    private SkillWriteResultVO handleCount(SkillWriteExecuteContext ctx) {
+        SessionContext session = resolveSession(ctx.getSessionId());
+        if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
+            return error(ACTION_COUNT, "sessionId is required and must resolve to an agent instance");
+        }
+        int total = boundSkills(session.instanceId()).size();
+        SkillWriteResultVO r = new SkillWriteResultVO();
+        r.setAction(ACTION_COUNT);
+        r.setTotal(total);
+        r.setPreview("Total skills bound to the current agent instance: " + total);
+        return r;
+    }
+
+    private SkillWriteResultVO handleSearchByTitle(SkillWriteExecuteContext ctx) {
+        SessionContext session = resolveSession(ctx.getSessionId());
+        if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
+            return error(ACTION_SEARCH_TITLE, "sessionId is required and must resolve to an agent instance");
+        }
+        String keyword = ctx.getKeyword();
+        if (keyword == null || keyword.isBlank()) {
+            return error(ACTION_SEARCH_TITLE, "keyword is required");
+        }
+        String key = keyword.trim().toLowerCase(java.util.Locale.ROOT);
+        List<SkillVO> matched = boundSkills(session.instanceId()).stream()
+                .filter(s -> s.getName() != null && s.getName().toLowerCase(java.util.Locale.ROOT).contains(key))
+                .toList();
+        int page = Math.max(1, ctx.getPage());
+        int pageSize = Math.max(1, ctx.getPageSize());
+        SkillWriteResultVO r = new SkillWriteResultVO();
+        r.setAction(ACTION_SEARCH_TITLE);
+        r.setSkills(skillSummaries(paginate(matched, page, pageSize)));
+        r.setTotal(matched.size());
+        r.setPreview("Found " + matched.size() + " skill(s) matching \"" + keyword.trim() + "\"");
+        return r;
+    }
+
+    private List<SkillVO> boundSkills(Long instanceId) {
         List<Long> boundIds = new ArrayList<>();
-        for (CapabilityVO cap : instanceCapabilitySpi.getCapabilitiesByInstance(session.instanceId())) {
+        for (CapabilityVO cap : instanceCapabilitySpi.getCapabilitiesByInstance(instanceId)) {
             if (CAPABILITY_TYPE_SKILL.equals(cap.getCapabilityType())) {
                 boundIds.add(cap.getCapabilityId());
             }
         }
-        List<SkillVO> skills = skillSpi.listSkillsByIds(boundIds);
-        List<SkillWriteResultVO.SkillSummaryVO> summaries = skills.stream()
+        return skillSpi.listSkillsByIds(boundIds);
+    }
+
+    private List<SkillWriteResultVO.SkillSummaryVO> skillSummaries(List<SkillVO> skills) {
+        return skills.stream()
                 .map(s -> {
                     SkillWriteResultVO.SkillSummaryVO item = new SkillWriteResultVO.SkillSummaryVO();
                     item.setSkillId(s.getId());
@@ -204,11 +320,13 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
                     return item;
                 })
                 .toList();
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_LIST);
-        r.setSkills(summaries);
-        r.setPreview("Found " + summaries.size() + " skill(s) bound to the current agent instance");
-        return r;
+    }
+
+    private static <T> List<T> paginate(List<T> items, int page, int pageSize) {
+        if (items == null || items.isEmpty()) return List.of();
+        int from = Math.min(items.size(), (page - 1) * pageSize);
+        int to = Math.min(items.size(), from + pageSize);
+        return items.subList(from, to);
     }
 
     private SkillWriteResultVO handleGet(SkillWriteExecuteContext ctx, Long skillId) {
@@ -226,12 +344,59 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
         if (skill == null) {
             return error(ACTION_GET, "Skill not found: " + skillId);
         }
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_GET);
-        r.setSkillId(skill.getId());
-        r.setName(skill.getName());
-        r.setDescription(skill.getDescription());
-        r.setPreview(previewOf(skill.getDefinition()));
+        SkillWriteResultVO r = baseResult(skill);
+        String definition = skill.getDefinition();
+        if (definition == null || definition.isBlank()) {
+            r.setPreview("Skill has no definition");
+            return r;
+        }
+        String prompt = extractPromptTemplate(definition);
+        int totalLines = prompt != null ? lineCount(prompt) : lineCount(definition);
+
+        // Structure mode: 仅返回 promptTemplate 大纲（标题 + 行号）。
+        if (Boolean.TRUE.equals(ctx.getStructure())) {
+            if (prompt == null) {
+                return withPreview(r, "definition has no textual 'promptTemplate' to outline");
+            }
+            List<HeadingInfo> headings = MarkdownParser.parseHeadings(prompt);
+            r.setHeadings(headings);
+            r.setTotalLines(totalLines);
+            r.setTotal(headings.size());
+            return r;
+        }
+
+        // Section mode: 按标题提取 promptTemplate 对应 section 正文。
+        if (ctx.getSectionHeading() != null) {
+            if (prompt == null) {
+                return withPreview(r, "definition has no textual 'promptTemplate' to search sections");
+            }
+            String section = MarkdownParser.extractSection(prompt, ctx.getSectionHeading());
+            if (section == null) {
+                r.setPreview("Section not found: \"" + ctx.getSectionHeading() + "\". Available headings:");
+                r.setHeadings(MarkdownParser.parseHeadings(prompt));
+                r.setTotalLines(totalLines);
+                return r;
+            }
+            r.setContent(section);
+            r.setPreview(truncate(section));
+            return r;
+        }
+
+        // Line range 模式: 按行号提取 promptTemplate 内容。
+        if (ctx.getStartLine() != null) {
+            if (prompt == null) {
+                return withPreview(r, "definition has no textual 'promptTemplate' to extract lines");
+            }
+            String extracted = MarkdownParser.extractLines(prompt, ctx.getStartLine(), ctx.getEndLine());
+            r.setContent(extracted);
+            r.setPreview(truncate(extracted));
+            return r;
+        }
+
+        // Default: 全文 definition（JSON）。
+        r.setContent(definition);
+        r.setPreview(previewOf(definition));
+        r.setTotalLines(totalLines);
         return r;
     }
 
@@ -294,20 +459,10 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
         if (definition == null || definition.isBlank()) {
             return PatchedDefinition.error("definition is empty; cannot patch");
         }
-        JsonNode root;
-        try {
-            root = readDefinitionJson(definition);
-        } catch (Exception e) {
-            return PatchedDefinition.error("Invalid definition JSON: " + e.getMessage());
-        }
-        if (root == null || !root.isObject()) {
-            return PatchedDefinition.error("definition must be a JSON object");
-        }
-        JsonNode promptNode = root.get("promptTemplate");
-        if (promptNode == null || !promptNode.isTextual()) {
+        String prompt = extractPromptTemplate(definition);
+        if (prompt == null) {
             return PatchedDefinition.error("definition has no textual 'promptTemplate' to patch");
         }
-        String prompt = promptNode.asText();
         String headOrText;
         List<HeadingInfo> headings = null;
         switch (ctx.getOperation()) {
@@ -354,7 +509,16 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
                         + ". Supported: replace_section, insert_after, replace_text");
             }
         }
-        ObjectNode rebuilt = root.deepCopy();
+        JsonNode root;
+        try {
+            root = readDefinitionJson(definition);
+        } catch (Exception e) {
+            return PatchedDefinition.error("Invalid definition JSON: " + e.getMessage());
+        }
+        if (root == null || !root.isObject()) {
+            return PatchedDefinition.error("definition must be a JSON object");
+        }
+        ObjectNode rebuilt = (ObjectNode) root.deepCopy();
         rebuilt.put("promptTemplate", headOrText);
         return PatchedDefinition.ok(rebuilt.toString());
     }
@@ -406,6 +570,38 @@ public class CapabilityBuiltinToolSkillOperation implements CapabilityBuiltinToo
         if (definition == null) return "";
         String normalized = definition.replaceAll("[#*`\\n\\r]+", " ").trim();
         return normalized.length() > PREVIEW_LENGTH ? normalized.substring(0, PREVIEW_LENGTH) + "…" : normalized;
+    }
+
+    private static String truncate(String text) {
+        if (text == null) return "";
+        return text.length() > PREVIEW_LENGTH ? text.substring(0, PREVIEW_LENGTH) + "..." : text;
+    }
+
+    private SkillWriteResultVO baseResult(SkillVO skill) {
+        SkillWriteResultVO r = new SkillWriteResultVO();
+        r.setAction(ACTION_GET);
+        r.setSkillId(skill.getId());
+        r.setName(skill.getName());
+        r.setDescription(skill.getDescription());
+        return r;
+    }
+
+    private static SkillWriteResultVO withPreview(SkillWriteResultVO r, String message) {
+        r.setPreview(message);
+        return r;
+    }
+
+    /** 解出 definition 内嵌的 promptTemplate 文本；非对象 JSON / 无文本 promptTemplate 时返回 null。 */
+    private String extractPromptTemplate(String definition) {
+        if (definition == null || definition.isBlank()) return null;
+        try {
+            JsonNode root = readDefinitionJson(definition);
+            if (root == null || !root.isObject()) return null;
+            JsonNode promptNode = root.get("promptTemplate");
+            return promptNode != null && promptNode.isTextual() ? promptNode.asText() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private SkillWriteResultVO error(String action, String message) {
