@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 自助注册用户资源初始化：监听 {@link UserRegisteredEvent}，读取 user.resource-template
- * 系统配置（留空回落默认模板 ResourceTemplates.DEFAULT），异步复用
+ * 系统配置（留空则不初始化资源），异步复用
  * {@link UserResourceProvisioner} 为用户开通一份私有资源副本。与 SSO 首登开通同构，
  * 全程绝不影响注册接口返回。
  */

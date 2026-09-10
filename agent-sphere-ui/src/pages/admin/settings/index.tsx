@@ -3,6 +3,7 @@ import { App, Button, Collapse, Form, Input, Modal, Tag, Upload } from 'antd';
 import { useEffect, useState } from 'react';
 import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
+import ResourceTemplateEditor from './resourceTemplate/ResourceTemplateEditor';
 import { useStyles } from './style';
 
 interface ConfigItem {
@@ -19,6 +20,7 @@ const GROUP_LABELS: Record<string, string> = {
   'web-read': 'pages.admin.settings.group.web-read',
   'rate-limit': 'pages.admin.settings.group.rate-limit',
   plugin: 'pages.admin.settings.group.plugin',
+  sso: 'pages.admin.settings.group.sso',
   user: 'pages.admin.settings.group.user',
 };
 
@@ -31,6 +33,7 @@ export default function AdminSettings() {
   const [editingConfig, setEditingConfig] = useState<ConfigItem | null>(null);
   const [editValue, setEditValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
 
   const canUpdate = useCan('admin:settings:update');
   const canRegenerate = useCan('admin:settings:regenerate-aes');
@@ -188,7 +191,11 @@ export default function AdminSettings() {
             type="link"
             onClick={() => {
               setEditingConfig(config);
-              setEditValue('');
+              if (config.configKey === 'user.resource-template') {
+                setTemplateOpen(true);
+                return;
+              }
+              setEditValue(config.configValue || '');
               setEditModalOpen(true);
             }}
           >
@@ -246,33 +253,31 @@ export default function AdminSettings() {
               id: 'pages.admin.settings.edit.label',
             })}
           >
-            {editingConfig?.configKey === 'user.resource-template' ? (
-              <Input.TextArea
-                rows={10}
-                placeholder={intl.formatMessage({
-                  id: 'pages.admin.settings.edit.template.placeholder',
-                  defaultMessage: 'JSON 数组（留空使用默认模板）',
-                })}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-              />
-            ) : (
-              <Input
-                placeholder={
-                  editingConfig?.isSecret
-                    ? intl.formatMessage({
-                        id: 'pages.admin.settings.edit.secret.placeholder',
-                      })
-                    : undefined
-                }
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                type={editingConfig?.isSecret ? 'password' : 'text'}
-              />
-            )}
+            <Input
+              placeholder={
+                editingConfig?.isSecret
+                  ? intl.formatMessage({
+                      id: 'pages.admin.settings.edit.secret.placeholder',
+                    })
+                  : undefined
+              }
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              type={editingConfig?.isSecret ? 'password' : 'text'}
+            />
           </Form.Item>
         </Form>
       </Modal>
+      <ResourceTemplateEditor
+        open={templateOpen}
+        initialValue={editingConfig?.configValue || ''}
+        onClose={() => setTemplateOpen(false)}
+        onSaved={async (jsonText) => {
+          await agentApi.admin.updateConfig('user.resource-template', jsonText);
+          await loadConfigs();
+          setTemplateOpen(false);
+        }}
+      />
     </>
   );
 }

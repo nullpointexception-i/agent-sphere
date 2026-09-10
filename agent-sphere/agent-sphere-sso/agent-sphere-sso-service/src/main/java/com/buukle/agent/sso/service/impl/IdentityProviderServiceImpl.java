@@ -1,8 +1,9 @@
 package com.buukle.agent.sso.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.config.SystemConfigKeys;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.exception.BizException;
-import com.buukle.agent.resource.template.ResourceTemplates;
 import com.buukle.agent.sso.domain.IdentityProvider;
 import com.buukle.agent.sso.dtvo.dto.CreateIdentityProviderDTO;
 import com.buukle.agent.sso.dtvo.dto.UpdateIdentityProviderDTO;
@@ -27,6 +28,7 @@ public class IdentityProviderServiceImpl extends ServiceImpl<IdentityProviderMap
 
     private final IdentityProviderConverter identityProviderConverter;
     private final SsoOidcClient ssoOidcClient;
+    private final SystemConfigSpi systemConfigSpi;
     @Override
     public IdentityProviderVO createProvider(CreateIdentityProviderDTO dto) {
         long count = lambdaQuery().eq(IdentityProvider::getCode, dto.getCode()).count();
@@ -45,7 +47,8 @@ public class IdentityProviderServiceImpl extends ServiceImpl<IdentityProviderMap
 
     @Override
     public ResourceTemplateVO getDefaultResourceTemplate() {
-        return new ResourceTemplateVO(ResourceTemplates.DEFAULT);
+        String template = systemConfigSpi.get(SystemConfigKeys.USER_RESOURCE_TEMPLATE, "");
+        return new ResourceTemplateVO(template);
     }
 
     @Override

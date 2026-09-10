@@ -12,7 +12,7 @@ public final class SystemConfigKeys {
     public static final String PLUGIN_DOWNLOAD_URL = "plugin.download-url";
     /** Chrome 插件应用市场（Chrome Web Store）下载地址；空则前端不展示应用市场选项 */
     public static final String PLUGIN_STORE_URL = "plugin.store-url";
-    /** 自助注册用户初始化资源模板（JSON，留空回落 ResourceTemplates.DEFAULT） */
+    /** 默认资源模板（JSON 数组，新用户初始化时使用；留空则不初始化资源） */
     public static final String USER_RESOURCE_TEMPLATE = "user.resource-template";
 
     /** 允许不经鉴权公开读取的配置键（仅安全/非敏感项） */

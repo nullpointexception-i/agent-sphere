@@ -58,7 +58,8 @@ public class SystemConfigServiceImpl implements SystemConfigSpi {
         if (SystemConfigKeys.AES_KEY.equals(key) && value.isBlank()) {
             value = initAesKey();
         }
-        if (value != null) {
+        // 仅非空值写缓存：空值不缓存、不续期 TTL，避免 SQL 直改 DB 后旧空值缓存长期残留
+        if (!value.isBlank()) {
             bucket.set(value);
             bucket.expire(CACHE_TTL);
         }
@@ -143,6 +144,8 @@ public class SystemConfigServiceImpl implements SystemConfigSpi {
 
     @PostConstruct
     public void init() {
+        // 清理 SQL 直改 DB 场景下残留的空值缓存（如 V62 将 user.resource-template 从空值填充为模板后）
+        invalidateCache(SystemConfigKeys.USER_RESOURCE_TEMPLATE);
         get(SystemConfigKeys.AES_KEY);
     }
 }

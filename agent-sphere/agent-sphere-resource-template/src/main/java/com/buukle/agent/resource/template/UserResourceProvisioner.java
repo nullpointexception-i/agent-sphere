@@ -1,5 +1,7 @@
 package com.buukle.agent.resource.template;
 
+import com.buukle.agent.common.config.SystemConfigKeys;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -21,6 +23,7 @@ public class UserResourceProvisioner {
 
     private final ResourceTemplateCoordinator resourceTemplateCoordinator;
     private final UserSpi userSpi;
+    private final SystemConfigSpi systemConfigSpi;
 
     /**
      * 为用户开通资源副本。任何异常均被捕获计入结果，绝不影响登录流程。
@@ -32,7 +35,10 @@ public class UserResourceProvisioner {
             result.failed("user not found: " + userId);
             return result;
         }
-        String template = StringUtils.hasText(customTemplate) ? customTemplate : ResourceTemplates.DEFAULT;
+        String template = customTemplate;
+        if (!StringUtils.hasText(template)) {
+            template = systemConfigSpi.get(SystemConfigKeys.USER_RESOURCE_TEMPLATE, "");
+        }
         String owner = user.getUsername();
         TenantUtil.start(owner);
         try {

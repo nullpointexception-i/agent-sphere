@@ -1,7 +1,6 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.exception.GlobalExceptionHandler;
-import com.buukle.agent.resource.template.ResourceTemplates;
 import com.buukle.agent.sso.controller.IdentityProviderAdminController;
 import com.buukle.agent.sso.dtvo.vo.ResourceTemplateVO;
 import com.buukle.agent.sso.dtvo.vo.IdentityProviderVO;
@@ -161,12 +160,13 @@ class IdentityProviderAdminControllerTest {
 
     @Test
     void getDefaultResourceTemplate_shouldReturnSystemDefault() throws Exception {
+        String testTemplate = "[{\"type\":\"document\",\"title\":\"Test\"}]";
         given(identityProviderService.getDefaultResourceTemplate())
-                .willReturn(new ResourceTemplateVO(ResourceTemplates.DEFAULT));
+                .willReturn(new ResourceTemplateVO(testTemplate));
 
         mockMvc.perform(get("/api/v1/admin/identity-providers/resource-template-default"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.template").value(ResourceTemplates.DEFAULT));
+                .andExpect(jsonPath("$.template").value(testTemplate));
         verify(identityProviderService).getDefaultResourceTemplate();
     }
 

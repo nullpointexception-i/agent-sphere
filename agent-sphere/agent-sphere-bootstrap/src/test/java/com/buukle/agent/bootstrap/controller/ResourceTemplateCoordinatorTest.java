@@ -5,19 +5,12 @@ import com.buukle.agent.resource.template.ResourceInitContext;
 import com.buukle.agent.resource.template.ResourceInitResult;
 import com.buukle.agent.resource.template.ResourceInitializer;
 import com.buukle.agent.resource.template.ResourceTemplateCoordinator;
-import com.buukle.agent.resource.template.ResourceTemplates;
-import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 
 class ResourceTemplateCoordinatorTest {
 
@@ -89,51 +82,6 @@ class ResourceTemplateCoordinatorTest {
         assertEquals(1, result.getUnknownTypes().size());
         assertEquals("bogus_type", result.getUnknownTypes().get(0));
         assertEquals("model_provider: upstream down", result.getFailedDetails().get(0));
-    }
-
-    @Test
-    void defaultTemplate_shouldBeValidJsonWithEightCompletions() throws Exception {
-        JsonNode arr = JsonUtils.getMapper().readTree(ResourceTemplates.DEFAULT);
-        assertTrue(arr.isArray());
-        List<JsonNode> completions = new ArrayList<>();
-        for (JsonNode node : arr) {
-            if ("completions".equals(node.path("type").asText())) {
-                completions.add(node);
-            }
-        }
-        assertEquals(8, completions.size());
-        for (JsonNode c : completions) {
-            assertTrue(c.hasNonNull("name"));
-            assertTrue(c.hasNonNull("description"));
-            assertTrue(c.hasNonNull("businessType"));
-            assertTrue(c.hasNonNull("route"));
-            assertTrue(c.hasNonNull("promptSystem"));
-            assertTrue(c.hasNonNull("promptUser"));
-            assertTrue(c.hasNonNull("inputSchema"));
-            assertTrue(c.hasNonNull("outputSchema"));
-            assertEquals("deepseek-v4-flash-vision-exp", c.path("route").asText());
-            JsonNode config = JsonUtils.getMapper().readTree(c.path("config").asText());
-            assertEquals(false, config.path("thinking").asBoolean());
-        }
-        Set<String> businessTypes = completions.stream()
-                .map(c -> c.path("businessType").asText())
-                .collect(Collectors.toSet());
-        assertEquals(8, businessTypes.size(), "8 个 completions 的 businessType 应互不重复");
-
-        JsonNode instance = null;
-        for (JsonNode node : arr) {
-            if ("instance".equals(node.path("type").asText())) {
-                instance = node;
-                break;
-            }
-        }
-        assertTrue(instance != null, "默认模板应包含一个 instance 条目");
-        assertEquals("Headhunter Assist", instance.path("name").asText());
-        assertEquals("Headhunter Assist", instance.path("description").asText());
-        assertEquals("task", instance.path("businessType").asText());
-        assertEquals("deepseek-v4-flash-vision-exp", instance.path("route").asText());
-        assertTrue(instance.hasNonNull("systemPrompt"));
-        assertTrue(instance.path("systemPrompt").asText().contains("Strict rules"));
     }
 
     @Test

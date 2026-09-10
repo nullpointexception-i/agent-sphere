@@ -116,7 +116,6 @@ export default {
   'pages.models.apiKeyHint':
     'Without a default API Key, routes cannot be used to configure models for instances',
   'pages.models.cancelActive': 'Deactivate',
-  'pages.models.cancelActive': 'Deactivate',
   'pages.models.setAsActive': 'Set as Active',
   'pages.models.emptyPlaceholder':
     'Select a provider to view API Keys and Routes',
@@ -187,7 +186,6 @@ export default {
   'pages.instances.detailCreated': 'Created',
   'pages.instances.detailSystemPrompt': 'System Prompt:',
   'pages.instances.addCapability': '+ Add',
-  'pages.instances.removeCapability': 'Remove',
   'pages.instances.promptType': 'Capability type (mcp/skill/cli):',
   'pages.instances.promptId': 'Capability ID:',
   'pages.instances.added': 'Added',
@@ -399,6 +397,68 @@ export default {
   'pages.admin.settings.group.rate-limit': 'Rate Limit',
   'pages.admin.settings.group.plugin': 'Plugin Package',
   'pages.admin.settings.group.user': 'User Init',
+  'pages.admin.settings.template.title': 'Resource Template',
+  'pages.admin.settings.template.tab.form': 'Form',
+  'pages.admin.settings.template.tab.formDesc':
+    'Visually edit resource template items by type; providers / routes refer to each other by template names.',
+  'pages.admin.settings.template.tab.json': 'JSON',
+  'pages.admin.settings.template.tab.jsonDesc':
+    'JSON array format, matching backend config storage; must be valid JSON on save.',
+  'pages.admin.settings.template.jsonInvalidOnOpen':
+    'Current config is not valid JSON. Fix it in JSON mode first.',
+  'pages.admin.settings.template.jsonRequired':
+    'Must be a valid JSON string; may be left empty on save',
+  'pages.admin.settings.template.selectProvider':
+    'Select a provider from the template',
+  'pages.admin.settings.template.selectRoute':
+    'Select a model route from the template',
+  'pages.admin.settings.template.selectType': 'Select item type',
+  'pages.admin.settings.template.add': 'Add',
+  'pages.admin.settings.template.count': 'Total',
+  'pages.admin.settings.template.items': 'items',
+  'pages.admin.settings.template.delete.confirm': 'Delete this item?',
+  'pages.admin.settings.template.col.type': 'Type',
+  'pages.admin.settings.template.col.name': 'Name',
+  'pages.admin.settings.template.col.config': 'Config',
+  'pages.admin.settings.template.col.status': 'Status',
+  'pages.admin.settings.template.col.action': 'Actions',
+  'pages.admin.settings.template.status.ok': 'OK',
+  'pages.admin.settings.template.label.provider': 'Provider',
+  'pages.admin.settings.template.label.route': 'Model route',
+  'pages.admin.settings.template.label.promptSystem': 'System Prompt',
+  'pages.admin.settings.template.label.promptUser': 'User Prompt',
+  'pages.admin.settings.template.label.serverType': 'Server Type',
+  'pages.admin.settings.template.label.definition': 'Definition',
+  'pages.admin.settings.template.label.title': 'Title',
+  'pages.admin.settings.template.label.contentType': 'Content Type',
+  'pages.admin.settings.template.label.content': 'Content',
+  'pages.admin.settings.template.type.modelProvider': 'Model Provider',
+  'pages.admin.settings.template.type.apiKey': 'API Key',
+  'pages.admin.settings.template.type.modelRoute': 'Model Route',
+  'pages.admin.settings.template.type.completions': 'Completions Capability',
+  'pages.admin.settings.template.type.instance': 'Agent Instance',
+  'pages.admin.settings.template.type.mcp': 'MCP Server',
+  'pages.admin.settings.template.type.skill': 'Skill',
+  'pages.admin.settings.template.type.document': 'Document',
+  'pages.admin.settings.template.skill.promptTemplate':
+    'Task instruction (promptTemplate)',
+  'pages.admin.settings.template.skill.promptTemplateHint':
+    'Supports Markdown and {{field}} placeholders',
+  'pages.admin.settings.template.skill.parameters':
+    'Input JSON Schema (parameters)',
+  'pages.admin.settings.template.skill.parametersHint':
+    'May be empty (empty object)',
+  'pages.admin.settings.template.skill.allowTools':
+    'Allowed tools (allowTools)',
+  'pages.admin.settings.template.skill.allowToolsHint':
+    'Pick tools this skill can call; if empty, no tool is allowed',
+  'pages.admin.settings.group.sso': 'SSO',
+  'pages.admin.settings.plugin.upload.btn': 'Upload Package',
+  'pages.admin.settings.plugin.upload.success': 'Uploaded',
+  'pages.admin.settings.plugin.delete.btn': 'Delete',
+  'pages.admin.settings.plugin.delete.confirm':
+    'Delete the managed plugin package? The download entry will be hidden.',
+  'pages.admin.settings.plugin.delete.success': 'Deleted',
   'pages.admin.settings.regenerate.btn': 'Regenerate',
   'pages.admin.settings.regenerate.confirm':
     'Regenerating the AES key will re-encrypt all API keys. This action cannot be undone. Continue?',
@@ -409,6 +469,7 @@ export default {
     'Leave empty to keep current value',
   'pages.admin.users.roles': 'Roles',
   'pages.table.code': 'Code',
+  'pages.table.create': 'New',
   'pages.table.sort': 'Sort',
   'pages.form.code': 'Code',
   'pages.form.type': 'Type',

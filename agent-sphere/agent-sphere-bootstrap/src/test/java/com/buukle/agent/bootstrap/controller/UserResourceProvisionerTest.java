@@ -1,12 +1,13 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.common.config.SystemConfigKeys;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.resource.template.ResourceInitContext;
 import com.buukle.agent.resource.template.ResourceInitResult;
 import com.buukle.agent.resource.template.ResourceTemplateCoordinator;
-import com.buukle.agent.resource.template.ResourceTemplates;
 import com.buukle.agent.resource.template.UserResourceProvisioner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,6 +35,9 @@ class UserResourceProvisionerTest {
 
     @Mock
     ResourceTemplateCoordinator coordinator;
+
+    @Mock
+    SystemConfigSpi systemConfigSpi;
 
     @InjectMocks
     UserResourceProvisioner provisioner;
@@ -73,6 +78,8 @@ class UserResourceProvisionerTest {
     @Test
     void provision_shouldUseDefaultTemplateWhenBlank() {
         when(userSpi.getByUserId(7L)).thenReturn(user(7L, "business_7"));
+        when(systemConfigSpi.get(eq(SystemConfigKeys.USER_RESOURCE_TEMPLATE), eq("")))
+                .thenReturn("[{\"type\":\"document\"}]");
         when(coordinator.initialize(anyString(), any(ResourceInitContext.class)))
                 .thenReturn(new ResourceInitResult());
 
@@ -80,7 +87,7 @@ class UserResourceProvisionerTest {
 
         ArgumentCaptor<String> template = ArgumentCaptor.forClass(String.class);
         verify(coordinator).initialize(template.capture(), any(ResourceInitContext.class));
-        assertEquals(ResourceTemplates.DEFAULT, template.getValue());
+        assertEquals("[{\"type\":\"document\"}]", template.getValue());
     }
 
     @Test
