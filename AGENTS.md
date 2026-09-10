@@ -26,6 +26,19 @@ GitHub flow off `main`. **No test CI** — run each project's tests before pushi
 - `k8s/` holds the namespace + postgres/redis/backend/frontend/widget/ingress manifests; `04-backend-config.yaml` sets backend env (DB, Redis, JWT, etc.).
 - Frontend image build takes `build-args: COMMIT_HASH` — referenced in the UI's version display.
 
+### Tagging & pushing (deploy trigger)
+
+- Tag convention: `v1.0.NN-alpha` (next after the latest remote tag). Create annotated tag on `main` HEAD: `git tag -a v1.0.NN-alpha -m "v1.0.NN-alpha"`.
+
+- **This environment has no SSH key / gh CLI** — the `origin` remote (`git@github.com:...`) will fail with `Permission denied (publickey)`. Push tags (and any auth-required git op) over HTTPS using the GitHub token in `local-config/token.json` (`/local-config` is gitignored, never commit it):
+
+  ```bash
+  TOKEN=$(node -p "require('./local-config/token.json').github.token")
+  git push "https://nullpointexception-i:${TOKEN}@github.com/nullpointexception-i/agent-sphere.git" v1.0.NN-alpha
+  ```
+
+- Pushing the `v*` tag triggers the deploy workflow (see above); verify the run at the repo's Actions tab.
+
 ## agent-sphere-copilot-widget (chat widget)
 
 Independent package — install/build only from inside `agent-sphere-copilot-widget/`. Stack: Vite 6 (lib mode, IIFE `AgentSphereWidget`), React 19, TypeScript (strict). **No CopilotKit / AG-UI** — chat renders a typed REST+SSE timeline (same shape as the main UI `chat` page).
