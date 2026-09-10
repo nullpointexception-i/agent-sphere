@@ -18,6 +18,7 @@ import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.async.FiberSet;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
+import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
@@ -80,6 +81,7 @@ public class SessionRunner {
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final RedissonClient redissonClient;
     private final ChatAttachmentResolver attachmentResolver;
+    private final LlmRequestConfigurer llmRequestConfigurer;
 
     /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
     private volatile ScreenshotObservationSupport screenshotObservationSupport;
@@ -216,9 +218,9 @@ public class SessionRunner {
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
 
             if (!hasToolCalls) {
+                String todolistText = null;
                 if (messages.isEmpty()) {
                     titleService.generateIfNeeded(ctx, input.text(), sessionId, currentRunId);
-                    String todolistText = null;
                     try {
                         AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
                                 sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
@@ -228,7 +230,7 @@ public class SessionRunner {
                     } catch (Exception e) {
                         log.warn("Failed to load todolist for session {}", sessionId, e);
                     }
-                    String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx, todolistText);
+                    String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx);
                     if (systemPrompt != null && !systemPrompt.isBlank()) {
                         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                     }
@@ -239,6 +241,8 @@ public class SessionRunner {
                 messages.add(new ChatMessageDTO()
                         .setRole(LlmApiConstant.ROLE_SYSTEM)
                         .setContent(runPromptBuilder.currentTimeText()));
+                // 待办列表独立为尾部 system 段（原位替换，不触碰 index 0，保持前缀缓存稳定）
+                applyTodolistSuffix(messages, todolistText);
             }
 
             List<RuntimeTool> tools = ctx != null ? ctx.getTools() : List.of();
@@ -285,7 +289,7 @@ public class SessionRunner {
                         } catch (Exception e) {
                             log.warn("Failed to load todolist for session {}", sessionId, e);
                         }
-                        String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx, todolistText);
+                        String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx);
                         if (systemPrompt != null && !systemPrompt.isBlank()) {
                             messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                         }
@@ -294,6 +298,7 @@ public class SessionRunner {
                         messages.add(new ChatMessageDTO()
                                 .setRole(LlmApiConstant.ROLE_SYSTEM)
                                 .setContent(runPromptBuilder.currentTimeText()));
+                        applyTodolistSuffix(messages, todolistText);
                         hasToolCalls = true;
                         continue;
                     }
@@ -489,10 +494,8 @@ public class SessionRunner {
                             sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
                     String freshTodolist = todoRecord != null && todoRecord.getArtifact() != null
                             ? todoRecord.getArtifact() : null;
-                    String newSystemPrompt = runPromptBuilder.buildSystemPrompt(ctx, freshTodolist);
-                    messages.set(0, new ChatMessageDTO()
-                            .setRole(LlmApiConstant.ROLE_SYSTEM)
-                            .setContent(newSystemPrompt));
+                    // 原位更新尾部待办槽（不重写 messages[0]，保持前缀缓存命中）
+                    applyTodolistSuffix(messages, freshTodolist);
                 } catch (Exception e) {
                     log.warn("Failed to refresh todolist for session {}", sessionId, e);
                 }
@@ -552,6 +555,45 @@ public class SessionRunner {
         }
         run.setLoopCapped(true);
         log.warn("Run {} hit loop cap {} (loopCapped=true, task guard will fail the task)", run.getId(), maxLoopCount);
+    }
+
+    /**
+     * 原位维护消息列表尾部的待办槽：以 {@link RunnerConstants#PROMPT_TODOLIST_HEADER} 定位已有槽
+     * （存在 −> 原位替换；不存在 −> 在 FINAL_TURN 之前或列表末尾插入），避免中间位移破坏前缀缓存。
+     * todolistText 为空时移除旧槽。messages[0] 与历史前缀保持字节不变。
+     */
+    private void applyTodolistSuffix(List<ChatMessageDTO> messages, String todolistText) {
+        if (messages == null) {
+            return;
+        }
+        String suffix = runPromptBuilder.buildTodolistSuffix(todolistText);
+        int existingSlot = -1;
+        for (int i = 0; i < messages.size(); i++) {
+            Object content = messages.get(i).getContent();
+            if (content instanceof String s && runPromptBuilder.isTodolistSlot(s)) {
+                existingSlot = i;
+                break;
+            }
+        }
+        if (suffix == null) {
+            if (existingSlot >= 0) {
+                messages.remove(existingSlot);
+            }
+            return;
+        }
+        if (existingSlot >= 0) {
+            messages.get(existingSlot).setContent(suffix);
+            return;
+        }
+        // 无已有槽：优先插在 FINAL_TURN 收口指令之前，保证待办是"最末可见 system"之一
+        int insertAt = messages.size();
+        Object last = messages.get(messages.size() - 1).getContent();
+        if (last instanceof String s && RunnerConstants.FINAL_TURN_INSTRUCTION.equals(s)) {
+            insertAt = messages.size() - 1;
+        }
+        messages.add(insertAt, new ChatMessageDTO()
+                .setRole(LlmApiConstant.ROLE_SYSTEM)
+                .setContent(suffix));
     }
 
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
@@ -620,6 +662,13 @@ public class SessionRunner {
                             .setMessages(new ArrayList<>(messages));
                     if (!toolDefs.isEmpty()) {
                         request.setTools(toolDefs);
+                    }
+                    // 采样参数接线：全局系统配置兜底 + 实例级 config 覆盖；并行工具行为保持默认开启（与现有多工具批一致）
+                    String instanceConfig = ctx != null && ctx.getAgentInstance() != null
+                            ? ctx.getAgentInstance().getConfig() : null;
+                    llmRequestConfigurer.apply(request, instanceConfig);
+                    if (request.getParallelToolCalls() == null) {
+                        request.setParallelToolCalls(true);
                     }
 
                     CountDownLatch streamDone = new CountDownLatch(1);

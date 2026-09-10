@@ -87,6 +87,9 @@ export default {
   'pages.instances.maxLoopCount': 'Max Loop Count',
   'pages.instances.maxLoopCount.extra':
     'Max loops per run; 0=system default, >0=override, required',
+  'pages.instances.config': 'Advanced Config (JSON)',
+  'pages.instances.config.extra':
+    'Sampling params JSON (same shape as Completions config); empty = use global system default',
   'pages.instances.image': 'Image',
   'pages.capabilities.definition': 'Definition',
   'pages.capabilities.serverUrl': 'Server URL',
@@ -397,6 +400,7 @@ export default {
   'pages.admin.settings.group.rate-limit': 'Rate Limit',
   'pages.admin.settings.group.plugin': 'Plugin Package',
   'pages.admin.settings.group.user': 'User Init',
+  'pages.admin.settings.group.llm': 'LLM Defaults',
   'pages.admin.settings.template.title': 'Resource Template',
   'pages.admin.settings.template.tab.form': 'Form',
   'pages.admin.settings.template.tab.formDesc':

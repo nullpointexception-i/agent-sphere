@@ -2,6 +2,7 @@ package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
+import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
@@ -12,11 +13,13 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 前缀缓存友好性单测：
- * - buildSystemPrompt 对给定 ctx/todolist 字节确定（不含动态时间），两次调用结果一致；
+ * - buildSystemPrompt 对给定 ctx 字节确定（不含动态时间、不含待办），两次调用结果一致；
+ * - 待办列表独立为尾部段 buildTodolistSuffix，不进入 system 头部（messages[0] 前缀稳定）；
  * - 当前时间独立为尾部小段 currentTimeText，不进入 system 头部；
  * - buildToolDefinitions 按名称稳定排序（工具顺序变动不影响前缀缓存）。
  */
@@ -43,24 +46,35 @@ class RunPromptBuilderTest {
 
     @Test
     void buildSystemPrompt_isDeterministicAcrossCalls() {
-        String first = builder.buildSystemPrompt(ctx(), "todo-list-A");
-        String second = builder.buildSystemPrompt(ctx(), "todo-list-A");
+        String first = builder.buildSystemPrompt(ctx());
+        String second = builder.buildSystemPrompt(ctx());
 
-        assertEquals(first, second, "同一 ctx/todolist 两次生成必须字节一致，才能命中前缀缓存");
+        assertEquals(first, second, "同一 ctx 两次生成必须字节一致，才能命中前缀缓存");
         assertFalse(first.contains("Current server time"), "system prompt 不应包含动态时间");
     }
 
     @Test
-    void buildSystemPrompt_differentTodolist_onlyChangesTail() {
-        // todolist 变化只影响尾部待办块；前缀（instance+工具列表+footer）保持一致
-        String a = builder.buildSystemPrompt(ctx(), "todos: A");
-        String b = builder.buildSystemPrompt(ctx(), "todos: B");
+    void buildSystemPrompt_neverContainsTodolist() {
+        // 待办已从系统提示剥离为尾部独立段：messages[0] 前缀不随待办变化，缓存稳定
+        String systemPrompt = builder.buildSystemPrompt(ctx());
 
-        int prefix = a.indexOf("## 当前待办列表");
-        assertTrue(prefix >= 0);
-        assertEquals(a.substring(0, prefix), b.substring(0, prefix),
-                "待办块之前的前缀必须一致（命中缓存）");
-        assertNotEquals(a, b);
+        assertFalse(systemPrompt.contains("## 当前待办列表"),
+                "system prompt 不应包含待办列表（待办改为尾部独立段）");
+        assertFalse(systemPrompt.contains(RunnerConstants.PROMPT_TODOLIST_HEADER.trim()),
+                "system prompt 不应包含待办 header marker");
+    }
+
+    @Test
+    void buildTodolistSuffix_isStableTailWithHeaderMarker() {
+        String a = builder.buildTodolistSuffix("todos: A");
+        String b = builder.buildTodolistSuffix("todos: B");
+
+        assertTrue(a.startsWith(RunnerConstants.PROMPT_TODOLIST_HEADER), "待办段以 header marker 开头（供原位定位）");
+        assertNotEquals(a, b, "待办内容变化应反映在尾部段");
+        assertTrue(builder.isTodolistSlot(a), "header marker 应能被 isTodolistSlot 识别");
+        assertFalse(builder.isTodolistSlot("plain system text"));
+        assertNull(builder.buildTodolistSuffix("  "), "空白待办应返回 null（调用方移除旧槽）");
+        assertNull(builder.buildTodolistSuffix(null));
     }
 
     @Test
@@ -71,6 +85,7 @@ class RunPromptBuilderTest {
         assertTrue(time.length() > "\n\nCurrent server time: ".length());
         // 不包含 footer/待办等 system 主体内容，确保仅作为尾部小段
         assertFalse(time.contains("Available tools"));
+        assertFalse(time.contains("## 当前待办列表"));
     }
 
     @Test

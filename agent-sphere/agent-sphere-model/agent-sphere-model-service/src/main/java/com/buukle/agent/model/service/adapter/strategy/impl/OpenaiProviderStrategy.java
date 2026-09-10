@@ -19,6 +19,9 @@ public class OpenaiProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
+        // OpenAI：无 thinking / tool_stream 参数（推理强度用 reasoning_effort），剔除避免非预期行为
+        request.setThinking(null);
+        request.setToolStream(null);
     }
 
     @Override

@@ -24,6 +24,15 @@ public class ZhipuProviderStrategy implements ProviderStrategy {
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
         request.setToolStream(true);
+        // GLM/智谱：仅保留 OpenAI 兼容核心字段，剔除不支持的扩展字段避免 400。
+        // 保留 stream_options（usage 采集）、user、parallel_tool_calls（GLM 支持，与 OpenAI 默认对齐）。
+        request.setSeed(null);
+        request.setReasoningEffort(null);
+        request.setMaxCompletionTokens(null);
+        request.setN(null);
+        request.setLogprobs(null);
+        request.setTopLogprobs(null);
+        request.setLogitBias(null);
     }
 
     @Override

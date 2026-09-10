@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useStyles } from '../../style';
+import { formatTokens } from '../Usage';
 import Footer from './Footer';
 import Header from './Header';
 import type { SubAgentLiveMap, SubAgentTimelineItem } from './subAgentTypes';
@@ -32,6 +33,8 @@ interface ChatMainProps {
   onExpandOpen: () => void;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
+  /** 会话级用量聚合（聊天区最下方吸底悬浮展示）。 */
+  sessionUsage?: any;
 }
 
 export default function ChatMain({
@@ -57,6 +60,7 @@ export default function ChatMain({
   onExpandOpen,
   sessionPanelOpen,
   onTogglePanel,
+  sessionUsage,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const { styles } = useStyles();
@@ -146,6 +150,38 @@ export default function ChatMain({
               subAgentLive={subAgentLive}
             />
           </div>
+          {sessionUsage && Number(sessionUsage.totalTokens) > 0 && (
+            <div
+              style={{
+                position: 'sticky',
+                bottom: 8,
+                marginTop: 8,
+                alignSelf: 'center',
+                maxWidth: 640,
+                width: 'auto',
+                padding: '4px 14px',
+                borderRadius: 999,
+                background: 'rgba(255, 255, 255, 0.72)',
+                WebkitBackdropFilter: 'blur(8px)',
+                backdropFilter: 'blur(8px)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                border: '1px solid rgba(0,0,0,0.06)',
+                fontSize: 12,
+                color: 'rgba(0,0,0,0.55)',
+                zIndex: 10,
+                pointerEvents: 'auto',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ♨ 会话用量 · {formatTokens(sessionUsage.totalTokens)} tokens
+              {formatTokens(sessionUsage.promptTokens) !== '0' &&
+                ` · prompt ${formatTokens(sessionUsage.promptTokens)}`}
+              {formatTokens(sessionUsage.completionTokens) !== '0' &&
+                ` · completion ${formatTokens(sessionUsage.completionTokens)}`}
+              {sessionUsage.cacheHitRate != null &&
+                ` · cache ${sessionUsage.cacheHitRate}%`}
+            </div>
+          )}
         </div>
       ) : (
         <div className={styles.footerCenter}>

@@ -19,6 +19,7 @@ public final class LlmApiConstants {
     public static final String FIELD_CONTENT = "content";
     public static final String FIELD_REASONING_CONTENT = "reasoning_content";
     public static final String FIELD_FINISH_REASON = "finish_reason";
+    public static final String FIELD_USAGE = "usage";
     public static final String FIELD_TOOL_CALLS = "tool_calls";
     public static final String FIELD_FUNCTION = "function";
     public static final String FIELD_NAME = "name";

@@ -19,6 +19,15 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
+        // DeepSeek：不接收注定不支持的字段，避免 400/静默异常。
+        // 保留 stream_options（usage 采集）、user、parallel_tool_calls（OpenAI 兼容默认行为）。
+        request.setSeed(null);
+        request.setN(null);
+        request.setReasoningEffort(null);
+        request.setMaxCompletionTokens(null);
+        request.setLogprobs(null);
+        request.setTopLogprobs(null);
+        request.setLogitBias(null);
     }
 
     @Override

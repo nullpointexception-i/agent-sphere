@@ -18,7 +18,9 @@ public enum TimelineContentKey {
     DURATION_MS("durationMs"),
     MODEL_NAME("modelName"),
     /** 用户消息附图引用（[{fileKey, contentType}]，前端按 fileKey 拉字节显示）。 */
-    IMAGES("images");
+    IMAGES("images"),
+    /** 用量聚合（{promptTokens, completionTokens, totalTokens, cacheHitTokens, cacheMissTokens}；assistant / run_status 行）。 */
+    USAGE("usage");
 
     private final String code;
 

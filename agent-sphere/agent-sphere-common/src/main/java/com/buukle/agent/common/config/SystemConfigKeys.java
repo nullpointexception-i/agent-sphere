@@ -14,6 +14,8 @@ public final class SystemConfigKeys {
     public static final String PLUGIN_STORE_URL = "plugin.store-url";
     /** 默认资源模板（JSON 数组，新用户初始化时使用；留空则不初始化资源） */
     public static final String USER_RESOURCE_TEMPLATE = "user.resource-template";
+    /** 全局 LLM 采样默认配置（JSON，与 instance/completions config 同形状；agent 链路全局兜底） */
+    public static final String LLM_DEFAULTS_CONFIG = "llm.defaults-config";
 
     /** 允许不经鉴权公开读取的配置键（仅安全/非敏感项） */
     public static final java.util.Set<String> PUBLIC_KEYS = java.util.Set.of(PLUGIN_DOWNLOAD_URL, PLUGIN_STORE_URL);

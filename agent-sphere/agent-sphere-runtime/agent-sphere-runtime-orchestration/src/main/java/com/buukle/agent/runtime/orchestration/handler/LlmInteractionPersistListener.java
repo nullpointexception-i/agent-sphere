@@ -5,9 +5,11 @@ import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
+import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionEvent;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
+import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -40,6 +42,15 @@ public class LlmInteractionPersistListener {
         vo.setDurationMs((int) event.getDurationMs());
         vo.setSuccess(event.isSuccess());
         vo.setErrorMessage(event.getErrorMessage());
+        TokenUsage usage = event.getUsage();
+        if (usage != null) {
+            vo.setUsage(JsonUtils.toJson(usage));
+            vo.setPromptTokens(usage.getPromptTokens());
+            vo.setCompletionTokens(usage.getCompletionTokens());
+            vo.setTotalTokens(usage.getTotalTokens());
+            vo.setCacheHitTokens(usage.getCacheHitTokens());
+            vo.setCacheMissTokens(usage.getCacheMissTokens());
+        }
 
         try {
             RunVO run = runSpi.getRun(meta.getRunId());

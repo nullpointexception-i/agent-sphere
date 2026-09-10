@@ -35,6 +35,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -177,6 +178,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 // 响应头已就绪：body 阶段用定时中断兜底读取超时（每轮取消，避免残留中断）
                 readTimeoutFuture = READ_TIMEOUT_SCHEDULER.schedule(
                         Thread.currentThread()::interrupt, streamReadTimeoutSeconds, TimeUnit.SECONDS);
+                AtomicReference<JsonNode> usageRef = new AtomicReference<>();
                 try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -186,6 +188,11 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                             chunkCount++;
                             try {
                                 JsonNode chunk = JsonUtils.parse(data, JsonNode.class);
+                                // usage 末帧（stream_options.include_usage）：choices 为空、usage 在 chunk 顶层，取最后一次非空
+                                if (chunk != null && chunk.has(LlmApiConstants.FIELD_USAGE)
+                                        && !chunk.get(LlmApiConstants.FIELD_USAGE).isNull()) {
+                                    usageRef.set(chunk.get(LlmApiConstants.FIELD_USAGE));
+                                }
                                 if (chunk != null && chunk.has(LlmApiConstants.FIELD_CHOICES)
                                         && chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
                                         && chunk.get(LlmApiConstants.FIELD_CHOICES).size() > 0) {
@@ -239,11 +246,15 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     }
                 }
 
-                Map<String, Object> usage = Map.of();
+                Map<String, Object> usage = usageRef.get() == null ? Map.of()
+                        : JsonUtils.getMapper().convertValue(usageRef.get(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                        });
                 String content = contentBuilder.toString();
                 String reasoning = reasoningBuilder.toString();
-                log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}",
-                        modelName, chunkCount, content.length(), reasoning.length());
+                log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}, usage={}",
+                        modelName, chunkCount, content.length(), reasoning.length(),
+                        usage.isEmpty() ? "-" : usage.getOrDefault("total_tokens", "-"));
                 onEvent.accept(new LLMEvent.Finish(LlmApiConstants.FINISH_REASON_STOP, usage));
                 onDone.run();
                 if (readTimeoutFuture != null) {

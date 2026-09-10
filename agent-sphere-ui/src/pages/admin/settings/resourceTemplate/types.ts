@@ -278,6 +278,14 @@ export const TYPE_SCHEMAS: Record<TemplateItemType, TypeSchema> = {
         },
         widget: 'route-select',
       },
+      {
+        name: 'config',
+        label: { id: 'pages.instances.config', def: '高级配置 (JSON)' },
+        widget: 'textarea',
+        rows: 4,
+        json: true,
+        placeholder: '{"temperature":0.2,"thinking":true,"max_tokens":4096}',
+      },
     ],
   },
   mcp: {

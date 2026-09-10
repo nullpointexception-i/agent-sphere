@@ -62,6 +62,13 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
                     .set(AgentInstance::getMaxLoopCount, null)
                     .update();
         }
+        if (dto.getConfig() != null && dto.getConfig().isBlank()) {
+            // 空字符串 = 清除配置覆盖（置 NULL 走全局兜底）
+            lambdaUpdate()
+                    .eq(AgentInstance::getId, id)
+                    .set(AgentInstance::getConfig, null)
+                    .update();
+        }
         AgentInstance saved = getById(id);
         return instanceConverter.toVO(saved);
     }

@@ -21,6 +21,13 @@ public class RunActivityVO implements Serializable {
     private Integer durationMs;
     private String llmErrorMessage;
     private Boolean success;
+    /** 该次调用的归一化用量（仅 llm_interaction 行有值）。 */
+    private String usage;
+    private Integer promptTokens;
+    private Integer completionTokens;
+    private Integer totalTokens;
+    private Integer cacheHitTokens;
+    private Integer cacheMissTokens;
 
     private Long stepId;
     private String toolName;

@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.dtvo.vo;
 
+import com.buukle.agent.instance.domain.vo.RunUsageVO;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
@@ -30,4 +31,6 @@ public class RunVO implements Serializable {
     /** 瞬态标记：为 true 时该 run 的 kernel context 不注册 ask_clarification 工具（不落库，不对外序列化） */
     @JsonIgnore
     private Boolean noClarification;
+    /** 该 run 的 LLM 用量聚合（终态 run 有值；列表回填，单查含）。 */
+    private RunUsageVO usageSummary;
 }

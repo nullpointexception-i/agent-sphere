@@ -10,6 +10,7 @@ import { App, Button, Divider, Image, Input, Tag, Typography } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
+import UsageChip, { formatTokens } from '../Usage';
 import type { SubAgentLiveMap } from './subAgentTypes';
 
 interface TimelineListProps {
@@ -178,6 +179,7 @@ function AssistantCard({ row }: any) {
           )}
         </div>
       </Block>
+      <UsageChip usage={content.usage} />
     </div>
   );
 }
@@ -669,10 +671,14 @@ function RowCard({
   // 状态行：横线 + 状态 + 耗时 + LLM 模型名（不再渲染卡片）
   if (row.kind === 'run_status') {
     const duration = formatDuration(row.content?.durationMs);
+    const usage = row.content?.usage;
     const parts = [
       row.content?.text || row.title,
       duration,
       row.content?.modelName,
+      usage && usage.totalTokens
+        ? `Tokens ${formatTokens(usage.totalTokens)}`
+        : null,
     ].filter((p): p is string => !!p);
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>

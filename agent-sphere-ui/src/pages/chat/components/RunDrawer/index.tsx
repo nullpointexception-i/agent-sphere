@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import InteractionModal from '../InteractionModal';
+import { cacheHitRate, formatTokens } from '../Usage';
 
 interface RunDrawerProps {
   open: boolean;
@@ -95,6 +96,25 @@ export default function RunDrawer({
       render: (s: string) => (
         <Tag color={STATUS_COLORS[s] || 'default'}>{s || '-'}</Tag>
       ),
+    },
+    {
+      title: 'Tokens',
+      width: 110,
+      render: (_: any, r: any) => {
+        const u = r.usageSummary;
+        if (!u || !Number(u.totalTokens)) return '-';
+        const rate = cacheHitRate(u);
+        return (
+          <span style={{ fontSize: 12 }}>
+            {formatTokens(u.totalTokens)}
+            {rate != null ? (
+              <span style={{ color: 'rgba(0,0,0,0.35)', marginLeft: 6 }}>
+                cache {rate}%
+              </span>
+            ) : null}
+          </span>
+        );
+      },
     },
     {
       title: intl.formatMessage({ id: 'pages.table.created' }),

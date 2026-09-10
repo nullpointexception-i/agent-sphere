@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import DetailModal from '../DetailModal';
+import { cacheHitRate, formatTokens } from '../Usage';
 
 interface InteractionModalProps {
   open: boolean;
@@ -46,6 +47,7 @@ export default function InteractionModal({
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [detailRecord, setDetailRecord] = useState<any>(null);
+  const [runUsage, setRunUsage] = useState<any>(null);
 
   useEffect(() => {
     if (!open || runId == null || sessionId == null) return;
@@ -53,6 +55,10 @@ export default function InteractionModal({
     setRecords([]);
     setTotal(0);
     loadActivities(runId, sessionId, 1);
+    agentApi.runs
+      .usage(runId)
+      .then(setRunUsage)
+      .catch(() => setRunUsage(null));
   }, [open, runId, sessionId]);
 
   const loadActivities = async (rid: number, sid: number, p: number) => {
@@ -116,6 +122,14 @@ export default function InteractionModal({
         r.durationMs != null ? `${r.durationMs}ms` : '-',
     },
     {
+      title: 'Tokens',
+      width: 90,
+      render: (_: any, r: any) =>
+        r.activityType === 'llm_interaction' && r.totalTokens != null
+          ? formatTokens(r.totalTokens)
+          : '-',
+    },
+    {
       title: intl.formatMessage({
         id: 'pages.chat.success',
         defaultMessage: 'Status',
@@ -171,9 +185,26 @@ export default function InteractionModal({
         )}
         open={open}
         onCancel={onClose}
-        width={960}
+        width={980}
         footer={null}
       >
+        {runUsage && Number(runUsage.totalTokens) > 0 && (
+          <div
+            style={{
+              marginBottom: 8,
+              fontSize: 12,
+              color: 'rgba(0,0,0,0.45)',
+            }}
+          >
+            Run SUM · {formatTokens(runUsage.totalTokens)} tokens
+            {formatTokens(runUsage.promptTokens) !== '0' &&
+              ` · prompt ${formatTokens(runUsage.promptTokens)}`}
+            {formatTokens(runUsage.completionTokens) !== '0' &&
+              ` · completion ${formatTokens(runUsage.completionTokens)}`}
+            {cacheHitRate(runUsage) != null &&
+              ` · cache ${cacheHitRate(runUsage)}%`}
+          </div>
+        )}
         <Spin spinning={loading}>
           {records.length === 0 && !loading ? (
             <Empty

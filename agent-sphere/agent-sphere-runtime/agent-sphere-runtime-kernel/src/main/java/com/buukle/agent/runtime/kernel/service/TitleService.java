@@ -8,6 +8,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
+import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
@@ -41,6 +42,7 @@ public class TitleService {
     private final RouteListBuilder routeListBuilder;
     private final FallbackRouteExecutor fallbackRouteExecutor;
     private final ApplicationEventPublisher eventPublisher;
+    private final LlmRequestConfigurer llmRequestConfigurer;
 
     @Qualifier("runtimeAsyncExecutor")
     private final Executor asyncExecutor;
@@ -77,6 +79,7 @@ public class TitleService {
                         .setMessages(List.of(
                                 new ChatMessageDTO().setRole("user")
                                         .setContent(TITLE_PROMPT + userMessage)));
+                llmRequestConfigurer.applyGlobal(request);
 
                 String apiKey = resolveApiKey(route);
                 StringBuilder content = new StringBuilder();

@@ -25,10 +25,6 @@ public class RunPromptBuilder {
     };
 
     public String buildSystemPrompt(KernelContext ctx) {
-        return buildSystemPrompt(ctx, null);
-    }
-
-    public String buildSystemPrompt(KernelContext ctx, String todolistText) {
         StringBuilder sb = new StringBuilder();
         if (ctx != null && ctx.getAgentInstance() != null) {
             sb.append(ctx.getAgentInstance().getSystemPrompt() != null
@@ -48,12 +44,27 @@ public class RunPromptBuilder {
             }
         }
         sb.append(RunnerConstants.PROMPT_TOOLS_FOOTER);
-        if (todolistText != null && !todolistText.isBlank()) {
-            sb.append("\n\n## 当前待办列表\n")
-                    .append(todolistText)
-                    .append("\n\n**请根据任务状态变更及时更新此列表，不要等待用户提醒。**");
-        }
         return sb.toString();
+    }
+
+    /**
+     * 待办列表尾部小段（系统消息），由组装侧追加到消息最末（不晚于 FINAL_TURN），
+     * 保证 messages[0] 与历史前缀字节稳定命中缓存。todolist 每次变更只原位替换该槽内容。
+     *
+     * @return 待办后缀文本；todolistText 为空时返回 null（调用方应移除已有槽位）
+     */
+    public String buildTodolistSuffix(String todolistText) {
+        if (todolistText == null || todolistText.isBlank()) {
+            return null;
+        }
+        return RunnerConstants.PROMPT_TODOLIST_HEADER
+                + todolistText
+                + RunnerConstants.PROMPT_TODOLIST_INSTRUCTION;
+    }
+
+    /** 判断消息是否待办槽（以 header marker 开头，用于原位定位/删除）。 */
+    public boolean isTodolistSlot(String content) {
+        return content != null && content.startsWith(RunnerConstants.PROMPT_TODOLIST_HEADER);
     }
 
     /**

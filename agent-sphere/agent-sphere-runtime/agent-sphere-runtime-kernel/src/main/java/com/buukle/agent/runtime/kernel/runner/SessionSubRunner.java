@@ -19,6 +19,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
+import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
@@ -81,6 +82,7 @@ public class SessionSubRunner {
     /** 可选：统一 Timeline 索引（无则跳过子 Agent 头行，不影响功能）。 */
     private final ObjectProvider<AgentTimelineSpi> timelineSpiProvider;
     private final ChatAttachmentResolver attachmentResolver;
+    private final LlmRequestConfigurer llmRequestConfigurer;
     /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
     private volatile ScreenshotObservationSupport screenshotObservationSupport;
 
@@ -333,6 +335,11 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 if (!toolDefs.isEmpty()) {
                     request.setTools(toolDefs);
                 }
+                // 采样参数接线：全局兜底 + 实例 config 覆盖
+                String instanceConfig = ctx.getKernelContext() != null
+                        && ctx.getKernelContext().getAgentInstance() != null
+                        ? ctx.getKernelContext().getAgentInstance().getConfig() : null;
+                llmRequestConfigurer.apply(request, instanceConfig);
                 CountDownLatch done = new CountDownLatch(1);
                 CompletableFuture<Void> future = kernelLlmService.stream(
                         route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(), request,

@@ -13,6 +13,10 @@ public final class RunnerConstants {
     public static final String TOOL_RESULT_BUDGET_OMITTED = "[Tool result omitted due to context limit]";
     public static final String PROMPT_CURRENT_TIME = "\n\nCurrent server time: ";
     public static final String PROMPT_TOOLS_HEADER = "\n\nAvailable tools:\n";
+    /** 待办列表尾部段：header 同时作为槽位定位 marker（内容以 header 开头的消息即待办槽）。 */
+    public static final String PROMPT_TODOLIST_HEADER = "\n\n## 当前待办列表\n";
+    public static final String PROMPT_TODOLIST_INSTRUCTION =
+            "\n\n**请根据任务状态变更及时更新此列表，不要等待用户提醒。**";
     public static final String PROMPT_TOOLS_FOOTER = """
             
             BEFORE any other action, call the task list tool to create a structured

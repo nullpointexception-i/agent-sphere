@@ -10,7 +10,6 @@ import com.buukle.agent.completions.domain.AgentCompletionsPrompt;
 import com.buukle.agent.completions.dtvo.ChatCompletionsResp;
 import com.buukle.agent.completions.dtvo.CompletionsCallVO;
 import com.buukle.agent.completions.dtvo.CompletionsInput;
-import com.buukle.agent.completions.dtvo.CompletionsConfigDTO;
 import com.buukle.agent.completions.dtvo.CompletionsPromptVO;
 import com.buukle.agent.completions.dtvo.CompletionsVO;
 import com.buukle.agent.completions.dtvo.CreateCompletionsDTO;
@@ -21,8 +20,9 @@ import com.buukle.agent.completions.repository.CompletionsPromptMapper;
 import com.buukle.agent.completions.service.CompletionsCallService;
 import com.buukle.agent.completions.service.CompletionsPromptService;
 import com.buukle.agent.completions.service.CompletionsService;
+import com.buukle.agent.model.dtvo.dto.LlmSamplingConfigDTO;
+import com.buukle.agent.model.dtvo.dto.LlmSamplingConfigMapper;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
-import com.buukle.agent.model.dtvo.dto.complete.ThinkingDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -59,10 +59,6 @@ public class CompletionsServiceImpl implements CompletionsService {
     private static final String OUTPUT_SCHEMA_HINT = "\n\n请严格按照以下 JSON Schema 输出最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
     private static final String RESPONSE_FORMAT_TYPE_JSON_OBJECT = "json_object";
     private static final String JSON_SCHEMA_NAME = "output";
-    private static final String THINKING_TYPE_ENABLED = "enabled";
-    private static final String THINKING_TYPE_DISABLED = "disabled";
-    private static final String BOOLEAN_STRING_TRUE = "true";
-    private static final String BOOLEAN_STRING_FALSE = "false";
 
     private final CompletionsMapper completionsMapper;
     private final CompletionsPromptMapper promptMapper;
@@ -122,6 +118,12 @@ public class CompletionsServiceImpl implements CompletionsService {
             request.setMessages(messages);
             applyResponseFormat(request, c.getOutputSchema());
             applyConfig(request, c.getConfig());
+            // usage 采集默认开启（配置未显式设置时兜底），保证调用记录 usage 真实可观测
+            if (request.getStreamOptions() == null
+                    || request.getStreamOptions().getIncludeUsage() == null) {
+                request.setStreamOptions(
+                        new com.buukle.agent.model.dtvo.dto.complete.StreamOptionsDTO().setIncludeUsage(true));
+            }
             KernelLlmService.InvokeResult result;
             try {
                 result = llmService.invokeSync(
@@ -300,57 +302,10 @@ public class CompletionsServiceImpl implements CompletionsService {
         }
     }
 
-    /** 解析 agent_completions.config，把支持的参数映射到请求（temperature/thinking/max_tokens/top_p/penalties/stop）。 */
+    /** 解析 agent_completions.config，把支持的参数映射到请求（复用共享映射层，覆盖全字段）。 */
     private void applyConfig(ChatCompletionRequestDTO request, String configJson) {
-        if (!StringUtils.hasText(configJson)) {
-            return;
-        }
-        try {
-            CompletionsConfigDTO cfg = JsonUtils.getMapper().readValue(configJson, CompletionsConfigDTO.class);
-            if (cfg == null) {
-                return;
-            }
-            if (cfg.getTemperature() != null) {
-                request.setTemperature(cfg.getTemperature());
-            }
-            if (cfg.getMaxTokens() != null) {
-                request.setMaxTokens(cfg.getMaxTokens());
-            }
-            if (cfg.getTopP() != null) {
-                request.setTopP(cfg.getTopP());
-            }
-            if (cfg.getPresencePenalty() != null) {
-                request.setPresencePenalty(cfg.getPresencePenalty());
-            }
-            if (cfg.getFrequencyPenalty() != null) {
-                request.setFrequencyPenalty(cfg.getFrequencyPenalty());
-            }
-            if (cfg.getStop() != null && !cfg.getStop().isEmpty()) {
-                request.setStop(cfg.getStop());
-            }
-            String thinkingValue = StringUtils.hasText(cfg.getThinking()) ? cfg.getThinking() : cfg.getReasoning();
-            if (StringUtils.hasText(thinkingValue)) {
-                String type = resolveThinkingType(thinkingValue);
-                if (StringUtils.hasText(type)) {
-                    request.setThinking(new ThinkingDTO().setType(type));
-                }
-            }
-        } catch (Exception e) {
-            // config 解析失败：忽略，保持默认
-        }
-    }
-
-    private String resolveThinkingType(String value) {
-        if (THINKING_TYPE_ENABLED.equalsIgnoreCase(value) || THINKING_TYPE_DISABLED.equalsIgnoreCase(value)) {
-            return value.toLowerCase();
-        }
-        if (BOOLEAN_STRING_TRUE.equalsIgnoreCase(value)) {
-            return THINKING_TYPE_ENABLED;
-        }
-        if (BOOLEAN_STRING_FALSE.equalsIgnoreCase(value)) {
-            return THINKING_TYPE_DISABLED;
-        }
-        return null;
+        LlmSamplingConfigDTO cfg = LlmSamplingConfigMapper.fromJson(configJson);
+        LlmSamplingConfigMapper.apply(request, cfg);
     }
 
     private String renderFieldPlaceholders(String text, Map<String, Object> input) {

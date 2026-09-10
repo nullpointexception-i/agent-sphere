@@ -111,6 +111,8 @@ export const agentApi = {
           params.limit != null ? `limit=${params.limit}` : 'limit=5',
         ].join('&')}`,
       ),
+    usage: (id: number) =>
+      request<any>(`${BASE}/instance/sessions/${id}/usage`),
     getDocuments: (id: number, page = 1, size = 20) =>
       request<any>(`${BASE}/artifacts/documents?sessionId=${id}&page=${page}&size=${size}`),
     clarify: (sessionId: number, runId: number, response: string, clarificationId?: string) =>
@@ -148,6 +150,8 @@ export const agentApi = {
       request<void>(`${BASE}/runtime/${sessionId}/run/${runId}/stop`, { method: 'POST' }),
     sessionStop: (sessionId: number) =>
       request<void>(`${BASE}/runtime/${sessionId}/stop`, { method: 'POST' }),
+    usage: (runId: number) =>
+      request<any>(`${BASE}/instance/runs/${runId}/usage`),
   },
 
   interactions: {

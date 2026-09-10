@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.model.invoke;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.spi.ModelProviderSpi;
 import com.buukle.agent.util.TextSanitizer;
@@ -44,6 +45,7 @@ public class KernelLlmService {
             StringBuilder resultCollector = new StringBuilder();
             StringBuilder textCollector = new StringBuilder();
             StringBuilder reasoningCollector = new StringBuilder();
+            AtomicReference<Map<String, Object>> usageRef = new AtomicReference<>();
             String requestBody = JsonUtils.toJson(request);
             try {
                 CountDownLatch done = new CountDownLatch(1);
@@ -65,6 +67,9 @@ public class KernelLlmService {
                                         reasoningCollector.append(clean);
                                         resultCollector.append(clean); // response_body 保持兼容（合并）
                                         onEvent.accept(new LLMEvent.ReasoningDelta(clean));
+                                    } else if (event instanceof LLMEvent.Finish(String reason, Map<String, Object> usage) && usage != null) {
+                                        usageRef.set(usage);
+                                        onEvent.accept(event);
                                     } else {
                                         onEvent.accept(event);
                                     }
@@ -95,6 +100,7 @@ public class KernelLlmService {
                         this, meta, modelName, requestBody, resultCollector.toString(),
                         textCollector.length() > 0 ? textCollector.toString() : null,
                         reasoningCollector.length() > 0 ? reasoningCollector.toString() : null,
+                        TokenUsage.from(usageRef.get()),
                         System.currentTimeMillis() - start, success, errorMessage));
             }
         });
@@ -160,6 +166,7 @@ public class KernelLlmService {
 
         eventPublisher.publishEvent(new LlmInteractionEvent(
                 this, meta, modelName, JsonUtils.toJson(request), merged.toString(),
+                null, null, TokenUsage.from(usageRef.get()),
                 System.currentTimeMillis() - start, success, errorMessage));
 
         InvokeResult result = new InvokeResult();

@@ -136,11 +136,12 @@ export default function ResourceTemplateEditor({
           ) : (
             <Alert
               style={{ margin: '8px 0' }}
-type="info"
+              type="info"
               showIcon
               title={intl.formatMessage({
                 id: 'pages.admin.settings.template.tab.jsonDesc',
-                defaultMessage: 'JSON 数组格式，与后端配置存储一致；保存时需为合法 JSON。',
+                defaultMessage:
+                  'JSON 数组格式，与后端配置存储一致；保存时需为合法 JSON。',
               })}
             />
           )}

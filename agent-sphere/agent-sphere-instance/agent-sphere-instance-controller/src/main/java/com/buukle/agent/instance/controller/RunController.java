@@ -28,6 +28,12 @@ public class RunController extends BaseController {
         return ok(runService.getRun(id));
     }
 
+    /** run 级用量聚合（InteractionModal 头部 / RunDrawer 明细）。 */
+    @GetMapping("/{id}/usage")
+    public ResponseEntity<?> usage(@PathVariable Long id) {
+        return ok(runService.usageSummary(id));
+    }
+
     @GetMapping
     public ResponseEntity<?> listBySession(@RequestParam Long sessionId,
                                            @RequestParam(required = false) String keyword,

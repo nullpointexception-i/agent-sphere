@@ -5,11 +5,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentRun;
+import com.buukle.agent.instance.domain.vo.RunUsageVO;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.MessageHistoryVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
+import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.RunMapper;
 import com.buukle.agent.instance.dtvo.vo.ClarificationVO;
 import com.buukle.agent.instance.service.ClarificationService;
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements RunService {
     private final RunConverter runConverter;
     private final ClarificationService clarificationService;
+    private final AgentLlmInteractionRecordMapper interactionMapper;
 
     /** 列表/增量查询排除的大字段属性名（按需经 findReasoningBatch 定点补拉，避免行宽撑爆） */
     private static final String REASONING_PROPERTY = "reasoning";
@@ -98,8 +101,20 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 List<ClarificationVO> cvs = clarificationMap.get(runVO.getId());
                 if (cvs != null && !cvs.isEmpty()) runVO.setClarifications(cvs);
             }
+            // run 级用量聚合批量回填（RunDrawer 逐行直接消费）
+            Map<Long, RunUsageVO> usageMap = interactionMapper.sumUsageByRunIds(runIds)
+                    .stream().collect(Collectors.toMap(RunUsageVO::getRunId, u -> u));
+            for (RunVO runVO : voPage.getRecords()) {
+                runVO.setUsageSummary(usageMap.get(runVO.getId()));
+            }
         }
         return voPage;
+    }
+
+    @Override
+    public RunUsageVO usageSummary(Long runId) {
+        RunUsageVO vo = interactionMapper.getRunUsage(runId);
+        return vo != null ? vo : RunUsageVO.empty(runId);
     }
 
     @Override

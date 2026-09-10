@@ -64,6 +64,7 @@ export default function Chat() {
   const [sending, setSending] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sseConnected, setSseConnected] = useState(false);
+  const [sessionUsage, setSessionUsage] = useState<any>(null);
   const [instances, setInstances] = useState<any[]>([]);
   const [chosenInstance, setChosenInstance] = useState('');
   const [currentInstanceObj, setCurrentInstanceObj] = useState<any>(null);
@@ -303,6 +304,21 @@ export default function Chat() {
       // ignore
     }
   };
+
+  // 会话级用量：run 终态后拉取 SUM，驱动聊天区最下方吸底用量条
+  const refreshSessionUsage = async (sid: number) => {
+    if (!sid) return;
+    try {
+      const u = await agentApi.sessions.usage(sid);
+      setSessionUsage(u);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (currentSession?.id) void refreshSessionUsage(currentSession.id);
+  }, [currentSession?.id]);
 
   const handleTimelineClarify = (row: any, response: string) => {
     if (!currentSession?.id || !row?.runId) return;
@@ -618,6 +634,14 @@ export default function Chat() {
               } else {
                 void refreshLatest(sid);
               }
+            }
+            // run 终态：刷新会话级用量（聊天区吸底 SUM）
+            if (
+              tlSubType === 'run_completed' ||
+              tlSubType === 'run_failed' ||
+              tlSubType === 'run_cancelled'
+            ) {
+              void refreshSessionUsage(sid);
             }
 
             // 始终跟踪当前 runId（含任务系统发起的 run），保证停止能命中正确 run
@@ -1402,6 +1426,7 @@ export default function Chat() {
               onLoadOlderTimeline={loadOlderTimeline}
               onRespondClarify={handleTimelineClarify}
               subAgentLive={subAgentLive}
+              sessionUsage={sessionUsage}
               loadSubAgentSteps={async (id: number) => {
                 try {
                   return await agentApi.sessions.getSubAgentTimeline(id);

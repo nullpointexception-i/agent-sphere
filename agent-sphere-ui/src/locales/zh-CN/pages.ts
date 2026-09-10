@@ -86,6 +86,9 @@ export default {
   'pages.instances.maxLoopCount': '最大循环次数',
   'pages.instances.maxLoopCount.extra':
     '单次 run 最大循环数；0=系统默认，>0=覆盖，必填',
+  'pages.instances.config': '高级配置 (JSON)',
+  'pages.instances.config.extra':
+    '采样参数 JSON（与 Completions config 同形状）；留空 = 使用全局系统默认',
   'pages.instances.image': '图片',
   'pages.capabilities.definition': '定义',
   'pages.capabilities.serverUrl': '服务地址',
@@ -381,6 +384,7 @@ export default {
   'pages.admin.settings.group.rate-limit': '限流配置',
   'pages.admin.settings.group.plugin': '插件安装包',
   'pages.admin.settings.group.user': '用户初始化',
+  'pages.admin.settings.group.llm': '大模型默认',
   'pages.admin.settings.template.title': '资源配置模板',
   'pages.admin.settings.template.tab.form': '页面配置',
   'pages.admin.settings.template.tab.formDesc':

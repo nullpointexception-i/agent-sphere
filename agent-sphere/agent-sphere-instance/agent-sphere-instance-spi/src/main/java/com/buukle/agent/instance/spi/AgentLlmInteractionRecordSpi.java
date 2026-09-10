@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.spi;
 
+import com.buukle.agent.instance.domain.vo.SessionUsageVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 
 import java.util.List;
@@ -13,4 +14,7 @@ public interface AgentLlmInteractionRecordSpi {
     long countByRunId(Long runId);
 
     AgentLlmInteractionRecordVO getById(Long id);
+
+    /** 会话级用量聚合（聊天区最下方吸底展示用）。 */
+    SessionUsageVO usageSummary(Long sessionId);
 }

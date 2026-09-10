@@ -18,6 +18,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
+import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
@@ -63,6 +64,7 @@ public class CompactionService {
     private final ApplicationEventPublisher eventPublisher;
     private final RouteListBuilder routeListBuilder;
     private final FallbackRouteExecutor fallbackRouteExecutor;
+    private final LlmRequestConfigurer llmRequestConfigurer;
 
     public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route) {
         if (route == null) return false;
@@ -225,6 +227,7 @@ public class CompactionService {
                             new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM)
                                     .setContent(CompactionPromptConstant.getSystemPrompt()),
                             new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(messagesText)));
+            llmRequestConfigurer.applyGlobal(request);
             String apiKeyValue = resolveApiKey(route);
             StringBuilder content = new StringBuilder();
             var future = kernelLlmService.stream(

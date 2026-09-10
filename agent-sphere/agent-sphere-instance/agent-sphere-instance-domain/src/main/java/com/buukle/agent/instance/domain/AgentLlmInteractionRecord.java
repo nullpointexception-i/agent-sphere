@@ -26,6 +26,13 @@ public class AgentLlmInteractionRecord {
     private String replyContent;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
+    /** 归一化用量 JSON（TokenUsage，供应商无关镜像，冗余标量列供聚合）。 */
+    private String usage;
+    private Integer promptTokens;
+    private Integer completionTokens;
+    private Integer totalTokens;
+    private Integer cacheHitTokens;
+    private Integer cacheMissTokens;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

@@ -190,14 +190,25 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             return pageVO;
         }
         Map<Long, AgentRun> runs = loadRuns(rows);
-        pageVO.setRows(rows.stream().map(r -> toVO(r, runs)).collect(Collectors.toList()));
+        // run 级用量聚合批量预取（run_status 行展示会话内单 run SUM；避免逐行查询）
+        List<Long> distinctRunIds = rows.stream()
+                .map(r -> r.getRefRunId() != null ? r.getRefRunId() : r.getRunId())
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, com.buukle.agent.instance.domain.vo.RunUsageVO> usageByRun =
+                distinctRunIds.isEmpty() ? Map.of()
+                        : interactionMapper.sumUsageByRunIds(distinctRunIds).stream()
+                        .collect(Collectors.toMap(com.buukle.agent.instance.domain.vo.RunUsageVO::getRunId, u -> u));
+        pageVO.setRows(rows.stream().map(r -> toVO(r, runs, usageByRun)).collect(Collectors.toList()));
         pageVO.setHasMore(hasMore);
         pageVO.setOldestSeq(rows.get(0).getSeq());
         pageVO.setNewestSeq(rows.get(rows.size() - 1).getSeq());
         return pageVO;
     }
 
-    private AgentTimelineVO toVO(AgentTimeline row, Map<Long, AgentRun> runs) {
+    private AgentTimelineVO toVO(AgentTimeline row, Map<Long, AgentRun> runs,
+                                 Map<Long, com.buukle.agent.instance.domain.vo.RunUsageVO> usageByRun) {
         AgentTimelineVO vo = new AgentTimelineVO();
         vo.setSeq(row.getSeq());
         vo.setRunId(row.getRunId());
@@ -211,12 +222,13 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         vo.setRefToolCallId(row.getRefToolCallId());
         vo.setRefSubAgentRunId(row.getRefSubAgentRunId());
         vo.setRefClarificationId(row.getRefClarificationId());
-        vo.setContent(resolveContent(row, runs));
+        vo.setContent(resolveContent(row, runs, usageByRun));
         return vo;
     }
 
     /** 按 ref 从原表批量解析正文（loading 时取好，非懒取）。 */
-    private Map<String, Object> resolveContent(AgentTimeline row, Map<Long, AgentRun> runs) {
+    private Map<String, Object> resolveContent(AgentTimeline row, Map<Long, AgentRun> runs,
+                                               Map<Long, com.buukle.agent.instance.domain.vo.RunUsageVO> usageByRun) {
         String kind = row.getKind();
         Map<String, Object> content = new HashMap<>();
         TimelineKind kindEnum = TimelineKind.from(kind);
@@ -248,6 +260,12 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                             }
                             if (reply != null && !reply.isBlank()) {
                                 content.put(TimelineContentKey.REPLY.getCode(), cap(reply, CONTENT_CAP));
+                            }
+                            // 迭代级用量：该次 LLM 调用的归一化用量（有值才附）
+                            if (rec.getTotalTokens() != null) {
+                                content.put(TimelineContentKey.USAGE.getCode(), usageMap(
+                                        rec.getPromptTokens(), rec.getCompletionTokens(), rec.getTotalTokens(),
+                                        rec.getCacheHitTokens(), rec.getCacheMissTokens()));
                             }
                         }
                     } else {
@@ -325,6 +343,14 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                         if (last != null && last.getModelName() != null) {
                             content.put(TimelineContentKey.MODEL_NAME.getCode(), last.getModelName());
                         }
+                        // run 级用量：批量预取的 run 汇总（run 结束后 SUM 展示）
+                        com.buukle.agent.instance.domain.vo.RunUsageVO usage = usageByRun != null
+                                ? usageByRun.get(r.getId()) : null;
+                        if (usage != null && usage.getTotalTokens() != null && usage.getTotalTokens() > 0) {
+                            content.put(TimelineContentKey.USAGE.getCode(), usageMap(
+                                    usage.getPromptTokens(), usage.getCompletionTokens(), usage.getTotalTokens(),
+                                    usage.getCacheHitTokens(), usage.getCacheMissTokens()));
+                        }
                     }
                 }
                 default -> { /* 未知 kind：仅元数据 */ }
@@ -358,6 +384,18 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             return null;
         }
         return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    /** 组装用量聚合 Map（前端统一结构；仅在有值字段时放入，零值保留便于展示）。 */
+    private static Map<String, Object> usageMap(Number prompt, Number completion, Number total,
+                                                Number cacheHit, Number cacheMiss) {
+        Map<String, Object> m = new HashMap<>(5);
+        m.put("promptTokens", prompt != null ? prompt.longValue() : 0L);
+        m.put("completionTokens", completion != null ? completion.longValue() : 0L);
+        m.put("totalTokens", total != null ? total.longValue() : 0L);
+        m.put("cacheHitTokens", cacheHit != null ? cacheHit.longValue() : 0L);
+        m.put("cacheMissTokens", cacheMiss != null ? cacheMiss.longValue() : 0L);
+        return m;
     }
 
     /** 解析 USER 行附件引用 JSON；失败返回空列表（不阻断正文渲染）。 */

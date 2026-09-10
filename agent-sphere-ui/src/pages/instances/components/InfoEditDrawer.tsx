@@ -159,6 +159,28 @@ export default function InfoEditDrawer({
             style={{ width: '100%' }}
           />
         </Form.Item>
+        <Form.Item
+          name="config"
+          label={labelWithRule(
+            intl.formatMessage({
+              id: 'pages.instances.config',
+              defaultMessage: '高级配置 (JSON)',
+            }),
+            intl.formatMessage({
+              id: 'pages.instances.config.extra',
+              defaultMessage:
+                '采样参数 JSON（与 Completions config 同形状）；留空 = 使用全局系统默认',
+            }),
+          )}
+        >
+          <Input.TextArea
+            rows={4}
+            maxLength={8000}
+            placeholder={
+              '{"temperature":0.2,"thinking":true,"max_tokens":4096}'
+            }
+          />
+        </Form.Item>
       </Form>
     </Drawer>
   );

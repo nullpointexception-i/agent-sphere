@@ -84,8 +84,9 @@ class AgentTimelineServiceTest {
     @SuppressWarnings("unchecked")
     private Map<String, Object> invokeResolveContent(AgentTimeline row) throws Exception {
         AgentTimelineServiceImpl svc = new AgentTimelineServiceImpl(null, null, toolCallMapper, null, null, null);
-        Method m = AgentTimelineServiceImpl.class.getDeclaredMethod("resolveContent", AgentTimeline.class, Map.class);
+        Method m = AgentTimelineServiceImpl.class.getDeclaredMethod(
+                "resolveContent", AgentTimeline.class, Map.class, Map.class);
         m.setAccessible(true);
-        return (Map<String, Object>) m.invoke(svc, row, Collections.emptyMap());
+        return (Map<String, Object>) m.invoke(svc, row, Collections.emptyMap(), Collections.emptyMap());
     }
 }

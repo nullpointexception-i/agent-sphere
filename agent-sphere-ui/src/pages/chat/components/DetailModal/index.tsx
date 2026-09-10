@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Modal } from 'antd';
+import { formatTokens } from '../Usage';
 
 interface DetailModalProps {
   open: boolean;
@@ -52,6 +53,37 @@ export default function DetailModal({
 
         {isLLM && (
           <>
+            {record.totalTokens != null && (
+              <div
+                style={{
+                  background: '#fafafa',
+                  border: '1px solid #f0f0f0',
+                  borderRadius: 4,
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  color: '#595959',
+                  display: 'flex',
+                  gap: 20,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span>Prompt: {formatTokens(record.promptTokens)}</span>
+                <span>Completion: {formatTokens(record.completionTokens)}</span>
+                <span>
+                  <strong>Total: {formatTokens(record.totalTokens)}</strong>
+                </span>
+                {record.cacheHitTokens != null && (
+                  <>
+                    <span>
+                      Cache hit: {formatTokens(record.cacheHitTokens)}
+                    </span>
+                    <span>
+                      Cache miss: {formatTokens(record.cacheMissTokens)}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
             <div>
               <div
                 style={{ fontWeight: 600, marginBottom: 4, color: '#8c8c8c' }}

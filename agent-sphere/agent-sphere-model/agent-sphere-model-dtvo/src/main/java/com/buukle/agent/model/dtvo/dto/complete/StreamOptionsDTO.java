@@ -10,9 +10,8 @@ import java.io.Serializable;
 @Data
 @Accessors(chain = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class ThinkingDTO implements Serializable {
-    private String type;
-    /** DeepSeek 思考 token 配额（reasoning 阶段的预算上限）。 */
-    @JsonProperty("budget_tokens")
-    private Integer budgetTokens;
+public class StreamOptionsDTO implements Serializable {
+    /** 流式响应末尾携带 usage（OpenAI / 兼容实现支持）。 */
+    @JsonProperty("include_usage")
+    private Boolean includeUsage;
 }

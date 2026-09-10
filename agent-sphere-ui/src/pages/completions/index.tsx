@@ -30,6 +30,43 @@ import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
 
+/** 解析 completions 调用 usage 原始 JSON（供应商字段）→ 统一展示结构；失败返回 null。 */
+function parseCallUsage(raw?: string): {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheHitTokens: number;
+  cacheMissTokens: number;
+} | null {
+  if (!raw) return null;
+  try {
+    const u = JSON.parse(raw);
+    if (typeof u !== 'object' || u == null) return null;
+    const prompt = Number(u.prompt_tokens) || 0;
+    const completion = Number(u.completion_tokens) || 0;
+    const total = Number(u.total_tokens) || prompt + completion;
+    const details = u.prompt_tokens_details || {};
+    const cached =
+      Number(details.cached_tokens) || Number(u.prompt_cache_hit_tokens) || 0;
+    return {
+      promptTokens: prompt,
+      completionTokens: completion,
+      totalTokens: total,
+      cacheHitTokens: cached,
+      cacheMissTokens:
+        Number(u.prompt_cache_miss_tokens) || Math.max(0, prompt - cached),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function fmtTokens(n?: number): string {
+  if (n == null) return '-';
+  if (n >= 1000) return `${Math.round((n * 10) / 1000) / 10}k`;
+  return String(n);
+}
+
 export default function CompletionsList() {
   const { message, modal } = App.useApp();
   const intl = useIntl();
@@ -442,8 +479,16 @@ export default function CompletionsList() {
       dataIndex: 'usage',
       key: 'usage',
       width: 140,
-      render: (u: string) =>
-        u ? <span style={{ fontSize: 12 }}>{u}</span> : '-',
+      render: (u: string) => {
+        const parsed = parseCallUsage(u);
+        return parsed ? (
+          <span style={{ fontSize: 12 }}>{fmtTokens(parsed.totalTokens)}</span>
+        ) : u ? (
+          <span style={{ fontSize: 12 }}>{u}</span>
+        ) : (
+          '-'
+        );
+      },
     },
     {
       title: t('pages.admin.completions.calls.output', '输出'),
@@ -961,7 +1006,55 @@ export default function CompletionsList() {
                 },
                 {
                   label: t('pages.admin.completions.calls.usage', 'Usage'),
-                  value: callDetail?.usage || '-',
+                  value: (() => {
+                    const parsed = parseCallUsage(callDetail?.usage);
+                    if (!parsed) return callDetail?.usage || '-';
+                    return (
+                      <div style={{ fontSize: 13 }}>
+                        <div>Prompt: {fmtTokens(parsed.promptTokens)}</div>
+                        <div>
+                          Completion: {fmtTokens(parsed.completionTokens)}
+                        </div>
+                        <div>
+                          <strong>
+                            Total: {fmtTokens(parsed.totalTokens)}
+                          </strong>
+                        </div>
+                        {parsed.cacheHitTokens > 0 && (
+                          <div>
+                            Cache hit: {fmtTokens(parsed.cacheHitTokens)} ·
+                            miss: {fmtTokens(parsed.cacheMissTokens)}
+                          </div>
+                        )}
+                        <details style={{ marginTop: 6 }}>
+                          <summary
+                            style={{
+                              cursor: 'pointer',
+                              fontSize: 12,
+                              color: '#8c8c8c',
+                            }}
+                          >
+                            Raw usage
+                          </summary>
+                          <pre
+                            style={{
+                              background: '#f5f5f5',
+                              padding: 8,
+                              borderRadius: 4,
+                              fontSize: 12,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-all',
+                              margin: '4px 0 0',
+                              maxHeight: 180,
+                              overflow: 'auto',
+                            }}
+                          >
+                            {callDetail.usage}
+                          </pre>
+                        </details>
+                      </div>
+                    );
+                  })(),
                 },
                 {
                   label: t('pages.admin.completions.calls.input', '入参'),
