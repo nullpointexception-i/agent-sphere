@@ -10,6 +10,9 @@ import java.util.List;
 public interface CapabilitySkillSpi {
     SkillVO createSkill(CreateSkillDTO dto);
 
+    /** 运行线程内创建技能时显式指定创建人（避免审计回落为 system）。 */
+    SkillVO createSkill(CreateSkillDTO dto, String createdBy);
+
     SkillVO getSkill(Long id);
 
     List<SkillVO> listSkills(String keyword, LocalDateTime startTime, LocalDateTime endTime);
@@ -17,6 +20,9 @@ public interface CapabilitySkillSpi {
     IPage<SkillVO> pageSkills(int page, int size, String keyword, LocalDateTime startTime, LocalDateTime endTime);
 
     SkillVO updateSkill(Long id, CreateSkillDTO dto);
+
+    /** 运行线程内更新技能时显式指定更新人（避免审计回落为 system）。 */
+    SkillVO updateSkill(Long id, CreateSkillDTO dto, String updatedBy);
 
     void deleteSkill(Long id);
 

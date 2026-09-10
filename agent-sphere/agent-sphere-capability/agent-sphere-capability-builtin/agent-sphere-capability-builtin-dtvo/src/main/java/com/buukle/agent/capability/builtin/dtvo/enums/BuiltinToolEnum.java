@@ -6,7 +6,8 @@ public enum BuiltinToolEnum {
     WEB_READ(4),
     CHROME(5),
     DOCWRITE(6),
-    ASK_CLARIFICATION(7);
+    ASK_CLARIFICATION(7),
+    SKILLWRITE(8);
 
     private final int id;
 

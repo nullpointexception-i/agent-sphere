@@ -1,6 +1,6 @@
-package com.buukle.agent.capability.builtin.tool.docwrite.tool;
+package com.buukle.agent.capability.builtin.tool.spi.util;
 
-import com.buukle.agent.capability.builtin.tool.docwrite.dtvo.vo.HeadingInfo;
+import com.buukle.agent.capability.builtin.tool.spi.dtvo.vo.HeadingInfo;
 
 import java.util.ArrayList;
 import java.util.Arrays;

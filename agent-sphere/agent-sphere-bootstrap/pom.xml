@@ -54,6 +54,10 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-capability-builtin-tool-skillwrite</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-runtime-orchestration</artifactId>
         </dependency>
         <dependency>

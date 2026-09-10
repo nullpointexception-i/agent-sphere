@@ -30,8 +30,18 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
 
     @Override
     public SkillVO createSkill(CreateSkillDTO dto) {
+        return createSkill(dto, null);
+    }
+
+    @Override
+    public SkillVO createSkill(CreateSkillDTO dto, String createdBy) {
         validateDefinition(dto.getDefinition());
         CapabilitySkill skill = capabilitySkillConverter.toDO(dto);
+        if (createdBy != null && !createdBy.isBlank()) {
+            // 显式指定创建人：MetaObjectHandler 的 fillStrategy 不会覆盖非空值
+            skill.setCreatedBy(createdBy);
+            skill.setUpdatedBy(createdBy);
+        }
         save(skill);
         return capabilitySkillConverter.toVO(skill);
     }
@@ -45,6 +55,11 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
 
     @Override
     public SkillVO updateSkill(Long id, CreateSkillDTO dto) {
+        return updateSkill(id, dto, null);
+    }
+
+    @Override
+    public SkillVO updateSkill(Long id, CreateSkillDTO dto, String updatedBy) {
         validateDefinition(dto.getDefinition());
         CapabilitySkill existing = getById(id);
         if (existing == null) {
@@ -54,6 +69,10 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         skill.setId(id);
         // 保留原状态：更新内容不应把 DISABLED 重置为 ENABLED
         skill.setStatus(existing.getStatus());
+        if (updatedBy != null && !updatedBy.isBlank()) {
+            // 显式指定更新人：MetaObjectHandler 的 fillStrategy 不会覆盖非空值
+            skill.setUpdatedBy(updatedBy);
+        }
         updateById(skill);
         return capabilitySkillConverter.toVO(skill);
     }

@@ -1,4 +1,4 @@
-package com.buukle.agent.capability.builtin.tool.docwrite.dtvo.vo;
+package com.buukle.agent.capability.builtin.tool.spi.dtvo.vo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
