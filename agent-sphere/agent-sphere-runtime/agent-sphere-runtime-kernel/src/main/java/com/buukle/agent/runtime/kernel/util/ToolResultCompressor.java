@@ -17,10 +17,23 @@ public class ToolResultCompressor {
     private static final int STRING_TAIL_CHARS = 50;
 
     public static String compress(String raw, int maxValueChars) {
+        return compress(raw, maxValueChars, false);
+    }
+
+    /**
+     * 压缩但保留数组完整（不折叠成 { _count, _showing, items } 只截前几项）。
+     * 用于需要前端完整展示的载荷（如 todo 工具的 todos 列表）。
+     * 数组元素仍按 maxValueChars 截断超长字符串，避免单个元素失控。
+     */
+    public static String compressKeepArrays(String raw, int maxValueChars) {
+        return compress(raw, maxValueChars, true);
+    }
+
+    private static String compress(String raw, int maxValueChars, boolean keepArrays) {
         if (raw == null || raw.isBlank()) return raw;
         try {
             Object node = MAPPER.readValue(raw, Object.class);
-            Object compressed = jsonCompress(node, 0, maxValueChars);
+            Object compressed = jsonCompress(node, 0, maxValueChars, keepArrays);
             String result = MAPPER.writeValueAsString(compressed);
             return result.length() > raw.length() ? raw : result;
         } catch (Exception e) {
@@ -30,12 +43,17 @@ public class ToolResultCompressor {
 
     @SuppressWarnings("unchecked")
     private static Object jsonCompress(Object node, int depth, int maxValueChars) {
+        return jsonCompress(node, depth, maxValueChars, false);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object jsonCompress(Object node, int depth, int maxValueChars, boolean keepArrays) {
         if (depth > MAX_DEPTH) return "[deep nested]";
 
         if (node instanceof Map map) {
             Map<String, Object> result = new LinkedHashMap<>();
             for (var entry : (Set<Map.Entry<String, Object>>) map.entrySet()) {
-                Object val = jsonCompress(entry.getValue(), depth + 1, maxValueChars);
+                Object val = jsonCompress(entry.getValue(), depth + 1, maxValueChars, keepArrays);
                 if (val == null || (val instanceof String s && s.isEmpty())) continue;
                 result.put(entry.getKey(), val);
             }
@@ -43,6 +61,11 @@ public class ToolResultCompressor {
         }
 
         if (node instanceof List list) {
+            if (keepArrays) {
+                return list.stream()
+                        .map(e -> jsonCompress(e, depth + 1, maxValueChars, true))
+                        .toList();
+            }
             if (list.isEmpty()) {
                 Map<String, Object> arr = new LinkedHashMap<>();
                 arr.put("_count", 0);

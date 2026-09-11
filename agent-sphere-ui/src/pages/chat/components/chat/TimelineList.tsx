@@ -1,5 +1,7 @@
 import {
+  ArrowRightOutlined,
   CheckOutlined,
+  CloseOutlined,
   CopyOutlined,
   DownOutlined,
   RightOutlined,
@@ -9,6 +11,7 @@ import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import {
   App,
   Button,
+  Checkbox,
   Divider,
   Image,
   Input,
@@ -22,6 +25,18 @@ import { useStyles } from '../../style';
 import UsageChip, { formatTokens } from '../Usage';
 import { stripSubAgentMarkerPrefix } from './subAgentMarker';
 import type { SubAgentLiveMap } from './subAgentTypes';
+import {
+  browserResult,
+  docSummary,
+  extractTodos,
+  genericSummary,
+  isBrowserTool,
+  type TodoItem,
+  type ToolFamily,
+  todoProgress,
+  todoTotal,
+  toolFamily,
+} from './toolRenderers';
 
 interface TimelineListProps {
   rows: any[];
@@ -96,7 +111,10 @@ function StateTag({ state, small }: { state?: string; small?: boolean }) {
   const color =
     state === 'COMPLETED' || state === 'succeeded' || state === 'ANSWERED'
       ? 'success'
-      : state === 'FAILED' || state === 'failed' || state === 'CANCELLED'
+      : state === 'FAILED' ||
+          state === 'failed' ||
+          state === 'CANCELLED' ||
+          state === 'TIMEOUT'
         ? 'error'
         : 'processing';
   return (
@@ -202,51 +220,285 @@ function AssistantCard({ row }: any) {
   );
 }
 
-function ToolCard({ row }: any) {
-  const content = row.content || {};
-  const args = content.args
-    ? JSON.stringify(JSON.parse(content.args), null, 2)
-    : content.args;
+const TODO_STYLE: Record<
+  string,
+  {
+    color?: string;
+    strikethrough?: boolean;
+    muted?: boolean;
+    indeterminate?: boolean;
+  }
+> = {
+  completed: { color: '#389e0d', strikethrough: true },
+  in_progress: { color: '#d46b08', indeterminate: true },
+  pending: {},
+  cancelled: { color: '#8c8c8c', strikethrough: true, muted: true },
+};
+
+const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+function sortTodos(todos: TodoItem[]): TodoItem[] {
+  return [...todos].sort(
+    (a, b) =>
+      (PRIORITY_ORDER[a.priority ?? ''] ?? 9) -
+      (PRIORITY_ORDER[b.priority ?? ''] ?? 9),
+  );
+}
+
+/** 原文 JSON 折叠块（默认关闭，不丢细节）。 */
+function JsonBlock({ label, json }: { label: string; json?: string }) {
+  if (!json) return null;
+  let pretty = json;
+  try {
+    pretty = JSON.stringify(JSON.parse(json), null, 2);
+  } catch {
+    /* 保持原文 */
+  }
   return (
-    <div>
+    <Block title={label} faint>
+      <pre
+        style={{
+          whiteSpace: 'pre-wrap',
+          fontSize: 10.5,
+          color: '#999',
+          maxHeight: 140,
+          overflow: 'auto',
+        }}
+      >
+        {pretty}
+      </pre>
+    </Block>
+  );
+}
+
+function TodoCard({ content }: { content: any }) {
+  const todos = extractTodos(content);
+  const realTotal = todoTotal(content);
+  const { done } = todoProgress(todos);
+  const total = Math.max(realTotal, todos.length);
+  const sorted = sortTodos(todos);
+  const summaryChip =
+    total > 0 ? (
+      <Tag
+        style={{
+          fontSize: 10,
+          lineHeight: '16px',
+          color: done === total ? '#389e0d' : '#d46b08',
+        }}
+      >
+        {done}/{total} 已完成
+      </Tag>
+    ) : null;
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        border: '1px solid #d9d9d9',
+        borderRadius: 8,
+        padding: '8px 12px',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 4,
+        }}
+      >
+        <span style={{ fontSize: 12, opacity: 0.7 }}>☑️</span>
+        <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
+          待办进度
+        </Typography.Text>
+        {summaryChip}
+      </div>
+      {todos.length === 0 ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          无待办项
+        </Typography.Text>
+      ) : (
+        sorted.map((t, i) => {
+          const st = TODO_STYLE[t.status ?? ''] ?? TODO_STYLE.pending;
+          return (
+            <div
+              key={`${t.content}-${t.status ?? ''}`}
+              data-todo-index={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '2px 0',
+                opacity: st.muted ? 0.55 : 1,
+              }}
+            >
+              <Checkbox
+                checked={t.status === 'completed'}
+                indeterminate={st.indeterminate}
+                disabled
+              />
+              <Typography.Text
+                style={{
+                  fontSize: 12,
+                  color: st.color || undefined,
+                  textDecoration: st.strikethrough ? 'line-through' : undefined,
+                }}
+              >
+                {t.content}
+              </Typography.Text>
+              {t.priority === 'high' && (
+                <Tag
+                  color="red"
+                  style={{ fontSize: 9, lineHeight: '15px', marginLeft: 4 }}
+                >
+                  high
+                </Tag>
+              )}
+            </div>
+          );
+        })
+      )}
+      <JsonBlock label="查看原始待办" json={content.args || content.artifact} />
+    </div>
+  );
+}
+
+function DocCard({ content }: { content: any }) {
+  const summary = docSummary(content);
+  const artifact = content.artifact;
+  let artifactObj: any = null;
+  try {
+    artifactObj = artifact ? JSON.parse(artifact) : null;
+  } catch {
+    artifactObj = null;
+  }
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 12, opacity: 0.7 }}>📄</span>
+        <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
+          文档操作
+        </Typography.Text>
+        <ArrowRightOutlined style={{ fontSize: 11, color: '#a0a0a0' }} />
+        <Typography.Text strong style={{ fontSize: 12 }}>
+          {summary}
+        </Typography.Text>
+      </div>
+      {artifactObj?.documentId && (
+        <div style={{ marginTop: 4 }}>
+          <Typography.Text
+            type="secondary"
+            style={{ fontSize: 11, lineHeight: '16px' }}
+          >
+            {(artifactObj.preview || artifactObj.title || '') && (
+              <>
+                {artifactObj.title || '文档'}
+                {artifactObj.preview
+                  ? `：${String(artifactObj.preview).slice(0, 60)}…`
+                  : ''}
+              </>
+            )}
+          </Typography.Text>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GenericCard({
+  content,
+  family,
+  hideJson = false,
+  stateLabel,
+}: {
+  content: any;
+  family: ToolFamily;
+  hideJson?: boolean;
+  stateLabel?: string;
+}) {
+  const summary = genericSummary(content);
+  const displayName =
+    content.displayName ||
+    (family === 'todo' ? '待办写入' : content.toolName) ||
+    '工具';
+  return (
+    <div style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 12, opacity: 0.7 }}>🛠️</span>
         <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-          {content.displayName || row.title || 'tool'}
+          {displayName}
         </Typography.Text>
-        <StateTag state={row.state} small />
+        {summary !== displayName && (
+          <>
+            <ArrowRightOutlined style={{ fontSize: 10, color: '#a0a0a0' }} />
+            <Typography.Text style={{ fontSize: 12 }}>
+              {summary}
+            </Typography.Text>
+          </>
+        )}
+        {stateLabel && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              color: '#ff4d4f',
+            }}
+          >
+            <CloseOutlined style={{ fontSize: 10 }} />
+            <Typography.Text style={{ fontSize: 12, color: '#ff4d4f' }}>
+              {stateLabel}
+            </Typography.Text>
+          </span>
+        )}
       </div>
+      {!hideJson && <JsonBlock label="查看原始参数" json={content.args} />}
+      {!hideJson && <JsonBlock label="查看原始结果" json={content.artifact} />}
+    </div>
+  );
+}
+
+function ToolCard({ row }: any) {
+  const content = row.content || {};
+  const family = toolFamily(content, content.displayName);
+  const name = content.displayName || row.title || 'tool';
+  // 「委派子 Agent」工具调用在下方已由 SubAgentCard 完整展示，顶部标题行冗余，隐藏。
+  const isDelegate = /委派|子 ?agent/i.test(name);
+  // 浏览器工具：后端把超时/失败编码进 artifact（row.state 恒为 SUCCEEDED），此处按 artifact 解析真实状态。
+  const isBrowser = isBrowserTool(content, content.displayName);
+  const brow = browserResult(content, content.displayName);
+  const stateLabel = brow.failed
+    ? brow.errorCategory === 'timeout'
+      ? 'timeout'
+      : 'failed'
+    : undefined;
+  // 浏览器/doc：顶部标题行冗余，由 GenericCard/DocCard 自身渲染，这里隐藏。
+  const hideTitleRow = isDelegate || family === 'doc' || isBrowser;
+  return (
+    <div>
+      {!hideTitleRow && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>🛠️</span>
+          <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
+            {name}
+          </Typography.Text>
+          {family !== 'todo' && <StateTag state={row.state} small />}
+        </div>
+      )}
       {Array.isArray(content.images) && content.images.length > 0 && (
         <UserImages images={content.images} />
       )}
-      <Block title={'详情'} faint>
-        {args && (
-          <pre
-            style={{
-              whiteSpace: 'pre-wrap',
-              fontSize: 10.5,
-              color: '#999',
-              maxHeight: 140,
-              overflow: 'auto',
-            }}
-          >
-            {args}
-          </pre>
-        )}
-        {content.artifact && (
-          <pre
-            style={{
-              whiteSpace: 'pre-wrap',
-              fontSize: 10.5,
-              color: '#999',
-              maxHeight: 140,
-              overflow: 'auto',
-            }}
-          >
-            {content.artifact}
-          </pre>
-        )}
-      </Block>
+      {family === 'todo' ? (
+        <TodoCard content={content} />
+      ) : family === 'doc' ? (
+        <DocCard content={content} />
+      ) : (
+        <GenericCard
+          content={content}
+          family={family}
+          hideJson={isDelegate || isBrowser}
+          stateLabel={stateLabel}
+        />
+      )}
     </div>
   );
 }
@@ -786,8 +1038,14 @@ function RowCard({
   if (row.kind === 'run_status') {
     const duration = formatDuration(row.content?.durationMs);
     const usage = row.content?.usage;
+    const isRunFailed = row.state === 'FAILED' || row.state === 'failed';
+    // 后端失败文案「❌ 执行失败」的红叉太粗，前端剥掉改细线红叉（与行文字同字号）。
+    const text = (row.content?.text || row.title || '')
+      .replace(/^❌\s*/, '')
+      .replace(/^⏹️\s*/, '')
+      .replace(/^⏸️\s*/, '');
     const parts = [
-      row.content?.text || row.title,
+      text,
       duration,
       row.content?.modelName,
       usage && usage.totalTokens
@@ -797,7 +1055,14 @@ function RowCard({
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
-          {row.state === 'RUNNING' ? '⟳' : '•'} {parts.join(' · ')}
+          {row.state === 'RUNNING' ? (
+            '⟳'
+          ) : isRunFailed ? (
+            <CloseOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
+          ) : (
+            '•'
+          )}{' '}
+          {parts.join(' · ')}
         </Divider>
       </div>
     );
@@ -873,32 +1138,27 @@ function RowCard({
         </div>
       ) : (
         <>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              marginBottom: 2,
-            }}
-          >
-            <Tag
-              style={
-                row.kind === 'tool'
-                  ? { margin: 0, fontSize: 11, color: '#999' }
-                  : { margin: 0 }
-              }
+          {row.kind === 'subagent' ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginBottom: 2,
+              }}
             >
-              {KIND_LABEL[row.kind] || row.kind}
-            </Tag>
-            {/* 助手 RUNNING → 晃动小球；终态 → 状态位消失（不显示文字标签） */}
-            {row.kind === 'assistant' ? (
-              row.state === 'RUNNING' ? (
-                <RunningDot />
-              ) : null
-            ) : (
+              <Tag style={{ margin: 0 }}>
+                {KIND_LABEL[row.kind] || row.kind}
+              </Tag>
               <StateTag state={row.state} />
-            )}
-          </div>
+            </div>
+          ) : row.kind === 'assistant' && row.state === 'RUNNING' ? (
+            <div style={{ marginBottom: 2 }}>
+              <RunningDot />
+            </div>
+          ) : (
+            <div style={{ marginBottom: 2 }} />
+          )}
           {body}
         </>
       )}

@@ -20,6 +20,8 @@ import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEnvelope;
 import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEvent;
 import com.buukle.agent.runtime.orchestration.sse.SseEventCache;
+import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
+import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 import com.buukle.agent.util.TextSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -283,6 +285,12 @@ public class RuntimeEventListener {
         run.setReasoning(TextSanitizer.sanitize(reasoning));
     }
 
+    /** 判断工具名是否为 todo 工具（其 args 需完整保留以便前端勾线展示）。 */
+    private boolean isTodoArgs(String toolName) {
+        return toolName != null && toolName.equals(
+                InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
+    }
+
     private void handleToolCallLifecycle(RuntimeEventDataVO data, ToolCallStatus status) {
         if (data.getRunId() == null) return;
         // Use publishId hash as stepId so each tool call maps to its own record.
@@ -299,7 +307,9 @@ public class RuntimeEventListener {
                 String callId = data.getPublishId() != null && data.getPublishId().startsWith(prefix)
                         ? data.getPublishId().substring(prefix.length()) : null;
                 String rawArgs = data.getArgumentsJson() != null ? data.getArgumentsJson() : "";
-                String compressedArgs = ToolResultCompressor.compress(rawArgs, RunnerConstants.TOOL_RESULT_MAX_CHARS);
+                String compressedArgs = isTodoArgs(data.getToolName())
+                        ? ToolResultCompressor.compressKeepArrays(rawArgs, RunnerConstants.TOOL_RESULT_MAX_CHARS)
+                        : ToolResultCompressor.compress(rawArgs, RunnerConstants.TOOL_RESULT_MAX_CHARS);
                 AgentToolCallRecordVO vo = toolCallRecordSpi.createRecord(
                         stepId, callId, data.getRunId(), data.getSessionId(),
                         data.getToolName() != null ? data.getToolName() : "",
