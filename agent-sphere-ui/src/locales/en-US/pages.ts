@@ -153,6 +153,8 @@ export default {
     'Only jpeg/png/webp/gif images are supported',
   'pages.chat.attachmentSizeHint': 'Image must not exceed 5MB',
   'pages.chat.attachmentUploadFailed': 'Attachment upload failed',
+  'pages.chat.attachmentBusyHint':
+    'There is already a pending attachment. Send or remove it before pasting.',
   'pages.chat.userMessage': 'User Message',
   'pages.chat.runList': 'Runs',
   'pages.chat.interactionType': 'Interaction Type',
@@ -452,10 +454,6 @@ export default {
     'Input JSON Schema (parameters)',
   'pages.admin.settings.template.skill.parametersHint':
     'May be empty (empty object)',
-  'pages.admin.settings.template.skill.allowTools':
-    'Allowed tools (allowTools)',
-  'pages.admin.settings.template.skill.allowToolsHint':
-    'Pick tools this skill can call; if empty, no tool is allowed',
   'pages.admin.settings.group.sso': 'SSO',
   'pages.admin.settings.plugin.upload.btn': 'Upload Package',
   'pages.admin.settings.plugin.upload.success': 'Uploaded',

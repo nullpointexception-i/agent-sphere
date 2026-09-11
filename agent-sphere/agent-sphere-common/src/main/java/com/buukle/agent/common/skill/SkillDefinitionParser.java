@@ -1,17 +1,13 @@
 package com.buukle.agent.common.skill;
 
 import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
-import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
- * Skill definition 解析器。支持 V1（parameters + promptTemplate + allowTools）与遗留
+ * Skill definition 解析器。支持 V1（parameters + promptTemplate）与遗留
  * {"prompt": "..."} 格式；不再"日志后静默跳过"，解析失败抛出 {@link InvalidSubRunDefinition}。
+ * 未知键会被忽略（只读取 version / parameters / promptTemplate / prompt）。
  */
 public final class SkillDefinitionParser {
 
@@ -19,7 +15,6 @@ public final class SkillDefinitionParser {
     private static final String KEY_VERSION = "version";
     private static final String KEY_PARAMETERS = "parameters";
     private static final String KEY_PROMPT_TEMPLATE = "promptTemplate";
-    private static final String KEY_ALLOW_TOOLS = "allowTools";
     private static final String KEY_PROMPT = "prompt";
     private static final String MARKDOWN_FENCE = "```json";
 
@@ -60,31 +55,7 @@ public final class SkillDefinitionParser {
         if (promptTemplate == null || !promptTemplate.isTextual() || promptTemplate.asText().isBlank()) {
             throw new InvalidSubRunDefinition("缺少非空 'promptTemplate'");
         }
-        List<String> allowTools = parseAllowTools(root.get(KEY_ALLOW_TOOLS));
         int version = root.has(KEY_VERSION) && root.get(KEY_VERSION).isInt() ? root.get(KEY_VERSION).asInt() : 1;
-        return new SkillDefinition(version, params.toString(), promptTemplate.asText(), allowTools, root.has(KEY_ALLOW_TOOLS));
-    }
-
-    private static List<String> parseAllowTools(JsonNode node) throws InvalidSubRunDefinition {
-        if (node == null || node.isNull()) {
-            return List.of();
-        }
-        if (!node.isArray() || node.isEmpty()) {
-            return List.of();
-        }
-        ArrayNode array = (ArrayNode) node;
-        List<String> refs = new ArrayList<>();
-        for (JsonNode item : array) {
-            if (!item.isTextual()) {
-                throw new InvalidSubRunDefinition("'allowTools' 必须是字符串数组");
-            }
-            String ref = item.asText().trim();
-            if (ref.isEmpty()) {
-                continue;
-            }
-            ToolRefs.validate(ref);
-            refs.add(ref);
-        }
-        return List.copyOf(refs);
+        return new SkillDefinition(version, params.toString(), promptTemplate.asText());
     }
 }

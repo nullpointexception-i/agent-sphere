@@ -4,31 +4,30 @@ import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.instance.spi.ClarificationSpi;
 import com.buukle.agent.instance.spi.SessionTodoSpi;
-import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
+import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
-import com.buukle.agent.runtime.kernel.runner.SessionSubRunner;
+import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
+import com.buukle.agent.runtime.kernel.runner.sub.SubAgentConstants;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,42 +46,37 @@ class ToolExecutorSkillTest {
     @Mock
     ClarificationSpi clarificationSpi;
     @Mock
-    ObjectProvider<SessionSubRunner> skillExecutorProvider;
-    @Mock
-    SessionSubRunner sessionSubRunner;
+    DelegateService delegateService;
 
     ToolExecutor toolExecutor;
 
     @BeforeEach
     void setUp() {
         toolExecutor = new ToolExecutor(mcpSpis, builtinSpi, cliExecutorService, sessionTodoSpi,
-                eventPublisher, clarificationSpi, skillExecutorProvider);
+                eventPublisher, clarificationSpi, delegateService);
+    }
+
+    private RuntimeTool delegateTool() {
+        return RuntimeTool.builder()
+                .capabilityType(SubAgentConstants.CAPABILITY_TYPE_SUB_AGENT)
+                .llmToolName(SubAgentConstants.DELEGATE_TOOL)
+                .toolRef(ToolRefs.agent(SubAgentConstants.DELEGATE_TOOL))
+                .execBinding(java.util.Map.of())
+                .build();
     }
 
     @Test
-    void skillBranch_delegatesToSkillReActExecutor() {
-        RuntimeTool skillTool = RuntimeTool.builder()
-                .capabilityType("skill")
-                .capabilityId(8L)
-                .llmToolName("skill_8")
-                .toolRef("skill:8")
-                .parametersSchemaJson("{\"type\":\"object\"}")
-                .execBinding(Map.of(
-                        ExecBindingKeys.SKILL_PROMPT_TEMPLATE, "请按配置执行",
-                        ExecBindingKeys.SKILL_ALLOW_TOOLS, List.of()))
-                .build();
-        doReturn(sessionSubRunner).when(skillExecutorProvider).getIfAvailable();
-        given(sessionSubRunner.execute(any(RuntimeTool.class), anyString(),
-                any(SubRunExecutionContext.class), anyList())).willReturn("{\"result\":\"ok\"}");
+    void delegate_dispatchesToDelegateService() {
+        given(delegateService.execute(anyString(), any(SubRunExecutionContext.class), anyList()))
+                .willReturn("{\"mode\":\"main\"}");
 
         String result = toolExecutor.execute(
-                new TurnToolCall("call_1", "skill_8", "{\"keyword\":\"x\"}"),
+                new TurnToolCall("call_9", SubAgentConstants.DELEGATE_TOOL, "{\"goal\":\"g\",\"mode\":\"main\"}"),
                 SubRunExecutionContext.root(1L, 2L, null),
-                List.of(skillTool));
+                List.of(delegateTool()));
 
-        assertEquals("{\"result\":\"ok\"}", result);
-        verify(sessionSubRunner).execute(any(RuntimeTool.class), anyString(),
-                any(SubRunExecutionContext.class), anyList());
+        assertEquals("{\"mode\":\"main\"}", result);
+        verify(delegateService).execute(anyString(), any(SubRunExecutionContext.class), anyList());
     }
 
     @Test
@@ -92,5 +86,13 @@ class ToolExecutorSkillTest {
                 SubRunExecutionContext.root(1L, 2L, null),
                 List.of());
         assertTrue(result.contains("Unknown tool"));
+    }
+
+    @Test
+    void isSubRunTool_onlyForDelegate() {
+        List<RuntimeTool> tools = List.of(delegateTool(),
+                RuntimeTool.builder().llmToolName("builtin_1").toolRef("builtin:x").build());
+        assertTrue(toolExecutor.isSubRunTool(SubAgentConstants.DELEGATE_TOOL, tools));
+        assertFalse(toolExecutor.isSubRunTool("builtin_1", tools));
     }
 }

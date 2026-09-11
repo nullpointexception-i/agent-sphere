@@ -19,6 +19,7 @@ import { agentApi } from '@/services/agentSphere/api';
 import { getToken } from '@/utils/auth';
 import { connectSse } from '@/utils/sse';
 import ChatMain from './components/chat';
+import { stripSubAgentSentinel } from './components/chat/subAgentMarker';
 import type { SubAgentLiveMap } from './components/chat/subAgentTypes';
 import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
@@ -456,8 +457,8 @@ export default function Chat() {
       if (subType === 'model_reason') {
         if (d?.firstFrame) {
           // 新 LLM 轮：剥离首帧哨兵行（"<marker>id: name\n"），旧轮标记结束
-          const nl = delta.indexOf('\n');
-          const body = nl >= 0 ? delta.slice(nl + 1) : delta;
+          // 新旧前缀均接受（`▶ Agent ` / `▶ Skill `），避免历史会话断裂
+          const body = stripSubAgentSentinel(delta);
           setSubAgentLive((prev) => {
             const arr: any[] = prev[subId] || [];
             const closed = arr.map((it) =>
@@ -558,7 +559,10 @@ export default function Chat() {
                   return [
                     ...prev,
                     {
-                      seq: -1,
+                      // 占位 seq 按 subId 唯一取负（与 widget placeholderSeq 对齐）：
+                      // 并行子 agent 会同时存在多个占位行，硬编码 -1 会导致 React key
+                      // `-1-subagent` 重复，且 mergeTimeline 按 seq 建 Map 时互相覆盖丢数据
+                      seq: -(Math.abs(liveSubId) + 1),
                       kind: 'subagent',
                       refSubAgentRunId: liveSubId,
                       status: 'RUNNING',

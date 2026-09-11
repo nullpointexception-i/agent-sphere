@@ -16,7 +16,7 @@ public class AgentRuntimeProperties {
     private RunnerConfig runner = new RunnerConfig();
     private ToolConfig tool = new ToolConfig();
     private LlmConfig llm = new LlmConfig();
-    private SkillConfig skill = new SkillConfig();
+    private DelegateConfig delegate = new DelegateConfig();
     private McpConfig mcp = new McpConfig();
     private LockConfig lock = new LockConfig();
     private AsyncConfig async = new AsyncConfig();
@@ -129,21 +129,29 @@ public class AgentRuntimeProperties {
         private Duration streamRetryDelay = Duration.ofSeconds(1);
     }
 
-    /** 嵌套 ReAct Skill 执行配置。 */
+    /** 统一 delegate 子 Agent 执行配置。 */
     @Data
-    public static class SkillConfig {
-        /** 是否启用 skill 嵌套执行（feature flag，可一键回退）。 */
-        private boolean executionEnabled = true;
+    public static class DelegateConfig {
+        /** 是否启用 delegate 子 Agent 机制（feature flag，可一键回退）。 */
+        private boolean enabled = true;
+        /** 子 Agent 最大嵌套深度。 */
+        private int maxNestedDepth = 3;
         /** 子循环最大轮次。 */
         private int maxSubLoopCount = 8;
-        /** skill 最大嵌套深度（1=不允许调用其他 skill）。 */
-        private int maxNestedDepth = 3;
-        /** 单个 skill 执行总超时（外层工具 fiber 需容得下该预算）。 */
+        /** 单个子 Agent 执行总超时（外层工具 fiber 需容得下该预算）。 */
         private Duration executionTimeout = Duration.ofMinutes(10);
         /** 渲染后 prompt 最大长度。 */
         private int maxPromptChars = 20000;
-        /** skill 返回结果最大字符数。 */
-        private int maxResultChars = 2000;
+        /** 子 Agent 返回结果最大字符数。 */
+        private int maxResultChars = 4000;
+        /** DAG 层内最大并行数。 */
+        private int maxParallel = 4;
+        /** DAG 任务数上限。 */
+        private int maxDagTasks = 16;
+        /** 缺失/UNCERTAIN 泳道最多重派发轮数（P0 静默截断防御）。 */
+        private int maxDagRetries = 1;
+        /** 信封上游预算（字节）：超限时截断上游 value 并标 truncated，信封本身永不整体丢弃。 */
+        private int maxEnvelopeChars = 8000;
     }
 
     @Data

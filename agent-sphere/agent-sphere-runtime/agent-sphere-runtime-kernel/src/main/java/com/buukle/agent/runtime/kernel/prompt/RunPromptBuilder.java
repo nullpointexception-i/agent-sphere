@@ -5,6 +5,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
+import com.buukle.agent.runtime.kernel.runner.sub.SubAgentConstants;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,10 @@ public class RunPromptBuilder {
             }
         }
         sb.append(RunnerConstants.PROMPT_TOOLS_FOOTER);
+        if (tools != null && tools.stream()
+                .anyMatch(t -> SubAgentConstants.DELEGATE_TOOL.equals(t.getLlmToolName()))) {
+            sb.append(RunnerConstants.PROMPT_SUBAGENT_WORKFLOW);
+        }
         return sb.toString();
     }
 

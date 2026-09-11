@@ -26,10 +26,27 @@ import java.util.List;
 public class AgentSubAgentRunServiceImpl implements AgentSubAgentRunSpi {
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    /** agent_type 缺省值（调用方通常显式传入）。 */
+    private static final String DEFAULT_AGENT_TYPE = "AGENT";
+    /** 与 agent_sub_agent_run 列宽对齐的防御性上限（display_name VARCHAR(200) / agent_ref VARCHAR(100) / parent_tool_call_id VARCHAR(100)）。 */
+    private static final int DISPLAY_NAME_MAX = 200;
+    private static final int AGENT_REF_MAX = 100;
+    private static final int PARENT_TOOL_CALL_ID_MAX = 100;
 
     private final AgentSubAgentRunMapper mapper;
     private final AgentLlmInteractionRecordMapper interactionMapper;
     private final AgentToolCallRecordMapper toolCallMapper;
+
+    private static String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() > max ? value.substring(0, max) : value;
+    }
 
     private static AgentSubAgentRunVO toVO(AgentSubAgentRun r) {
         AgentSubAgentRunVO vo = new AgentSubAgentRunVO();
@@ -55,10 +72,10 @@ public class AgentSubAgentRunServiceImpl implements AgentSubAgentRunSpi {
         r.setSessionId(sessionId);
         r.setRunId(runId);
         r.setParentRunId(parentRunId);
-        r.setParentToolCallId(parentToolCallId);
-        r.setAgentType(agentType != null ? agentType : "SKILL");
-        r.setAgentRef(agentRef != null ? agentRef : "");
-        r.setDisplayName(displayName != null ? displayName : "");
+        r.setParentToolCallId(truncate(parentToolCallId, PARENT_TOOL_CALL_ID_MAX));
+        r.setAgentType(agentType != null ? agentType : DEFAULT_AGENT_TYPE);
+        r.setAgentRef(truncate(agentRef, AGENT_REF_MAX));
+        r.setDisplayName(truncate(singleLine(displayName), DISPLAY_NAME_MAX));
         r.setStatus(SubRunStatus.RUNNING.name());
         r.setStartedAt(LocalDateTime.now());
         mapper.insert(r);

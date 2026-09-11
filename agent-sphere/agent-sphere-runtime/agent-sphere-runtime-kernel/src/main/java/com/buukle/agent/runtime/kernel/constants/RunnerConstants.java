@@ -75,9 +75,21 @@ public final class RunnerConstants {
     public static final String FINAL_TURN_INSTRUCTION =
             "\n\n**IMPORTANT: This is your final turn. You MUST provide a complete summary answer now. Do NOT call any more tools.**";
 
+    /** delegate 子 Agent 工作流指引（仅当注册了 delegate 工具时追加，避免无谓 token）。 */
+    public static final String PROMPT_SUBAGENT_WORKFLOW = """
+
+
+            DELEGATE WORKFLOW: Skills are NOT direct tools.
+            1) Use skill_library to discover and inspect skills (list/search; get by outline, section, or line range for progressive loading).
+            2) Then use delegate to execute the work. call delegate with mode=main to run inline in this loop (no sub-agent);
+               use mode=subagent ONLY when isolation is warranted (noisy intermediate context, long-running work, or independent parallel lanes).
+               Provide tasks[] (requires mode=subagent) for a DAG of parallel sub-agents; results are aggregated by key.
+               A sub-agent inherits the full toolset and the parent model route; optionally pass agentRef=instance:<id> to prefix its system prompt.
+            3) You do NOT need a sub-agent for simple work — when no isolation is needed, just finish the task yourself in this loop.""";
+
     // ---- SessionRunner magic strings ----
     public static final String JSON_ERROR_TOOL_LOST = "{\"error\":\"Tool execution lost\"}";
-    public static final String FALLBACK_COMPLETE_MSG = "Task completed. Please check the results above.";
+    public static final String FALLBACK_COMPLETE_MSG = "{\"status\":\"ERROR\",\"reason\":\"No completion content produced\"}";
     public static final String CANCEL_MSG = "⏹️ Run cancelled by user";
 
     private RunnerConstants() {

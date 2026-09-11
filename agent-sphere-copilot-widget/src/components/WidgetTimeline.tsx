@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Markdown } from '../markdown';
 import { CheckIcon, CopyIcon } from '../icons';
+import { stripSubAgentMarkerPrefix } from '../subAgentMarker';
 import type { SubAgentTimelineItemVO, TimelineRow } from '../types';
 import type { SubAgentLiveMap } from '../useTimelineStream';
 
@@ -445,7 +446,10 @@ function SubAgentCard({
     <div className="aw-subagent">
       <div className="aw-subagent-head">
         <span>⚙️</span>
-        <strong>{row.content?.displayName || row.title || '子 Agent'}</strong>
+        <strong>
+          {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
+            '子 Agent'}
+        </strong>
         <StateTag state={row.state} />
         {open && isRunning ? (
           <span style={{ color: '#9ca3af', fontSize: 11 }}>⟳ 实时更新中</span>

@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
 import UsageChip, { formatTokens } from '../Usage';
+import { stripSubAgentMarkerPrefix } from './subAgentMarker';
 import type { SubAgentLiveMap } from './subAgentTypes';
 
 interface TimelineListProps {
@@ -517,7 +518,8 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span>⚙️</span>
         <Typography.Text strong>
-          {row.content?.displayName || row.title || '子 Agent'}
+          {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
+            '子 Agent'}
         </Typography.Text>
         <StateTag state={row.state} />
         {open && isRunning && (

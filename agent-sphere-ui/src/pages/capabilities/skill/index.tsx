@@ -24,7 +24,6 @@ import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
 import SkillMarkdownEditor from './components/SkillMarkdownEditor';
-import SkillToolPicker, { WILDCARD_ALL } from './components/SkillToolPicker';
 
 const SAMPLE_DEFINITION = `{
   "version": 1,
@@ -35,13 +34,7 @@ const SAMPLE_DEFINITION = `{
     },
     "required": ["keyword"]
   },
-  "promptTemplate": "请围绕 {{keyword}} 完成任务并返回最终结果。",
-  "allowTools": [
-    "builtin:chrome",
-    "mcp:<capabilityId>:<nativeToolName>",
-    "cli:<capabilityId>",
-    "skill:<skillId>"
-  ]
+  "promptTemplate": "请围绕 {{keyword}} 完成任务并返回最终结果。"
 }`;
 
 const EMPTY_PARAMETERS = { type: 'object', properties: {} };
@@ -62,22 +55,20 @@ interface SkillRecord {
 function parseDefinition(def?: string): {
   promptTemplate: string;
   parameters: string;
-  allowTools: string[];
 } {
-  if (!def) return { promptTemplate: '', parameters: '', allowTools: [] };
+  if (!def) return { promptTemplate: '', parameters: '' };
   try {
     const raw = def.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const obj = JSON.parse(raw);
     if (typeof obj.prompt === 'string') {
-      return { promptTemplate: obj.prompt, parameters: '', allowTools: [] };
+      return { promptTemplate: obj.prompt, parameters: '' };
     }
     return {
       promptTemplate: obj.promptTemplate || '',
       parameters: obj.parameters ? JSON.stringify(obj.parameters, null, 2) : '',
-      allowTools: Array.isArray(obj.allowTools) ? obj.allowTools : [],
     };
   } catch {
-    return { promptTemplate: '', parameters: '', allowTools: [] };
+    return { promptTemplate: '', parameters: '' };
   }
 }
 
@@ -85,7 +76,6 @@ function parseDefinition(def?: string): {
 function buildDefinition(values: {
   promptTemplate: string;
   parameters: string;
-  allowTools: string[];
 }): string {
   let parameters = EMPTY_PARAMETERS;
   if (values.parameters?.trim()) {
@@ -95,18 +85,11 @@ function buildDefinition(values: {
       throw new Error('parameters 不是合法 JSON');
     }
   }
-  const allowTools = (
-    Array.isArray(values.allowTools) ? values.allowTools : []
-  ).filter(Boolean);
-  const finalAllowTools = allowTools.includes(WILDCARD_ALL)
-    ? [WILDCARD_ALL]
-    : allowTools;
   return JSON.stringify(
     {
       version: 1,
       parameters,
       promptTemplate: values.promptTemplate,
-      ...(finalAllowTools.length > 0 ? { allowTools: finalAllowTools } : {}),
     },
     null,
     2,
@@ -221,7 +204,6 @@ export default function SkillList() {
                   description: record.description,
                   promptTemplate: parsed.promptTemplate,
                   parameters: parsed.parameters,
-                  allowTools: parsed.allowTools,
                 });
                 setModalOpen(true);
               }}
@@ -537,15 +519,6 @@ export default function SkillList() {
               placeholder={'{\n  "type": "object",\n  "properties": {}\n}'}
             />
           </Form.Item>
-          <Form.Item
-            name="allowTools"
-            label={labelWithRule(
-              '允许工具 (allowTools)',
-              '选取 Skill 子 Agent 可调用的工具；未选择则禁止调用任何工具',
-            )}
-          >
-            <SkillToolPicker />
-          </Form.Item>
           <Button type="link" size="small" onClick={() => setSampleOpen(true)}>
             查看样例
           </Button>
@@ -582,7 +555,6 @@ export default function SkillList() {
       >
         {(() => {
           const parsed = parseDefinition(viewRecord?.definition);
-          const allowTools = parsed.allowTools || [];
           return (
             <div>
               <div
@@ -658,22 +630,6 @@ export default function SkillList() {
                   </pre>
                 </>
               ) : null}
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                允许工具 (allowTools)
-              </div>
-              <div>
-                {allowTools.length === 0 ? (
-                  <span style={{ color: '#999' }}>
-                    未选择（不调用任何工具）
-                  </span>
-                ) : (
-                  allowTools.map((ref) => (
-                    <Tag key={ref} color={ref.includes('*') ? 'gold' : 'blue'}>
-                      {ref}
-                    </Tag>
-                  ))
-                )}
-              </div>
             </div>
           );
         })()}

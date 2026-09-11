@@ -41,7 +41,7 @@ export interface SubAgentLive {
   parentToolCallId?: string;
   agentType?: string;
   agentRef?: string;
-  /** 后端 agent_sub_agent_run 主键（同一 skill 执行全程一致），用于身份与 live/历史去重。 */
+  /** 后端 agent_sub_agent_run 主键（同一子 Agent 执行全程一致），用于身份与 live/历史去重。 */
   subAgentRunId?: number | null;
   name: string;
   status?: string;

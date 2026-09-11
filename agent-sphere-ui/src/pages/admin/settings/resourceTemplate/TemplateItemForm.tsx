@@ -13,9 +13,6 @@ import {
 } from 'antd';
 import { useEffect } from 'react';
 import SkillMarkdownEditor from '@/pages/capabilities/skill/components/SkillMarkdownEditor';
-import SkillToolPicker, {
-  WILDCARD_ALL,
-} from '@/pages/capabilities/skill/components/SkillToolPicker';
 import { labelWithRule } from '@/utils/labelWithRule';
 import { normalizeItem } from './serialize';
 import {
@@ -71,26 +68,23 @@ function jsonRule(intl: ReturnType<typeof useIntl>) {
 function definitionToForm(def?: string): {
   promptTemplate: string;
   parameters: string;
-  allowTools: string[];
 } {
-  if (!def) return { promptTemplate: '', parameters: '', allowTools: [] };
+  if (!def) return { promptTemplate: '', parameters: '' };
   try {
     const raw = def.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
     const obj = JSON.parse(raw);
     return {
       promptTemplate: obj.promptTemplate || obj.prompt || '',
       parameters: obj.parameters ? JSON.stringify(obj.parameters, null, 2) : '',
-      allowTools: Array.isArray(obj.allowTools) ? obj.allowTools : [],
     };
   } catch {
-    return { promptTemplate: '', parameters: '', allowTools: [] };
+    return { promptTemplate: '', parameters: '' };
   }
 }
 
 function definitionFromForm(values: {
   promptTemplate: string;
   parameters?: string;
-  allowTools?: string[];
 }): string {
   let parameters: Record<string, unknown> = EMPTY_PARAMETERS;
   if (values.parameters?.trim()) {
@@ -103,18 +97,11 @@ function definitionFromForm(values: {
       throw new Error('parameters 不是合法 JSON');
     }
   }
-  const allowTools = (
-    Array.isArray(values.allowTools) ? values.allowTools : []
-  ).filter(Boolean);
-  const finalAllowTools = allowTools.includes(WILDCARD_ALL)
-    ? [WILDCARD_ALL]
-    : allowTools;
   return JSON.stringify(
     {
       version: 1,
       parameters,
       promptTemplate: values.promptTemplate,
-      ...(finalAllowTools.length > 0 ? { allowTools: finalAllowTools } : {}),
     },
     null,
     2,
@@ -261,22 +248,6 @@ function FieldRenderer({
               rows={5}
               placeholder={'{\n  "type": "object",\n  "properties": {}\n}'}
             />
-          </Form.Item>
-          <Form.Item
-            name="allowTools"
-            label={labelWithRule(
-              intl.formatMessage({
-                id: 'pages.admin.settings.template.skill.allowTools',
-                defaultMessage: '允许工具 (allowTools)',
-              }),
-              intl.formatMessage({
-                id: 'pages.admin.settings.template.skill.allowToolsHint',
-                defaultMessage:
-                  '选取 Skill 可调用的工具；未选择则禁止调用任何工具',
-              }),
-            )}
-          >
-            <SkillToolPicker />
           </Form.Item>
         </>
       );

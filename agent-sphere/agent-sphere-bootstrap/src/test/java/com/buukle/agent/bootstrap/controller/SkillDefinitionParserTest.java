@@ -3,11 +3,9 @@ package com.buukle.agent.bootstrap.controller;
 import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
 import com.buukle.agent.common.skill.SkillDefinition;
 import com.buukle.agent.common.skill.SkillDefinitionParser;
-import com.buukle.agent.common.sub.agent.ToolRefs;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -21,8 +19,7 @@ class SkillDefinitionParserTest {
                 {
                   "version": 1,
                   "parameters": {"type":"object","properties":{"keyword":{"type":"string"}},"required":["keyword"]},
-                  "promptTemplate": "请围绕 {{keyword}} 完成任务",
-                  "allowTools": ["builtin:chrome", "skill:8", "cli:3", "mcp:12:search"]
+                  "promptTemplate": "请围绕 {{keyword}} 完成任务"
                 }
                 """;
         SkillDefinition parsed = SkillDefinitionParser.parse(def);
@@ -30,18 +27,13 @@ class SkillDefinitionParserTest {
         assertEquals(1, parsed.version());
         assertTrue(parsed.parametersSchemaJson().contains("\"keyword\""));
         assertEquals("请围绕 {{keyword}} 完成任务", parsed.promptTemplate());
-        assertTrue(parsed.allowToolsSpecified());
-        assertEquals(4, parsed.allowTools().size());
-        assertTrue(parsed.allowTools().contains("builtin:chrome"));
     }
 
     @Test
-    void parse_legacyPromptFallsBackToNoTools() {
+    void parse_legacyPromptFallsBack() {
         SkillDefinition parsed = SkillDefinitionParser.parse("{\"prompt\":\"请按配置执行\"}");
         assertNotNull(parsed);
         assertEquals("请按配置执行", parsed.promptTemplate());
-        assertTrue(parsed.allowTools().isEmpty());
-        assertFalse(parsed.allowToolsSpecified());
     }
 
     @Test
@@ -72,21 +64,5 @@ class SkillDefinitionParserTest {
     void parse_emptyReturnsNull() {
         assertNull(SkillDefinitionParser.parse(null));
         assertNull(SkillDefinitionParser.parse(""));
-    }
-
-    @Test
-    void parse_invalidAllowToolsRefThrows() {
-        assertThrows(InvalidSubRunDefinition.class,
-                () -> SkillDefinitionParser.parse("""
-                        {"parameters":{"type":"object"},"promptTemplate":"p","allowTools":["???:1"]}
-                        """));
-    }
-
-    @Test
-    void parse_wildcardAllowToolsAllowed() {
-        SkillDefinition parsed = SkillDefinitionParser.parse(
-                "{\"parameters\":{\"type\":\"object\"},\"promptTemplate\":\"p\",\"allowTools\":[\"*\"]}");
-        assertNotNull(parsed);
-        assertTrue(parsed.allowTools().contains(ToolRefs.WILDCARD));
     }
 }

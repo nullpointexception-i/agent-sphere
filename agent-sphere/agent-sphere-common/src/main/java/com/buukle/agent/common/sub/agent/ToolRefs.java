@@ -8,6 +8,7 @@ package com.buukle.agent.common.sub.agent;
  * mcp:&lt;capabilityId&gt;:&lt;nativeToolName&gt;
  * cli:&lt;capabilityId&gt;
  * skill:&lt;skillId&gt;
+ * agent:&lt;key&gt;
  * </pre>
  */
 public final class ToolRefs {
@@ -18,6 +19,7 @@ public final class ToolRefs {
     public static final String TYPE_MCP = "mcp";
     public static final String TYPE_CLI = "cli";
     public static final String TYPE_SKILL = "skill";
+    public static final String TYPE_AGENT = "agent";
 
     private ToolRefs() {
     }
@@ -38,10 +40,14 @@ public final class ToolRefs {
         return TYPE_SKILL + SEPARATOR + skillId;
     }
 
+    public static String agent(String key) {
+        return TYPE_AGENT + SEPARATOR + key;
+    }
+
     /** 校验引用格式，非法时抛出描述性异常。 */
     public static void validate(String ref) throws InvalidSubRunDefinition {
         if (ref == null || ref.isBlank()) {
-            throw new InvalidSubRunDefinition("allowTools 工具引用不能为空");
+            throw new InvalidSubRunDefinition("工具引用不能为空");
         }
         if (WILDCARD.equals(ref.trim())) {
             return;
@@ -61,6 +67,12 @@ public final class ToolRefs {
             Long.parseLong(stripPrefix(r, TYPE_SKILL));
             return;
         }
+        if (r.startsWith(TYPE_AGENT + SEPARATOR)) {
+            if (r.length() == TYPE_AGENT.length() + 1) {
+                throw new InvalidSubRunDefinition("agent 引用缺少标识: " + ref);
+            }
+            return;
+        }
         if (r.startsWith(TYPE_MCP + SEPARATOR)) {
             String[] parts = r.substring(TYPE_MCP.length() + 1).split(String.valueOf(SEPARATOR));
             if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
@@ -69,7 +81,7 @@ public final class ToolRefs {
             Long.parseLong(parts[0]);
             return;
         }
-        throw new InvalidSubRunDefinition("未知工具引用类型（应为 builtin/mcp/cli/skill）: " + ref);
+        throw new InvalidSubRunDefinition("未知工具引用类型（应为 builtin/mcp/cli/skill/agent）: " + ref);
     }
 
     public static boolean matches(String allowRef, String toolRef, String toolName) {

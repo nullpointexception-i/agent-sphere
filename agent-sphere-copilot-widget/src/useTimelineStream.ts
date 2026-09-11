@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApiClient, TimelineQuery } from './api';
 import { connectSse } from './sse';
+import { stripSubAgentSentinel } from './subAgentMarker';
 import {
   fetchInitialTimeline,
   fetchLatestTimeline,
@@ -335,8 +336,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       if (subType === 'model_reason') {
         if (d?.firstFrame) {
           // 新 LLM 轮：剥离首帧哨兵行（"<marker>id: name\n"），旧轮标记结束
-          const nl = delta.indexOf('\n');
-          const body = nl >= 0 ? delta.slice(nl + 1) : delta;
+          // 新旧前缀均接受（`▶ Agent ` / `▶ Skill `），避免历史会话断裂
+          const body = stripSubAgentSentinel(delta);
           setSubAgentLiveMap((prev) => {
             const arr: SubAgentLiveStep[] = prev[subId] || [];
             const closed = arr.map((it) =>

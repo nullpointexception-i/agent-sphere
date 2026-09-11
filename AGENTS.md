@@ -1,5 +1,9 @@
 # AgentSphere — monorepo
 
+## 回答语言 (response language)
+
+- 默认使用中文回答用户；只有用户明确要求时才使用其他语言。
+
 Git root holds four **independent** projects (no shared root build/lockfile):
 - `agent-sphere/` — Java 21 / Spring Boot backend. **See `agent-sphere/AGENTS.md`** for module layout, Maven commands, Flyway, MyBatis-Plus, and code-style rules.
 - `agent-sphere-ui/` — React 19 / UmiJS Max frontend (Ant Design Pro base).

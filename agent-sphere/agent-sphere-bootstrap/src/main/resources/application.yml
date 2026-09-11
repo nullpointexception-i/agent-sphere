@@ -121,17 +121,6 @@ buukle:
       execution-timeout: 60s                       # 工具执行超时 / Tool execution timeout
       cli-timeout: 30s                             # CLI 工具超时 / CLI tool timeout
 
-    # ============================================================
-    # Skill 嵌套 ReAct 执行 / Skill Nested ReAct Execution
-    # ============================================================
-    skill:
-      execution-enabled: true                      # 是否启用 Skill 嵌套执行 / Enable skill nested execution
-      max-sub-loop-count: 128                      # 子循环最大轮次 / Max sub-loop count
-      max-nested-depth: 2                          # 最大嵌套深度 / Max nested depth
-      execution-timeout: 45m                       # 单个 Skill 执行超时 / Skill execution timeout
-      max-prompt-chars: 20000                      # 渲染后 prompt 最大长度 / Max rendered prompt chars
-      max-result-chars: 5000                       # Skill 返回结果最大字符数 / Max result chars
-
       # ---- 网页读取工具 / Web Read Tool ----
       web-read:
         connect-timeout: 10s                       # 连接超时 / Connect timeout
@@ -142,7 +131,7 @@ buukle:
 
       # ---- Jina AI 高级网页读取 / Jina AI Advanced Web Read ----
       web-read-advanced:
-        use-jina-fallback: false                    # 启用 Jina Reader 降级 / Enable Jina Reader fallback
+        use-jina-fallback: true                     # 启用 Jina Reader 降级 / Enable Jina Reader fallback
         jina-reader-url: "https://r.jina.ai/"      # Jina Reader 服务地址 / Jina Reader service URL
         jina-api-key: ""
         jina-engine: "direct"                      # Jina 引擎模式（direct/browser）/ Jina engine mode

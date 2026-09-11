@@ -23,7 +23,9 @@ const TYPE_COLORS: Record<string, string> = {
   TITLE: 'cyan',
   TOOL_ARGUMENT: 'lime',
   TOOL_RESULT_SUMMARIZE: 'green',
-  SKILL_EXECUTE: 'magenta',
+  // 统一 delegate 后的子 Agent 交互类型；SKILL_EXECUTION 兼容历史数据
+  AGENT_EXECUTION: 'magenta',
+  SKILL_EXECUTION: 'magenta',
 };
 
 const STATUS_COLORS: Record<string, string> = {

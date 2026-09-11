@@ -1,35 +1,34 @@
 package com.buukle.agent.runtime.kernel.port;
 
 import java.util.List;
-import java.util.Set;
 
 /**
- * Skill 嵌套执行的显式上下文（禁止经 ThreadLocal 传递）。
- * 主 Agent 创建 root（depth=0、stack 空、allowedToolRefs=null 表示无父级限制）；
- * 进入 skill 时创建 child。
+ * 子 Agent 嵌套执行的显式上下文（禁止经 ThreadLocal 传递）。
+ * 主 Agent 创建 root（depth=0、ancestry 空、ownerSubAgentRunId=null）；
+ * 进入子 Agent 时创建 child，用 toolRefAncestry 记录调用链以检测递归。
  */
 public class SubRunExecutionContext {
 
     private final Long sessionId;
     private final Long runId;
     private final KernelContext kernelContext;
-    /** 当前 skill 嵌套深度（主循环为 0）。 */
-    private final int skillDepth;
-    /** 当前 skill 调用链（skill id）。 */
-    private final List<Long> skillStack;
-    /** 父级继承的白名单；null = 无限制（仅根上下文允许 null），其余为交集结果。 */
-    private final Set<String> inheritedAllowedToolRefs;
+    /** 当前子 Agent 嵌套深度（主循环为 0）。 */
+    private final int depth;
+    /** 当前子 Agent 调用链（toolRef），用于递归检测。 */
+    private final List<String> toolRefAncestry;
+    /** 拥有当前执行上下文的 sub_agent_run id；顶层为 null。 */
+    private final Long ownerSubAgentRunId;
     private final String parentToolCallId;
 
     public SubRunExecutionContext(Long sessionId, Long runId, KernelContext kernelContext,
-                                  int skillDepth, List<Long> skillStack,
-                                  Set<String> inheritedAllowedToolRefs, String parentToolCallId) {
+                                  int depth, List<String> toolRefAncestry,
+                                  Long ownerSubAgentRunId, String parentToolCallId) {
         this.sessionId = sessionId;
         this.runId = runId;
         this.kernelContext = kernelContext;
-        this.skillDepth = skillDepth;
-        this.skillStack = skillStack == null ? List.of() : List.copyOf(skillStack);
-        this.inheritedAllowedToolRefs = inheritedAllowedToolRefs;
+        this.depth = depth;
+        this.toolRefAncestry = toolRefAncestry == null ? List.of() : List.copyOf(toolRefAncestry);
+        this.ownerSubAgentRunId = ownerSubAgentRunId;
         this.parentToolCallId = parentToolCallId;
     }
 
@@ -37,8 +36,10 @@ public class SubRunExecutionContext {
         return new SubRunExecutionContext(sessionId, runId, kernelContext, 0, List.of(), null, null);
     }
 
-    public SubRunExecutionContext child(int depth, List<Long> stack, Set<String> allowed, String parentToolCallId) {
-        return new SubRunExecutionContext(sessionId, runId, kernelContext, depth, stack, allowed, parentToolCallId);
+    public SubRunExecutionContext child(int depth, List<String> ancestry,
+                                        String parentToolCallId, Long ownerSubAgentRunId) {
+        return new SubRunExecutionContext(sessionId, runId, kernelContext, depth, ancestry,
+                ownerSubAgentRunId, parentToolCallId);
     }
 
     public Long getSessionId() {
@@ -53,16 +54,16 @@ public class SubRunExecutionContext {
         return kernelContext;
     }
 
-    public int getSkillDepth() {
-        return skillDepth;
+    public int getDepth() {
+        return depth;
     }
 
-    public List<Long> getSkillStack() {
-        return skillStack;
+    public List<String> getToolRefAncestry() {
+        return toolRefAncestry;
     }
 
-    public Set<String> getInheritedAllowedToolRefs() {
-        return inheritedAllowedToolRefs;
+    public Long getOwnerSubAgentRunId() {
+        return ownerSubAgentRunId;
     }
 
     public String getParentToolCallId() {

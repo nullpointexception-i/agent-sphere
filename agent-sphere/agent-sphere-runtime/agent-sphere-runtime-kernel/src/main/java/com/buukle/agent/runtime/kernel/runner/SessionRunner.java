@@ -372,15 +372,15 @@ public class SessionRunner {
                                 .setPublishId(runPublishId)));
             }
 
-            // 含 skill 工具的轮次：外层 fiber 整批执行超时要容得下 skill 自身预算（skill 会按自己的 deadline 自终止），
-            // 否则长 skill（如 boss 寻访多步操作）会在默认 30s 被执行超时打断 → "Tool execution lost"/InterruptedException。
+            // 含 delegate 工具的轮次：外层 fiber 整批执行超时要容得下子 Agent 自身预算（子 Agent 会按自己的 deadline 自终止），
+            // 否则长子 Agent 会在默认 30s 被执行超时打断 → "Tool execution lost"/InterruptedException。
             Duration batchExecutionTimeout = properties.getTool().getExecutionTimeout();
-            boolean hasSkillTool = turn.toolCalls().stream()
+            boolean hasSubRunTool = turn.toolCalls().stream()
                     .anyMatch(tc -> toolExecutor.isSubRunTool(tc.name(), tools));
-            if (hasSkillTool) {
-                Duration skillBudget = properties.getSkill().getExecutionTimeout();
-                if (skillBudget != null && skillBudget.compareTo(batchExecutionTimeout) > 0) {
-                    batchExecutionTimeout = skillBudget;
+            if (hasSubRunTool) {
+                Duration subRunBudget = properties.getDelegate().getExecutionTimeout();
+                if (subRunBudget != null && subRunBudget.compareTo(batchExecutionTimeout) > 0) {
+                    batchExecutionTimeout = subRunBudget;
                 }
             }
 

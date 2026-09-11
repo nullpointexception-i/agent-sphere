@@ -148,6 +148,7 @@ export default {
   'pages.chat.attachmentTypeHint': '仅支持 jpeg/png/webp/gif 图片',
   'pages.chat.attachmentSizeHint': '图片不能超过 5MB',
   'pages.chat.attachmentUploadFailed': '附件上传失败',
+  'pages.chat.attachmentBusyHint': '已有待发送附件，请先发送或删除后再粘贴',
   'pages.chat.userMessage': '用户消息',
   'pages.chat.runList': '运行列表',
   'pages.chat.interactionType': '交互类型',
@@ -433,9 +434,6 @@ export default {
   'pages.admin.settings.template.skill.parameters':
     '入参 JSON Schema (parameters)',
   'pages.admin.settings.template.skill.parametersHint': '可留空=空对象',
-  'pages.admin.settings.template.skill.allowTools': '允许工具 (allowTools)',
-  'pages.admin.settings.template.skill.allowToolsHint':
-    '选取 Skill 可调用的工具；未选择则禁止调用任何工具',
   'pages.admin.settings.group.sso': '单点登录',
   'pages.admin.settings.plugin.upload.btn': '上传安装包',
   'pages.admin.settings.plugin.upload.success': '上传成功',

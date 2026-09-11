@@ -5,12 +5,9 @@ import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
 
 /**
- * 子 Agent ReAct 执行策略（skill / mcp / 其它 sub-run 各自的宿主配置与语义）。
+ * 子 Agent ReAct 执行策略（delegate 等 sub-run 的宿主配置与语义）。
  * {@code SessionSubRunner} 只关心通用 ReAct 骨架，命中策略的差异全部收敛到该接口。
  * 子类需保证返回的命名/文案与协议（前端路由、事件总线）一致。
  */
@@ -28,7 +25,7 @@ public interface SubRunPolicy {
 
     int maxResultChars();
 
-    /** 工具标识（分组/去重用），如 skill:5 → 5。 */
+    /** 工具标识（分组/去重用），如 agent:&lt;key&gt; 的稳定 hash。 */
     long toolId(RuntimeTool tool);
 
     String nodeNamePrefix();
@@ -45,17 +42,22 @@ public interface SubRunPolicy {
 
     String displayName(RuntimeTool tool);
 
-    boolean hasPromptTemplate(RuntimeTool tool);
+    /** 子 Agent 专属系统提示（agentRef 的 systemPrompt+customInstructions）；无则 null。 */
+    default String systemPrompt(RuntimeTool tool) {
+        return null;
+    }
 
-    /** 渲染子 Agent 首轮用户 prompt（含模板占位符/入参注入）。 */
+    /** 渲染子 Agent 首轮用户 prompt（含 goal / 入参注入）。 */
     String renderPrompt(RuntimeTool tool, String argsJson, SubRunExecutionContext ctx) throws InvalidSubRunDefinition;
 
-    /** 可用工具白名单（与父链交集）。 */
-    Set<String> allowedRefs(RuntimeTool tool, SubRunExecutionContext parentCtx);
+    /** 子 Agent 的可结构化接触信封（escalated args + upstream 依赖结果）；无则 null/空串。 */
+    default String contactEnvelope(RuntimeTool tool, String argsJson) {
+        return null;
+    }
 
     /**
-     * 一次性完成“深度/递归校验 + 子上下文构建”（depth + SkillStack 语义由策略负责，
-     * runner 不再触碰 {@code getSkillDepth()/getSkillStack()}）。返回错误或就绪的子上下文。
+     * 一次性完成“深度/递归校验 + 子上下文构建”（depth + ancestry 语义由策略负责，
+     * runner 不再触碰 depth/ancestry）。返回错误或就绪的子上下文。
      */
     PreparedSubRun prepare(RuntimeTool tool, long toolId, SubRunExecutionContext parentCtx);
 

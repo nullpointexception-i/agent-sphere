@@ -67,6 +67,60 @@ export default function Footer({
   const toggleRecordingRef = useRef(toggleRecording);
   toggleRecordingRef.current = toggleRecording;
 
+  const uploadImageFile = async (file: File) => {
+    if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.chat.attachmentTypeHint',
+          defaultMessage: '仅支持 jpeg/png/webp/gif 图片',
+        }),
+      );
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.warning(
+        intl.formatMessage({
+          id: 'pages.chat.attachmentSizeHint',
+          defaultMessage: '图片不能超过 5MB',
+        }),
+      );
+      return;
+    }
+    try {
+      setUploadingAttachment(true);
+      const res = await agentApi.files.upload(file);
+      const previewUrl = URL.createObjectURL(file);
+      setAttachments([
+        {
+          fileKey: res.fileKey,
+          contentType: res.contentType,
+          previewUrl,
+        },
+      ]);
+    } catch (err) {
+      message.error(
+        intl.formatMessage({
+          id: 'pages.chat.attachmentUploadFailed',
+          defaultMessage: '附件上传失败',
+        }),
+      );
+      console.warn('[attachment] upload failed:', err);
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
+  const attachmentsRef = useRef(attachments);
+  const uploadingAttachmentRef = useRef(uploadingAttachment);
+  const sendingRef = useRef(sending);
+  const uploadImageFileRef = useRef(uploadImageFile);
+  const intlRef = useRef(intl);
+  attachmentsRef.current = attachments;
+  uploadingAttachmentRef.current = uploadingAttachment;
+  sendingRef.current = sending;
+  uploadImageFileRef.current = uploadImageFile;
+  intlRef.current = intl;
+
   useEffect(() => {
     senderRef.current?.focus();
   }, [sessionKey]);
@@ -150,6 +204,52 @@ export default function Footer({
     return () => textarea.removeEventListener('keydown', onKeyDown);
   }, [sessionId, sending, loadingHistory, onInputValueChange]);
 
+  useEffect(() => {
+    const el = senderRef.current?.nativeElement;
+    if (!el) return;
+    const textarea = el.querySelector('textarea');
+    if (!textarea) return;
+
+    const onPaste = (e: Event) => {
+      const pe = e as ClipboardEvent;
+      const files: File[] = [];
+      const dataTransfer = pe.clipboardData;
+      if (dataTransfer) {
+        if (dataTransfer.files && dataTransfer.files.length > 0) {
+          files.push(...Array.from(dataTransfer.files));
+        } else if (dataTransfer.items) {
+          for (const item of Array.from(dataTransfer.items)) {
+            if (item.kind === 'file') {
+              const f = item.getAsFile();
+              if (f) files.push(f);
+            }
+          }
+        }
+      }
+      const image = files.find((f) => f.type.startsWith('image/'));
+      if (!image) return;
+      // 消费图片粘贴（与图片按钮共用单附件规则：已有/上传中/发送中则提示并忽略）
+      pe.preventDefault();
+      if (
+        attachmentsRef.current.length > 0 ||
+        uploadingAttachmentRef.current ||
+        sendingRef.current
+      ) {
+        message.warning(
+          intlRef.current.formatMessage({
+            id: 'pages.chat.attachmentBusyHint',
+            defaultMessage: '已有待发送附件，请先发送或删除后再粘贴',
+          }),
+        );
+        return;
+      }
+      void uploadImageFileRef.current(image);
+    };
+
+    textarea.addEventListener('paste', onPaste);
+    return () => textarea.removeEventListener('paste', onPaste);
+  }, []);
+
   const handlePickImage = () => {
     if (attachments.length > 0 || uploadingAttachment || sending) return;
     fileInputRef.current?.click();
@@ -159,46 +259,7 @@ export default function Footer({
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) {
-      message.warning(
-        intl.formatMessage({
-          id: 'pages.chat.attachmentTypeHint',
-          defaultMessage: '仅支持 jpeg/png/webp/gif 图片',
-        }),
-      );
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      message.warning(
-        intl.formatMessage({
-          id: 'pages.chat.attachmentSizeHint',
-          defaultMessage: '图片不能超过 5MB',
-        }),
-      );
-      return;
-    }
-    try {
-      setUploadingAttachment(true);
-      const res = await agentApi.files.upload(file);
-      const previewUrl = URL.createObjectURL(file);
-      setAttachments([
-        {
-          fileKey: res.fileKey,
-          contentType: res.contentType,
-          previewUrl,
-        },
-      ]);
-    } catch (err) {
-      message.error(
-        intl.formatMessage({
-          id: 'pages.chat.attachmentUploadFailed',
-          defaultMessage: '附件上传失败',
-        }),
-      );
-      console.warn('[attachment] upload failed:', err);
-    } finally {
-      setUploadingAttachment(false);
-    }
+    await uploadImageFileRef.current(file);
   };
 
   const handleSubmitAttachment = () => {

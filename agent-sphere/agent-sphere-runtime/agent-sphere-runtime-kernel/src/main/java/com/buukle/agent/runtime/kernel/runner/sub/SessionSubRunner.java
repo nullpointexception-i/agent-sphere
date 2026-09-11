@@ -1,4 +1,4 @@
-package com.buukle.agent.runtime.kernel.runner;
+package com.buukle.agent.runtime.kernel.runner.sub;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
@@ -36,6 +36,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
+import com.buukle.agent.runtime.kernel.runner.LoopLimitResolver;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
 import lombok.RequiredArgsConstructor;
@@ -44,13 +45,13 @@ import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -111,9 +112,6 @@ public class SessionSubRunner {
         }
         SubRunExecutionContext childCtx = prep.childCtx();
 
-        if (!policy.hasPromptTemplate(subRunTool)) {
-            return policy.errorMissingPrompt();
-        }
         String rendered;
         try {
             rendered = policy.renderPrompt(subRunTool, argsJson, parentCtx);
@@ -121,24 +119,36 @@ public class SessionSubRunner {
             return policy.errorRenderFailed(e.getMessage());
         }
 
-        Set<String> effectiveAllowed = policy.allowedRefs(subRunTool, parentCtx);
-        List<RuntimeTool> subTools = filterTools(sessionTools, effectiveAllowed);
+        List<RuntimeTool> subTools = filterTools(sessionTools);
 
         publishReasoning(policy.textStarted(displayName, prep.depth()), subRunToolId);
 
         List<ChatMessageDTO> messages = new ArrayList<>();
-        messages.add(new ChatMessageDTO().setRole("system").setContent(buildSystemPrompt(childCtx, subTools)));
+        messages.add(new ChatMessageDTO().setRole("system").setContent(buildSystemPrompt(childCtx, subTools, subRunTool)));
         messages.add(new ChatMessageDTO().setRole("user").setContent(rendered));
+        String contactEnvelope = policy.contactEnvelope(subRunTool, argsJson);
+        if (StringUtils.hasText(contactEnvelope)) {
+            messages.add(new ChatMessageDTO().setRole("user").setContent(contactEnvelope));
+        }
+        log.debug("Sub-run dispatched: toolRef={} promptChars={} envelopeBytes={}",
+                subRunTool != null ? subRunTool.getToolRef() : null,
+                rendered != null ? rendered.length() : 0,
+                StringUtils.hasText(contactEnvelope) ? contactEnvelope.length() : 0);
 
-        // 通用子 Agent 运行：进入时创建（agentType 由策略给出），结束更新状态
+        // 通用子 Agent 运行：进入时创建（agentType 由策略给出），结束更新状态；
+        // parent_run_id 写入当前上下文的 owner（顶层 null），实现嵌套子 Agent 链路。
         AgentSubAgentRunVO subRun = null;
         try {
-            subRun = subAgentRunSpi.start(childCtx.getSessionId(), childCtx.getRunId(), null,
+            subRun = subAgentRunSpi.start(childCtx.getSessionId(), childCtx.getRunId(),
+                    childCtx.getOwnerSubAgentRunId(),
                     childCtx.getParentToolCallId(), policy.agentType(), policy.toolRef(subRunToolId), displayName);
         } catch (Exception e) {
             log.warn("Failed to start sub-agent run", e);
         }
         Long subAgentRunId = subRun != null ? subRun.getId() : null;
+        // 内层工具执行上下文：owner 指向当前子 run，使嵌套 delegate 的 parent_run_id 指向它
+        SubRunExecutionContext innerCtx = childCtx.child(childCtx.getDepth(), childCtx.getToolRefAncestry(),
+                childCtx.getParentToolCallId(), subAgentRunId);
 
         // 统一 Timeline：子 Agent 头行（正文按 agent_sub_agent_run 懒解，此处仅标记 + 封口）
         try {
@@ -158,12 +168,12 @@ public class SessionSubRunner {
                 ? timeout : Duration.ofMinutes(10));
         long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
 
-        // 子 Agent 复用同一实例级循环上限（与主循环一致，最高优先）；未配置则按 skill 配置回落，不继承任务提额
+        // 子 Agent 复用同一实例级循环上限（与主循环一致，最高优先）；未配置则按 delegate 配置回落，不继承任务提额
         Integer instanceLoopLimit = childCtx.getKernelContext() != null
                 && childCtx.getKernelContext().getAgentInstance() != null
                 ? childCtx.getKernelContext().getAgentInstance().getMaxLoopCount() : null;
         LoopLimitResolver.ResolvedLoopLimit loopLimit = LoopLimitResolver.resolveSub(
-                instanceLoopLimit, properties.getSkill().getMaxSubLoopCount());
+                instanceLoopLimit, properties.getDelegate().getMaxSubLoopCount());
         log.info("Sub-run session={} run={} source={}, effective loop limit={}",
                 childCtx.getSessionId(), childCtx.getRunId(), loopLimit.source(), loopLimit.limit());
 
@@ -177,7 +187,7 @@ public class SessionSubRunner {
                 finishSubAgentRun(subAgentRunId, SubRunStatus.TIMEOUT.name());
                 return policy.errorTimeout();
             }
-            TurnResult turn = turn(messages, subTools, childCtx, turnTimeout, subRunToolId,
+            TurnResult turn = turn(messages, subTools, innerCtx, turnTimeout, subRunToolId,
                     subRunTool.getDisplayName(), subAgentRunId);
             if (turn.cancelled()) {
                 finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED.name());
@@ -219,7 +229,7 @@ public class SessionSubRunner {
                                 .setPublishId(publishId)));
                 String result;
                 try {
-                    result = toolExecutor.execute(tc, childCtx, subTools);
+                    result = toolExecutor.execute(tc, innerCtx, subTools);
 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
                         new RuntimeEventDataVO()
                                 .setSessionId(childCtx.getSessionId())
@@ -254,8 +264,8 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         }
         publishReasoning(policy.textSubLoopCapped(displayName), subRunToolId);
         finishSubAgentRun(subAgentRunId, SubRunStatus.FAILED.name());
-        return truncate(allContent.length() > 0 ? allContent.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG,
-                policy.maxResultChars());
+        String finalValue = allContent.length() > 0 ? allContent.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG;
+        return truncate(normalizeStructuredOutput(finalValue), policy.maxResultChars());
     }
 
     private void finishSubAgentRun(Long subAgentRunId, String status) {
@@ -437,11 +447,15 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         return new TurnResult(contentRef.get(), toolCalls, errorRef.get(), false, reasoningRef.get());
     }
 
-    private String buildSystemPrompt(SubRunExecutionContext ctx, List<RuntimeTool> subTools) {
+    private String buildSystemPrompt(SubRunExecutionContext ctx, List<RuntimeTool> subTools, RuntimeTool tool) {
         StringBuilder sb = new StringBuilder();
         if (ctx.getKernelContext() != null && ctx.getKernelContext().getAgentInstance() != null
                 && ctx.getKernelContext().getAgentInstance().getSystemPrompt() != null) {
             sb.append(ctx.getKernelContext().getAgentInstance().getSystemPrompt());
+        }
+        String policySystem = subRunPolicy.systemPrompt(tool);
+        if (policySystem != null && !policySystem.isBlank()) {
+            sb.append("\n\n").append(policySystem);
         }
         sb.append("\n\n允许使用的工具：\n");
         if (subTools.isEmpty()) {
@@ -499,38 +513,21 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                         .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8))));
     }
 
-    private List<RuntimeTool> filterTools(List<RuntimeTool> sessionTools, Set<String> allowedRefs) {
-        if (sessionTools == null || allowedRefs == null || allowedRefs.isEmpty()) {
-            return List.of();
-        }
+    /** 子 Agent 工具集 = 父 tools 全集，仅剔除 ask_clarification。 */
+    private List<RuntimeTool> filterTools(List<RuntimeTool> sessionTools) {
         List<RuntimeTool> result = new ArrayList<>();
+        if (sessionTools == null) {
+            return result;
+        }
         for (RuntimeTool tool : sessionTools) {
             // 嵌套 Sub run 禁止 ask_clarification：子 Agent 不得向用户提问
             if (tool.getToolRef() != null
                     && tool.getToolRef().equals(ToolRefs.builtin(ChatClarification.INTERNAL_NAME))) {
                 continue;
             }
-            if (matchesAny(allowedRefs, tool)) {
-                result.add(tool);
-            }
+            result.add(tool);
         }
         return result;
-    }
-
-    private boolean matchesAny(Set<String> allowedRefs, RuntimeTool tool) {
-        for (String ref : allowedRefs) {
-            String r = ref.trim();
-            if (ToolRefs.WILDCARD.equals(r)) {
-                return true;
-            }
-            if (tool.getToolRef() != null && r.equalsIgnoreCase(tool.getToolRef())) {
-                return true;
-            }
-            if (tool.getLlmToolName() != null && r.equalsIgnoreCase(tool.getLlmToolName())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean containsTool(List<RuntimeTool> tools, String llmName) {
@@ -554,6 +551,45 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         } catch (Exception e) {
             log.warn("Failed to resolve API key id={}", route.getApiKeyId(), e);
             return "";
+        }
+    }
+
+    private static String normalizeStructuredOutput(String value) {
+        if (value == null || value.isBlank()) {
+            return RunnerConstants.FALLBACK_COMPLETE_MSG;
+        }
+        String trimmed = value.trim();
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(trimmed);
+            return node != null ? node.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG;
+        } catch (Exception ignored) {
+            // Strip fenced JSON before validation so prose + JSON is reduced to a single authoritative payload.
+            int fenceStart = trimmed.indexOf("```");
+            int fenceEnd = trimmed.lastIndexOf("```");
+            if (fenceStart >= 0 && fenceEnd > fenceStart) {
+                String candidate = trimmed.substring(fenceStart + 3, fenceEnd).trim();
+                if (candidate.startsWith("json")) {
+                    candidate = candidate.substring(4).trim();
+                }
+                try {
+                    com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(candidate);
+                    return node != null ? node.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG;
+                } catch (Exception ignored2) {
+                    // fall through
+                }
+            }
+            int lastBrace = trimmed.lastIndexOf('}');
+            int firstBrace = trimmed.indexOf('{');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                String candidate = trimmed.substring(firstBrace, lastBrace + 1);
+                try {
+                    com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(candidate);
+                    return node != null ? node.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG;
+                } catch (Exception ignored3) {
+                    // fall through
+                }
+            }
+            return RunnerConstants.FALLBACK_COMPLETE_MSG;
         }
     }
 

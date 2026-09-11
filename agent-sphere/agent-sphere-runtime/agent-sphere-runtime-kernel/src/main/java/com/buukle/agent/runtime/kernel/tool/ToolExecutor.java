@@ -3,7 +3,6 @@ package com.buukle.agent.runtime.kernel.tool;
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
-import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.instance.dtvo.dto.TodowriteResultDTO;
 import com.buukle.agent.instance.dtvo.vo.SessionTodoVO;
 import com.buukle.agent.instance.spi.ClarificationSpi;
@@ -19,7 +18,8 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
-import com.buukle.agent.runtime.kernel.runner.SessionSubRunner;
+import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
+import com.buukle.agent.runtime.kernel.runner.sub.SubAgentConstants;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -50,7 +50,7 @@ public class ToolExecutor {
     private final SessionTodoSpi sessionTodoSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final ClarificationSpi clarificationSpi;
-    private final org.springframework.beans.factory.ObjectProvider<SessionSubRunner> subRunnerProvider;
+    private final DelegateService delegateService;
 
     /** 主循环工具入口：以根上下文执行（主 Agent 无父级限制）。 */
     public String execute(TurnToolCall tc, Long sessionId, Long runId, List<RuntimeTool> tools) {
@@ -73,6 +73,14 @@ public class ToolExecutor {
             String type = tool.getCapabilityType();
             Map<String, Object> binding = tool.getExecBinding();
             String args = tc.arguments() != null ? tc.arguments() : RunnerConstants.EMPTY_JSON_ARGS;
+
+            // delegate 统一执行入口（pseudo-tool）：main 内联或 subagent 隔离，深度由策略统一 +1
+            if (SubAgentConstants.DELEGATE_TOOL.equals(tc.name())) {
+                // 保持同深度不变，仅记录触发本调用的 toolCallId 与当前 owner，供嵌套子 run 回溯
+                SubRunExecutionContext execCtx = ctx.child(ctx.getDepth(), ctx.getToolRefAncestry(),
+                        tc.id(), ctx.getOwnerSubAgentRunId());
+                return delegateService.execute(args, execCtx, tools);
+            }
 
             if (CAPABILITY_TYPE_MCP.equals(type) && !mcpSpis.isEmpty()) {
                 return mcpSpis.get(0).executeTool(
@@ -123,16 +131,6 @@ public class ToolExecutor {
                         (String) binding.get(ExecBindingKeys.CLI_WORKING_DIR));
                 return cliExecutorService.execute(cliBinding, args);
             }
-            if (CAPABILITY_TYPE_SKILL.equals(type)) {
-                SessionSubRunner subRunner = subRunnerProvider.getIfAvailable();
-                if (subRunner == null) {
-                    return "{\"error\":\"Skill executor unavailable\"}";
-                }
-                // 携带触发本 skill 的工具调用 id 作为 parentToolCallId（sub_agent_run.parent_tool_call_id 关联回溯）
-                SubRunExecutionContext subRunExecutionContext = ctx.child(
-                        ctx.getSkillDepth() + 1, ctx.getSkillStack(), ctx.getInheritedAllowedToolRefs(), tc.id());
-                return subRunner.execute(tool, args, subRunExecutionContext, tools);
-            }
             return JSON_ERROR_UNSUPPORTED_TYPE + type + "\"}";
         } catch (Exception e) {
             log.warn("Tool execution failed: tool={}", tc.name(), e);
@@ -160,14 +158,11 @@ public class ToolExecutor {
                 .orElse(toolName);
     }
 
-    /** 判断某个工具调用是否为 sub-run 工具（toolRef 形如 "skill:<id>"），用于放宽外层 fiber 超时。 */
+    /** delegate 可能触发隔离子 agent（subagent/DAG），按子 Agent 预算放宽外层超时。 */
     public boolean isSubRunTool(String toolName, List<RuntimeTool> tools) {
         if (toolName == null || tools == null || tools.isEmpty()) return false;
-        String prefix = ToolRefs.TYPE_SKILL + ToolRefs.SEPARATOR;
-        return tools.stream().anyMatch(t ->
-                toolName.equals(t.getLlmToolName())
-                        && t.getToolRef() != null
-                        && t.getToolRef().startsWith(prefix));
+        if (!SubAgentConstants.DELEGATE_TOOL.equals(toolName)) return false;
+        return tools.stream().anyMatch(t -> toolName.equals(t.getLlmToolName()));
     }
 
     private void persistTodosFromResult(Long sessionId, Long runId, String resultJson) {

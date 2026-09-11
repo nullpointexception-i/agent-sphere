@@ -2,7 +2,8 @@ package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillWriteExecuteContext;
 import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillWriteResultVO;
-import com.buukle.agent.capability.builtin.tool.skillwrite.tool.CapabilityBuiltinToolSkillOperation;
+import com.buukle.agent.capability.builtin.tool.skillwrite.tool.CapabilityBuiltinToolSkillLibrary;
+import com.buukle.agent.capability.builtin.tool.skillwrite.tool.CapabilityBuiltinToolSkillManage;
 import com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
@@ -36,14 +37,16 @@ class CapabilityBuiltinToolSkillOperationTest {
     private CapabilitySkillSpi skillSpi;
     private InstanceCapabilitySpi instanceCapabilitySpi;
     private SessionSpi sessionSpi;
-    private CapabilityBuiltinToolSkillOperation tool;
+    private CapabilityBuiltinToolSkillLibrary libraryTool;
+    private CapabilityBuiltinToolSkillManage manageTool;
 
     @BeforeEach
     void setUp() {
         skillSpi = mock(CapabilitySkillSpi.class);
         instanceCapabilitySpi = mock(InstanceCapabilitySpi.class);
         sessionSpi = mock(SessionSpi.class);
-        tool = new CapabilityBuiltinToolSkillOperation(skillSpi, instanceCapabilitySpi, sessionSpi);
+        libraryTool = new CapabilityBuiltinToolSkillLibrary(skillSpi, instanceCapabilitySpi, sessionSpi);
+        manageTool = new CapabilityBuiltinToolSkillManage(skillSpi, instanceCapabilitySpi, sessionSpi);
     }
 
     @Test
@@ -59,7 +62,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setDescription("简历抓取");
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertEquals("create", r.getAction());
         assertEquals(100L, r.getSkillId());
@@ -82,7 +85,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setName("bad");
         ctx.setDefinition("not-json");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("Invalid definition"));
         verify(skillSpi, never()).createSkill(any(CreateSkillDTO.class), any());
@@ -99,7 +102,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setName("orphan");
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("agent instance"));
         verify(skillSpi, never()).createSkill(any(CreateSkillDTO.class), any());
@@ -116,7 +119,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSessionId(1L);
         ctx.setAction("list");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertEquals("list", r.getAction());
         assertEquals(1, r.getSkills().size());
@@ -134,7 +137,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setAction("get");
         ctx.setSkillId(100L);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("not bound"));
         verify(skillSpi, never()).getSkill(100L);
@@ -151,7 +154,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setAction("get");
         ctx.setSkillId(100L);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertEquals(100L, r.getSkillId());
         assertNotNull(r.getPreview());
@@ -171,7 +174,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSkillId(100L);
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertEquals("update", r.getAction());
         verify(skillSpi).updateSkill(eq(100L), any(CreateSkillDTO.class), eq("alice"));
@@ -188,18 +191,17 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSkillId(100L);
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("not bound"));
         verify(skillSpi, never()).updateSkill(any(), any(), any());
     }
 
     @Test
-    void update_patch_replaceSection_preservesParametersAndAllowTools() {
+    void update_patch_replaceSection_preservesParameters() {
         String definition = """
                 {"version":1,
                  "parameters":{"type":"object","properties":{"keyword":{"type":"string"}}},
-                 "allowTools":["builtin:docwrite"],
                  "promptTemplate":"## 任务\\nold body\\n\\n## 输出\\nout"}""";
         when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
@@ -215,7 +217,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setHeadingSearch("任务");
         ctx.setContent("new body");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertEquals("update", r.getAction());
         org.mockito.ArgumentCaptor<CreateSkillDTO> captor = org.mockito.ArgumentCaptor.forClass(CreateSkillDTO.class);
@@ -223,7 +225,6 @@ class CapabilityBuiltinToolSkillOperationTest {
         String patched = captor.getValue().getDefinition();
         assertTrue(patched.contains("new body"), "patch content should be present");
         assertFalse(patched.contains("old body"), "old section should be replaced");
-        assertTrue(patched.contains("allowTools"), "allowTools should be preserved");
         assertTrue(patched.contains("\"keyword\""), "parameters should be preserved");
     }
 
@@ -243,7 +244,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setHeadingSearch("不存在的标题");
         ctx.setContent("x");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("Section not found"));
         assertNotNull(r.getHeadings());
@@ -265,7 +266,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSkillId(100L);
         ctx.setStructure(true);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertNotNull(r.getHeadings());
         assertEquals(2, r.getHeadings().size());
@@ -290,7 +291,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSkillId(100L);
         ctx.setSectionHeading("任务");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertNotNull(r.getContent());
         assertTrue(r.getContent().contains("按 JD 分析候选人"));
@@ -311,7 +312,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSkillId(100L);
         ctx.setSectionHeading("不存在的标题");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("Section not found"));
         assertNotNull(r.getHeadings());
@@ -334,7 +335,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setStartLine(2);
         ctx.setEndLine(2);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertEquals("按 JD 分析候选人", r.getContent());
     }
@@ -350,7 +351,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setAction("get");
         ctx.setSkillId(100L);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertEquals(VALID_DEFINITION, r.getContent());
         assertNotNull(r.getPreview());
@@ -369,7 +370,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSessionId(1L);
         ctx.setAction("count");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertEquals("count", r.getAction());
         assertEquals(Integer.valueOf(2), r.getTotal());
@@ -389,7 +390,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setAction("search_by_title");
         ctx.setKeyword("fetch");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
 
         assertEquals("search_by_title", r.getAction());
         assertEquals(1, r.getSkills().size());
@@ -398,11 +399,10 @@ class CapabilityBuiltinToolSkillOperationTest {
     }
 
     @Test
-    void append_appendsToPromptTemplateAndPreservesParametersAndAllowTools() {
+    void append_appendsToPromptTemplateAndPreservesParameters() {
         String definition = """
                 {"version":1,
                  "parameters":{"type":"object","properties":{"keyword":{"type":"string"}}},
-                 "allowTools":["builtin:docwrite"],
                  "promptTemplate":"## 任务\\nold body"}""";
         when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
@@ -416,7 +416,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setSkillId(100L);
         ctx.setContent("## 补充\nextra notes");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) tool.execute(ctx);
+        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
 
         assertEquals("append", r.getAction());
         org.mockito.ArgumentCaptor<CreateSkillDTO> captor = org.mockito.ArgumentCaptor.forClass(CreateSkillDTO.class);
@@ -424,7 +424,6 @@ class CapabilityBuiltinToolSkillOperationTest {
         String appended = captor.getValue().getDefinition();
         assertTrue(appended.contains("## 补充"), "appended content should be present");
         assertTrue(appended.contains("\"keyword\""), "parameters should be preserved");
-        assertTrue(appended.contains("allowTools"), "allowTools should be preserved");
         assertTrue(appended.contains("old body"), "original promptTemplate should be preserved");
     }
 

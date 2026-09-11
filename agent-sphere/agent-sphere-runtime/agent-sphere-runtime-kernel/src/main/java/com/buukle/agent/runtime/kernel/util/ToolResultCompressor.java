@@ -43,15 +43,18 @@ public class ToolResultCompressor {
         }
 
         if (node instanceof List list) {
-            if (list.isEmpty()) return list;
-            if (list.size() <= ARRAY_EXPAND_THRESHOLD) {
-                return list.stream().map(e -> jsonCompress(e, depth + 1, maxValueChars)).toList();
+            if (list.isEmpty()) {
+                Map<String, Object> arr = new LinkedHashMap<>();
+                arr.put("_count", 0);
+                arr.put("_showing", 0);
+                arr.put("items", List.of());
+                return arr;
             }
-            var head = list.subList(0, ARRAY_SHOW_ITEMS).stream()
+            var head = list.subList(0, Math.min(list.size(), ARRAY_SHOW_ITEMS)).stream()
                     .map(e -> jsonCompress(e, depth + 1, maxValueChars)).toList();
             Map<String, Object> arr = new LinkedHashMap<>();
             arr.put("_count", list.size());
-            arr.put("_showing", ARRAY_SHOW_ITEMS);
+            arr.put("_showing", Math.min(list.size(), ARRAY_SHOW_ITEMS));
             arr.put("items", head);
             return arr;
         }

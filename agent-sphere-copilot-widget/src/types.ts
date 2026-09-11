@@ -86,6 +86,10 @@ export interface TimelineRow {
     reply?: string;
     displayName?: string;
     status?: string;
+    /** 子 Agent 类型（统一 delegate 后为 AGENT；历史数据可能为 SKILL）。 */
+    agentType?: string;
+    /** 子 Agent 引用/标识（delegate 的 agentRef，形如 instance:<id>）。 */
+    agentRef?: string;
     args?: string;
     artifact?: string;
     clarificationId?: string;

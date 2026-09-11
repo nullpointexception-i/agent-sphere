@@ -15,6 +15,10 @@ public enum TimelineContentKey {
     RESPONSE("response"),
     STATE("state"),
     STARTED_AT("startedAt"),
+    /** 子 Agent 类型（SUBAGENT 行）。 */
+    AGENT_TYPE("agentType"),
+    /** 子 Agent 引用/标识（SUBAGENT 行）。 */
+    AGENT_REF("agentRef"),
     DURATION_MS("durationMs"),
     MODEL_NAME("modelName"),
     /** 用户消息附图引用（[{fileKey, contentType}]，前端按 fileKey 拉字节显示）。 */

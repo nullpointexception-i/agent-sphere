@@ -319,6 +319,8 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                         if (s != null) {
                             content.put(TimelineContentKey.DISPLAY_NAME.getCode(), s.getDisplayName());
                             content.put(TimelineContentKey.STATE.getCode(), s.getStatus());
+                            content.put(TimelineContentKey.AGENT_TYPE.getCode(), s.getAgentType());
+                            content.put(TimelineContentKey.AGENT_REF.getCode(), s.getAgentRef());
                             content.put(TimelineContentKey.STARTED_AT.getCode(), s.getStartedAt() != null ? s.getStartedAt().toString() : null);
                         }
                     } else {
