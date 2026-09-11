@@ -34,6 +34,8 @@ public class RuntimeEventDataVO {
     private String clarificationId;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
+    /** 触发该子 Agent 的父工具调用 id（同批次并行子 Agent 共享，用于前端成组展示）。 */
+    private String parentToolCallId;
     /** 统一 Timeline 行 seq（会话级单调）——SSE 打字机/打平渲染的目标键。 */
     private Long seq;
     /** 统一 Timeline 行展示类型（user|assistant|tool|clarification|subagent|run_status|error）。 */

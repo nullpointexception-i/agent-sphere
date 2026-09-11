@@ -44,7 +44,7 @@
 ## 功能特性
 
 - **LLM ReAct 编排** — `SessionRunner` 执行 `Plan → Act → Observe → Learn` 循环，支持单轮超时、取消、自动上下文压缩。
-- **多 Agent 子任务（sub-agent）** — 父 run 可将子任务委托给**子 Agent**（`SessionSubRunner`）：受限工具集的子 LLM 循环，自带推理/回复与工具调用，主聊天与 Widget 都以内联子 Agent 卡片渲染（SSE 实时步骤聚合 + 完成后权威时间线校正）。
+- **多 Agent 子任务（sub-agent）** — 父 run 经统一 **`delegate` 工具**将子任务委托给**子 Agent**（`SessionSubRunner`）；同时支持 **DAG 编排**（`tasks[]`）：Kahn 分层并行泳道、per-task `args`/`dependsOn` 数据注入（`ContactEnvelope`）、`delegate-lane/v1` 输出契约 + 逐 key 对账、有界重试。
 - **多供应商模型路由** — 支持 OpenAI / DeepSeek / 智谱（BigModel）/ 中转站 / OrcaRouter，主路由 + fallback 路由链自动降级。
 - **统一能力层** — MCP Server、内置 SPI 工具、CLI 执行、浏览器自动化、复合技能，通过 `ToolExecutor` 统一分发。
 - **真实浏览器自动化** — Manifest V3 Chrome 扩展桥接，执行 DOM 操作（导航 / 点击 / 输入 / executeJS）并实时执行反馈。
@@ -321,6 +321,45 @@ AgentSphere 支持 **用户澄清（User Clarification）** 机制，使 LLM 在
 | `clarification_responded` | 用户提交回应 | 卡片显示 ✓，run 继续 |
 | `clarification_expired` | 30 分钟 TTL 到期 | 卡片变灰 |
 | `clarification_dismissed` | 等待时 run 被取消 | 卡片显示已撤销 |
+
+### 3.9 delegate：多 Agent 委派与 DAG 编排
+
+![多 Agent DAG 编排（delegate）](agent-sphere-readme/delegate-dag-orchestration.png)
+
+`delegate` 是委派工作的**唯一伪工具执行入口**，对主 agent（只要 `delegate.enabled` 开启）与 skill 执行统一接线。**skill 不是直接工具**：agent 先经 `skill_library`（builtin_8）发现/检阅技能，再通过 `delegate` 执行它 —— 即两段式 *发现 → 执行* 流程（见系统提示中的 `DELEGATE WORKFLOW`）。
+
+#### 执行模式
+- `mode=main` —— 在当前循环**内联**执行：不建子 Agent、不增深度。默认方式，除非有隔离需要。
+- `mode=subagent` —— 隔离到 **`SessionSubRunner`** 子 Agent：受限工具的子 LLM 循环，自带推理/回复与工具调用。**继承完整工具集与父级模型路由**；可选 `agentRef=instance:<id>` 前缀其系统提示。聊天与 Widget 均以内联子 Agent 卡片渲染。
+
+隔离仅用于嘈杂中间态、长耗时、独立并行泳道；简单任务应在当前循环直接完成。
+
+#### 任务 DAG（`tasks[]`，要求 `mode=subagent`）
+- 每个任务含 `key` / `goal`（必填），可选每任务 `args`、`agentRef`、`dependsOn`（上游任务 key）。
+- 编排器执行 **Kahn 拓扑分层**：同层泳道并行（上限 `maxParallel`）；只有其所有 `dependsOn` 泳道交付 OK（`DELIVERED_OK`）才派发。环与未知依赖 key 前置拒绝。
+- **数据注入** —— 每个泳道收到 `ContactEnvelope`（`v1-delegate-contact`）：`{laneKey, args, upstream, upstream_visible, upstream_raw, truncated}`。任务私有 `args` 与解析出的上游结果以确定性 JSON 注入（渲染为额外 user 消息，`SubAgentPolicy` 递归内联作纵深防御）；超大上游按 key 截断，但信封本身永远完整可解析。
+
+#### 泳道输出契约（`delegate-lane/v1`）
+业务字段全部位于**顶层**；所有框架字段进入顶层 `_meta` 对象：
+```json
+{"<业务字段>": "...",
+ "_meta": {"contract":"delegate-lane/v1",
+           "status":"OK|ERROR|UNCERTAIN",
+           "verdict":"COMPUTED|UPSTREAM_MISSING|CLAIM_UNVERIFIABLE",
+           "errorCategory":"...", "upstream_visible":true,
+           "upstream_raw":"...", "retryCount":0, "reason":"..."}}
+```
+交付**仅**以 `_meta.status=="OK"` 判定；无 `_meta` 的泳道按 `UNCERTAIN` 处理（严格模式——裸业务 JSON 不算交付）。框架永不读写顶层业务键。
+
+#### 编排管线
+1. 环检测与依赖 key 校验。
+2. `runDagLayers` —— 首次**无预算上限**的按依赖分层执行；已派发过（无论结果）的泳道不再此处重派。
+3. `tryRetryFailed` —— **有界**重试（`maxDagRetries`）：只重发返回 UNCERTAIN/ERROR/空值的泳道，各附针对性修正提示（重放原始 args）。
+4. 聚合信封 —— `{mode, overall, results[]}`：
+   - `overall = {total, ok, failed, failedKeys, fencedKeys}`；父级**逐 key** 对账，缺失/失败泳道一律判 `UNCERTAIN` 重跑——绝不推断。
+   - 每个 `results[k]` = `{key, result, meta, raw, durationMs, retryCount, fenced}`；`result` 为剥离顶层 `_meta` 的纯业务 JSON（失败为 `null`）、`meta` 承载框架元数据、`raw` 为泳道原文。
+
+关键 `delegate.*` 配置：`enabled`、`maxDagTasks`、`maxDagRetries`、`maxParallel`、`maxNestedDepth`、`maxSubLoopCount`、`executionTimeout` 及 prompt/信封字节预算。
 
 ---
 

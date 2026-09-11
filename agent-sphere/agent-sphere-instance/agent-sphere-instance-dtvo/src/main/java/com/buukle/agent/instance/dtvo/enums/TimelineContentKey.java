@@ -21,6 +21,8 @@ public enum TimelineContentKey {
     AGENT_REF("agentRef"),
     DURATION_MS("durationMs"),
     MODEL_NAME("modelName"),
+    /** 触发该子 Agent 的父工具调用 id（SUBAGENT 行；同批次并行子 Agent 共享）。 */
+    PARENT_TOOL_CALL_ID("parentToolCallId"),
     /** 用户消息附图引用（[{fileKey, contentType}]，前端按 fileKey 拉字节显示）。 */
     IMAGES("images"),
     /** 用量聚合（{promptTokens, completionTokens, totalTokens, cacheHitTokens, cacheMissTokens}；assistant / run_status 行）。 */

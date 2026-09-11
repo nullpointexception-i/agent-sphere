@@ -6,7 +6,16 @@ import {
 } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
-import { App, Button, Divider, Image, Input, Tag, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Divider,
+  Image,
+  Input,
+  Tabs,
+  Tag,
+  Typography,
+} from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
@@ -146,6 +155,13 @@ function AssistantCard({ row }: any) {
   const reply = content.reply || '';
   const [thinkingOpen, setThinkingOpen] = useState(true);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const thinkingBoxRef = useRef<HTMLPreElement | null>(null);
+  // 流式思考持续增长：展开且内容变化时自动滚底（与子 Agent 步骤容器行为一致）
+  useEffect(() => {
+    if (!thinkingOpen) return;
+    const el = thinkingBoxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [thinking, thinkingOpen]);
   useEffect(() => {
     if (!autoCollapsed && reply.trim().length > 0) {
       setAutoCollapsed(true);
@@ -160,6 +176,7 @@ function AssistantCard({ row }: any) {
         onToggle={() => setThinkingOpen((o) => !o)}
       >
         <pre
+          ref={thinkingBoxRef}
           style={{
             whiteSpace: 'pre-wrap',
             fontSize: 12,
@@ -324,6 +341,12 @@ function ClarificationCard({
 
 /** 子 Agent 单步：LLM 交互对齐主 Agent（Model Reason + 回复），标题不再裸展示内部枚举名。 */
 function SubAgentLlmItem({ s }: any) {
+  const reasoningBoxRef = useRef<HTMLPreElement | null>(null);
+  // 子 Agent 流式推理持续增长：贴底滚动（与主 Agent 思考容器一致）
+  useEffect(() => {
+    const el = reasoningBoxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [s.reasoning]);
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -343,6 +366,7 @@ function SubAgentLlmItem({ s }: any) {
       {s.reasoning && (
         <Block title="Model Reason">
           <pre
+            ref={reasoningBoxRef}
             style={{
               whiteSpace: 'pre-wrap',
               fontSize: 12,
@@ -653,6 +677,94 @@ function UserImages({ images }: any) {
   );
 }
 
+function subAgentMemberKey(row: any): string {
+  const id = row?.refSubAgentRunId;
+  return String(id ?? row?.seq ?? Math.random());
+}
+
+/** 同批次并行子 Agent 的分组键：共享 parentToolCallId（同一 delegate 调用派生）。 */
+function parallelGroupKey(row: any): string | null {
+  if (row?.kind !== 'subagent') return null;
+  const pid = row?.content?.parentToolCallId;
+  if (pid == null || pid === '') return null;
+  return String(pid);
+}
+
+/**
+ * 同批次并行子 Agent 的横向 Tab 容器：Tab 条原生横向滚动，
+ * 面板复用 SubAgentCard（live 聚合/展开/步骤加载逻辑不变）。
+ * inactive 面板默认保持挂载，切换 Tab 不丢各卡片状态。
+ */
+function ParallelSubAgentTabs({
+  groupKey,
+  members,
+  loadSubAgentSteps,
+  subAgentLive,
+}: any) {
+  const keys = members.map((m: any) => subAgentMemberKey(m));
+  const [activeKey, setActiveKey] = useState<string | undefined>(undefined);
+  const effectiveKey =
+    activeKey != null && keys.includes(activeKey) ? activeKey : keys[0];
+  const anyRunning = members.some((m: any) => m.state === 'RUNNING');
+  return (
+    <div
+      style={{
+        width: '100%',
+        maxWidth: 940,
+        margin: '2px auto',
+        fontSize: 13,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 2,
+        }}
+      >
+        <Tag style={{ margin: 0 }}>子 Agent</Tag>
+        <Tag style={{ margin: 0, fontSize: 11, color: '#999' }}>
+          ×{members.length} 并行
+        </Tag>
+        {anyRunning ? <RunningDot /> : null}
+      </div>
+      <Tabs
+        size="small"
+        style={{ width: '100%' }}
+        tabBarStyle={{ marginBottom: 4 }}
+        activeKey={effectiveKey}
+        onChange={setActiveKey}
+        items={members.map((m: any, i: number) => {
+          const name =
+            stripSubAgentMarkerPrefix(m.content?.displayName || m.title) ||
+            `子 Agent ${i + 1}`;
+          return {
+            key: subAgentMemberKey(m),
+            label: (
+              <span>
+                {name}{' '}
+                {m.state === 'RUNNING' ? (
+                  <RunningDot />
+                ) : (
+                  <StateTag state={m.state} small />
+                )}
+              </span>
+            ),
+            children: (
+              <SubAgentCard
+                row={m}
+                loadSubAgentSteps={loadSubAgentSteps}
+                subAgentLive={subAgentLive}
+              />
+            ),
+          };
+        })}
+      />
+    </div>
+  );
+}
+
 function RowCard({
   row,
   onRespondClarify,
@@ -814,6 +926,43 @@ export default function TimelineList({
   loadSubAgentSteps,
   subAgentLive,
 }: TimelineListProps) {
+  // 同批次并行子 Agent（共享 parentToolCallId 且 ≥2 个）合并为横向 Tab；
+  // 单个子 Agent / 缺分组键的过渡态仍走原 RowCard，保证行为不变。
+  // 同一 subId 的占位行与权威行可能短暂共存，去重时优先保留权威行（seq>=0）。
+  const items = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const k = parallelGroupKey(r);
+      if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const consumed = new Set<string>();
+    const out: Array<
+      { type: 'row'; row: any } | { type: 'group'; key: string; members: any[] }
+    > = [];
+    for (const r of rows) {
+      const k = parallelGroupKey(r);
+      if (k && (counts.get(k) ?? 0) >= 2 && !consumed.has(k)) {
+        consumed.add(k);
+        const bySub = new Map<string, any>();
+        for (const m of rows) {
+          if (parallelGroupKey(m) !== k) continue;
+          const mk = subAgentMemberKey(m);
+          const prev = bySub.get(mk);
+          if (!prev || (prev.seq ?? 0) < 0) bySub.set(mk, m);
+        }
+        out.push({
+          type: 'group',
+          key: `parallel-${k}`,
+          members: [...bySub.values()],
+        });
+      } else if (k && consumed.has(k)) {
+      } else {
+        out.push({ type: 'row', row: r });
+      }
+    }
+    return out;
+  }, [rows]);
+
   return (
     <>
       {hasMore && (
@@ -823,16 +972,26 @@ export default function TimelineList({
           </Button>
         </div>
       )}
-      {rows.map((row) => (
-        <RowCard
-          key={`${row.seq}-${row.kind}`}
-          row={row}
-          onRespondClarify={onRespondClarify}
-          onCancelClarification={onCancelClarification}
-          loadSubAgentSteps={loadSubAgentSteps}
-          subAgentLive={subAgentLive}
-        />
-      ))}
+      {items.map((it) =>
+        it.type === 'row' ? (
+          <RowCard
+            key={`${it.row.seq}-${it.row.kind}`}
+            row={it.row}
+            onRespondClarify={onRespondClarify}
+            onCancelClarification={onCancelClarification}
+            loadSubAgentSteps={loadSubAgentSteps}
+            subAgentLive={subAgentLive}
+          />
+        ) : (
+          <ParallelSubAgentTabs
+            key={it.key}
+            groupKey={it.key}
+            members={it.members}
+            loadSubAgentSteps={loadSubAgentSteps}
+            subAgentLive={subAgentLive}
+          />
+        ),
+      )}
     </>
   );
 }

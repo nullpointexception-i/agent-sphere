@@ -97,6 +97,12 @@ public class DelegateService {
     private static final String CAT_TOOL_ERROR = "TOOL_ERROR";
     private static final String CAT_INTERRUPTED = "INTERRUPTED";
     private static final int DEFAULT_RETRY_LIMIT = 1;
+    // FIX-2 失败阶段归类：父级判定用，区分“未派发/上游搁浅/无输出/工具错误/内容降级”。
+    private static final String STAGE_NOT_DISPATCHED = "NOT_DISPATCHED";
+    private static final String STAGE_UPSTREAM_STRANDED = "UPSTREAM_STRANDED";
+    private static final String STAGE_NO_OUTPUT = "NO_OUTPUT";
+    private static final String STAGE_TOOL_ERROR = "TOOL_ERROR";
+    private static final String STAGE_CONTENT_DEGRADED = "CONTENT_DEGRADED";
     /** 与 agent_sub_agent_run.display_name VARCHAR(200) 对齐的上限。 */
     private static final int DISPLAY_NAME_MAX = 200;
     private static final Pattern JSON_BLOCK = Pattern.compile("(?s)```(?:json)?\\s*(.*?)\\s*```");
@@ -406,29 +412,44 @@ public class DelegateService {
         }
     }
 
-    /** 有界预算重试：仅重派发已执行但返回 UNCERTAIN/ERROR/空值的泳道，附带针对性修正提示。 */
+    /** FIX-1 拓扑化重试：每轮只重派“依赖现已交付”的泳道；下游仅在上游确认后才在后续轮次重派。
+     * 预算为 per-lane 上限（每泳道至多重试 retryLimit 次）；已交付上游保持结果供下游判定，
+     * 避免同批并行把可恢复的上游重试放大成整条子图静默搁浅（P0-2）。 */
     private void tryRetryFailed(List<DagTask> parsed, SessionSubRunner runner, SubRunExecutionContext parentCtx,
                                 List<RuntimeTool> tools, int maxParallel, Map<String, String> results,
                                 Map<String, String> rawOutputs, Map<String, Long> durations,
                                 Map<String, String> retryHints, Map<String, Integer> retryCounts,
                                 int retryLimit, Map<String, Boolean> fencedFlags) throws InterruptedException {
-        for (int pass = 0; pass < retryLimit; pass++) {
-            List<DagTask> failed = new ArrayList<>();
+        int safetyValve = parsed.size() * 2 + 1;
+        for (int pass = 0; pass < safetyValve; pass++) {
+            Set<String> delivered = new HashSet<>();
             for (DagTask task : parsed) {
-                if (laneDelivered(results.getOrDefault(task.key(), "")) != StatusVerdict.DELIVERED_OK) {
-                    failed.add(task);
+                if (laneDelivered(results.getOrDefault(task.key(), "")) == StatusVerdict.DELIVERED_OK) {
+                    delivered.add(task.key());
                 }
             }
-            if (failed.isEmpty()) return;
-            // 重派发前重置已失败的泳道（清除老结果让子任务重新执行）
-            for (DagTask task : failed) {
-                results.remove(task.key());
-                retryCounts.put(task.key(), pass + 1);
+            List<DagTask> eligible = new ArrayList<>();
+            for (DagTask task : parsed) {
+                int used = retryCounts.getOrDefault(task.key(), 0);
+                if (laneDelivered(results.getOrDefault(task.key(), "")) != StatusVerdict.DELIVERED_OK
+                        && depsDelivered(task, delivered)
+                        && used < retryLimit) {
+                    eligible.add(task);
+                }
             }
-            runLayer(failed, runner, parentCtx, tools, maxParallel, results, rawOutputs, durations,
+            if (eligible.isEmpty()) {
+                return;
+            }
+            // 仅清除本批待重派泳道旧结果；已交付上游保持，供下游 fail-fast 判定。
+            for (DagTask task : eligible) {
+                results.remove(task.key());
+                retryCounts.put(task.key(), retryCounts.getOrDefault(task.key(), 0) + 1);
+            }
+            runLayer(eligible, runner, parentCtx, tools, maxParallel, results, rawOutputs, durations,
                     retryHints, fencedFlags);
-            for (DagTask task : failed) {
-                classifyLane(task, results, retryHints, retryCounts, pass + 1, fencedFlags);
+            for (DagTask task : eligible) {
+                classifyLane(task, results, retryHints, retryCounts,
+                        retryCounts.getOrDefault(task.key(), 0), fencedFlags);
             }
         }
     }
@@ -468,6 +489,7 @@ public class DelegateService {
                             List<RuntimeTool> tools, Semaphore permits, Map<String, String> results,
                             Map<String, String> rawOutputs, Map<String, Long> durations,
                             Map<String, String> retryHints, Map<String, Boolean> fencedFlags) {
+        long startMs = System.currentTimeMillis();
         try {
             permits.acquire();
         } catch (InterruptedException e) {
@@ -496,7 +518,6 @@ public class DelegateService {
             log.info("delegate lane dispatch: key={} deps={} contactBytes={}",
                     task.key(), task.dependsOn(),
                     contact != null ? contact.toString().length() : 0);
-            long startMs = System.currentTimeMillis();
             String rawResult = runner.execute(tool, argsForTask(task.args()), parentCtx, tools);
             durations.put(task.key(), System.currentTimeMillis() - startMs);
             rawOutputs.put(task.key(), rawResult != null ? rawResult : "");
@@ -504,6 +525,7 @@ public class DelegateService {
             results.put(task.key(), normalizeStructuredResult(rawResult, task.key()));
         } catch (Exception e) {
             log.warn("delegate DAG task {} failed", task.key(), e);
+            durations.put(task.key(), System.currentTimeMillis() - startMs);
             results.put(task.key(), frameworkError(task.key(), STATUS_ERROR, CAT_TOOL_ERROR, e.getMessage(), 0, ""));
         } finally {
             permits.release();
@@ -640,8 +662,39 @@ public class DelegateService {
             if (Boolean.TRUE.equals(fencedFlags.get(task.key()))) {
                 addWarning(results, task.key(), SubAgentConstants.WARNING_FENCED);
             }
+            // FIX-3 contentVerdict：框架独立内容审定（不改 status，仅透明化“OK 但内容为空”）。
+            // 业务对象为“空对象且状态 OK”时记 INVALID，业务对象缺失/非对象记 DEGRADED，否则 OK。
+            stampContentVerdict(results, task.key(), node);
         }
         logLane(task.key(), results.get(task.key()), retryCount);
+    }
+
+    /** FIX-3 在 `_meta.contentVerdict` 写入框架侧独立审定（OK|DEGRADED|INVALID），不改业务 status。 */
+    private static void stampContentVerdict(Map<String, String> results, String key, JsonNode node) {
+        JsonNode stored = parseJson(results.getOrDefault(key, ""));
+        if (!(stored instanceof ObjectNode obj) || !(obj.get(META_KEY) instanceof ObjectNode metaObj)) {
+            return;
+        }
+        // 业务对象 = 顶层剥离 _meta 后剩余字段
+        JsonNode business = obj.deepCopy();
+        if (business instanceof ObjectNode bobj) {
+            bobj.remove(META_KEY);
+        }
+        String verdict;
+        if (!(business instanceof ObjectNode bus) || bus.size() == 0) {
+            // 无业务字段
+            if (STATUS_OK.equals(metaObj.path(META_STATUS).asText())) {
+                verdict = "INVALID"; // 声称 OK 却无内容 → 结构性掩盖
+            } else {
+                verdict = "DEGRADED";
+            }
+        } else if (!STATUS_OK.equals(metaObj.path(META_STATUS).asText())) {
+            verdict = "DEGRADED";
+        } else {
+            verdict = "OK";
+        }
+        metaObj.put(SubAgentConstants.META_CONTENT_VERDICT, verdict);
+        results.put(key, obj.toString());
     }
 
     /** 回写 _meta.retryCount（框架包装器在创建时 retryCount 恒为 0，重试轮次需显式回填）。 */
@@ -771,6 +824,8 @@ public class DelegateService {
         meta.put(META_STATUS, STATUS_ERROR);
         meta.put(META_VERDICT, VERDICT_UPSTREAM_MISSING);
         meta.put(META_ERROR_CATEGORY, CAT_UPSTREAM_MISSING);
+        meta.put(SubAgentConstants.META_FAILED_STAGE, STAGE_UPSTREAM_STRANDED);
+        meta.put(SubAgentConstants.META_DEPENDS_NOT_DELIVERED, dep);
         meta.put(META_REASON, "upstream dependency not delivered: " + dep + " (lane " + key + " not dispatched)");
         meta.put(META_RETRY_COUNT, 0);
         return out.toString();
@@ -782,6 +837,7 @@ public class DelegateService {
         meta.put(META_STATUS, STATUS_UNCERTAIN);
         meta.put(META_VERDICT, VERDICT_UPSTREAM_MISSING);
         meta.put(META_ERROR_CATEGORY, CAT_UPSTREAM_MISSING);
+        meta.put(SubAgentConstants.META_FAILED_STAGE, STAGE_NOT_DISPATCHED);
         meta.put(META_REASON, "not dispatched (dependency not ready or cycle): " + key);
         meta.put(META_RETRY_COUNT, 0);
         return out.toString();
@@ -793,11 +849,26 @@ public class DelegateService {
         ObjectNode meta = (ObjectNode) out.get(META_KEY);
         meta.put(META_STATUS, status == null ? STATUS_ERROR : status);
         meta.put(META_ERROR_CATEGORY, category);
+        meta.put(SubAgentConstants.META_FAILED_STAGE, stageForCategory(category));
         if (StringUtils.hasText(reason)) {
             meta.put(META_REASON, reason);
         }
         meta.put(META_RETRY_COUNT, retryCount);
         return out.toString();
+    }
+
+    /** FIX-2 失败阶段归类：按 errorCategory 映射，供父级拓扑级判定（区别于自报 status）。 */
+    private static String stageForCategory(String category) {
+        if (CAT_MODEL_NO_OUTPUT.equals(category)) {
+            return STAGE_NO_OUTPUT;
+        }
+        if (CAT_TOOL_ERROR.equals(category) || CAT_INTERRUPTED.equals(category)) {
+            return STAGE_TOOL_ERROR;
+        }
+        if (CAT_UPSTREAM_MISSING.equals(category)) {
+            return STAGE_UPSTREAM_STRANDED;
+        }
+        return STAGE_CONTENT_DEGRADED;
     }
 
     /**

@@ -360,6 +360,43 @@ class DelegateServiceTest {
         assertEquals("UPSTREAM_MISSING", meta.get("errorCategory").asText());
     }
 
+    /** FIX-1 回归：上游首轮失败触发重试、随后恢复 → 下游不能搁浅，必须在后续 pass 补派成功。 */
+    @Test
+    void retry_recoversUpstream_downstreamDispatchedInNextPass() throws Exception {
+        given(subRunnerProvider.getIfAvailable()).willReturn(subRunner);
+        java.util.concurrent.atomic.AtomicInteger aCalls = new java.util.concurrent.atomic.AtomicInteger();
+        given(subRunner.execute(any(RuntimeTool.class), anyString(), any(SubRunExecutionContext.class), anyList()))
+                .willAnswer(inv -> {
+                    RuntimeTool t = inv.getArgument(0);
+                    if ("agent:a".equals(t.getToolRef())) {
+                        // a：首轮内容失败（触发重试），第二次恢复成功
+                        return aCalls.getAndIncrement() == 0
+                                ? "I could not compute that"
+                                : laneOk("{\"value\":\"a-ok\"}", "COMPUTED", false);
+                    }
+                    if ("agent:b".equals(t.getToolRef())) {
+                        // b 依赖 a：补派时 a 已 OK，需带依赖探针（upstream_visible/upstream_raw）
+                        return laneOk("{\"value\":\"b-ok\"}", "COMPUTED", true);
+                    }
+                    return "{}";
+                });
+
+        String out = service.execute("""
+                {"goal":"dag","mode":"subagent","tasks":[
+                  {"key":"a","goal":"ga"},
+                  {"key":"b","goal":"gb","dependsOn":["a"]}]}""", ctx(), List.of());
+
+        // a 重试成功、b 补齐——下游不再被 UPSTREAM_MISSING 搁浅
+        JsonNode aMeta = laneMeta(out, "a");
+        assertEquals("OK", aMeta.get("status").asText());
+        JsonNode bMeta = laneMeta(out, "b");
+        assertEquals("OK", bMeta.get("status").asText(), "下游必须在上游恢复后补齐，不得搁浅");
+        // 派发账：a=2（首轮+重试），b=1（首轮跳过、后续补派）
+        List<String> refs = dispatchedToolRefs();
+        assertEquals(2, refs.stream().filter("agent:a"::equals).count());
+        assertEquals(1, refs.stream().filter("agent:b"::equals).count());
+    }
+
     @Test
     void verdictContradiction_statusOkWithMissingVerdict_flagged() throws Exception {
         given(subRunnerProvider.getIfAvailable()).willReturn(subRunner);

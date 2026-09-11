@@ -225,6 +225,7 @@ public class SessionSubRunner {
                                 .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
                                 .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
                                 .setSubAgentRunId(subAgentRunId)
+                                .setParentToolCallId(childCtx.getParentToolCallId())
                                 .setArgumentsJson(tc.arguments())
                                 .setPublishId(publishId)));
                 String result;
@@ -238,6 +239,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
                                 .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
                                 .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
                                 .setSubAgentRunId(subAgentRunId)
+                                .setParentToolCallId(childCtx.getParentToolCallId())
                                 .setArtifact(result)
                                 .setPublishId(publishId)));
                 } catch (Exception e) {
@@ -250,6 +252,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
                                 .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
                                 .setSubAgentRunId(subAgentRunId)
+                                .setParentToolCallId(childCtx.getParentToolCallId())
                                 .setErrorMessage(e.getMessage())
                                 .setPublishId(publishId)));
                 }
@@ -324,6 +327,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 .setSessionId(ctx.getSessionId())
                                 .setRunId(ctx.getRunId())
                                 .setSubAgentRunId(subAgentRunId)
+                                .setParentToolCallId(ctx.getParentToolCallId())
                                 .setResponse("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
                                 .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                 .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
@@ -364,6 +368,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                                     .setRunId(ctx.getRunId())
                                                     .setNodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
                                                     .setSubAgentRunId(subAgentRunId)
+                                                    .setParentToolCallId(ctx.getParentToolCallId())
                                                     .setResponse(t.text())
                                                     .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8))));
                                 }
@@ -377,6 +382,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                             .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                             .setPublishId(UUID.randomUUID().toString())
                                             .setSubAgentRunId(subAgentRunId)
+                                            .setParentToolCallId(ctx.getParentToolCallId())
                                             // 子 Agent thinking 全程打 sub-run 标记：前端按 nodeName 路由到子卡片
                                             .setNodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
                                             // 首帧标记：前端据此刻新 LLM 轮（避免解析哨兵前缀）
@@ -402,6 +408,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                                     .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
                                                     .setArgumentsJson(tc.arguments())
                                                     .setSubAgentRunId(subAgentRunId)
+                                                    .setParentToolCallId(ctx.getParentToolCallId())
                                                     .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + tc.id())));
                                 }
                                 case LLMEvent.Error e -> errorRef.set(e.message());

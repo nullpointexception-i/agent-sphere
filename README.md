@@ -44,7 +44,7 @@ Embeddable chat widget (shadow DOM, OIDC SSO, REST + SSE timeline chat):
 ## Features
 
 - **LLM ReAct orchestration** — `SessionRunner` runs a `Plan → Act → Observe → Learn` loop with per-turn timeout, cancellation, and automatic context compaction.
-- **Multi-agent sub-runs** — a parent run can delegate sub-tasks to **sub-agents** (`SessionSubRunner`): a restricted-tool child LLM loop with its own reasoning/reply and tool calls, rendered as inline sub-agent cards in both the main chat and the widget (live step aggregation via SSE + authoritative timeline on completion).
+- **Multi-agent sub-runs** — a parent run can delegate sub-tasks to **sub-agents** via the unified **`delegate` tool** (`SessionSubRunner`); it also drives **DAG orchestration** (`tasks[]`): Kahn-layered parallel lanes, per-task `args`/`dependsOn` data injection through `ContactEnvelope`, a `delegate-lane/v1` output contract with per-key reconciliation, and bounded retries.
 - **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations / OrcaRouter, with primary + fallback route chains and graceful degradation.
 - **Unified capability layer** — MCP servers, built-in SPI tools, CLI execution, browser automation, and composite skills, dispatched through a single `ToolExecutor`.
 - **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / executeJS) with real-time execution feedback.
@@ -321,6 +321,45 @@ Users can cancel a pending clarification at any time:
 | `clarification_responded` | User submits response | Card shows ✓, run resumes |
 | `clarification_expired` | 30-minute TTL reached | Card grays out |
 | `clarification_dismissed` | Run cancelled while awaiting | Card shows dismissed |
+
+### 3.9 Delegate: Multi-Agent Delegation & DAG Orchestration
+
+![Multi-Agent DAG orchestration via delegate](agent-sphere-readme/delegate-dag-orchestration.png)
+
+`delegate` is the **single pseudo-tool execution entry** for delegated work, always wired to the main agent (whenever `delegate.enabled`) and to skill execution. Skills are **not** direct tools: the agent first discovers/inspects a skill via `skill_library` (builtin_8), then executes it through `delegate` — the two-stage *discover → execute* flow (see `DELEGATE WORKFLOW` in the system prompt).
+
+#### Execution modes
+- `mode=main` — run **inline** in the current loop: no sub-agent, no depth increase. Default unless isolation is warranted.
+- `mode=subagent` — isolate into a **`SessionSubRunner`** sub-agent: a restricted child LLM loop with its own reasoning/reply and tool calls. It **inherits the full toolset and the parent model route**; an optional `agentRef=instance:<id>` prefixes its system prompt. Rendered as inline sub-agent cards in the chat and the widget.
+
+Isolation is reserved for noisy intermediate context, long-running work, or independent parallel lanes; simple work should be finished inline.
+
+#### Task DAG (`tasks[]`, requires `mode=subagent`)
+- Each task has `key` / `goal` (required), optional per-task `args`, `agentRef`, and `dependsOn` (upstream task keys).
+- The orchestrator runs a **Kahn topological layering**: lanes in the same layer run in parallel (up to `maxParallel`); a lane is dispatched only once all its `dependsOn` lanes delivered OK (`DELIVERED_OK`). Cycles and unknown dependency keys are rejected up front.
+- **Data injection** — each lane receives a `ContactEnvelope` (`v1-delegate-contact`): `{laneKey, args, upstream, upstream_visible, upstream_raw, truncated}`. Task-private `args` and the resolved upstream results are injected as deterministic JSON (rendered as an extra user message, with a recursive inline fallback in `SubAgentPolicy`); oversized upstream is truncated per-key, but the envelope itself always stays complete and parseable.
+
+#### Lane output contract (`delegate-lane/v1`)
+Business fields stay at the **top level**; all framework fields live under a top-level `_meta` object:
+```json
+{"<business fields>": "...",
+ "_meta": {"contract":"delegate-lane/v1",
+           "status":"OK|ERROR|UNCERTAIN",
+           "verdict":"COMPUTED|UPSTREAM_MISSING|CLAIM_UNVERIFIABLE",
+           "errorCategory":"...", "upstream_visible":true,
+           "upstream_raw":"...", "retryCount":0, "reason":"..."}}
+```
+Delivery is gated **only** on `_meta.status=="OK"`; a lane without `_meta` is treated as `UNCERTAIN` (strict mode — bare business JSON never counts as delivered). The framework never reads or writes top-level business keys.
+
+#### Orchestration pipeline
+1. Cycle detection and dependency-key validation.
+2. `runDagLayers` — first pass with **unbounded** dependency layering; a lane already dispatched (whatever its outcome) is never re-dispatched here.
+3. `tryRetryFailed` — bounded retries (`maxDagRetries`): only re-dispatches lanes that returned UNCERTAIN/ERROR/empty, each with a targeted corrective hint (replaying the original args).
+4. Aggregation envelope — `{mode, overall, results[]}`:
+   - `overall = {total, ok, failed, failedKeys, fencedKeys}`; the parent reconciles **per-key**, treating any missing/failed lane as `UNCERTAIN` to re-run — never inferred.
+   - each `results[k]` = `{key, result, meta, raw, durationMs, retryCount, fenced}`; `result` is the business JSON with the top-level `_meta` stripped (`null` on failure), `meta` holds the framework metadata, `raw` is the original lane text.
+
+Key `delegate.*` config: `enabled`, `maxDagTasks`, `maxDagRetries`, `maxParallel`, `maxNestedDepth`, `maxSubLoopCount`, `executionTimeout`, and prompt/envelope byte budgets.
 
 ---
 

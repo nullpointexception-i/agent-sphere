@@ -51,6 +51,12 @@ public final class SubAgentConstants {
     public static final String LANE_FENCED = "fenced";
     public static final String LANE_DURATION_MS = "durationMs";
     public static final String LANE_RETRY_COUNT = "retryCount";
+    /** 失败阶段归类（区分 未派发/上游搁浅/无输出/工具错误/内容降级），供父级做拓扑级判定。 */
+    public static final String META_FAILED_STAGE = "failedStage";
+    /** 上游搁浅时未交付的依赖 key 列表。 */
+    public static final String META_DEPENDS_NOT_DELIVERED = "dependsOnNotDelivered";
+    /** 框架内容审定（对比自报 meta.status），用于透明化“结构合法但内容为空”的 OK 掩盖。 */
+    public static final String META_CONTENT_VERDICT = "contentVerdict";
     /** 非致命告警（B1：围栏被剥离但不及改判）。 */
     public static final String META_WARNINGS = "warnings";
     public static final String WARNING_FENCED = "fenced";

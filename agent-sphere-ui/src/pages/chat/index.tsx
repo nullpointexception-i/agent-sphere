@@ -570,6 +570,8 @@ export default function Chat() {
                       content: {
                         displayName: d?.displayNameCn || d?.displayName,
                         state: 'RUNNING',
+                        // 同批次并行子 agent 共享 parentToolCallId，用于 Tab 成组展示
+                        parentToolCallId: d?.parentToolCallId ?? null,
                       },
                     },
                   ].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
