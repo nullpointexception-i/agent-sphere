@@ -107,4 +107,11 @@ public class CapabilitySkillController extends BaseController {
     public ResponseEntity<?> install(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {
         return created(capabilitySkillService.installSkill(id, body != null ? body.get("name") : null));
     }
+
+    @AuditLog(action = "UPDATE_AUTO_UPDATE", resourceType = "Capability", resourceId = "#id")
+    @RequirePermission("capability:skill:update")
+    @PutMapping("/{id}/auto-update")
+    public ResponseEntity<?> setAutoUpdate(@PathVariable Long id, @RequestBody java.util.Map<String, Boolean> body) {
+        return ok(capabilitySkillService.setAutoUpdate(id, body != null && Boolean.TRUE.equals(body.get("autoUpdate"))));
+    }
 }

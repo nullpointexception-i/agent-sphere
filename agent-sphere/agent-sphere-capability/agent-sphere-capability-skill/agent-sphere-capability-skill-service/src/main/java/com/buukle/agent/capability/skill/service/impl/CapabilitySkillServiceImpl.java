@@ -31,6 +31,9 @@ import java.util.List;
 public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, CapabilitySkill> implements CapabilitySkillService {
     private final CapabilitySkillConverter capabilitySkillConverter;
 
+    /** 自动更新同步来源内容时使用的操作人（后台任务无用户上下文）。 */
+    private static final String AUTO_UPDATE_OPERATOR = "skill-auto-update";
+
     @Override
     public SkillVO createSkill(CreateSkillDTO dto) {
         return createSkill(dto, null);
@@ -40,6 +43,7 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
     public SkillVO createSkill(CreateSkillDTO dto, String createdBy) {
         validateDefinition(dto.getDefinition());
         CapabilitySkill skill = capabilitySkillConverter.toDO(dto);
+        skill.setVersion(1);
         if (createdBy != null && !createdBy.isBlank()) {
             // 显式指定创建人：MetaObjectHandler 的 fillStrategy 不会覆盖非空值
             skill.setCreatedBy(createdBy);
@@ -73,6 +77,8 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         skill.setId(id);
         // 保留原状态：更新内容不应把 DISABLED 重置为 ENABLED
         skill.setStatus(existing.getStatus());
+        // 内容更新视为新版本：源技能的已安装副本据此对比 origin_version 触发自动更新
+        skill.setVersion(existing.getVersion() != null ? existing.getVersion() + 1 : 1);
         if (updatedBy != null && !updatedBy.isBlank()) {
             // 显式指定更新人：MetaObjectHandler 的 fillStrategy 不会覆盖非空值
             skill.setUpdatedBy(updatedBy);
@@ -207,6 +213,9 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         copy.setVisibility(SkillVisibilityEnum.PRIVATE);
         copy.setOriginSkillId(source.getId());
         copy.setInstallCount(0);
+        copy.setVersion(1);
+        copy.setOriginVersion(source.getVersion() != null ? source.getVersion() : 1);
+        copy.setAutoUpdate(false);
         copy.setCreatedBy(operator);
         copy.setUpdatedBy(operator);
         save(copy);
@@ -227,6 +236,48 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         qw.orderByDesc("install_count").orderByDesc("created_at");
         Page<CapabilitySkill> p = getBaseMapper().selectPage(new Page<>(page, size), qw);
         return p.convert(capabilitySkillConverter::toVO);
+    }
+
+    @Override
+    public SkillVO setAutoUpdate(Long id, boolean enabled) {
+        CapabilitySkill skill = getById(id);
+        if (skill == null) {
+            throw new BizException(CapabilitySkillErrorCode.SKILL_NOT_FOUND);
+        }
+        requireOwnership(skill);
+        if (skill.getOriginSkillId() == null) {
+            // 只有已安装（fork）副本才有源可跟随；原生技能开启自动更新无意义
+            throw new BizException(CapabilitySkillErrorCode.SKILL_FORBIDDEN, "原生技能不支持自动更新");
+        }
+        skill.setAutoUpdate(enabled);
+        updateById(skill);
+        return capabilitySkillConverter.toVO(skill);
+    }
+
+    @Override
+    public boolean syncFromOrigin(CapabilitySkill copy) {
+        CapabilitySkill source = getById(copy.getOriginSkillId());
+        if (source == null) {
+            return false;
+        }
+        if (!SkillVisibilityEnum.PUBLIC.equals(source.getVisibility())) {
+            return false;
+        }
+        int sourceVersion = source.getVersion() != null ? source.getVersion() : 1;
+        int originVersion = copy.getOriginVersion() != null ? copy.getOriginVersion() : 1;
+        if (sourceVersion <= originVersion) {
+            return false;
+        }
+        // 条件更新：仅当 origin_version 未被其它副本抢先推进时才覆盖，保证多副本幂等
+        return lambdaUpdate()
+                .eq(CapabilitySkill::getId, copy.getId())
+                .eq(CapabilitySkill::getOriginVersion, copy.getOriginVersion())
+                .set(CapabilitySkill::getName, source.getName())
+                .set(CapabilitySkill::getDescription, source.getDescription())
+                .set(CapabilitySkill::getDefinition, source.getDefinition())
+                .set(CapabilitySkill::getOriginVersion, sourceVersion)
+                .set(CapabilitySkill::getUpdatedBy, AUTO_UPDATE_OPERATOR)
+                .update();
     }
 
     /** 同名自动加后缀（hub 安装友好）；上限防极端循环。 */

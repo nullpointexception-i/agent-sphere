@@ -262,6 +262,11 @@ export const agentApi = {
       request<any>(`${BASE}/capability/skill/${id}/visibility`, { method: 'PUT', data: { visibility } }),
     install: (id: number, data?: any) =>
       request<any>(`${BASE}/capability/skill/${id}/install`, { method: 'POST', data: data || {} }),
+    setAutoUpdate: (id: number, enabled: boolean) =>
+      request<any>(`${BASE}/capability/skill/${id}/auto-update`, {
+        method: 'PUT',
+        data: { autoUpdate: enabled },
+      }),
   },
 
   cli: {

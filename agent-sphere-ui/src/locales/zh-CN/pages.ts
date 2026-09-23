@@ -108,6 +108,8 @@ export default {
   'pages.capabilities.skill.installSuccess': '已安装到我的技能',
   'pages.capabilities.skill.author': '作者',
   'pages.capabilities.skill.installCount': '安装数',
+  'pages.capabilities.skill.version': '版本',
+  'pages.capabilities.skill.autoUpdate': '自动更新',
   'pages.capabilities.serverUrl': '服务地址',
   'pages.capabilities.toolDefinitions': '工具定义 (JSON)',
   'pages.capabilities.commandTemplate': '命令模板',

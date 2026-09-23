@@ -99,6 +99,8 @@
 
 后端过滤条件为 `visibility='PUBLIC' AND created_by IS NOT NULL`：显式引用 `created_by` 使 `DataPermissionInterceptor` 跳过归属改写，Hub 成为真正的跨用户公开列表（普通用户的其他查询默认都被改写为 `created_by = <username>` 进行行级隔离）。「安装」（`POST /api/v1/capability/skill/{id}/install`）会把源技能 **fork** 到自己的技能列表——私有副本、`origin_skill_id` 回指源技能、同名自动加后缀（如 `skill (1)`）、源技能 `install_count` +1。自己发布的技能**不**显示「安装」按钮；取消公开发布不影响已安装的副本。
 
+**版本与自动更新** —— 每个技能带一个 `version`（int，默认 1；每次内容编辑 `PUT /api/v1/capability/skill/{id}` 自增）。安装副本在 fork 时记录源版本（`origin_version`）。在「我的技能」页可对任意已安装副本开启「自动更新」（`PUT /api/v1/capability/skill/{id}/auto-update`）；后台定时任务（`SkillAutoUpdateSweeper`，默认每 5 分钟，可用 `buukle.agent.skill.auto-update-interval` 配置）扫描开启自动更新的副本，当 `源.version > 副本.origin_version` 时把源的 `name`/`description`/`definition` **全量同步**到副本（真正的 fork 追踪，副本上本地改名会一并被覆盖）。源被删除或取消公开时，副本保持不动，其自动更新自然暂停。同步采用条件更新 `UPDATE ... WHERE id=? AND origin_version=?`，多副本部署下同一副本不会被重复覆盖。
+
 ![技能 Hub —— 跨用户公开列表](agent-sphere-readme/ui-skill-hub-hub.png)
 
 ![我的技能 —— 发布 / 取消公开](agent-sphere-readme/ui-skill-hub-mine.png)

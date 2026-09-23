@@ -47,4 +47,7 @@ public interface CapabilitySkillSpi {
 
     /** hub 列表：公开的全部 + 自己的全部（分页）。 */
     com.baomidou.mybatisplus.core.metadata.IPage<SkillVO> pageHubSkills(int page, int size, String keyword);
+
+    /** 设置自己已安装副本的自动更新开关（仅副本可开启）。 */
+    SkillVO setAutoUpdate(Long id, boolean enabled);
 }

@@ -110,6 +110,8 @@ export default {
   'pages.capabilities.skill.installSuccess': 'Installed to my skills',
   'pages.capabilities.skill.author': 'Author',
   'pages.capabilities.skill.installCount': 'Installs',
+  'pages.capabilities.skill.version': 'Version',
+  'pages.capabilities.skill.autoUpdate': 'Auto update',
   'pages.capabilities.serverUrl': 'Server URL',
   'pages.capabilities.toolDefinitions': 'Tool Definitions (JSON)',
   'pages.capabilities.commandTemplate': 'Command Template',

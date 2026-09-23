@@ -24,7 +24,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-/** skill hub：公开/安装/归属校验。 */
+/** skill hub：公开/安装/归属校验/自动更新。 */
 @ExtendWith(MockitoExtension.class)
 class SkillHubServiceTest {
 
@@ -35,6 +35,11 @@ class SkillHubServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        // 初始化 MyBatis-Plus 表信息缓存，使 lambda wrapper getTargetSql() 可用
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""),
+                CapabilitySkill.class);
         service = new CapabilitySkillServiceImpl(new CapabilitySkillConverter());
         // ServiceImpl.baseMapper 位于父类 CrudRepository（protected，无 setter），反射注入 mock
         java.lang.reflect.Field f =
@@ -52,6 +57,10 @@ class SkillHubServiceTest {
     }
 
     private CapabilitySkill skill(Long id, String name, String createdBy, String visibility) {
+        return skill(id, name, createdBy, visibility, 1);
+    }
+
+    private CapabilitySkill skill(Long id, String name, String createdBy, String visibility, int version) {
         CapabilitySkill s = new CapabilitySkill();
         s.setId(id);
         s.setName(name);
@@ -60,6 +69,7 @@ class SkillHubServiceTest {
         s.setStatus("ENABLED");
         s.setVisibility(visibility);
         s.setCreatedBy(createdBy);
+        s.setVersion(version);
         return s;
     }
 
@@ -104,6 +114,9 @@ class SkillHubServiceTest {
         verify(skillMapper).insert(captor.capture());
         assertEquals("alice", captor.getValue().getCreatedBy());
         assertEquals(7L, captor.getValue().getOriginSkillId());
+        assertEquals(1, captor.getValue().getVersion());
+        assertEquals(1, captor.getValue().getOriginVersion());
+        assertEquals(false, captor.getValue().getAutoUpdate());
         // 源行 install_count + 1
         verify(skillMapper).update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(), any(com.baomidou.mybatisplus.core.conditions.Wrapper.class));
     }
@@ -186,5 +199,155 @@ class SkillHubServiceTest {
         assertTrue(!sql.contains("created_by <> ?"), "hub 不应排除自己, 实际: " + sql);
         Object values = captor.getValue().getParamNameValuePairs();
         assertTrue(values.toString().contains("PUBLIC"), "visibility 参数应为 PUBLIC, 实际: " + values);
+    }
+
+    @Test
+    void updateSkill_bumpsVersion() {
+        given(skillMapper.selectById(1L)).willReturn(skill(1L, "a", "alice", "PRIVATE", 3));
+        given(skillMapper.updateById(any(CapabilitySkill.class))).willReturn(1);
+        com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO dto =
+                new com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO();
+        dto.setName("a");
+        dto.setDefinition("{\"prompt\":\"p\"}");
+
+        SkillVO vo = service.updateSkill(1L, dto);
+
+        assertEquals(4, vo.getVersion());
+        org.mockito.ArgumentCaptor<CapabilitySkill> captor =
+                org.mockito.ArgumentCaptor.forClass(CapabilitySkill.class);
+        verify(skillMapper).updateById(captor.capture());
+        assertEquals(4, captor.getValue().getVersion());
+    }
+
+    @Test
+    void updateSkill_nullVersion_defaultsTo1() {
+        CapabilitySkill legacy = skill(1L, "a", "alice", "PRIVATE");
+        legacy.setVersion(null);
+        given(skillMapper.selectById(1L)).willReturn(legacy);
+        given(skillMapper.updateById(any(CapabilitySkill.class))).willReturn(1);
+        com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO dto =
+                new com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO();
+        dto.setName("a");
+        dto.setDefinition("{\"prompt\":\"p\"}");
+
+        SkillVO vo = service.updateSkill(1L, dto);
+
+        assertEquals(1, vo.getVersion());
+    }
+
+    @Test
+    void setAutoUpdate_ownCopy_ok() {
+        CapabilitySkill own = skill(1L, "a", "alice", "PRIVATE");
+        own.setOriginSkillId(7L);
+        own.setAutoUpdate(false);
+        given(skillMapper.selectById(1L)).willReturn(own);
+        given(skillMapper.updateById(any(CapabilitySkill.class))).willReturn(1);
+
+        SkillVO vo = service.setAutoUpdate(1L, true);
+
+        assertEquals(true, vo.getAutoUpdate());
+        org.mockito.ArgumentCaptor<CapabilitySkill> captor =
+                org.mockito.ArgumentCaptor.forClass(CapabilitySkill.class);
+        verify(skillMapper).updateById(captor.capture());
+        assertEquals(true, captor.getValue().getAutoUpdate());
+    }
+
+    @Test
+    void setAutoUpdate_originSkillNull_forbidden() {
+        given(skillMapper.selectById(1L)).willReturn(skill(1L, "a", "alice", "PRIVATE"));
+
+        BizException e = assertThrows(BizException.class, () -> service.setAutoUpdate(1L, true));
+        assertEquals(CapabilitySkillErrorCode.SKILL_FORBIDDEN.getCode(), e.getErrorCode());
+        verify(skillMapper, never()).updateById(any(CapabilitySkill.class));
+    }
+
+    @Test
+    void setAutoUpdate_othersCopy_forbidden() {
+        CapabilitySkill other = skill(1L, "a", "bob", "PRIVATE");
+        other.setOriginSkillId(7L);
+        given(skillMapper.selectById(1L)).willReturn(other);
+
+        BizException e = assertThrows(BizException.class, () -> service.setAutoUpdate(1L, true));
+        assertEquals(CapabilitySkillErrorCode.SKILL_FORBIDDEN.getCode(), e.getErrorCode());
+        verify(skillMapper, never()).updateById(any(CapabilitySkill.class));
+    }
+
+    @Test
+    void syncFromOrigin_sourceNewer_syncsContent() {
+        CapabilitySkill source = skill(7L, "shared-v2", "bob", "PUBLIC", 3);
+        source.setDescription("new desc");
+        given(skillMapper.selectById(7L)).willReturn(source);
+        given(skillMapper.update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(),
+                any(com.baomidou.mybatisplus.core.conditions.Wrapper.class))).willReturn(1);
+
+        CapabilitySkill copy = new CapabilitySkill();
+        copy.setId(2L);
+        copy.setOriginSkillId(7L);
+        copy.setOriginVersion(1);
+
+        boolean changed = service.syncFromOrigin(copy);
+
+        assertTrue(changed);
+        org.mockito.ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.Wrapper> captor =
+                org.mockito.ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(skillMapper).update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(), captor.capture());
+        assertTrue(captor.getValue().getTargetSql().contains("origin_version = ?"));
+    }
+
+    @Test
+    void syncFromOrigin_sourceDeleted_skipped() {
+        given(skillMapper.selectById(7L)).willReturn(null);
+
+        CapabilitySkill copy = new CapabilitySkill();
+        copy.setId(2L);
+        copy.setOriginSkillId(7L);
+        copy.setOriginVersion(1);
+
+        assertTrue(!service.syncFromOrigin(copy));
+        verify(skillMapper, never()).update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(),
+                any(com.baomidou.mybatisplus.core.conditions.Wrapper.class));
+    }
+
+    @Test
+    void syncFromOrigin_sourceNotPublic_skipped() {
+        given(skillMapper.selectById(7L)).willReturn(skill(7L, "private", "bob", "PRIVATE", 9));
+
+        CapabilitySkill copy = new CapabilitySkill();
+        copy.setId(2L);
+        copy.setOriginSkillId(7L);
+        copy.setOriginVersion(1);
+
+        assertTrue(!service.syncFromOrigin(copy));
+        verify(skillMapper, never()).update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(),
+                any(com.baomidou.mybatisplus.core.conditions.Wrapper.class));
+    }
+
+    @Test
+    void syncFromOrigin_versionNotAdvanced_skipped() {
+        given(skillMapper.selectById(7L)).willReturn(skill(7L, "shared", "bob", "PUBLIC", 2));
+
+        CapabilitySkill copy = new CapabilitySkill();
+        copy.setId(2L);
+        copy.setOriginSkillId(7L);
+        copy.setOriginVersion(2);
+
+        assertTrue(!service.syncFromOrigin(copy));
+        verify(skillMapper, never()).update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(),
+                any(com.baomidou.mybatisplus.core.conditions.Wrapper.class));
+    }
+
+    @Test
+    void syncFromOrigin_staleConditionUpdate_returnsFalse() {
+        given(skillMapper.selectById(7L)).willReturn(skill(7L, "shared", "bob", "PUBLIC", 3));
+        // 并发下另一副本已抢先推进，条件更新影响 0 行
+        given(skillMapper.update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(),
+                any(com.baomidou.mybatisplus.core.conditions.Wrapper.class))).willReturn(0);
+
+        CapabilitySkill copy = new CapabilitySkill();
+        copy.setId(2L);
+        copy.setOriginSkillId(7L);
+        copy.setOriginVersion(1);
+
+        assertTrue(!service.syncFromOrigin(copy));
     }
 }

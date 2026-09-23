@@ -56,6 +56,11 @@ interface SkillRecord {
   description?: string;
   definition?: string;
   status?: string;
+  visibility?: string;
+  originSkillId?: number;
+  installCount?: number;
+  version?: number;
+  autoUpdate?: boolean;
   createdAt?: string;
   createdBy?: string;
   updatedBy?: string;
@@ -217,6 +222,52 @@ export default function SkillList() {
               defaultMessage: '私有',
             })}
           </Tag>
+        ),
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.skill.version',
+        defaultMessage: '版本',
+      }),
+      dataIndex: 'version',
+      key: 'version',
+      width: 70,
+      render: (v: any) => v ?? 1,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.skill.autoUpdate',
+        defaultMessage: '自动更新',
+      }),
+      dataIndex: 'autoUpdate',
+      key: 'autoUpdate',
+      width: 100,
+      render: (v: any, record: SkillRecord) =>
+        record.originSkillId ? (
+          <Switch
+            checked={v === true}
+            size="small"
+            onChange={(checked) => {
+              agentApi.skill
+                .setAutoUpdate(record.id, checked)
+                .then(() => {
+                  message.success(
+                    intl.formatMessage({
+                      id: 'pages.modal.saved',
+                      defaultMessage: 'Saved',
+                    }),
+                  );
+                  actionRef.current?.reload();
+                })
+                .catch(() => {
+                  message.error(
+                    intl.formatMessage({ id: 'pages.chat.saveFailed' }),
+                  );
+                });
+            }}
+          />
+        ) : (
+          <span>-</span>
         ),
     },
     {
