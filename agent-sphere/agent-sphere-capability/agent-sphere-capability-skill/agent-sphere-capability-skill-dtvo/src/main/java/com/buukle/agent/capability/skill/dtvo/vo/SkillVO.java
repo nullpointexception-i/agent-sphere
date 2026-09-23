@@ -11,6 +11,9 @@ public class SkillVO implements Serializable {
     private String description;
     private String definition;
     private String status;
+    private String visibility;
+    private Long originSkillId;
+    private Integer installCount;
     private String createdAt;
     private String createdBy;
     private String updatedBy;

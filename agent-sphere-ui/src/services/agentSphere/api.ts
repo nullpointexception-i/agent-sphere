@@ -254,6 +254,14 @@ export const agentApi = {
       request<any>(`${BASE}/capability/skill/${id}/status`, { method: 'PUT', data: { status } }),
     batchUpdateStatus: (ids: number[], status: string) =>
       request<any>(`${BASE}/capability/skill/batch/status`, { method: 'POST', data: { ids, status } }),
+    hub: (params: { keyword?: string; page?: number; size?: number }) =>
+      request<any>(`${BASE}/capability/skill/hub`, {
+        params,
+      }),
+    publish: (id: number, visibility: string) =>
+      request<any>(`${BASE}/capability/skill/${id}/visibility`, { method: 'PUT', data: { visibility } }),
+    install: (id: number, data?: any) =>
+      request<any>(`${BASE}/capability/skill/${id}/install`, { method: 'POST', data: data || {} }),
   },
 
   cli: {

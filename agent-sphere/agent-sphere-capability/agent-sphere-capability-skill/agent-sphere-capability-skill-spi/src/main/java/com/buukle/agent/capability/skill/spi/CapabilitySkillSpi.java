@@ -35,4 +35,16 @@ public interface CapabilitySkillSpi {
     void batchUpdateStatus(java.util.List<Long> ids, String status);
 
     List<SkillVO> listSkillsByIds(List<Long> ids);
+
+    /** 设置自己 skill 的 hub 可见性（PRIVATE/PUBLIC）。 */
+    SkillVO setVisibility(Long id, String visibility);
+
+    /**
+     * 从 hub 安装：将源 skill 复制一份到当前用户名下（fork，不绑定实例）。
+     * 源须为公开或自己所有；副本默认私有，同名自动加后缀。
+     */
+    SkillVO installSkill(Long sourceId, String newName);
+
+    /** hub 列表：公开的全部 + 自己的全部（分页）。 */
+    com.baomidou.mybatisplus.core.metadata.IPage<SkillVO> pageHubSkills(int page, int size, String keyword);
 }

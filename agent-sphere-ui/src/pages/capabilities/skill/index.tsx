@@ -15,12 +15,23 @@ import {
 import XMarkdown from '@ant-design/x-markdown';
 import { useIntl } from '@umijs/max';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
-import { App, Button, DatePicker, Form, Input, Modal, Switch, Tag } from 'antd';
+import {
+  App,
+  Button,
+  DatePicker,
+  Form,
+  Input,
+  Modal,
+  Switch,
+  Tabs,
+  Tag,
+} from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
 import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
+import { getStoredUser } from '@/utils/auth';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
 import SkillMarkdownEditor from './components/SkillMarkdownEditor';
@@ -106,13 +117,17 @@ export default function SkillList() {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
   const [keyword, setKeyword] = useState('');
+  const [hubKeyword, setHubKeyword] = useState('');
   const [timeRange, setTimeRange] = useState<
     [dayjs.Dayjs | null, dayjs.Dayjs | null]
   >([null, null]);
   const [tableScrollY, setTableScrollY] = useState(400);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [viewRecord, setViewRecord] = useState<SkillRecord | null>(null);
+  const [activeTab, setActiveTab] = useState<'mine' | 'hub'>('mine');
+  const hubActionRef = useRef<any>(null);
   const canUpdate = useCan('capability:skill:update');
+  const currentUsername = getStoredUser()?.username ?? '';
 
   useEffect(() => {
     const calc = () => setTableScrollY(window.innerHeight - 280);
@@ -180,6 +195,31 @@ export default function SkillList() {
       render: (v: any) => formatTime(v),
     },
     {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.skill.visibility',
+        defaultMessage: '可见性',
+      }),
+      dataIndex: 'visibility',
+      key: 'visibility',
+      width: 90,
+      render: (v: any) =>
+        v === 'PUBLIC' ? (
+          <Tag color="gold">
+            {intl.formatMessage({
+              id: 'pages.capabilities.skill.visibilityPublic',
+              defaultMessage: '公开',
+            })}
+          </Tag>
+        ) : (
+          <Tag>
+            {intl.formatMessage({
+              id: 'pages.capabilities.skill.visibilityPrivate',
+              defaultMessage: '私有',
+            })}
+          </Tag>
+        ),
+    },
+    {
       title: intl.formatMessage({ id: 'pages.table.actions' }),
       key: 'actions',
       width: 160,
@@ -208,6 +248,23 @@ export default function SkillList() {
                 setModalOpen(true);
               }}
             />
+          </Can>
+          <Can code="capability:skill:publish">
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handlePublish(record)}
+            >
+              {record.visibility === 'PUBLIC'
+                ? intl.formatMessage({
+                    id: 'pages.capabilities.skill.unpublish',
+                    defaultMessage: '取消公开',
+                  })
+                : intl.formatMessage({
+                    id: 'pages.capabilities.skill.publish',
+                    defaultMessage: '公开',
+                  })}
+            </Button>
           </Can>
           <Can code="capability:skill:delete">
             <Button
@@ -279,6 +336,145 @@ export default function SkillList() {
     }
   };
 
+  const handlePublish = (record: any) => {
+    const toPublic = record.visibility !== 'PUBLIC';
+    modal.confirm({
+      title: toPublic
+        ? intl.formatMessage(
+            {
+              id: 'pages.capabilities.skill.publishConfirm',
+              defaultMessage: '公开「{name}」到技能 Hub？',
+            },
+            { name: record.name },
+          )
+        : intl.formatMessage(
+            {
+              id: 'pages.capabilities.skill.unpublishConfirm',
+              defaultMessage: '取消公开「{name}」？已安装的副本不受影响。',
+            },
+            { name: record.name },
+          ),
+      okText: intl.formatMessage({
+        id: 'pages.modal.ok',
+        defaultMessage: '确认',
+      }),
+      onOk: async () => {
+        await agentApi.skill.publish(
+          record.id,
+          toPublic ? 'PUBLIC' : 'PRIVATE',
+        );
+        message.success(
+          intl.formatMessage({
+            id: 'pages.modal.saved',
+            defaultMessage: 'Saved',
+          }),
+        );
+        actionRef.current?.reload();
+      },
+    });
+  };
+
+  const handleInstall = (record: any) => {
+    modal.confirm({
+      title: intl.formatMessage(
+        {
+          id: 'pages.capabilities.skill.installConfirm',
+          defaultMessage: '安装「{name}」到我的技能？',
+        },
+        { name: record.name },
+      ),
+      content: intl.formatMessage({
+        id: 'pages.capabilities.skill.installConfirmContent',
+        defaultMessage: '将复制一份到你的技能列表（默认私有），可独立编辑。',
+      }),
+      okText: intl.formatMessage({
+        id: 'pages.modal.ok',
+        defaultMessage: '确认',
+      }),
+      onOk: async () => {
+        await agentApi.skill.install(record.id);
+        message.success(
+          intl.formatMessage({
+            id: 'pages.capabilities.skill.installSuccess',
+            defaultMessage: '已安装到我的技能',
+          }),
+        );
+        actionRef.current?.reload();
+      },
+    });
+  };
+
+  const hubColumns: ProColumns<SkillRecord>[] = [
+    {
+      title: intl.formatMessage({ id: 'pages.table.id' }),
+      dataIndex: 'id',
+      key: 'id',
+      width: 60,
+    },
+    {
+      title: intl.formatMessage({ id: 'pages.table.name' }),
+      dataIndex: 'name',
+      key: 'name',
+      ellipsis: true,
+    },
+    {
+      title: intl.formatMessage({ id: 'pages.table.description' }),
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.skill.author',
+        defaultMessage: '作者',
+      }),
+      dataIndex: 'createdBy',
+      key: 'createdBy',
+      width: 120,
+      ellipsis: true,
+      render: (v: any) => v || '-',
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.skill.installCount',
+        defaultMessage: '安装数',
+      }),
+      dataIndex: 'installCount',
+      key: 'installCount',
+      width: 90,
+      render: (v: any) => v ?? 0,
+    },
+    {
+      title: intl.formatMessage({ id: 'pages.table.actions' }),
+      key: 'actions',
+      width: 160,
+      render: (_: any, record: any) => (
+        <>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => setViewRecord(record)}
+          />
+          <Can code="capability:skill:install">
+            {record.createdBy !== currentUsername && (
+              <Button
+                type="link"
+                size="small"
+                onClick={() => handleInstall(record)}
+              >
+                {intl.formatMessage({
+                  id: 'pages.capabilities.skill.install',
+                  defaultMessage: '安装',
+                })}
+              </Button>
+            )}
+          </Can>
+        </>
+      ),
+    },
+  ];
+
   const handleBatchStatus = (status: string) => {
     if (selectedRowKeys.length === 0) return;
     const enabled = status === 'ENABLED';
@@ -330,131 +526,204 @@ export default function SkillList() {
 
   return (
     <PageContainer title={false} breadcrumbRender={false}>
-      <ProTable
-        actionRef={actionRef}
-        rowKey="id"
-        search={false}
-        options={false}
-        scroll={{ y: tableScrollY }}
-        pagination={{
-          defaultPageSize: 10,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          pageSizeOptions: [5, 10, 20, 50],
-          style: { justifyContent: 'flex-start' },
-        }}
-        params={{
-          keyword: keyword || undefined,
-          startTime: formatParamDate(timeRange[0]),
-          endTime: formatParamDate(timeRange[1]?.endOf('day')),
-        }}
-        request={async (p) => {
-          const res = await agentApi.skill.list({
-            keyword: p.keyword,
-            startTime: p.startTime,
-            endTime: p.endTime,
-            page: p.current,
-            size: p.pageSize,
-          });
-          return {
-            data: res.records || res,
-            total: res.total ?? 0,
-            success: true,
-          };
-        }}
-        columns={columns}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: (keys: any) => setSelectedRowKeys(keys),
-        }}
-        toolBarRender={() => [
-          selectedRowKeys.length > 0 && (
-            <Button
-              key="batchEnable"
-              type="primary"
-              icon={<LikeOutlined />}
-              onClick={() => handleBatchStatus('ENABLED')}
-            >
-              启用 ({selectedRowKeys.length})
-            </Button>
-          ),
-          selectedRowKeys.length > 0 && (
-            <Button
-              key="batchDisable"
-              danger
-              icon={<DislikeOutlined />}
-              onClick={() => handleBatchStatus('DISABLED')}
-            >
-              禁用 ({selectedRowKeys.length})
-            </Button>
-          ),
-          selectedRowKeys.length > 0 && (
-            <Button
-              key="batchDelete"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={handleBatchDelete}
-            >
-              {intl.formatMessage(
-                { id: 'pages.batchDelete', defaultMessage: 'Delete ({count})' },
-                { count: selectedRowKeys.length },
-              )}
-            </Button>
-          ),
-          <Input.Search
-            key="search"
-            placeholder={intl.formatMessage({ id: 'pages.search.placeholder' })}
-            style={{ width: 200 }}
-            onSearch={(value) => {
-              setKeyword(value);
-            }}
-            allowClear
-            onClear={() => setKeyword('')}
-            maxLength={255}
-          />,
-          <DatePicker.RangePicker
-            key="date"
-            value={
-              timeRange[0] && timeRange[1]
-                ? (timeRange as [dayjs.Dayjs, dayjs.Dayjs])
-                : undefined
-            }
-            onChange={(dates) => {
-              if (dates?.[0] && dates?.[1]) {
-                const diff = dates[1].diff(dates[0], 'day');
-                if (diff > 90) {
-                  setTimeRange([dates[0], dates[0].add(90, 'day')]);
-                  message.warning(
-                    intl.formatMessage({ id: 'pages.dateRange.warning' }),
-                  );
-                  return;
-                }
-              }
-              setTimeRange(dates || [null, null]);
-            }}
-          />,
-          <Button
-            key="clear"
-            icon={<ClearOutlined />}
-            onClick={() => {
-              setKeyword('');
-              setTimeRange([null, null]);
-              actionRef.current?.reload();
-            }}
-          />,
-          <Can key="new" code="capability:skill:create">
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditing(null);
-                form.resetFields();
-                setModalOpen(true);
-              }}
-            />
-          </Can>,
+      <Tabs
+        activeKey={activeTab}
+        onChange={(k) => setActiveTab(k as 'mine' | 'hub')}
+        items={[
+          {
+            key: 'mine',
+            label: intl.formatMessage({
+              id: 'pages.capabilities.skill.tabs.mine',
+              defaultMessage: '我的技能',
+            }),
+          },
+          {
+            key: 'hub',
+            label: intl.formatMessage({
+              id: 'pages.capabilities.skill.tabs.hub',
+              defaultMessage: '技能 Hub',
+            }),
+          },
         ]}
       />
+      {activeTab === 'hub' ? (
+        <ProTable
+          key="hub"
+          actionRef={hubActionRef}
+          rowKey="id"
+          search={false}
+          options={false}
+          scroll={{ y: tableScrollY }}
+          pagination={{
+            defaultPageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: [5, 10, 20, 50],
+            style: { justifyContent: 'flex-start' },
+          }}
+          params={{ keyword: hubKeyword || undefined }}
+          request={async (p) => {
+            const res = await agentApi.skill.hub({
+              keyword: p.keyword,
+              page: p.current,
+              size: p.pageSize,
+            });
+            return {
+              data: res.records || res,
+              total: res.total ?? 0,
+              success: true,
+            };
+          }}
+          columns={hubColumns}
+          toolBarRender={() => [
+            <Input.Search
+              key="search"
+              placeholder={intl.formatMessage({
+                id: 'pages.search.placeholder',
+              })}
+              style={{ width: 200 }}
+              onSearch={(value) => {
+                setHubKeyword(value);
+              }}
+              allowClear
+              onClear={() => setHubKeyword('')}
+              maxLength={255}
+            />,
+          ]}
+        />
+      ) : (
+        <ProTable
+          key="mine"
+          actionRef={actionRef}
+          rowKey="id"
+          search={false}
+          options={false}
+          scroll={{ y: tableScrollY }}
+          pagination={{
+            defaultPageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: [5, 10, 20, 50],
+            style: { justifyContent: 'flex-start' },
+          }}
+          params={{
+            keyword: keyword || undefined,
+            startTime: formatParamDate(timeRange[0]),
+            endTime: formatParamDate(timeRange[1]?.endOf('day')),
+          }}
+          request={async (p) => {
+            const res = await agentApi.skill.list({
+              keyword: p.keyword,
+              startTime: p.startTime,
+              endTime: p.endTime,
+              page: p.current,
+              size: p.pageSize,
+            });
+            return {
+              data: res.records || res,
+              total: res.total ?? 0,
+              success: true,
+            };
+          }}
+          columns={columns}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (keys: any) => setSelectedRowKeys(keys),
+          }}
+          toolBarRender={() => [
+            selectedRowKeys.length > 0 && (
+              <Button
+                key="batchEnable"
+                type="primary"
+                icon={<LikeOutlined />}
+                onClick={() => handleBatchStatus('ENABLED')}
+              >
+                启用 ({selectedRowKeys.length})
+              </Button>
+            ),
+            selectedRowKeys.length > 0 && (
+              <Button
+                key="batchDisable"
+                danger
+                icon={<DislikeOutlined />}
+                onClick={() => handleBatchStatus('DISABLED')}
+              >
+                禁用 ({selectedRowKeys.length})
+              </Button>
+            ),
+            selectedRowKeys.length > 0 && (
+              <Button
+                key="batchDelete"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={handleBatchDelete}
+              >
+                {intl.formatMessage(
+                  {
+                    id: 'pages.batchDelete',
+                    defaultMessage: 'Delete ({count})',
+                  },
+                  { count: selectedRowKeys.length },
+                )}
+              </Button>
+            ),
+            <Input.Search
+              key="search"
+              placeholder={intl.formatMessage({
+                id: 'pages.search.placeholder',
+              })}
+              style={{ width: 200 }}
+              onSearch={(value) => {
+                setKeyword(value);
+              }}
+              allowClear
+              onClear={() => setKeyword('')}
+              maxLength={255}
+            />,
+            <DatePicker.RangePicker
+              key="date"
+              value={
+                timeRange[0] && timeRange[1]
+                  ? (timeRange as [dayjs.Dayjs, dayjs.Dayjs])
+                  : undefined
+              }
+              onChange={(dates) => {
+                if (dates?.[0] && dates?.[1]) {
+                  const diff = dates[1].diff(dates[0], 'day');
+                  if (diff > 90) {
+                    setTimeRange([dates[0], dates[0].add(90, 'day')]);
+                    message.warning(
+                      intl.formatMessage({ id: 'pages.dateRange.warning' }),
+                    );
+                    return;
+                  }
+                }
+                setTimeRange(dates || [null, null]);
+              }}
+            />,
+            <Button
+              key="clear"
+              icon={<ClearOutlined />}
+              onClick={() => {
+                setKeyword('');
+                setTimeRange([null, null]);
+                actionRef.current?.reload();
+              }}
+            />,
+            <Can key="new" code="capability:skill:create">
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setEditing(null);
+                  form.resetFields();
+                  setModalOpen(true);
+                }}
+              />
+            </Can>,
+          ]}
+        />
+      )}
       <Modal
         title={
           editing

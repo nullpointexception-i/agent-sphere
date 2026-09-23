@@ -14,6 +14,12 @@ public class CapabilitySkill {
     private String description;
     private String definition;
     private String status;
+    /** hub 可见性：PRIVATE=仅作者，PUBLIC=hub 公开。 */
+    private String visibility;
+    /** fork 血缘：安装副本指回源 skill id；原生为 null。 */
+    private Long originSkillId;
+    /** 被复制安装次数（源行累加）。 */
+    private Integer installCount;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

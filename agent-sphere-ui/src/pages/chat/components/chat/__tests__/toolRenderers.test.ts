@@ -66,7 +66,9 @@ describe('toolRenderers', () => {
 
   describe('docSummary', () => {
     it('renders action + document + title', () => {
-      const s = docSummary({ args: JSON.stringify({ action: 'create', title: 'Hello' }) });
+      const s = docSummary({
+        args: JSON.stringify({ action: 'create', title: 'Hello' }),
+      });
       expect(s).toBe('create document Hello');
     });
 
@@ -78,7 +80,9 @@ describe('toolRenderers', () => {
 
   describe('genericSummary', () => {
     it('extracts query as subject', () => {
-      const s = genericSummary({ args: JSON.stringify({ action: 'search', query: 'a b' }) });
+      const s = genericSummary({
+        args: JSON.stringify({ action: 'search', query: 'a b' }),
+      });
       expect(s).toBe('search a b');
     });
 

@@ -20,6 +20,9 @@ public class CapabilitySkillConverter {
         vo.setDescription(skill.getDescription());
         vo.setDefinition(skill.getDefinition());
         vo.setStatus(skill.getStatus());
+        vo.setVisibility(skill.getVisibility());
+        vo.setOriginSkillId(skill.getOriginSkillId());
+        vo.setInstallCount(skill.getInstallCount());
         vo.setCreatedAt(skill.getCreatedAt() != null ? skill.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(skill.getCreatedBy());
         vo.setUpdatedBy(skill.getUpdatedBy());

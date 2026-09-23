@@ -84,4 +84,27 @@ public class CapabilitySkillController extends BaseController {
         capabilitySkillService.batchUpdateStatus(dto.getIds(), dto.getStatus());
         return ok();
     }
+
+    @RequirePermission("capability:skill:read")
+    @GetMapping("/hub")
+    public ResponseEntity<?> hub(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword) {
+        return ok(capabilitySkillService.pageHubSkills(page, size, keyword));
+    }
+
+    @AuditLog(action = "PUBLISH", resourceType = "Capability", resourceId = "#id")
+    @RequirePermission("capability:skill:publish")
+    @PutMapping("/{id}/visibility")
+    public ResponseEntity<?> setVisibility(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
+        return ok(capabilitySkillService.setVisibility(id, body != null ? body.get("visibility") : null));
+    }
+
+    @AuditLog(action = "INSTALL", resourceType = "Capability", resourceId = "#id")
+    @RequirePermission("capability:skill:install")
+    @PostMapping("/{id}/install")
+    public ResponseEntity<?> install(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {
+        return created(capabilitySkillService.installSkill(id, body != null ? body.get("name") : null));
+    }
 }
