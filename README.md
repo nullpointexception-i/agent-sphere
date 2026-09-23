@@ -59,6 +59,7 @@ Embeddable chat widget (shadow DOM, OIDC SSO, REST + SSE timeline chat):
 - **Completions management** — 提示工程 admin page with input/output JSON Schema, runtime config (`temperature` / `max_tokens` / `top_p` / penalties / `stop` / `thinking`), prompt versioning, and call records.
 - **Single user-level browser connection** — the Chrome extension keeps one per-user task SSE stream (no per-session following), `<all_urls>` host permission, and shows the user as `provider@subject`.
 - **Embeddable chat widget** — a single IIFE script that mounts into a shadow DOM and talks a typed **REST + SSE timeline** with self-managed Bearer auth (no CopilotKit / AG-UI runtime), embeddable in any third-party page.
+- **Skill Hub (composite-skill marketplace)** — every skill has a `PRIVATE`/`PUBLIC` visibility: publish it from **My Skills** to make it appear in the **Skill Hub**, which lists **all users' PUBLIC skills (including your own)** with keyword search and install-count ordering. Installing **forks** a copy into your own skills (PRIVATE by default, auto-suffixed on name collision) and increments the source's `install_count`; your own published skills do not show an **Install** button. Gated by `capability:skill:publish` / `capability:skill:install`.
 
 ## 1. Quick Start for Development
 
@@ -91,6 +92,16 @@ Manages the complete execution lifecycle of an AI session, implementing the **Pl
 | **Chrome Browser** | Chrome Extension bridge | DOM operations + real-time execution feedback | Navigate, click, fill forms, executeJS, **screenshot, clickAt** |
 | **CLI (command line)** | `ProcessBuilder` execution | Local or remote shell | Git operations, build/deploy, system administration |
 | **Skill (composite skills)** | Multi-step task orchestration | LLM-driven task decomposition | Cross-system workflows |
+
+#### 2.2.2a Skill Hub (Publish & Install)
+
+Each skill carries a `visibility`: `PRIVATE` (author only, default) or `PUBLIC` (published to the Hub — publishing is immediate, **no review gate**). The **My Skills** tab toggles visibility (`PUT /api/v1/capability/skill/{id}/visibility`); the **Skill Hub** tab (`GET /api/v1/capability/skill/hub`, keyword + paging) lists **all users' PUBLIC skills, including your own**, ordered by `install_count` then `created_at`.
+
+Backend filter: `visibility='PUBLIC' AND created_by IS NOT NULL`. The explicit `created_by` reference makes `DataPermissionInterceptor` skip its ownership rewrite, so the Hub is a true cross-user listing (ordinary users are otherwise row-scoped to `created_by = <username>`). Installing (`POST /api/v1/capability/skill/{id}/install`) **forks** the source into your own skills — a PRIVATE copy with `origin_skill_id` back-linking the source, name auto-suffixed on collision (e.g. `skill (1)`), and the source's `install_count` incremented. Your own published skills do **not** show an Install button; unpublishing never affects already-installed copies.
+
+![Skill Hub — cross-user public listing](agent-sphere-readme/ui-skill-hub-hub.png)
+
+![My Skills — publish / unpublish](agent-sphere-readme/ui-skill-hub-mine.png)
 
 #### 2.2.3 Chrome Extension (Browser Bridge)
 
@@ -613,6 +624,8 @@ RBAC, system configuration, and OIDC identity providers are all managed from a s
 - **User Management** — create/view users and assign roles
 - **Role Configuration** — create roles and bundle permissions
 - **Permission Assignment** — grant/revoke `domain:action` permissions per role
+
+Skill Hub permissions: `capability:skill:publish` (publish/unpublish a skill to the Hub) and `capability:skill:install` (fork a Hub skill into your own skills) — both seeded to the `USER` role.
 
 ### 4.9 Audit Log
 

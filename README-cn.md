@@ -59,6 +59,7 @@
 - **Completions 能力管理** — 提示工程管理页：input/output JSON Schema、运行配置（`temperature` / `max_tokens` / `top_p` / penalties / `stop` / `thinking`）、Prompt 版本管理、调用记录。
 - **浏览器扩展单用户连接** — 扩展仅保留一条用户级 task SSE 流（不再做会话跟随），安装即声明 `<all_urls>` 全站点权限，popup 展示 Task 状态与 `provider@subject` 用户名。
 - **可嵌入聊天 Widget** — 单个 IIFE 脚本挂载进 shadow DOM，通过**类型化 REST + SSE timeline** 自管 Bearer 鉴权对话（不依赖 CopilotKit / AG-UI 运行时），可嵌入任意第三方页面。
+- **技能 Hub（复合技能市场）** — 每个技能带 `PRIVATE`/`PUBLIC` 可见性：在「我的技能」页面把它发布，即可出现在「技能 Hub」中。Hub 展示**所有用户（含自己）的 PUBLIC 技能**，支持关键词搜索与按安装数倒序；安装会把技能 **fork** 一份到自己的技能列表（默认 PRIVATE，同名自动加后缀），并在源技能上累加 `install_count`；自己发布的技能不显示「安装」按钮。权限码：`capability:skill:publish` / `capability:skill:install`。
 
 ## 1. 开发quick start
 
@@ -91,6 +92,16 @@
 | **Chrome 浏览器** | Chrome Extension 桥接 | DOM 操作 + 实时执行反馈 | 导航、点击、填表、executeJS、**截图 screenshot、clickAt** |
 | **CLI (命令行)** | `ProcessBuilder` 执行 | 本地或远程 Shell | Git 操作、构建部署、系统管理 |
 | **Skill (复合技能)** | 多步任务编排 | LLM 驱动的任务分解 | 跨系统工作流 |
+
+#### 2.2.2a 技能 Hub（发布与安装）
+
+每个技能带一个 `visibility`：`PRIVATE`（仅作者可见，默认）或 `PUBLIC`（发布到 Hub——发布即生效，**无审核门槛**）。「我的技能」页可切换可见性（`PUT /api/v1/capability/skill/{id}/visibility`）；「技能 Hub」页（`GET /api/v1/capability/skill/hub`，关键词 + 分页）展示**所有用户（含自己）的 PUBLIC 技能**，按 `install_count`、`created_at` 倒序。
+
+后端过滤条件为 `visibility='PUBLIC' AND created_by IS NOT NULL`：显式引用 `created_by` 使 `DataPermissionInterceptor` 跳过归属改写，Hub 成为真正的跨用户公开列表（普通用户的其他查询默认都被改写为 `created_by = <username>` 进行行级隔离）。「安装」（`POST /api/v1/capability/skill/{id}/install`）会把源技能 **fork** 到自己的技能列表——私有副本、`origin_skill_id` 回指源技能、同名自动加后缀（如 `skill (1)`）、源技能 `install_count` +1。自己发布的技能**不**显示「安装」按钮；取消公开发布不影响已安装的副本。
+
+![技能 Hub —— 跨用户公开列表](agent-sphere-readme/ui-skill-hub-hub.png)
+
+![我的技能 —— 发布 / 取消公开](agent-sphere-readme/ui-skill-hub-mine.png)
 
 #### 2.2.3 Chrome Extension（浏览器桥接）
 
@@ -613,6 +624,8 @@ RBAC、系统配置与 OIDC 身份源统一在「系统管理」后台中完成�
 - **用户管理** — 创建/查看用户并分配角色
 - **角色配置** — 创建角色并聚合权限
 - **权限分配** — 按角色授予/回收 `domain:action` 权限
+
+技能 Hub 相关权限：`capability:skill:publish`（将技能发布/取消公开到 Hub）与 `capability:skill:install`（把 Hub 技能 fork 到自己的技能列表）——两者均已授权给 `USER` 角色。
 
 ### 4.9 审计日志（Audit Log）
 
