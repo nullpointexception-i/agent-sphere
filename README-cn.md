@@ -900,6 +900,8 @@ curl -X POST /api/v1/instance/instance-capabilities \
 # → LLM 调用 MCP tool → Jira API → 返回结果
 ```
 
+无需 Parallel API key 的网页搜索和内容抓取，可参考 [Parallel Search MCP 示例](examples/parallel-search/README-cn.md)。示例复用现有 HTTP MCP 能力，不修改默认配置。
+
 ![MCP 配置界面](agent-sphere-readme/ui-new-mcp.png)
 
 ## 9. License

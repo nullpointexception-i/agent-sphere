@@ -1,0 +1,7 @@
+{
+  "name": "Parallel Search",
+  "description": "Anonymous web search and page fetch via Parallel Search MCP",
+  "serverUrl": "https://search.parallel.ai/mcp",
+  "serverType": "http",
+  "authConfig": "{\"User-Agent\":\"agent-sphere/1.0.0\"}"
+}

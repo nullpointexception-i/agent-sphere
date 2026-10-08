@@ -900,6 +900,8 @@ curl -X POST /api/v1/instance/instance-capabilities \
 # → LLM calls MCP tool → Jira API → returns result
 ```
 
+For free, keyless web search and page fetch, see the runnable [Parallel Search MCP example](examples/parallel-search/README.md). It uses the existing HTTP MCP capability and does not change any defaults.
+
 ![MCP Configuration UI](agent-sphere-readme/ui-new-mcp.png)
 
 ## 9. License
