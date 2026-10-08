@@ -4,10 +4,8 @@ import {
   DislikeOutlined,
   EditOutlined,
   EyeOutlined,
-  HistoryOutlined,
   LikeOutlined,
   PlusOutlined,
-  SyncOutlined,
 } from '@ant-design/icons';
 import {
   PageContainer,
@@ -32,11 +30,7 @@ import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
 import { useCan } from '@/hooks/usePermission';
-import { useRecordedTask } from '@/hooks/useRecordedTask';
-import SkillSyncRunPanel from './components/SkillSyncRunPanel';
-import SkillSyncRunsDrawer from './components/SkillSyncRunsDrawer';
 import { agentApi } from '@/services/agentSphere/api';
-import type { SkillSyncRun } from '@/services/agentSphere/api';
 import { getStoredUser } from '@/utils/auth';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -141,14 +135,6 @@ export default function SkillList() {
   const [tableScrollY, setTableScrollY] = useState(400);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [viewRecord, setViewRecord] = useState<SkillRecord | null>(null);
-  const [syncRunId, setSyncRunId] = useState<number | null>(null);
-  const [syncRunsOpen, setSyncRunsOpen] = useState(false);
-  const [syncSubmitting, setSyncSubmitting] = useState(false);
-  const { record: syncRun } = useRecordedTask<SkillSyncRun>(
-    syncRunId,
-    (id) => agentApi.skill.syncRun(id),
-    () => actionRef.current?.reload(),
-  );
   const [activeTab, setActiveTab] = useState<'mine' | 'hub'>('mine');
   const hubActionRef = useRef<any>(null);
   const canUpdate = useCan('capability:skill:update');
@@ -280,11 +266,15 @@ export default function SkillList() {
       render: (v: any, row: SkillRecord) =>
         row.originSkillId ? (
           <span>
-            {intl.formatMessage({
-              id: 'pages.capabilities.skill.syncedVersionValue',
-              defaultMessage: '源头 v{v}',
-              values: { v: v ?? row.originVersion ?? 1 },
-            })}
+            {intl.formatMessage(
+              {
+                id: 'pages.capabilities.skill.syncedVersionValue',
+                defaultMessage: '源头 v{v}',
+              },
+              // values 必须是第二个位置参数：塞进 descriptor 里 react-intl 会忽略它，
+              // {v} 会原样渲染出来。
+              { v: v ?? row.originVersion ?? 1 },
+            )}
           </span>
         ) : (
           '-'
@@ -490,26 +480,6 @@ export default function SkillList() {
         actionRef.current?.reload();
       },
     });
-  };
-
-  /**
-   * 手动触发一轮「从 Skill Hub 同步最新版本」。
-   *
-   * 异步：接口只负责提交并返回执行记录，真正的扫描在后台跑，
-   * 所以提交完就开面板轮询，不等结果。
-   */
-  const handleSyncNow = async () => {
-    setSyncSubmitting(true);
-    try {
-      const run = await agentApi.skill.syncNow();
-      setSyncRunId(run?.id ?? null);
-    } catch {
-      message.error(
-        intl.formatMessage({ id: 'pages.chat.saveFailed', defaultMessage: '操作失败' }),
-      );
-    } finally {
-      setSyncSubmitting(false);
-    }
   };
 
   const handleInstall = (record: any) => {
@@ -769,28 +739,6 @@ export default function SkillList() {
             onChange: (keys: any) => setSelectedRowKeys(keys),
           }}
           toolBarRender={() => [
-            <Can code="capability:skill:update" key="syncNow">
-              <Button
-                icon={<SyncOutlined />}
-                loading={syncSubmitting}
-                onClick={handleSyncNow}
-              >
-                {intl.formatMessage({
-                  id: 'pages.capabilities.skill.syncNow',
-                  defaultMessage: '检查更新',
-                })}
-              </Button>
-            </Can>,
-            <Button
-              key="syncRuns"
-              icon={<HistoryOutlined />}
-              onClick={() => setSyncRunsOpen(true)}
-            >
-              {intl.formatMessage({
-                id: 'pages.capabilities.skill.syncRuns',
-                defaultMessage: '同步记录',
-              })}
-            </Button>,
             selectedRowKeys.length > 0 && (
               <Button
                 key="batchEnable"
@@ -974,15 +922,6 @@ export default function SkillList() {
           {SAMPLE_DEFINITION}
         </pre>
       </Modal>
-      <SkillSyncRunPanel
-        open={syncRunId != null}
-        run={syncRun}
-        onClose={() => setSyncRunId(null)}
-      />
-      <SkillSyncRunsDrawer
-        open={syncRunsOpen}
-        onClose={() => setSyncRunsOpen(false)}
-      />
       <Modal
         title={viewRecord?.name}
         open={!!viewRecord}
@@ -1030,16 +969,16 @@ export default function SkillList() {
                       })}
                       :{' '}
                       <b style={{ color: 'rgba(0,0,0,0.88)' }}>
-                        {intl.formatMessage({
-                          id: 'pages.capabilities.skill.syncedVersionValue',
-                          defaultMessage: '源头 v{v}',
-                          values: {
-                            v:
+                        {intl.formatMessage(
+                          {
+                            id: 'pages.capabilities.skill.syncedVersionValue',
+                            defaultMessage: '源头 v{v}',
+                          },
+                          { v:
                               viewRecord?.syncedFromVersion ??
                               viewRecord?.originVersion ??
-                              1,
-                          },
-                        })}
+                              1 },
+                        )}
                       </b>
                     </span>
                     <span>

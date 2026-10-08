@@ -4,10 +4,15 @@ import { useEffect, useState } from 'react';
 import { useCan } from '@/hooks/usePermission';
 import { useRecordedTask } from '@/hooks/useRecordedTask';
 import { agentApi } from '@/services/agentSphere/api';
-import type { SessionCleanupRun } from '@/services/agentSphere/api';
+import type {
+  SessionCleanupRun,
+  SkillSyncRun,
+} from '@/services/agentSphere/api';
 import ResourceTemplateEditor from './resourceTemplate/ResourceTemplateEditor';
 import SessionCleanupRunPanel from './sessionCleanup';
 import SessionCleanupRunsDrawer from './sessionCleanupRuns';
+import SkillSyncRunPanel from './skillSync';
+import SkillSyncRunsDrawer from './skillSyncRuns';
 import { useStyles } from './style';
 
 interface ConfigItem {
@@ -28,6 +33,7 @@ const GROUP_LABELS: Record<string, string> = {
   user: 'pages.admin.settings.group.user',
   llm: 'pages.admin.settings.group.llm',
   session: 'pages.admin.settings.group.session',
+  skill: 'pages.admin.settings.group.skill',
 };
 
 export default function AdminSettings() {
@@ -46,6 +52,12 @@ export default function AdminSettings() {
   const { record: cleanupRun } = useRecordedTask<SessionCleanupRun>(
     cleanupRunId,
     (id) => agentApi.admin.getSessionCleanupRun(id),
+  );
+  const [syncRunsOpen, setSyncRunsOpen] = useState(false);
+  const [syncRunId, setSyncRunId] = useState<number | null>(null);
+  const [syncSubmitting, setSyncSubmitting] = useState(false);
+  const { record: syncRun } = useRecordedTask<SkillSyncRun>(syncRunId, (id) =>
+    agentApi.admin.getSkillSyncRun(id),
   );
 
   const canUpdate = useCan('admin:settings:update');
@@ -162,6 +174,40 @@ export default function AdminSettings() {
       size: 1,
     });
     return page?.records?.[0];
+  };
+
+  /**
+   * 提交一轮 Skill Hub 同步，形状同 {@link submitCleanup}。
+   *
+   * <p>它是系统级定时任务的手动触发入口（与清理同处一格），所以同样先接管已在跑的那条记录，
+   * 避免重复提交 —— 定时轮是 5 分钟一轮，点得再快也不该堆出并发。
+   */
+  const submitSkillSync = async () => {
+    setSyncSubmitting(true);
+    try {
+      const running = await agentApi.admin.listSkillSyncRuns({
+        status: 'RUNNING',
+        page: 1,
+        size: 1,
+      });
+      const existing = running?.records?.[0];
+      if (existing) {
+        setSyncRunId(existing.id);
+        message.info(
+          intl.formatMessage({
+            id: 'pages.admin.settings.skillSync.alreadyRunning',
+            defaultMessage: '已有同步在执行，切换到它的进度',
+          }),
+        );
+        return;
+      }
+      const run = await agentApi.admin.syncSkillNow();
+      setSyncRunId(run?.id ?? null);
+    } catch {
+      message.error(intl.formatMessage({ id: 'pages.chat.saveFailed' }));
+    } finally {
+      setSyncSubmitting(false);
+    }
   };
 
   const handleDeletePlugin = () => {
@@ -296,6 +342,25 @@ export default function AdminSettings() {
             })}
           </Button>
         </div>
+      ) : group === 'skill' && canUpdate ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            size="small"
+            loading={syncSubmitting}
+            onClick={() => submitSkillSync()}
+          >
+            {intl.formatMessage({
+              id: 'pages.admin.settings.skillSync.trigger.btn',
+              defaultMessage: '检查更新',
+            })}
+          </Button>
+          <Button size="small" onClick={() => setSyncRunsOpen(true)}>
+            {intl.formatMessage({
+              id: 'pages.admin.settings.skillSync.runs.btn',
+              defaultMessage: '执行记录',
+            })}
+          </Button>
+        </div>
       ) : group === 'plugin' && canUpdate ? (
         <div style={{ display: 'flex', gap: 8 }}>
           <Upload
@@ -361,6 +426,15 @@ export default function AdminSettings() {
       <SessionCleanupRunsDrawer
         open={runsOpen}
         onClose={() => setRunsOpen(false)}
+      />
+      <SkillSyncRunPanel
+        open={syncRunId != null}
+        run={syncRun}
+        onClose={() => setSyncRunId(null)}
+      />
+      <SkillSyncRunsDrawer
+        open={syncRunsOpen}
+        onClose={() => setSyncRunsOpen(false)}
       />
       <ResourceTemplateEditor
         open={templateOpen}

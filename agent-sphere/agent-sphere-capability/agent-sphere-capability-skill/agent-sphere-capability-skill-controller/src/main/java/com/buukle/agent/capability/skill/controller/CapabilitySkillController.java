@@ -116,16 +116,19 @@ public class CapabilitySkillController extends BaseController {
      *
      * <p>不阻塞：一轮会扫所有开启自动更新的副本，前端用返回的 id 轮询
      * {@code GET /sync-runs/{id}} 看进度与结果。
+     *
+     * <p>入口在「系统设置」页而不是技能列表 —— 它是系统级定时任务的手动触发，
+     * 行为完全由 {@code agent_system_config} 的 {@code skill} 组驱动（总开关 + 记录保留天数）。
      */
     @AuditLog(action = "SYNC", resourceType = "Capability")
-    @RequirePermission("capability:skill:update")
+    @RequirePermission("admin:settings:update")
     @PostMapping("/sync-now")
     public ResponseEntity<?> syncNow() {
         return ok(skillSyncRunner.submitSync(SkillSyncTriggerEnum.TRIGGER_MANUAL));
     }
 
     /** 轮询单条同步执行记录（含实时统计与跳过明细）。 */
-    @RequirePermission("capability:skill:read")
+    @RequirePermission("admin:settings:read")
     @GetMapping("/sync-runs/{id}")
     public ResponseEntity<?> syncRun(@PathVariable Long id) {
         var run = skillSyncRunner.getRun(id);
@@ -138,7 +141,7 @@ public class CapabilitySkillController extends BaseController {
      * <p>这张表也是「自动同步到底跑没跑」的唯一证据：任务 logger 被压到 WARN，
      * 光看日志无法回答。
      */
-    @RequirePermission("capability:skill:read")
+    @RequirePermission("admin:settings:read")
     @GetMapping("/sync-runs")
     public ResponseEntity<?> syncRuns(@RequestParam(required = false) String triggerType,
                                       @RequestParam(required = false) String status,

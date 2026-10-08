@@ -19,10 +19,11 @@ const STATUS_META: Record<string, { color: string; label: string }> = {
 };
 
 /**
- * Skill 自动同步的执行记录。
+ * Skill Hub 自动同步的执行记录。
  *
  * <p>这张列表是「自动同步到底跑没跑」的唯一证据：任务的 logger 被压到 WARN，
  * 光看日志永远回答不了「跑了没有、扫到几条、同步了几条」。
+ * 入口在「系统设置」页，与会话清理的执行记录并列 —— 两者都是系统级定时任务。
  */
 export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
   const intl = useIntl();
@@ -36,7 +37,7 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
 
   return (
     <Drawer
-      title={t('pages.capabilities.skill.syncRuns.title', 'Skill 同步执行记录')}
+      title={t('pages.admin.settings.skillSyncRuns.title', 'Skill 同步执行记录')}
       width={1000}
       open={open}
       onClose={onClose}
@@ -46,7 +47,7 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
         <Select
           allowClear
           style={{ width: 130 }}
-          placeholder={t('pages.capabilities.skill.syncRuns.filterTrigger', '触发方式')}
+          placeholder={t('pages.admin.settings.skillSyncRuns.filterTrigger', '触发方式')}
           value={triggerType}
           onChange={(v) => {
             setTriggerType(v);
@@ -55,28 +56,28 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
           options={[
             {
               value: 'SCHEDULED',
-              label: t('pages.capabilities.skill.syncRuns.scheduled', '定时'),
+              label: t('pages.admin.settings.skillSyncRuns.scheduled', '定时'),
             },
             {
               value: 'MANUAL',
-              label: t('pages.capabilities.skill.syncRuns.manual', '手动'),
+              label: t('pages.admin.settings.skillSyncRuns.manual', '手动'),
             },
           ]}
         />
         <Select
           allowClear
           style={{ width: 130 }}
-          placeholder={t('pages.capabilities.skill.syncRuns.filterStatus', '状态')}
+          placeholder={t('pages.admin.settings.skillSyncRuns.filterStatus', '状态')}
           value={status}
           onChange={(v) => {
             setStatus(v);
             reload();
           }}
           options={[
-            { value: 'RUNNING', label: t('pages.capabilities.skill.syncRuns.running', '运行中') },
-            { value: 'SUCCESS', label: t('pages.capabilities.skill.syncRuns.success', '完成') },
-            { value: 'FAILED', label: t('pages.capabilities.skill.syncRuns.failed', '失败') },
-            { value: 'SKIPPED', label: t('pages.capabilities.skill.syncRuns.skipped', '已跳过') },
+            { value: 'RUNNING', label: t('pages.admin.settings.skillSyncRuns.running', '运行中') },
+            { value: 'SUCCESS', label: t('pages.admin.settings.skillSyncRuns.success', '完成') },
+            { value: 'FAILED', label: t('pages.admin.settings.skillSyncRuns.failed', '失败') },
+            { value: 'SKIPPED', label: t('pages.admin.settings.skillSyncRuns.skipped', '已跳过') },
           ]}
         />
       </Space>
@@ -89,27 +90,27 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
         columns={[
           { title: t('pages.table.id'), dataIndex: 'id', width: 70 },
           {
-            title: t('pages.capabilities.skill.syncRuns.col.trigger', '触发方式'),
+            title: t('pages.admin.settings.skillSyncRuns.col.trigger', '触发方式'),
             dataIndex: 'triggerType',
             width: 90,
             render: (_: any, row: SkillSyncRun) =>
               row.triggerType === 'MANUAL' ? (
                 <Tag color="blue">
-                  {t('pages.capabilities.skill.syncRuns.manual', '手动')}
+                  {t('pages.admin.settings.skillSyncRuns.manual', '手动')}
                 </Tag>
               ) : (
-                <Tag>{t('pages.capabilities.skill.syncRuns.scheduled', '定时')}</Tag>
+                <Tag>{t('pages.admin.settings.skillSyncRuns.scheduled', '定时')}</Tag>
               ),
           },
           {
-            title: t('pages.capabilities.skill.syncRuns.col.status', '状态'),
+            title: t('pages.admin.settings.skillSyncRuns.col.status', '状态'),
             dataIndex: 'status',
             width: 120,
             render: (_: any, row: SkillSyncRun) => {
               if (row.stale) {
                 return (
                   <Tag color="red">
-                    {t('pages.capabilities.skill.syncRuns.stale', '疑似中断')}
+                    {t('pages.admin.settings.skillSyncRuns.stale', '疑似中断')}
                   </Tag>
                 );
               }
@@ -118,13 +119,13 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
             },
           },
           {
-            title: t('pages.capabilities.skill.syncRuns.col.scanned', '扫描'),
+            title: t('pages.admin.settings.skillSyncRuns.col.scanned', '扫描'),
             dataIndex: 'scannedCount',
             width: 80,
             align: 'right' as const,
           },
           {
-            title: t('pages.capabilities.skill.syncRuns.col.updated', '更新'),
+            title: t('pages.admin.settings.skillSyncRuns.col.updated', '更新'),
             dataIndex: 'updated',
             width: 80,
             align: 'right' as const,
@@ -135,13 +136,13 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
             ),
           },
           {
-            title: t('pages.capabilities.skill.syncRuns.col.skipped', '未更新'),
+            title: t('pages.admin.settings.skillSyncRuns.col.skipped', '未更新'),
             dataIndex: 'skipped',
             width: 90,
             align: 'right' as const,
           },
           {
-            title: t('pages.capabilities.skill.syncRuns.col.elapsed', '耗时'),
+            title: t('pages.admin.settings.skillSyncRuns.col.elapsed', '耗时'),
             dataIndex: 'elapsedMs',
             width: 90,
             align: 'right' as const,
@@ -149,7 +150,7 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
               row.elapsedMs == null ? '-' : `${row.elapsedMs} ms`,
           },
           {
-            title: t('pages.capabilities.skill.syncRuns.col.startedAt', '开始时间'),
+            title: t('pages.admin.settings.skillSyncRuns.col.startedAt', '开始时间'),
             dataIndex: 'startedAt',
             width: 170,
             render: (_: any, row: SkillSyncRun) => formatTime(row.startedAt),
@@ -160,12 +161,12 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
             <Space direction="vertical" style={{ width: '100%' }}>
               {row.skipReason && (
                 <span>
-                  {t('pages.capabilities.skill.syncRuns.skipReason', '跳过原因')}：{row.skipReason}
+                  {t('pages.admin.settings.skillSyncRuns.skipReason', '跳过原因')}：{row.skipReason}
                 </span>
               )}
               {row.errorMessage && (
                 <span>
-                  {t('pages.capabilities.skill.syncRuns.errorMessage', '错误')}：{row.errorMessage}
+                  {t('pages.admin.settings.skillSyncRuns.errorMessage', '错误')}：{row.errorMessage}
                 </span>
               )}
               {(row.detail || []).length > 0 && (
@@ -176,17 +177,17 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
                   dataSource={row.detail}
                   columns={[
                     {
-                      title: t('pages.capabilities.skill.syncPanel.copyId', '副本 ID'),
+                      title: t('pages.admin.settings.skillSync.copyId', '副本 ID'),
                       dataIndex: 'copyId',
                       width: 90,
                     },
                     {
-                      title: t('pages.capabilities.skill.syncPanel.originId', '源技能 ID'),
+                      title: t('pages.admin.settings.skillSync.originId', '源技能 ID'),
                       dataIndex: 'originId',
                       width: 90,
                     },
                     {
-                      title: t('pages.capabilities.skill.syncPanel.reason', '未更新原因'),
+                      title: t('pages.admin.settings.skillSync.reason', '未更新原因'),
                       dataIndex: 'reason',
                       render: (v: string) => <Tag>{v}</Tag>,
                     },
@@ -197,7 +198,7 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
           ),
         }}
         request={async (p) => {
-          const res = await agentApi.skill.syncRuns({
+          const res = await agentApi.admin.listSkillSyncRuns({
             triggerType,
             status,
             page: p.current,

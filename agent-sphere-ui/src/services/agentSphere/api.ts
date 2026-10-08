@@ -360,13 +360,6 @@ export const agentApi = {
         method: 'PUT',
         data: { autoUpdate: enabled },
       }),
-    /** 手动触发一轮「从 Skill Hub 同步最新版本」，异步提交、立即返回执行记录。 */
-    syncNow: () => request<SkillSyncRun>(`${BASE}/capability/skill/sync-now`, { method: 'POST' }),
-    /** 轮询单条同步执行记录（含实时统计与跳过明细）。 */
-    syncRun: (id: number) => request<SkillSyncRun>(`${BASE}/capability/skill/sync-runs/${id}`),
-    /** 同步执行记录分页（定时 + 手动）。 */
-    syncRuns: (params?: { triggerType?: string; status?: string; page?: number; size?: number }) =>
-      request<PageResult<SkillSyncRun>>(`${BASE}/capability/skill/sync-runs`, { params }),
   },
 
   cli: {
@@ -455,6 +448,25 @@ export const agentApi = {
       size?: number;
     }) =>
       request<PageResult<SessionCleanupRun>>(`${BASE}/instance/session-cleanup/runs`, {
+        params,
+      }),
+    /**
+     * 手动触发一轮「从 Skill Hub 同步最新版本」（异步，立即返回执行记录）。
+     * 进度与结果要用返回记录的 id 轮询 {@link getSkillSyncRun}。
+     */
+    syncSkillNow: () =>
+      request<SkillSyncRun>(`${BASE}/capability/skill/sync-now`, { method: 'POST' }),
+    /** 轮询单条同步执行记录（含实时统计与跳过明细）。 */
+    getSkillSyncRun: (id: number) =>
+      request<SkillSyncRun>(`${BASE}/capability/skill/sync-runs/${id}`),
+    /** 同步执行记录分页（定时 + 手动）。 */
+    listSkillSyncRuns: (params?: {
+      triggerType?: string;
+      status?: string;
+      page?: number;
+      size?: number;
+    }) =>
+      request<PageResult<SkillSyncRun>>(`${BASE}/capability/skill/sync-runs`, {
         params,
       }),
     roles: {
