@@ -9,7 +9,8 @@ public enum BuiltinToolEnum {
     ASK_CLARIFICATION(7),
     SKILL_LIBRARY(8),
     SKILL_MANAGE(9),
-    WAIT(10);
+    WAIT(10),
+    TEXT_CONTAINS(11);
 
     private final int id;
 

@@ -91,7 +91,7 @@
 | 能力类型 | 实现 | 说明 | 示例 |
 |---------|------|------|------|
 | **MCP (Model Context Protocol)** | MCP Server 客户端 | 标准协议，接入任意 MCP Server | Jira、GitHub、Slack、数据库 |
-| **Builtin (内置工具)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI 扩展 | WebFetch、WebRead、Chrome、Todowrite、DocWrite |
+| **Builtin (内置工具)** | SPI: `CapabilityBuiltinToolSpi` | Java SPI 扩展 | WebFetch、WebRead、Chrome、Todowrite、DocWrite、SkillManage、TextContains |
 | **Chrome 浏览器** | Chrome Extension 桥接 | DOM 操作 + 实时执行反馈 | 导航、点击、填表、executeJS、**截图 screenshot、clickAt** |
 | **CLI (命令行)** | `ProcessBuilder` 执行 | 本地或远程 Shell | Git 操作、构建部署、系统管理 |
 | **Skill (复合技能)** | 多步任务编排 | LLM 驱动的任务分解 | 跨系统工作流 |

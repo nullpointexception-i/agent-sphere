@@ -354,6 +354,27 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 - 前端两侧同步：widget 读 `allowWidgetSession`（只认严格 `true`，对齐列默认 FALSE）；
   主站读 `allowConsoleSession`，关闭时禁用发送并提示。**服务端才是强约束**，前端只为体验一致。
 
+## 新增内置工具（builtin tool）
+
+一个内置工具 = 一个独立 maven 模块 + `@Component implements CapabilityBuiltinToolSpi`。
+**参数 schema 不用手写** —— `ToolSchemaUtil.generateParamSchema(ExecuteContext.class)` 用 swagger
+`ModelConverters` 从 POJO 自动生成（`wait` 那种手写 schema 是特例：它没有 SPI bean）。
+
+- **`needConfig()` 决定「默认绑定」**：返回 `false` → 被 `BuiltinToolService#listAutoIncludeBuiltinTools`
+  收录 → `ContextPreparer#resolveTools` 在**每个实例**上无条件注册，无需任何 DB 能力绑定或 seed
+  （todowrite / docwrite / skillwrite / textcontains 都是这一档）。返回 `true` → 必须在实例能力里
+  显式绑定（chrome / webfetch / webread；`InstanceInitializer#bindBuiltinBrowser` 就是干这个的）。
+  **改成 true 不会报错，工具会从所有实例静默消失。**
+- **装配有 4 处，漏一处就静默失效**（无编译错误）：
+  1. `BuiltinToolEnum` 加 id（当前已用到 11）；
+  2. `agent-sphere-capability-builtin-tool/pom.xml` 加 `<module>`；
+  3. `agent-sphere-bootstrap/pom.xml` 加 `<dependency>`（否则 `@Component` 不在 classpath、扫不到）；
+  4. **根 `pom.xml` 的 `dependencyManagement` 加同名条目**（否则 3 里的无版本依赖解析不了）。
+  工具名 = `builtin.<SimpleClassName>`，模型侧看到的是 `builtin_<id>`。
+- **`@NotNull` / `@NotBlank` 只在 `parameterVerify` 里生效，而那条路径不在运行链路上**
+  （`ToolExecutor` 直接调 `executeBuiltinTool`）。参数约束必须在 `execute` 里再守一道，
+  否则非法入参会一路走到业务逻辑里静默产出错误结果（例：空 needle 会让 `String.contains("")` 返回 true）。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).
