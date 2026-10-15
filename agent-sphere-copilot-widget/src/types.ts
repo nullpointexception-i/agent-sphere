@@ -33,6 +33,16 @@ export interface InstanceVO {
   systemPrompt: string;
   image: string;
   status: string;
+  /**
+   * 业务域（`agent_instance.business_type`）。非空表示这是**任务专用实例** ——
+   * 外部 API 按 businessType 匹配它来跑目标驱动任务，因此不允许在 widget 里手动发起对话。
+   */
+  businessType?: string | null;
+  /**
+   * 是否允许从 widget 端发起/继续会话（`agent_instance.allow_widget_session`）。
+   * 后端列 `NOT NULL DEFAULT FALSE` —— 缺省/空值按禁止处理。
+   */
+  allowWidgetSession?: boolean | null;
   createdAt: string;
   createdBy: string;
   updatedAt: string;

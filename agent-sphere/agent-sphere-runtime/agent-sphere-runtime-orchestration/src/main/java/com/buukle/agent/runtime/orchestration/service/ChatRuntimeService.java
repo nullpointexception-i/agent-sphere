@@ -82,6 +82,9 @@ public class ChatRuntimeService {
      */
     public RunVO createRun(Long sessionId, SendMessageDTO dto) {
         assertSessionOwnership(sessionId);
+        // 来源端（主站 / widget）开关：实例已关掉该来源时禁止继续对话。
+        // 任务路径是服务端内部调用、不携带来源，SessionSurfaceHolder.current() 返回 INTERNAL → 放行。
+        sessionSpi.assertSurfaceAllowed(sessionId);
         sessionSpi.touchSession(sessionId);
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);

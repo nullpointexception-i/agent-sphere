@@ -22,6 +22,8 @@ interface FooterProps {
   onExpandOpen: () => void;
   sessionKey?: string;
   sessionId?: number;
+  /** 该会话所属实例未开放主站会话（`allowConsoleSession=false`）：禁用输入并提示。 */
+  consoleBlocked?: boolean;
 }
 
 interface PendingAttachment {
@@ -40,6 +42,7 @@ export default function Footer({
   onExpandOpen,
   sessionKey,
   sessionId,
+  consoleBlocked,
 }: FooterProps) {
   const intl = useIntl();
   const senderRef = useRef<SenderRef>(null);
@@ -339,6 +342,26 @@ export default function Footer({
           ))}
         </div>
       )}
+      {consoleBlocked ? (
+        <div
+          style={{
+            maxWidth: 940,
+            width: '100%',
+            margin: '0 auto 6px',
+            padding: '6px 12px',
+            borderRadius: 8,
+            background: '#f5f5f5',
+            color: '#8c8c8c',
+            fontSize: 12,
+            textAlign: 'center',
+          }}
+        >
+          {intl.formatMessage({
+            id: 'pages.chat.consoleSessionDisabled',
+            defaultMessage: '该实例未开放主站会话，如需聊天机器人请申请开通',
+          })}
+        </div>
+      ) : null}
       <div
         style={{
           display: 'flex',
@@ -353,6 +376,7 @@ export default function Footer({
           value={inputValue}
           onChange={onInputValueChange}
           loading={sending || hasPendingClarifications}
+          disabled={!!consoleBlocked}
           submitType="enter"
           onSubmit={handleSubmitAttachment}
           onCancel={onCancel}

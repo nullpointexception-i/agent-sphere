@@ -331,6 +331,29 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 - 代价要说清：业务方传 3600 却被实际执行 10800，**服务端单方面覆盖了调用方参数**。若后续
   业务方主动改传更大值，两边自然对齐，下限退化为纯兜底。
 
+## 会话来源开关（V89）—— 按入口控制能否建会话/发消息
+
+一个实例可以按**来源端**分别控制是否允许发起/继续会话：`allow_console_session`（主站）与
+`allow_widget_session`（嵌入式 widget）。列均为 `NOT NULL`，默认 **主站 true / widget false**。
+
+- **为什么要来源信号**：主站与 widget 调的是**同一个**接口（`POST /api/v1/instance/sessions`、
+  `POST /api/v1/runtime/{sid}/chat`），令牌层面也分不出（`agent_user.token` 每用户一个）。
+  故由 widget 发送 `X-Client-Surface: widget`，拦截器解析进 `SessionSurfaceHolder`。
+  **这是策略信号、不是安全边界** —— 伪造它没有意义（用户本就能直接用主站）。
+- **第三态 `INTERNAL` 必须放行**：`createSession` 还被任务路径调用（`AgentTaskServiceImpl`），
+  `chat` 也被提炼轮调用。这些是服务端内部调用、不经过拦截器，holder 未设置 → 按 `INTERNAL` 放行。
+  漏了这一态，任务会建不了自己的会话。
+- **判定只有一处**：`SessionSurfacePolicy`（common），建会话与发消息共用。两处各写一遍真值表迟早漂移，
+  而漂移的表现是「某一端悄悄绕过开关」。
+- **拦截落点**：`SessionServiceImpl.createSession` 与 `ChatRuntimeService.createRun`（`chat` 的唯一建 run 入口）。
+- **ThreadLocal 清理是硬要求**：`AuthInterceptor.afterCompletion` 必须 `clear()` —— Tomcat 线程池会复用线程。
+  同理来源必须在**鉴权通过之后**才 set：`preHandle` 提前 `return false`（401）时 Spring 不会调用
+  `afterCompletion`，之前赋值会残留给下一个请求。
+- **存量回填按 businessType**：带业务域的是任务专用实例（外部 API 用它跑任务），widget 置禁止；
+  不带业务域的普通聊天实例保持放行。此后由管理员在实例表单上按需调整。
+- 前端两侧同步：widget 读 `allowWidgetSession`（只认严格 `true`，对齐列默认 FALSE）；
+  主站读 `allowConsoleSession`，关闭时禁用发送并提示。**服务端才是强约束**，前端只为体验一致。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).

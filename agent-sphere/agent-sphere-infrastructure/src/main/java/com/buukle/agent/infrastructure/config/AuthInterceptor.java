@@ -2,6 +2,8 @@ package com.buukle.agent.infrastructure.config;
 
 import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.SessionSurface;
+import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.error.CommonErrorCode;
@@ -84,7 +86,18 @@ public class AuthInterceptor implements HandlerInterceptor {
                 TenantUtil.start(user.getUsername());
             }
         }
+        // 来源端（主站 / widget）必须在**鉴权通过之后**才设置：preHandle 提前 return false（401）时
+        // Spring 不会调用 afterCompletion，在此之前的赋值会残留在池化线程上串给下一个请求。
+        SessionSurfaceHolder.set(resolveSurface(request));
         return true;
+    }
+
+    /** 缺省（未带头）按主站；widget 显式声明 `X-Client-Surface: widget`。 */
+    private static SessionSurface resolveSurface(HttpServletRequest request) {
+        String raw = request.getHeader(SessionSurfaceHolder.HEADER);
+        return SessionSurface.WIDGET.name().equalsIgnoreCase(raw == null ? null : raw.trim())
+                ? SessionSurface.WIDGET
+                : SessionSurface.CONSOLE;
     }
 
     private void writeUnauthorized(HttpServletResponse response) throws IOException {
@@ -97,5 +110,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         TenantUtil.stop();
         AuthContext.clear();
+        // Tomcat 线程池会复用线程：不清理会把本请求的来源端串给下一个请求
+        SessionSurfaceHolder.clear();
     }
 }

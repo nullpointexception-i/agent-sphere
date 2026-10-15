@@ -103,6 +103,11 @@ export default function ChatMain({
     (r: any) => r.kind === 'clarification' && r.state === 'PENDING',
   );
 
+  // 实例未开放主站会话时禁用输入（服务端同样会拦，这里只为体验一致）
+  const consoleBlocked =
+    instances.find((i: any) => i.id === currentSession?.agentInstanceId)
+      ?.allowConsoleSession === false;
+
   const footerProps = {
     inputValue,
     onInputValueChange,
@@ -113,6 +118,7 @@ export default function ChatMain({
     onExpandOpen,
     sessionKey,
     sessionId: currentSession?.id,
+    consoleBlocked,
   };
 
   return (

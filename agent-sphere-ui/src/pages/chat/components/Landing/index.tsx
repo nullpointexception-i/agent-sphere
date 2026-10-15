@@ -97,12 +97,32 @@ export default function Landing({
   }, [instances, chosenInstance, currentInstanceObj]);
 
   const noData = dataLoaded && instances.length === 0;
+  // 该实例未开放主站会话（服务端同样会拦，这里只为体验一致）
+  const consoleBlocked = currentInstance?.allowConsoleSession === false;
 
   return (
     <div className={styles.landing}>
       <div className={styles.landingTitle}>
         {intl.formatMessage({ id: 'pages.landing.title' })}
       </div>
+
+      {consoleBlocked ? (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '6px 12px',
+            borderRadius: 8,
+            background: '#f5f5f5',
+            color: '#8c8c8c',
+            fontSize: 12,
+          }}
+        >
+          {intl.formatMessage({
+            id: 'pages.chat.consoleSessionDisabled',
+            defaultMessage: '该实例未开放主站会话，如需聊天机器人请申请开通',
+          })}
+        </div>
+      ) : null}
 
       <style>{`
         @keyframes voice-pulse {
@@ -137,7 +157,7 @@ export default function Landing({
           value={inputValue}
           onChange={onInputValueChange}
           loading={sending}
-          disabled={noData}
+          disabled={noData || consoleBlocked}
           onSubmit={onStartSession}
           placeholder={intl.formatMessage({
             id: 'pages.chat.typeMessageHint',

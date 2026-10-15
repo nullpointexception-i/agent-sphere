@@ -45,3 +45,12 @@ export const SSO_AUTHORIZE_PATH = '/auth/sso/authorize';
 export const SSO_EXCHANGE_PATH = '/auth/sso/exchange';
 export const SSO_QUERY_PARAM_OTC = 'otc';
 export const SSO_QUERY_PARAM_ERROR = 'error';
+
+/**
+ * 声明调用来源的请求头 —— 必须与后端 `SessionSurfaceHolder.HEADER` 一致。
+ *
+ * <p>服务端按实例的 `allow_widget_session` 开关校验建会话/发消息；缺省（不带头）按**主站**处理，
+ * 那样被关掉 widget 的实例在这里仍会被放行，所以每个请求都要带上。
+ */
+export const CLIENT_SURFACE_HEADER = 'X-Client-Surface';
+export const CLIENT_SURFACE_WIDGET = 'widget';

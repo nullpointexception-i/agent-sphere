@@ -1,6 +1,6 @@
 import { UploadOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, InputNumber, Upload } from 'antd';
+import { App, Button, Drawer, Form, Input, InputNumber, Switch, Upload } from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -137,6 +137,39 @@ export default function InfoEditDrawer({
           )}
         >
           <Input maxLength={64} placeholder="sourcing" />
+        </Form.Item>
+        <Form.Item
+          name="allowConsoleSession"
+          label={labelWithRule(
+            intl.formatMessage({
+              id: 'pages.instances.allowConsoleSession',
+              defaultMessage: '允许主站会话',
+            }),
+            intl.formatMessage({
+              id: 'pages.instances.allowConsoleSession.extra',
+              defaultMessage: '关闭后主站（控制台）不能对该实例发起或继续会话',
+            }),
+          )}
+          valuePropName="checked"
+        >
+          <Switch />
+        </Form.Item>
+        <Form.Item
+          name="allowWidgetSession"
+          label={labelWithRule(
+            intl.formatMessage({
+              id: 'pages.instances.allowWidgetSession',
+              defaultMessage: '允许 widget 会话',
+            }),
+            intl.formatMessage({
+              id: 'pages.instances.allowWidgetSession.extra',
+              defaultMessage:
+                '关闭后嵌入式 widget 不能对该实例发起或继续会话（任务专用实例请保持关闭）',
+            }),
+          )}
+          valuePropName="checked"
+        >
+          <Switch />
         </Form.Item>
         <Form.Item
           name="maxLoopCount"

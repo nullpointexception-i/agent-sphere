@@ -2,6 +2,8 @@ package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.event.SessionCreatedEvent;
+import com.buukle.agent.common.context.SessionSurfaceHolder;
+import com.buukle.agent.common.context.SessionSurfacePolicy;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.domain.AgentSession;
@@ -32,6 +34,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         if (instance == null) {
             throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
         }
+        assertSurfaceAllowed(instance);
         if (instance.getModelRouteId() == null && dto.getOverrideModelRouteId() == null) {
             throw new BizException(InstanceErrorCode.INSTANCE_NO_MODEL_ROUTE);
         }
@@ -104,6 +107,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
 
     @Override
     public void touchSession(Long sessionId) {
+
         AgentSession session = getById(sessionId);
         if (session == null) return;
         // updateById triggers AuditMetaObjectHandler to set updatedAt = now
@@ -123,5 +127,24 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         }
         session.setSummaryModelRouteId(modelRouteId);
         updateById(session);
+    }
+
+    @Override
+    public void assertSurfaceAllowed(Long sessionId) {
+        AgentSession session = getById(sessionId);
+        if (session == null) {
+            throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);
+        }
+        AgentInstance instance = instanceMapper.selectById(session.getAgentInstanceId());
+        if (instance == null) {
+            throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
+        }
+        assertSurfaceAllowed(instance);
+    }
+
+    /** 来源开关判定的唯一实现；createSession 复用已加载的实例如以免二次查库。 */
+    private void assertSurfaceAllowed(AgentInstance instance) {
+        SessionSurfacePolicy.assertAllowed(SessionSurfaceHolder.current(),
+                instance.getAllowConsoleSession(), instance.getAllowWidgetSession());
     }
 }

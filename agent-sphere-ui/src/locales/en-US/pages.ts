@@ -77,6 +77,12 @@ export default {
   'pages.instances.businessType': 'Business Type',
   'pages.instances.businessType.extra':
     'Tasks match this instance by businessType; must match the caller',
+  'pages.instances.allowConsoleSession': 'Allow Console Session',
+  'pages.instances.allowConsoleSession.extra':
+    'When off, the console (main site) cannot start or continue sessions on this instance',
+  'pages.instances.allowWidgetSession': 'Allow Widget Session',
+  'pages.instances.allowWidgetSession.extra':
+    'When off, the embedded widget cannot start or continue sessions on this instance (keep off for task-only instances)',
   'pages.instances.defaultModelRoute': 'Default Model Route',
   'pages.instances.selectRoute': 'Select route',
   'pages.instances.refreshRoutes': 'Refresh routes',
@@ -189,6 +195,8 @@ export default {
   'pages.chat.modelPlaceholder': 'Model',
   'pages.chat.typeMessage': 'Type a message...',
   'pages.chat.typeMessageHint': 'Type a message... (Shift+Enter for new line)',
+  'pages.chat.consoleSessionDisabled':
+    'This instance does not allow console sessions. Apply for a chatbot if you need one.',
   'pages.chat.attachImage': 'Attach image',
   'pages.chat.attachmentTypeHint':
     'Only jpeg/png/webp/gif images are supported',

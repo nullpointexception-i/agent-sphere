@@ -1,6 +1,8 @@
 import { clearUser, getToken } from './auth';
 import { loadCachedObjectUrl } from './fileCache';
 import {
+  CLIENT_SURFACE_HEADER,
+  CLIENT_SURFACE_WIDGET,
   SSO_AUTHORIZE_PATH,
   SSO_EXCHANGE_PATH,
   type WidgetConfig,
@@ -59,6 +61,9 @@ async function request<T>(
   if (!headers.has('Content-Type') && init.body != null) {
     headers.set('Content-Type', 'application/json');
   }
+  // 声明调用来源：服务端按实例的 allow_widget_session 开关校验建会话/发消息。
+  // 缺省（不带头）会被当作主站，那样关掉了 widget 的实例在这里仍会被放行。
+  headers.set(CLIENT_SURFACE_HEADER, CLIENT_SURFACE_WIDGET);
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }

@@ -77,6 +77,12 @@ export default {
   'pages.instances.businessType': '业务域',
   'pages.instances.businessType.extra':
     '任务按业务域匹配该实例，需与调用方一致',
+  'pages.instances.allowConsoleSession': '允许主站会话',
+  'pages.instances.allowConsoleSession.extra':
+    '关闭后主站（控制台）不能对该实例发起或继续会话',
+  'pages.instances.allowWidgetSession': '允许 widget 会话',
+  'pages.instances.allowWidgetSession.extra':
+    '关闭后嵌入式 widget 不能对该实例发起或继续会话（任务专用实例请保持关闭）',
   'pages.instances.defaultModelRoute': '默认模型路由',
   'pages.instances.selectRoute': '选择路由',
   'pages.instances.refreshRoutes': '刷新路由',
@@ -184,6 +190,8 @@ export default {
   'pages.chat.modelPlaceholder': '模型',
   'pages.chat.typeMessage': '输入消息...',
   'pages.chat.typeMessageHint': '输入消息... (Shift+Enter 换行)',
+  'pages.chat.consoleSessionDisabled':
+    '该实例未开放主站会话，如需聊天机器人请申请开通',
   'pages.chat.attachImage': '添加图片',
   'pages.chat.attachmentTypeHint': '仅支持 jpeg/png/webp/gif 图片',
   'pages.chat.attachmentSizeHint': '图片不能超过 5MB',

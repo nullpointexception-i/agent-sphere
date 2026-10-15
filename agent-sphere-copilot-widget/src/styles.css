@@ -268,9 +268,16 @@
   padding-top: 8px;
 }
 
-.aw-new-session {
+/* 包裹层承载悬停提示：原生 title 在 disabled 元素上不触发
+   （浏览器不对禁用表单控件派发鼠标事件）。按钮本身保留真实 disabled 语义。 */
+.aw-new-session-wrap {
   flex-shrink: 0;
+  display: block;
   margin: 4px 8px 2px 10px;
+}
+
+.aw-new-session {
+  width: 100%;
   padding: 6px 8px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -284,6 +291,13 @@
 .aw-new-session:hover {
   background: #eff6ff;
   border-color: #2563eb;
+}
+
+.aw-new-session:disabled {
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  background: #f9fafb;
+  cursor: not-allowed;
 }
 
 .aw-plugin-download {
@@ -1126,6 +1140,31 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
+}
+
+/* 任务专用实例（businessType 非空）：输入区原位替换为占位，
+   会话列表与时间线保持原样，仍可只读查看任务执行过程。 */
+.aw-business-autochat {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+  text-align: center;
+}
+
+.aw-business-autochat-label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.aw-business-autochat-hint {
+  font-size: 11px;
+  color: #9ca3af;
 }
 
 .aw-attach-preview {

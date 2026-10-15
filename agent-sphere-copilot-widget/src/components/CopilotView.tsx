@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import { ApiError, createApi, stopSession } from '../api';
 import { clearFileCache } from '../fileCache';
+import { allowsWidgetSession, businessTypeOf } from '../instance';
 import type { WidgetConfig } from '../config';
 import type { InstanceVO, SessionVO, UsageData, UserVO } from '../types';
 import { useTimelineStream } from '../useTimelineStream';
@@ -255,6 +256,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
 
   const handleCreateSession = async () => {
     if (selectedAgentId === null) {
+      return;
+    }
+    // 实例未开放 widget 端会话时不允许手动新建：按钮已置灰，这里再守一道 ——
+    // 按钮置灰只是 UI，函数本身应当自守，避免样式/结构变更后绕过。
+    const agent = instances.find((i) => i.id === selectedAgentId);
+    if (!allowsWidgetSession(agent)) {
       return;
     }
     setLoading(true);
@@ -518,6 +525,17 @@ export function CopilotView({ config, user }: CopilotViewProps) {
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedAgent = instances.find((i) => i.id === selectedAgentId) ?? null;
+  /**
+   * 实例是否**未开放** widget 端会话（`agent_instance.allow_widget_session` 为假）。
+   *
+   * <p>关掉时 widget 里既不能手动发起会话，也不能手动对话 —— 只保留「查看历史会话」的能力。
+   * 服务端在 `createSession` / `chat` 用同一规则强校验，这里只是让 UI 保持一致。
+   *
+   * <p>按**实例**统一门控而非按会话判定：即使选中的是该实例下的历史聊天会话，也一样隐藏输入区。
+   * 规则只依赖 instance，无需额外请求（开关已随实例列表返回）。
+   */
+  const businessType = businessTypeOf(selectedAgent);
+  const widgetSessionBlocked = !allowsWidgetSession(selectedAgent);
   const visibleSessions = selectedAgentId
     ? sessions.filter((s) => s.agentInstanceId === selectedAgentId)
     : [];
@@ -733,13 +751,27 @@ export function CopilotView({ config, user }: CopilotViewProps) {
             </a>
           </div>
         ) : null}
-        <button
-          type="button"
-          className="aw-new-session"
-          onClick={() => void handleCreateSession()}
+        {/* 原生 title 在 disabled 元素上不触发（浏览器不对禁用表单控件派发鼠标事件），
+            所以提示挂在包裹层上，按钮本身仍保留真实 disabled 语义。 */}
+        <span
+          className="aw-new-session-wrap"
+          title={
+            widgetSessionBlocked
+              ? businessType
+                ? `「${businessType}」不支持手动发起会话；如需聊天机器人请申请开通`
+                : '该实例不支持手动发起会话；如需聊天机器人请申请开通'
+              : undefined
+          }
         >
-          新会话
-        </button>
+          <button
+            type="button"
+            className="aw-new-session"
+            disabled={widgetSessionBlocked}
+            onClick={() => void handleCreateSession()}
+          >
+            新会话
+          </button>
+        </span>
       </div>
 
       <div className="aw-main">
@@ -787,6 +819,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 </div>
               ) : null}
             </div>
+            {widgetSessionBlocked ? (
+              <div className="aw-business-autochat">
+                <div className="aw-business-autochat-label">--{businessType}自动会话--</div>
+                <div className="aw-business-autochat-hint">如需聊天机器人请申请开通</div>
+              </div>
+            ) : (
             <div className="aw-chat-input">
               {runActive ? (
                 <div className="aw-tl-divider">
@@ -871,6 +909,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 )}
               </div>
             </div>
+            )}
           </div>
         ) : (
           <div className="aw-empty">

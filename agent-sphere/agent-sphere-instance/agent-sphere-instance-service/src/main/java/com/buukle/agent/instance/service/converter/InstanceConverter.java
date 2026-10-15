@@ -24,6 +24,8 @@ public class InstanceConverter {
         vo.setImage(instance.getImage());
         vo.setStatus(instance.getStatus());
         vo.setBusinessType(instance.getBusinessType());
+        vo.setAllowConsoleSession(instance.getAllowConsoleSession());
+        vo.setAllowWidgetSession(instance.getAllowWidgetSession());
         vo.setMaxLoopCount(instance.getMaxLoopCount());
         vo.setConfig(instance.getConfig());
         vo.setCreatedAt(instance.getCreatedAt() != null ? instance.getCreatedAt().format(DTF) : null);
@@ -42,6 +44,11 @@ public class InstanceConverter {
         instance.setCustomInstructions(dto.getCustomInstructions());
         instance.setImage(dto.getImage());
         instance.setBusinessType(dto.getBusinessType());
+        // 两个来源开关刻意**不设默认值**：留 null 时 create 走库默认（主站放行/widget 禁止），
+        // update 则被 MyBatis-Plus 忽略、表示"不改动"。若在这里补默认值，任何一次不携带这两个字段的
+        // 更新都会把开关静默重置回默认，把管理员的选择抹掉。
+        instance.setAllowConsoleSession(dto.getAllowConsoleSession());
+        instance.setAllowWidgetSession(dto.getAllowWidgetSession());
         instance.setMaxLoopCount(normalizeLoop(dto.getMaxLoopCount()));
         instance.setConfig(normalizeConfig(dto.getConfig()));
         instance.setStatus(InstanceEnum.STATUS_ENABLED);
