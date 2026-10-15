@@ -283,9 +283,11 @@ export class CdpClient {
         // 落点精确：直接点元素坐标，不做像素抖动（见文件头拟人化参数说明）。
         const tx = Math.max(0, x);
         const ty = Math.max(0, y);
-        // 起点在目标附近（模拟"从旁边的上一次位置移过来"），无需额外查询视口尺寸
-        const sx = Math.max(0, tx + randInt(-120, 120));
-        const sy = Math.max(0, ty + randInt(-90, 90));
+        // 起点在目标附近（模拟"从旁边的上一次位置移过来"），无需额外查询视口尺寸。
+        // 约 1/5 的概率让起点更远一点：模拟指针"闲逛后移过来"，避免每次都是同样的短距离直线。
+        const far = Math.random() < 0.2;
+        const sx = Math.max(0, tx + randInt(far ? -260 : -120, far ? 260 : 120));
+        const sy = Math.max(0, ty + randInt(far ? -200 : -90, far ? 200 : 90));
         await this._moveMouse(tabId, sx, sy, tx, ty);
         await this.sendCommand(tabId, 'Input.dispatchMouseEvent', {
           type: 'mousePressed', x: tx, y: ty, button: 'left', clickCount: 1,
@@ -430,6 +432,10 @@ export class CdpClient {
         const size = await this._viewportSize(tabId);
         const cx = Math.round((size.w || 800) / 2);
         const cy = Math.round((size.h || 600) / 2);
+        // 滚动前先把指针移到视口内（真实用户是"鼠标停在页面上再滚"）：
+        // 直接对中心发 wheel 而无任何 mouseMoved，会缺掉滚动前的手势前奏。
+        await this._moveMouse(tabId, Math.max(0, cx + randInt(-150, 150)),
+          Math.max(0, cy + randInt(-120, 120)), cx, cy, 5);
         const total = amount || Math.max(Math.round((size.h || 600) * 0.8), 200);
         const segments = Math.max(2, Math.min(6, Math.round(total / 220)));
         const per = Math.round(total / segments);
