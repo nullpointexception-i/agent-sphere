@@ -1,5 +1,5 @@
 (function () {
-  const DEFAULT_SETTINGS = { frontendUrls: ['http://bole.buukle.top'], mainUrl: 'http://as.buukle.top', backendUrl: 'http://as.buukle.top', agentCursor: true, browserMetrics: false, browserMetricAudit: false, browserMetricSample: 5 };
+  const DEFAULT_SETTINGS = { frontendUrls: ['https://bole.buukle.top'], mainUrl: 'https://as.buukle.top', backendUrl: 'https://as.buukle.top', agentCursor: true, browserMetrics: false, browserMetricAudit: false, browserMetricSample: 5 };
 
   // Metrics tab state. Refresh only runs while the tab is open — the background
   // writes metrics on every action, and an always-on listener would re-render the
@@ -40,7 +40,7 @@
     const input = document.createElement('input');
     input.type = 'url';
     input.className = 'input-frontend';
-    input.placeholder = 'http://bole.buukle.top';
+    input.placeholder = 'https://bole.buukle.top';
     input.value = value || '';
     const btn = document.createElement('button');
     btn.type = 'button';
