@@ -44,46 +44,6 @@ const RISK_URL_PATTERNS = [/\/\/safe\./i, /captchaPage/i, /\/v\/intercept\//i];
 const RISK_TITLE_PATTERNS = [/验证码/, /安全中心/];
 const riskLockedSessions = new Set();
 
-// ---- 通用节奏与预算（站点无关）----
-// 策略（每一步的快慢）由渠道技能在提示词里描述；这里只做**运行时兜底**，让"提示词要求的节奏"
-// 真的被执行，而不是只在纸面上。刻意不绑定任何站点选择器（通用化）：按动作类别 + 通用词表判定。
-const THROTTLE_MS = {
-  read: 2000,      // 只读（getContent/readInput/wait/截图…）
-  write: 5000,     // 普通写（非提交类）
-  commit: 8000,    // 提交类：点搜索/确定/保存/应用…（这类动作常立刻重打搜索接口）
-  favorite: 30000, // 收藏类：间隔最长
-};
-const JITTER_RATIO = 0.3;                       // 每次间隔在 ±30% 内随机
-const POST_COMMIT_DWELL_MS = { min: 3000, max: 8000 }; // 提交类动作**之后**再停一下
-const EXECUTEJS_PER_SESSION_LIMIT = 8;          // 每会话 executeJS 次数上限
-// 通用词表（中英）：不看站点选择器，只看点击/输入目标的文本语义
-const COMMIT_WORDS = ['搜索', '查询', '确定', '确认', '保存', '应用', '筛选', '提交', '开始', '下一步'];
-const COMMIT_WORDS_EN = ['search', 'query', 'confirm', 'ok', 'save', 'apply', 'filter', 'submit', 'next'];
-const FAVORITE_WORDS = ['收藏', 'favorite'];
-
-let lastCommandAt = 0;
-const executeJsCountBySession = new Map();
-
-const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** 动作分类：read / write / commit / favorite —— 全文不看站点，只看动作与目标文本。 */
-function actionClass(action, params) {
-  const isWrite = WRITE_ACTIONS.has(action) || action === 'clickAt' || action === 'navigate';
-  if (!isWrite) return 'read';
-  const hint = `${(params && params.text) || ''} ${(params && params.selector) || ''}`.toLowerCase();
-  if (FAVORITE_WORDS.some((w) => hint.includes(w))) return 'favorite';
-  if (COMMIT_WORDS.some((w) => hint.includes(w))
-      || COMMIT_WORDS_EN.some((w) => hint.includes(w))) return 'commit';
-  return 'write';
-}
-
-/** 该类动作之间至少要间隔多少毫秒（含 ±JITTER_RATIO 抖动）。 */
-function throttleMsFor(cls) {
-  const base = THROTTLE_MS[cls] || THROTTLE_MS.write;
-  return Math.round(base * (1 - JITTER_RATIO + Math.random() * 2 * JITTER_RATIO));
-}
-
-
 async function detectRiskChallenge(tabId) {
   if (!tabId) return null;
   const tab = await chrome.tabs.get(tabId).catch(() => null);
@@ -340,23 +300,6 @@ async function executeInPage(commandId, action, params, sessionId) {
     return;
   }
 
-  // executeJS 预算：本会话次数上限。模型常用它注入读 DOM（实测一次任务 20+ 次），
-  // 这是最像"脚本"的行为特征。超限**直接失败并指导换工具**（不是重试）。
-  if (action === 'executeJS') {
-    const n = (executeJsCountBySession.get(sessionId) || 0) + 1;
-    executeJsCountBySession.set(sessionId, n);
-    if (n > EXECUTEJS_PER_SESSION_LIMIT) {
-      const res = failResult(
-        `本会话 executeJS 已达上限（${EXECUTEJS_PER_SESSION_LIMIT} 次）。`
-          + "请改用 getContent(mode:'extract'|'query'|'snapshot') 或 readInput 读取状态，不要重试 executeJS。",
-        'js_budget_exceeded',
-      );
-      res.data = { _executeJsCount: n };
-      sendCallbackSafe(commandId, res, checkTabId, sessionId);
-      return;
-    }
-  }
-
   if (commandInFlightAt && Date.now() - commandInFlightAt < COMMAND_LEASE_MS) {
     const elapsed = Date.now() - commandInFlightAt;
     const running = (commandActive && commandActive.action) || 'unknown';
@@ -375,27 +318,12 @@ async function executeInPage(commandId, action, params, sessionId) {
   commandInFlightAt = Date.now();
   commandActive = { action, at: commandInFlightAt };
   const t0 = Date.now();
-  const cls = actionClass(action, params);
   try {
-    // 节流地板：与上一命令**结束**时刻至少间隔 floor（含 ±30% 抖动）。
-    // 这才是把"技能里写的节奏"变成可执行约束的地方 —— 光写在提示词里模型不会遵守。
-    if (lastCommandAt > 0) {
-      const gap = Date.now() - lastCommandAt;
-      const floor = throttleMsFor(cls);
-      if (gap < floor) await sleepMs(floor - gap);
-    }
     await executeInPageInner(commandId, action, params, sessionId);
   } finally {
-    // 提交类动作（搜索/确定/保存…）之后**再停一下**：这类动作常立刻重打搜索接口，
-    // 是风控最敏感的节奏（实测最后一根稻草就是"点确认→立即重查"）。
-    if (cls === 'commit') {
-      await sleepMs(POST_COMMIT_DWELL_MS.min
-        + Math.random() * (POST_COMMIT_DWELL_MS.max - POST_COMMIT_DWELL_MS.min));
-    }
-    lastCommandAt = Date.now();
     commandInFlightAt = 0;
     commandActive = null;
-    console.log(`[ChromeCmd] action=${action} cls=${cls} tab=${params.tabId || tabManager.getControlled() || '-'} ms=${Date.now() - t0}`);
+    console.log(`[ChromeCmd] action=${action} tab=${params.tabId || tabManager.getControlled() || '-'} ms=${Date.now() - t0}`);
   }
 }
 
