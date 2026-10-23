@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/License-MIT-%23FF9900" alt="MIT"/>
 </p>
 
-<p align="center"><b><a href="http://as.buukle.top" target="_blank">🔗 线上预览 / Live Demo → as.buukle.top</a></b></p>
+<p align="center"><b><a href="https://as.buukle.top" target="_blank">🔗 线上预览 / Live Demo → as.buukle.top</a></b></p>
 <p align="center"><b>👤 演示账户 / Demo Account: <code>demo001</code> / <code>demo001</code></b></p>
 
 本项目是一个面向 AI Agent 编排平台。它通过 LLM 驱动的决策引擎，结合能力（内置工具、MCP 协议、CLI 执行、浏览器操作等），实现从**感知→规划→执行→反馈**的初级闭环。
@@ -623,11 +623,18 @@ npm run dev
 
 # 5. 配置 URL
 # 点击扩展图标 → Settings Tab
-# Frontend URLs（widget 宿主页，可多个）：http://bole.buukle.top
-# Main URL（主站）：                           http://as.buukle.top
-# Backend URL：                                http://as.buukle.top
+# Frontend URLs（widget 宿主页，可多个）：https://bole.buukle.top
+# Main URL（主站）：                           https://as.buukle.top
+# Backend URL：                                https://as.buukle.top
 # popup 只显示一个「Task」连接徽章，User 行显示 provider@subject
 ```
+
+> **扩展更新说明。** 扩展通过**加载已解压的扩展**安装，`manifest.json` 没有 `update_url`，
+> **Chrome 不会自动更新**。更新方式：从 GitHub Release 下载最新 zip → 覆盖原目录 →
+> `chrome://extensions` → **重新加载**（或重启 Chrome）。popup 会显示当前版本，并在后端的
+> `plugin.min-extension-version` 高于本地版本时展示升级提示。切换 https 之前保存的设置会在
+> service worker 下次启动时自动迁移 —— 只改写两个旧默认地址（`http://bole.buukle.top`、
+> `http://as.buukle.top`），自定义地址原样保留。
 
 ### 4.5 架构决策记录 (ADR)
 

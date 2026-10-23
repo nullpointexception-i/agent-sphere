@@ -91,9 +91,51 @@ startSseHost();
 let frontendUrls = [];
 let mainUrl = '';
 
+/**
+ * 曾作为默认值的地址（切 https 前的旧值）。
+ *
+ * <p>只做**精确匹配**改写：自定义域名、带端口的地址、灰度/内网地址一律不动。
+ * 用户若是故意保留 http（内部部署），也会被改写到 https —— 这两个域名就是公网生产地址，
+ * 此取舍可接受；需要 http 的用户重新填一次即可。
+ */
+const LEGACY_DEFAULT_URLS = {
+  'http://bole.buukle.top': 'https://bole.buukle.top',
+  'http://as.buukle.top': 'https://as.buukle.top',
+};
+
+/**
+ * 把 storage 里的旧默认地址迁移为 https；无需变更时返回 null。
+ *
+ * <p>幂等：迁移写回后旧字面量不再存在，下次调用返回 null，不会形成写-改-写循环。
+ */
+function upgradeLegacySettings(settings) {
+  if (!settings || typeof settings !== 'object') return null;
+  let changed = false;
+  const mapUrl = (u) => {
+    if (typeof u !== 'string') return u;
+    const hit = LEGACY_DEFAULT_URLS[u.trim()];
+    if (!hit) return u;
+    changed = true;
+    return hit;
+  };
+  const next = { ...settings };
+  if (Array.isArray(settings.frontendUrls)) next.frontendUrls = settings.frontendUrls.map(mapUrl);
+  if (settings.frontendUrl != null) next.frontendUrl = mapUrl(settings.frontendUrl);
+  if (settings.mainUrl != null) next.mainUrl = mapUrl(settings.mainUrl);
+  if (settings.backendUrl != null) next.backendUrl = mapUrl(settings.backendUrl);
+  return changed ? next : null;
+}
+
 function loadConfiguredUrls(done) {
   chrome.storage.local.get(['settings'], (data) => {
-    const s = data.settings || {};
+    // 一次性迁移：旧 http 默认值 → https。放在 service worker 的常驻启动路径上，
+    // 用户不开 popup 也会执行；popup 侧的 storage.onChanged 会随后自动重读重渲染。
+    const upgraded = upgradeLegacySettings(data.settings);
+    if (upgraded) {
+      chrome.storage.local.set({ settings: upgraded }).catch(() => {});
+      console.log('[AgentSphere] Migrated legacy http defaults to https');
+    }
+    const s = upgraded || data.settings || {};
     frontendUrls = Array.isArray(s.frontendUrls)
       ? s.frontendUrls.filter(Boolean)
       : s.frontendUrl

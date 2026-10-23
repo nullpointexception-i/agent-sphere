@@ -26,6 +26,13 @@
     .status-badge .dot { width: 7px; height: 7px; border-radius: 50%; }
     .status-badge.on .dot { background: #1a7f37; }
     .status-badge.off .dot { background: #cf222e; }
+    .update-banner { display: none; margin-bottom: 12px; padding: 9px 12px; border-radius: 10px; background: #fff8c5; color: #7d4e00; font-size: 12px; line-height: 1.5; }
+    .update-banner a { color: #0969da; font-weight: 600; text-decoration: none; margin-left: 4px; }
+    .update-banner a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) {
+      .update-banner { background: #3d2e00; color: #f0d58c; }
+      .update-banner a { color: #6cb6ff; }
+    }
     .tabs { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 1px solid #e8e8ed; }
     @media (prefers-color-scheme: dark) { .tabs { border-bottom-color: #38383a; } }
     .tab { flex: 1; padding: 8px 0; text-align: center; font-size: 13px; font-weight: 500; color: #8e8e93; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; user-select: none; }
@@ -163,6 +170,10 @@
       <span id="taskStatusBadge" class="status-badge off" style="margin-left:auto"><span class="dot"></span><span id="taskStatusText">Task Off</span></span>
     </div>
 
+    <div id="updateBanner" class="update-banner">
+      <span id="updateBannerText"></span><a id="updateBannerLink" href="#" target="_blank" rel="noreferrer">立即下载</a>
+    </div>
+
     <div class="tabs">
       <div class="tab active" data-tab="info">Info</div>
       <div class="tab" data-tab="metrics">Metrics</div>
@@ -178,6 +189,7 @@
         <div class="info-row"><span class="label">Frontend</span><span class="value" id="infoFrontend">-</span></div>
         <div class="info-row"><span class="label">Main</span><span class="value" id="infoMain">-</span></div>
         <div class="info-row"><span class="label">Backend</span><span class="value" id="infoBackend">-</span></div>
+        <div class="info-row"><span class="label">Version</span><span class="value" id="infoVersion">-</span></div>
       </div>
     </div>
 

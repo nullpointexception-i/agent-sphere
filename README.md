@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/License-MIT-%23FF9900" alt="MIT"/>
 </p>
 
-<p align="center"><b><a href="http://as.buukle.top" target="_blank">🔗 线上预览 / Live Demo → as.buukle.top</a></b></p>
+<p align="center"><b><a href="https://as.buukle.top" target="_blank">🔗 线上预览 / Live Demo → as.buukle.top</a></b></p>
 <p align="center"><b>👤 演示账户 / Demo Account: <code>demo001</code> / <code>demo001</code></b></p>
 
 This project is an AI  Agent orchestration platform. Driven by an LLM-based decision engine and combined with capabilities (built-in tools, MCP protocol, CLI execution, browser automation, etc.), it implements a primary closed loop of **Perception → Planning → Execution → Feedback**.
@@ -625,11 +625,19 @@ npm run dev
 
 # 5. Configure URLs
 # Click the extension icon → Settings Tab
-# Frontend URLs (widget host pages, multiple allowed): http://bole.buukle.top
-# Main URL (main site):                             http://as.buukle.top
-# Backend URL:                                      http://as.buukle.top
+# Frontend URLs (widget host pages, multiple allowed): https://bole.buukle.top
+# Main URL (main site):                             https://as.buukle.top
+# Backend URL:                                      https://as.buukle.top
 # The popup shows a single "Task" connection badge; the User row shows provider@subject
 ```
+
+> **Updating the extension.** It is installed via **Load unpacked** and `manifest.json` has no
+> `update_url`, so **Chrome does not auto-update it**. To update: download the latest zip from the
+> GitHub Release, replace the directory, then `chrome://extensions` → **Reload** (or restart Chrome).
+> The popup shows the current version and turns on a banner when the backend's
+> `plugin.min-extension-version` is higher than the installed one. Settings saved before the https
+> switch are migrated automatically on the next service-worker start — only the two former default
+> addresses (`http://bole.buukle.top`, `http://as.buukle.top`) are rewritten; custom URLs are kept.
 
 ### 4.5 Architecture Decision Records (ADR)
 

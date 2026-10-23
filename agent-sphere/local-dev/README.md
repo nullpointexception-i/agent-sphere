@@ -7,8 +7,8 @@
 1. **中间件**：`cd agent-sphere/agent-docker-middleware && docker compose up -d`
    （Postgres + Redis；volume 路径硬编码 macOS，非 Mac 需改/删）。
 2. **后端**：`cd agent-sphere && mvn -pl agent-sphere-bootstrap spring-boot:run -am`（:8080）。
-   - 迁移 V27–V30 自动执行。⚠️ V30 会把 `sso.base-url` 种子为 `http://as.buukle.top`，
-     本地改回本机后再重启后端：
+   - 迁移 V27–V30 自动执行。⚠️ V30 把 `sso.base-url` 种成 `http://as.buukle.top`，**V90 随后纠正为
+     `https://as.buukle.top`**；本地仍需改回本机后再重启后端：
      ```sql
      UPDATE agent_system_config SET config_value='http://localhost:8080' WHERE config_key='sso.base-url';
      ```

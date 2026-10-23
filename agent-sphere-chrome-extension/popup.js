@@ -1,6 +1,78 @@
 (function () {
   const DEFAULT_SETTINGS = { frontendUrls: ['https://bole.buukle.top'], mainUrl: 'https://as.buukle.top', backendUrl: 'https://as.buukle.top', agentCursor: true, browserMetrics: false, browserMetricAudit: false, browserMetricSample: 5 };
 
+  // ---- 版本与升级提示 ----
+  // 扩展是「Load unpacked」安装（Release 附件 zip），manifest 无 update_url，Chrome 不会自动更新。
+  // 后端通过公开配置 plugin.min-extension-version 声明最低要求版本，这里比对后提示用户重新下载。
+  // 注意：发布包版本由 deploy.yml 从 tag 生成（v1.0.NNN-alpha → 1.0.NNN）。
+  const CURRENT_VERSION = chrome.runtime.getManifest().version;
+  const UPDATE_CHECK_TTL_MS = 10 * 60 * 1000;
+  // render 会被 browserMetrics 等写入频繁触发，必须缓存，否则每次动作都会打一次公开配置接口
+  let updateCheckState = { key: '', at: 0 };
+
+  /** 按点分段比较版本号：返回 -1 / 0 / 1；缺失段按 0 处理。 */
+  function compareVersions(a, b) {
+    const pa = String(a || '').split('.').map((x) => parseInt(x, 10) || 0);
+    const pb = String(b || '').split('.').map((x) => parseInt(x, 10) || 0);
+    const n = Math.max(pa.length, pb.length);
+    for (let i = 0; i < n; i++) {
+      const x = pa[i] || 0;
+      const y = pb[i] || 0;
+      if (x !== y) return x < y ? -1 : 1;
+    }
+    return 0;
+  }
+
+  /** plugin.download-url 可能是相对路由（V47 起存 apiBase 相对路径），需要拼成绝对地址。 */
+  function resolveDownloadUrl(raw, backend) {
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    const base = (backend || '').replace(/\/+$/, '');
+    if (!base) return '';
+    return `${base}/api/v1${raw.startsWith('/') ? raw : `/${raw}`}`;
+  }
+
+  async function checkForUpdate(settings) {
+    const banner = document.getElementById('updateBanner');
+    if (!banner) return;
+    const backend = (settings && settings.backendUrl) || '';
+    if (!backend) {
+      banner.style.display = 'none';
+      return;
+    }
+    const now = Date.now();
+    if (updateCheckState.key === backend && now - updateCheckState.at < UPDATE_CHECK_TTL_MS) {
+      return; // 缓存期内不重复请求
+    }
+    updateCheckState = { key: backend, at: now };
+    try {
+      const url = `${backend.replace(/\/+$/, '')}/api/v1/system/config/public`
+        + '?keys=plugin.min-extension-version,plugin.download-url';
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const cfg = (await res.json()) || {};
+      const min = String(cfg['plugin.min-extension-version'] || '').trim();
+      if (!min || compareVersions(CURRENT_VERSION, min) >= 0) {
+        banner.style.display = 'none';
+        return;
+      }
+      document.getElementById('updateBannerText').textContent =
+        `扩展有新版本（当前 ${CURRENT_VERSION}，最低要求 ${min}）。请重新下载并 Reload。`;
+      const link = document.getElementById('updateBannerLink');
+      const dl = resolveDownloadUrl(String(cfg['plugin.download-url'] || '').trim(), backend);
+      if (dl) {
+        link.href = dl;
+        link.style.display = '';
+      } else {
+        link.style.display = 'none';
+      }
+      banner.style.display = '';
+    } catch (e) {
+      // 拉不到就不提示：升级提示是辅助信息，不能因网络或旧后端而骚扰用户
+      banner.style.display = 'none';
+    }
+  }
+
   // Metrics tab state. Refresh only runs while the tab is open — the background
   // writes metrics on every action, and an always-on listener would re-render the
   // whole popup (and reset list scroll) while the user reads it.
@@ -418,6 +490,9 @@
     document.getElementById('infoUser').textContent = data.displayName || (data.token ? 'Logged in' : '-');
     document.getElementById('infoTaskConn').textContent = taskConnected ? 'On' : 'Off';
     document.getElementById('infoBackend').textContent = settings.backendUrl || data.baseUrl || '-';
+    document.getElementById('infoVersion').textContent = CURRENT_VERSION;
+    // 升级提示：命中失败/无最低版本要求时静默隐藏（内部有 10 分钟缓存，render 频繁也不会刷接口）
+    void checkForUpdate(settings);
     document.getElementById('infoFrontend').textContent = frontendUrls.length ? frontendUrls.join(' , ') : '-';
     document.getElementById('infoMain').textContent = settings.mainUrl || '-';
 

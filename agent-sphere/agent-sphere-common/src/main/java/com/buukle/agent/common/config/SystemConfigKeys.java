@@ -12,6 +12,14 @@ public final class SystemConfigKeys {
     public static final String PLUGIN_DOWNLOAD_URL = "plugin.download-url";
     /** Chrome 插件应用市场（Chrome Web Store）下载地址；空则前端不展示应用市场选项 */
     public static final String PLUGIN_STORE_URL = "plugin.store-url";
+    /**
+     * Chrome 插件最低要求版本（如 {@code 1.0.118}）；空 = 不提示。
+     *
+     * <p>扩展 popup 用本机 {@code getManifest().version} 与之比较，低于它时展示升级提示。
+     * 发布包版本由 {@code deploy.yml} 从 tag 生成（{@code v1.0.NNN-alpha} → {@code 1.0.NNN}），
+     * 注意与仓库里 manifest.json 的字面版本无关。
+     */
+    public static final String PLUGIN_MIN_EXTENSION_VERSION = "plugin.min-extension-version";
     /** 默认资源模板（JSON 数组，新用户初始化时使用；留空则不初始化资源） */
     public static final String USER_RESOURCE_TEMPLATE = "user.resource-template";
     /** 全局 LLM 采样默认配置（JSON，与 instance/completions config 同形状；agent 链路全局兜底） */
@@ -30,7 +38,8 @@ public final class SystemConfigKeys {
     public static final String SKILL_SYNC_LOG_RETENTION_DAYS = "skill.sync-log-retention-days";
 
     /** 允许不经鉴权公开读取的配置键（仅安全/非敏感项） */
-    public static final java.util.Set<String> PUBLIC_KEYS = java.util.Set.of(PLUGIN_DOWNLOAD_URL, PLUGIN_STORE_URL);
+    public static final java.util.Set<String> PUBLIC_KEYS =
+            java.util.Set.of(PLUGIN_DOWNLOAD_URL, PLUGIN_STORE_URL, PLUGIN_MIN_EXTENSION_VERSION);
 
     private SystemConfigKeys() {}
 }
