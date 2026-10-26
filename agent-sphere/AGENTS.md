@@ -375,6 +375,29 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
   （`ToolExecutor` 直接调 `executeBuiltinTool`）。参数约束必须在 `execute` 里再守一道，
   否则非法入参会一路走到业务逻辑里静默产出错误结果（例：空 needle 会让 `String.contains("")` 返回 true）。
 
+## 模型供应商策略（ProviderStrategy）
+
+不同厂商对入参的宽容度不同，差异集中在 `agent-sphere-model-service/.../adapter/strategy/`：
+
+- `ProviderStrategy`：`getCompany()` / `adaptRequest()` / `adaptResponse()` / `extractToolCallsFromContent()`
+- `ProviderStrategyFactory`：**只按 `ModelProviderCompany.fromValue(company)` 选**，没有模型名兜底
+- 落地入口：`ChatRequestAdapter.adapt(request, company)` 与 `ChatResponseAdapter`
+- 现有实现：`Deepseek` / `Openai` / `Zhipu(GLM)` / `OrcaRouter` / `Qwen`
+
+`company` 来自路由配置（`ModelRouteDrawer` 的下拉由 `GET /model/providers/companies` 动态生成，
+新增枚举值会自动出现）。**新增厂商只要加枚举 + `@Component` 策略即可，前端无需改动。**
+
+- **`ChatMessageDTO` 是类级 `@JsonInclude(NON_NULL)`，所以策略里把字段设成 `null` 是无效的** ——
+  Jackson 仍会省略该键。要让某个键出现在请求体里，策略只能填**非 null 值（空串）**。
+  这条直接决定了 Qwen 兼容的写法。
+- **Qwen（`qwen`）必须显式选用**：Qwen3 的网关（vLLM / PAI-EAS）把 assistant 消息的
+  `content`、`reasoning_content` 视为「键必须存在」，而只带 `tool_calls` 的 assistant 消息
+  因为 content 为 null 会把整个键省略 → 400 `Field required`。`QwenProviderStrategy` 对这类
+  消息补空串。**路由的 Company 必须设为 `qwen`**，否则会走 OpenAI 策略、修复不生效
+  （刻意没做模型名前缀兜底，避免"看起来生效了其实走的是另一条策略"）。
+- Qwen3 是 OpenAI 兼容接口，`thinking` / `tool_stream` 是本系统给智谱/DeepSeek 的内部字段，
+  策略里剔除；SSE delta 解析与 OpenAI 一致。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).

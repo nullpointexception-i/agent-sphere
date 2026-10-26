@@ -10,6 +10,7 @@ public enum ModelProviderCompany {
     OPENAI("OpenAI", "OpenAI", "openai"),
     GLM("GLM", "智谱", "GLM"),
     ORCAROUTER("OrcaRouter", "OrcaRouter", "orcarouter"),
+    QWEN("Qwen", "通义千问", "qwen"),
     ;
 
     private final String nameEn;
