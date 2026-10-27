@@ -21,10 +21,14 @@ import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
+import com.buukle.agent.util.json.JsonUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.buukle.agent.model.dtvo.complete.FinishReason;
 import com.buukle.agent.runtime.kernel.contract.TurnResult;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
@@ -203,6 +207,11 @@ public class SessionRunner {
         LoopLimitSource loopSource = loopLimit.source();
         log.info("Run {} execution source={}, effective loop limit={}", currentRunId, loopSource, maxLoopCount);
         int compactionRetries = 0;
+        // L2：进入 agentic 流程之后，「本轮没有任何工具调用」不再是完成信号。
+        // toolsEverExecuted 从已持久化的 loopCount 起步 —— loopCount 只在工具轮自增，
+        // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
+        boolean toolsEverExecuted = loopCount > 0;
+        int silentTurns = 0;
         loop:
         while (loopCount < maxLoopCount) {
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
@@ -275,6 +284,7 @@ public class SessionRunner {
             // 硬收口则提前 FINAL_TURN_INSTRUCTION_LEAD 轮，两者刻意不同。
             boolean isLastLoop = loopCount >= maxLoopCount - 1;
             applyLoopBudget(messages, loopCount, maxLoopCount);
+            applySilentTurnNudge(messages, silentTurns);
 
             AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
             TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef);
@@ -332,6 +342,28 @@ public class SessionRunner {
                     break loop;
                 }
                 case COMPLETE -> {
+                    // L2：agentic 流程里的沉默不是完成。模型必须以 finish 显式收口；
+                    // 连续静默超过上限就判失败 —— 否则「只说了几句就放弃」会被记成成功。
+                    if (toolsEverExecuted) {
+                        if (silentTurns < RunnerConstants.MAX_SILENT_TURNS) {
+                            silentTurns++;
+                            log.warn("Run {} ended a turn without any tool call (silent turn {}/{})",
+                                    currentRunId, silentTurns, RunnerConstants.MAX_SILENT_TURNS);
+                            continue;
+                        }
+                        log.warn("Run {} kept replying without tools for {} turn(s); failing it",
+                                currentRunId, silentTurns);
+                        currentRun.setStatus(RunStatus.FAILED.name());
+                        runSpi.updateRun(currentRun);
+                        eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
+                                new RuntimeEventDataVO()
+                                        .setSessionId(sessionId)
+                                        .setRunId(currentRunId)
+                                        .setErrorMessage("模型连续 " + silentTurns
+                                                + " 轮未调用任何工具，也未调用 finish 收口")
+                                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                        break loop;
+                    }
                     // 注意：这里<b>不能</b>置 loopCapped。走到本分支说明模型在最后一轮主动交付了答案，
                     // 那是一次正常完成，不是被上限截断。旧实现在此也置 loopCapped，导致
                     // 「恰好在最后一轮收工」与「被截断出半成品」被混为一谈；任务守卫
@@ -437,6 +469,65 @@ public class SessionRunner {
             // Check for cancellation before ANY tool submission
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                 break;
+            }
+
+            // finish：模型显式声明任务完成 —— agentic run 的唯一合法结束方式。
+            // 必须在提交任何工具之前处理：同轮其它工具不执行（避免"边收尾边产生副作用"）。
+            // 它们的 PENDING 记录已由 runTurn 的 PENDING 事件创建，必须各自补一条 FAILED 关闭，
+            // 否则 timeline 会永久停在 PENDING。本分支也先于 isLastLoop 的 markLoopCapped，
+            // 保证「最后一轮 finish」是一次干净完成、不被标成 loop cap。
+            TurnToolCall finishCall = null;
+            for (TurnToolCall tcc : turn.toolCalls()) {
+                if (FinishConstants.TOOL_NAME.equals(tcc.name())) {
+                    finishCall = tcc;
+                    break;
+                }
+            }
+            if (finishCall != null) {
+                for (TurnToolCall other : turn.toolCalls()) {
+                    if (other == finishCall) {
+                        continue;
+                    }
+                    log.warn("Discarding tool call {} from a finish turn (run {})", other.name(), currentRunId);
+                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setToolName(other.name())
+                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(other.name(), tools))
+                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(other.name(), tools))
+                                    .setErrorMessage("skipped: finish was called in the same turn")
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + other.id())));
+                }
+                // 关闭 finish 自身的 PENDING 记录
+                eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(currentRunId)
+                                .setToolName(finishCall.name())
+                                .setDisplayNameCn(FinishConstants.DISPLAY_NAME_CN)
+                                .setDisplayNameEn(FinishConstants.DISPLAY_NAME)
+                                .setArgumentsJson(finishCall.arguments())
+                                .setArtifact(finishCall.arguments())
+                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + finishCall.id())));
+                String declaredSummary = jsonField(finishCall.arguments(), FinishConstants.JSON_SUMMARY);
+                String declaredStatus = jsonField(finishCall.arguments(), FinishConstants.JSON_STATUS);
+                String reply = declaredSummary != null && !declaredSummary.isBlank()
+                        ? declaredSummary
+                        : (allContent.length() > 0 ? allContent.toString() : turnReasoningRef.get());
+                if (reply != null && !reply.isBlank()) {
+                    currentRun.setAssistantReply(reply);
+                }
+                currentRun.setStatus(RunStatus.COMPLETED.name());
+                runSpi.updateRun(currentRun);
+                eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(currentRunId)
+                                .setAssistantReply(currentRun.getAssistantReply())
+                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                log.info("Run {} finished by finish tool: declaredStatus={}", currentRunId, declaredStatus);
+                break loop;
             }
 
             for (int i = 0; i < turn.toolCalls().size(); i++) {
@@ -546,6 +637,8 @@ public class SessionRunner {
             }
 
             hasToolCalls = true;
+            toolsEverExecuted = true;
+            silentTurns = 0;
             loopCount++;
         }
 
@@ -633,6 +726,25 @@ public class SessionRunner {
      * 在最后一轮才收工，只给 1 轮收尾太紧（详见 {@link RunnerConstants#FINAL_TURN_INSTRUCTION_LEAD}）。
      * 它是<b>持续</b>注入的 —— 一旦进入该窗口，n-2、n-1 同样携带，直到本方法每轮重建时重新判定。
      */
+    /**
+     * 静默追问：本轮没有工具调用时，给模型一条尾部提示（marker 定位，每轮替换而不是累积）。
+     *
+     * <p>只对已经进入 agentic 流程的 run 生效 —— 纯聊天实例（从未用过工具）保持「回文本即完成」。
+     */
+    private void applySilentTurnNudge(List<ChatMessageDTO> messages, int silentTurns) {
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+        messages.removeIf(m -> m.getContent() instanceof String t
+                && t.startsWith(RunnerConstants.SILENT_TURN_NUDGE_PREFIX));
+        if (silentTurns <= 0) {
+            return;
+        }
+        messages.add(new ChatMessageDTO()
+                .setRole(LlmApiConstant.ROLE_SYSTEM)
+                .setContent(RunnerConstants.SILENT_TURN_NUDGE_PREFIX + RunnerConstants.SILENT_TURN_NUDGE_TEXT));
+    }
+
     private void applyLoopBudget(List<ChatMessageDTO> messages, int loopCount, int maxLoopCount) {
         if (messages == null || messages.isEmpty()) {
             return;
@@ -748,6 +860,9 @@ public class SessionRunner {
             List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
             AtomicReference<String> errorRef = new AtomicReference<>();
             AtomicReference<String> reasoningRef = new AtomicReference<>("");
+            // 本次尝试的真实 finish_reason（stop/length/content_filter/tool_calls），供调用方区分
+            // 「模型主动停」与「被截断/被过滤」。
+            AtomicReference<String> finishReasonRef = new AtomicReference<>();
             java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
             java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -837,6 +952,7 @@ public class SessionRunner {
                                                         .setArgumentsJson(tc.arguments())
                                                         .setPublishId(callPublishId)));
                                     }
+                                    case LLMEvent.Finish f -> finishReasonRef.set(f.reason());
                                     case LLMEvent.Error e -> errorRef.set(e.message());
                                     default -> {
                                     }
@@ -904,16 +1020,41 @@ public class SessionRunner {
                 continue;
             }
             turnReasoningOut.set(reasoningRef.get());
+            String finishReason = finishReasonRef.get();
             if (error != null) {
-                return TurnResult.error(error);
+                return TurnResult.error(error).withFinishReason(finishReason);
             }
             if (!toolCalls.isEmpty()) {
-                return TurnResult.toolCalls(getTurnContent(contentRef), toolCalls);
+                // 工具轮：即使正文被截断，工具参数已完整或本就不可用，按正常工具轮继续
+                return TurnResult.toolCalls(getTurnContent(contentRef), toolCalls).withFinishReason(finishReason);
             }
-            return TurnResult.complete(getTurnContent(contentRef));
+            // 没有工具调用却「非正常结束」→ 不能当完成（否则半截答案会被标 COMPLETED）
+            if (FinishReason.LENGTH.equals(finishReason)) {
+                return TurnResult.error("output truncated by max_tokens (finish_reason=length): "
+                        + "raise max_tokens or shorten the requested answer")
+                        .withFinishReason(finishReason);
+            }
+            if (FinishReason.CONTENT_FILTER.equals(finishReason)) {
+                return TurnResult.error("output blocked by content filter (finish_reason=content_filter)")
+                        .withFinishReason(finishReason);
+            }
+            return TurnResult.complete(getTurnContent(contentRef)).withFinishReason(finishReason);
         }
         turnReasoningOut.set("");
         return TurnResult.error("LLM turn retries exhausted");
+    }
+
+    /** 读取工具入参里的字符串字段；缺失/非法一律返回 null（收口逻辑要能容忍脏入参）。 */
+    private static String jsonField(String argumentsJson, String field) {
+        if (argumentsJson == null || argumentsJson.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = JsonUtils.getMapper().readTree(argumentsJson).path(field);
+            return node.isMissingNode() || node.isNull() ? null : node.asText();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String getTurnContent(AtomicReference<String> contentRef) {

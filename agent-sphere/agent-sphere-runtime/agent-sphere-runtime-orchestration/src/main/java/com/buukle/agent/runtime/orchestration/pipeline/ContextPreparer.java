@@ -4,6 +4,7 @@ import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.capability.builtin.dtvo.vo.BuiltinToolVO;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
 import com.buukle.agent.capability.cli.spi.CapabilityCliSpi;
@@ -44,6 +45,7 @@ public class ContextPreparer {
     private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (clear, friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"confirm=yes/no; choice=provide 2-5 concise distinct options; input=free-form answer\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Short display text shown to the user (max ~20 chars, a concise option phrase, NOT a full sentence, NOT placeholder like 'http://')\"},\"value\":{\"type\":\"string\",\"description\":\"Machine value sent back to the agent when the user picks this option\"},\"description\":{\"type\":\"string\",\"description\":\"Optional short explanation for the option\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"description\":\"2-5 concise, distinct choices (required when type=choice). No duplicates, no placeholder URLs, no full sentences.\"},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"}},\"required\":[\"title\",\"type\"]}";
 
     private static final String WAIT_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"ms\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":600000,\"description\":\"Milliseconds to wait (100-600000). The run suspends immediately and resumes automatically afterwards. Use it to give dynamic content time to appear or settle.\"}},\"required\":[\"ms\"],\"additionalProperties\":false}";
+    private static final String FINISH_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"enum\":[\"success\",\"failed\",\"blocked\"],\"description\":\"success=work done and verified; failed=tried but could not complete; blocked=cannot proceed without something external (login/permission/missing data)\"},\"summary\":{\"type\":\"string\",\"description\":\"Complete, self-contained answer for the user; the run's final reply is taken from it\"}},\"required\":[\"status\",\"summary\"],\"additionalProperties\":false}";
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
     private final CapabilitySkillSpi skillSpi;
@@ -208,6 +210,26 @@ public class ContextPreparer {
                     .description(WaitConstants.DESCRIPTION)
                     .parametersSchemaJson(WAIT_PARAM_SCHEMA)
                     .execBinding(waitBinding).build());
+        }
+        // 默认注册 finish：agentic run 的唯一合法结束方式。
+        // 「没有工具调用」既可能是做完、也可能是放弃，只靠沉默无法区分 —— finish 让它变成显式声明。
+        // 纯聊天实例（无任何真实能力且非自主任务）不下发，避免模型用 terse summary 顶替正常回答；
+        // 运行期还会用「是否真的用过工具」再兜一层（SessionRunner）。
+        if (noClarification || (capabilities != null && !capabilities.isEmpty())) {
+            long finishId = BuiltinToolEnum.FINISH.getId();
+            Map<String, Object> finishBinding = new HashMap<>();
+            finishBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, FinishConstants.INTERNAL_NAME);
+            result.add(RuntimeTool.builder()
+                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                    .capabilityId(finishId)
+                    .llmToolName(LLM_PREFIX_BUILTIN + finishId)
+                    .toolRef(ToolRefs.builtin(FinishConstants.INTERNAL_NAME))
+                    .displayName(FinishConstants.DISPLAY_NAME)
+                    .displayNameCn(FinishConstants.DISPLAY_NAME_CN)
+                    .displayNameEn(FinishConstants.DISPLAY_NAME)
+                    .description(FinishConstants.DESCRIPTION)
+                    .parametersSchemaJson(FINISH_PARAM_SCHEMA)
+                    .execBinding(finishBinding).build());
         }
         Set<String> seen = new HashSet<>();
         List<RuntimeTool> deduped = new ArrayList<>();

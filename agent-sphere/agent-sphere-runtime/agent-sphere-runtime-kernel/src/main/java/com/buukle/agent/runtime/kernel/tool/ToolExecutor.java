@@ -11,6 +11,7 @@ import com.buukle.agent.instance.spi.PendingWaitSpi;
 import com.buukle.agent.instance.spi.SessionTodoSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.runtime.kernel.contract.CliExecutionBinding;
@@ -121,6 +122,24 @@ public class ToolExecutor {
                 } catch (Exception e) {
                     log.warn("Failed to process ask_clarification", e);
                     return JSON_ERROR_CLARIFICATION;
+                }
+            }
+
+            // finish：正常收口在 SessionRunner 里完成（直接读入参并短路结束循环）。
+            // 这里只做兜底 —— 万一有人直接执行它，返回一个明确结果而不是 "Unknown builtin tool"。
+            if (CAPABILITY_TYPE_BUILTIN.equals(type) && FinishConstants.TOOL_NAME.equals(tc.name())) {
+                try {
+                    JsonNode argsNode = JSON.readTree(args);
+                    String finishStatus = argsNode.path(FinishConstants.JSON_STATUS)
+                            .asText(FinishConstants.RESULT_SUCCESS);
+                    String summary = argsNode.path(FinishConstants.JSON_SUMMARY).asText("");
+                    return JSON.writeValueAsString(Map.of(
+                            FinishConstants.JSON_STATUS, FinishConstants.STATUS_FINISHED,
+                            FinishConstants.JSON_FINISH_STATUS, finishStatus,
+                            FinishConstants.JSON_SUMMARY, summary));
+                } catch (Exception e) {
+                    log.warn("Failed to process finish", e);
+                    return "{\"status\":\"" + FinishConstants.STATUS_FINISHED + "\"}";
                 }
             }
 

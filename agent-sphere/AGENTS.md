@@ -398,6 +398,43 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 - Qwen3 是 OpenAI 兼容接口，`thinking` / `tool_stream` 是本系统给智谱/DeepSeek 的内部字段，
   策略里剔除；SSE delta 解析与 OpenAI 一致。
 
+## run 的结束判据：沉默不是完成（L0/L1/L2）
+
+旧循环把「模型没有调用工具」当作完成 —— 这是个**二义信号**：既可能是做完了，也可能是模型只说了几句
+就放弃。后者会被记成成功（静默失败）。现在的判据是三分支：
+
+| 本轮输出 | 判定 |
+|---|---|
+| 含 `finish` 工具调用 | 完成（用声明的 `summary` 作为回复） |
+| 有其它工具调用 | 继续 |
+| 完全没有工具调用（且**已用过工具**） | 异常：追问，连续超限判 FAILED |
+| 完全没有工具调用（**从未用过工具**，纯聊天） | 仍按完成 —— 保住问答体验 |
+
+**L0 · `finish_reason` 必须透传。** `ModelProviderServiceImpl` 过去把流结束的终止原因硬编码成 `stop`，
+于是 `length`（被 max_tokens 截断）与 `content_filter`（被安全策略拦截）跟「主动说完」无法区分，
+半截答案被标 COMPLETED。现在保留真实原因（`FinishReason`，model-dtvo），`SessionRunner.runTurn`
+在**没有工具调用**时把 `length`/`content_filter` 判为该轮 ERROR；有工具调用则照常继续
+（工具参数已完整或本就不可用）。
+
+**L1 · `finish` 是 agentic run 的唯一合法结束方式。** 形态照 `wait`/`ask_clarification`：
+`FinishConstants` + 手写 schema + `ContextPreparer` 注册 + `ToolExecutor` 兜底拦截，**无 SPI bean、无 DB seed**。
+
+- 注册条件 `noClarification || capabilities 非空`：纯聊天实例不下发，避免模型用 terse summary 顶替正常回答。
+- `SessionRunner` 在**提交 fibers 之前**短路：只处理 `finish`，同轮其它工具**不执行**；但它们的
+  PENDING 记录已由 `runTurn` 的 PENDING 事件创建，必须各补一条 FAILED 关闭，否则 timeline 永久停在 PENDING。
+- 该分支必须先于 `isLastLoop` 的 `markLoopCapped` —— 最后一轮调 `finish` 是干净完成，不能被标
+  `loopCapped`（否则任务守卫 `AgentTaskServiceImpl` 判 task FAILED，把完整产出丢掉）。
+- `finish(status=failed|blocked)` **仍置 run COMPLETED**，状态只体现在 finish 的工具记录与 summary 里，
+  保住任务的结构化提炼链路。
+- **子 Agent 不接 `finish`**（`SessionSubRunner#filterTools` 剔除），收口判定只在主循环。
+
+**L2 · 静默追问。** `toolsEverExecuted` 从**已持久化的 `loopCount`** 起步（`loopCount` 只在工具轮自增，
+所以跨挂起恢复依然成立）。沉默时追加一条尾部 system 提示（`SILENT_TURN_NUDGE_PREFIX` marker，
+每轮**替换而非累积**），超过 `MAX_SILENT_TURNS` 判 FAILED。
+
+**硬收口文案必须豁免 `finish`。** `FINAL_TURN_INSTRUCTION` 现在写的是「除 `finish` 外不得再调用任何工具」——
+否则最后几轮会被禁止走唯一合法的结束路径。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).

@@ -10,7 +10,8 @@ public enum BuiltinToolEnum {
     SKILL_LIBRARY(8),
     SKILL_MANAGE(9),
     WAIT(10),
-    TEXT_CONTAINS(11);
+    TEXT_CONTAINS(11),
+    FINISH(12);
 
     private final int id;
 

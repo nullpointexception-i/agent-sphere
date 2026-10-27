@@ -14,6 +14,7 @@ import com.buukle.agent.capability.mcp.service.impl.CapabilityMcpServiceImpl;
 import com.buukle.agent.capability.mcp.service.mcp.McpTransportFactory;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.common.mcp.TaskMcpCredentialStore;
@@ -86,6 +87,7 @@ class ParallelSearchAgentLoopTest {
     private static final String FETCH = "web_fetch";
     private static final String SEARCH_CALL = "search-call";
     private static final String FETCH_CALL = "fetch-call";
+    private static final String FINISH_CALL = "finish-call";
     private static final String OBJECTIVE = "Find the official MCP Streamable HTTP transport documentation";
     private static final String QUERY = "site:modelcontextprotocol.io specification Streamable HTTP transports";
     private static final String FIXTURE_PAGE = "https://modelcontextprotocol.io/specification/2025-11-25/basic/transports";
@@ -289,6 +291,9 @@ class ParallelSearchAgentLoopTest {
                         String answer = selectedUrl.get() + "\n" + text.substring(0, Math.min(240, text.length()));
                         finalAnswer.set(answer);
                         events.accept(new LLMEvent.TextDelta(answer));
+                        // agentic 流程只能用 finish 显式收口：只回文本会被判为「静默」并追问/失败
+                        events.accept(new LLMEvent.ToolCall(FINISH_CALL, FinishConstants.TOOL_NAME,
+                                JSON.createObjectNode().put("status", "success").put("summary", answer).toString()));
                     } else {
                         fail("Unexpected model turn: " + turn);
                     }

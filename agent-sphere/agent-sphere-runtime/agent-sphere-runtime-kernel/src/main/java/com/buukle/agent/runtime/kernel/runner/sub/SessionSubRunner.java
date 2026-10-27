@@ -22,6 +22,7 @@ import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
@@ -540,6 +541,11 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
             // 子 Agent 路径没有那套检测。若放行，ToolExecutor 仍会建 pending 记录并返回
             // {"status":"waiting"}，但没人去认领它 —— 变成一次静默的空等。
             if (tool.getToolRef().equals(ToolRefs.builtin(WaitConstants.INTERNAL_NAME))) {
+                continue;
+            }
+            // 同理不接 finish：显式收口（COMPLETED + summary）的判定只存在于主 SessionRunner 循环，
+            // 子 Agent 放行会落到 ToolExecutor 的兜底分支，返回一个没人消费的 finished 结果。
+            if (tool.getToolRef().equals(ToolRefs.builtin(FinishConstants.INTERNAL_NAME))) {
                 continue;
             }
             result.add(tool);

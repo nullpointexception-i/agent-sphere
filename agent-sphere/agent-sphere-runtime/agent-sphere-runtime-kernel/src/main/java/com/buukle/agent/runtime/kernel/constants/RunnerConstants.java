@@ -114,8 +114,8 @@ public final class RunnerConstants {
      */
     public static final String FINAL_TURN_INSTRUCTION =
             "\n\n**IMPORTANT: You are approaching the hard loop limit. From now on you must NOT call any more"
-                    + " tools. Use your remaining turns to deliver a complete, well-structured final answer,"
-                    + " then stop.**";
+                    + " tools except `finish`. Use your remaining turns to deliver a complete, well-structured"
+                    + " final answer, then call `finish(status, summary)` to end the run.**";
 
     /**
      * 每轮 loop 预算预告的 marker：同时用于「跨轮定位并清除上一轮副本」与文案前缀。
@@ -126,6 +126,21 @@ public final class RunnerConstants {
      * 必须每轮先按本 marker 全部清除再在尾部重新追加，保证全列表恒只有一份。
      */
     public static final String LOOP_BUDGET_PREFIX = "\n\n[LOOP BUDGET] ";
+
+    /**
+     * 静默追问上限：用过工具之后，连续这么多轮「没有任何工具调用」即判 run 失败。
+     *
+     * <p>「没有工具调用」是二义信号（做完 / 放弃），agentic 流程里只允许用 {@code finish} 显式收口，
+     * 所以沉默只能是异常。给 2 轮容错是照顾小模型偶发的「只说不做」。
+     */
+    public static final int MAX_SILENT_TURNS = 2;
+
+    /** 静默追问消息的 marker（每轮重建尾部时据此清理旧副本，避免累积）。 */
+    public static final String SILENT_TURN_NUDGE_PREFIX = "\n\n[NO TOOL CALL] ";
+
+    public static final String SILENT_TURN_NUDGE_TEXT =
+            "You ended your turn WITHOUT calling any tool. If the task is complete you MUST call `finish(status, summary)`;"
+                    + " otherwise continue by calling the next tool. Replying with plain text alone is treated as an error.";
 
     /** 剩余轮数低于该值时，预算预告追加一句紧迫提醒（模型对「还剩 100 轮」无感，需要显式推一把）。 */
     public static final int LOOP_BUDGET_LOW_THRESHOLD = 5;

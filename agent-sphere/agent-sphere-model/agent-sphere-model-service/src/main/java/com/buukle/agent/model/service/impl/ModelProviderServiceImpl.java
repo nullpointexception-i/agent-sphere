@@ -142,6 +142,9 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 }
             }
             int chunkCount = 0;
+            // 本次流里最后一个非空 finish_reason：OpenAI 兼容接口只在最后一个 chunk 给，
+            // 过去这里被丢弃、结束时硬编码成 "stop"，导致 length（截断）/content_filter 被当成正常完成。
+            String lastFinishReason = null;
             java.util.concurrent.Future<?> readTimeoutFuture = null;
             try {
                 StringBuilder contentBuilder = new StringBuilder();
@@ -199,7 +202,11 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                                     JsonNode choice = chunk.get(LlmApiConstants.FIELD_CHOICES).get(0);
                                     if (choice.has(LlmApiConstants.FIELD_FINISH_REASON)
                                             && !choice.get(LlmApiConstants.FIELD_FINISH_REASON).isNull()) {
-                                        log.debug("LLM finish_reason: {}", choice.get(LlmApiConstants.FIELD_FINISH_REASON).asText());
+                                        String finishReason = choice.get(LlmApiConstants.FIELD_FINISH_REASON).asText();
+                                        if (finishReason != null && !finishReason.isBlank()) {
+                                            lastFinishReason = finishReason;
+                                        }
+                                        log.debug("LLM finish_reason: {}", finishReason);
                                     }
                                     JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
                                     if (delta != null) {
@@ -255,7 +262,14 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}, usage={}",
                         modelName, chunkCount, content.length(), reasoning.length(),
                         usage.isEmpty() ? "-" : usage.getOrDefault("total_tokens", "-"));
-                onEvent.accept(new LLMEvent.Finish(LlmApiConstants.FINISH_REASON_STOP, usage));
+                String finishReason = lastFinishReason != null && !lastFinishReason.isBlank()
+                        ? lastFinishReason : com.buukle.agent.model.dtvo.complete.FinishReason.STOP;
+                if (!com.buukle.agent.model.dtvo.complete.FinishReason.STOP.equals(finishReason)
+                        && !com.buukle.agent.model.dtvo.complete.FinishReason.TOOL_CALLS.equals(finishReason)) {
+                    log.warn("LLM stream ended with abnormal finish_reason: model={}, reason={}, chunks={}",
+                            modelName, finishReason, chunkCount);
+                }
+                onEvent.accept(new LLMEvent.Finish(finishReason, usage));
                 onDone.run();
                 if (readTimeoutFuture != null) {
                     readTimeoutFuture.cancel(false);
