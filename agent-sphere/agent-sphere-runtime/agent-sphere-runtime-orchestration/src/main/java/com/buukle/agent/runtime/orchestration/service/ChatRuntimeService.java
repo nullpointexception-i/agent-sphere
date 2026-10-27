@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.orchestration.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentPendingClarification;
@@ -157,6 +158,10 @@ public class ChatRuntimeService {
      * <p>调用方必须已用 {@code PendingWaitSpi#claimForResume} 抢占成功。
      */
     public ResumeOutcome resumeFromWait(PendingWaitVO wait) {
+        // 只被后台唤醒/对账路径调用：清掉线程可能继承来的租户，
+        // 否则 DataPermission 会用别人的 created_by 过滤，run 直接读成 null。
+        TenantUtil.stop();
+        AuthContext.clear();
         Long sessionId = wait.getSessionId();
         Long runId = wait.getRunId();
         boolean submitted = false;

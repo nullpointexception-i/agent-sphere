@@ -39,7 +39,7 @@ public class WaitingRunReconciler {
     private final RedissonClient redissonClient;
 
     /** 判定"卡住"的阈值：大于 MAX_WAIT_MS(10min)，避免抢救正常的长 wait。 */
-    @Value("${buukle.agent.wait.reconcile-stale-minutes:15}")
+    @Value("${buukle.agent.wait.reconcile-stale-minutes:11}")
     private long staleMinutes;
 
     public WaitingRunReconciler(RunSpi runSpi, PendingWaitSpi pendingWaitSpi,
@@ -50,8 +50,10 @@ public class WaitingRunReconciler {
         this.redissonClient = redissonClient;
     }
 
-    @Scheduled(fixedDelayString = "${buukle.agent.wait.reconcile-interval:PT60S}")
+    @Scheduled(fixedDelayString = "${buukle.agent.wait.reconcile-interval:PT30S}")
     public void reconcile() {
+        // 对账是后台动作：清掉调度线程可能残留的租户，否则 findStaleByStatus 会被 created_by 过滤。
+        PendingWaitWakeScheduler.clearInheritedContext();
         boolean locked = false;
         try {
             locked = redissonClient.getLock(LOCK_KEY).tryLock(0, LOCK_LEASE.toMillis(), TimeUnit.MILLISECONDS);

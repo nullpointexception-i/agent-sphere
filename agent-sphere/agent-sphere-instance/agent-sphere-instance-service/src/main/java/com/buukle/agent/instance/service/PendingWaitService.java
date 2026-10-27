@@ -87,6 +87,23 @@ public class PendingWaitService implements PendingWaitSpi {
     }
 
     @Override
+    public boolean releaseClaim(Long waitId) {
+        if (waitId == null) {
+            return false;
+        }
+        // 单条原子 UPDATE：回读失败（本方法要救的正是这种情况）也照样能把记录放回队列。
+        int updated = waitMapper.update(null, new LambdaUpdateWrapper<AgentPendingWait>()
+                .eq(AgentPendingWait::getId, waitId)
+                .eq(AgentPendingWait::getStatus, WaitConstants.RESUMED_STATUS)
+                .lt(AgentPendingWait::getAttempts, WaitConstants.MAX_RESUME_ATTEMPTS)
+                .set(AgentPendingWait::getStatus, WaitConstants.PENDING_STATUS)
+                .set(AgentPendingWait::getResumedAt, null)
+                .set(AgentPendingWait::getLastError, truncate("claim released: record unreadable"))
+                .setSql("attempts = attempts + 1"));
+        return updated > 0;
+    }
+
+    @Override
     public void markTerminal(Long waitId, String status, String error) {
         if (waitId == null) {
             return;

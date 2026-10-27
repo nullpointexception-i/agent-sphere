@@ -1,6 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
@@ -31,8 +32,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -88,6 +91,7 @@ class WaitResumeOutcomeTest {
     @AfterEach
     void tearDown() {
         AuthContext.clear();
+        TenantUtil.stop();
     }
 
     private static PendingWaitVO pendingWait() {
@@ -111,6 +115,22 @@ class WaitResumeOutcomeTest {
 
         assertEquals(ChatRuntimeService.ResumeOutcome.ERROR, service.resumeFromWait(pendingWait()));
         verify(pendingWaitSpi, never()).markTerminal(any(), anyString(), anyString());
+    }
+
+    @Test
+    void resumeFromWait_clearsInheritedTenantBeforeReadingRun() {
+        // 对账任务也会直接调 resumeFromWait；无论从哪条后台路径进来都必须无租户，
+        // 否则 getRun 会被 DataPermission 追加 created_by 过滤成 null（→ 误判 SKIPPED）。
+        TenantUtil.start("leaked-user");
+        AtomicReference<String> tenantSeenByRead = new AtomicReference<>("not-called");
+        when(runSpi.getRun(7L)).thenAnswer(inv -> {
+            tenantSeenByRead.set(TenantUtil.get());
+            return runWithStatus(RunStatus.CANCELLED.name());
+        });
+
+        service.resumeFromWait(pendingWait());
+
+        assertNull(tenantSeenByRead.get(), "恢复入口必须先清掉继承来的租户");
     }
 
     @Test

@@ -289,6 +289,33 @@ copies from their origin skill. Replaces the old `SkillAutoUpdateSweeper`.
 
 ## 等待恢复：`resumeFromWait` 的提交边界
 
+### 后台唤醒线程必须无租户，claim 之后不得静默丢弃（线上「进入 wait 一直卡」的根因）
+
+`PendingWaitWakeScheduler` 的线程池是**懒创建的长驻单线程**：第一次 `schedule()` 时 `new Thread`
+会复制父线程的 `InheritableThreadLocal`，而 `TenantUtil` 正是它、且控制台请求会在
+`AuthInterceptor` 里 `TenantUtil.start(user.getUsername())`。于是唤醒线程被永久绑定成
+「JVM 启动后第一个创建 wait 的那个用户」。
+
+`DataPermissionInterceptor` 只拦 SELECT，会给 `getById` 追加 `AND created_by=<那个用户>`：
+
+- `claimForResume` 是 UPDATE → 成功，记录变成 `RESUMED`；
+- `getById` 是 SELECT → 别的用户的记录读成 `null` → 旧实现 `log.warn("record missing")` 后 `return`；
+- 记录停在 `RESUMED`，而 `listDue`/`claimForResume` 只认 `PENDING` → cron 永远捞不到；
+- 只有 `WaitingRunReconciler`（无租户的 `scheduling-*` 线程、且绕过 `getById`）能救 → **每次 wait 卡 15 分钟**。
+
+为什么平时不暴露：**任务型 run 只设 `AuthContext`、不设 `TenantUtil`**（`AgentTaskServiceImpl`），
+多数重启后第一个 wait 由任务创建 → 线程租户为空 → 拦截器跳过 → 所有用户都正常。只有当某次重启后
+第一个 wait 来自**控制台会话**时，线程被污染，之后所有任务型 run 全部落 15 分钟兜底。
+
+护栏（漏一处就可能复发）：
+
+- `PendingWaitWakeScheduler#wake`、`WaitWakeTask#sweepDueWaits`、`WaitingRunReconciler#reconcile`、
+  `ChatRuntimeService#resumeFromWait` 入口统一 `TenantUtil.stop()` + `AuthContext.clear()`；
+- claim 之后 `getById == null` 必须 `PendingWaitSpi#releaseClaim`（**按 id 单条原子 UPDATE** 回置
+  PENDING，不做回读 —— 回读正是失败场景），不能 `return`；
+- `wake` 的 catch 用 `Throwable`（`Error` 同样会把记录留在 `RESUMED`），先尽力回置再重抛；
+- 兜底阈值 `reconcile-stale-minutes` 11（必须 > `MAX_WAIT_MS`=10）、间隔 `PT30S`。
+
 `resumeFromWait` 里 **`asyncHandleUserMessage` 一旦返回就等于恢复已提交**，此后再失败也不能把 run
 退回 WAITING：
 

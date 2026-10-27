@@ -45,6 +45,8 @@ public class WaitWakeTask {
 
     @Scheduled(cron = "${buukle.agent.wait.wake-cron:*/10 * * * * ?}")
     public void sweepDueWaits() {
+        // 调度线程可能残留别的任务的租户上下文；带租户会让 DataPermission 过滤掉本批记录。
+        PendingWaitWakeScheduler.clearInheritedContext();
         boolean locked = false;
         try {
             locked = redissonClient.getLock(WAKE_LOCK_KEY)
@@ -63,19 +65,22 @@ public class WaitWakeTask {
                 }
                 try {
                     PendingWaitVO claimed = pendingWaitSpi.getById(wait.getId());
-                    if (claimed != null) {
-                        chatRuntimeService.onResumeOutcome(claimed, chatRuntimeService.resumeFromWait(claimed));
+                    if (claimed == null) {
+                        // claim 成功却读不回来：回置 PENDING 交给下一轮，绝不能停在这里。
+                        log.warn("Wait {} claimed but unreadable; releasing claim", wait.getId());
+                        releaseClaim(wait.getId());
+                        continue;
                     }
-                } catch (Exception e) {
+                    chatRuntimeService.onResumeOutcome(claimed, chatRuntimeService.resumeFromWait(claimed));
+                } catch (Throwable e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
                     // 单条失败不拖垮整批：其余等待仍应被唤醒
                     log.error("Failed to resume pending wait {}", wait.getId(), e);
-                    try {
-                        PendingWaitVO w = pendingWaitSpi.getById(wait.getId());
-                        if (w != null) {
-                            chatRuntimeService.onResumeOutcome(w, ChatRuntimeService.ResumeOutcome.ERROR);
-                        }
-                    } catch (Exception e2) {
-                        log.error("Failed to requeue pending wait {}", wait.getId(), e2);
+                    requeueBestEffort(wait.getId());
+                    if (e instanceof Error error) {
+                        throw error;
                     }
                 }
             }
@@ -93,6 +98,30 @@ public class WaitWakeTask {
                     log.warn("Failed to release wait wake lock", e);
                 }
             }
+        }
+    }
+
+    /** 回置 claim：先按记录回置 attempts，读不到再按 id 原子回置（不依赖任何回读）。 */
+    private void requeueBestEffort(Long waitId) {
+        try {
+            PendingWaitVO w = pendingWaitSpi.getById(waitId);
+            if (w != null) {
+                chatRuntimeService.onResumeOutcome(w, ChatRuntimeService.ResumeOutcome.ERROR);
+                return;
+            }
+        } catch (Exception e) {
+            log.error("Failed to requeue pending wait {}", waitId, e);
+        }
+        releaseClaim(waitId);
+    }
+
+    private void releaseClaim(Long waitId) {
+        try {
+            if (!pendingWaitSpi.releaseClaim(waitId)) {
+                log.warn("Wait {} could not be released (already terminal or retries exhausted)", waitId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to release claim for wait {}", waitId, e);
         }
     }
 }

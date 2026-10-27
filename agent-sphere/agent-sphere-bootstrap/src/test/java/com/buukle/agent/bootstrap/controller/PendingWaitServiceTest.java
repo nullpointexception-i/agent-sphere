@@ -156,6 +156,29 @@ class PendingWaitServiceTest {
     }
 
     @Test
+    void releaseClaim_putsResumedRowBackToPendingWithoutReadingIt() {
+        when(waitMapper.update(any(), any(LambdaUpdateWrapper.class))).thenReturn(1);
+
+        assertTrue(service.releaseClaim(13L));
+
+        // 必须是单条原子 UPDATE：回读正是失败场景，不能再依赖 selectById
+        verify(waitMapper, times(1)).update(any(), any(LambdaUpdateWrapper.class));
+        verify(waitMapper, never()).selectById(any());
+    }
+
+    @Test
+    void releaseClaim_returnsFalseWhenRowIsNotResumedOrRetriesExhausted() {
+        when(waitMapper.update(any(), any(LambdaUpdateWrapper.class))).thenReturn(0);
+        assertFalse(service.releaseClaim(14L));
+    }
+
+    @Test
+    void releaseClaim_ignoresNullId() {
+        assertFalse(service.releaseClaim(null));
+        verify(waitMapper, never()).update(any(), any());
+    }
+
+    @Test
     void markTerminal_ignoresNullId() {
         service.markTerminal(null, WaitConstants.FAILED_STATUS, "x");
         verify(waitMapper, never()).update(any(), any());

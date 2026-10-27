@@ -177,8 +177,8 @@ buukle:
       # 副本重启/发布会让定时器全丢，这一层按 wake_at 兜底（CAS 保证不重复恢复）。
       wake-cron: "*/10 * * * * ?"                   # 唤醒补偿扫描 / Wait wake compensation sweep
       # 「卡住 WAITING」对账：扫描超时仍 WAITING 且名下无 PENDING 记录的 run，直接再推进；失败置终态。
-      reconcile-interval: "PT60S"                   # 对账扫描间隔 / Stuck-WAITING reconcile interval
-      reconcile-stale-minutes: 15                   # 判定"卡住"的阈值(分钟，需 > MAX_WAIT_MS=10) / Stale threshold (min)
+      reconcile-interval: "PT30S"                   # 对账扫描间隔 / Stuck-WAITING reconcile interval
+      reconcile-stale-minutes: 11                   # 判定"卡住"的阈值(分钟，需 > MAX_WAIT_MS=10) / Stale threshold (min)
 
     # ============================================================
     # Controller 日志截断配置 / Controller Log Config

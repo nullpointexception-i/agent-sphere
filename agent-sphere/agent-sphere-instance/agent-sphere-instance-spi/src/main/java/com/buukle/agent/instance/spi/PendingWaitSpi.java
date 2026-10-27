@@ -54,6 +54,20 @@ public interface PendingWaitSpi {
      */
     int requeueForRetry(Long waitId, String error);
 
+    /**
+     * claim 之后「记录读不回来」时的兜底：RESUMED → PENDING，attempts + 1。
+     *
+     * <p>唤醒路径必须先 {@link #claimForResume} 再回读详情才能恢复；一旦回读失败（曾因
+     * 后台线程继承到别的租户、被 {@code DataPermissionInterceptor} 追加 {@code created_by}
+     * 过滤而返回 null），记录就停在 RESUMED —— 而 {@link #listDue}/{@link #claimForResume}
+     * 只认 PENDING，cron 永远捞不到，run 只能等对账任务兜底。
+     *
+     * <p><b>刻意不做回读</b>：回读失败正是要处理的场景，只有单条原子 UPDATE 才能把它放回队列。
+     *
+     * @return true 表示已回置 PENDING（可被 cron 重试）；false 表示记录已不是 RESUMED 或重试已达上限
+     */
+    boolean releaseClaim(Long waitId);
+
     /** 终态化一条等待记录（CANCELLED / FAILED），记录原因。 */
     void markTerminal(Long waitId, String status, String error);
 
