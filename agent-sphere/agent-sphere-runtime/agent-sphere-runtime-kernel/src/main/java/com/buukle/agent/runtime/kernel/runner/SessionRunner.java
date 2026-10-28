@@ -900,7 +900,7 @@ public class SessionRunner {
                     }
 
                     // ★ 压缩检查：使用实际 route（和 LLM 调用同源）
-                    if (compactionService.shouldCompact(messages, route)) {
+                    if (compactionService.shouldCompact(messages, route, toolDefs)) {
                         compactionTriggered.set(true);
                         return null;
                     }

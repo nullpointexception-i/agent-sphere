@@ -490,6 +490,15 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 **硬收口文案必须豁免 `finish`。** `FINAL_TURN_INSTRUCTION` 现在写的是「除 `finish` 外不得再调用任何工具」——
 否则最后几轮会被禁止走唯一合法的结束路径。
 
+**压缩阈值必须计入工具 schema（`CompactionService.shouldCompact`）。** 请求体 = messages + tools + 输出；
+10 个工具的 JSON 约 1 万 token。只估算 messages 会让「估算没到阈值、实际已超上下文」——线上 32k 路由
+（`max_input_tokens=32000`、tools≈11.7k）在 messages 估算 19,953 时未压缩，实际请求 32,852 token
+直接 400（vLLM 报 `maximum context length is 32768`）。现在估算 =
+`(messages + tools JSON/3) × 1.1`（10% 安全系数覆盖中文/JSON 的偏低估算），预算 =
+`max_input_tokens × budget-ratio`；`max_output_tokens` 不进入请求（请求 `max_tokens` 由 sampling
+config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M 并**每个路由只告警一次**——否则
+等于永不压缩（生产库存在这类路由）。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).

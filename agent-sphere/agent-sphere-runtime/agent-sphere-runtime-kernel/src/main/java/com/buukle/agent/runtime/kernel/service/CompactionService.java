@@ -15,6 +15,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
@@ -33,6 +34,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.CompactionPromptConstant;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
+import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -42,6 +44,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -53,6 +57,8 @@ public class CompactionService {
 
     private static final double INPUT_RATIO = 0.5;
     private static final double OUTPUT_RATIO = 2.0 / 3;
+    /** 估算安全系数：chars/3 对中文/JSON 仍偏低，留 10% 余量避免「估算没到阈值、实际已超上下文」。 */
+    private static final double ESTIMATE_SAFETY_RATIO = 1.1;
 
     private final AgentRuntimeProperties agentRuntimeProperties;
     private final RunSpi runSpi;
@@ -65,13 +71,50 @@ public class CompactionService {
     private final RouteListBuilder routeListBuilder;
     private final FallbackRouteExecutor fallbackRouteExecutor;
     private final LlmRequestConfigurer llmRequestConfigurer;
+    /** 只对每个缺 max_input_tokens 的路由告警一次，避免每轮刷日志。 */
+    private final Set<Long> warnedMissingMaxInput = ConcurrentHashMap.newKeySet();
 
-    public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route) {
+    /**
+     * 是否需要压缩。
+     *
+     * <p><b>必须把工具 schema 计入估算</b>：请求体 = messages + tools + 输出；10 个工具的 JSON 约 1 万
+     * token，只算 messages 会让「估算没到阈值、实际已超上下文」——线上 32k 路由（工具 11.7k token）
+     * 就是这样在 32,852 实际 token 时报 400 的。
+     *
+     * <p>再加 10% 安全系数：{@code chars/3} 对中文/JSON 偏低。route 的 {@code max_output_tokens}
+     * 不参与请求（请求的 max_tokens 由 sampling config 控制），这里也不从总上下文里扣它；
+     * 0.7 的 budgetRatio 本身已为输出预留 30%。
+     */
+    public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route,
+                                 List<ToolDefinitionDTO> tools) {
         if (route == null) return false;
-        long maxInputTokens = route.getMaxInputTokens() != null ? route.getMaxInputTokens()
-                : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
+        Long routeId = route.getId();
+        long maxInputTokens;
+        if (route.getMaxInputTokens() != null) {
+            maxInputTokens = route.getMaxInputTokens();
+        } else {
+            maxInputTokens = RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
+            if (routeId == null || warnedMissingMaxInput.add(routeId)) {
+                log.warn("Route {} has no max_input_tokens; compaction falls back to {} tokens and may never trigger",
+                        routeId, maxInputTokens);
+            }
+        }
         long budget = (long) (maxInputTokens * agentRuntimeProperties.getRunner().getCompaction().getBudgetRatio());
-        return estimateMessagesTokens(messages) > budget;
+        long messageTokens = estimateMessagesTokens(messages);
+        long toolTokens = estimateToolTokens(tools);
+        long estimated = (long) Math.ceil((messageTokens + toolTokens) * ESTIMATE_SAFETY_RATIO);
+        log.debug("Compaction check: messageTokens={}, toolTokens={}, estimated={}, budget={}, maxInput={}",
+                messageTokens, toolTokens, estimated, budget, maxInputTokens);
+        return estimated > budget;
+    }
+
+    /** 工具定义也是 prompt 的一部分：把 tools JSON 的字符数按同一 divisor 折算成 token。 */
+    private long estimateToolTokens(List<ToolDefinitionDTO> tools) {
+        if (tools == null || tools.isEmpty()) {
+            return 0;
+        }
+        String json = JsonUtils.toJson(tools);
+        return json == null ? 0 : json.length() / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
     }
 
     public void compact(Long sessionId, Long runId, KernelContext ctx) {
