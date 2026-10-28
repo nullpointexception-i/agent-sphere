@@ -859,6 +859,9 @@ public class SessionRunner {
             AtomicReference<String> contentRef = new AtomicReference<>("");
             List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
             AtomicReference<String> errorRef = new AtomicReference<>();
+            // 本次尝试的错误是否值得重试：4xx（408/429 除外）是终态错误，重试只会把一次失败放大成多次
+            java.util.concurrent.atomic.AtomicBoolean errorRetryableRef =
+                    new java.util.concurrent.atomic.AtomicBoolean(true);
             AtomicReference<String> reasoningRef = new AtomicReference<>("");
             // 本次尝试的真实 finish_reason（stop/length/content_filter/tool_calls），供调用方区分
             // 「模型主动停」与「被截断/被过滤」。
@@ -953,7 +956,10 @@ public class SessionRunner {
                                                         .setPublishId(callPublishId)));
                                     }
                                     case LLMEvent.Finish f -> finishReasonRef.set(f.reason());
-                                    case LLMEvent.Error e -> errorRef.set(e.message());
+                                    case LLMEvent.Error e -> {
+                                        errorRef.set(e.message());
+                                        errorRetryableRef.set(e.retryable());
+                                    }
                                     default -> {
                                     }
                                 }
@@ -1014,8 +1020,9 @@ public class SessionRunner {
             }
 
             String error = errorRef.get();
-            // 瞬时失败且尚无任何输出（未下发分片）→ 同轮限界重试；带部分输出或已是终态错误则不重试
-            if (error != null && attempt < turnRetries
+            // 瞬时失败且尚无任何输出（未下发分片）→ 同轮限界重试；
+            // 带部分输出、或上游明确给出终态错误（4xx）则不重试。
+            if (error != null && errorRetryableRef.get() && attempt < turnRetries
                     && getTurnContent(contentRef).isEmpty() && toolCalls.isEmpty()) {
                 continue;
             }

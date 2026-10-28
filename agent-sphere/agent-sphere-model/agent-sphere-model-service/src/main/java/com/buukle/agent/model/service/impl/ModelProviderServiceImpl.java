@@ -164,14 +164,18 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                         .orTimeout(streamReadTimeoutSeconds, TimeUnit.SECONDS)
                         .get();
                 if (response.statusCode() >= 400) {
+                    int status = response.statusCode();
                     String errorBody = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-                    log.error("LLM stream error: status={}, body={}", response.statusCode(), errorBody);
-                    String uiMsg = switch (response.statusCode()) {
+                    log.error("LLM stream error: model={}, status={}, body={}", modelName, status, errorBody);
+                    String uiMsg = switch (status) {
                         case 429 -> "请求过于频繁，请稍后再试";
                         case 502 -> "模型服务暂时不可用";
-                        default -> "模型调用异常 (" + response.statusCode() + "): " + truncate(errorBody);
+                        default -> "模型调用异常 (" + status + "): " + truncate(errorBody);
                     };
-                    onEvent.accept(new LLMEvent.Error(uiMsg));
+                    // 4xx（408/429 除外）是终态错误：重试不会成功，只会把一次失败放大成多次；
+                    // 5xx/429/408 则是真瞬时故障，保留重试。
+                    boolean retryable = status == 408 || status == 429 || status >= 500;
+                    onEvent.accept(new LLMEvent.Error(uiMsg, status, retryable));
                     onDone.run();
                     return;
                 }

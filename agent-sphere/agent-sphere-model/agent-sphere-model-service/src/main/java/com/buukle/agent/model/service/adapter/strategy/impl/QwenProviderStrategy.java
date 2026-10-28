@@ -10,6 +10,7 @@ import com.buukle.agent.model.service.stream.ToolStream;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -30,6 +31,8 @@ import java.util.List;
 public class QwenProviderStrategy implements ProviderStrategy {
 
     private static final String ROLE_ASSISTANT = "assistant";
+    private static final String ROLE_SYSTEM = "system";
+    private static final String ROLE_USER = "user";
 
     @Override
     public ModelProviderCompany getCompany() {
@@ -64,6 +67,54 @@ public class QwenProviderStrategy implements ProviderStrategy {
                 m.setReasoningContent("");
             }
         }
+
+        // Qwen3 模板要求所有 system 消息必须在最前面，否则网关 400：
+        //   "System message must be at the beginning."
+        // runner 为了命中前缀缓存，会把「当前时间 / 待办 / loop 预算 / 静默追问 / 收口指令」
+        // 作为尾部 system 追加；这里把这些「非首条 system」就地降级为 user（保持位置与顺序），
+        // 既满足模板约束，又不把变化内容挪到 messages[0]（保留前缀缓存）。
+        List<ChatMessageDTO> normalized = demoteTrailingSystem(messages);
+        if (normalized != messages) {
+            request.setMessages(normalized);
+        }
+    }
+
+    /**
+     * 把出现在首条非 system 消息之后的 system 消息降级为 user。
+     *
+     * <p><b>必须新建对象而不是原地改 role</b>：request 的 messages 是 runner 列表的浅拷贝
+     * （列表新、元素共享），原地改 role 会污染 runner 的历史消息。
+     */
+    private static List<ChatMessageDTO> demoteTrailingSystem(List<ChatMessageDTO> messages) {
+        boolean seenNonSystem = false;
+        boolean changed = false;
+        List<ChatMessageDTO> out = new ArrayList<>(messages.size());
+        for (ChatMessageDTO m : messages) {
+            if (m == null) {
+                out.add(null);
+                continue;
+            }
+            if (ROLE_SYSTEM.equals(m.getRole())) {
+                if (seenNonSystem) {
+                    out.add(asUser(m));
+                    changed = true;
+                    continue;
+                }
+                out.add(m);
+                continue;
+            }
+            seenNonSystem = true;
+            out.add(m);
+        }
+        return changed ? out : messages;
+    }
+
+    /** system 消息只保留 role/content/name；不复制 tool_calls 等字段，避免污染 user 消息。 */
+    private static ChatMessageDTO asUser(ChatMessageDTO source) {
+        return new ChatMessageDTO()
+                .setRole(ROLE_USER)
+                .setContent(source.getContent())
+                .setName(source.getName());
     }
 
     @Override

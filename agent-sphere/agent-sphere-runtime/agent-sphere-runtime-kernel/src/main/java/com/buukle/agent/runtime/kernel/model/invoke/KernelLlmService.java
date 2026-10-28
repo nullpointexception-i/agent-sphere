@@ -55,7 +55,8 @@ public class KernelLlmService {
              * 用 AtomicReference 持有是因为内层 stream consumer 无法直接改外层局部变量。
              */
             AtomicReference<String> errorEventRef = new AtomicReference<>();
-            String requestBody = JsonUtils.toJson(request);
+            // 上游 HTTP 状态码（错误事件携带）；成功且无错误事件时按 200 记，便于直接按状态码筛。
+            AtomicReference<Integer> httpStatusRef = new AtomicReference<>();
             try {
                 CountDownLatch done = new CountDownLatch(1);
                 AtomicReference<Exception> streamError = new AtomicReference<>();
@@ -76,9 +77,12 @@ public class KernelLlmService {
                                         reasoningCollector.append(clean);
                                         resultCollector.append(clean); // response_body 保持兼容（合并）
                                         onEvent.accept(new LLMEvent.ReasoningDelta(clean));
-                                    } else if (event instanceof LLMEvent.Error(String message)) {
+                                    } else if (event instanceof LLMEvent.Error error) {
                                         // 先记账再转发：转发后调用方可能立刻终止本次调用
-                                        errorEventRef.compareAndSet(null, message);
+                                        errorEventRef.compareAndSet(null, error.message());
+                                        if (error.httpStatus() != null) {
+                                            httpStatusRef.set(error.httpStatus());
+                                        }
                                         onEvent.accept(event);
                                     } else if (event instanceof LLMEvent.Finish(String reason, Map<String, Object> usage) && usage != null) {
                                         usageRef.set(usage);
@@ -113,6 +117,17 @@ public class KernelLlmService {
                 String eventError = errorEventRef.get();
                 boolean failed = !success || eventError != null;
                 String finalError = errorMessage != null ? errorMessage : eventError;
+                // http_status 落库：错误事件带真实状态码；正常结束按 200 记。
+                Integer httpStatus = httpStatusRef.get();
+                if (httpStatus == null && !failed) {
+                    httpStatus = 200;
+                }
+                if (meta != null) {
+                    meta.setHttpStatus(httpStatus);
+                }
+                // 记录“实际发出去的请求体”：provider 策略会在调用前改写 request（Qwen 会降级尾部 system），
+                // 在 finally 里序列化才能与线上真实请求一致，否则审计记录会误导排查。
+                String requestBody = JsonUtils.toJson(request);
                 eventPublisher.publishEvent(new LlmInteractionEvent(
                         this, meta, modelName, requestBody, resultCollector.toString(),
                         textCollector.length() > 0 ? textCollector.toString() : null,

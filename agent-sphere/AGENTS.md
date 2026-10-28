@@ -424,6 +424,17 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
   （刻意没做模型名前缀兜底，避免"看起来生效了其实走的是另一条策略"）。
 - Qwen3 是 OpenAI 兼容接口，`thinking` / `tool_stream` 是本系统给智谱/DeepSeek 的内部字段，
   策略里剔除；SSE delta 解析与 OpenAI 一致。
+- **Qwen3 还要求所有 system 消息必须在最前面**（否则 400 `System message must be at the
+  beginning.`），且其 chat template **只把 `messages[0]` 当 system 渲染**，后面的 system 会被
+  忽略。runner 为了前缀缓存刻意把「当前时间 / 待办 / loop 预算 / 静默追问 / 收口指令」作为
+  **尾部 system** 追加 —— 所以 `QwenProviderStrategy` 会把「出现在首条非 system 之后的
+  system」**降级为 user（保持原位）**。只处理时间/预算是不够的：待办、静默追问、收口指令同样
+  是尾部 system，漏一个就继续 400。**必须新建 `ChatMessageDTO` 再改 role**：request 的
+  messages 是 runner 列表的浅拷贝（元素共享），原地改 role 会污染 runner 历史。
+- **`LLMEvent.Error` 携带 `httpStatus` + `retryable`**：`agent_llm_interaction_record.http_status`
+  由此落库（正常结束记 200）。4xx（408/429 除外）是终态错误，`SessionRunner` 不再做同轮重试
+  —— 否则一次 400 会被放大成 4 次（线上实测）。`KernelLlmService` 在 finally 里序列化
+  requestBody，记录的是**策略改写后实际发出的请求**。
 
 ## run 的结束判据：沉默不是完成（L0/L1/L2）
 

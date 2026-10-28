@@ -165,4 +165,30 @@ class KernelLlmServiceErrorRecordTest {
                 "事件仍需转发给 SessionRunner —— 它靠这个置位 errorRef 并最终把 run 置 FAILED");
 
     }
+
+    @Test
+    void eventError_recordsUpstreamHttpStatus() throws Exception {
+        emitEvents(new LLMEvent.Error("模型调用异常 (400): bad request", 400, false));
+
+        service.stream("c", "u", "k", "m",
+                new ChatCompletionRequestDTO(), e -> {
+                }, meta()).get();
+
+        LlmInteractionEvent e = captured();
+        assertFalse(e.isSuccess());
+        assertEquals(400, e.getMeta().getHttpStatus().intValue(),
+                "上游状态码必须落到交互记录，否则只能从 error_message 文本里猜");
+    }
+
+    @Test
+    void normalTurn_recordsHttpStatus200() throws Exception {
+        emitEvents(new LLMEvent.TextDelta("hello"));
+
+        service.stream("c", "u", "k", "m",
+                new ChatCompletionRequestDTO(), e -> {
+                }, meta()).get();
+
+        assertEquals(200, captured().getMeta().getHttpStatus().intValue(),
+                "正常结束按 200 记，便于直接按状态码筛");
+    }
 }

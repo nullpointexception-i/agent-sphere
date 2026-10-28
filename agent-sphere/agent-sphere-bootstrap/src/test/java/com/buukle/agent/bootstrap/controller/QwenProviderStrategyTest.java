@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -133,5 +134,57 @@ class QwenProviderStrategyTest {
         assertEquals(ModelProviderCompany.QWEN, factory.getStrategy("QWEN").getCompany());
         assertEquals(ModelProviderCompany.OPENAI, factory.getStrategy("openai").getCompany());
         assertNull(factory.getStrategy("unknown-vendor"));
+    }
+
+    // ---- system 消息位置：Qwen3 要求 system 必须在最前，runner 的尾部 system 需降级为 user ----
+
+    @Test
+    void adaptRequest_demotesTrailingSystemMessagesToUserPreservingPosition() {
+        ChatMessageDTO base = new ChatMessageDTO().setRole("system").setContent("base prompt");
+        ChatMessageDTO user = new ChatMessageDTO().setRole("user").setContent("hi");
+        ChatMessageDTO assistant = new ChatMessageDTO().setRole("assistant").setContent("hello");
+        ChatMessageDTO time = new ChatMessageDTO().setRole("system").setContent("Current server time: t");
+        ChatMessageDTO budget = new ChatMessageDTO().setRole("system").setContent("[LOOP BUDGET] Loop 1/300");
+        ChatCompletionRequestDTO req = request(base, user, assistant, time, budget);
+
+        qwen.adaptRequest(req);
+
+        List<ChatMessageDTO> m = req.getMessages();
+        assertEquals(5, m.size());
+        assertEquals("system", m.get(0).getRole(), "首条 system 必须保留");
+        assertEquals("base prompt", m.get(0).getContent());
+        assertEquals("user", m.get(1).getRole());
+        assertEquals("assistant", m.get(2).getRole());
+        assertEquals("user", m.get(3).getRole(), "尾部 system 必须降级为 user");
+        assertEquals("Current server time: t", m.get(3).getContent());
+        assertEquals("user", m.get(4).getRole());
+        assertEquals("[LOOP BUDGET] Loop 1/300", m.get(4).getContent());
+        // 不能原地改：request 的 messages 与 runner 历史共享元素
+        assertEquals("system", time.getRole(), "原对象不得被污染（runner 历史共享同一实例）");
+        assertEquals("system", budget.getRole());
+    }
+
+    @Test
+    void adaptRequest_keepsLeadingOnlySystemUnchanged() {
+        ChatMessageDTO base = new ChatMessageDTO().setRole("system").setContent("base prompt");
+        ChatMessageDTO user = new ChatMessageDTO().setRole("user").setContent("hi");
+        ChatCompletionRequestDTO req = request(base, user);
+
+        qwen.adaptRequest(req);
+
+        List<ChatMessageDTO> m = req.getMessages();
+        assertEquals("system", m.get(0).getRole());
+        assertEquals("user", m.get(1).getRole());
+        assertSame(base, m.get(0), "没有尾部 system 时不应重建列表");
+    }
+
+    @Test
+    void adaptRequest_noSystemMessageUnchanged() {
+        ChatMessageDTO user = new ChatMessageDTO().setRole("user").setContent("hi");
+        ChatCompletionRequestDTO req = request(user);
+
+        qwen.adaptRequest(req);
+
+        assertEquals("user", req.getMessages().get(0).getRole());
     }
 }

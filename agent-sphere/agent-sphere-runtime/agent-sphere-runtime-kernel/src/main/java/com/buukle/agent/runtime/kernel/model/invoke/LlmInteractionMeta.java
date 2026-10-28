@@ -11,6 +11,8 @@ public class LlmInteractionMeta {
     private LlmInteractionType interactionType;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
+    /** 上游 HTTP 状态码（错误事件携带；正常结束记 200；无 HTTP 交互时为 null）。 */
+    private Integer httpStatus;
 
     public LlmInteractionMeta(Long runId, Long sessionId, LlmInteractionType interactionType, Long subAgentRunId) {
         this.runId = runId;
