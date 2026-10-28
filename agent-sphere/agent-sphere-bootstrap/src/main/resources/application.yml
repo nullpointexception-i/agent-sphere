@@ -234,6 +234,16 @@ buukle:
       owner-lease: 5m                              # session 执行者 owner 租约 / Owner lease duration
       orphan-sweep-interval: 30s                    # 孤儿 run 清扫间隔 / Orphan sweep interval
 
+    # ============================================================
+    # 卡住 RUNNING 的 run 对账 / Stale RUNNING reconcile
+    # 按 DB updated_at 扫：超时仍 RUNNING 且 session 无 owner（无副本在跑）→ FAILED。
+    # 兜住「循环异常退出未写终态」—— 此时 Redis state 已是 IDLE，orphan-sweep 扫不到。
+    # 阈值必须大于单轮最坏耗时（LLM 4 次重试 + 压缩调用），默认 30m。
+    # ============================================================
+    run:
+      stale-reconcile-minutes: 30                  # 判定卡住的门槛（分钟）/ Stale threshold in minutes
+      stale-reconcile-interval: PT1M               # 对账间隔 / Reconcile interval
+
 # ============================================================
 # 能力开放层配置 / Capability Open Platform
 # ============================================================

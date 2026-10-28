@@ -173,6 +173,10 @@ public final class RunnerConstants {
     public static final String JSON_ERROR_TOOL_LOST = "{\"error\":\"Tool execution lost\"}";
     public static final String FALLBACK_COMPLETE_MSG = "{\"status\":\"ERROR\",\"reason\":\"No completion content produced\"}";
     public static final String CANCEL_MSG = "⏹️ Run cancelled by user";
+    /** 循环退出却没有任何路径写终态时的兜底失败原因。 */
+    public static final String RUN_LOOP_NO_TERMINAL_MSG = "执行异常：run 循环已退出但未产生终态";
+    /** 长时间停在 RUNNING 且执行副本已不在（无 owner）时的对账失败原因。 */
+    public static final String RUN_STALE_MSG = "执行中断：run 长时间无进展且执行副本已失联";
 
     private RunnerConstants() {
     }

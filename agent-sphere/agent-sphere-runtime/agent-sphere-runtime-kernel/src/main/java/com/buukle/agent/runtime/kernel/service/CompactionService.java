@@ -73,6 +73,8 @@ public class CompactionService {
     private final LlmRequestConfigurer llmRequestConfigurer;
     /** 只对每个缺 max_input_tokens 的路由告警一次，避免每轮刷日志。 */
     private final Set<Long> warnedMissingMaxInput = ConcurrentHashMap.newKeySet();
+    /** 只对每个「压缩不可能把上下文压进预算」的路由告警一次，避免每轮刷日志。 */
+    private final Set<Long> warnedInfeasibleCompaction = ConcurrentHashMap.newKeySet();
 
     /**
      * 是否需要压缩。
@@ -84,6 +86,11 @@ public class CompactionService {
      * <p>再加 10% 安全系数：{@code chars/3} 对中文/JSON 偏低。route 的 {@code max_output_tokens}
      * 不参与请求（请求的 max_tokens 由 sampling config 控制），这里也不从总上下文里扣它；
      * 0.7 的 budgetRatio 本身已为输出预留 30%。
+     *
+     * <p><b>不可压缩部分已超预算时直接跳过压缩</b>：主 system prompt 与工具 schema 是每轮都带的固定开销，
+     * 压缩只能压历史。若 {@code (leading system + tools) × 1.1} 已超过预算，压缩永远不可能成功，
+     * 只会每轮白烧 3 次压缩调用后把 run 卡住（线上 route 4 = 20k 的测试路由就是这样）。
+     * 此时返回 false，让请求带着超上下文直接发：模型接受就继续，拒绝则走 400 终态失败。
      */
     public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route,
                                  List<ToolDefinitionDTO> tools) {
@@ -100,12 +107,40 @@ public class CompactionService {
             }
         }
         long budget = (long) (maxInputTokens * agentRuntimeProperties.getRunner().getCompaction().getBudgetRatio());
-        long messageTokens = estimateMessagesTokens(messages);
         long toolTokens = estimateToolTokens(tools);
+        long irreducibleTokens = estimateIrreducibleTokens(messages, toolTokens);
+        if (irreducibleTokens > budget) {
+            if (routeId == null || warnedInfeasibleCompaction.add(routeId)) {
+                log.warn("Route {} cannot compact below budget: irreducible(leading system + tools)={}, budget={}; "
+                        + "sending oversized context instead", routeId, irreducibleTokens, budget);
+            }
+            return false;
+        }
+        long messageTokens = estimateMessagesTokens(messages);
         long estimated = (long) Math.ceil((messageTokens + toolTokens) * ESTIMATE_SAFETY_RATIO);
-        log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, estimated={}, budget={}, maxInput={}",
-                routeId, messageTokens, toolTokens, estimated, budget, maxInputTokens);
+        log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, irreducible={}, estimated={}, budget={}, maxInput={}",
+                routeId, messageTokens, toolTokens, irreducibleTokens, estimated, budget, maxInputTokens);
         return estimated > budget;
+    }
+
+    /**
+     * 压缩无法削减的部分：开头的连续 system 消息（主提示词 + 历史层注入的摘要/取消提示）+ 工具 schema。
+     * 只有 leading system 算固定开销 —— 尾部 system（时间/待办/预算）每轮重建，同样压不掉，但体量很小，
+     * 这里不额外计入以免误伤边界场景。
+     */
+    private long estimateIrreducibleTokens(List<ChatMessageDTO> messages, long toolTokens) {
+        long systemTokens = 0;
+        if (messages != null) {
+            List<ChatMessageDTO> leadingSystem = new ArrayList<>();
+            for (ChatMessageDTO msg : messages) {
+                if (!LlmApiConstant.ROLE_SYSTEM.equals(msg.getRole())) {
+                    break;
+                }
+                leadingSystem.add(msg);
+            }
+            systemTokens = estimateMessagesTokens(leadingSystem);
+        }
+        return (long) Math.ceil((systemTokens + toolTokens) * ESTIMATE_SAFETY_RATIO);
     }
 
     /** 工具定义也是 prompt 的一部分：把 tools JSON 的字符数按同一 divisor 折算成 token。 */

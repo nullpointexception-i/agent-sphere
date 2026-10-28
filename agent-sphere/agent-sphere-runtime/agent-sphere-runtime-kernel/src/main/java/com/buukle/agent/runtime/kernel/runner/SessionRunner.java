@@ -29,6 +29,7 @@ import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.buukle.agent.model.dtvo.complete.FinishReason;
+import com.buukle.agent.runtime.kernel.contract.TurnOutcome;
 import com.buukle.agent.runtime.kernel.contract.TurnResult;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
@@ -207,6 +208,9 @@ public class SessionRunner {
         LoopLimitSource loopSource = loopLimit.source();
         log.info("Run {} execution source={}, effective loop limit={}", currentRunId, loopSource, maxLoopCount);
         int compactionRetries = 0;
+        // 压缩重试耗尽后置位：本轮不再压缩，直接带超上下文发给模型。
+        // 否则「每轮压缩 → 仍超预算 → 再压缩」只会耗到重试上限，而旧实现的 break 会让 run 永远停在 RUNNING。
+        boolean skipCompaction = false;
         // L2：进入 agentic 流程之后，「本轮没有任何工具调用」不再是完成信号。
         // toolsEverExecuted 从已持久化的 loopCount 起步 —— loopCount 只在工具轮自增，
         // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
@@ -287,7 +291,8 @@ public class SessionRunner {
             applySilentTurnNudge(messages, silentTurns);
 
             AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
-            TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef);
+            TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef,
+                    skipCompaction);
 
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
 
@@ -299,7 +304,12 @@ public class SessionRunner {
             switch (turn.outcome()) {
                 case COMPACTED -> {
                     if (compactionRetries++ >= 3) {
+                        // 压缩已证明救不回来（例如 system prompt + tools 本身就超预算）：
+                        // 兑现日志承诺，带超上下文直接把这一轮发出去。模型接受就继续；拒绝则是 400 → ERROR 终态。
                         log.warn("Compaction retry exhausted for run {}, sending oversized context", currentRunId);
+                        skipCompaction = true;
+                        hasToolCalls = true;
+                        continue;
                     } else {
                         log.info("Compaction triggered, reassembling messages (attempt {})", compactionRetries);
                         String userText = input != null ? input.text() : "";
@@ -328,7 +338,6 @@ public class SessionRunner {
                         hasToolCalls = true;
                         continue;
                     }
-                    break loop;
                 }
                 case ERROR -> {
                     currentRun.setStatus(RunStatus.FAILED.name());
@@ -395,6 +404,11 @@ public class SessionRunner {
                     // TOOL_CALLS — fall through to tool execution below
                 }
             }
+
+            // 这一轮真正发出去了（工具轮）：解除「跳过压缩」并重置重试计数，
+            // 下一轮重新按阈值判断，避免一次压缩失败让整条 run 永久关闭压缩。
+            skipCompaction = false;
+            compactionRetries = 0;
 
             List<ToolCallDTO> toolCallDTOs = new ArrayList<>();
             for (TurnToolCall tc : turn.toolCalls()) {
@@ -667,6 +681,20 @@ public class SessionRunner {
                             .setAssistantReply(RunnerConstants.CANCEL_MSG)
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
         }
+        // 安全网：任何 break / 自然退出都不允许把 run 留在 RUNNING。
+        // 此时 coordinator 会把 session state 置 IDLE 并清掉 owner，而 OrphanRunSweeper 只认
+        // RUNNING/RUNNING_WITH_PENDING + 无 owner —— 永远扫不到这个组合，不兜底就是永久卡死。
+        if (currentRun != null && RunStatus.RUNNING.name().equals(currentRun.getStatus())) {
+            log.warn("Run {} exited the loop without a terminal status; marking FAILED", currentRunId);
+            currentRun.setStatus(RunStatus.FAILED.name());
+            runSpi.updateRun(currentRun);
+            eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
+                    new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(currentRunId)
+                            .setErrorMessage(RunnerConstants.RUN_LOOP_NO_TERMINAL_MSG)
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+        }
         return parked;
     }
 
@@ -840,7 +868,8 @@ public class SessionRunner {
 
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
-                               KernelContext ctx, AtomicReference<String> turnReasoning) {
+                               KernelContext ctx, AtomicReference<String> turnReasoning,
+                               boolean skipCompaction) {
         int turnRetries = properties.getRunner().getLlmTurnMaxRetries();
         AtomicReference<String> turnReasoningOut = turnReasoning;
         for (int attempt = 0; attempt <= turnRetries; attempt++) {
@@ -899,8 +928,9 @@ public class SessionRunner {
                         throw new RuntimeException("Run cancelled");
                     }
 
-                    // ★ 压缩检查：使用实际 route（和 LLM 调用同源）
-                    if (compactionService.shouldCompact(messages, route, toolDefs)) {
+                    // ★ 压缩检查：使用实际 route（和 LLM 调用同源）。
+                    // skipCompaction 仅在「重试耗尽、压缩已被证明救不回来」的下一轮为 true。
+                    if (!skipCompaction && compactionService.shouldCompact(messages, route, toolDefs)) {
                         compactionTriggered.set(true);
                         return null;
                     }

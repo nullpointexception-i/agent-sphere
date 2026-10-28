@@ -174,6 +174,13 @@ Bounds and retry limits for the `wait` tool are code constants (`WaitConstants`)
 | `owner-lease` | `5m` | Session executor owner lease (multi-replica takeover) |
 | `orphan-sweep-interval` | `30s` | Orphan-run sweep interval (stale owner → run FAILED → re-wake) |
 
+## `buukle.agent.run`
+
+| Key | Default | Description |
+|---|---|---|
+| `stale-reconcile-minutes` | `30` | DB-level safety net: RUNNING run untouched longer than this with no session owner → FAILED (`StaleRunningRunReconciler`) |
+| `stale-reconcile-interval` | `PT1M` | Sweep interval for the stale-RUNNING reconciler |
+
 ## `buukle.agent.delegate`
 
 Not present in `application.yml` (class defaults apply). Listed here for completeness.

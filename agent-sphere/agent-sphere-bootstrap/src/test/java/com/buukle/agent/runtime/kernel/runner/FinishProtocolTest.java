@@ -56,6 +56,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 「沉默 ≠ 完成」的三层护栏（L0 截断信号 / L1 finish 工具 / L2 静默追问）。
@@ -142,14 +143,18 @@ class FinishProtocolTest {
     }
 
     private TurnResult runTurn() throws Exception {
+        return runTurn(false);
+    }
+
+    private TurnResult runTurn(boolean skipCompaction) throws Exception {
         List<ChatMessageDTO> messages = new ArrayList<>();
         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("do it"));
         Method m = SessionRunner.class.getDeclaredMethod(
                 "runTurn", Long.class, Long.class, List.class, List.class, List.class,
-                KernelContext.class, AtomicReference.class);
+                KernelContext.class, AtomicReference.class, boolean.class);
         m.setAccessible(true);
         return (TurnResult) m.invoke(runner, 1L, 2L, messages, List.of(), List.of(),
-                KernelContext.builder().modelRoute(route).build(), new AtomicReference<>());
+                KernelContext.builder().modelRoute(route).build(), new AtomicReference<>(), skipCompaction);
     }
 
     // ---------- L0：截断 / 内容过滤不能当完成 ----------
@@ -197,6 +202,19 @@ class FinishProtocolTest {
         assertEquals(TurnOutcome.COMPLETE, result.outcome());
         assertEquals("done", result.content());
         assertEquals(FinishReason.STOP, result.finishReason());
+    }
+
+    // ---------- 压缩重试耗尽：跳过压缩直接发超上下文 ----------
+
+    @Test
+    void skipCompactionFlagBypassesCompactionGate() throws Exception {
+        emit(new LLMEvent.TextDelta("done"), new LLMEvent.Finish(FinishReason.STOP, null));
+        when(compactionService.shouldCompact(any(), any(), any())).thenReturn(true);
+
+        assertEquals(TurnOutcome.COMPACTED, runTurn(false).outcome(),
+                "正常轮次命中阈值时必须触发压缩");
+        assertEquals(TurnOutcome.COMPLETE, runTurn(true).outcome(),
+                "压缩重试耗尽后必须绕过压缩，带超上下文直接发请求");
     }
 
     // ---------- L2：静默追问消息的槽位语义 ----------

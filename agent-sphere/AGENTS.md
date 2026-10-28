@@ -211,6 +211,10 @@ copies from their origin skill. Replaces the old `SkillAutoUpdateSweeper`.
   监听器又会把 DB 覆写回 FAILED，于是「取消」被记成「失败」。
 - `OrphanRunSweeper` 把孤儿 run 置 FAILED 时必须**同时发终态事件**，否则该会话 timeline
   永久停在运行中，只有刷新才一致。
+- **但它管不到「循环退出没写终态」的 run**：那条路径里 `SessionRunCoordinator` 已把 Redis state
+  置 IDLE 并清掉 owner，而 sweeper 只认 state ∈ {RUNNING, RUNNING_WITH_PENDING} + 无 owner，
+  两者永远对不上（线上 run 2263/2264 因此永久 RUNNING）。这类脏数据由
+  `StaleRunningRunReconciler` 按 DB `updated_at` 兜底（见 L0/L1/L2 一节末尾）。
 
 ## 技能与待办（skill ↔ todo）——单向、模型主导
 
@@ -498,6 +502,26 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 `max_input_tokens × budget-ratio`；`max_output_tokens` 不进入请求（请求 `max_tokens` 由 sampling
 config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M 并**每个路由只告警一次**——否则
 等于永不压缩（生产库存在这类路由）。
+
+**压缩不可能成功时必须跳过，而不是重试到死。** 主 system prompt 与工具 schema 是每轮固定开销，
+压缩只能压历史。先算不可压缩基线 `(leading system 消息 + tools JSON/3) × 1.1`：一旦它已超预算
+（如测试路由 `max_input_tokens=20000` → 预算 14000，而 tools 就有 11.3k token），压缩永远不可能把
+上下文压进预算。`shouldCompact` 此时直接返回 `false`（每路由只 WARN 一次），让请求带超上下文发出；
+模型接受就继续，拒绝就是 400 → ERROR 终态。旧实现会每轮白烧 3 次压缩调用，然后……
+
+**`case COMPACTED` 在重试耗尽后绝不能 `break loop`。** 旧实现只打一句
+「sending oversized context」就 `break`，但循环出口只处理取消，run 会永远停在 RUNNING。
+现在耗尽时置 `skipCompaction`（透传到 `runTurn` 的 `shouldCompact` 前置条件）+ `hasToolCalls=true`
++ `continue`，真正把这一轮发出去；工具轮成功后再复位，避免永久关闭压缩。
+
+**循环出口必须有终态安全网。** `runInternal` 收敛前若 `currentRun` 仍是 `RUNNING`，一律置 FAILED
+并发终态事件（`RunnerConstants.RUN_LOOP_NO_TERMINAL_MSG`）。`break` 点将来再加也不会静默留 RUNNING。
+
+**`StaleRunningRunReconciler` 是 DB 层最后一道网。** 每 `stale-reconcile-interval`（默认 1m）扫
+`findStaleByStatus(RUNNING, now - stale-reconcile-minutes)`（默认 30m），**且 session owner 租约不存在**
+才动手（活副本每 60s 续约，长工具/长 LLM 调用不会被误杀）：置 FAILED + 发终态事件；若 session state
+仍是 RUNNING/RUNNING_WITH_PENDING 再复位并 `coordinator.wake`，IDLE 则只收口 run。入口必须
+`TenantUtil.stop()` + `AuthContext.clear()`，否则 `findStaleByStatus` 会被 `created_by` 过滤。
 
 **路由的 token 上限必须在 `RuntimeValidator.toFull` 复制到 `ModelRouteFullVO`。** compaction 读的是
 `KernelContext` 里那个 full VO（`RouteListBuilder.fromContext` 直接返回它），而 `ModelRouteFullVO`
