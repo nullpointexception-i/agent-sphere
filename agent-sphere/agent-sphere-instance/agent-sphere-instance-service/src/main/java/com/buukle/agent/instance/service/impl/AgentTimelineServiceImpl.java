@@ -286,6 +286,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                         AgentToolCallRecord rec = toolCallMapper.selectById(row.getRefToolCallId());
                         if (rec != null) {
                             content.put(TimelineContentKey.DISPLAY_NAME.getCode(), rec.getDisplayNameCn() != null ? rec.getDisplayNameCn() : rec.getToolName());
+                            content.put(TimelineContentKey.TOOL_NAME.getCode(), rec.getToolName());
                             content.put(TimelineContentKey.STATUS.getCode(), rec.getStatus());
                             if (rec.getArgumentsJson() != null) content.put(TimelineContentKey.ARGS.getCode(), cap(rec.getCompressedArguments() != null ? rec.getCompressedArguments() : rec.getArgumentsJson(), CONTENT_CAP));
                             if (rec.getArtifact() != null) {

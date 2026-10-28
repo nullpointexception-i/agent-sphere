@@ -18,6 +18,8 @@ public final class LlmApiConstants {
     public static final String FIELD_DELTA = "delta";
     public static final String FIELD_CONTENT = "content";
     public static final String FIELD_REASONING_CONTENT = "reasoning_content";
+    /** vLLM / Qwen3 reasoning-parser 返回的字段名（与 DeepSeek/智谱的 reasoning_content 并存）。 */
+    public static final String FIELD_REASONING = "reasoning";
     public static final String FIELD_FINISH_REASON = "finish_reason";
     public static final String FIELD_USAGE = "usage";
     public static final String FIELD_TOOL_CALLS = "tool_calls";

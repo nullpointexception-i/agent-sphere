@@ -6,6 +6,7 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.model.domain.AgentModelProvider;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
+import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.vo.ModelProviderVO;
 import com.buukle.agent.model.exception.ModelErrorCode;
@@ -16,6 +17,7 @@ import com.buukle.agent.model.service.adapter.ChatResponseAdapter;
 import com.buukle.agent.model.service.adapter.record.ContentToolCallResult;
 import com.buukle.agent.model.service.constants.LlmApiConstants;
 import com.buukle.agent.model.service.converter.ModelProviderConverter;
+import com.buukle.agent.model.service.stream.LlmStreamUtils;
 import com.buukle.agent.model.service.stream.ToolStream;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -214,13 +216,13 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                                     }
                                     JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
                                     if (delta != null) {
-                                        if (delta.has(LlmApiConstants.FIELD_REASONING_CONTENT)
-                                                && delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).isTextual()) {
-                                            String r = delta.get(LlmApiConstants.FIELD_REASONING_CONTENT).asText();
-                                            if (!r.isEmpty()) {
-                                                reasoningBuilder.append(r);
-                                                onEvent.accept(new LLMEvent.ReasoningDelta(r));
-                                            }
+                                        // 双字段兼容：vLLM/Qwen3 用 reasoning，DeepSeek/智谱用 reasoning_content
+                                        String r = LlmStreamUtils.firstTextual(delta,
+                                                LlmApiConstants.FIELD_REASONING,
+                                                LlmApiConstants.FIELD_REASONING_CONTENT);
+                                        if (r != null && !r.isEmpty()) {
+                                            reasoningBuilder.append(r);
+                                            onEvent.accept(new LLMEvent.ReasoningDelta(r));
                                         }
                                         if (delta.has(LlmApiConstants.FIELD_CONTENT)
                                                 && delta.get(LlmApiConstants.FIELD_CONTENT).isTextual()) {
@@ -263,9 +265,12 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                         });
                 String content = contentBuilder.toString();
                 String reasoning = reasoningBuilder.toString();
-                log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}, usage={}",
+                TokenUsage usageModel = TokenUsage.from(usage);
+                log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}, usage={}, cached={}/{}",
                         modelName, chunkCount, content.length(), reasoning.length(),
-                        usage.isEmpty() ? "-" : usage.getOrDefault("total_tokens", "-"));
+                        usage.isEmpty() ? "-" : usage.getOrDefault("total_tokens", "-"),
+                        usageModel == null ? "-" : usageModel.getCacheHitTokens(),
+                        usageModel == null ? "-" : usageModel.getCacheMissTokens());
                 String finishReason = lastFinishReason != null && !lastFinishReason.isBlank()
                         ? lastFinishReason : com.buukle.agent.model.dtvo.complete.FinishReason.STOP;
                 if (!com.buukle.agent.model.dtvo.complete.FinishReason.STOP.equals(finishReason)

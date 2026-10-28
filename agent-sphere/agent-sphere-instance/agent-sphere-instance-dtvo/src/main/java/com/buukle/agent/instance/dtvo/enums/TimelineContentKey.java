@@ -26,7 +26,9 @@ public enum TimelineContentKey {
     /** 用户消息附图引用（[{fileKey, contentType}]，前端按 fileKey 拉字节显示）。 */
     IMAGES("images"),
     /** 用量聚合（{promptTokens, completionTokens, totalTokens, cacheHitTokens, cacheMissTokens}；assistant / run_status 行）。 */
-    USAGE("usage");
+    USAGE("usage"),
+    /** 工具名（TOOL 行；用于前端识别内部协议工具，如 finish/builtin_12）。 */
+    TOOL_NAME("toolName");
 
     private final String code;
 

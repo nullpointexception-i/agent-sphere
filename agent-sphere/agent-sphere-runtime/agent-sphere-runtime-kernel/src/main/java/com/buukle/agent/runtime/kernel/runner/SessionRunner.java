@@ -954,6 +954,18 @@ public class SessionRunner {
                                                         .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
                                                         .setArgumentsJson(tc.arguments())
                                                         .setPublishId(callPublishId)));
+                                        // finish 的 summary 就是最终答案：正文为空时作为助手正文实时推给前端。
+                                        // 否则前端只剩一张 finish 工具卡、答案空白；正文已流式输出时不重复发。
+                                        if (FinishConstants.TOOL_NAME.equals(tc.name())) {
+                                            String summary = jsonField(tc.arguments(), FinishConstants.JSON_SUMMARY);
+                                            if (summary != null && !summary.isBlank() && contentRef.get().isEmpty()) {
+                                                contentRef.set(summary);
+                                                eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
+                                                        new RuntimeEventDataVO()
+                                                                .setSessionId(sessionId).setRunId(runId)
+                                                                .setResponse(summary)));
+                                            }
+                                        }
                                     }
                                     case LLMEvent.Finish f -> finishReasonRef.set(f.reason());
                                     case LLMEvent.Error e -> {

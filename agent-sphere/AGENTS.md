@@ -434,6 +434,11 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
      loop 预算 / 静默追问 / 收口指令」作为尾部 system 追加；待办/追问/收口漏一个就继续 400。
   **必须新建 `ChatMessageDTO`/新列表**：request 的 messages 是 runner 列表的浅拷贝（元素共享），
   原地改 role 会污染 runner 历史。
+- **reasoning 字段名因网关而异，必须双字段兼容**：vLLM / Qwen3 的 reasoning-parser 返回
+  `delta.reasoning`，DeepSeek/智谱返回 `delta.reasoning_content`。只读后者会让 Qwen 的
+  `reasoningLen=0`、思考正文整体丢失（线上 54 个分片实测 `reasoning_content` 出现 0 次）。
+  `ModelProviderServiceImpl` 统一走 `LlmStreamUtils.firstTextual(delta, "reasoning", "reasoning_content")`
+  （跳过空串，避免空 `reasoning` 遮蔽后一个字段）。请求侧 assistant 的 `reasoning_content` 补空串不动。
 - **`LLMEvent.Error` 携带 `httpStatus` + `retryable`**：`agent_llm_interaction_record.http_status`
   由此落库（正常结束记 200）。4xx（408/429 除外）是终态错误，`SessionRunner` 不再做同轮重试
   —— 否则一次 400 会被放大成 4 次（线上实测）。`KernelLlmService` 在 finally 里序列化
@@ -468,6 +473,15 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 - `finish(status=failed|blocked)` **仍置 run COMPLETED**，状态只体现在 finish 的工具记录与 summary 里，
   保住任务的结构化提炼链路。
 - **子 Agent 不接 `finish`**（`SessionSubRunner#filterTools` 剔除），收口判定只在主循环。
+- **`finish.summary` 必须作为助手正文可见，否则界面空白。** 答案在 tool_calls 参数里，
+  LLM 轮本身 content 为空；两层都要处理：
+  1. 实时：`SessionRunner` 的 `LLMEvent.ToolCall` 分支在 `contentRef` 为空时把 summary 作为
+     `CONTENT_TOKEN` 推出（必须在 `closeAssistantTurn` 之前；正文已流式输出时不重复发）。
+  2. 持久化：时间线 ASSISTANT 行按 `agent_llm_interaction_record.reply_content` 渲染，
+     `FinishReplyPersistListener` 在 run COMPLETED 时回填「最新一条且 reply 为空」的 CHAT_REPLY
+     （只写 reply_content，不覆盖已有正文）。
+- **`finish` 工具行对用户隐藏**（内部协议工具）：时间线 TOOL 行带 `toolName`，
+  主站 `TimelineList` 与 widget `WidgetTimeline` 两端都过滤 `builtin_12`；工具记录仍保留供审计。
 
 **L2 · 静默追问。** `toolsEverExecuted` 从**已持久化的 `loopCount`** 起步（`loopCount` 只在工具轮自增，
 所以跨挂起恢复依然成立）。沉默时追加一条尾部 system 提示（`SILENT_TURN_NUDGE_PREFIX` marker，

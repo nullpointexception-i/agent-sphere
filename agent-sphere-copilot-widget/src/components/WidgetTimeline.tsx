@@ -27,6 +27,21 @@ export interface WidgetTimelineProps {
 
 // ---------------------------------------------------------------- utils
 
+// finish 是内部协议工具（builtin_12）：答案已作为助手正文展示，工具行不再渲染（与主站一致）。
+const FINISH_TOOL_NAME = 'builtin_12';
+
+function isFinishToolRow(row: TimelineRow): boolean {
+  if (!row || row.kind !== 'tool') {
+    return false;
+  }
+  const content = row.content;
+  return (
+    content?.toolName === FINISH_TOOL_NAME ||
+    content?.displayName === '完成任务' ||
+    content?.displayName === 'Finish'
+  );
+}
+
 function formatDuration(ms?: number | null): string {
   if (ms == null || ms < 0 || !Number.isFinite(ms)) return '';
   const sec = Math.round(ms / 1000);
@@ -769,6 +784,9 @@ export function WidgetTimeline({
   const items = useMemo(() => {
     const groups = new Map<string, TimelineRow[]>();
     for (const r of rows) {
+      if (isFinishToolRow(r)) {
+        continue;
+      }
       if (r.kind !== 'subagent') continue;
       const pid = r.content?.parentToolCallId;
       if (pid == null || pid === '') continue;

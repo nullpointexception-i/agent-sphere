@@ -14,6 +14,7 @@ import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.contract.TurnOutcome;
@@ -22,6 +23,8 @@ import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
+import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
+import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
@@ -29,6 +32,7 @@ import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RSet;
@@ -43,11 +47,14 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -220,5 +227,38 @@ class FinishProtocolTest {
         Method m = SessionRunner.class.getDeclaredMethod("applySilentTurnNudge", List.class, int.class);
         m.setAccessible(true);
         m.invoke(runner, messages, silentTurns);
+    }
+
+    // ---------- finish.summary 作为助手正文（界面空白的修复） ----------
+
+    @Test
+    void finishToolCall_emitsSummaryAsContentWhenNoContent() throws Exception {
+        emit(new LLMEvent.ToolCall("finish-call", FinishConstants.TOOL_NAME,
+                "{\"status\":\"success\",\"summary\":\"最终答案\"}"));
+
+        runTurn();
+
+        ArgumentCaptor<RuntimeEventVO> captor = ArgumentCaptor.forClass(RuntimeEventVO.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
+        assertTrue(captor.getAllValues().stream().anyMatch(e ->
+                        e.getEventType() == FlowEventType.CONTENT_TOKEN
+                                && "最终答案".equals(e.getData().getResponse())),
+                "finish.summary 必须作为助手正文推出，否则前端只剩工具卡、答案空白");
+    }
+
+    @Test
+    void finishToolCall_doesNotDuplicateSummaryWhenContentAlreadyStreamed() throws Exception {
+        emit(new LLMEvent.TextDelta("正文"),
+                new LLMEvent.ToolCall("finish-call", FinishConstants.TOOL_NAME,
+                        "{\"status\":\"success\",\"summary\":\"最终答案\"}"));
+
+        runTurn();
+
+        ArgumentCaptor<RuntimeEventVO> captor = ArgumentCaptor.forClass(RuntimeEventVO.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
+        assertFalse(captor.getAllValues().stream().anyMatch(e ->
+                        e.getEventType() == FlowEventType.CONTENT_TOKEN
+                                && "最终答案".equals(e.getData().getResponse())),
+                "正文已流式输出时不得重复发 summary");
     }
 }

@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
 import com.buukle.agent.instance.domain.vo.SessionUsageVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
@@ -18,6 +19,8 @@ import java.util.stream.Collectors;
 public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteractionRecordSpi {
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    /** 主 Agent 问答轮次（与 kernel LlmInteractionType.CHAT_REPLY 的落库字符串一致；instance 不能依赖 kernel）。 */
+    private static final String INTERACTION_TYPE_CHAT_REPLY = "CHAT_REPLY";
 
     private final AgentLlmInteractionRecordMapper mapper;
 
@@ -69,6 +72,31 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
     public AgentLlmInteractionRecordVO getById(Long id) {
         AgentLlmInteractionRecord record = mapper.selectById(id);
         return record == null ? null : toVO(record);
+    }
+
+    @Override
+    public boolean updateLatestBlankReply(Long runId, String reply) {
+        if (runId == null || reply == null || reply.isBlank()) {
+            return false;
+        }
+        AgentLlmInteractionRecord latest = mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
+                .eq(AgentLlmInteractionRecord::getRunId, runId)
+                .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
+                .orderByDesc(AgentLlmInteractionRecord::getId)
+                .last("LIMIT 1"));
+        if (latest == null) {
+            return false;
+        }
+        String existing = latest.getReplyContent();
+        if (existing != null && !existing.isBlank()) {
+            return false;
+        }
+        // 只更新 reply_content，且二次校验仍为空：不覆盖并发写入的正文，也不重写 request/response 大字段
+        return mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
+                .eq(AgentLlmInteractionRecord::getId, latest.getId())
+                .and(w -> w.isNull(AgentLlmInteractionRecord::getReplyContent)
+                        .or().eq(AgentLlmInteractionRecord::getReplyContent, ""))
+                .set(AgentLlmInteractionRecord::getReplyContent, reply)) > 0;
     }
 
     @Override

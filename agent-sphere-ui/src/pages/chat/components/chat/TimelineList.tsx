@@ -58,6 +58,21 @@ const KIND_LABEL: Record<string, string> = {
   error: '错误',
 };
 
+// finish 是内部协议工具（builtin_12）：答案已作为助手正文展示，工具行不再渲染（主站/widget 两端一致）。
+const FINISH_TOOL_NAME = 'builtin_12';
+
+function isFinishToolRow(row: any): boolean {
+  if (!row || row.kind !== 'tool') {
+    return false;
+  }
+  const content = row.content;
+  return (
+    content?.toolName === FINISH_TOOL_NAME ||
+    content?.displayName === '完成任务' ||
+    content?.displayName === 'Finish'
+  );
+}
+
 function formatDuration(ms?: number) {
   if (ms == null || Number.isNaN(ms) || ms < 0) return '';
   if (ms < 1000) return '<1s';
@@ -1214,6 +1229,9 @@ export default function TimelineList({
       { type: 'row'; row: any } | { type: 'group'; key: string; members: any[] }
     > = [];
     for (const r of rows) {
+      if (isFinishToolRow(r)) {
+        continue;
+      }
       const k = parallelGroupKey(r);
       if (k && (counts.get(k) ?? 0) >= 2 && !consumed.has(k)) {
         consumed.add(k);
