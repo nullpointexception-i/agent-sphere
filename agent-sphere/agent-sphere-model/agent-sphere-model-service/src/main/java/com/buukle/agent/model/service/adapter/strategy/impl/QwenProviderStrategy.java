@@ -7,6 +7,7 @@ import com.buukle.agent.model.service.adapter.record.ContentToolCallResult;
 import com.buukle.agent.model.service.adapter.strategy.ProviderStrategy;
 import com.buukle.agent.model.service.constants.LlmApiConstants;
 import com.buukle.agent.model.service.stream.ToolStream;
+import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
 
@@ -68,15 +69,56 @@ public class QwenProviderStrategy implements ProviderStrategy {
             }
         }
 
-        // Qwen3 模板要求所有 system 消息必须在最前面，否则网关 400：
+        // Qwen3 模板要求所有 system 消息必须在最前面，且网关只认 messages[0]：
         //   "System message must be at the beginning."
-        // runner 为了命中前缀缓存，会把「当前时间 / 待办 / loop 预算 / 静默追问 / 收口指令」
-        // 作为尾部 system 追加；这里把这些「非首条 system」就地降级为 user（保持位置与顺序），
-        // 既满足模板约束，又不把变化内容挪到 messages[0]（保留前缀缓存）。
-        List<ChatMessageDTO> normalized = demoteTrailingSystem(messages);
+        // 两类来源都要处理：
+        //   1) leading system：runner 的系统提示词 + HistoryLoader 注入的「上一轮被取消」/「压缩摘要」
+        //      → 必须合并成一条，否则第二条 leading system 同样 400；
+        //   2) trailing system：当前时间 / 待办 / loop 预算 / 静默追问 / 收口
+        //      → 降级为 user（保持位置与顺序），避免把每轮变化的内容挪到 messages[0]（保留前缀缓存）。
+        List<ChatMessageDTO> normalized = demoteTrailingSystem(mergeLeadingSystem(messages));
         if (normalized != messages) {
             request.setMessages(normalized);
         }
+    }
+
+    /**
+     * 把开头连续的 system 消息合并成一条（保持顺序，空行分隔）。
+     *
+     * <p>Qwen 模板只读取 {@code messages[0]} 作为 system，且网关要求非 0 位置不得出现 system；
+     * HistoryLoader 在「上一轮被取消」或「有压缩摘要」时会把 system 提示插到 history 最前，
+     * 与 runner 的系统提示词形成多条 leading system —— 合并后才能通过校验。
+     *
+     * <p>没有多条 leading system 时原样返回（快路径，不改列表引用）。
+     */
+    private static List<ChatMessageDTO> mergeLeadingSystem(List<ChatMessageDTO> messages) {
+        int leading = 0;
+        while (leading < messages.size()
+                && messages.get(leading) != null
+                && ROLE_SYSTEM.equals(messages.get(leading).getRole())) {
+            leading++;
+        }
+        if (leading <= 1) {
+            return messages;
+        }
+        StringBuilder merged = new StringBuilder();
+        for (int i = 0; i < leading; i++) {
+            Object content = messages.get(i).getContent();
+            String text = content instanceof String s
+                    ? s
+                    : (content == null ? null : JsonUtils.toJson(content));
+            if (text == null || text.isBlank()) {
+                continue;
+            }
+            if (merged.length() > 0) {
+                merged.append("\n\n");
+            }
+            merged.append(text);
+        }
+        List<ChatMessageDTO> out = new ArrayList<>(messages.size() - leading + 1);
+        out.add(new ChatMessageDTO().setRole(ROLE_SYSTEM).setContent(merged.toString()));
+        out.addAll(messages.subList(leading, messages.size()));
+        return out;
     }
 
     /**

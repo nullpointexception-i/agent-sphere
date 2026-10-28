@@ -425,12 +425,15 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 - Qwen3 是 OpenAI 兼容接口，`thinking` / `tool_stream` 是本系统给智谱/DeepSeek 的内部字段，
   策略里剔除；SSE delta 解析与 OpenAI 一致。
 - **Qwen3 还要求所有 system 消息必须在最前面**（否则 400 `System message must be at the
-  beginning.`），且其 chat template **只把 `messages[0]` 当 system 渲染**，后面的 system 会被
-  忽略。runner 为了前缀缓存刻意把「当前时间 / 待办 / loop 预算 / 静默追问 / 收口指令」作为
-  **尾部 system** 追加 —— 所以 `QwenProviderStrategy` 会把「出现在首条非 system 之后的
-  system」**降级为 user（保持原位）**。只处理时间/预算是不够的：待办、静默追问、收口指令同样
-  是尾部 system，漏一个就继续 400。**必须新建 `ChatMessageDTO` 再改 role**：request 的
-  messages 是 runner 列表的浅拷贝（元素共享），原地改 role 会污染 runner 历史。
+  beginning.`），且网关/模板**只认 `messages[0]`**，非 0 位置的 system 直接拒绝（不是忽略）。
+  两类来源都要在 `QwenProviderStrategy` 里归一化：
+  1. **leading system 合并**：runner 的系统提示词 + `HistoryLoader` 在「上一轮被取消」或
+     「有压缩摘要」时注入到 history 最前的 system —— 必须合并成一条，否则第二条 leading
+     system 仍 400。compaction summary 同样走这条路。
+  2. **trailing system 降级为 user（保持原位）**：runner 为前缀缓存刻意把「当前时间 / 待办 /
+     loop 预算 / 静默追问 / 收口指令」作为尾部 system 追加；待办/追问/收口漏一个就继续 400。
+  **必须新建 `ChatMessageDTO`/新列表**：request 的 messages 是 runner 列表的浅拷贝（元素共享），
+  原地改 role 会污染 runner 历史。
 - **`LLMEvent.Error` 携带 `httpStatus` + `retryable`**：`agent_llm_interaction_record.http_status`
   由此落库（正常结束记 200）。4xx（408/429 除外）是终态错误，`SessionRunner` 不再做同轮重试
   —— 否则一次 400 会被放大成 4 次（线上实测）。`KernelLlmService` 在 finally 里序列化
