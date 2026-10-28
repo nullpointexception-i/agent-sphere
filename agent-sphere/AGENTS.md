@@ -499,6 +499,13 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M 并**每个路由只告警一次**——否则
 等于永不压缩（生产库存在这类路由）。
 
+**路由的 token 上限必须在 `RuntimeValidator.toFull` 复制到 `ModelRouteFullVO`。** compaction 读的是
+`KernelContext` 里那个 full VO（`RouteListBuilder.fromContext` 直接返回它），而 `ModelRouteFullVO`
+的 `maxInputTokens/maxOutputTokens` 是**继承自 `ModelRouteVO`** 的——`RuntimeValidator.toFull`
+漏拷过这两个字段，于是所有路由在运行时都是 null → 回落 1M → 预算 700k。线上 session 951
+（instance 2 / route 4 = 20k）与 Qwen 32k 的 400 都是这个原因；`RouteListBuilder.toFull` 是对的，
+只有 `RuntimeValidator.toFull` 曾经漏掉（现在已补，并有 `RuntimeValidatorTest` 锁定）。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).

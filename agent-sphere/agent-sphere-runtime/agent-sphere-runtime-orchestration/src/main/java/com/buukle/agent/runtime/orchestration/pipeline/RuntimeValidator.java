@@ -119,6 +119,9 @@ public class RuntimeValidator {
         full.setCreatedAt(route.getCreatedAt());
         full.setCompany(route.getCompany());
         full.setSupportsAttachment(route.getSupportsAttachment());
+        // 必须带上：CompactionService 用 max_input_tokens 算压缩阈值；漏拷会回落 1M → 永不压缩
+        full.setMaxInputTokens(route.getMaxInputTokens());
+        full.setMaxOutputTokens(route.getMaxOutputTokens());
 
         if (route.getProviderId() != null) {
             try {

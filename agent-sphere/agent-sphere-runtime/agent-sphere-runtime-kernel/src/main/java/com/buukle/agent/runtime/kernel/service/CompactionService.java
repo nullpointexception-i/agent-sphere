@@ -103,8 +103,8 @@ public class CompactionService {
         long messageTokens = estimateMessagesTokens(messages);
         long toolTokens = estimateToolTokens(tools);
         long estimated = (long) Math.ceil((messageTokens + toolTokens) * ESTIMATE_SAFETY_RATIO);
-        log.debug("Compaction check: messageTokens={}, toolTokens={}, estimated={}, budget={}, maxInput={}",
-                messageTokens, toolTokens, estimated, budget, maxInputTokens);
+        log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, estimated={}, budget={}, maxInput={}",
+                routeId, messageTokens, toolTokens, estimated, budget, maxInputTokens);
         return estimated > budget;
     }
 
