@@ -24,6 +24,8 @@ public final class RuntimeEventTypeConstant {
     public static final String REASONING_SUB_TYPE_COMPACTION_RUNNING = "compaction_running";
     public static final String REASONING_SUB_TYPE_COMPACTION_COMPLETED = "compaction_completed";
     public static final String REASONING_SUB_TYPE_COMPACTION_FAILED = "compaction_failed";
+    /** 压缩模型的流式输出（CONTENT_TOKEN）：前端打印到 compaction 行正文，不并入 assistant。 */
+    public static final String REASONING_SUB_TYPE_COMPACTION_OUTPUT = "compaction_output";
 
     public static final String REASONING_SUB_TYPE_TOOL_CALL_STARTED = "tool_call_started";
     public static final String REASONING_SUB_TYPE_TOOL_CALL_IN_PROGRESS = "tool_call_in_progress";

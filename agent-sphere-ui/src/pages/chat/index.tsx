@@ -689,6 +689,38 @@ export default function Chat() {
               setSending(true);
             }
 
+            // 上下文压缩：RUNNING 事件本地插行（后端已回填 seq/kind），输出 token 追加到正文。
+            // 刻意不在 compaction_running 时 refreshLatest —— 浅合并会用「尚无正文」的权威行覆盖已流出的文字。
+            if (d?.seq != null && d?.kind === 'compaction') {
+              const seq = Number(d.seq);
+              const delta = evtType === 'content_token' ? String(d?.response || '') : '';
+              const terminal =
+                tlSubType === 'compaction_completed' ||
+                tlSubType === 'compaction_failed';
+              setTimeline((prev) => {
+                const m = new Map<number, any>(prev.map((r) => [r.seq, r]));
+                const existing = m.get(seq);
+                const content = { ...(existing?.content || {}) };
+                if (delta) content.text = (content.text || '') + delta;
+                m.set(seq, {
+                  ...(existing || {}),
+                  seq,
+                  kind: 'compaction',
+                  state: terminal
+                    ? tlSubType === 'compaction_failed'
+                      ? 'FAILED'
+                      : 'COMPLETED'
+                    : 'RUNNING',
+                  title:
+                    d?.assistantReply ||
+                    existing?.title ||
+                    '正在压缩上下文…',
+                  content,
+                });
+                return [...m.values()].sort((a, b) => a.seq - b.seq);
+              });
+            }
+
             if (
               d?.seq != null &&
               d?.kind === 'assistant' &&
@@ -732,6 +764,8 @@ export default function Chat() {
                 'run_waiting',
                 'tool_call_succeeded',
                 'tool_call_failed',
+                'compaction_completed',
+                'compaction_failed',
               ].includes(tlSubType) ||
               String(evtType).startsWith('clarification_')
             ) {

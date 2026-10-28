@@ -5,7 +5,11 @@ public final class RunnerConstants {
     public static final String EMPTY_JSON_ARGS = "{}";
     public static final long DEFAULT_MAX_INPUT_TOKENS = 1_000_000L;
     public static final long DEFAULT_MAX_OUTPUT_TOKENS = 128_000L;
-    public static final int TOKEN_ESTIMATE_DIVISOR = 3;
+    /**
+     * 字符数 → token 的估算除数。中文实际约 1.5–1.8 字/token（JSON 里的中文值同样偏密），
+     * 旧的 3 会显著低估、导致压缩总是晚于真实溢出（线上 32k 路由实测请求 32,852 token 时估算才 ~20k）。
+     */
+    public static final double TOKEN_ESTIMATE_DIVISOR = 1.8;
     public static final int TOOL_RESULT_MAX_CHARS = 2000;
     public static final int COMPACTION_TOOL_RESULT_MAX_CHARS = 500;
     public static final int TOOL_RESULT_HISTORY_CHARS_BUDGET = 50000;

@@ -6,6 +6,7 @@ import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentUserInLoopRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
@@ -148,8 +149,7 @@ public class RuntimeEventListener {
             case RunStatus r -> handleRunLifecycle(data, r);
             case ToolCallStatus s -> handleToolCallLifecycle(data, s);
             case UserInLoopRecordStatus s -> handleUserInLoopLifecycle(data, s);
-            case CompactionStatus s -> {
-            }
+            case CompactionStatus s -> handleCompaction(data, s);
             case SessionStatus s -> handleSessionLifecycle(data, s);
             case FlowEventType f -> handleFlow(data, f);
             case ChromeCommandEventType s -> handleChromeCommand(event, data);
@@ -256,6 +256,12 @@ public class RuntimeEventListener {
         if (!isReasoning && !isContent) {
             return;
         }
+        // 压缩模型的流式输出：打到 compaction 行，绝不能落到 assistant 容器（会污染本轮回复/推理）。
+        if (isContent && RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_OUTPUT
+                .equals(data.getReasoningSubType())) {
+            timelineRecorder.stampCompactionSeq(data);
+            return;
+        }
         // 主 Agent 流式容器：仅主 agent（子 Agent 与其头行由 SkillReActExecutor 管理，卡内按 sub_agent_run_id 实时订阅）
         if (data.getSubAgentRunId() == null
                 && (isContent || RuntimeEventTypeConstant.REASONING_TYPE_LLM.equals(data.getReasoningType()))) {
@@ -272,6 +278,30 @@ public class RuntimeEventListener {
             return;
         }
         reasoningBufferStore.accumulate(runId, response);
+    }
+
+    /**
+     * 压缩状态落 timeline（kind=compaction）。RUNNING 建行并回填 seq/kind，
+     * 前端据此本地插行、随后把 compaction_output 的流式正文打在分割线下；
+     * COMPLETED/FAILED 原地更新，刷新后正文从 agent_compact_record.summary_after 解析。
+     */
+    private void handleCompaction(RuntimeEventDataVO data, CompactionStatus status) {
+        if (data.getSessionId() == null) {
+            return;
+        }
+        String state = switch (status) {
+            case PENDING, RUNNING -> TimelineState.RUNNING.getCode();
+            case COMPLETED -> TimelineState.COMPLETED.getCode();
+            case FAILED -> TimelineState.FAILED.getCode();
+        };
+        long seq = timelineRecorder.recordCompaction(data.getSessionId(), data.getRunId(),
+                data.getPublishId(), data.getCompactRecordId(), state, data.getAssistantReply());
+        if (seq > 0) {
+            data.setSeq(seq);
+            data.setKind(TimelineKind.COMPACTION.getCode());
+            // 前端按 assistantReply 本地插行，必须是完整标题（含状态前缀 + 轮次数）
+            data.setAssistantReply(TimelineRecorder.compactionTitle(state, data.getAssistantReply()));
+        }
     }
 
     private void handleClarification(RuntimeEventDataVO data, ClarificationStatus status) {

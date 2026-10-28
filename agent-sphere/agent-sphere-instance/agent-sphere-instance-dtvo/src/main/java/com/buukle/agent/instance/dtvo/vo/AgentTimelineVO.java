@@ -21,6 +21,8 @@ public class AgentTimelineVO implements Serializable {
     private Long refToolCallId;
     private Long refSubAgentRunId;
     private Long refClarificationId;
-    /** kind 专属正文（user/assistant/tool/clarification/subagent/run_status），加载时从 ref 解析。 */
+    /** 压缩记录 id（COMPACTION 行）。 */
+    private Long refCompactId;
+    /** kind 专属正文（user/assistant/tool/clarification/subagent/compaction/run_status），加载时从 ref 解析。 */
     private Map<String, Object> content;
 }

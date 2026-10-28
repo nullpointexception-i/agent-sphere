@@ -38,6 +38,8 @@ public class RuntimeEventDataVO {
     private String parentToolCallId;
     /** 统一 Timeline 行 seq（会话级单调）——SSE 打字机/打平渲染的目标键。 */
     private Long seq;
-    /** 统一 Timeline 行展示类型（user|assistant|tool|clarification|subagent|run_status|error）。 */
+    /** 统一 Timeline 行展示类型（user|assistant|tool|clarification|subagent|run_status|compaction|error）。 */
     private String kind;
+    /** 压缩记录 id（CompactionStatus 事件携带；timeline 行据此回填 ref_compact_id）。 */
+    private Long compactRecordId;
 }

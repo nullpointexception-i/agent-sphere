@@ -24,6 +24,9 @@ public interface AgentTimelineSpi {
     /** 回填行引用的 LLM 交互记录 id（每轮 LLM 调用落库后由 recorder 补引用，一轮一行）。 */
     void updateRefInteractionId(Long sessionId, Long seq, Long interactionId);
 
+    /** 回填 COMPACTION 行的压缩记录 id（正文从 agent_compact_record.summary_after 解析）。 */
+    void updateRefCompactId(Long sessionId, Long seq, Long compactRecordId);
+
     /** 按子 Agent 运行 id 更新其头行状态（sub_agent_run 结束封口）。 */
     void updateBySubAgentRun(Long subAgentRunId, String state);
 

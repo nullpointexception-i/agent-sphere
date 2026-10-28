@@ -6,6 +6,7 @@ import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -33,6 +34,8 @@ public class TimelineRecorder {
     private final ConcurrentHashMap<String, Long> toolSeqByRunStep = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> clarificationSeqByRun = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> runStatusSeqByRun = new ConcurrentHashMap<>();
+    /** 压缩行：同一 publishId（= 一次压缩尝试）复用一行，终态后释放。 */
+    private final ConcurrentHashMap<String, Long> compactionSeqByPublishId = new ConcurrentHashMap<>();
 
     /** run 终态展示文案。成功 run 展示完成时间 yyyy-MM-dd HH:mm:ss（不再显示「任务完成」）。 */
     private static final DateTimeFormatter RUN_TERMINAL_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -40,6 +43,9 @@ public class TimelineRecorder {
     private static final String TITLE_RUN_CANCELLED = "⏹️ 已取消";
     private static final String TITLE_RUN_AWAITING = "⏸️ 等待澄清";
     private static final String TITLE_RUN_WAITING = "⏳ 等待中（到点自动继续）";
+    private static final String TITLE_COMPACT_RUNNING = "正在压缩上下文…";
+    private static final String TITLE_COMPACT_COMPLETED = "上下文已压缩";
+    private static final String TITLE_COMPACT_FAILED = "上下文压缩失败";
 
     /** 直接记录一行（chat 用户消息 / 子 Agent 头行等），返回 seq。 */
     public long record(Long sessionId, Long runId, String kind, String subtype, String state, String title,
@@ -171,6 +177,72 @@ public class TimelineRecorder {
             timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
                     runId, null, null, null, null);
         }
+    }
+
+    /**
+     * 压缩行：同一次压缩（publishId）RUNNING 建行、COMPLETED/FAILED 原地更新后释放；
+     * 下一次压缩（新的 publishId）另起一行。正文由 {@link #stampCompactionSeq} 回填 seq 后流式推送。
+     */
+    public long recordCompaction(Long sessionId, Long runId, String publishId, Long compactRecordId,
+                                 String state, String detail) {
+        if (sessionId == null) {
+            return -1L;
+        }
+        String key = compactionKey(publishId, runId);
+        String title = compactionTitle(state, detail);
+        try {
+            Long seq = compactionSeqByPublishId.get(key);
+            if (seq == null) {
+                seq = timelineSpi.record(sessionId, runId, TimelineKind.COMPACTION.getCode(), state, state, title,
+                        runId, null, null, null, null);
+                if (compactRecordId != null) {
+                    timelineSpi.updateRefCompactId(sessionId, seq, compactRecordId);
+                }
+                compactionSeqByPublishId.put(key, seq);
+            } else {
+                timelineSpi.update(sessionId, seq, state, state, title);
+            }
+            if (isCompactionTerminal(state)) {
+                compactionSeqByPublishId.remove(key);
+            }
+            return seq;
+        } catch (Exception e) {
+            log.warn("Timeline compaction row failed: {}", e.getMessage());
+            return -1L;
+        }
+    }
+
+    /** 压缩输出流式 token：按 publishId 回填 seq/kind（行应在 RUNNING 事件时已建好）。 */
+    public void stampCompactionSeq(RuntimeEventDataVO data) {
+        Long runId = data.getRunId();
+        String key = compactionKey(data.getPublishId(), runId);
+        Long seq = compactionSeqByPublishId.get(key);
+        if (seq == null && data.getSessionId() != null) {
+            seq = recordCompaction(data.getSessionId(), runId, data.getPublishId(), data.getCompactRecordId(),
+                    TimelineState.RUNNING.getCode(), null);
+        }
+        if (seq != null && seq > 0) {
+            data.setSeq(seq);
+            data.setKind(TimelineKind.COMPACTION.getCode());
+        }
+    }
+
+    private static String compactionKey(String publishId, Long runId) {
+        return publishId != null && !publishId.isBlank() ? publishId : "run:" + runId;
+    }
+
+    private static boolean isCompactionTerminal(String state) {
+        return TimelineState.COMPLETED.getCode().equals(state) || TimelineState.FAILED.getCode().equals(state);
+    }
+
+    static String compactionTitle(String state, String detail) {
+        String base = TITLE_COMPACT_RUNNING;
+        if (TimelineState.COMPLETED.getCode().equals(state)) {
+            base = TITLE_COMPACT_COMPLETED;
+        } else if (TimelineState.FAILED.getCode().equals(state)) {
+            base = TITLE_COMPACT_FAILED;
+        }
+        return detail != null && !detail.isBlank() ? base + " · " + detail : base;
     }
 
     /** 澄清行：pending→answered 复用同一行。 */

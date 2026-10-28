@@ -22,7 +22,7 @@ public class AgentTimeline {
     private Long sessionId;
     private Long runId;
     private Long seq;
-    /** 展示类型：user|assistant|tool|clarification|subagent|run_status|error。 */
+    /** 展示类型：user|assistant|tool|clarification|subagent|compaction|run_status|error。 */
     private String kind;
     /** 阶段/子类型：started|in_progress|succeeded|failed|answered|cancelled… */
     private String subtype;
@@ -36,6 +36,8 @@ public class AgentTimeline {
     private Long refToolCallId;
     private Long refSubAgentRunId;
     private Long refClarificationId;
+    /** 压缩记录 id（COMPACTION 行：正文从 agent_compact_record.summary_after 解析）。 */
+    private Long refCompactId;
     private String status;
     private String remark;
     @TableLogic

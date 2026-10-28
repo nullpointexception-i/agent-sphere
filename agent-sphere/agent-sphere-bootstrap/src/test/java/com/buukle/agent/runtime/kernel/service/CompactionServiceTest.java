@@ -82,14 +82,15 @@ class CompactionServiceTest {
     @Test
     void messagesAloneStaysUnderBudget_butToolsPushItOver() {
         ModelRouteFullVO route = route(101L, 32_000L);
-        List<ChatMessageDTO> messages = failingMessages();
+        // 18,000 chars → 10,000 tokens；×1.1=11,000 < 22,400
+        List<ChatMessageDTO> messages = List.of(
+                new ChatMessageDTO().setRole("user").setContent("u".repeat(18_000)));
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(35_000);
 
-        // 只算 messages：(58564+1295)/3 ≈ 19953，×1.1 ≈ 21949 < 22400 → 旧实现不压缩（正是线上现状）
         assertFalse(service.shouldCompact(messages, route, List.of()),
-                "只算 messages 时估算低于预算，复现线上未触发压缩");
+                "只算 messages 时估算低于预算");
 
-        // 计入 10 个工具（这里用 1 个 35k chars 的 schema 模拟 ≈11.7k token）→ 34k+ > 22400
+        // tools 35,000 chars → ≈19,444 tokens；合计 ≈32,389 > 22,400
         assertTrue(service.shouldCompact(messages, route, tools),
                 "工具 schema 必须计入阈值，否则实际 prompt 超 32k 才报错");
     }
@@ -97,19 +98,28 @@ class CompactionServiceTest {
     @Test
     void safetyFactorCatchesBorderlineCase() {
         ModelRouteFullVO route = route(101L, 32_000L);
-        // messages 45,000 chars → 15,000 tokens；tools JSON ≈20,000 chars → ≈6,667；合计 ≈21,667
+        // 38,000 chars → 21,111 tokens（无安全系数 < 22,400）；×1.1 ≈23,222 > 22,400
         List<ChatMessageDTO> messages = List.of(
-                new ChatMessageDTO().setRole("user").setContent("u".repeat(45_000)));
-        List<ToolDefinitionDTO> tools = toolsWithJsonChars(20_000);
+                new ChatMessageDTO().setRole("user").setContent("u".repeat(38_000)));
 
-        // 21,667 < 22,400（无安全系数会漏），×1.1 ≈23,834 > 22,400 → 必须触发
-        assertTrue(service.shouldCompact(messages, route, tools),
-                "10% 安全系数应覆盖 chars/3 对中文/JSON 的偏低估算");
+        assertTrue(service.shouldCompact(messages, route, List.of()),
+                "10% 安全系数应覆盖字符密度的偏低估算");
     }
 
     @Test
-    void infeasibleCompactionIsSkipped_whenLeadingSystemAndToolsExceedBudget() {
-        // 线上 route 4：max_input=20000 → budget=14000；主 system + 10 个工具本身就压不进预算。
+    void chineseDensityTriggersCompactionWhereOldDivisorDidNot() {
+        ModelRouteFullVO route = route(101L, 32_000L);
+        // 40,000 chars：旧除数 3 → 13,333×1.1≈14,667（不触发）；1.8 → 22,222×1.1≈24,444（触发）
+        List<ChatMessageDTO> messages = List.of(
+                new ChatMessageDTO().setRole("user").setContent("中".repeat(40_000)));
+
+        assertTrue(service.shouldCompact(messages, route, List.of()),
+                "1.8 字/token 才能让中文对话在溢出前触发压缩");
+    }
+
+    @Test
+    void infeasibleCompactionIsSkipped_whenFixedPartExceedsMaxInput() {
+        // 线上 route 4：max_input=20000；主 system（30k chars≈16.7k）+ 工具（35k chars≈19.4k）已超硬上限。
         ModelRouteFullVO route = route(4L, 20_000L);
         List<ChatMessageDTO> messages = new ArrayList<>();
         messages.add(new ChatMessageDTO().setRole("system").setContent("s".repeat(30_000)));
@@ -117,7 +127,7 @@ class CompactionServiceTest {
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(35_000);
 
         assertFalse(service.shouldCompact(messages, route, tools),
-                "不可压缩部分已超预算，压缩不可能成功，必须跳过");
+                "固定开销已超 max_input，压缩不可能成功，必须跳过");
         assertFalse(service.shouldCompact(messages, route, tools),
                 "重复判断仍应跳过（每路由只 WARN 一次）");
     }
@@ -128,11 +138,11 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = new ArrayList<>();
         messages.add(new ChatMessageDTO().setRole("system").setContent("s".repeat(6_000)));
         messages.add(new ChatMessageDTO().setRole("user").setContent("u".repeat(60_000)));
-        // 固定部分 ≈ (2000+2000)×1.1=4400 < 14000；历史仍可压 → 必须触发。
+        // 固定部分 ≈ 3,334+3,334=6,668 < max_input 20,000；历史仍可压 → 必须触发。
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(6_000);
 
         assertTrue(service.shouldCompact(messages, route, tools),
-                "固定部分没超预算时，历史压缩仍然有效");
+                "固定部分没超硬上限时，历史压缩仍然有效");
     }
 
     @Test

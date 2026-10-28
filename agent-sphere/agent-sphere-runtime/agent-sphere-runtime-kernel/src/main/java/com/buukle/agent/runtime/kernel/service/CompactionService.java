@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -57,7 +58,7 @@ public class CompactionService {
 
     private static final double INPUT_RATIO = 0.5;
     private static final double OUTPUT_RATIO = 2.0 / 3;
-    /** 估算安全系数：chars/3 对中文/JSON 仍偏低，留 10% 余量避免「估算没到阈值、实际已超上下文」。 */
+    /** 估算安全系数：中文/JSON 的字符密度波动大，留 10% 余量避免「估算没到阈值、实际已超上下文」。 */
     private static final double ESTIMATE_SAFETY_RATIO = 1.1;
 
     private final AgentRuntimeProperties agentRuntimeProperties;
@@ -83,14 +84,16 @@ public class CompactionService {
      * token，只算 messages 会让「估算没到阈值、实际已超上下文」——线上 32k 路由（工具 11.7k token）
      * 就是这样在 32,852 实际 token 时报 400 的。
      *
-     * <p>再加 10% 安全系数：{@code chars/3} 对中文/JSON 偏低。route 的 {@code max_output_tokens}
+     * <p>再加 10% 安全系数（字符/1.8 ×1.1）。route 的 {@code max_output_tokens}
      * 不参与请求（请求的 max_tokens 由 sampling config 控制），这里也不从总上下文里扣它；
      * 0.7 的 budgetRatio 本身已为输出预留 30%。
      *
-     * <p><b>不可压缩部分已超预算时直接跳过压缩</b>：主 system prompt 与工具 schema 是每轮都带的固定开销，
-     * 压缩只能压历史。若 {@code (leading system + tools) × 1.1} 已超过预算，压缩永远不可能成功，
-     * 只会每轮白烧 3 次压缩调用后把 run 卡住（线上 route 4 = 20k 的测试路由就是这样）。
+     * <p><b>固定开销本身就塞不进模型时才跳过压缩</b>：主 system prompt 与工具 schema 是每轮都带的，
+     * 压缩只能压历史。若 {@code leading system + tools} 已超过 {@code max_input_tokens}（硬上限，不再乘
+     * 安全系数），压缩就是不可能的，只会每轮白烧 3 次压缩调用（线上 route 4 = 20k 的测试路由）。
      * 此时返回 false，让请求带着超上下文直接发：模型接受就继续，拒绝则走 400 终态失败。
+     * 注意门槛必须是硬上限而不是 0.7×budget —— 后者会让「工具占大头但真实仍可容纳」的路由
+     * （如 32k 路由）被永久关闭压缩，历史继续涨到真溢出。
      */
     public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route,
                                  List<ToolDefinitionDTO> tools) {
@@ -108,18 +111,18 @@ public class CompactionService {
         }
         long budget = (long) (maxInputTokens * agentRuntimeProperties.getRunner().getCompaction().getBudgetRatio());
         long toolTokens = estimateToolTokens(tools);
-        long irreducibleTokens = estimateIrreducibleTokens(messages, toolTokens);
-        if (irreducibleTokens > budget) {
+        long fixedTokens = estimateFixedTokens(messages, toolTokens);
+        if (fixedTokens >= maxInputTokens) {
             if (routeId == null || warnedInfeasibleCompaction.add(routeId)) {
-                log.warn("Route {} cannot compact below budget: irreducible(leading system + tools)={}, budget={}; "
-                        + "sending oversized context instead", routeId, irreducibleTokens, budget);
+                log.warn("Route {} cannot compact: fixed(leading system + tools)={} >= maxInput={}; "
+                        + "sending oversized context instead", routeId, fixedTokens, maxInputTokens);
             }
             return false;
         }
         long messageTokens = estimateMessagesTokens(messages);
         long estimated = (long) Math.ceil((messageTokens + toolTokens) * ESTIMATE_SAFETY_RATIO);
-        log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, irreducible={}, estimated={}, budget={}, maxInput={}",
-                routeId, messageTokens, toolTokens, irreducibleTokens, estimated, budget, maxInputTokens);
+        log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, fixed={}, estimated={}, budget={}, maxInput={}",
+                routeId, messageTokens, toolTokens, fixedTokens, estimated, budget, maxInputTokens);
         return estimated > budget;
     }
 
@@ -128,7 +131,7 @@ public class CompactionService {
      * 只有 leading system 算固定开销 —— 尾部 system（时间/待办/预算）每轮重建，同样压不掉，但体量很小，
      * 这里不额外计入以免误伤边界场景。
      */
-    private long estimateIrreducibleTokens(List<ChatMessageDTO> messages, long toolTokens) {
+    private long estimateFixedTokens(List<ChatMessageDTO> messages, long toolTokens) {
         long systemTokens = 0;
         if (messages != null) {
             List<ChatMessageDTO> leadingSystem = new ArrayList<>();
@@ -140,7 +143,15 @@ public class CompactionService {
             }
             systemTokens = estimateMessagesTokens(leadingSystem);
         }
-        return (long) Math.ceil((systemTokens + toolTokens) * ESTIMATE_SAFETY_RATIO);
+        return systemTokens + toolTokens;
+    }
+
+    /** 字符数 → token（向上取整；除数见 {@link RunnerConstants#TOKEN_ESTIMATE_DIVISOR}）。 */
+    private static long charsToTokens(int chars) {
+        if (chars <= 0) {
+            return 0;
+        }
+        return (long) Math.ceil(chars / RunnerConstants.TOKEN_ESTIMATE_DIVISOR);
     }
 
     /** 工具定义也是 prompt 的一部分：把 tools JSON 的字符数按同一 divisor 折算成 token。 */
@@ -149,7 +160,7 @@ public class CompactionService {
             return 0;
         }
         String json = JsonUtils.toJson(tools);
-        return json == null ? 0 : json.length() / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
+        return json == null ? 0 : charsToTokens(json.length());
     }
 
     public void compact(Long sessionId, Long runId, KernelContext ctx) {
@@ -192,36 +203,52 @@ public class CompactionService {
         }
         if (compactCount <= 0) return;
 
-        eventPublisher.publishEvent(new RuntimeEventVO(CompactionStatus.RUNNING,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId)));
-
         List<RunVO> toCompact = allAfterCursor.subList(0, compactCount);
         Long newCursor = toCompact.get(compactCount - 1).getId();
+        String detail = "合并 " + toCompact.size() + " 轮历史";
+        // publishId 必须每次压缩唯一：同一 session 的多次压缩要各自成行（timeline 按它复用/封口）。
+        String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
+        // 先建记录：失败也有审计行，timeline 也能立刻挂上 ref（刷新后正文从 summary_after 解析）。
+        AgentCompactRecordVO record = compactRecordSpi.createRecord(sessionId);
+        publishCompaction(CompactionStatus.RUNNING, sessionId, runId, publishId, record.getId(), detail);
 
-        long compactionInputLimit = (long) (maxInputTokens * INPUT_RATIO);
-        String inputText = buildCompactInput(sessionId, toCompact, compactionInputLimit);
+        try {
+            long compactionInputLimit = (long) (maxInputTokens * INPUT_RATIO);
+            String inputText = buildCompactInput(sessionId, toCompact, compactionInputLimit);
 
-        long summaryMaxLen = Math.min(
-                (long) (maxOutputTokens * OUTPUT_RATIO),
-                inputText.length() / RunnerConstants.TOKEN_ESTIMATE_DIVISOR * 2 / 3);
-        String newSummary = callLLM(
-                CompactionPromptConstant.buildPrompt(session.getSummary(), inputText, summaryMaxLen),
-                route, sessionId, runId);
+            long summaryMaxLen = Math.min(
+                    (long) (maxOutputTokens * OUTPUT_RATIO),
+                    charsToTokens(inputText.length()) * 2 / 3);
+            String newSummary = callLLM(
+                    CompactionPromptConstant.buildPrompt(session.getSummary(), inputText, summaryMaxLen),
+                    route, sessionId, runId, publishId);
 
-        if (newSummary != null && !newSummary.isBlank()) {
+            if (newSummary == null || newSummary.isBlank()) {
+                String reason = "压缩模型未返回内容";
+                compactRecordSpi.updateFailed(record.getId(), reason);
+                publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
+                return;
+            }
             sessionSpi.updateSummary(sessionId, newSummary, LocalDateTime.now().toString(), route.getId());
-            AgentCompactRecordVO record = compactRecordSpi.createRecord(sessionId);
             compactRecordSpi.updateCompleted(record.getId(), session.getSummary(), newSummary, null, newCursor);
+            publishCompaction(CompactionStatus.COMPLETED, sessionId, runId, publishId, record.getId(), detail);
+        } catch (Exception e) {
+            log.warn("Compaction failed for session {}", sessionId, e);
+            String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            compactRecordSpi.updateFailed(record.getId(), reason);
+            publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
         }
+    }
 
-        eventPublisher.publishEvent(new RuntimeEventVO(CompactionStatus.COMPLETED,
+    private void publishCompaction(CompactionStatus status, Long sessionId, Long runId,
+                                   String publishId, Long compactRecordId, String detail) {
+        eventPublisher.publishEvent(new RuntimeEventVO(status,
                 new RuntimeEventDataVO()
                         .setSessionId(sessionId)
                         .setRunId(runId)
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId)));
+                        .setPublishId(publishId)
+                        .setCompactRecordId(compactRecordId)
+                        .setAssistantReply(detail)));
     }
 
     private String buildCompactInput(Long sessionId, List<RunVO> runs, long tokenLimit) {
@@ -251,7 +278,7 @@ public class CompactionService {
                     ? RunnerConstants.COMPACTION_ASSISTANT_PREFIX + r.getAssistantReply() + RunnerConstants.COMPACTION_NEWLINE : "";
             runSb.append(asstText);
 
-            int added = runSb.length() / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
+            int added = (int) charsToTokens(runSb.length());
             if (estimatedTokens + added > limit) break;
             sb.insert(0, runSb);
             estimatedTokens += added;
@@ -268,7 +295,7 @@ public class CompactionService {
             if (c.getArgumentsJson() != null) len += c.getArgumentsJson().length();
             if (c.getArtifact() != null) len += Math.min(c.getArtifact().length(), 500);
         }
-        return len / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
+        return charsToTokens(len);
     }
 
     private long estimateMessagesTokens(List<ChatMessageDTO> messages) {
@@ -291,12 +318,13 @@ public class CompactionService {
                 }
             }
         }
-        int i = len / RunnerConstants.TOKEN_ESTIMATE_DIVISOR;
+        int i = (int) charsToTokens(len);
         log.debug("length:{}", i);
         return i;
     }
 
-    private String callLLM(String messagesText, ModelRouteFullVO route, Long sessionId, Long runId) {
+    private String callLLM(String messagesText, ModelRouteFullVO route, Long sessionId, Long runId,
+                           String publishId) {
         try {
             ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
                     .setModel(route.getModelName())
@@ -313,26 +341,22 @@ public class CompactionService {
                     request,
                     event -> {
                         switch (event) {
+                            // 压缩输出实时打到前端对话框（分割线下的正文）：
+                            // 用 compaction_output 子类型，避免被当成主 Agent 的 assistant/reasoning 行。
                             case LLMEvent.TextDelta t -> {
                                 content.append(t.text());
-                                eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
                                         new RuntimeEventDataVO()
                                                 .setSessionId(sessionId)
                                                 .setRunId(runId)
                                                 .setResponse(t.text())
-                                                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                                .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                                .setPublishId(java.util.UUID.randomUUID().toString())));
+                                                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                                .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_OUTPUT)
+                                                .setPublishId(publishId)));
                             }
-                            case LLMEvent.ReasoningDelta r ->
-                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                            new RuntimeEventDataVO()
-                                                    .setSessionId(sessionId)
-                                                    .setRunId(runId)
-                                                    .setResponse(r.text())
-                                                    .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                                    .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                                    .setPublishId(java.util.UUID.randomUUID().toString())));
+                            // 摘要模型的思考不展示（避免和压缩正文混在一起）。
+                            case LLMEvent.ReasoningDelta r -> {
+                            }
                             default -> {
                             }
                         }

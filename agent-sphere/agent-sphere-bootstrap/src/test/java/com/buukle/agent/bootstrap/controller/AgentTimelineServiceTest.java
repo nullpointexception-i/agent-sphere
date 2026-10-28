@@ -5,6 +5,8 @@ import com.buukle.agent.instance.domain.AgentToolCallRecord;
 import com.buukle.agent.instance.dtvo.enums.TimelineContentKey;
 import com.buukle.agent.instance.dtvo.vo.AgentTimelineVO;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
+import com.buukle.agent.instance.domain.AgentCompactRecord;
+import com.buukle.agent.instance.repository.AgentCompactRecordMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.service.impl.AgentTimelineServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,8 @@ class AgentTimelineServiceTest {
 
     @Mock
     AgentToolCallRecordMapper toolCallMapper;
+    @Mock
+    AgentCompactRecordMapper compactRecordMapper;
 
     @Test
     void parseAttachments_validJson_returnsList() {
@@ -81,9 +85,37 @@ class AgentTimelineServiceTest {
         assertNull(content.get(TimelineContentKey.IMAGES.getCode()));
     }
 
+    @Test
+    void resolveContent_compaction_usesSummaryAfter() throws Exception {
+        AgentCompactRecord rec = new AgentCompactRecord();
+        rec.setSummaryAfter("## Goal\n压缩后的摘要");
+        given(compactRecordMapper.selectById(7L)).willReturn(rec);
+
+        AgentTimeline row = new AgentTimeline();
+        row.setKind("compaction");
+        row.setTitle("上下文已压缩");
+        row.setRefCompactId(7L);
+
+        Map<String, Object> content = invokeResolveContent(row);
+
+        assertEquals("## Goal\n压缩后的摘要", content.get(TimelineContentKey.TEXT.getCode()));
+    }
+
+    @Test
+    void resolveContent_compaction_withoutRecord_fallsBackToTitle() throws Exception {
+        AgentTimeline row = new AgentTimeline();
+        row.setKind("compaction");
+        row.setTitle("正在压缩上下文…");
+
+        Map<String, Object> content = invokeResolveContent(row);
+
+        assertEquals("正在压缩上下文…", content.get(TimelineContentKey.TEXT.getCode()));
+    }
+
     @SuppressWarnings("unchecked")
     private Map<String, Object> invokeResolveContent(AgentTimeline row) throws Exception {
-        AgentTimelineServiceImpl svc = new AgentTimelineServiceImpl(null, null, toolCallMapper, null, null, null);
+        AgentTimelineServiceImpl svc = new AgentTimelineServiceImpl(
+                null, null, toolCallMapper, null, null, null, compactRecordMapper);
         Method m = AgentTimelineServiceImpl.class.getDeclaredMethod(
                 "resolveContent", AgentTimeline.class, Map.class, Map.class);
         m.setAccessible(true);

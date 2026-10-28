@@ -7,6 +7,8 @@ public enum TimelineKind {
     TOOL("tool"),
     CLARIFICATION("clarification"),
     SUBAGENT("subagent"),
+    /** 上下文压缩：分割线 + 压缩模型的流式输出。 */
+    COMPACTION("compaction"),
     RUN_STATUS("run_status"),
     ERROR("error");
 

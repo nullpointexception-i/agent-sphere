@@ -647,6 +647,33 @@ function RowView({
   const isUser = row.kind === 'user';
   const isAssistant = row.kind === 'assistant';
 
+  if (row.kind === 'compaction') {
+    const text = c.text || '';
+    const running = row.state === 'RUNNING';
+    const failed = row.state === 'FAILED' || row.state === 'failed';
+    return (
+      <div className="aw-tl-compaction">
+        <div className="aw-tl-divider">
+          {running ? (
+            <span className="aw-running-dot" />
+          ) : failed ? (
+            <span style={{ color: '#ff4d4f' }}>✕</span>
+          ) : (
+            <span>🔄</span>
+          )}
+          <span>{row.title || '上下文压缩'}</span>
+        </div>
+        {text ? (
+          <div className="aw-tl-compaction-body">
+            <Md text={text} />
+          </div>
+        ) : running ? (
+          <div className="aw-tl-compaction-hint">（压缩中…）</div>
+        ) : null}
+      </div>
+    );
+  }
+
   if (row.kind === 'run_status') {
     const duration = formatDuration(c.durationMs);
     const rawText = String(c.text || row.title || '');

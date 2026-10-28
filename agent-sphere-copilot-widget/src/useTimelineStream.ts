@@ -49,6 +49,9 @@ const PULL_TRIGGER_SUB_TYPES = [
   'run_waiting',
   'tool_call_succeeded',
   'tool_call_failed',
+  // 压缩终态：拉一次权威行（正文来自 summary_after）。running 不拉 —— 浅合并会覆盖已流出的正文。
+  'compaction_completed',
+  'compaction_failed',
 ];
 
 /** 从工具结果 artifact JSON 解析浏览器截图引用（data.screenshot.fileKey/contentType）。 */
@@ -426,6 +429,37 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         }
       }
 
+      const tlSubType = String(d?.reasoningSubType || d?.status || evtType);
+
+      // 上下文压缩：RUNNING 本地插行（后端已回填 seq/kind），输出 token 追加到正文
+      if (d?.seq != null && d?.kind === 'compaction') {
+        const seq = Number(d.seq);
+        const delta = evtType === 'content_token' ? String(d?.response || '') : '';
+        const terminal =
+          tlSubType === 'compaction_completed' ||
+          tlSubType === 'compaction_failed';
+        setRows((prev) => {
+          const m = new Map<number, TimelineRow>(prev.map((r) => [r.seq, r]));
+          const existing = m.get(seq);
+          const content = { ...((existing?.content || {}) as TimelineRow['content']) };
+          if (delta) content.text = (content.text || '') + delta;
+          m.set(seq, {
+            ...(existing || {}),
+            seq,
+            kind: 'compaction',
+            state: terminal
+              ? tlSubType === 'compaction_failed'
+                ? 'FAILED'
+                : 'COMPLETED'
+              : 'RUNNING',
+            title:
+              d?.assistantReply || existing?.title || '正在压缩上下文…',
+            content,
+          });
+          return [...m.values()].sort((a, b) => a.seq - b.seq);
+        });
+      }
+
       // assistant 容器打字机：seq+kind+response 就地追加 reply/thinking
       if (
         d?.seq != null &&
@@ -459,7 +493,6 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       }
 
       // 终态/工具结束/澄清 → 按 afterSeq 补行（权威合并）
-      const tlSubType = String(d?.reasoningSubType || d?.status || evtType);
 
       // 事件驱动 runActive：run_running/主助手打字机=在跑；终态=结束
       if (tlSubType === 'run_running') {

@@ -54,6 +54,7 @@ const KIND_LABEL: Record<string, string> = {
   tool: '工具',
   clarification: '澄清',
   subagent: '子 Agent',
+  compaction: '压缩',
   run_status: '状态',
   error: '错误',
 };
@@ -1062,6 +1063,47 @@ function RowCard({
     : isAssistant
       ? row.content?.reply || ''
       : '';
+
+  // 压缩行：分割线 + 压缩模型的实时输出（生成中逐 token 追加，刷新后取 summary_after）
+  if (row.kind === 'compaction') {
+    const text = row.content?.text || '';
+    const running = row.state === 'RUNNING';
+    const failed = row.state === 'FAILED' || row.state === 'failed';
+    return (
+      <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
+        <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
+          {running ? (
+            '⟳'
+          ) : failed ? (
+            <CloseOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
+          ) : (
+            '🔄'
+          )}{' '}
+          {row.title || '上下文压缩'}
+        </Divider>
+        {text ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: '#8c8c8c',
+              background: '#fafafa',
+              border: '1px solid #f0f0f0',
+              borderRadius: 6,
+              padding: '6px 10px',
+              maxHeight: 260,
+              overflow: 'auto',
+            }}
+          >
+            <XMarkdown content={text} />
+          </div>
+        ) : running ? (
+          <div style={{ fontSize: 12, color: '#bfbfbf', paddingLeft: 4 }}>
+            （压缩中…）
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   // 状态行：横线 + 状态 + 耗时 + LLM 模型名（不再渲染卡片）
   if (row.kind === 'run_status') {

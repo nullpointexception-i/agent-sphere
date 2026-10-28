@@ -15,6 +15,8 @@ import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.dtvo.vo.AgentTimelineVO;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.SessionTimelinePageVO;
+import com.buukle.agent.instance.domain.AgentCompactRecord;
+import com.buukle.agent.instance.repository.AgentCompactRecordMapper;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.repository.AgentSubAgentRunMapper;
@@ -64,6 +66,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
     private final AgentPendingClarificationMapper clarificationMapper;
     private final AgentSubAgentRunMapper subAgentRunMapper;
     private final AgentLlmInteractionRecordMapper interactionMapper;
+    private final AgentCompactRecordMapper compactRecordMapper;
 
     @Override
     public long nextSeq(Long sessionId) {
@@ -128,6 +131,19 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         }
         AgentTimeline patch = new AgentTimeline();
         patch.setRefInteractionId(interactionId);
+        lambdaUpdate()
+                .eq(AgentTimeline::getSessionId, sessionId)
+                .eq(AgentTimeline::getSeq, seq)
+                .update(patch);
+    }
+
+    @Override
+    public void updateRefCompactId(Long sessionId, Long seq, Long compactRecordId) {
+        if (sessionId == null || seq == null || compactRecordId == null) {
+            return;
+        }
+        AgentTimeline patch = new AgentTimeline();
+        patch.setRefCompactId(compactRecordId);
         lambdaUpdate()
                 .eq(AgentTimeline::getSessionId, sessionId)
                 .eq(AgentTimeline::getSeq, seq)
@@ -222,6 +238,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         vo.setRefToolCallId(row.getRefToolCallId());
         vo.setRefSubAgentRunId(row.getRefSubAgentRunId());
         vo.setRefClarificationId(row.getRefClarificationId());
+        vo.setRefCompactId(row.getRefCompactId());
         vo.setContent(resolveContent(row, runs, usageByRun));
         return vo;
     }
@@ -327,6 +344,20 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                         }
                     } else {
                         content.put(TimelineContentKey.DISPLAY_NAME.getCode(), row.getTitle());
+                    }
+                }
+                case COMPACTION -> {
+                    content.put(TimelineContentKey.TEXT.getCode(), row.getTitle());
+                    if (row.getRefCompactId() != null) {
+                        AgentCompactRecord rec = compactRecordMapper.selectById(row.getRefCompactId());
+                        if (rec != null) {
+                            String text = rec.getSummaryAfter() != null && !rec.getSummaryAfter().isBlank()
+                                    ? rec.getSummaryAfter()
+                                    : rec.getErrorMessage();
+                            if (text != null && !text.isBlank()) {
+                                content.put(TimelineContentKey.TEXT.getCode(), cap(text, CONTENT_CAP));
+                            }
+                        }
                     }
                 }
                 case RUN_STATUS, ERROR -> {

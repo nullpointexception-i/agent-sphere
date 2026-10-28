@@ -498,16 +498,18 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 10 个工具的 JSON 约 1 万 token。只估算 messages 会让「估算没到阈值、实际已超上下文」——线上 32k 路由
 （`max_input_tokens=32000`、tools≈11.7k）在 messages 估算 19,953 时未压缩，实际请求 32,852 token
 直接 400（vLLM 报 `maximum context length is 32768`）。现在估算 =
-`(messages + tools JSON/3) × 1.1`（10% 安全系数覆盖中文/JSON 的偏低估算），预算 =
+`(messages + tools JSON/1.8) × 1.1`（1.8 是中文实况的字符/token 比；旧的 /3 会把中文估算压低一半，
+压缩永远晚于溢出），预算 =
 `max_input_tokens × budget-ratio`；`max_output_tokens` 不进入请求（请求 `max_tokens` 由 sampling
 config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M 并**每个路由只告警一次**——否则
 等于永不压缩（生产库存在这类路由）。
 
 **压缩不可能成功时必须跳过，而不是重试到死。** 主 system prompt 与工具 schema 是每轮固定开销，
-压缩只能压历史。先算不可压缩基线 `(leading system 消息 + tools JSON/3) × 1.1`：一旦它已超预算
-（如测试路由 `max_input_tokens=20000` → 预算 14000，而 tools 就有 11.3k token），压缩永远不可能把
-上下文压进预算。`shouldCompact` 此时直接返回 `false`（每路由只 WARN 一次），让请求带超上下文发出；
-模型接受就继续，拒绝就是 400 → ERROR 终态。旧实现会每轮白烧 3 次压缩调用，然后……
+压缩只能压历史。先算固定开销 `leading system + tools JSON/1.8`：一旦它**已超 `max_input_tokens` 硬上限**
+（如测试路由 `max_input_tokens=20000`，而 system+tools 估算 36k），压缩永远不可能成功。
+`shouldCompact` 此时直接返回 `false`（每路由只 WARN 一次），让请求带超上下文发出；模型接受就继续，
+拒绝就是 400 → ERROR 终态。**门槛必须是硬上限而不是 0.7×budget** —— 后者会把「工具占大头但真实
+仍可容纳」的 32k 路由永久关闭压缩，历史继续涨到真溢出。旧实现会每轮白烧 3 次压缩调用，然后……
 
 **`case COMPACTED` 在重试耗尽后绝不能 `break loop`。** 旧实现只打一句
 「sending oversized context」就 `break`，但循环出口只处理取消，run 会永远停在 RUNNING。
@@ -516,6 +518,20 @@ config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M
 
 **循环出口必须有终态安全网。** `runInternal` 收敛前若 `currentRun` 仍是 `RUNNING`，一律置 FAILED
 并发终态事件（`RunnerConstants.RUN_LOOP_NO_TERMINAL_MSG`）。`break` 点将来再加也不会静默留 RUNNING。
+
+**压缩必须渲染在对话框里（分割线 + 实时输出）。** `TimelineKind.COMPACTION` 落 `agent_timeline`
+（kind=compaction，正文不落行），行通过 `ref_compact_id`（V92）指向 `agent_compact_record`，
+刷新/翻页时从 `summary_after` 解析正文。事件链：
+`CompactionService.doCompact` 先 `createRecord`（PENDING）→ 发 `CompactionStatus.RUNNING`
+（唯一 `publishId`、带 `compactRecordId`）→ `callLLM` 的每个 `TextDelta` 发
+`CONTENT_TOKEN + reasoning_sub_type=compaction_output`（**不是** reasoning_token，否则会被当成
+主 Agent 推理写进 reasoning buffer）→ 成功 `updateCompleted` 发 COMPLETED，失败 `updateFailed`
+发 FAILED（旧实现从不发 FAILED，行会永远 RUNNING）。
+- `RuntimeEventListener.handleCompaction` 是唯一落行点：RUNNING 建行并回填 `seq/kind/assistantReply`，
+  前端据此本地插行、把后续 token 追加到 `content.text`；**`compaction_running` 时不得 refreshLatest**
+  （timeline 合并是浅合并，会用「尚无正文」的权威行覆盖已流出的文字），只在完成/失败时刷新取摘要。
+- `handleFlow` 必须最先识别 `compaction_output` 并 `return`，不能走 `stampStreamingSeq`（否则会
+  建一条 assistant 行）。
 
 **`StaleRunningRunReconciler` 是 DB 层最后一道网。** 每 `stale-reconcile-interval`（默认 1m）扫
 `findStaleByStatus(RUNNING, now - stale-reconcile-minutes)`（默认 30m），**且 session owner 租约不存在**
