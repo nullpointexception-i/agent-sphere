@@ -1,0 +1,490 @@
+# ============================================================
+# 轻量日志栈：Loki(single-binary) + Alloy + Grafana
+#
+# 设计约束（单节点 k3s，磁盘有限）：
+#   - 镜像走公网 Docker Hub，**按 digest 固定**（已在节点验证可拉取），不走 ACR。
+#   - 只采 agent-sphere 命名空间，避免把 k3s/cattle 的日志一起收。
+#   - Alloy 用 DaemonSet 读节点 /var/log/pods（tail_from_end，不回放历史）。
+#   - Loki 保留 7 天（retention + compactor），PVC 5Gi；采集器 WAL 限 128Mi。
+#   - Grafana 不挂持久卷（仪表盘/datasource 由 ConfigMap 预置）。
+#   - 全部 ClusterIP，不暴露公网；通过 Rancher 服务页 “Launch” 或 port-forward 访问。
+#
+# 前置（Secret 不入 git，apply 前必须先建，否则 Grafana 起不来）：
+#   kubectl -n logging create secret generic grafana-admin \
+#     --from-literal=password='<强密码>'
+#
+# 访问：
+#   kubectl -n logging port-forward svc/grafana 3000:3000   # 本地打开 http://localhost:3000
+#   或 Rancher → logging → Services → grafana → Launch
+# ============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+---
+# ------------------------------------------------------------------
+# Loki 配置：单副本、文件系统存储、TSDB 索引、7 天保留
+# ------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: logging
+data:
+  loki.yaml: |
+    auth_enabled: false
+
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+      log_level: warn
+
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+    # 磁盘护栏：保留 7 天 + 单流/整体摄入限速，防止日志风暴写满盘
+    limits_config:
+      retention_period: 168h
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h
+      ingestion_rate_mb: 4
+      ingestion_burst_size_mb: 8
+      per_stream_rate_limit: 2MB
+      per_stream_rate_limit_burst: 4MB
+      max_query_series: 500
+      max_query_length: 721h
+      max_query_parallelism: 2
+
+    compactor:
+      working_directory: /loki/compactor
+      delete_request_store: filesystem
+      retention_enabled: true
+      retention_delete_delay: 2h
+      compaction_interval: 10m
+
+    query_range:
+      align_queries_with_step: true
+      cache_results: false
+
+    analytics:
+      reporting_enabled: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: logging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: logging
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: loki
+          image: grafana/loki@sha256:0f9cbc340cbe33ee498e654075034336962057db072f57b37f253e14d476443a
+          imagePullPolicy: IfNotPresent
+          args:
+            - -config.file=/etc/loki/loki.yaml
+          ports:
+            - name: http
+              containerPort: 3100
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+            - name: data
+              mountPath: /loki
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: loki-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: logging
+spec:
+  selector:
+    app: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: http
+---
+# ------------------------------------------------------------------
+# Alloy：DaemonSet 读取节点 /var/log/pods（只采 agent-sphere）
+#   - 用 local.file_match 展开 glob：loki.source.file 本身不展开 *
+#   - tail_from_end=true：只跟新增日志，避免重启后把历史回放一遍
+# ------------------------------------------------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: logging-alloy
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - namespaces
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logging-alloy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: logging-alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: logging
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: logging
+data:
+  config.alloy: |
+    logging {
+      level  = "warn"
+      format = "logfmt"
+    }
+
+    discovery.kubernetes "pods" {
+      role = "pod"
+
+      namespaces {
+        names = ["agent-sphere"]
+      }
+    }
+
+    discovery.relabel "pods" {
+      targets = discovery.kubernetes.pods.targets
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_phase"]
+        regex         = "Pending|Succeeded|Failed"
+        action        = "drop"
+      }
+
+      // /var/log/pods/<ns>_<pod>_<uid>/<container>/<n>.log
+      rule {
+        source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+        separator     = "/"
+        regex         = "(.*)/(.*)"
+        target_label  = "__path__"
+        replacement   = "/var/log/pods/*$1/$2/*.log"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label  = "app"
+      }
+    }
+
+    // loki.source.file 不做 glob 展开，必须先经 local.file_match
+    local.file_match "pods" {
+      path_targets = discovery.relabel.pods.output
+    }
+
+    loki.source.file "pods" {
+      targets       = local.file_match.pods.targets
+      tail_from_end = true
+      forward_to    = [loki.write.default.receiver]
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "http://loki.logging.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: logging
+  labels:
+    app: alloy
+spec:
+  selector:
+    matchLabels:
+      app: alloy
+  template:
+    metadata:
+      labels:
+        app: alloy
+    spec:
+      serviceAccountName: alloy
+      containers:
+        - name: alloy
+          image: grafana/alloy@sha256:89a5a320168387336b9ac3c850609c3ba7757eadd4ae5f1d819deb35e9854b18
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/tmp/alloy
+          # 节点上的 /var/log/pods/*.log 是 root:root 0640，需要 root 读
+          securityContext:
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+            - name: wal
+              mountPath: /tmp/alloy
+            - name: varlog
+              mountPath: /var/log/pods
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+        - name: wal
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: varlog
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+---
+# ------------------------------------------------------------------
+# Grafana：Loki 数据源预置，无持久卷，ClusterIP
+# ------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: logging
+data:
+  loki.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.logging.svc.cluster.local:3100
+        isDefault: true
+        editable: false
+        jsonData:
+          maxLines: 5000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana@sha256:9f7aa1e1e3246aade5792d35a738049f7f32f89cd51d1956cf426a4e86268a84
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: password
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            # 公网子域：登录后的跳转与 Cookie 必须基于 https
+            - name: GF_SERVER_ROOT_URL
+              value: https://grafana.buukle.top
+            - name: GF_SECURITY_COOKIE_SECURE
+              value: "true"
+            # Grafana 13 启动时会从 grafana.com 拉取预置插件列表；线上网络到不到
+            # grafana.com（实测超时），会让 HTTP 端口迟迟不监听、readiness 一直失败。
+            - name: GF_PLUGINS_PREINSTALL_DISABLED
+              value: "true"
+            - name: GF_PLUGINS_PREINSTALL_SYNC
+              value: "false"
+          ports:
+            - name: http
+              containerPort: 3000
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: data
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: logging
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+# ------------------------------------------------------------------
+# 公网入口：grafana.buukle.top（泛解析已配，证书由 cert-manager 自动签发）
+# 认证用 Grafana 自带登录（anonymous/sign-up 均已关闭）
+# ------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: logging
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - grafana.buukle.top
+      secretName: grafana-buukle-top-tls
+  rules:
+    - host: grafana.buukle.top
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
