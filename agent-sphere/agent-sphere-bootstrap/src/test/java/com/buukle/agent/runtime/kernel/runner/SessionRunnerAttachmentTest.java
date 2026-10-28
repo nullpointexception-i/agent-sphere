@@ -351,10 +351,10 @@ class SessionRunnerAttachmentTest {
     private TurnResult invokeRunTurn(List<ChatMessageDTO> messages, KernelContext ctx) throws Exception {
         Method m = SessionRunner.class.getDeclaredMethod(
                 "runTurn", Long.class, Long.class, List.class, List.class, List.class,
-                KernelContext.class, AtomicReference.class, boolean.class);
+                KernelContext.class, AtomicReference.class, boolean.class, int.class, int.class);
         m.setAccessible(true);
         return (TurnResult) m.invoke(runner, 1L, 2L, messages, List.of(), List.of(),
-                ctx, new AtomicReference<>(), false);
+                ctx, new AtomicReference<>(), false, 0, 0);
     }
 
     private static List<ChatMessageDTO> imagePartsMessages() {

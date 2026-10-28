@@ -28,6 +28,7 @@ import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
+import com.buukle.agent.runtime.kernel.service.CompactionService.RunCompactionResult;
 import com.buukle.agent.runtime.kernel.service.TitleService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,7 +53,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -130,7 +130,8 @@ class FinishProtocolTest {
         route.setBaseUrl("http://fixture.local");
         route.setModelName("fixture-model");
         lenient().when(routeListBuilder.fromContext(any())).thenReturn(List.of(route));
-        doAnswer(inv -> {
+        lenient().when(kernelLlmService.stream(anyString(), anyString(), any(), anyString(),
+                any(), any(), any())).thenAnswer(inv -> {
             @SuppressWarnings("unchecked")
             Consumer<LLMEvent> onEvent = inv.getArgument(5);
             for (LLMEvent e : events) {
@@ -139,8 +140,7 @@ class FinishProtocolTest {
             CompletableFuture<Void> done = new CompletableFuture<>();
             done.complete(null);
             return done;
-        }).when(kernelLlmService).stream(anyString(), anyString(), any(), anyString(),
-                any(), any(), any());
+        });
     }
 
     private TurnResult runTurn() throws Exception {
@@ -152,10 +152,10 @@ class FinishProtocolTest {
         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("do it"));
         Method m = SessionRunner.class.getDeclaredMethod(
                 "runTurn", Long.class, Long.class, List.class, List.class, List.class,
-                KernelContext.class, AtomicReference.class, boolean.class);
+                KernelContext.class, AtomicReference.class, boolean.class, int.class, int.class);
         m.setAccessible(true);
         return (TurnResult) m.invoke(runner, 1L, 2L, messages, List.of(), List.of(),
-                KernelContext.builder().modelRoute(route).build(), new AtomicReference<>(), skipCompaction);
+                KernelContext.builder().modelRoute(route).build(), new AtomicReference<>(), skipCompaction, 0, 0);
     }
 
     // ---------- L0：截断 / 内容过滤不能当完成 ----------
@@ -220,6 +220,23 @@ class FinishProtocolTest {
                 "压缩的真实结果必须回传给 caller，不能把‘触发过’当成成功");
         assertEquals(TurnOutcome.COMPLETE, runTurn(true).outcome(),
                 "压缩重试耗尽后必须绕过压缩，带超上下文直接发请求");
+    }
+
+    @Test
+    void runLocalCompactionResultIsReturnedToCaller() throws Exception {
+        emit(new LLMEvent.TextDelta("done"), new LLMEvent.Finish(FinishReason.STOP, null));
+        when(compactionService.shouldCompact(any(), any(), any(), any())).thenReturn(true);
+        when(compactionService.compact(any(), any(), any())).thenReturn(CompactionOutcome.NO_HISTORY);
+        List<ChatMessageDTO> rebuilt = List.of(
+                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("tail"));
+        when(compactionService.compactRun(any(), any(), any(), any(), any(Integer.class), any()))
+                .thenReturn(new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, 1, 9L));
+
+        TurnResult result = runTurn(false);
+
+        assertEquals(TurnOutcome.RUN_COMPACTED, result.outcome());
+        assertEquals(rebuilt, result.rebuiltMessages());
+        assertEquals(1, result.rebuiltCurrentRunStart());
     }
 
     // ---------- L2：静默追问消息的槽位语义 ----------

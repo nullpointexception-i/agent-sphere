@@ -63,6 +63,26 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
     }
 
     @Override
+    public List<AgentLlmInteractionRecordVO> listByRunIdAsc(Long runId) {
+        if (runId == null) {
+            return List.of();
+        }
+        return mapper.selectList(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
+                        .eq(AgentLlmInteractionRecord::getRunId, runId)
+                        .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
+                        .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
+                        // 只取恢复所需的轻量列；request_body/response_body 可能非常大
+                        .select(AgentLlmInteractionRecord::getId,
+                                AgentLlmInteractionRecord::getRunId,
+                                AgentLlmInteractionRecord::getSessionId,
+                                AgentLlmInteractionRecord::getInteractionType,
+                                AgentLlmInteractionRecord::getReplyContent,
+                                AgentLlmInteractionRecord::getCreatedAt)
+                        .orderByAsc(AgentLlmInteractionRecord::getId))
+                .stream().map(this::toVO).toList();
+    }
+
+    @Override
     public long countByRunId(Long runId) {
         return mapper.selectCount(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                 .eq(AgentLlmInteractionRecord::getRunId, runId));

@@ -43,6 +43,7 @@ import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
+import com.buukle.agent.runtime.kernel.service.CompactionService.RunCompactionResult;
 import com.buukle.agent.runtime.kernel.service.TitleService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
@@ -214,6 +215,8 @@ public class SessionRunner {
         boolean skipCompaction = false;
         /** 当前 run 的第一条内存消息在 messages 中的下标（压缩重组时据此保留当前 run，不重放数据库）。 */
         int currentRunStart = -1;
+        /** 当前 run 的 run-local 压缩次数（上限 2 次，不随工具轮重置）。 */
+        int runCompactionAttempts = 0;
         // L2：进入 agentic 流程之后，「本轮没有任何工具调用」不再是完成信号。
         // toolsEverExecuted 从已持久化的 loopCount 起步 —— loopCount 只在工具轮自增，
         // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
@@ -272,8 +275,15 @@ public class SessionRunner {
                     if (systemPrompt != null && !systemPrompt.isBlank()) {
                         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                     }
-                    messages.addAll(historyLoader.load(sessionId, currentRunId, input.isClarificationResume()));
-                    currentRunStart = messages.size();
+                    HistoryLoader.HistoryResult history = historyLoader.loadResult(
+                            sessionId, currentRunId, input.isClarificationResume());
+                    if (history != null) {
+                        messages.addAll(history.messages());
+                        currentRunStart = history.currentRunStart() >= 0
+                                ? history.currentRunStart() : messages.size();
+                    } else {
+                        currentRunStart = messages.size();
+                    }
                 }
                 messages.add(buildUserMessage(input, attachmentResolver));
                 // 当前时间追加在消息尾部（独立小段 system，不污染 messages[0] 前缀，命中缓存）
@@ -296,7 +306,7 @@ public class SessionRunner {
 
             AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
             TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef,
-                    skipCompaction);
+                    skipCompaction, currentRunStart, runCompactionAttempts);
 
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
 
@@ -333,6 +343,23 @@ public class SessionRunner {
                     messages.addAll(historyLoader.load(sessionId, currentRunId));
                     currentRunStart = messages.size();
                     messages.addAll(currentRunTail);
+                    hasToolCalls = true;
+                    continue;
+                }
+                case RUN_COMPACTED -> {
+                    if (turn.rebuiltMessages() == null) {
+                        log.warn("Run compaction returned no rebuilt messages for run {}; sending as-is", currentRunId);
+                        skipCompaction = true;
+                        hasToolCalls = true;
+                        continue;
+                    }
+                    runCompactionAttempts++;
+                    log.info("Run compaction applied for run {} (attempt {}): messages={}",
+                            currentRunId, runCompactionAttempts, turn.rebuiltMessages().size());
+                    messages.clear();
+                    messages.addAll(turn.rebuiltMessages());
+                    currentRunStart = turn.rebuiltCurrentRunStart() != null
+                            ? turn.rebuiltCurrentRunStart() : -1;
                     hasToolCalls = true;
                     continue;
                 }
@@ -419,9 +446,14 @@ public class SessionRunner {
                         .build());
             }
 
-            messages.add(new ChatMessageDTO()
+            ChatMessageDTO assistantTurn = new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_ASSISTANT)
-                    .setToolCalls(toolCallDTOs));
+                    .setToolCalls(toolCallDTOs);
+            // 正文（若有）必须保留：否则压缩/tail/resume 都只剩 tool 调用，模型看不到自己说过什么
+            if (turn.content() != null && !turn.content().isBlank()) {
+                assistantTurn.setContent(turn.content());
+            }
+            messages.add(assistantTurn);
 
             for (TurnToolCall tc : turn.toolCalls()) {
                 String runPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
@@ -579,6 +611,8 @@ public class SessionRunner {
             }
             if (suspendStatus != null) {
                 parked = true;
+                // 挂起快照：更新 run-local tail，避免 resume 用「上次压缩时」的旧 tail 丢掉之后的回合。
+                compactionService.snapshotRunTail(currentRunId, messages, currentRunStart);
                 currentRun.setStatus(suspendStatus.name());
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(suspendStatus,
@@ -865,7 +899,7 @@ public class SessionRunner {
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
                                KernelContext ctx, AtomicReference<String> turnReasoning,
-                               boolean skipCompaction) {
+                               boolean skipCompaction, int currentRunStart, int runCompactionAttempts) {
         int turnRetries = properties.getRunner().getLlmTurnMaxRetries();
         AtomicReference<String> turnReasoningOut = turnReasoning;
         for (int attempt = 0; attempt <= turnRetries; attempt++) {
@@ -1048,10 +1082,25 @@ public class SessionRunner {
                 }
             }
 
-            // ★ 压缩触发：把真实结果交给 caller —— 只有 COMPLETED 才重新组装，其余直接发。
+            // ★ 压缩触发：session 级失败/无历史时尝试当前 run 的 run-local 压缩。
             if (compactionTriggered.get()) {
-                CompactionOutcome outcome = compactionService.compact(sessionId, runId, ctx);
-                return TurnResult.compacted(outcome);
+                CompactionOutcome sessionOutcome = compactionService.compact(sessionId, runId, ctx);
+                if (sessionOutcome == CompactionOutcome.COMPLETED) {
+                    return TurnResult.compacted(sessionOutcome);
+                }
+                if (runCompactionAttempts < 2) {
+                    log.warn("Session compaction made no progress (outcome={}); attempting run-local compaction "
+                            + "for run {} (attempt {})", sessionOutcome, runId, runCompactionAttempts + 1);
+                    RunCompactionResult runResult = compactionService.compactRun(sessionId, runId, ctx,
+                            new ArrayList<>(messages), currentRunStart, effectiveMaxOutputTokens);
+                    if (runResult != null && runResult.outcome() == CompactionOutcome.COMPLETED) {
+                        return TurnResult.runCompacted(runResult.messages(), runResult.currentRunStart());
+                    }
+                } else {
+                    log.warn("Run compaction attempts exhausted for run {}; sending oversized context", runId);
+                }
+                return TurnResult.compacted(sessionOutcome != null
+                        ? sessionOutcome : CompactionOutcome.NO_PROGRESS);
             }
 
             if (cancelled.get()) {

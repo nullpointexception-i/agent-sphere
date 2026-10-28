@@ -23,6 +23,7 @@ import com.buukle.agent.runtime.kernel.contract.CompactionOutcome;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
+import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
@@ -37,6 +38,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.CompactionPromptConstant;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.util.json.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -45,7 +47,9 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -80,6 +84,26 @@ public class CompactionService {
     private static final int COMPACTION_FIELD_MAX_CHARS = 2000;
     /** 单个 run 的工具参数在压缩输入中的最大字符数。 */
     private static final int COMPACTION_ARGS_MAX_CHARS = 500;
+
+    /** run-local 压缩保留的消息数（当前 user + 最近 3 条，约 1 个工具轮）。 */
+    private static final int RUN_COMPACTION_KEEP_MESSAGES = 4;
+    /** run-local tail 持久化上限（字符）。 */
+    private static final int RUN_TAIL_MAX_CHARS = 64_000;
+    /** wait/澄清挂起时的完整未摘要 tail 上限；超限则置空，回退 HistoryLoader 的 DB 重建。 */
+    private static final int RUN_TAIL_SNAPSHOT_MAX_CHARS = 256_000;
+    /** run-local tail 单条消息持久化上限（字符）。 */
+    private static final int RUN_TAIL_MESSAGE_MAX_CHARS = 16_000;
+    /** run-local 压缩输入的单条消息/工具结果上限。 */
+    private static final int RUN_COMPACTION_MESSAGE_MAX_CHARS = 2_000;
+    private static final int RUN_COMPACTION_TOOL_RESULT_MAX_CHARS = 1_000;
+    private static final int RUN_COMPACTION_INPUT_MAX_CHARS = 200_000;
+    private static final String RUN_TAIL_IMAGE_OMITTED = "[image omitted after run compaction]";
+    private static final TypeReference<List<ChatMessageDTO>> MESSAGE_LIST_TYPE = new TypeReference<>() {};
+
+    /** 一次 run-local 压缩的真实结果（COMPLETED 时携带替换后的 messages）。 */
+    public record RunCompactionResult(CompactionOutcome outcome, List<ChatMessageDTO> messages,
+                                      int currentRunStart, Long compactRecordId) {
+    }
 
     private final AgentRuntimeProperties agentRuntimeProperties;
     private final RunSpi runSpi;
@@ -451,6 +475,266 @@ public class CompactionService {
         long tokens = charsToTokens(textChars) + imageTokens;
         log.debug("estimateMessagesTokens length:{}", tokens);
         return tokens;
+    }
+
+    /**
+     * 当前 run 的 run-local 压缩：只摘要「当前 user 之后、最后 4 条之前」的消息，
+     * 保留当前 user + 最近 3 条作为 tail；不推进 session 游标。
+     *
+     * <p>压缩后消息结构：`[system prompt][session summary][current run summary][已完成历史][当前 user + tail]`。
+     * run summary 放在 leading system 区，保持 Qwen 的 system-at-beginning 规则。
+     */
+    public RunCompactionResult compactRun(Long sessionId, Long runId, KernelContext ctx,
+                                          List<ChatMessageDTO> messages, int currentRunStart,
+                                          Integer effectiveMaxOutputTokens) {
+        if (sessionId == null || runId == null || messages == null || messages.isEmpty()
+                || currentRunStart < 0 || currentRunStart >= messages.size()) {
+            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+        }
+        try {
+            SessionVO session = sessionSpi.getSession(sessionId);
+            if (session == null) {
+                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+            }
+            List<ModelRouteFullVO> routes = routeListBuilder.fromInstance(session.getAgentInstanceId());
+            return fallbackRouteExecutor.execute(routes, (i, route) -> doCompactRun(
+                    sessionId, runId, session, route, messages, currentRunStart, effectiveMaxOutputTokens));
+        } catch (Exception e) {
+            log.warn("Run compaction failed for run {}", runId, e);
+            return new RunCompactionResult(CompactionOutcome.FAILED, messages, currentRunStart, null);
+        }
+    }
+
+    /**
+     * wait/澄清挂起：把当前未摘要上下文（从当前 user 到最新消息）快照进最近一条 run-local 记录。
+     * 这样 resume 不会用「上次压缩时」的旧 tail 丢掉之后的回合；超限则置空，让 HistoryLoader 回退 DB 重建。
+     */
+    public void snapshotRunTail(Long runId, List<ChatMessageDTO> messages, int currentRunStart) {
+        if (runId == null || messages == null || currentRunStart < 0 || currentRunStart >= messages.size()) {
+            return;
+        }
+        try {
+            AgentCompactRecordVO latest = compactRecordSpi.getLatestCompletedByRunId(runId);
+            if (latest == null) {
+                return;
+            }
+            List<ChatMessageDTO> tail = new ArrayList<>(messages.subList(currentRunStart, messages.size()));
+            String json = serializeTailSnapshot(tail);
+            compactRecordSpi.updateRunTail(runId, json);
+        } catch (Exception e) {
+            log.warn("Run tail snapshot failed for run {}", runId, e);
+        }
+    }
+
+    private RunCompactionResult doCompactRun(Long sessionId, Long runId, SessionVO session,
+                                             ModelRouteFullVO route, List<ChatMessageDTO> messages,
+                                             int currentRunStart, Integer effectiveMaxOutputTokens) {
+        int userIndex = currentRunStart;
+        int tailStart = Math.max(userIndex + 1,
+                messages.size() - (RUN_COMPACTION_KEEP_MESSAGES - 1));
+        // 不能从 tool 消息中间切：否则 resume 时会出现没有对应 assistant(tool_calls) 的孤儿 tool 消息。
+        while (tailStart > userIndex + 1
+                && LlmApiConstant.ROLE_TOOL.equals(messages.get(tailStart).getRole())) {
+            tailStart--;
+        }
+        if (tailStart <= userIndex + 1 || tailStart > messages.size()) {
+            log.info("Run compaction skipped: not enough current-run messages (run={}, userIndex={}, size={})",
+                    runId, userIndex, messages.size());
+            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+        }
+
+        List<ChatMessageDTO> toSummarize = messages.subList(userIndex + 1, tailStart);
+        String userText = truncateField(contentText(messages.get(userIndex).getContent()),
+                RUN_COMPACTION_MESSAGE_MAX_CHARS);
+        AgentCompactRecordVO previous = compactRecordSpi.getLatestCompletedByRunId(runId);
+        String previousSummary = previous != null ? previous.getSummaryAfter() : null;
+
+        long maxInputTokens = resolveMaxInputTokens(route);
+        long maxOutputTokens = route.getMaxOutputTokens() != null ? route.getMaxOutputTokens()
+                : RunnerConstants.DEFAULT_MAX_OUTPUT_TOKENS;
+        long inputLimit = (long) (maxInputTokens * INPUT_RATIO);
+        int maxInputChars = (int) Math.min(RUN_COMPACTION_INPUT_MAX_CHARS,
+                Math.max(1_000, Math.round(inputLimit * RunnerConstants.TOKEN_ESTIMATE_DIVISOR)));
+        String rendered = renderChatMessagesForCompaction(toSummarize, maxInputChars);
+        if (rendered.isBlank()) {
+            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+        }
+        String compactPrompt = "User request:\n" + userText + "\n\nMessages:\n" + rendered;
+
+        long summaryMaxLen = Math.min(
+                (long) (maxOutputTokens * OUTPUT_RATIO),
+                Math.min(SUMMARY_MAX_TOKENS_CAP, charsToTokens(compactPrompt.length()) * 2 / 3));
+        summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
+
+        String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
+        AgentCompactRecordVO record = compactRecordSpi.createRunRecord(sessionId, runId);
+        compactRecordSpi.updateRunning(record.getId());
+        String detail = "当前 run 合并 " + toSummarize.size() + " 条消息";
+        publishCompaction(CompactionStatus.RUNNING, sessionId, runId, publishId, record.getId(), detail);
+
+        try {
+            String summary = callLLM(
+                    CompactionPromptConstant.buildPrompt(previousSummary, compactPrompt, summaryMaxLen),
+                    route, sessionId, runId, publishId, (int) summaryMaxLen);
+            if (summary == null || summary.isBlank()) {
+                String reason = "压缩模型未返回内容";
+                compactRecordSpi.updateFailed(record.getId(), reason);
+                publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
+                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+            }
+
+            // 新消息：prefix（去掉旧 run summary）→ 新 run summary 插到 leading system 末尾 → 当前 user + tail
+            List<ChatMessageDTO> prefix = new ArrayList<>(messages.subList(0, userIndex));
+            prefix.removeIf(m -> LlmApiConstant.ROLE_SYSTEM.equals(m.getRole())
+                    && m.getContent() instanceof String s && s.startsWith(HistoryLoader.RUN_SUMMARY_PREFIX));
+            int insertAt = 0;
+            while (insertAt < prefix.size()
+                    && LlmApiConstant.ROLE_SYSTEM.equals(prefix.get(insertAt).getRole())) {
+                insertAt++;
+            }
+            prefix.add(insertAt, new ChatMessageDTO()
+                    .setRole(LlmApiConstant.ROLE_SYSTEM)
+                    .setContent(HistoryLoader.RUN_SUMMARY_PREFIX + summary));
+            List<ChatMessageDTO> tail = new ArrayList<>();
+            tail.add(messages.get(userIndex));
+            tail.addAll(messages.subList(tailStart, messages.size()));
+            List<ChatMessageDTO> rebuilt = new ArrayList<>(prefix);
+            int newCurrentRunStart = rebuilt.size();
+            rebuilt.addAll(tail);
+
+            String tailJson = serializeTailForPersistence(tail);
+            long summaryTokens = charsToTokens(summary.length());
+            compactRecordSpi.completeRunCompact(record.getId(), previousSummary, summary, summaryTokens, tailJson);
+            publishCompaction(CompactionStatus.COMPLETED, sessionId, runId, publishId, record.getId(), detail);
+            long after = estimateMessagesTokens(rebuilt);
+            log.info("Run compaction completed: run={}, summarizedMessages={}, tailMessages={}, summaryTokens={}, "
+                            + "estimatedMessagesAfter={}", runId, toSummarize.size(), tail.size(), summaryTokens, after);
+            return new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, newCurrentRunStart, record.getId());
+        } catch (Exception e) {
+            log.warn("Run compaction failed for run {}", runId, e);
+            String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            compactRecordSpi.updateFailed(record.getId(), reason);
+            publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
+            return new RunCompactionResult(CompactionOutcome.FAILED, messages, currentRunStart, null);
+        }
+    }
+
+    /** 把当前 run 的旧消息渲染成摘要输入；只含正文/工具调用/工具结果，明确不含 reasoning。 */
+    private static String renderChatMessagesForCompaction(List<ChatMessageDTO> messages, int maxChars) {
+        StringBuilder sb = new StringBuilder();
+        for (ChatMessageDTO m : messages) {
+            String role = m.getRole() != null ? m.getRole() : "unknown";
+            String content = contentText(m.getContent());
+            if (content != null && !content.isBlank()) {
+                int cap = LlmApiConstant.ROLE_TOOL.equals(role)
+                        ? RUN_COMPACTION_TOOL_RESULT_MAX_CHARS : RUN_COMPACTION_MESSAGE_MAX_CHARS;
+                sb.append(role).append(": ").append(truncateField(content, cap)).append('\n');
+            }
+            if (m.getToolCalls() != null) {
+                for (ToolCallDTO tc : m.getToolCalls()) {
+                    String name = tc.getFunction() != null ? tc.getFunction().getName() : "";
+                    String args = tc.getFunction() != null ? tc.getFunction().getArguments() : "";
+                    sb.append("assistant tool_call ").append(name).append(": ")
+                            .append(truncateField(args, COMPACTION_ARGS_MAX_CHARS)).append('\n');
+                }
+            }
+        }
+        return truncateWithMarker(sb.toString(), maxChars);
+    }
+
+    /** 只取文本正文；图片 part 用标记代替（不解析 data URL）。 */
+    private static String contentText(Object content) {
+        if (content instanceof String s) {
+            return s;
+        }
+        if (content instanceof List<?> parts) {
+            StringBuilder sb = new StringBuilder();
+            for (Object part : parts) {
+                if (part instanceof ChatMessagePartDTO p) {
+                    if (p.getText() != null) {
+                        sb.append(p.getText());
+                    } else if (ChatMessagePartDTO.TYPE_IMAGE_URL.equals(p.getType())) {
+                        sb.append(RUN_TAIL_IMAGE_OMITTED);
+                    }
+                }
+            }
+            return sb.toString();
+        }
+        return "";
+    }
+
+    private static boolean isGroupStart(ChatMessageDTO message) {
+        String role = message.getRole();
+        return LlmApiConstant.ROLE_USER.equals(role) || LlmApiConstant.ROLE_ASSISTANT.equals(role);
+    }
+
+    /** tail 持久化：剥离图片 data URL、截断超长正文，并控制总大小。 */
+    private static String serializeTailForPersistence(List<ChatMessageDTO> tail) {
+        List<ChatMessageDTO> copy = sanitizedTailCopy(tail, RUN_TAIL_MESSAGE_MAX_CHARS);
+        String json = JsonUtils.toJson(copy);
+        // 保留当前 user（index 0），按「完整 assistant/tool 组」丢弃最旧的一组，避免孤儿 tool 消息
+        while (json.length() > RUN_TAIL_MAX_CHARS && copy.size() > 1) {
+            int end = 2;
+            while (end < copy.size() && !isGroupStart(copy.get(end))) {
+                end++;
+            }
+            copy.subList(1, end).clear();
+            json = JsonUtils.toJson(copy);
+        }
+        if (json.length() > RUN_TAIL_MAX_CHARS && copy.get(0).getContent() instanceof String s) {
+            copy.get(0).setContent(truncateField(s, RUN_TAIL_MESSAGE_MAX_CHARS));
+            json = JsonUtils.toJson(copy);
+        }
+        return json;
+    }
+
+    /** 挂起快照：不丢弃任何组；超过上限返回 null，让 resume 回退 DB 重建。 */
+    private static String serializeTailSnapshot(List<ChatMessageDTO> tail) {
+        // 快照不逐条截断（模型当时看到的内容要完整恢复）；只受总上限约束
+        String json = JsonUtils.toJson(sanitizedTailCopy(tail, Integer.MAX_VALUE));
+        if (json != null && json.length() > RUN_TAIL_SNAPSHOT_MAX_CHARS) {
+            log.warn("Run tail snapshot too large ({} chars > {}), falling back to DB reconstruction",
+                    json.length(), RUN_TAIL_SNAPSHOT_MAX_CHARS);
+            return null;
+        }
+        return json;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<ChatMessageDTO> sanitizedTailCopy(List<ChatMessageDTO> tail, int messageMaxChars) {
+        List<ChatMessageDTO> copy = JsonUtils.parse(JsonUtils.toJson(tail), MESSAGE_LIST_TYPE);
+        if (copy == null) {
+            copy = new ArrayList<>(tail);
+        }
+        for (ChatMessageDTO m : copy) {
+            Object content = m.getContent();
+            if (content instanceof List<?> parts) {
+                // JsonUtils 反序列化时 content 是 Object，元素会变成 Map，而不是 ChatMessagePartDTO
+                List<Object> sanitized = new ArrayList<>(parts.size());
+                for (Object p : parts) {
+                    if (p instanceof ChatMessagePartDTO part
+                            && ChatMessagePartDTO.TYPE_IMAGE_URL.equals(part.getType())) {
+                        part.setType(ChatMessagePartDTO.TYPE_TEXT);
+                        part.setText(RUN_TAIL_IMAGE_OMITTED);
+                        part.setImageUrl(null);
+                        sanitized.add(part);
+                    } else if (p instanceof Map<?, ?> map
+                            && (ChatMessagePartDTO.TYPE_IMAGE_URL.equals(map.get("type"))
+                                || map.containsKey("image_url"))) {
+                        Map<String, Object> text = new LinkedHashMap<>();
+                        text.put("type", ChatMessagePartDTO.TYPE_TEXT);
+                        text.put("text", RUN_TAIL_IMAGE_OMITTED);
+                        sanitized.add(text);
+                    } else {
+                        sanitized.add(p);
+                    }
+                }
+                m.setContent(sanitized);
+            } else if (content instanceof String s && s.length() > messageMaxChars) {
+                m.setContent(truncateField(s, messageMaxChars));
+            }
+        }
+        return copy;
     }
 
     private String callLLM(String messagesText, ModelRouteFullVO route, Long sessionId, Long runId,

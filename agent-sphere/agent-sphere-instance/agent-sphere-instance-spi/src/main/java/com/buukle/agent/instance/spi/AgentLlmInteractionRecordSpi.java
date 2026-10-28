@@ -11,6 +11,9 @@ public interface AgentLlmInteractionRecordSpi {
 
     List<AgentLlmInteractionRecordVO> listByRunId(Long runId, int offset, int limit);
 
+    /** 当前 run 的全部 LLM 交互（按 id 升序；resume 恢复逐轮 assistant 正文用）。 */
+    List<AgentLlmInteractionRecordVO> listByRunIdAsc(Long runId);
+
     long countByRunId(Long runId);
 
     AgentLlmInteractionRecordVO getById(Long id);

@@ -557,6 +557,31 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
 - `handleFlow` 必须最先识别 `compaction_output` 并 `return`，不能走 `stampStreamingSeq`（否则会
   建一条 assistant 行）。
 
+**单 run 长任务：run-local 压缩（V93）。**
+- 第一轮/单个 RUNNING run 没有「已完成历史」时，session 级压缩返回 `NO_HISTORY`；此时对当前 run 做 run-local 压缩：
+  保留**当前 user + 最近 3 条消息**（按 tool 组边界回退，不产生孤儿 tool 消息）作为 tail，
+  把 user 之后的旧 assistant/tool 消息摘要为 `[Current run summary]`（leading system）。
+- 记录写 `agent_compact_record`：`run_id` 非空、`tail_json` 存 tail；**session 级 `getLatestCompleted`
+  必须过滤 `run_id IS NULL`**，run-local 不推进 session 游标。
+- 每次 `runInternal` 最多 2 次 run-local 压缩；仍超预算就直接发送并 WARN。
+- **wait/澄清挂起时** `snapshotRunTail` 会把当前未摘要上下文（当前 user→最新消息）写回最近的 run-local
+  `tail_json`；否则 resume 会使用「上次压缩时」的旧 tail，丢掉之后的回合。快照超过 256k 字符时置 null，
+  回退 HistoryLoader 的 DB 重建。
+- 压缩序列化/估算/tail **一律不含 reasoning**；assistant 正文必须保留（live tool 轮的 assistant 消息现在带 `content`）。
+- 触发与结果日志：`Session compaction made no progress ... attempting run-local`、
+  `Run compaction completed: summarizedMessages=..., tailMessages=..., summaryTokens=...`。
+
+**Resume 必须恢复当前 run 的持久化 tool 历史 + assistant 正文。**
+- `HistoryLoader` 新增 `loadResult(...)`：返回 messages + 当前 run 起点 `currentRunStart`；
+  wait/clarification 恢复用 `restoreCurrentRun=true`。
+- 有 run-local 记录：用 `summary_after`（leading system）+ `tail_json`，不再重放当前 run；
+  session 压缩重组（`restoreCurrentRun=false`）只补 run summary 前缀，tail 由 `SessionRunner#currentRunTail` 保留。
+- 无 run-local 记录：用 `agent_tool_call_record`（时间升序）恢复 assistant(tool_calls)+tool；
+  从 `agent_llm_interaction_record`（CHAT_REPLY、主 Agent、按 id 升序，只 select 轻量列）补回逐轮
+  `reply_content` **正文**；**不读 reasoning**。配对失败/tail 损坏/快照超限时回退普通 tool 记录。
+- `SessionRunner` 初始组装必须使用 `HistoryResult.currentRunStart`；压缩重组时 tail 起点仍是原始当前 user，
+  否则 wait 恢复后的 session 压缩会把 resume input 当成当前 run 起点。
+
 **`StaleRunningRunReconciler` 是 DB 层最后一道网。** 每 `stale-reconcile-interval`（默认 1m）扫
 `findStaleByStatus(RUNNING, now - stale-reconcile-minutes)`（默认 30m），**且 session owner 租约不存在**
 才动手（活副本每 60s 续约，长工具/长 LLM 调用不会被误杀）：置 FAILED + 发终态事件；若 session state
