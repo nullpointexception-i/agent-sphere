@@ -38,4 +38,14 @@ public class LlmRequestConfigurer {
     public void applyGlobal(ChatCompletionRequestDTO request) {
         apply(request, null);
     }
+
+    /** 合并后的输出 token 上限（实例优先、全局兜底）；未配置返回 null（预算回落到比例估算）。 */
+    public Integer resolveMaxOutputTokens(String instanceConfigJson) {
+        String globalConfig = systemConfigSpi.get(SystemConfigKeys.LLM_DEFAULTS_CONFIG, "");
+        LlmSamplingConfigDTO merged = LlmSamplingConfigMapper.merge(globalConfig, instanceConfigJson);
+        if (merged == null) {
+            return null;
+        }
+        return merged.getMaxTokens() != null ? merged.getMaxTokens() : merged.getMaxCompletionTokens();
+    }
 }

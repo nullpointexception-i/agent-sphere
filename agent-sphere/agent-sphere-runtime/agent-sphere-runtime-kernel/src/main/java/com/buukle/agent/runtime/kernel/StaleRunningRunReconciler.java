@@ -4,6 +4,7 @@ import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
@@ -44,18 +45,23 @@ public class StaleRunningRunReconciler {
     private static final Duration LOCK_LEASE = Duration.ofSeconds(30);
     private static final int BATCH_LIMIT = 50;
 
+    private static final long STALE_COMPACTION_MINUTES = 15;
+
     private final RedissonClient redissonClient;
     private final RunSpi runSpi;
+    private final AgentCompactRecordSpi compactRecordSpi;
     private final SessionRunCoordinator coordinator;
     private final ApplicationEventPublisher eventPublisher;
     private final long staleMinutes;
 
     public StaleRunningRunReconciler(RedissonClient redissonClient, RunSpi runSpi,
+                                     AgentCompactRecordSpi compactRecordSpi,
                                      SessionRunCoordinator coordinator,
                                      ApplicationEventPublisher eventPublisher,
                                      @Value("${buukle.agent.run.stale-reconcile-minutes:30}") long staleMinutes) {
         this.redissonClient = redissonClient;
         this.runSpi = runSpi;
+        this.compactRecordSpi = compactRecordSpi;
         this.coordinator = coordinator;
         this.eventPublisher = eventPublisher;
         this.staleMinutes = staleMinutes;
@@ -72,6 +78,12 @@ public class StaleRunningRunReconciler {
             locked = lock.tryLock(0, LOCK_LEASE.toMillis(), TimeUnit.MILLISECONDS);
             if (!locked) {
                 return;
+            }
+            // 压缩记录没有自己的定时器：进程崩溃/重启遗留的 PENDING/RUNNING 也在这里一并收口。
+            int staleCompactions = compactRecordSpi.failStalePending(
+                    LocalDateTime.now().minusMinutes(Math.max(STALE_COMPACTION_MINUTES, staleMinutes)));
+            if (staleCompactions > 0) {
+                log.warn("Marked {} stale compaction record(s) FAILED", staleCompactions);
             }
             LocalDateTime cutoff = LocalDateTime.now().minusMinutes(Math.max(1, staleMinutes));
             List<RunVO> stale = runSpi.findStaleByStatus(RunStatus.RUNNING.name(), cutoff, BATCH_LIMIT);

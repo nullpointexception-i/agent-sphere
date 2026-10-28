@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.prompt;
 
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
+import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
@@ -32,19 +33,25 @@ public class RunPromptBuilder {
                     ? ctx.getAgentInstance().getSystemPrompt() : "");
         }
         List<RuntimeTool> tools = ctx != null ? ctx.getTools() : null;
+        // 只列工具名：完整 description/schema 已在请求 `tools` 里各出现一次，
+        // 再拼进 system prompt 会让每个工具（尤其浏览器/技能工具）的说明重复发送。
         if (tools != null && !tools.isEmpty()) {
             List<RuntimeTool> sorted = new ArrayList<>(tools);
             sorted.sort(java.util.Comparator.comparing(RuntimeTool::getLlmToolName, String::compareTo));
             sb.append(RunnerConstants.PROMPT_TOOLS_HEADER);
             for (RuntimeTool t : sorted) {
-                sb.append("- ").append(t.getLlmToolName());
-                if (t.getDescription() != null && !t.getDescription().isBlank()) {
-                    sb.append(": ").append(t.getDescription());
-                }
-                sb.append("\n");
+                sb.append("- ").append(t.getLlmToolName()).append("\n");
             }
         }
         sb.append(RunnerConstants.PROMPT_TOOLS_FOOTER);
+        boolean hasTools = tools != null && !tools.isEmpty();
+        boolean canAskUser = hasTools && tools.stream()
+                .anyMatch(t -> ChatClarification.CLARIFICATION_TOOL_NAME.equals(t.getLlmToolName()));
+        if (canAskUser) {
+            sb.append(RunnerConstants.PROMPT_CLARIFICATION_RULES);
+        } else if (hasTools) {
+            sb.append(RunnerConstants.PROMPT_NO_CLARIFICATION_RULE);
+        }
         if (tools != null && tools.stream()
                 .anyMatch(t -> SubAgentConstants.DELEGATE_TOOL.equals(t.getLlmToolName()))) {
             sb.append(RunnerConstants.PROMPT_SUBAGENT_WORKFLOW);

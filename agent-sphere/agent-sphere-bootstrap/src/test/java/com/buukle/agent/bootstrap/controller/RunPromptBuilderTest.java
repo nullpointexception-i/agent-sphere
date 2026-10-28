@@ -2,6 +2,7 @@ package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
+import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
@@ -86,6 +87,30 @@ class RunPromptBuilderTest {
         // 不包含 footer/待办等 system 主体内容，确保仅作为尾部小段
         assertFalse(time.contains("Available tools"));
         assertFalse(time.contains("## 当前待办列表"));
+    }
+
+    @Test
+    void buildSystemPrompt_listsNamesOnly_noDuplicateDescriptions() {
+        String systemPrompt = builder.buildSystemPrompt(ctx());
+
+        assertTrue(systemPrompt.contains("builtin_1"), "system 清单保留工具名");
+        assertFalse(systemPrompt.contains("desc-builtin_1"),
+                "完整 description 由请求 tools 提供，system 里不再重复");
+    }
+
+    @Test
+    void clarificationRulesFollowRegisteredTools() {
+        String withClarification = builder.buildSystemPrompt(KernelContext.builder()
+                .agentInstance(new InstanceVO())
+                .tools(List.of(tool(ChatClarification.CLARIFICATION_TOOL_NAME)))
+                .build());
+        assertTrue(withClarification.contains("CLARIFICATION RULE"));
+        assertFalse(withClarification.contains("NO USER QUESTIONS"));
+
+        String withoutClarification = builder.buildSystemPrompt(ctx());
+        assertTrue(withoutClarification.contains("NO USER QUESTIONS"),
+                "没注册 clarification 工具时，必须明确禁止向用户提问");
+        assertFalse(withoutClarification.contains("CLARIFICATION RULE"));
     }
 
     @Test

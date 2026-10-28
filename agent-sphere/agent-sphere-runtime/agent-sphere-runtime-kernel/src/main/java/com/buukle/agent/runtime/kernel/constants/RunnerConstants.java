@@ -72,19 +72,6 @@ public final class RunnerConstants {
             as JSON or text in your reply — invoke the tool directly through the available
             function definitions.
 
-            CLARIFICATION RULE: If you ever need the user to confirm an action, choose
-            between options, or provide additional information, you MUST call the
-            clarification tool (type=choice for options, confirm for yes/no, input for
-            free-form). NEVER pose questions in natural language — the user cannot respond
-            to plain text questions in this interface; only the clarification tool
-            can capture their reply.
-
-            CLARIFICATION AFTERCARE: Whenever the user responds to a clarification,
-            IMMEDIATELY review your task list and call the task list tool to reflect
-            the new information. Mark resolved items as completed, add follow-up tasks,
-            and update priorities. Do NOT continue working on stale tasks. Then
-            EXECUTE the next step immediately — call the necessary tools and provide
-            the result. Do NOT ask another clarification on the same topic.
 
             CRITICAL — EXECUTE, DO NOT ASK: When the user gives you a clear instruction
             (e.g., 'search for X', 'check Y', 'look up Z'), EXECUTE it immediately.
@@ -94,10 +81,30 @@ public final class RunnerConstants {
             tool ONCE, then ACT on the response. Never ask multiple consecutive
             clarifications or questions. NEVER respond with a question when the user
             has already stated their intent.""";
+    /** 仅在注册了 clarification 工具时追加（避免对不存在的工具发指令）。 */
+    public static final String PROMPT_CLARIFICATION_RULES = """
+
+            CLARIFICATION RULE: If you need the user to confirm an action, choose between options,
+            or provide information, you MUST call the clarification tool (choice / confirm / input).
+            NEVER pose questions in plain text — the user can only answer through that tool.
+
+            CLARIFICATION AFTERCARE: After the user responds, immediately update the task list to
+            reflect the new information, then execute the next step. Do NOT ask another
+            clarification on the same topic.""";
+
+    /** 未注册 clarification 工具（自主任务）时的权威规则：不得向用户提问。 */
+    public static final String PROMPT_NO_CLARIFICATION_RULE = """
+
+            NO USER QUESTIONS: You cannot ask the user for input in this run. If you are blocked
+            by missing external information or permission, state exactly what is needed in your final
+            answer (or call `finish(status=blocked, summary=...)` when that tool is available).
+            Otherwise proceed with the best available information.""";
     public static final String COMPACTION_USER_PREFIX = "User: ";
     public static final String COMPACTION_ASSISTANT_PREFIX = "Assistant: ";
     public static final String COMPACTION_NEWLINE = "\n";
     public static final String HISTORY_SUMMARY_PREFIX = "[Conversation summary]\n";
+    /** todowrite 工具回执：完整清单已通过尾部待办槽下发，回执只保留短确认。 */
+    public static final String TODO_WRITE_ACK = "{\"ok\":true,\"message\":\"task list updated\"}";
     /**
      * 硬收口指令的提前量：剩余轮数 ≤ 该值时即注入 {@link #FINAL_TURN_INSTRUCTION}。
      *

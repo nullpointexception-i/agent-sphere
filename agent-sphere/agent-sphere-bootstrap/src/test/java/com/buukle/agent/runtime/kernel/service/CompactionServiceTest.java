@@ -6,8 +6,10 @@ import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
+import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -23,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -85,13 +88,13 @@ class CompactionServiceTest {
         // 18,000 chars → 10,000 tokens；×1.1=11,000 < 22,400
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("u".repeat(18_000)));
-        List<ToolDefinitionDTO> tools = toolsWithJsonChars(35_000);
+        List<ToolDefinitionDTO> tools = toolsWithJsonChars(40_000);
 
-        assertFalse(service.shouldCompact(messages, route, List.of()),
+        assertFalse(service.shouldCompact(messages, route, List.of(), null),
                 "只算 messages 时估算低于预算");
 
-        // tools 35,000 chars → ≈19,444 tokens；合计 ≈32,389 > 22,400
-        assertTrue(service.shouldCompact(messages, route, tools),
+        // tools 40,000 chars → ≈11,429 tokens（JSON 用 3.5 除数）；合计 ≈23,571 > 22,400
+        assertTrue(service.shouldCompact(messages, route, tools, null),
                 "工具 schema 必须计入阈值，否则实际 prompt 超 32k 才报错");
     }
 
@@ -102,7 +105,7 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("u".repeat(38_000)));
 
-        assertTrue(service.shouldCompact(messages, route, List.of()),
+        assertTrue(service.shouldCompact(messages, route, List.of(), null),
                 "10% 安全系数应覆盖字符密度的偏低估算");
     }
 
@@ -113,7 +116,7 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("中".repeat(40_000)));
 
-        assertTrue(service.shouldCompact(messages, route, List.of()),
+        assertTrue(service.shouldCompact(messages, route, List.of(), null),
                 "1.8 字/token 才能让中文对话在溢出前触发压缩");
     }
 
@@ -126,9 +129,9 @@ class CompactionServiceTest {
         messages.add(new ChatMessageDTO().setRole("user").setContent("hi"));
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(35_000);
 
-        assertFalse(service.shouldCompact(messages, route, tools),
+        assertFalse(service.shouldCompact(messages, route, tools, null),
                 "固定开销已超 max_input，压缩不可能成功，必须跳过");
-        assertFalse(service.shouldCompact(messages, route, tools),
+        assertFalse(service.shouldCompact(messages, route, tools, null),
                 "重复判断仍应跳过（每路由只 WARN 一次）");
     }
 
@@ -141,14 +144,90 @@ class CompactionServiceTest {
         // 固定部分 ≈ 3,334+3,334=6,668 < max_input 20,000；历史仍可压 → 必须触发。
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(6_000);
 
-        assertTrue(service.shouldCompact(messages, route, tools),
+        assertTrue(service.shouldCompact(messages, route, tools, null),
                 "固定部分没超硬上限时，历史压缩仍然有效");
+    }
+
+    @Test
+    void imagePartsCountTowardsEstimate() {
+        ModelRouteFullVO route = route(101L, 20_000L);
+        List<ChatMessagePartDTO> parts = new ArrayList<>();
+        for (int i = 0; i < 15; i++) {
+            parts.add(new ChatMessagePartDTO()
+                    .setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
+                    .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl("data:image/png;base64,xxx")));
+        }
+        List<ChatMessageDTO> messages = List.of(new ChatMessageDTO()
+                .setRole("user")
+                .setContent(parts));
+
+        // 15 张图按每张 1,000 token 估；预算 14,000，×1.1 后 16,500 → 必须触发
+        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+                "图片不能漏算，否则多模态请求会晚于真实溢出才压缩");
+    }
+
+    @Test
+    void outputTokenCapShrinksBudget() {
+        ModelRouteFullVO route = route(101L, 32_000L);
+        List<ChatMessageDTO> messages = List.of(
+                new ChatMessageDTO().setRole("user").setContent("u".repeat(21_000)));
+
+        // 无输出额度：预算 0.7×32000=22,400；21,000/1.8×1.1≈12,834 → 不触发
+        assertFalse(service.shouldCompact(messages, route, List.of(), null));
+        // 输出额度 25,000：预算上限被压到 floor=8,000（25%），12,834 → 触发
+        assertTrue(service.shouldCompact(messages, route, List.of(), 25_000),
+                "预算必须给实际输出额度让位，而不是固定 0.7");
+    }
+
+    @Test
+    void cursorStopsAtLastActuallyIncludedRun() {
+        RunVO first = run(11L, "a".repeat(10_000));
+        RunVO second = run(12L, "b".repeat(10_000));
+        // 单条 run 的正文先按 2,000 字符截断（≈1,112 token）；1,500 上限只够第一条
+        CompactionService.CompactInput input = service.buildCompactInput(
+                1L, List.of(first, second), 1_500);
+
+        assertEquals(11L, input.lastRunId(), "游标只能推进到实际写入摘要的最后一个 run");
+        assertEquals(1, input.includedRuns());
+        assertFalse(input.truncated());
+    }
+
+    @Test
+    void oversizedFirstRunIsTruncatedAndIncluded_notSkipped() {
+        RunVO huge = run(21L, "x".repeat(100_000));
+        RunVO newer = run(22L, "y".repeat(1_000));
+        CompactionService.CompactInput input = service.buildCompactInput(
+                1L, List.of(huge, newer), 1_000);
+
+        assertEquals(21L, input.lastRunId(),
+                "超大 run 必须截断后纳入（游标才能前进），不能跳过它去压缩更新的 run");
+        assertEquals(1, input.includedRuns());
+        assertTrue(input.truncated());
+        assertTrue(input.text().contains("[truncated"), "截断必须显式标记");
+    }
+
+    @Test
+    void onlyFinishedRunsAreEligibleForCompaction() {
+        assertTrue(CompactionService.isCompactionEligible("COMPLETED"));
+        assertTrue(CompactionService.isCompactionEligible("FAILED"));
+        assertTrue(CompactionService.isCompactionEligible("CANCELLED"));
+        assertFalse(CompactionService.isCompactionEligible("RUNNING"));
+        assertFalse(CompactionService.isCompactionEligible("WAITING"));
+        assertFalse(CompactionService.isCompactionEligible("AWAITING_USER"));
+    }
+
+    private static RunVO run(Long id, String userMessage) {
+        RunVO run = new RunVO();
+        run.setId(id);
+        run.setSessionId(1L);
+        run.setUserMessage(userMessage);
+        return run;
     }
 
     @Test
     void missingMaxInputFallsBackWithoutThrowing() {
         ModelRouteFullVO route = route(999L, null);
         // 默认 1M → 预算 700k，这几条消息远低于阈值；只验证不抛异常
-        assertFalse(service.shouldCompact(failingMessages(), route, toolsWithJsonChars(100)));
+        assertFalse(service.shouldCompact(failingMessages(), route, toolsWithJsonChars(100), null));
     }
 }

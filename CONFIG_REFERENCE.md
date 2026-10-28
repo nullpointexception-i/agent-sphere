@@ -63,7 +63,7 @@ Retention days and the kill switch for cleanup live in `agent_system_config` (`c
 | `turn-timeout` | `180s` | Single LLM turn timeout |
 | `llm-turn-max-retries` | `3` | Per-turn retries on a transient failure, exponential backoff 1s→2s→4s (README §3.1b) |
 | `max-screenshots-per-run` | `20` | Max screenshot observations injected per run (token guard) |
-| `compaction.budget-ratio` | `0.7` | Compaction trigger threshold (ratio of max input tokens) |
+| `compaction.budget-ratio` | `0.7` | Fallback compaction threshold (ratio of max input) when the merged sampling config has no output-token cap; with a cap the budget is `max_input - output_cap - margin` |
 
 Instance-level `agent_instance.max_loop_count` overrides all of these for that instance (`INSTANCE` source, highest priority except a pinned value). See README §3.1a for the full resolution order.
 

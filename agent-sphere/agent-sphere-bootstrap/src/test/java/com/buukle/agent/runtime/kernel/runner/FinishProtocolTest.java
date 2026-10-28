@@ -17,6 +17,7 @@ import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
+import com.buukle.agent.runtime.kernel.contract.CompactionOutcome;
 import com.buukle.agent.runtime.kernel.contract.TurnOutcome;
 import com.buukle.agent.runtime.kernel.contract.TurnResult;
 import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
@@ -209,10 +210,14 @@ class FinishProtocolTest {
     @Test
     void skipCompactionFlagBypassesCompactionGate() throws Exception {
         emit(new LLMEvent.TextDelta("done"), new LLMEvent.Finish(FinishReason.STOP, null));
-        when(compactionService.shouldCompact(any(), any(), any())).thenReturn(true);
+        when(compactionService.shouldCompact(any(), any(), any(), any())).thenReturn(true);
+        when(compactionService.compact(any(), any(), any())).thenReturn(CompactionOutcome.NO_PROGRESS);
 
-        assertEquals(TurnOutcome.COMPACTED, runTurn(false).outcome(),
+        TurnResult compacted = runTurn(false);
+        assertEquals(TurnOutcome.COMPACTED, compacted.outcome(),
                 "正常轮次命中阈值时必须触发压缩");
+        assertEquals(CompactionOutcome.NO_PROGRESS, compacted.compactionOutcome(),
+                "压缩的真实结果必须回传给 caller，不能把‘触发过’当成成功");
         assertEquals(TurnOutcome.COMPLETE, runTurn(true).outcome(),
                 "压缩重试耗尽后必须绕过压缩，带超上下文直接发请求");
     }

@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.buukle.agent.instance.domain.AgentCompactRecord;
 import com.buukle.agent.instance.dtvo.vo.AgentCompactRecordVO;
 import com.buukle.agent.instance.repository.AgentCompactRecordMapper;
@@ -15,6 +16,11 @@ import java.time.format.DateTimeFormatter;
 public class AgentCompactRecordServiceImpl implements AgentCompactRecordSpi {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_RUNNING = "RUNNING";
+    private static final String STATUS_COMPLETED = "COMPLETED";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STALE_ERROR = "compaction record timed out";
     private final AgentCompactRecordMapper mapper;
 
     private static AgentCompactRecordVO toVO(AgentCompactRecord r) {
@@ -36,16 +42,24 @@ public class AgentCompactRecordServiceImpl implements AgentCompactRecordSpi {
     public AgentCompactRecordVO createRecord(Long sessionId) {
         AgentCompactRecord record = new AgentCompactRecord();
         record.setSessionId(sessionId);
-        record.setStatus("PENDING");
+        record.setStatus(STATUS_PENDING);
         mapper.insert(record);
         return toVO(record);
+    }
+
+    @Override
+    public void updateRunning(Long id) {
+        AgentCompactRecord record = mapper.selectById(id);
+        if (record == null) return;
+        record.setStatus(STATUS_RUNNING);
+        mapper.updateById(record);
     }
 
     @Override
     public void updateCompleted(Long id, String summaryBefore, String summaryAfter, Long tokenCount, Long compactedUptoRunId) {
         AgentCompactRecord record = mapper.selectById(id);
         if (record == null) return;
-        record.setStatus("COMPLETED");
+        record.setStatus(STATUS_COMPLETED);
         record.setSummaryBefore(summaryBefore);
         record.setSummaryAfter(summaryAfter);
         record.setTokenCount(tokenCount);
@@ -57,9 +71,20 @@ public class AgentCompactRecordServiceImpl implements AgentCompactRecordSpi {
     public void updateFailed(Long id, String errorMessage) {
         AgentCompactRecord record = mapper.selectById(id);
         if (record == null) return;
-        record.setStatus("FAILED");
+        record.setStatus(STATUS_FAILED);
         record.setErrorMessage(errorMessage);
         mapper.updateById(record);
+    }
+
+    @Override
+    public int failStalePending(java.time.LocalDateTime olderThan) {
+        if (olderThan == null) return 0;
+        return mapper.update(null, new LambdaUpdateWrapper<AgentCompactRecord>()
+                .in(AgentCompactRecord::getStatus, STATUS_PENDING, STATUS_RUNNING)
+                .lt(AgentCompactRecord::getCreatedAt, olderThan)
+                .set(AgentCompactRecord::getStatus, STATUS_FAILED)
+                .set(AgentCompactRecord::getErrorMessage, STALE_ERROR)
+                .set(AgentCompactRecord::getUpdatedAt, java.time.LocalDateTime.now()));
     }
 
     @Override
@@ -77,7 +102,7 @@ public class AgentCompactRecordServiceImpl implements AgentCompactRecordSpi {
         AgentCompactRecord r = mapper.selectOne(
                 new LambdaQueryWrapper<AgentCompactRecord>()
                         .eq(AgentCompactRecord::getSessionId, sessionId)
-                        .eq(AgentCompactRecord::getStatus, "COMPLETED")
+                        .eq(AgentCompactRecord::getStatus, STATUS_COMPLETED)
                         .orderByDesc(AgentCompactRecord::getId)
                         .last("LIMIT 1"));
         return r != null ? toVO(r) : null;

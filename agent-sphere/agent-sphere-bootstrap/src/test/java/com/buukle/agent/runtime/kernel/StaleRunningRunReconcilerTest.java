@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel;
 
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
@@ -48,6 +49,8 @@ class StaleRunningRunReconcilerTest {
     @Mock
     RunSpi runSpi;
     @Mock
+    AgentCompactRecordSpi compactRecordSpi;
+    @Mock
     SessionRunCoordinator coordinator;
     @Mock
     ApplicationEventPublisher eventPublisher;
@@ -69,7 +72,8 @@ class StaleRunningRunReconcilerTest {
                 .thenReturn(ownerBucket);
         lenient().when(redissonClient.<String>getBucket(DistributedRuntimeConstants.sessionStateKey(SESSION_ID)))
                 .thenReturn(stateBucket);
-        reconciler = new StaleRunningRunReconciler(redissonClient, runSpi, coordinator, eventPublisher, 30);
+        reconciler = new StaleRunningRunReconciler(redissonClient, runSpi, compactRecordSpi,
+                coordinator, eventPublisher, 30);
     }
 
     private RunVO run(String status) {

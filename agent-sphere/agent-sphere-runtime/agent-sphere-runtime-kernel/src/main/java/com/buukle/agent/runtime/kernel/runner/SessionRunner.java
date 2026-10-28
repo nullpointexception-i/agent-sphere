@@ -29,6 +29,7 @@ import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.buukle.agent.model.dtvo.complete.FinishReason;
+import com.buukle.agent.runtime.kernel.contract.CompactionOutcome;
 import com.buukle.agent.runtime.kernel.contract.TurnOutcome;
 import com.buukle.agent.runtime.kernel.contract.TurnResult;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
@@ -211,6 +212,8 @@ public class SessionRunner {
         // 压缩重试耗尽后置位：本轮不再压缩，直接带超上下文发给模型。
         // 否则「每轮压缩 → 仍超预算 → 再压缩」只会耗到重试上限，而旧实现的 break 会让 run 永远停在 RUNNING。
         boolean skipCompaction = false;
+        /** 当前 run 的第一条内存消息在 messages 中的下标（压缩重组时据此保留当前 run，不重放数据库）。 */
+        int currentRunStart = -1;
         // L2：进入 agentic 流程之后，「本轮没有任何工具调用」不再是完成信号。
         // toolsEverExecuted 从已持久化的 loopCount 起步 —— loopCount 只在工具轮自增，
         // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
@@ -270,6 +273,7 @@ public class SessionRunner {
                         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                     }
                     messages.addAll(historyLoader.load(sessionId, currentRunId, input.isClarificationResume()));
+                    currentRunStart = messages.size();
                 }
                 messages.add(buildUserMessage(input, attachmentResolver));
                 // 当前时间追加在消息尾部（独立小段 system，不污染 messages[0] 前缀，命中缓存）
@@ -303,41 +307,34 @@ public class SessionRunner {
 
             switch (turn.outcome()) {
                 case COMPACTED -> {
-                    if (compactionRetries++ >= 3) {
-                        // 压缩已证明救不回来（例如 system prompt + tools 本身就超预算）：
-                        // 兑现日志承诺，带超上下文直接把这一轮发出去。模型接受就继续；拒绝则是 400 → ERROR 终态。
-                        log.warn("Compaction retry exhausted for run {}, sending oversized context", currentRunId);
+                    CompactionOutcome outcome = turn.compactionOutcome();
+                    boolean exhausted = compactionRetries++ >= 3;
+                    if (outcome != CompactionOutcome.COMPLETED || exhausted) {
+                        // 没有真实进展（无历史/无进展/失败）或已尝试够多次：带当前上下文直接发。
+                        // 模型接受就继续；拒绝则是 400 → ERROR 终态，不再做无效的压缩循环。
+                        log.warn("Compaction did not make progress (outcome={}, attempts={}) for run {}; sending oversized context",
+                                outcome, compactionRetries, currentRunId);
                         skipCompaction = true;
                         hasToolCalls = true;
                         continue;
-                    } else {
-                        log.info("Compaction triggered, reassembling messages (attempt {})", compactionRetries);
-                        String userText = input != null ? input.text() : "";
-                        messages.clear();
-                        titleService.generateIfNeeded(ctx, userText, sessionId, currentRunId);
-                        String todolistText = null;
-                        try {
-                            AgentToolCallRecordVO todoRecord = toolCallRecordSpi.getLatestBySessionAndToolName(
-                                    sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
-                            if (todoRecord != null && todoRecord.getArtifact() != null) {
-                                todolistText = todoRecord.getArtifact();
-                            }
-                        } catch (Exception e) {
-                            log.warn("Failed to load todolist for session {}", sessionId, e);
-                        }
-                        String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx);
-                        if (systemPrompt != null && !systemPrompt.isBlank()) {
-                            messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
-                        }
-                        messages.addAll(historyLoader.load(sessionId, currentRunId));
-                        messages.add(buildUserMessage(input, attachmentResolver));
-                        messages.add(new ChatMessageDTO()
-                                .setRole(LlmApiConstant.ROLE_SYSTEM)
-                                .setContent(runPromptBuilder.currentTimeText()));
-                        applyTodolistSuffix(messages, todolistText);
-                        hasToolCalls = true;
-                        continue;
                     }
+                    log.info("Compaction completed, reassembling history (attempt {})", compactionRetries);
+                    // 只替换可压缩的历史前缀；当前 run 的内存消息（user / 工具轮 / 观察）原样保留。
+                    // 旧实现清空后从数据库重放，而 HistoryLoader 默认排除当前 run —— 工具轮会丢上下文、
+                    // 首轮还会把当前 user 既写进摘要又重新加一遍。
+                    List<ChatMessageDTO> currentRunTail = currentRunStart >= 0 && currentRunStart <= messages.size()
+                            ? new ArrayList<>(messages.subList(currentRunStart, messages.size()))
+                            : new ArrayList<>();
+                    messages.clear();
+                    String systemPrompt = runPromptBuilder.buildSystemPrompt(ctx);
+                    if (systemPrompt != null && !systemPrompt.isBlank()) {
+                        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
+                    }
+                    messages.addAll(historyLoader.load(sessionId, currentRunId));
+                    currentRunStart = messages.size();
+                    messages.addAll(currentRunTail);
+                    hasToolCalls = true;
+                    continue;
                 }
                 case ERROR -> {
                     currentRun.setStatus(RunStatus.FAILED.name());
@@ -597,9 +594,8 @@ public class SessionRunner {
                         RunnerConstants.JSON_ERROR_TOOL_LOST);
                 String toolMessage = toolResult;
                 if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId())) {
-                    toolMessage = toolResult + "\n\n**Reminder: keep this list in sync with actual progress (update statuses by calling "
-                            + InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId()
-                            + " again). A fully completed list is PROGRESS ONLY — it does NOT by itself finish the task; completion follows the task instructions (and, when a skill applies, the skill's closing conditions / expected output).**";
+                    // 完整清单已经通过尾部待办槽下发；工具回执只保留短确认，避免同一份计划占两份上下文。
+                    toolMessage = RunnerConstants.TODO_WRITE_ACK;
                 }
                 messages.add(new ChatMessageDTO()
                         .setRole(LlmApiConstant.ROLE_TOOL)
@@ -898,6 +894,9 @@ public class SessionRunner {
             java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
             java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
+            String instanceConfig = ctx != null && ctx.getAgentInstance() != null
+                    ? ctx.getAgentInstance().getConfig() : null;
+            Integer effectiveMaxOutputTokens = llmRequestConfigurer.resolveMaxOutputTokens(instanceConfig);
             try {
                 List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
 
@@ -930,7 +929,8 @@ public class SessionRunner {
 
                     // ★ 压缩检查：使用实际 route（和 LLM 调用同源）。
                     // skipCompaction 仅在「重试耗尽、压缩已被证明救不回来」的下一轮为 true。
-                    if (!skipCompaction && compactionService.shouldCompact(messages, route, toolDefs)) {
+                    if (!skipCompaction && compactionService.shouldCompact(messages, route, toolDefs,
+                            effectiveMaxOutputTokens)) {
                         compactionTriggered.set(true);
                         return null;
                     }
@@ -944,8 +944,6 @@ public class SessionRunner {
                         request.setTools(toolDefs);
                     }
                     // 采样参数接线：全局系统配置兜底 + 实例级 config 覆盖；并行工具行为保持默认开启（与现有多工具批一致）
-                    String instanceConfig = ctx != null && ctx.getAgentInstance() != null
-                            ? ctx.getAgentInstance().getConfig() : null;
                     llmRequestConfigurer.apply(request, instanceConfig);
                     if (request.getParallelToolCalls() == null) {
                         request.setParallelToolCalls(true);
@@ -1050,10 +1048,10 @@ public class SessionRunner {
                 }
             }
 
-            // ★ 压缩触发：compact 后让 caller 重新组装
+            // ★ 压缩触发：把真实结果交给 caller —— 只有 COMPLETED 才重新组装，其余直接发。
             if (compactionTriggered.get()) {
-                compactionService.compact(sessionId, runId, ctx);
-                return TurnResult.compacted();
+                CompactionOutcome outcome = compactionService.compact(sessionId, runId, ctx);
+                return TurnResult.compacted(outcome);
             }
 
             if (cancelled.get()) {

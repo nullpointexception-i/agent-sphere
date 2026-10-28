@@ -494,27 +494,51 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 **硬收口文案必须豁免 `finish`。** `FINAL_TURN_INSTRUCTION` 现在写的是「除 `finish` 外不得再调用任何工具」——
 否则最后几轮会被禁止走唯一合法的结束路径。
 
-**压缩阈值必须计入工具 schema（`CompactionService.shouldCompact`）。** 请求体 = messages + tools + 输出；
-10 个工具的 JSON 约 1 万 token。只估算 messages 会让「估算没到阈值、实际已超上下文」——线上 32k 路由
-（`max_input_tokens=32000`、tools≈11.7k）在 messages 估算 19,953 时未压缩，实际请求 32,852 token
-直接 400（vLLM 报 `maximum context length is 32768`）。现在估算 =
-`(messages + tools JSON/1.8) × 1.1`（1.8 是中文实况的字符/token 比；旧的 /3 会把中文估算压低一半，
-压缩永远晚于溢出），预算 =
-`max_input_tokens × budget-ratio`；`max_output_tokens` 不进入请求（请求 `max_tokens` 由 sampling
-config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M 并**每个路由只告警一次**——否则
-等于永不压缩（生产库存在这类路由）。
+**压缩估算按内容类型分开（`CompactionService`）。** 请求体 = messages + tools + 输出，且必须计入工具
+schema——线上 32k 路由（`max_input_tokens=32000`、tools≈11.7k）在 messages 估算 19,953 时未压缩，
+实际请求 32,852 token 直接 400。现在：
+- 中文正文 `chars / 1.8`（`TOKEN_ESTIMATE_DIVISOR`）；工具 schema / JSON `chars / 3.5`
+  （`JSON_TOKEN_ESTIMATE_DIVISOR`，纯 ASCII 不能按中文密度估）；
+- 图片 part 每张按 1,000 token 计（base64 不解析）；
+- 总估算 `(messages + tools) × 1.1`。
+`max_input_tokens` 为 NULL 时回落 1M 并**每个路由只告警一次**。
+
+**输入预算必须给实际输出额度让位。** `LlmRequestConfigurer.resolveMaxOutputTokens` 取合并后的
+sampling config（实例优先、全局兜底）；有值时预算 = `max_input - output_cap - margin`
+（margin = max(512, 5%×max_input)），没有输出额度才回落 `budget-ratio`。下限为 `max_input × 25%`，
+避免异常配置把预算压到不可用。**不要再假设固定 0.7×max_input 就够**。
 
 **压缩不可能成功时必须跳过，而不是重试到死。** 主 system prompt 与工具 schema 是每轮固定开销，
-压缩只能压历史。先算固定开销 `leading system + tools JSON/1.8`：一旦它**已超 `max_input_tokens` 硬上限**
-（如测试路由 `max_input_tokens=20000`，而 system+tools 估算 36k），压缩永远不可能成功。
+压缩只能压历史。先算固定开销 `leading system + tools JSON/3.5`：一旦它**已超 `max_input_tokens` 硬上限**
+（如测试路由 `max_input_tokens=20000`，而 system+tools 估算 26k），压缩永远不可能成功。
 `shouldCompact` 此时直接返回 `false`（每路由只 WARN 一次），让请求带超上下文发出；模型接受就继续，
 拒绝就是 400 → ERROR 终态。**门槛必须是硬上限而不是 0.7×budget** —— 后者会把「工具占大头但真实
-仍可容纳」的 32k 路由永久关闭压缩，历史继续涨到真溢出。旧实现会每轮白烧 3 次压缩调用，然后……
+仍可容纳」的 32k 路由永久关闭压缩，历史继续涨到真溢出。
 
-**`case COMPACTED` 在重试耗尽后绝不能 `break loop`。** 旧实现只打一句
-「sending oversized context」就 `break`，但循环出口只处理取消，run 会永远停在 RUNNING。
-现在耗尽时置 `skipCompaction`（透传到 `runTurn` 的 `shouldCompact` 前置条件）+ `hasToolCalls=true`
-+ `continue`，真正把这一轮发出去；工具轮成功后再复位，避免永久关闭压缩。
+**压缩只处理已结束的历史，且游标只推进到「真正写进摘要」的 run。**
+- 候选 = 游标之后、状态 ∈ {COMPLETED, FAILED, CANCELLED}、且不是当前 run 的 run。
+  RUNNING / WAITING / AWAITING_USER 由内存消息承载，不进入摘要候选。
+- `buildCompactInput` 按从旧到新**连续**纳入，直到压缩输入预算（`max_input × 0.5`）用尽；
+  若第一条就超限，对它做字段级/整体截断并显式标记 `[truncated]` 后停止——**绝不跳过它去压缩更新的 run**。
+- 游标 = 实际纳入的最后一条 run；空 run 可以安全推进。`estimateRunTokens` 已删除：
+  渲染与估算共用 `renderRun`（用户/助手正文各截 2,000 字符、工具参数 500、工具结果 500），
+  避免「估了参数却摘要不到」。
+- 摘要硬上限 `SUMMARY_MAX_TOKENS_CAP=4000`，并作为压缩请求的 `max_tokens`（写在 prompt 里的
+  “MUST NOT exceed” 不是硬约束）。
+- compact record 是 HistoryLoader 的权威来源：先 `updateCompleted`（摘要 + 游标同一条 UPDATE），
+  再 best-effort 更新 `session.summary`。`tokenCount` 记摘要 token 数。
+
+**`COMPACTED` 必须是“有进展”才重组。** `compact()` 返回 `CompactionOutcome`
+（COMPLETED / NO_HISTORY / NO_PROGRESS / FAILED）；只有 COMPLETED 才重新组装历史。
+其他结果或尝试次数达 3 次后置 `skipCompaction`（透传到 `runTurn` 的 `shouldCompact` 前置条件）
++ `hasToolCalls=true` + `continue`，把当前上下文直接发出去；工具轮成功后复位。旧实现只要触发过就
+反复重试，且耗尽后 `break loop` 会让 run 永远停在 RUNNING。
+
+**压缩重组只能替换历史前缀，当前 run 的内存消息必须原样保留。**
+`runInternal` 用 `currentRunStart` 标记当前 run 第一条消息的位置；压缩成功后重建
+`[system + 新历史] + currentRunTail`。不要清空全部 messages 再 `historyLoader.load` ——
+HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/tool(result)/截图观察，
+首轮还会把当前 user 既写进摘要又重新加一遍。
 
 **循环出口必须有终态安全网。** `runInternal` 收敛前若 `currentRun` 仍是 `RUNNING`，一律置 FAILED
 并发终态事件（`RunnerConstants.RUN_LOOP_NO_TERMINAL_MSG`）。`break` 点将来再加也不会静默留 RUNNING。
@@ -538,6 +562,8 @@ config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M
 才动手（活副本每 60s 续约，长工具/长 LLM 调用不会被误杀）：置 FAILED + 发终态事件；若 session state
 仍是 RUNNING/RUNNING_WITH_PENDING 再复位并 `coordinator.wake`，IDLE 则只收口 run。入口必须
 `TenantUtil.stop()` + `AuthContext.clear()`，否则 `findStaleByStatus` 会被 `created_by` 过滤。
+同一处还调用 `AgentCompactRecordSpi.failStalePending`：把超过 15 分钟的 PENDING/RUNNING 压缩记录
+置 FAILED，避免进程崩溃留下的压缩记录永远悬挂。
 
 **路由的 token 上限必须在 `RuntimeValidator.toFull` 复制到 `ModelRouteFullVO`。** compaction 读的是
 `KernelContext` 里那个 full VO（`RouteListBuilder.fromContext` 直接返回它），而 `ModelRouteFullVO`
@@ -545,6 +571,15 @@ config 控制）也不从预算里扣。`max_input_tokens` 为 NULL 时回落 1M
 漏拷过这两个字段，于是所有路由在运行时都是 null → 回落 1M → 预算 700k。线上 session 951
 （instance 2 / route 4 = 20k）与 Qwen 32k 的 400 都是这个原因；`RouteListBuilder.toFull` 是对的，
 只有 `RuntimeValidator.toFull` 曾经漏掉（现在已补，并有 `RuntimeValidatorTest` 锁定）。
+
+**System prompt 不再重复工具描述，动态规则按能力注入。**
+- `RunPromptBuilder.buildSystemPrompt` 的 Available tools 只列 `llmToolName`；完整 description/schema
+  以请求 `tools` 为唯一权威来源（此前每个工具说明在 system 和 tools 里各出现一次）。
+- clarification 规则从无条件的 `PROMPT_TOOLS_FOOTER` 拆出：注册了 `ask_clarification`
+  才追加 `PROMPT_CLARIFICATION_RULES`；未注册（自主任务）追加 `PROMPT_NO_CLARIFICATION_RULE`
+  （禁止提问，阻塞时走 `finish(status=blocked)`）。**不要再无条件要求模型调用不存在的工具。**
+- `todowrite` 的工具回执只保留 `TODO_WRITE_ACK` 短确认；完整清单由尾部待办槽（每次从 DB artifact
+  刷新）提供，避免同一份计划在 tool 消息和历史里重复。待办仍是全量替换协议，不能改成增量。
 
 ## Conventions
 
