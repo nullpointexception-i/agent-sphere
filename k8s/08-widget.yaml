@@ -48,8 +48,14 @@ kind: Ingress
 metadata:
   name: widget
   namespace: agent-sphere
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: traefik
+  tls:
+  - hosts:
+    - as-widget.buukle.top
+    secretName: as-widget-buukle-top-tls
   rules:
   - host: as-widget.buukle.top
     http:

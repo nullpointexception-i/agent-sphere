@@ -3,8 +3,14 @@ kind: Ingress
 metadata:
   name: agent-sphere
   namespace: agent-sphere
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: traefik
+  tls:
+  - hosts:
+    - as.buukle.top
+    secretName: as-buukle-top-tls
   rules:
   - host: as.buukle.top
     http:
