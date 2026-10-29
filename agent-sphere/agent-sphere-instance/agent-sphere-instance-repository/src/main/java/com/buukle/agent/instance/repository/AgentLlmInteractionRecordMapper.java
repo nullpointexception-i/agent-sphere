@@ -2,6 +2,7 @@ package com.buukle.agent.instance.repository;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
+import com.buukle.agent.instance.domain.vo.RunUsagePointVO;
 import com.buukle.agent.instance.domain.vo.RunUsageVO;
 import com.buukle.agent.instance.domain.vo.SessionUsageVO;
 import org.apache.ibatis.annotations.Mapper;
@@ -61,4 +62,29 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
             GROUP BY session_id
             """)
     com.buukle.agent.instance.domain.vo.SessionUsageVO sumUsageBySession(@Param("sessionId") Long sessionId);
+
+    /** 最近 N 条主 Agent LLM 交互的 token 指标（按 id 倒序取窗口，再升序返回）。 */
+    @Select("""
+            SELECT id, interaction_type, model_name, created_at,
+                   prompt_tokens, completion_tokens, total_tokens,
+                   cache_hit_tokens, cache_miss_tokens
+            FROM (
+              SELECT id, interaction_type, model_name, created_at,
+                     prompt_tokens, completion_tokens, total_tokens,
+                     cache_hit_tokens, cache_miss_tokens
+              FROM agent_llm_interaction_record
+              WHERE run_id = #{runId}
+                AND session_id = #{sessionId}
+                AND sub_agent_run_id IS NULL
+                AND delete_flag = 0
+                AND id > #{afterId}
+              ORDER BY id DESC
+              LIMIT #{limit}
+            ) AS usage_window
+            ORDER BY id ASC
+            """)
+    List<RunUsagePointVO> selectUsageSeries(@Param("runId") Long runId,
+                                            @Param("sessionId") Long sessionId,
+                                            @Param("afterId") long afterId,
+                                            @Param("limit") int limit);
 }

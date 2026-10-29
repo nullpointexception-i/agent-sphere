@@ -4,6 +4,9 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.vo.RunActivityListVO;
 import com.buukle.agent.instance.domain.vo.RunActivitySummaryVO;
 import com.buukle.agent.instance.domain.vo.RunActivityVO;
+import com.buukle.agent.instance.domain.vo.RunUsagePointVO;
+import com.buukle.agent.instance.domain.vo.RunUsageSeriesVO;
+import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,12 +26,14 @@ class RunActivityServiceImplTest {
 
     @Mock
     AgentToolCallRecordMapper mapper;
+    @Mock
+    AgentLlmInteractionRecordMapper interactionMapper;
 
     private RunActivityServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new RunActivityServiceImpl(mapper);
+        service = new RunActivityServiceImpl(mapper, interactionMapper);
     }
 
     @Test
@@ -61,6 +66,33 @@ class RunActivityServiceImplTest {
 
         assertEquals(llm, service.getActivity(1L, 2L, RunActivitySummaryVO.ACTIVITY_TYPE_LLM, 10L));
         assertEquals(tool, service.getActivity(1L, 2L, RunActivitySummaryVO.ACTIVITY_TYPE_TOOL, 20L));
+    }
+
+    @Test
+    void usageSeriesKeepsLatest300AndReportsHasMore() {
+        List<RunUsagePointVO> rows = new java.util.ArrayList<>();
+        for (long i = 1; i <= 301; i++) {
+            RunUsagePointVO p = new RunUsagePointVO();
+            p.setId(i);
+            p.setPromptTokens((int) i);
+            rows.add(p);
+        }
+        when(interactionMapper.selectUsageSeries(1L, 2L, 0L, 301)).thenReturn(rows);
+
+        RunUsageSeriesVO series = service.listUsageSeries(1L, 2L, 0L, 300);
+
+        assertEquals(300, series.getPoints().size());
+        assertEquals(2L, series.getPoints().get(0).getId(), "最旧的一条应被丢弃");
+        assertEquals(301L, series.getPoints().get(299).getId());
+        org.junit.jupiter.api.Assertions.assertTrue(series.isHasMore());
+    }
+
+    @Test
+    void usageSeriesClampsLimit() {
+        when(interactionMapper.selectUsageSeries(1L, 2L, 5L, 301)).thenReturn(List.of());
+        service.listUsageSeries(1L, 2L, 5L, 999);
+        org.mockito.Mockito.verify(interactionMapper)
+                .selectUsageSeries(1L, 2L, 5L, 301);
     }
 
     @Test

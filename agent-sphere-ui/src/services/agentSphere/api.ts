@@ -260,6 +260,16 @@ export const agentApi = {
       request<any>(
         `${BASE}/instance/runs/${runId}/activities/${activityType}/${id}?sessionId=${sessionId}`,
       ),
+    // 最近 300 条主 Agent LLM 交互的 token 序列；afterId 支持 5s 增量刷新
+    usageSeries: (
+      runId: number,
+      sessionId: number,
+      afterId = 0,
+      limit = 300,
+    ) =>
+      request<{ points: any[]; hasMore: boolean }>(
+        `${BASE}/instance/runs/${runId}/usage-series?sessionId=${sessionId}&afterId=${afterId}&limit=${limit}`,
+      ),
   },
 
   modelProviders: {

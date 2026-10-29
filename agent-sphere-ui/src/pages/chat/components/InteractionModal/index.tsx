@@ -5,6 +5,7 @@ import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import DetailModal from '../DetailModal';
 import { cacheHitRate, formatTokens } from '../Usage';
+import UsageTrend from './UsageTrend';
 
 interface InteractionModalProps {
   open: boolean;
@@ -213,6 +214,7 @@ export default function InteractionModal({
         width={980}
         footer={null}
       >
+        <UsageTrend open={open} runId={runId} sessionId={sessionId} />
         {runUsage && Number(runUsage.totalTokens) > 0 && (
           <div
             style={{

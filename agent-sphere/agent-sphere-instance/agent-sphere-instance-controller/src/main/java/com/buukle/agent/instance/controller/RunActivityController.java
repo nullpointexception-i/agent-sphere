@@ -24,6 +24,16 @@ public class RunActivityController extends BaseController {
         return ok(runActivityService.listByRun(runId, sessionId, offset, limit));
     }
 
+    /** 最近 300 条主 Agent LLM 交互的 token 序列；afterId 支持 5s 增量刷新。 */
+    @GetMapping("/{runId}/usage-series")
+    public ResponseEntity<?> usageSeries(
+            @PathVariable Long runId,
+            @RequestParam Long sessionId,
+            @RequestParam(defaultValue = "0") long afterId,
+            @RequestParam(defaultValue = "300") int limit) {
+        return ok(runActivityService.listUsageSeries(runId, sessionId, afterId, limit));
+    }
+
     /** 列表只返回元数据；完整 request/response/args/artifact 在点击详情时按需拉取。 */
     @GetMapping("/{runId}/activities/{activityType}/{id}")
     public ResponseEntity<?> getActivity(

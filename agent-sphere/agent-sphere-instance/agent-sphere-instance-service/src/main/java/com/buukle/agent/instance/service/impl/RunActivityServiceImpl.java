@@ -5,12 +5,16 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.vo.RunActivityListVO;
 import com.buukle.agent.instance.domain.vo.RunActivitySummaryVO;
 import com.buukle.agent.instance.domain.vo.RunActivityVO;
+import com.buukle.agent.instance.domain.vo.RunUsagePointVO;
+import com.buukle.agent.instance.domain.vo.RunUsageSeriesVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
+import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.service.RunActivityService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -18,12 +22,24 @@ import java.util.List;
 public class RunActivityServiceImpl implements RunActivityService {
 
     private final AgentToolCallRecordMapper toolCallMapper;
+    private final AgentLlmInteractionRecordMapper interactionMapper;
 
     @Override
     public RunActivityListVO listByRun(Long runId, Long sessionId, int offset, int limit) {
         int total = toolCallMapper.countActivitiesByRun(runId, sessionId);
         List<RunActivitySummaryVO> records = toolCallMapper.selectActivitiesByRun(runId, sessionId, limit, offset);
         return new RunActivityListVO(total, records);
+    }
+
+    @Override
+    public RunUsageSeriesVO listUsageSeries(Long runId, Long sessionId, long afterId, int limit) {
+        int size = Math.min(Math.max(limit, 1), 300);
+        List<RunUsagePointVO> rows = interactionMapper.selectUsageSeries(runId, sessionId, afterId, size + 1);
+        boolean hasMore = rows.size() > size;
+        if (hasMore) {
+            rows = new ArrayList<>(rows.subList(1, rows.size()));
+        }
+        return new RunUsageSeriesVO(rows, hasMore);
     }
 
     @Override
