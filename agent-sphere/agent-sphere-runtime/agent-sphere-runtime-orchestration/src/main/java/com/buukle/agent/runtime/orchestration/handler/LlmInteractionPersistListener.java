@@ -63,8 +63,10 @@ public class LlmInteractionPersistListener {
 
         Long recordId = interactionRecordSpi.createRecord(vo);
         afterPersist(meta, recordId, event.isSuccess());
-        log.debug("LLM interaction recorded: runId={}, type={}, duration={}ms, success={}",
-                meta.getRunId(), meta.getInteractionType().name(), event.getDurationMs(), event.isSuccess());
+        log.debug("LLM interaction recorded: runId={}, type={}, duration={}ms, success={}, "
+                        + "promptTokens={}, completionTokens={}, totalTokens={}",
+                meta.getRunId(), meta.getInteractionType().name(), event.getDurationMs(), event.isSuccess(),
+                vo.getPromptTokens(), vo.getCompletionTokens(), vo.getTotalTokens());
     }
 
     /**
