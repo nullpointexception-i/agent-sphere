@@ -74,6 +74,8 @@ See: [QUICK_START.md](QUICK_START.md)
 
 ![agentsphere-architecture-v2.png](agent-sphere-readme/agentsphere-architecture-v2.png)
 
+> Full **4A architecture** (Business / Application / Technology / Data, with ER and call-sequence diagrams): [ARCHITECTURE-4A-cn.md](ARCHITECTURE-4A-cn.md) (Chinese).
+
 ### 2.2 Core Components
 
 #### 2.2.1 SessionRunner (ReAct Engine)

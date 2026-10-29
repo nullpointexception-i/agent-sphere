@@ -74,6 +74,8 @@
 
 ![agentsphere-architecture-v2.png](agent-sphere-readme/agentsphere-architecture-v2.png)
 
+> 完整的 **4A 架构**梳理（业务 / 应用 / 技术 / 数据，含 ER 图与调用时序图）见 [ARCHITECTURE-4A-cn.md](ARCHITECTURE-4A-cn.md)。
+
 ### 2.2 核心组件
 
 #### 2.2.1 SessionRunner（ReAct 引擎）
