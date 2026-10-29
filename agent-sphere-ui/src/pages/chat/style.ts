@@ -103,6 +103,15 @@ export const useStyles = createStyles(({ css, token }) => ({
     }
   `,
 
+  usageBarScroll: css`
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  `,
+
   footer: css`
     padding: ${token.paddingMD}px;
     border-top: 1px solid ${token.colorBorderSecondary};

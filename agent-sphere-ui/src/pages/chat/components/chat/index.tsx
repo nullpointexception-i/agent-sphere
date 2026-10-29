@@ -1,11 +1,13 @@
 import { useIntl } from '@umijs/max';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStyles } from '../../style';
 import { cacheHitRate, contextUsagePercent, formatTokens } from '../Usage';
 import Footer from './Footer';
 import Header from './Header';
 import type { SubAgentLiveMap, SubAgentTimelineItem } from './subAgentTypes';
 import TimelineList from './TimelineList';
+
+const USAGE_SCROLL_SPEED_PX_PER_MS = 0.03;
 
 interface ChatMainProps {
   currentSession: any;
@@ -74,8 +76,54 @@ export default function ChatMain({
     currentRoute?.maxInputTokens,
   );
   const sessionCacheRate = cacheHitRate(sessionUsage);
+  const usageTitleText = intl.formatMessage({
+    id: 'pages.chat.sessionUsage.title',
+    defaultMessage: 'Session total',
+  });
+  const usageAllModelsText = intl.formatMessage({
+    id: 'pages.chat.sessionUsage.allModels',
+    defaultMessage: 'All model calls',
+  });
+  const usagePromptLabel = intl.formatMessage({
+    id: 'pages.chat.sessionUsage.prompt',
+    defaultMessage: 'prompt',
+  });
+  const usageCompletionLabel = intl.formatMessage({
+    id: 'pages.chat.sessionUsage.completion',
+    defaultMessage: 'completion',
+  });
+  const usageCacheLabel = intl.formatMessage({
+    id: 'pages.chat.sessionUsage.cache',
+    defaultMessage: 'cache',
+  });
+  const usageContextLabel = intl.formatMessage({
+    id: 'pages.chat.sessionUsage.context',
+    defaultMessage: 'current context',
+  });
+  const usageTotalText = formatTokens(sessionUsage?.totalTokens);
+  const usagePromptText = formatTokens(sessionUsage?.promptTokens);
+  const usageCompletionText = formatTokens(sessionUsage?.completionTokens);
+  const usageBaseText = `♨ ${usageTitleText} · ${usageAllModelsText} · ${usageTotalText} tokens`;
+  const usagePromptPart =
+    usagePromptText !== '0' ? ` · ${usagePromptLabel} ${usagePromptText}` : '';
+  const usageCompletionPart =
+    usageCompletionText !== '0'
+      ? ` · ${usageCompletionLabel} ${usageCompletionText}`
+      : '';
+  const usageCachePart =
+    sessionCacheRate != null ? ` · ${usageCacheLabel} ${sessionCacheRate}%` : '';
+  const usageContextPart =
+    contextPercent != null ? ` · ${usageContextLabel} ${contextPercent}%` : '';
+  const usageFullText = `${usageBaseText}${usagePromptPart}${usageCompletionPart}${usageCachePart}${usageContextPart}`;
   const messagesRef = useRef<HTMLDivElement>(null);
   const timelineWrapRef = useRef<HTMLDivElement>(null);
+  const usageBarRef = useRef<HTMLDivElement>(null);
+  const usageScrollRef = useRef<HTMLDivElement>(null);
+  const usageFullMeasureRef = useRef<HTMLSpanElement>(null);
+  const usagePausedRef = useRef(false);
+  const [usageCompact, setUsageCompact] = useState(false);
+  const [usageHovered, setUsageHovered] = useState(false);
+  const showPromptCompletion = !usageCompact || usageHovered;
 
   const hasMessages =
     messages.some((m: any) => m.content && m.content !== '{}') ||
@@ -106,6 +154,72 @@ export default function ChatMain({
       ro.disconnect();
     };
   }, [hasMessages]);
+
+  useLayoutEffect(() => {
+    const bar = usageBarRef.current;
+    const full = usageFullMeasureRef.current;
+    if (!bar || !full) return;
+    const measure = () => {
+      const computed = window.getComputedStyle(bar);
+      const padding =
+        (Number.parseFloat(computed.paddingLeft) || 0) +
+        (Number.parseFloat(computed.paddingRight) || 0);
+      const available = Math.max(0, bar.clientWidth - padding);
+      setUsageCompact(full.getBoundingClientRect().width > available + 0.5);
+    };
+    measure();
+    let frame = 0;
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [usageFullText]);
+
+  useEffect(() => {
+    const el = usageScrollRef.current;
+    if (!usageHovered || !usageCompact || !el) return;
+    if (el.scrollWidth <= el.clientWidth) return;
+    let frame = 0;
+    let last = performance.now();
+    let direction = 1;
+    const tick = (now: number) => {
+      const delta = Math.min(now - last, 50);
+      last = now;
+      if (!usagePausedRef.current) {
+        const max = el.scrollWidth - el.clientWidth;
+        let next =
+          el.scrollLeft + direction * USAGE_SCROLL_SPEED_PX_PER_MS * delta;
+        if (next >= max) {
+          next = max;
+          direction = -1;
+        } else if (next <= 0) {
+          next = 0;
+          direction = 1;
+        }
+        el.scrollLeft = next;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [usageHovered, usageCompact, usageFullText]);
+
+  const handleUsageEnter = () => {
+    usagePausedRef.current = false;
+    setUsageHovered(true);
+    if (usageScrollRef.current) usageScrollRef.current.scrollLeft = 0;
+  };
+  const handleUsageLeave = () => {
+    usagePausedRef.current = false;
+    setUsageHovered(false);
+    if (usageScrollRef.current) usageScrollRef.current.scrollLeft = 0;
+  };
 
   // 单一事实来源：澄清卡只渲染 timeline；messages 不再参与运行态锁定，
   // 避免 messages 里残留的 pending 澄清把 Footer 永久锁在「执行中/停止」。
@@ -166,14 +280,17 @@ export default function ChatMain({
           </div>
           {sessionUsage && Number(sessionUsage.totalTokens) > 0 && (
             <div
+              ref={usageBarRef}
+              onMouseEnter={handleUsageEnter}
+              onMouseLeave={handleUsageLeave}
               style={{
                 position: 'sticky',
                 bottom: 8,
                 marginTop: 8,
                 alignSelf: 'center',
-                maxWidth: 640,
-                width: 'auto',
-                padding: '4px 14px',
+                maxWidth: 'min(720px, 100%)',
+                width: usageCompact ? 'min(720px, 100%)' : 'fit-content',
+                padding: '6px 16px',
                 borderRadius: 999,
                 background: 'rgba(255, 255, 255, 0.72)',
                 WebkitBackdropFilter: 'blur(8px)',
@@ -185,62 +302,74 @@ export default function ChatMain({
                 zIndex: 10,
                 pointerEvents: 'auto',
                 whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                boxSizing: 'border-box',
               }}
             >
-              ♨{' '}
-              {intl.formatMessage({
-                id: 'pages.chat.sessionUsage.title',
-                defaultMessage: 'Session total',
-              })}{' '}
-              ·{' '}
-              {intl.formatMessage({
-                id: 'pages.chat.sessionUsage.allModels',
-                defaultMessage: 'All model calls',
-              })}{' '}
-              · {formatTokens(sessionUsage.totalTokens)} tokens
-              {formatTokens(sessionUsage.promptTokens) !== '0' &&
-                ` · ${intl.formatMessage({
-                  id: 'pages.chat.sessionUsage.prompt',
-                  defaultMessage: 'prompt',
-                })} ${formatTokens(sessionUsage.promptTokens)}`}
-              {formatTokens(sessionUsage.completionTokens) !== '0' &&
-                ` · ${intl.formatMessage({
-                  id: 'pages.chat.sessionUsage.completion',
-                  defaultMessage: 'completion',
-                })} ${formatTokens(sessionUsage.completionTokens)}`}
-              {sessionCacheRate != null && (
-                <span
-                  title={`${intl.formatMessage(
-                    {
-                      id: 'pages.chat.usage.cacheDetail',
-                      defaultMessage: 'Hit {hit} / miss {miss}',
-                    },
-                    {
-                      hit: formatTokens(sessionUsage.cacheHitTokens),
-                      miss: formatTokens(sessionUsage.cacheMissTokens),
-                    },
-                  )} · ${intl.formatMessage({
-                    id: 'pages.chat.sessionUsage.scope',
-                    defaultMessage:
-                      'Session total (incl. compaction/title/sub-agents)',
-                  })}`}
-                >
-                  {` · ${intl.formatMessage({
-                    id: 'pages.chat.sessionUsage.cache',
-                    defaultMessage: 'cache',
-                  })} ${sessionCacheRate}%`}
-                </span>
-              )}
-              {contextPercent != null && (
-                <span
-                  title={`${formatTokens(sessionUsage.latestPromptTokens)} / ${formatTokens(currentRoute?.maxInputTokens)}`}
-                >
-                  {` · ${intl.formatMessage({
-                    id: 'pages.chat.sessionUsage.context',
-                    defaultMessage: 'current context',
-                  })} ${contextPercent}%`}
-                </span>
-              )}
+              <div
+                ref={usageScrollRef}
+                className={styles.usageBarScroll}
+                onPointerDown={() => {
+                  usagePausedRef.current = true;
+                }}
+                style={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  overflowX: usageHovered ? 'auto' : 'hidden',
+                  overflowY: 'hidden',
+                  whiteSpace: 'nowrap',
+                  textOverflow: usageHovered ? 'clip' : 'ellipsis',
+                  textAlign: usageHovered ? 'left' : 'center',
+                  cursor: usageHovered ? 'text' : 'default',
+                }}
+              >
+                {usageBaseText}
+                {showPromptCompletion && usagePromptPart}
+                {showPromptCompletion && usageCompletionPart}
+                {sessionCacheRate != null && (
+                  <span
+                    title={`${intl.formatMessage(
+                      {
+                        id: 'pages.chat.usage.cacheDetail',
+                        defaultMessage: 'Hit {hit} / miss {miss}',
+                      },
+                      {
+                        hit: formatTokens(sessionUsage.cacheHitTokens),
+                        miss: formatTokens(sessionUsage.cacheMissTokens),
+                      },
+                    )} · ${intl.formatMessage({
+                      id: 'pages.chat.sessionUsage.scope',
+                      defaultMessage:
+                        'Session total (incl. compaction/title/sub-agents)',
+                    })}`}
+                  >
+                    {usageCachePart}
+                  </span>
+                )}
+                {contextPercent != null && (
+                  <span
+                    title={`${formatTokens(sessionUsage.latestPromptTokens)} / ${formatTokens(currentRoute?.maxInputTokens)}`}
+                  >
+                    {usageContextPart}
+                  </span>
+                )}
+              </div>
+              <span
+                ref={usageFullMeasureRef}
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  visibility: 'hidden',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                  fontSize: 12,
+                  lineHeight: '18px',
+                }}
+              >
+                {usageFullText}
+              </span>
             </div>
           )}
         </div>
