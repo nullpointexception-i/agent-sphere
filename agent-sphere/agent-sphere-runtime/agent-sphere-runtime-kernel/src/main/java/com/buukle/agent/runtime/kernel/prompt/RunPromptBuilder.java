@@ -12,8 +12,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -105,16 +103,6 @@ public class RunPromptBuilder {
     /** 判断消息是否 loop 预算预告（以 marker 开头，用于跨轮定位并清除上一轮副本）。 */
     public boolean isLoopBudget(String content) {
         return content != null && content.startsWith(RunnerConstants.LOOP_BUDGET_PREFIX);
-    }
-
-    /**
-     * 当前服务器时间（独立小段文本，供组装侧追加到消息尾部）。
-     * 放在 system prompt 头部会破坏前缀缓存，故由调用方追加为最末一条 system 消息，
-     * 保证 messages[0] 及历史前缀字节稳定。
-     */
-    public String currentTimeText() {
-        return RunnerConstants.PROMPT_CURRENT_TIME
-                + LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
     }
 
     public List<ToolDefinitionDTO> buildToolDefinitions(List<RuntimeTool> tools) {

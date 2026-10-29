@@ -62,11 +62,30 @@ public class AgentRuntimeProperties {
          * 大多数抖动窗口。
          */
         private int llmTurnMaxRetries = 3;
+        /** live 工具结果单条压缩上限（浏览器类除外；浏览器只保留最近一条全文）。 */
+        private int liveToolResultMaxChars = 4000;
+        /** live 非浏览器工具结果总预算；超出后更旧的结果用省略标记。 */
+        private int liveToolResultBudgetChars = 50000;
+        /** 非浏览器工具结果始终完整保留的最近条数。 */
+        private int liveToolResultKeepRecent = 2;
         private CompactionConfig compaction = new CompactionConfig();
 
         @Data
         public static class CompactionConfig {
+            /** 触发阈值（占 maxInputTokens 比例）。 */
             private double budgetRatio = 0.5;
+            /** 压缩后目标（含 messages + tools + fixed 的总估算）。 */
+            private double targetRatio = 0.55;
+            /** 压缩输入预算占 maxInput 的比例。 */
+            private double inputRatio = 0.35;
+            /** run-local tail 预算占 maxInput 的比例。 */
+            private double tailRatio = 0.25;
+            /** 摘要硬上限（tokens）。 */
+            private long summaryMaxTokens = 2000;
+            /** 压缩后至少间隔的轮数（硬上限超限时不受限）。 */
+            private int cooldownTurns = 4;
+            /** 单 run run-local 压缩次数上限。 */
+            private int maxPerRun = 12;
         }
     }
 

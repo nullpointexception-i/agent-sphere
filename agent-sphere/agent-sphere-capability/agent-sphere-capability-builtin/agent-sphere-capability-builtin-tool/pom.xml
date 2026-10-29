@@ -18,5 +18,6 @@
         <module>agent-sphere-capability-builtin-tool-docwrite</module>
         <module>agent-sphere-capability-builtin-tool-skillwrite</module>
         <module>agent-sphere-capability-builtin-tool-textcontains</module>
+        <module>agent-sphere-capability-builtin-tool-currenttime</module>
     </modules>
 </project>

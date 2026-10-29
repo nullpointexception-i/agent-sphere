@@ -397,7 +397,7 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
   显式绑定（chrome / webfetch / webread；`InstanceInitializer#bindBuiltinBrowser` 就是干这个的）。
   **改成 true 不会报错，工具会从所有实例静默消失。**
 - **装配有 4 处，漏一处就静默失效**（无编译错误）：
-  1. `BuiltinToolEnum` 加 id（当前已用到 11）；
+  1. `BuiltinToolEnum` 加 id（当前已用到 13；12=finish，13=current_time）；
   2. `agent-sphere-capability-builtin-tool/pom.xml` 加 `<module>`；
   3. `agent-sphere-bootstrap/pom.xml` 加 `<dependency>`（否则 `@Component` 不在 classpath、扫不到）；
   4. **根 `pom.xml` 的 `dependencyManagement` 加同名条目**（否则 3 里的无版本依赖解析不了）。
@@ -434,8 +434,9 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
   1. **leading system 合并**：runner 的系统提示词 + `HistoryLoader` 在「上一轮被取消」或
      「有压缩摘要」时注入到 history 最前的 system —— 必须合并成一条，否则第二条 leading
      system 仍 400。compaction summary 同样走这条路。
-  2. **trailing system 降级为 user（保持原位）**：runner 为前缀缓存刻意把「当前时间 / 待办 /
+  2. **trailing system 降级为 user（保持原位）**：runner 为前缀缓存刻意把「待办 /
      loop 预算 / 静默追问 / 收口指令」作为尾部 system 追加；待办/追问/收口漏一个就继续 400。
+     当前时间已改为 `builtin_13` 按需查询，不再注入。
   **必须新建 `ChatMessageDTO`/新列表**：request 的 messages 是 runner 列表的浅拷贝（元素共享），
   原地改 role 会污染 runner 历史。
 - **reasoning 字段名因网关而异，必须双字段兼容**：vLLM / Qwen3 的 reasoning-parser 返回
@@ -581,6 +582,24 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
   `reply_content` **正文**；**不读 reasoning**。配对失败/tail 损坏/快照超限时回退普通 tool 记录。
 - `SessionRunner` 初始组装必须使用 `HistoryResult.currentRunStart`；压缩重组时 tail 起点仍是原始当前 user，
   否则 wait 恢复后的 session 压缩会把 resume input 当成当前 run 起点。
+
+**run-local 压缩与 resume 的上下文边界（run 2294 复盘）。**
+- `HistoryResult.currentRunStart` 是相对 **history 列表**的下标；`SessionRunner` 在 history 前已加 system prompt，
+  必须用 `resolveCurrentRunStart(base, history, total)`（`base + history.currentRunStart()`）。漏掉偏移会让
+  run-local tail 从 system prompt 开始，当前 user/todo 丢失，压缩后的请求出现「run summary → system prompt → 无 user」。
+- run-local tail 只从 user/assistant/tool **工作消息**里选，排除 time/todo/loop/silent/final/run summary 等动态 system；
+  按 `tail-ratio` 预算选，并保证最新一条浏览器结果进入 tail；压缩/重组后由 `refreshTodolistSlot` 从 DB 重新注入 todo 槽。
+- 压缩调用必须 `thinking=disabled`（`callLLM` 在 `applyGlobal` 后覆盖）：全局 thinking=true 会把 4k 输出预算耗在
+  reasoning 上，线上出现 completion=4000、reasoning 5–11k、content 为空（记录 FAILED）。
+- 压缩策略：`target-ratio=0.55`、`input-ratio=0.35`、`tail-ratio=0.25`、`summary-max-tokens=2000`、
+  `cooldown-turns=4`、`max-per-run=12`；fixed+tools+summary 已超 target 时返回 NO_PROGRESS，不写成功记录。
+- live 工具结果预算：非浏览器单条 4k、总 50k、最近 2 条保留；**浏览器只保留最近一条全文，更早的用占位符**
+  （`LiveToolResultPolicy`）。完整 artifact 仍在 DB，模型可用 getContent 回读。`HistoryLoader` 回退重建时
+  最近一条浏览器工具使用原始 `artifact`，其余用 `compressedArtifact`。
+- 时间不再注入 messages；需要时模型调用 `builtin_13`（`CURRENT_TIME`，Asia/Shanghai，返回
+  time/timezone/epochMillis/weekday）。`builtin_13` 是 `needConfig=false` 的自动包含工具。
+- builtin_5（Chrome）description/schema 与 `PROMPT_TOOLS_FOOTER` 只做文案/描述精简；**不改变工具集合、
+  needConfig、绑定关系**。
 
 **`StaleRunningRunReconciler` 是 DB 层最后一道网。** 每 `stale-reconcile-interval`（默认 1m）扫
 `findStaleByStatus(RUNNING, now - stale-reconcile-minutes)`（默认 30m），**且 session owner 租约不存在**

@@ -62,6 +62,10 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-capability-builtin-tool-currenttime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-runtime-orchestration</artifactId>
         </dependency>
         <dependency>

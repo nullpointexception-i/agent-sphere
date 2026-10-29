@@ -217,6 +217,9 @@ public class SessionRunner {
         int currentRunStart = -1;
         /** 当前 run 的 run-local 压缩次数（上限 2 次，不随工具轮重置）。 */
         int runCompactionAttempts = 0;
+        int runCompactionCount = currentRunId != null
+                ? (int) compactionService.countCompletedRunCompactions(currentRunId) : 0;
+        int lastRunCompactionLoop = -1000;
         // L2：进入 agentic 流程之后，「本轮没有任何工具调用」不再是完成信号。
         // toolsEverExecuted 从已持久化的 loopCount 起步 —— loopCount 只在工具轮自增，
         // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
@@ -275,21 +278,17 @@ public class SessionRunner {
                     if (systemPrompt != null && !systemPrompt.isBlank()) {
                         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                     }
+                    // HistoryResult.currentRunStart 是相对 history 列表的下标；这里已先加了 system prompt，
+                    // 必须加 base 偏移，否则 wait/澄清恢复后 currentRunStart 会指向 system prompt。
+                    int historyBase = messages.size();
                     HistoryLoader.HistoryResult history = historyLoader.loadResult(
                             sessionId, currentRunId, input.isClarificationResume());
                     if (history != null) {
                         messages.addAll(history.messages());
-                        currentRunStart = history.currentRunStart() >= 0
-                                ? history.currentRunStart() : messages.size();
-                    } else {
-                        currentRunStart = messages.size();
                     }
+                    currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
                 }
                 messages.add(buildUserMessage(input, attachmentResolver));
-                // 当前时间追加在消息尾部（独立小段 system，不污染 messages[0] 前缀，命中缓存）
-                messages.add(new ChatMessageDTO()
-                        .setRole(LlmApiConstant.ROLE_SYSTEM)
-                        .setContent(runPromptBuilder.currentTimeText()));
                 // 待办列表独立为尾部 system 段（原位替换，不触碰 index 0，保持前缀缓存稳定）
                 applyTodolistSuffix(messages, todolistText);
             }
@@ -306,7 +305,8 @@ public class SessionRunner {
 
             AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
             TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef,
-                    skipCompaction, currentRunStart, runCompactionAttempts);
+                    skipCompaction, currentRunStart, runCompactionAttempts,
+                    runCompactionCount, lastRunCompactionLoop, loopCount);
 
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
 
@@ -343,6 +343,7 @@ public class SessionRunner {
                     messages.addAll(historyLoader.load(sessionId, currentRunId));
                     currentRunStart = messages.size();
                     messages.addAll(currentRunTail);
+                    refreshTodolistSlot(sessionId, messages);
                     hasToolCalls = true;
                     continue;
                 }
@@ -354,12 +355,15 @@ public class SessionRunner {
                         continue;
                     }
                     runCompactionAttempts++;
-                    log.info("Run compaction applied for run {} (attempt {}): messages={}",
-                            currentRunId, runCompactionAttempts, turn.rebuiltMessages().size());
+                    runCompactionCount++;
+                    lastRunCompactionLoop = loopCount;
+                    log.info("Run compaction applied for run {} (attempt {}, runCount {}): messages={}",
+                            currentRunId, runCompactionAttempts, runCompactionCount, turn.rebuiltMessages().size());
                     messages.clear();
                     messages.addAll(turn.rebuiltMessages());
                     currentRunStart = turn.rebuiltCurrentRunStart() != null
                             ? turn.rebuiltCurrentRunStart() : -1;
+                    refreshTodolistSlot(sessionId, messages);
                     hasToolCalls = true;
                     continue;
                 }
@@ -647,6 +651,12 @@ public class SessionRunner {
                 }
             }
 
+            // live 工具结果预算：浏览器只保留最近一条全文，非浏览器按单条/总预算压缩。
+            LiveToolResultPolicy.apply(messages,
+                    properties.getRunner().getLiveToolResultMaxChars(),
+                    properties.getRunner().getLiveToolResultBudgetChars(),
+                    properties.getRunner().getLiveToolResultKeepRecent());
+
             boolean todowriteCalled = turn.toolCalls().stream().anyMatch(tc ->
                     tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId()));
             if (todowriteCalled && !messages.isEmpty()) {
@@ -728,6 +738,14 @@ public class SessionRunner {
         return parked;
     }
 
+    /** currentRunStart = 已加入 messages 的前缀长度 + history 内的相对下标；history 无当前 run 时取末尾。 */
+    static int resolveCurrentRunStart(int base, HistoryLoader.HistoryResult history, int totalAfterHistory) {
+        if (history == null || history.currentRunStart() < 0) {
+            return totalAfterHistory;
+        }
+        return base + history.currentRunStart();
+    }
+
     /** 达到轮次上限强收口时标记 run（任务守卫据 loopCapped 判失败，避免"半成品"冒充完成）。 */
     private void markLoopCapped(RunVO run, int maxLoopCount) {
         if (run == null) {
@@ -735,6 +753,17 @@ public class SessionRunner {
         }
         run.setLoopCapped(true);
         log.warn("Run {} hit loop cap {} (loopCapped=true, task guard will fail the task)", run.getId(), maxLoopCount);
+    }
+
+    /** 压缩重组后从 DB 重新注入待办槽，避免 todo 被摘要/ tail 选择丢掉。 */
+    private void refreshTodolistSlot(Long sessionId, List<ChatMessageDTO> messages) {
+        try {
+            AgentToolCallRecordVO todo = toolCallRecordSpi.getLatestBySessionAndToolName(
+                    sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
+            applyTodolistSuffix(messages, todo != null ? todo.getArtifact() : null);
+        } catch (Exception e) {
+            log.warn("Failed to refresh todolist after compaction for session {}", sessionId, e);
+        }
     }
 
     /**
@@ -899,7 +928,8 @@ public class SessionRunner {
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
                                KernelContext ctx, AtomicReference<String> turnReasoning,
-                               boolean skipCompaction, int currentRunStart, int runCompactionAttempts) {
+                               boolean skipCompaction, int currentRunStart, int runCompactionAttempts,
+                               int runCompactionCount, int lastRunCompactionLoop, int loopCount) {
         int turnRetries = properties.getRunner().getLlmTurnMaxRetries();
         AtomicReference<String> turnReasoningOut = turnReasoning;
         for (int attempt = 0; attempt <= turnRetries; attempt++) {
@@ -926,6 +956,8 @@ public class SessionRunner {
             // 「模型主动停」与「被截断/被过滤」。
             AtomicReference<String> finishReasonRef = new AtomicReference<>();
             java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicReference<CompactionService.CompactionDecision> compactionDecisionRef =
+                    new java.util.concurrent.atomic.AtomicReference<>();
             java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
             String instanceConfig = ctx != null && ctx.getAgentInstance() != null
@@ -963,9 +995,11 @@ public class SessionRunner {
 
                     // ★ 压缩检查：使用实际 route（和 LLM 调用同源）。
                     // skipCompaction 仅在「重试耗尽、压缩已被证明救不回来」的下一轮为 true。
-                    if (!skipCompaction && compactionService.shouldCompact(messages, route, toolDefs,
-                            effectiveMaxOutputTokens)) {
+                    CompactionService.CompactionDecision decision = compactionService.evaluate(
+                            messages, route, toolDefs, effectiveMaxOutputTokens);
+                    if (!skipCompaction && decision != null && decision.shouldCompact()) {
                         compactionTriggered.set(true);
+                        compactionDecisionRef.set(decision);
                         return null;
                     }
 
@@ -1088,16 +1122,30 @@ public class SessionRunner {
                 if (sessionOutcome == CompactionOutcome.COMPLETED) {
                     return TurnResult.compacted(sessionOutcome);
                 }
-                if (runCompactionAttempts < 2) {
+                CompactionService.CompactionDecision decision = compactionDecisionRef.get();
+                int maxPerRun = properties.getRunner().getCompaction().getMaxPerRun();
+                int cooldownTurns = properties.getRunner().getCompaction().getCooldownTurns();
+                boolean hardCeiling = decision != null
+                        && decision.estimated() >= decision.maxInputTokens() * 0.9;
+                boolean coolingDown = decision != null && !hardCeiling
+                        && loopCount - lastRunCompactionLoop < cooldownTurns;
+                if (runCompactionAttempts >= 2) {
+                    log.warn("Run compaction attempts exhausted for run {}; sending oversized context", runId);
+                } else if (runCompactionCount >= maxPerRun) {
+                    log.warn("Run compaction count reached max-per-run ({}) for run {}; sending oversized context",
+                            maxPerRun, runId);
+                } else if (coolingDown) {
+                    log.info("Run compaction cooling down for run {} (lastLoop={}, loop={}, cooldown={}); "
+                            + "sending current context", runId, lastRunCompactionLoop, loopCount, cooldownTurns);
+                } else {
                     log.warn("Session compaction made no progress (outcome={}); attempting run-local compaction "
-                            + "for run {} (attempt {})", sessionOutcome, runId, runCompactionAttempts + 1);
+                            + "for run {} (attempt {}, runCount {})", sessionOutcome, runId,
+                            runCompactionAttempts + 1, runCompactionCount);
                     RunCompactionResult runResult = compactionService.compactRun(sessionId, runId, ctx,
-                            new ArrayList<>(messages), currentRunStart, effectiveMaxOutputTokens);
+                            new ArrayList<>(messages), currentRunStart, toolDefs, effectiveMaxOutputTokens);
                     if (runResult != null && runResult.outcome() == CompactionOutcome.COMPLETED) {
                         return TurnResult.runCompacted(runResult.messages(), runResult.currentRunStart());
                     }
-                } else {
-                    log.warn("Run compaction attempts exhausted for run {}; sending oversized context", runId);
                 }
                 return TurnResult.compacted(sessionOutcome != null
                         ? sessionOutcome : CompactionOutcome.NO_PROGRESS);

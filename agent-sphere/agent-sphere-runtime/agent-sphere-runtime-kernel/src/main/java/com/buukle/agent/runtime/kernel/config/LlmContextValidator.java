@@ -61,6 +61,24 @@ public class LlmContextValidator {
                 "runner.turn-timeout must be >= 10s, got: " + runner.getTurnTimeout());
         require(runner.getCompaction().getBudgetRatio() > 0 && runner.getCompaction().getBudgetRatio() < 1,
                 "runner.compaction.budget-ratio must be between 0 and 1, got: " + runner.getCompaction().getBudgetRatio());
+        require(runner.getCompaction().getTargetRatio() > 0 && runner.getCompaction().getTargetRatio() < 1,
+                "runner.compaction.target-ratio must be between 0 and 1, got: " + runner.getCompaction().getTargetRatio());
+        require(runner.getCompaction().getInputRatio() > 0 && runner.getCompaction().getInputRatio() < 1,
+                "runner.compaction.input-ratio must be between 0 and 1, got: " + runner.getCompaction().getInputRatio());
+        require(runner.getCompaction().getTailRatio() > 0 && runner.getCompaction().getTailRatio() < 1,
+                "runner.compaction.tail-ratio must be between 0 and 1, got: " + runner.getCompaction().getTailRatio());
+        require(runner.getCompaction().getSummaryMaxTokens() >= 256,
+                "runner.compaction.summary-max-tokens must be >= 256, got: " + runner.getCompaction().getSummaryMaxTokens());
+        require(runner.getCompaction().getCooldownTurns() >= 0,
+                "runner.compaction.cooldown-turns must be >= 0, got: " + runner.getCompaction().getCooldownTurns());
+        require(runner.getCompaction().getMaxPerRun() >= 1,
+                "runner.compaction.max-per-run must be >= 1, got: " + runner.getCompaction().getMaxPerRun());
+        require(runner.getLiveToolResultMaxChars() >= 1,
+                "runner.live-tool-result-max-chars must be >= 1, got: " + runner.getLiveToolResultMaxChars());
+        require(runner.getLiveToolResultBudgetChars() >= runner.getLiveToolResultMaxChars(),
+                "runner.live-tool-result-budget-chars must be >= live-tool-result-max-chars");
+        require(runner.getLiveToolResultKeepRecent() >= 0,
+                "runner.live-tool-result-keep-recent must be >= 0, got: " + runner.getLiveToolResultKeepRecent());
         require(t.getMaxParallel() >= 1, "tool.max-parallel must be >= 1, got: " + t.getMaxParallel());
         require(t.getSubmitTimeout() != null && t.getSubmitTimeout().getSeconds() >= 5,
                 "tool.submit-timeout must be >= 5s, got: " + t.getSubmitTimeout());

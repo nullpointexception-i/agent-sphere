@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 前缀缓存友好性单测：
  * - buildSystemPrompt 对给定 ctx 字节确定（不含动态时间、不含待办），两次调用结果一致；
  * - 待办列表独立为尾部段 buildTodolistSuffix，不进入 system 头部（messages[0] 前缀稳定）；
- * - 当前时间独立为尾部小段 currentTimeText，不进入 system 头部；
  * - buildToolDefinitions 按名称稳定排序（工具顺序变动不影响前缀缓存）。
  */
 class RunPromptBuilderTest {
@@ -76,17 +75,6 @@ class RunPromptBuilderTest {
         assertFalse(builder.isTodolistSlot("plain system text"));
         assertNull(builder.buildTodolistSuffix("  "), "空白待办应返回 null（调用方移除旧槽）");
         assertNull(builder.buildTodolistSuffix(null));
-    }
-
-    @Test
-    void currentTimeText_isIsolatedTailFragment() {
-        String time = builder.currentTimeText();
-
-        assertTrue(time.startsWith("\n\nCurrent server time: "));
-        assertTrue(time.length() > "\n\nCurrent server time: ".length());
-        // 不包含 footer/待办等 system 主体内容，确保仅作为尾部小段
-        assertFalse(time.contains("Available tools"));
-        assertFalse(time.contains("## 当前待办列表"));
     }
 
     @Test

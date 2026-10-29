@@ -143,7 +143,7 @@ class QwenProviderStrategyTest {
         ChatMessageDTO base = new ChatMessageDTO().setRole("system").setContent("base prompt");
         ChatMessageDTO user = new ChatMessageDTO().setRole("user").setContent("hi");
         ChatMessageDTO assistant = new ChatMessageDTO().setRole("assistant").setContent("hello");
-        ChatMessageDTO time = new ChatMessageDTO().setRole("system").setContent("Current server time: t");
+        ChatMessageDTO time = new ChatMessageDTO().setRole("system").setContent("trailing system fixture: t");
         ChatMessageDTO budget = new ChatMessageDTO().setRole("system").setContent("[LOOP BUDGET] Loop 1/300");
         ChatCompletionRequestDTO req = request(base, user, assistant, time, budget);
 
@@ -156,7 +156,7 @@ class QwenProviderStrategyTest {
         assertEquals("user", m.get(1).getRole());
         assertEquals("assistant", m.get(2).getRole());
         assertEquals("user", m.get(3).getRole(), "尾部 system 必须降级为 user");
-        assertEquals("Current server time: t", m.get(3).getContent());
+        assertEquals("trailing system fixture: t", m.get(3).getContent());
         assertEquals("user", m.get(4).getRole());
         assertEquals("[LOOP BUDGET] Loop 1/300", m.get(4).getContent());
         // 不能原地改：request 的 messages 与 runner 历史共享元素
@@ -215,7 +215,7 @@ class QwenProviderStrategyTest {
         ChatMessageDTO hint = new ChatMessageDTO().setRole("system").setContent("cancelled hint");
         ChatMessageDTO user = new ChatMessageDTO().setRole("user").setContent("hi");
         ChatMessageDTO assistant = new ChatMessageDTO().setRole("assistant").setContent("hello");
-        ChatMessageDTO time = new ChatMessageDTO().setRole("system").setContent("Current server time: t");
+        ChatMessageDTO time = new ChatMessageDTO().setRole("system").setContent("trailing system fixture: t");
         ChatCompletionRequestDTO req = request(prompt, hint, user, assistant, time);
 
         qwen.adaptRequest(req);
@@ -227,6 +227,6 @@ class QwenProviderStrategyTest {
         assertEquals("user", m.get(1).getRole());
         assertEquals("assistant", m.get(2).getRole());
         assertEquals("user", m.get(3).getRole(), "尾部 system 仍要降级为 user");
-        assertEquals("Current server time: t", m.get(3).getContent());
+        assertEquals("trailing system fixture: t", m.get(3).getContent());
     }
 }

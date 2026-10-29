@@ -52,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
@@ -152,10 +153,12 @@ class FinishProtocolTest {
         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("do it"));
         Method m = SessionRunner.class.getDeclaredMethod(
                 "runTurn", Long.class, Long.class, List.class, List.class, List.class,
-                KernelContext.class, AtomicReference.class, boolean.class, int.class, int.class);
+                KernelContext.class, AtomicReference.class, boolean.class,
+                int.class, int.class, int.class, int.class, int.class);
         m.setAccessible(true);
         return (TurnResult) m.invoke(runner, 1L, 2L, messages, List.of(), List.of(),
-                KernelContext.builder().modelRoute(route).build(), new AtomicReference<>(), skipCompaction, 0, 0);
+                KernelContext.builder().modelRoute(route).build(), new AtomicReference<>(), skipCompaction,
+                0, 0, 0, -1000, 0);
     }
 
     // ---------- L0：截断 / 内容过滤不能当完成 ----------
@@ -210,7 +213,8 @@ class FinishProtocolTest {
     @Test
     void skipCompactionFlagBypassesCompactionGate() throws Exception {
         emit(new LLMEvent.TextDelta("done"), new LLMEvent.Finish(FinishReason.STOP, null));
-        when(compactionService.shouldCompact(any(), any(), any(), any())).thenReturn(true);
+        when(compactionService.evaluate(any(), any(), any(), any())).thenReturn(
+                new CompactionService.CompactionDecision(true, 0, 0, 0, 95_000, 100_000, 100_000));
         when(compactionService.compact(any(), any(), any())).thenReturn(CompactionOutcome.NO_PROGRESS);
 
         TurnResult compacted = runTurn(false);
@@ -225,12 +229,13 @@ class FinishProtocolTest {
     @Test
     void runLocalCompactionResultIsReturnedToCaller() throws Exception {
         emit(new LLMEvent.TextDelta("done"), new LLMEvent.Finish(FinishReason.STOP, null));
-        when(compactionService.shouldCompact(any(), any(), any(), any())).thenReturn(true);
+        when(compactionService.evaluate(any(), any(), any(), any())).thenReturn(
+                new CompactionService.CompactionDecision(true, 0, 0, 0, 95_000, 100_000, 100_000));
         when(compactionService.compact(any(), any(), any())).thenReturn(CompactionOutcome.NO_HISTORY);
         List<ChatMessageDTO> rebuilt = List.of(
                 new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("tail"));
-        when(compactionService.compactRun(any(), any(), any(), any(), any(Integer.class), any()))
-                .thenReturn(new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, 1, 9L));
+        when(compactionService.compactRun(any(), any(), any(), any(), anyInt(), any(), any()))
+                .thenReturn(new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, 1, 9L, 0, 0));
 
         TurnResult result = runTurn(false);
 

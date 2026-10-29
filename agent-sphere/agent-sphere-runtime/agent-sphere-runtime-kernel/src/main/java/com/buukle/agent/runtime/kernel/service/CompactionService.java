@@ -15,6 +15,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ThinkingDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -36,6 +37,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.CompactionPromptConstant;
+import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -63,7 +65,6 @@ public class CompactionService {
 
     public static final String COMPACTED_SENTINEL = "__COMPACTED__";
 
-    private static final double INPUT_RATIO = 0.5;
     private static final double OUTPUT_RATIO = 2.0 / 3;
     /** 估算安全系数：中文/JSON 的字符密度波动大，留 10% 余量避免「估算没到阈值、实际已超上下文」。 */
     private static final double ESTIMATE_SAFETY_RATIO = 1.1;
@@ -77,16 +78,12 @@ public class CompactionService {
     private static final double OUTPUT_MARGIN_RATIO = 0.05;
     /** 预算下限（占 max_input）：即使输出额度配置异常也不至于把预算压到无法工作。 */
     private static final double MIN_INPUT_BUDGET_RATIO = 0.25;
-    /** 摘要硬上限：防止长期运行中摘要逐轮膨胀。 */
-    private static final long SUMMARY_MAX_TOKENS_CAP = 4000L;
     private static final long SUMMARY_MIN_TOKENS = 256L;
     /** 单个 run 的用户/助手正文在压缩输入中的最大字符数（超出标记省略）。 */
     private static final int COMPACTION_FIELD_MAX_CHARS = 2000;
     /** 单个 run 的工具参数在压缩输入中的最大字符数。 */
     private static final int COMPACTION_ARGS_MAX_CHARS = 500;
 
-    /** run-local 压缩保留的消息数（当前 user + 最近 3 条，约 1 个工具轮）。 */
-    private static final int RUN_COMPACTION_KEEP_MESSAGES = 4;
     /** run-local tail 持久化上限（字符）。 */
     private static final int RUN_TAIL_MAX_CHARS = 64_000;
     /** wait/澄清挂起时的完整未摘要 tail 上限；超限则置空，回退 HistoryLoader 的 DB 重建。 */
@@ -102,7 +99,8 @@ public class CompactionService {
 
     /** 一次 run-local 压缩的真实结果（COMPLETED 时携带替换后的 messages）。 */
     public record RunCompactionResult(CompactionOutcome outcome, List<ChatMessageDTO> messages,
-                                      int currentRunStart, Long compactRecordId) {
+                                      int currentRunStart, Long compactRecordId,
+                                      long postEstimate, long target) {
     }
 
     private final AgentRuntimeProperties agentRuntimeProperties;
@@ -139,27 +137,45 @@ public class CompactionService {
      * 注意门槛必须是硬上限而不是 0.7×budget —— 后者会让「工具占大头但真实仍可容纳」的路由
      * （如 32k 路由）被永久关闭压缩，历史继续涨到真溢出。
      */
+    /** 压缩决策快照（供 runner 做 cooldown/硬上限判断，避免重复估算）。 */
+    public record CompactionDecision(boolean shouldCompact, long messageTokens, long toolTokens,
+                                     long fixedTokens, long estimated, long budget, long maxInputTokens) {
+    }
+
     public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route,
                                  List<ToolDefinitionDTO> tools, Integer effectiveMaxOutputTokens) {
-        if (route == null) return false;
+        return evaluate(messages, route, tools, effectiveMaxOutputTokens).shouldCompact();
+    }
+
+    public CompactionDecision evaluate(List<ChatMessageDTO> messages, ModelRouteFullVO route,
+                                       List<ToolDefinitionDTO> tools, Integer effectiveMaxOutputTokens) {
+        if (route == null) {
+            return new CompactionDecision(false, 0, 0, 0, 0, 0, 0);
+        }
         Long routeId = route.getId();
         long maxInputTokens = resolveMaxInputTokens(route);
         long budget = resolveInputBudget(maxInputTokens, effectiveMaxOutputTokens);
         long toolTokens = estimateToolTokens(tools);
         long fixedTokens = estimateFixedTokens(messages, toolTokens);
+        long messageTokens = estimateMessagesTokens(messages);
         if (fixedTokens >= maxInputTokens) {
             if (routeId == null || warnedInfeasibleCompaction.add(routeId)) {
                 log.warn("Route {} cannot compact: fixed(leading system + tools)={} >= maxInput={}; "
                         + "sending oversized context instead", routeId, fixedTokens, maxInputTokens);
             }
-            return false;
+            return new CompactionDecision(false, messageTokens, toolTokens, fixedTokens, fixedTokens, budget, maxInputTokens);
         }
-        long messageTokens = estimateMessagesTokens(messages);
         long estimated = (long) Math.ceil((messageTokens + toolTokens) * ESTIMATE_SAFETY_RATIO);
         log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, fixed={}, estimated={}, budget={}, maxInput={}, outputCap={}",
                 routeId, messageTokens, toolTokens, fixedTokens, estimated, budget, maxInputTokens,
                 effectiveMaxOutputTokens);
-        return estimated > budget;
+        return new CompactionDecision(estimated > budget, messageTokens, toolTokens, fixedTokens,
+                estimated, budget, maxInputTokens);
+    }
+
+    /** 当前 run 已完成的 run-local 压缩次数（per-run 上限）。 */
+    public long countCompletedRunCompactions(Long runId) {
+        return compactRecordSpi.countCompletedByRunId(runId);
     }
 
     private long resolveMaxInputTokens(ModelRouteFullVO route) {
@@ -279,7 +295,8 @@ public class CompactionService {
         long maxOutputTokens = route.getMaxOutputTokens() != null ? route.getMaxOutputTokens()
                 : RunnerConstants.DEFAULT_MAX_OUTPUT_TOKENS;
 
-        long compactionInputLimit = (long) (maxInputTokens * INPUT_RATIO);
+        long compactionInputLimit = (long) (maxInputTokens
+                * agentRuntimeProperties.getRunner().getCompaction().getInputRatio());
         CompactInput compactInput = buildCompactInput(sessionId, candidates, compactionInputLimit);
         if (compactInput.lastRunId() == null || compactInput.text().isBlank()) {
             log.warn("Compaction made no progress for session {}: candidates={}, lastRunId={}",
@@ -299,7 +316,8 @@ public class CompactionService {
         try {
             long summaryMaxLen = Math.min(
                     (long) (maxOutputTokens * OUTPUT_RATIO),
-                    Math.min(SUMMARY_MAX_TOKENS_CAP, charsToTokens(compactInput.text().length()) * 2 / 3));
+                    Math.min(agentRuntimeProperties.getRunner().getCompaction().getSummaryMaxTokens(),
+                            charsToTokens(compactInput.text().length()) * 2 / 3));
             summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
             String newSummary = callLLM(
                     CompactionPromptConstant.buildPrompt(session.getSummary(), compactInput.text(), summaryMaxLen),
@@ -486,22 +504,24 @@ public class CompactionService {
      */
     public RunCompactionResult compactRun(Long sessionId, Long runId, KernelContext ctx,
                                           List<ChatMessageDTO> messages, int currentRunStart,
+                                          List<ToolDefinitionDTO> toolDefs,
                                           Integer effectiveMaxOutputTokens) {
         if (sessionId == null || runId == null || messages == null || messages.isEmpty()
                 || currentRunStart < 0 || currentRunStart >= messages.size()) {
-            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
         }
         try {
             SessionVO session = sessionSpi.getSession(sessionId);
             if (session == null) {
-                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
             }
             List<ModelRouteFullVO> routes = routeListBuilder.fromInstance(session.getAgentInstanceId());
             return fallbackRouteExecutor.execute(routes, (i, route) -> doCompactRun(
-                    sessionId, runId, session, route, messages, currentRunStart, effectiveMaxOutputTokens));
+                    sessionId, runId, session, route, messages, currentRunStart, toolDefs,
+                    effectiveMaxOutputTokens));
         } catch (Exception e) {
             log.warn("Run compaction failed for run {}", runId, e);
-            return new RunCompactionResult(CompactionOutcome.FAILED, messages, currentRunStart, null);
+            return new RunCompactionResult(CompactionOutcome.FAILED, messages, currentRunStart, null, 0, 0);
         }
     }
 
@@ -518,7 +538,13 @@ public class CompactionService {
             if (latest == null) {
                 return;
             }
-            List<ChatMessageDTO> tail = new ArrayList<>(messages.subList(currentRunStart, messages.size()));
+            List<ChatMessageDTO> tail = new ArrayList<>();
+            tail.add(messages.get(currentRunStart));
+            for (int i = currentRunStart + 1; i < messages.size(); i++) {
+                if (isWorkMessage(messages.get(i))) {
+                    tail.add(messages.get(i));
+                }
+            }
             String json = serializeTailSnapshot(tail);
             compactRecordSpi.updateRunTail(runId, json);
         } catch (Exception e) {
@@ -528,42 +554,51 @@ public class CompactionService {
 
     private RunCompactionResult doCompactRun(Long sessionId, Long runId, SessionVO session,
                                              ModelRouteFullVO route, List<ChatMessageDTO> messages,
-                                             int currentRunStart, Integer effectiveMaxOutputTokens) {
+                                             int currentRunStart, List<ToolDefinitionDTO> toolDefs,
+                                             Integer effectiveMaxOutputTokens) {
         int userIndex = currentRunStart;
-        int tailStart = Math.max(userIndex + 1,
-                messages.size() - (RUN_COMPACTION_KEEP_MESSAGES - 1));
-        // 不能从 tool 消息中间切：否则 resume 时会出现没有对应 assistant(tool_calls) 的孤儿 tool 消息。
-        while (tailStart > userIndex + 1
-                && LlmApiConstant.ROLE_TOOL.equals(messages.get(tailStart).getRole())) {
-            tailStart--;
+        long maxInputTokens = resolveMaxInputTokens(route);
+        long maxOutputTokens = route.getMaxOutputTokens() != null ? route.getMaxOutputTokens()
+                : RunnerConstants.DEFAULT_MAX_OUTPUT_TOKENS;
+        var compaction = agentRuntimeProperties.getRunner().getCompaction();
+        long target = (long) (maxInputTokens * compaction.getTargetRatio());
+        long toolTokens = estimateToolTokens(toolDefs);
+        long prefixTokens = estimateMessagesTokens(messages.subList(0, userIndex + 1));
+        long summaryReserve = compaction.getSummaryMaxTokens();
+        long availableForTail = target - prefixTokens - toolTokens - summaryReserve;
+        if (availableForTail <= 0) {
+            log.warn("Run compaction cannot reach target: run={}, prefix={}, tools={}, summaryReserve={}, target={}",
+                    runId, prefixTokens, toolTokens, summaryReserve, target);
+            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
         }
+        long tailBudgetTokens = Math.min((long) (maxInputTokens * compaction.getTailRatio()), availableForTail);
+        TailSelection selection = selectRunTail(messages, userIndex, tailBudgetTokens);
+        int tailStart = selection.tailStart();
         if (tailStart <= userIndex + 1 || tailStart > messages.size()) {
-            log.info("Run compaction skipped: not enough current-run messages (run={}, userIndex={}, size={})",
+            log.info("Run compaction skipped: not enough current-run work messages (run={}, userIndex={}, size={})",
                     runId, userIndex, messages.size());
-            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
         }
 
-        List<ChatMessageDTO> toSummarize = messages.subList(userIndex + 1, tailStart);
+        // 摘要输入只含 user/assistant/tool 工作消息，排除 time/todo/loop 等动态 system 槽
+        List<ChatMessageDTO> toSummarize = workMessages(messages.subList(userIndex + 1, tailStart));
         String userText = truncateField(contentText(messages.get(userIndex).getContent()),
                 RUN_COMPACTION_MESSAGE_MAX_CHARS);
         AgentCompactRecordVO previous = compactRecordSpi.getLatestCompletedByRunId(runId);
         String previousSummary = previous != null ? previous.getSummaryAfter() : null;
 
-        long maxInputTokens = resolveMaxInputTokens(route);
-        long maxOutputTokens = route.getMaxOutputTokens() != null ? route.getMaxOutputTokens()
-                : RunnerConstants.DEFAULT_MAX_OUTPUT_TOKENS;
-        long inputLimit = (long) (maxInputTokens * INPUT_RATIO);
+        long inputLimit = (long) (maxInputTokens * compaction.getInputRatio());
         int maxInputChars = (int) Math.min(RUN_COMPACTION_INPUT_MAX_CHARS,
                 Math.max(1_000, Math.round(inputLimit * RunnerConstants.TOKEN_ESTIMATE_DIVISOR)));
         String rendered = renderChatMessagesForCompaction(toSummarize, maxInputChars);
         if (rendered.isBlank()) {
-            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+            return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
         }
         String compactPrompt = "User request:\n" + userText + "\n\nMessages:\n" + rendered;
 
         long summaryMaxLen = Math.min(
                 (long) (maxOutputTokens * OUTPUT_RATIO),
-                Math.min(SUMMARY_MAX_TOKENS_CAP, charsToTokens(compactPrompt.length()) * 2 / 3));
+                Math.min(compaction.getSummaryMaxTokens(), charsToTokens(compactPrompt.length()) * 2 / 3));
         summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
 
         String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
@@ -580,7 +615,7 @@ public class CompactionService {
                 String reason = "压缩模型未返回内容";
                 compactRecordSpi.updateFailed(record.getId(), reason);
                 publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
-                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null);
+                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
             }
 
             // 新消息：prefix（去掉旧 run summary）→ 新 run summary 插到 leading system 末尾 → 当前 user + tail
@@ -595,28 +630,133 @@ public class CompactionService {
             prefix.add(insertAt, new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_SYSTEM)
                     .setContent(HistoryLoader.RUN_SUMMARY_PREFIX + summary));
-            List<ChatMessageDTO> tail = new ArrayList<>();
-            tail.add(messages.get(userIndex));
-            tail.addAll(messages.subList(tailStart, messages.size()));
+            List<ChatMessageDTO> tail = selection.tail();
             List<ChatMessageDTO> rebuilt = new ArrayList<>(prefix);
             int newCurrentRunStart = rebuilt.size();
             rebuilt.addAll(tail);
 
-            String tailJson = serializeTailForPersistence(tail);
+            // tail 的选择已按 tail-ratio 控制；持久化保留 64k 硬上限，
+            // 以免把「最近一条浏览器全文」按路由预算截掉（浏览器策略优先）。
+            String tailJson = serializeTailForPersistence(tail, RUN_TAIL_MAX_CHARS);
             long summaryTokens = charsToTokens(summary.length());
             compactRecordSpi.completeRunCompact(record.getId(), previousSummary, summary, summaryTokens, tailJson);
             publishCompaction(CompactionStatus.COMPLETED, sessionId, runId, publishId, record.getId(), detail);
-            long after = estimateMessagesTokens(rebuilt);
+            long after = (long) Math.ceil((estimateMessagesTokens(rebuilt) + toolTokens) * ESTIMATE_SAFETY_RATIO);
             log.info("Run compaction completed: run={}, summarizedMessages={}, tailMessages={}, summaryTokens={}, "
-                            + "estimatedMessagesAfter={}", runId, toSummarize.size(), tail.size(), summaryTokens, after);
-            return new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, newCurrentRunStart, record.getId());
+                            + "postEstimate={}, target={}", runId, toSummarize.size(), tail.size(), summaryTokens,
+                    after, target);
+            if (after > target) {
+                log.warn("Run compaction still above target: run={}, postEstimate={}, target={}", runId, after, target);
+            }
+            return new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, newCurrentRunStart,
+                    record.getId(), after, target);
         } catch (Exception e) {
             log.warn("Run compaction failed for run {}", runId, e);
             String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             compactRecordSpi.updateFailed(record.getId(), reason);
             publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
-            return new RunCompactionResult(CompactionOutcome.FAILED, messages, currentRunStart, null);
+            return new RunCompactionResult(CompactionOutcome.FAILED, messages, currentRunStart, null, 0, 0);
         }
+    }
+
+    private record TailSelection(List<ChatMessageDTO> tail, int tailStart) {
+    }
+
+    /**
+     * 从当前 user 之后选择最近的工作消息作为 tail：排除 time/todo/loop 等动态 system 槽；
+     * 按 tail 预算从新到旧累计；始终包含最新一条浏览器结果（即使超出 tail 预算）；
+     * 不切断 assistant(tool_calls)/tool 组。
+     */
+    private TailSelection selectRunTail(List<ChatMessageDTO> messages, int userIndex, long tailBudgetTokens) {
+        int size = messages.size();
+        if (userIndex < 0 || userIndex >= size) {
+            return new TailSelection(List.of(), -1);
+        }
+        long budgetChars = Math.max(1_000L,
+                (long) (tailBudgetTokens * RunnerConstants.TOKEN_ESTIMATE_DIVISOR));
+        int selectedStart = size;
+        long used = 0;
+        for (int i = size - 1; i > userIndex; i--) {
+            ChatMessageDTO m = messages.get(i);
+            if (!isWorkMessage(m)) {
+                continue;
+            }
+            long len = messageChars(m);
+            if (selectedStart != size && used + len > budgetChars) {
+                break;
+            }
+            used += len;
+            selectedStart = i;
+        }
+        if (selectedStart == size) {
+            selectedStart = userIndex + 1;
+        }
+        int latestBrowser = latestBrowserIndex(messages, userIndex);
+        if (latestBrowser >= 0 && latestBrowser < selectedStart) {
+            selectedStart = latestBrowser;
+        }
+        while (selectedStart > userIndex + 1
+                && LlmApiConstant.ROLE_TOOL.equals(messages.get(selectedStart).getRole())) {
+            selectedStart--;
+        }
+        List<ChatMessageDTO> tail = new ArrayList<>();
+        tail.add(messages.get(userIndex));
+        for (int i = selectedStart; i < size; i++) {
+            if (isWorkMessage(messages.get(i))) {
+                tail.add(messages.get(i));
+            }
+        }
+        return new TailSelection(tail, selectedStart);
+    }
+
+    private static List<ChatMessageDTO> workMessages(List<ChatMessageDTO> messages) {
+        List<ChatMessageDTO> result = new ArrayList<>();
+        for (ChatMessageDTO m : messages) {
+            if (isWorkMessage(m)) {
+                result.add(m);
+            }
+        }
+        return result;
+    }
+
+    private static boolean isWorkMessage(ChatMessageDTO m) {
+        String role = m.getRole();
+        return role != null && !LlmApiConstant.ROLE_SYSTEM.equals(role);
+    }
+
+    private static long messageChars(ChatMessageDTO m) {
+        long len = contentText(m.getContent()).length();
+        if (m.getToolCalls() != null) {
+            for (ToolCallDTO tc : m.getToolCalls()) {
+                if (tc.getFunction() != null && tc.getFunction().getArguments() != null) {
+                    len += tc.getFunction().getArguments().length();
+                }
+            }
+        }
+        return len;
+    }
+
+    private static int latestBrowserIndex(List<ChatMessageDTO> messages, int userIndex) {
+        String browser = LiveToolResultPolicy.browserToolName();
+        Map<String, String> callNames = new LinkedHashMap<>();
+        for (ChatMessageDTO m : messages) {
+            if (LlmApiConstant.ROLE_ASSISTANT.equals(m.getRole()) && m.getToolCalls() != null) {
+                for (ToolCallDTO tc : m.getToolCalls()) {
+                    if (tc.getId() != null && tc.getFunction() != null) {
+                        callNames.put(tc.getId(), tc.getFunction().getName());
+                    }
+                }
+            }
+        }
+        int latest = -1;
+        for (int i = userIndex + 1; i < messages.size(); i++) {
+            ChatMessageDTO m = messages.get(i);
+            if (LlmApiConstant.ROLE_TOOL.equals(m.getRole())
+                    && browser.equals(callNames.get(m.getToolCallId()))) {
+                latest = i;
+            }
+        }
+        return latest;
     }
 
     /** 把当前 run 的旧消息渲染成摘要输入；只含正文/工具调用/工具结果，明确不含 reasoning。 */
@@ -669,11 +809,11 @@ public class CompactionService {
     }
 
     /** tail 持久化：剥离图片 data URL、截断超长正文，并控制总大小。 */
-    private static String serializeTailForPersistence(List<ChatMessageDTO> tail) {
+    private static String serializeTailForPersistence(List<ChatMessageDTO> tail, int maxChars) {
         List<ChatMessageDTO> copy = sanitizedTailCopy(tail, RUN_TAIL_MESSAGE_MAX_CHARS);
         String json = JsonUtils.toJson(copy);
         // 保留当前 user（index 0），按「完整 assistant/tool 组」丢弃最旧的一组，避免孤儿 tool 消息
-        while (json.length() > RUN_TAIL_MAX_CHARS && copy.size() > 1) {
+        while (json.length() > maxChars && copy.size() > 1) {
             int end = 2;
             while (end < copy.size() && !isGroupStart(copy.get(end))) {
                 end++;
@@ -681,7 +821,7 @@ public class CompactionService {
             copy.subList(1, end).clear();
             json = JsonUtils.toJson(copy);
         }
-        if (json.length() > RUN_TAIL_MAX_CHARS && copy.get(0).getContent() instanceof String s) {
+        if (json.length() > maxChars && copy.get(0).getContent() instanceof String s) {
             copy.get(0).setContent(truncateField(s, RUN_TAIL_MESSAGE_MAX_CHARS));
             json = JsonUtils.toJson(copy);
         }
@@ -748,6 +888,9 @@ public class CompactionService {
                                     .setContent(CompactionPromptConstant.getSystemPrompt()),
                             new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(messagesText)));
             llmRequestConfigurer.applyGlobal(request);
+            // 摘要不需要思考：全局 config 的 thinking=true 会把 4k 输出预算耗在 reasoning 上，
+            // 实测出现 completion=4000、reasoning 5-11k、content 为空（压缩直接失败）。
+            request.setThinking(new ThinkingDTO().setType("disabled"));
             // 摘要长度必须由请求硬上限兜底：prompt 里的「MUST NOT exceed」只是自然语言要求。
             // 放在 applyGlobal 之后，避免被全局 sampling 配置覆盖。
             request.setMaxTokens(hardMaxTokens);

@@ -26,13 +26,11 @@ public class ChromeExecuteContext extends ExecuteContext {
     private String text;
 
     @Schema(example = "document.title",
-            description = "仅 action=executeJS 时使用。只读：读取 DOM/取值/计算并 return 小 JSON。"
-                    + "禁止导航写操作（location.*= / location.assign|replace|reload / document|window.location / "
-                    + "history.pushState|replaceState|go|back|forward / window.open / form.submit）——会被拒绝并返回 "
-                    + "errorCategory=js_navigation_blocked；打开或返回详情请用 click。")
+            description = "executeJS only. Read-only; must return small JSON. Navigation writes are rejected "
+                    + "(js_navigation_blocked). Use click to open/return.")
     private String code;
 
-    @Schema(example = "summary", description = "getContent的扫描模式：summary（结构化摘要，含inputs/buttons/forms/navLinks/sections/dialogs）或留空（完整DOM）")
+    @Schema(example = "snapshot", description = "getContent mode: snapshot/summary/axtree/query/extract/containers/ready.")
     private String mode;
 
     @Schema(example = "123", description = "指定操作的标签页ID，为空时自动使用当前受控标签页")
@@ -47,16 +45,16 @@ public class ChromeExecuteContext extends ExecuteContext {
     @Schema(example = "2", description = "text匹配多处文本时定位第N处（1起），如多个\"确定\"按钮；仅click/hover生效")
     private Integer occurrence;
 
-    @Schema(example = "0", description = "快照(getContent mode:snapshot)返回的稳定元素引用（0起），用于click/type/hover/select/upload直接定位，免去selector；优先于selector/text")
+    @Schema(example = "0", description = "Snapshot ref (0-based); preferred over selector/text.")
     private Integer ref;
 
-    @Schema(example = "3000", description = "元素出现/可交互前的最大等待毫秒（默认3000），click/type/hover/select/upload生效")
+    @Schema(example = "3000", description = "Max wait for element readiness (default 3000ms).")
     private Integer waitMs;
 
-    @Schema(example = "500", description = "【已废弃】原 wait 动作的固定等待毫秒。wait 已下沉为全局内置工具，Chrome 不再有 wait 动作；字段仅为线协议兼容保留。")
+    @Schema(example = "500", description = "Deprecated wire-compat field; use the global wait tool.")
     private Integer ms;
 
-    @Schema(example = "10", description = "单条命令的执行超时覆盖（秒，min 2 / max 30）。用于慢渲染页面；等待动态内容请用 getContent(mode:ready, waitMs) 或全局 wait 工具。")
+    @Schema(example = "10", description = "Command timeout seconds (2-30).")
     private Integer timeout;
 
     @Schema(example = "Enter", description = "key动作：按键名（Enter/Tab/Escape/Backspace/ArrowDown等），可选codeKey指定物理键")
@@ -98,19 +96,19 @@ public class ChromeExecuteContext extends ExecuteContext {
     @Schema(example = "true", description = "type 动作：输入后派发 Enter 提交（如搜索框回车触发搜索），并回传 _submitted/changed")
     private Boolean submit;
 
-    @Schema(example = "[\"text\",\".name\",\"@data-id\"]", description = "getContent mode:extract 的字段：text=元素文本；.xxx=相对子选择器取首个子元素文本；@attr=取属性；href/value 为内置字段")
+    @Schema(example = "[\"text\",\".name\",\"@data-id\"]", description = "extract fields: text, .child, @attr, href, value.")
     private List<String> fields;
 
-    @Schema(example = "[\".dropdown-city\",\".degree-condition-ui\"]", description = "getContent mode:containers 的容器选择器列表（跨同源 iframe 探测 present/count/frame），也可用逗号分隔的单个 selector")
+    @Schema(example = "[\".dropdown-city\",\".degree-condition-ui\"]", description = "containers selectors (cross-frame present/count/frame).")
     private List<String> selectors;
 
-    @Schema(example = "200", description = "getContent mode:extract / textMax：单字段文本截断长度（默认200）")
+    @Schema(example = "200", description = "extract text truncation length (default 200).")
     private Integer textMax;
 
-    @Schema(example = "320", description = "clickAt动作：最后一张 viewport 截图的设备像素 X 坐标（视觉操作，与 dpr 无关，执行层换算）")
+    @Schema(example = "320", description = "clickAt: device-pixel X on the last viewport screenshot.")
     private Integer x;
 
-    @Schema(example = "560", description = "clickAt动作：最后一张 viewport 截图的设备像素 Y 坐标（视觉操作，与 dpr 无关，执行层换算）")
+    @Schema(example = "560", description = "clickAt: device-pixel Y on the last viewport screenshot.")
     private Integer y;
 
     @Schema(example = "jpeg", description = "screenshot动作：图片格式 jpeg/png，默认 jpeg")

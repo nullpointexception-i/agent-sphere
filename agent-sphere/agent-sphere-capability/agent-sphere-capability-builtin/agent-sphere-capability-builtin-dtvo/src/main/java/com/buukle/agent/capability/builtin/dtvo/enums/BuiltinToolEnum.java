@@ -11,7 +11,8 @@ public enum BuiltinToolEnum {
     SKILL_MANAGE(9),
     WAIT(10),
     TEXT_CONTAINS(11),
-    FINISH(12);
+    FINISH(12),
+    CURRENT_TIME(13);
 
     private final int id;
 

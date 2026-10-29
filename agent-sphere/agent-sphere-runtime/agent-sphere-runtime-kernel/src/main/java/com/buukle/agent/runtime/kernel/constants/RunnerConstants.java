@@ -15,7 +15,6 @@ public final class RunnerConstants {
     public static final int TOOL_RESULT_HISTORY_CHARS_BUDGET = 50000;
     public static final String FALLBACK_CALL_ID_PREFIX = "hist_";
     public static final String TOOL_RESULT_BUDGET_OMITTED = "[Tool result omitted due to context limit]";
-    public static final String PROMPT_CURRENT_TIME = "\n\nCurrent server time: ";
     public static final String PROMPT_TOOLS_HEADER = "\n\nAvailable tools:\n";
     /** 待办列表尾部段：header 同时作为槽位定位 marker（内容以 header 开头的消息即待办槽）。 */
     public static final String PROMPT_TODOLIST_HEADER = "\n\n## 进度记录（不代表任务完成）\n";
@@ -27,60 +26,25 @@ public final class RunnerConstants {
             + "任何更新都必须回传完整清单（该工具是整体替换）。**";
     public static final String PROMPT_TOOLS_FOOTER = """
             
-            TASK LIST: keep exactly ONE task list via the task list tool. It is the plan for the
-            WHOLE task and must always contain EVERYTHING still to do — regardless of which skill
-            you have read.
-
-            - If NO skill applies: create your own task list covering the user's request before
-              acting, and restructure it freely (add / remove / reorder / re-scope) as work evolves.
-            - If a skill IS the whole plan: read it (skill_library) first, then lay the list out
-              from its steps — every `## stepN` and `### stepN.M`, in order — writing each item's
-              content as plain numbering derived from the step id (`N. <title>` for stepN,
-              `N.M <title>` for stepN.M; drop the word "step"; no `#` marks). For each such item
-              also set its `skillId` (the skill id returned by skill_library) and `stepId`
-              (the step id, e.g. step1 / step1.1).
-            - If a skill only details ONE OR A FEW steps of your EXISTING plan: KEEP the existing
-              list and use that skill as the method for those steps — only add `skillId`/`stepId`
-              to the relevant items (optionally nest the skill's sub-steps under them). Do NOT
-              replace the plan with the skill's steps and do NOT drop unrelated items.
-
-            Before executing any item that carries `skillId` + `stepId`, read that step's body with
-            skill_library(action=get, skillId=<skillId>, sectionHeading=<stepId>) — the outline is
-            only titles; the method lives in the section (an H2 section returns its H3 children too).
-
-            The task list tool REPLACES the entire list — always pass the COMPLETE list (existing
-            items plus any additions/changes); anything you omit is deleted. Keep it in sync with
-            actual progress whenever a task's status changes (pending → in_progress → completed / cancelled).
-
-            A todo's status is PROGRESS ONLY. Marking every todo 'completed' does NOT mean the
-            task is finished — completion is decided by the task instructions and, when a skill
-            applies, the skill's closing conditions and expected output. Do not stop early just
-            because the list looks done.
-
-            You may call multiple INDEPENDENT tools in a single turn — they will
-            run in parallel. But tools with sequential dependencies (e.g., fetch
-            a URL first, then read its content) MUST be called in separate turns.
-            Mark dependent tasks as 'pending' in the todo list until their turn.
-            
-            IMPORTANT: When calling the task list tool, the JSON MUST be strictly valid.
-            Each key-value pair MUST be separated by a comma. Example:
+            TASK LIST: keep exactly ONE task list via the task list tool. It is the plan for the WHOLE task
+            and must contain everything still to do.
+            - No skill applies: create your own list before acting; restructure freely as work evolves.
+            - A skill IS the whole plan: read it first, then lay out every `## stepN` and `### stepN.M` in
+              order as plain numbering (`N. <title>` / `N.M <title>`), with `skillId` + `stepId` on each item.
+            - A skill covers only some steps: keep your existing list; add `skillId`/`stepId` to those items only.
+            Before executing an item with `skillId` + `stepId`, read its body with
+            skill_library(action=get, skillId=<id>, sectionHeading=<stepId>); the outline is titles only.
+            The task list tool REPLACES the entire list — always pass the COMPLETE list; omitted items are deleted.
+            A completed list is PROGRESS ONLY, not completion; completion follows the task instructions/skill.
+            You may call multiple INDEPENDENT tools in one turn (parallel); dependent tools need separate turns.
+            When calling the task list tool, JSON must be valid (commas between properties):
             {"todos": [{"content": "...", "status": "pending", "priority": "high"}]}
-            Never omit commas between object properties.
-
-            CRITICAL: When you need to call a tool, you MUST use the function calling API
-            (respond with tool_calls in the API format). Do NOT describe or plan tool calls
-            as JSON or text in your reply — invoke the tool directly through the available
-            function definitions.
-
-
-            CRITICAL — EXECUTE, DO NOT ASK: When the user gives you a clear instruction
-            (e.g., 'search for X', 'check Y', 'look up Z'), EXECUTE it immediately.
-            Call the necessary tools and provide the result. Do NOT ask the user
-            'what do you want to do' or 'what would you like to search' — they already
-            told you. If you need exactly one missing detail, use the clarification
-            tool ONCE, then ACT on the response. Never ask multiple consecutive
-            clarifications or questions. NEVER respond with a question when the user
-            has already stated their intent.""";
+            CRITICAL: call tools through the function-calling API (tool_calls); never describe them as JSON/text.
+            CRITICAL — EXECUTE, DO NOT ASK: when the user gave a clear instruction, execute it immediately with
+            tools. Do NOT ask "what do you want to do". If exactly one detail is missing, use the clarification
+            tool once when available, otherwise proceed with the best available assumption; never ask
+            consecutive clarifications.
+            """;
     /** 仅在注册了 clarification 工具时追加（避免对不存在的工具发指令）。 */
     public static final String PROMPT_CLARIFICATION_RULES = """
 

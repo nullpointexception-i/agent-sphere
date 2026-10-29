@@ -15,6 +15,7 @@ import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
+import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
@@ -205,6 +206,13 @@ public class HistoryLoader {
                     .setContent(run.getUserMessage()));
         }
         List<AgentToolCallRecordVO> allCalls = calls != null ? calls : List.of();
+        String browserTool = LiveToolResultPolicy.browserToolName();
+        Long latestBrowserCallId = null;
+        for (AgentToolCallRecordVO c : allCalls) {
+            if (browserTool.equals(c.getToolName())) {
+                latestBrowserCallId = c.getId();
+            }
+        }
         List<AgentLlmInteractionRecordVO> interactions;
         try {
             interactions = interactionSpi.listByRunIdAsc(run.getId());
@@ -238,7 +246,8 @@ public class HistoryLoader {
                 }
                 messages.add(assistant);
                 for (AgentToolCallRecordVO call : turnCalls) {
-                    messages.add(toolMessage(call, overBudget));
+                    messages.add(toolMessage(call, overBudget,
+                            call.getId() != null && call.getId().equals(latestBrowserCallId)));
                 }
             }
         }
@@ -249,7 +258,8 @@ public class HistoryLoader {
                     .setRole(LlmApiConstant.ROLE_ASSISTANT)
                     .setToolCalls(toToolCalls(remaining)));
             for (AgentToolCallRecordVO call : remaining) {
-                messages.add(toolMessage(call, overBudget));
+                messages.add(toolMessage(call, overBudget,
+                        call.getId() != null && call.getId().equals(latestBrowserCallId)));
             }
         }
         addFinalAssistantReply(messages, run);
@@ -286,7 +296,7 @@ public class HistoryLoader {
             messages.add(new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_ASSISTANT)
                     .setToolCalls(List.of(toolCall(c))));
-            messages.add(toolMessage(c, overBudget));
+            messages.add(toolMessage(c, overBudget, false));
         }
     }
 
@@ -311,11 +321,15 @@ public class HistoryLoader {
                 .build();
     }
 
-    private static ChatMessageDTO toolMessage(AgentToolCallRecordVO c, Set<Long> overBudget) {
+    private static ChatMessageDTO toolMessage(AgentToolCallRecordVO c, Set<Long> overBudget, boolean keepFull) {
         String callId = c.getCallId() != null ? c.getCallId()
                 : RunnerConstants.FALLBACK_CALL_ID_PREFIX + c.getStepId();
         String result;
-        if (overBudget.contains(c.getId())) {
+        if (keepFull) {
+            // 最近一条浏览器结果恢复全文（与 live 策略一致）；完整 artifact 可能较大，但页面状态需要它
+            result = c.getArtifact() != null ? c.getArtifact()
+                    : (c.getCompressedArtifact() != null ? c.getCompressedArtifact() : "");
+        } else if (overBudget.contains(c.getId())) {
             result = RunnerConstants.TOOL_RESULT_BUDGET_OMITTED;
         } else if (ToolCallRecordStatus.SUCCEEDED.name().equals(c.getStatus())) {
             result = c.getCompressedArtifact() != null ? c.getCompressedArtifact() : "";

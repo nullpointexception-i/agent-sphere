@@ -34,4 +34,7 @@ public interface AgentCompactRecordSpi {
 
     /** 当前 run 最近完成的 run-local 压缩（resume 恢复 summary + tail 用）。 */
     AgentCompactRecordVO getLatestCompletedByRunId(Long runId);
+
+    /** 当前 run 已完成的 run-local 压缩次数（per-run 上限用）。 */
+    long countCompletedByRunId(Long runId);
 }

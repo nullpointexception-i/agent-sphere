@@ -150,6 +150,14 @@ public class AgentCompactRecordServiceImpl implements AgentCompactRecordSpi {
     }
 
     @Override
+    public long countCompletedByRunId(Long runId) {
+        if (runId == null) return 0L;
+        return mapper.selectCount(new LambdaQueryWrapper<AgentCompactRecord>()
+                .eq(AgentCompactRecord::getRunId, runId)
+                .eq(AgentCompactRecord::getStatus, STATUS_COMPLETED));
+    }
+
+    @Override
     public AgentCompactRecordVO getLatestCompletedByRunId(Long runId) {
         if (runId == null) return null;
         AgentCompactRecord r = mapper.selectOne(

@@ -8,6 +8,7 @@ import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -15,6 +16,7 @@ import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.contract.CompactionOutcome;
+import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.util.json.JsonUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,6 +69,8 @@ class RunCompactionServiceTest {
 
     private CompactionService service;
     private ModelRouteFullVO route;
+    private final java.util.concurrent.atomic.AtomicReference<ChatCompletionRequestDTO> lastRequest =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     @BeforeEach
     void setUp() {
@@ -97,6 +101,7 @@ class RunCompactionServiceTest {
 
         lenient().when(kernelLlmService.stream(anyString(), anyString(), any(), anyString(),
                 any(), any(), any())).thenAnswer(inv -> {
+            lastRequest.set(inv.getArgument(4));
             @SuppressWarnings("unchecked")
             Consumer<LLMEvent> onEvent = inv.getArgument(5);
             onEvent.accept(new LLMEvent.TextDelta("RUN-SUM"));
@@ -112,31 +117,28 @@ class RunCompactionServiceTest {
         List<ChatMessageDTO> messages = new ArrayList<>();
         messages.add(msg("system", "SYS"));
         messages.add(msg("user", "original task"));
-        messages.add(msg("assistant", "a2"));
-        messages.add(msg("tool", "t3"));
-        messages.add(msg("assistant", "a4"));
-        messages.add(msg("tool", "t5"));
-        messages.add(msg("assistant", "a6"));
-        messages.add(msg("tool", "t7"));
+        messages.add(msg("assistant", "a2".repeat(3_000)));
+        messages.add(msg("tool", "t3".repeat(3_000)));
+        messages.add(msg("assistant", "a4".repeat(3_000)));
+        messages.add(msg("tool", "t5".repeat(3_000)));
+        messages.add(msg("assistant", "a6".repeat(3_000)));
+        messages.add(msg("tool", "t7".repeat(3_000)));
         return messages;
     }
 
     @Test
     void compactRunKeepsUserAndLastThreeMessagesAsTail() {
         CompactionService.RunCompactionResult result = service.compactRun(
-                SESSION_ID, RUN_ID, null, messages(), 1, null);
+                SESSION_ID, RUN_ID, null, messages(), 1, null, null);
 
         assertEquals(CompactionOutcome.COMPLETED, result.outcome());
-        // 初始 tailStart 落在 tool 上，会回退到该组 assistant，避免孤儿 tool 消息
-        assertEquals(7, result.messages().size());
+        // tail 预算只够最近一组：user + a6 + t7；更旧的 a2/t3/a4/t5 进入摘要
+        assertEquals(5, result.messages().size());
         assertEquals(2, result.currentRunStart());
         assertTrue(result.messages().get(1).getContent().toString().contains("RUN-SUM"));
         assertEquals("original task", result.messages().get(2).getContent());
-        // tail = user + a4/t5/a6/t7
-        assertEquals("a4", result.messages().get(3).getContent());
-        assertEquals("t5", result.messages().get(4).getContent());
-        assertEquals("a6", result.messages().get(5).getContent());
-        assertEquals("t7", result.messages().get(6).getContent());
+        assertTrue(result.messages().get(3).getContent().toString().startsWith("a6"));
+        assertTrue(result.messages().get(4).getContent().toString().startsWith("t7"));
 
         verify(compactRecordSpi).completeRunCompact(org.mockito.ArgumentMatchers.eq(99L),
                 org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("RUN-SUM"),
@@ -153,7 +155,7 @@ class RunCompactionServiceTest {
                         .setImageUrl(new com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO.ImageUrl()
                                 .setUrl("data:image/png;base64,AAAA")))));
 
-        service.compactRun(SESSION_ID, RUN_ID, null, messages, 1, null);
+        service.compactRun(SESSION_ID, RUN_ID, null, messages, 1, null, null);
 
         org.mockito.ArgumentCaptor<String> tail = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(compactRecordSpi).completeRunCompact(any(), any(), any(), any(), tail.capture());
@@ -161,6 +163,33 @@ class RunCompactionServiceTest {
         assertTrue(tail.getValue().contains("[image omitted after run compaction]"));
         assertTrue(tail.getValue().contains("original task"));
         assertEquals(5, JsonUtils.parse(tail.getValue(), new com.fasterxml.jackson.core.type.TypeReference<List<Object>>() {}).size());
+    }
+
+    @Test
+    void compactionDisablesThinking() {
+        service.compactRun(SESSION_ID, RUN_ID, null, messages(), 1, null, null);
+
+        org.junit.jupiter.api.Assertions.assertNotNull(lastRequest.get());
+        org.junit.jupiter.api.Assertions.assertEquals("disabled",
+                lastRequest.get().getThinking().getType());
+    }
+
+    @Test
+    void tailExcludesDynamicSystemSlots() {
+        List<ChatMessageDTO> messages = new ArrayList<>(messages());
+        messages.add(msg("system", RunnerConstants.LOOP_BUDGET_PREFIX + "Loop 1/10"));
+        messages.add(msg("system", RunnerConstants.PROMPT_TODOLIST_HEADER + "{\"todos\":[]}"));
+        messages.add(msg("system", "\n\nCurrent server time: legacy"));
+
+        CompactionService.RunCompactionResult result = service.compactRun(
+                SESSION_ID, RUN_ID, null, messages, 1, null, null);
+
+        assertEquals(CompactionOutcome.COMPLETED, result.outcome());
+        assertEquals("original task", result.messages().get(result.currentRunStart()).getContent());
+        org.junit.jupiter.api.Assertions.assertTrue(result.messages().stream().noneMatch(m ->
+                m.getContent() instanceof String s && (s.contains("Current server time")
+                        || s.contains(RunnerConstants.PROMPT_TODOLIST_HEADER.trim())
+                        || s.startsWith(RunnerConstants.LOOP_BUDGET_PREFIX))));
     }
 
     @Test
@@ -196,7 +225,7 @@ class RunCompactionServiceTest {
                 msg("assistant", "a4"));
 
         CompactionService.RunCompactionResult result = service.compactRun(
-                SESSION_ID, RUN_ID, null, messages, 1, null);
+                SESSION_ID, RUN_ID, null, messages, 1, null, null);
 
         assertEquals(CompactionOutcome.NO_PROGRESS, result.outcome());
     }
