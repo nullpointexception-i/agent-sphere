@@ -85,6 +85,14 @@ export const useStyles = createStyles(({ css, token }) => ({
     background: ${token.colorBgContainer};
   `,
 
+  chatStage: css`
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  `,
+
   messages: css`
     flex: 1;
     overflow-x: hidden;

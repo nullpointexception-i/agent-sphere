@@ -7,7 +7,12 @@ import java.util.List;
 import java.util.Map;
 
 public interface ClarificationSpi {
-    Long createPending(Long sessionId, Long runId, Long messageId, String title, String type, String optionsJson, String clarificationId);
+    Long createPending(Long sessionId, Long runId, Long messageId, String title, String type,
+                       boolean multiple, String optionsJson, String clarificationId);
+
+    /** L2 tool approval: one pending clarification carrying the batch of tool calls. */
+    Long createToolApprovalPending(Long sessionId, Long runId, String title, String optionsJson,
+                                   String toolCallsJson, String clarificationId);
 
     Map<Long, List<ClarificationVO>> mapByRunIdList(Collection<Long> runIds);
 

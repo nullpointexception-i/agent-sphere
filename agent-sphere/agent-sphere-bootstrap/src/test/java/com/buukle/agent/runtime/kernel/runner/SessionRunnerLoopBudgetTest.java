@@ -5,6 +5,7 @@ import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
@@ -18,6 +19,7 @@ import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -95,7 +97,7 @@ class SessionRunnerLoopBudgetTest {
                 eventPublisher, routeListBuilder, fallbackRouteExecutor, historyLoader,
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
                 toolCallRecordSpi, redissonClient, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class)));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
     }
 
     private void applyLoopBudget(List<ChatMessageDTO> messages, int loopCount, int maxLoopCount) throws Exception {

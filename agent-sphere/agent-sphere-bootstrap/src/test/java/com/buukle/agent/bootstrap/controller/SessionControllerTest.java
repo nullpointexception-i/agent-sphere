@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,6 +37,20 @@ class SessionControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(sessionController).build();
+    }
+
+    @Test
+    void updateRunMode_persistsSessionPreference() throws Exception {
+        SessionVO vo = new SessionVO();
+        vo.setId(1L);
+        vo.setRunMode("READ_ONLY");
+        given(sessionService.updateRunMode(1L, "READ_ONLY")).willReturn(vo);
+
+        mockMvc.perform(put("/api/v1/instance/sessions/1/run-mode")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"runMode\":\"READ_ONLY\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runMode").value("READ_ONLY"));
     }
 
     @Test

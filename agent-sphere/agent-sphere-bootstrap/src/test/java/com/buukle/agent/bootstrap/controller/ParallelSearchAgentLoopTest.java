@@ -46,6 +46,7 @@ import com.buukle.agent.runtime.kernel.service.CliExecutorService;
 import com.buukle.agent.runtime.kernel.service.ToolResultReadService;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import com.buukle.agent.runtime.orchestration.pipeline.ContextPreparer;
 import com.buukle.agent.runtime.orchestration.pipeline.ValidationResult;
@@ -313,7 +314,7 @@ class ParallelSearchAgentLoopTest {
                     new RouteListBuilder(mock(RouteSpi.class), mock(InstanceSpi.class), model),
                     new FallbackRouteExecutor(), mock(HistoryLoader.class), mock(CompactionService.class), input,
                     new RunPromptBuilder(), executor, mock(TitleService.class), mock(AgentToolCallRecordSpi.class),
-                    redis, mock(ChatAttachmentResolver.class), new LlmRequestConfigurer(mock(SystemConfigSpi.class)));
+                    redis, mock(ChatAttachmentResolver.class), new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
             runner.run(SESSION_ID);
             if (modelFailure.get() != null) throw new AssertionError("Controlled model validation failed", modelFailure.get());
             assertEquals("COMPLETED", run.getStatus(), "Runner must finish all result-dependent turns");

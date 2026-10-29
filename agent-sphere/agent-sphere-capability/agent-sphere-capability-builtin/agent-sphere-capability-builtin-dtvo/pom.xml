@@ -9,5 +9,9 @@
     </parent>
     <artifactId>agent-sphere-capability-builtin-dtvo</artifactId>
     <dependencies>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-common</artifactId>
+        </dependency>
     </dependencies>
 </project>

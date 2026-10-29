@@ -6,6 +6,7 @@ public enum TimelineKind {
     ASSISTANT("assistant"),
     TOOL("tool"),
     CLARIFICATION("clarification"),
+    TOOL_APPROVAL("tool_approval"),
     SUBAGENT("subagent"),
     /** 上下文压缩：分割线 + 压缩模型的流式输出。 */
     COMPACTION("compaction"),

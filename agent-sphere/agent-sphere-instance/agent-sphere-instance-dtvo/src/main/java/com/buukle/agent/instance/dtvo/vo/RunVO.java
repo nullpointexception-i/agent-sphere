@@ -20,6 +20,8 @@ public class RunVO implements Serializable {
     /** 聊图片附件引用（[{"fileKey","contentType"}]）：Timeline USER 行回显用 */
     private List<RunAttachment> attachments;
     private String status;
+    /** Snapshot of session run mode at creation: WRITE / READ_ONLY. */
+    private String runMode;
     /** 命中循环次数上限被强收口（任务守卫据此判失败） */
     private Boolean loopCapped;
     /**

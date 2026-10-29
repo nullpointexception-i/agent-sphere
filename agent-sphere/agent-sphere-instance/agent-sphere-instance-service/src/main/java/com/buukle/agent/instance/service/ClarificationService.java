@@ -21,7 +21,8 @@ public class ClarificationService implements ClarificationSpi {
     private final AgentPendingClarificationMapper clarificationMapper;
 
     @Override
-    public Long createPending(Long sessionId, Long runId, Long messageId, String title, String type, String optionsJson, String clarificationId) {
+    public Long createPending(Long sessionId, Long runId, Long messageId, String title, String type,
+                              boolean multiple, String optionsJson, String clarificationId) {
         AgentPendingClarification entity = new AgentPendingClarification();
         entity.setSessionId(sessionId);
         entity.setRunId(runId);
@@ -29,7 +30,24 @@ public class ClarificationService implements ClarificationSpi {
         entity.setClarificationId(clarificationId);
         entity.setTitle(title);
         entity.setType(type);
+        entity.setMultiple(multiple);
         entity.setOptions(optionsJson);
+        clarificationMapper.insert(entity);
+        return entity.getId();
+    }
+
+    @Override
+    public Long createToolApprovalPending(Long sessionId, Long runId, String title, String optionsJson,
+                                          String toolCallsJson, String clarificationId) {
+        AgentPendingClarification entity = new AgentPendingClarification();
+        entity.setSessionId(sessionId);
+        entity.setRunId(runId);
+        entity.setMessageId(runId);
+        entity.setClarificationId(clarificationId);
+        entity.setTitle(title);
+        entity.setType(com.buukle.agent.runtime.kernel.constants.ChatClarification.TOOL_APPROVAL_TYPE);
+        entity.setOptions(optionsJson);
+        entity.setToolCallsJson(toolCallsJson);
         clarificationMapper.insert(entity);
         return entity.getId();
     }
@@ -82,7 +100,9 @@ public class ClarificationService implements ClarificationSpi {
             vo.setMessageId(p.getMessageId());
             vo.setTitle(p.getTitle());
             vo.setType(p.getType());
+            vo.setMultiple(Boolean.TRUE.equals(p.getMultiple()));
             vo.setOptions(p.getOptions());
+            vo.setToolCallsJson(p.getToolCallsJson());
             vo.setUserResponse(p.getUserResponse());
             String status;
             if (ChatClarification.CLARIFICATION_RESPONSE_DISMISSED.equals(p.getUserResponse())) {

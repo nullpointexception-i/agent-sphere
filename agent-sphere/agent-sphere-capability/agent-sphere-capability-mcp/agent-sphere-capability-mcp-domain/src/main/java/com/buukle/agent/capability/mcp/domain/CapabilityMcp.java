@@ -17,6 +17,10 @@ public class CapabilityMcp {
     private String authConfig;
     private String toolDefinitions;
     private String status;
+    private Boolean compressEnabled;
+    private String accessMode;
+    private String securityLevel;
+    private String approvalScope;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

@@ -1,5 +1,6 @@
 package com.buukle.agent.capability.builtin.service;
 
+import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.capability.builtin.dtvo.vo.BuiltinToolVO;
 import com.buukle.agent.capability.builtin.dtvo.vo.ParameterVerifyResultVO;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
@@ -36,6 +37,7 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
             vo.setParamSchema(info.getParamSchema());
             vo.setResponseSchema(info.getResponseSchema());
             vo.setNeedConfig(t.needConfig());
+            applyPolicy(vo, t.getToolType());
             return vo;
         }).toList();
     }
@@ -55,8 +57,16 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
                     vo.setParamSchema(info.getParamSchema());
                     vo.setResponseSchema(info.getResponseSchema());
                     vo.setNeedConfig(false);
+                    applyPolicy(vo, t.getToolType());
                     return vo;
                 }).toList();
+    }
+
+    private static void applyPolicy(BuiltinToolVO vo, BuiltinToolEnum type) {
+        vo.setCompressEnabled(type.isCompressEnabled());
+        vo.setAccessMode(type.getAccessMode().name());
+        vo.setSecurityLevel(type.getSecurityLevel().name());
+        vo.setApprovalScope(type.getApprovalScope().name());
     }
 
     @Override

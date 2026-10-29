@@ -7,7 +7,7 @@ import {
 import { Sender } from '@ant-design/x';
 import type { SenderRef } from '@ant-design/x/es/sender/interface';
 import { useIntl } from '@umijs/max';
-import { message, Tooltip } from 'antd';
+import { message, Segmented, Tooltip } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { useVoiceInput } from './useVoiceInput';
@@ -17,6 +17,7 @@ interface FooterProps {
   onInputValueChange: (v: string) => void;
   sending: boolean;
   hasPendingClarifications?: boolean;
+  hasPendingToolApproval?: boolean;
   onSendMessage: (attachmentKeys?: string[]) => void;
   onCancel: () => void;
   onExpandOpen: () => void;
@@ -24,6 +25,8 @@ interface FooterProps {
   sessionId?: number;
   /** 该会话所属实例未开放主站会话（`allowConsoleSession=false`）：禁用输入并提示。 */
   consoleBlocked?: boolean;
+  runMode?: 'WRITE' | 'READ_ONLY';
+  onRunModeChange?: (mode: 'WRITE' | 'READ_ONLY') => void;
 }
 
 interface PendingAttachment {
@@ -37,14 +40,20 @@ export default function Footer({
   onInputValueChange,
   sending,
   hasPendingClarifications,
+  hasPendingToolApproval,
   onSendMessage,
   onCancel,
   onExpandOpen,
   sessionKey,
   sessionId,
   consoleBlocked,
+  runMode = 'WRITE',
+  onRunModeChange,
 }: FooterProps) {
   const intl = useIntl();
+  const inputLocked = Boolean(
+    sending || hasPendingClarifications || hasPendingToolApproval,
+  );
   const senderRef = useRef<SenderRef>(null);
   const [historyRunId, setHistoryRunId] = useState<number | null>(null);
   const [savedInput, setSavedInput] = useState('');
@@ -62,7 +71,7 @@ export default function Footer({
   const { isRecording, toggleRecording } = useVoiceInput({
     inputRef,
     onInputValueChange,
-    sending,
+    sending: inputLocked,
     messageApi: message,
     intl,
   });
@@ -120,7 +129,7 @@ export default function Footer({
   const intlRef = useRef(intl);
   attachmentsRef.current = attachments;
   uploadingAttachmentRef.current = uploadingAttachment;
-  sendingRef.current = sending;
+  sendingRef.current = inputLocked;
   uploadImageFileRef.current = uploadImageFile;
   intlRef.current = intl;
 
@@ -254,7 +263,7 @@ export default function Footer({
   }, []);
 
   const handlePickImage = () => {
-    if (attachments.length > 0 || uploadingAttachment || sending) return;
+    if (attachments.length > 0 || uploadingAttachment || inputLocked) return;
     fileInputRef.current?.click();
   };
 
@@ -266,6 +275,7 @@ export default function Footer({
   };
 
   const handleSubmitAttachment = () => {
+    if (inputLocked) return;
     if (attachments.length === 0) {
       onSendMessage();
       return;
@@ -342,6 +352,30 @@ export default function Footer({
           ))}
         </div>
       )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Segmented
+          size="small"
+          value={runMode}
+          disabled={!!consoleBlocked}
+          onChange={(v) => onRunModeChange?.(v as 'WRITE' | 'READ_ONLY')}
+          options={[
+            {
+              label: intl.formatMessage({
+                id: 'pages.chat.runMode.write',
+                defaultMessage: 'Write',
+              }),
+              value: 'WRITE',
+            },
+            {
+              label: intl.formatMessage({
+                id: 'pages.chat.runMode.readOnly',
+                defaultMessage: 'Read only',
+              }),
+              value: 'READ_ONLY',
+            },
+          ]}
+        />
+      </div>
       {consoleBlocked ? (
         <div
           style={{
@@ -375,7 +409,8 @@ export default function Footer({
           ref={senderRef}
           value={inputValue}
           onChange={onInputValueChange}
-          loading={sending || hasPendingClarifications}
+          loading={inputLocked}
+          readOnly={inputLocked}
           disabled={!!consoleBlocked}
           submitType="enter"
           onSubmit={handleSubmitAttachment}
@@ -406,7 +441,7 @@ export default function Footer({
                   style={{
                     fontSize: 16,
                     cursor:
-                      attachments.length > 0 || uploadingAttachment || sending
+                      attachments.length > 0 || uploadingAttachment || inputLocked
                         ? 'not-allowed'
                         : 'pointer',
                     color: uploadingAttachment ? '#bfbfbf' : '#8c8c8c',

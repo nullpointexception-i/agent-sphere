@@ -12,6 +12,10 @@ public class CliVO implements Serializable {
     private String paramSchema;
     private String workingDir;
     private String status;
+    private Boolean compressEnabled;
+    private String accessMode;
+    private String securityLevel;
+    private String approvalScope;
     private String createdAt;
     private String createdBy;
     private String updatedBy;

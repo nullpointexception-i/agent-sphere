@@ -276,6 +276,61 @@ export function sendMessage(
   });
 }
 
+export interface ToolApprovalVO {
+  approvalId: string;
+  sessionId: number;
+  runId: number;
+  toolCallsJson: string;
+  status: string;
+}
+
+export function pendingToolApproval(base: string, sessionId: number): Promise<ToolApprovalVO | null> {
+  return request<ToolApprovalVO | null>(base, `/runtime/${sessionId}/tool-approvals/pending`);
+}
+
+export function resolveToolApproval(
+  base: string,
+  sessionId: number,
+  runId: number,
+  approvalId: string,
+  decisions: Array<{ callId: string; decision: string }>,
+): Promise<void> {
+  return request(base, `/runtime/${sessionId}/run/${runId}/tool-approvals/${approvalId}`, {
+    method: 'POST',
+    body: JSON.stringify({ decisions }),
+  });
+}
+
+export interface ClarificationVO {
+  clarificationId: string;
+  sessionId: number;
+  runId: number;
+  title?: string;
+  type?: string;
+  multiple?: boolean;
+  options?: string;
+  status?: string;
+}
+
+export function pendingClarifications(
+  base: string,
+  sessionId: number,
+): Promise<ClarificationVO[]> {
+  return request<ClarificationVO[]>(base, `/runtime/${sessionId}/clarifications/pending`);
+}
+
+export function resolveClarifications(
+  base: string,
+  sessionId: number,
+  runId: number,
+  answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+): Promise<unknown> {
+  return request(base, `/runtime/${sessionId}/run/${runId}/clarifications/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ answers }),
+  });
+}
+
 /** 澄清应答。 */
 export function clarify(
   base: string,
@@ -317,6 +372,19 @@ export interface ApiClient {
     response: string,
     clarificationId?: string,
   ) => Promise<unknown>;
+  pendingClarifications: (sessionId: number) => Promise<ClarificationVO[]>;
+  resolveClarifications: (
+    sessionId: number,
+    runId: number,
+    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+  ) => Promise<unknown>;
+  pendingToolApproval: (sessionId: number) => Promise<ToolApprovalVO | null>;
+  resolveToolApproval: (
+    sessionId: number,
+    runId: number,
+    approvalId: string,
+    decisions: Array<{ callId: string; decision: string }>,
+  ) => Promise<void>;
 }
 
 export function createApi(config: WidgetConfig): ApiClient {
@@ -342,5 +410,11 @@ export function createApi(config: WidgetConfig): ApiClient {
       sendMessage(base, sessionId, message, attachmentKeys),
     clarify: (sessionId, runId, response, clarificationId) =>
       clarify(base, sessionId, runId, response, clarificationId),
+    pendingClarifications: (sessionId) => pendingClarifications(base, sessionId),
+    resolveClarifications: (sessionId, runId, answers) =>
+      resolveClarifications(base, sessionId, runId, answers),
+    pendingToolApproval: (sessionId) => pendingToolApproval(base, sessionId),
+    resolveToolApproval: (sessionId, runId, approvalId, decisions) =>
+      resolveToolApproval(base, sessionId, runId, approvalId, decisions),
   };
 }

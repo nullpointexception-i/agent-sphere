@@ -1,6 +1,9 @@
 package com.buukle.agent.capability.mcp.service.converter;
 
 import com.buukle.agent.capability.mcp.domain.CapabilityMcp;
+import com.buukle.agent.common.constant.ToolAccessMode;
+import com.buukle.agent.common.constant.ToolApprovalScope;
+import com.buukle.agent.common.constant.ToolSecurityLevel;
 import com.buukle.agent.capability.mcp.dtvo.dto.CreateMcpDTO;
 import com.buukle.agent.capability.mcp.dtvo.enums.McpCapabilityEnum;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
@@ -23,6 +26,10 @@ public class CapabilityMcpConverter {
         vo.setAuthConfig(mcp.getAuthConfig());
         vo.setToolDefinitions(mcp.getToolDefinitions());
         vo.setStatus(mcp.getStatus());
+        vo.setCompressEnabled(Boolean.TRUE.equals(mcp.getCompressEnabled()));
+        vo.setAccessMode(mcp.getAccessMode());
+        vo.setSecurityLevel(mcp.getSecurityLevel());
+        vo.setApprovalScope(mcp.getApprovalScope());
         vo.setCreatedAt(mcp.getCreatedAt() != null ? mcp.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(mcp.getCreatedBy());
         vo.setUpdatedBy(mcp.getUpdatedBy());
@@ -39,6 +46,10 @@ public class CapabilityMcpConverter {
         mcp.setAuthConfig(dto.getAuthConfig());
         mcp.setToolDefinitions(dto.getToolDefinitions());
         mcp.setStatus(McpCapabilityEnum.STATUS_ENABLED);
+        mcp.setCompressEnabled(Boolean.TRUE.equals(dto.getCompressEnabled()));
+        mcp.setAccessMode(dto.getAccessMode() != null ? dto.getAccessMode() : ToolAccessMode.READ_WRITE.name());
+        mcp.setSecurityLevel(dto.getSecurityLevel() != null ? dto.getSecurityLevel() : ToolSecurityLevel.L1.name());
+        mcp.setApprovalScope(dto.getApprovalScope() != null ? dto.getApprovalScope() : ToolApprovalScope.ONCE.name());
         return mcp;
     }
 }

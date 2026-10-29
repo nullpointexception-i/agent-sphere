@@ -18,6 +18,8 @@ public interface SessionSpi {
 
     SessionVO updateSession(Long id, String title);
 
+    SessionVO updateRunMode(Long id, String runMode);
+
     void updateSummary(Long sessionId, String summary, String summaryUpdatedAt, Long modelRouteId);
 
     void updateSummaryManually(Long sessionId, String summary);

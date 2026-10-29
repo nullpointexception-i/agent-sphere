@@ -78,6 +78,10 @@ public class AgentRuntimeProperties {
             private double budgetRatio = 0.5;
             /** 压缩后目标（含 messages + tools + fixed 的总估算）。 */
             private double targetRatio = 0.55;
+            /** 自适应目标：固定开销 + tail 放不下配置目标时自动抬高 target。 */
+            private boolean adaptiveTargetEnabled = true;
+            /** 自适应 target 至少为 tail 保留的 token 数。 */
+            private long minTailTokens = 2000;
             /** 压缩输入预算占 maxInput 的比例。 */
             private double inputRatio = 0.35;
             /** run-local tail 预算占 maxInput 的比例。 */

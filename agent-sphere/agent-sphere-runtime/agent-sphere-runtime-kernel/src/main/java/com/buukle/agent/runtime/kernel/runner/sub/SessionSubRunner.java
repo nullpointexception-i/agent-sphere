@@ -1,12 +1,15 @@
 package com.buukle.agent.runtime.kernel.runner.sub;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.ToolApprovalDecision;
+import com.buukle.agent.common.constant.ToolSecurityLevel;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.common.sub.agent.InvalidSubRunDefinition;
 import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.instance.dtvo.enums.SubRunStatus;
 import com.buukle.agent.instance.dtvo.vo.AgentSubAgentRunVO;
 import com.buukle.agent.instance.spi.AgentSubAgentRunSpi;
+import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
@@ -39,6 +42,8 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.runner.LoopLimitResolver;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
+import com.buukle.agent.runtime.kernel.tool.ToolAccessGuard;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
 import lombok.RequiredArgsConstructor;
@@ -86,6 +91,8 @@ public class SessionSubRunner {
     private final ObjectProvider<AgentTimelineSpi> timelineSpiProvider;
     private final ChatAttachmentResolver attachmentResolver;
     private final LlmRequestConfigurer llmRequestConfigurer;
+    private final ToolApprovalGrantSpi toolApprovalGrantSpi;
+    private final ToolApprovalService toolApprovalService;
     /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
     private volatile ScreenshotObservationSupport screenshotObservationSupport;
 
@@ -232,8 +239,35 @@ public class SessionSubRunner {
                                 .setPublishId(publishId)));
                 String result;
                 try {
-                    result = toolExecutor.execute(tc, innerCtx, subTools);
-eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
+                    RuntimeTool executed = subTools.stream()
+                            .filter(t -> tc.name().equals(t.getLlmToolName()))
+                            .findFirst().orElse(null);
+                    String runMode = innerCtx.getKernelContext() != null
+                            && innerCtx.getKernelContext().getRun() != null
+                            ? innerCtx.getKernelContext().getRun().getRunMode() : null;
+                    String accessDenied = ToolAccessGuard.denyReason(executed, tc.arguments(), runMode);
+                    boolean approvalDenied = false;
+                    if (accessDenied == null && executed != null
+                            && ToolSecurityLevel.from(executed.getSecurityLevel()).requiresApproval()) {
+                        if (toolApprovalGrantSpi.isDenied(childCtx.getSessionId(), childCtx.getRunId(),
+                                executed.getToolRef())) {
+                            approvalDenied = true;
+                        } else if (!toolApprovalGrantSpi.isGranted(childCtx.getSessionId(), childCtx.getRunId(),
+                                executed.getToolRef(), executed.getApprovalScope())) {
+                            // 子 Agent 是同步执行、没有挂起/恢复通道，不能向用户发起审批。
+                            approvalDenied = true;
+                        }
+                    }
+                    if (accessDenied != null) {
+                        result = accessDenied;
+                    } else if (approvalDenied) {
+                        result = "{\"error\":\"USER_DENIED\",\"message\":\"User denied this tool call. "
+                                + "Do not retry this tool in this run.\",\"tool\":\"" + tc.name() + "\"}";
+                    } else {
+                        result = toolExecutor.execute(tc, innerCtx, subTools);
+                    }
+eventPublisher.publishEvent(new RuntimeEventVO(
+                        approvalDenied || accessDenied != null ? ToolCallStatus.FAILED : ToolCallStatus.SUCCEEDED,
                         new RuntimeEventDataVO()
                                 .setSessionId(childCtx.getSessionId())
                                 .setRunId(childCtx.getRunId())
@@ -243,6 +277,8 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
                                 .setSubAgentRunId(subAgentRunId)
                                 .setParentToolCallId(childCtx.getParentToolCallId())
                                 .setArtifact(result)
+                                .setErrorMessage(approvalDenied ? "User denied tool execution"
+                                        : (accessDenied != null ? "Read-only tool access denied" : null))
                                 .setPublishId(publishId)));
                 } catch (Exception e) {
                     result = "{\"error\":\"" + e.getMessage() + "\"}";

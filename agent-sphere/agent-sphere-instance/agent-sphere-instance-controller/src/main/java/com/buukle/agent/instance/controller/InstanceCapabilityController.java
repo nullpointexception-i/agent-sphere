@@ -75,12 +75,18 @@ public class InstanceCapabilityController extends BaseController {
                 case "cli" -> cliIds.add(c.getCapabilityId());
             }
         }
-        Map<Long, String> mcpNames = capabilityMcpSpi.listMcpsByIds(mcpIds).stream().collect(Collectors.toMap(McpVO::getId, McpVO::getName));
+        Map<Long, McpVO> mcpById = capabilityMcpSpi.listMcpsByIds(mcpIds).stream()
+                .collect(Collectors.toMap(McpVO::getId, Function.identity()));
+        Map<Long, String> mcpNames = mcpById.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getName()));
         Map<Long, SkillVO> skillById = capabilitySkillSpi.listSkillsByIds(skillIds).stream()
                 .collect(Collectors.toMap(SkillVO::getId, Function.identity()));
         Map<Long, String> skillNames = skillById.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getName()));
-        Map<Long, String> cliNames = capabilityCliSpi.listClisByIds(cliIds).stream().collect(Collectors.toMap(CliVO::getId, CliVO::getName));
+        Map<Long, CliVO> cliById = capabilityCliSpi.listClisByIds(cliIds).stream()
+                .collect(Collectors.toMap(CliVO::getId, Function.identity()));
+        Map<Long, String> cliNames = cliById.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getName()));
         Map<Long, BuiltinToolVO> builtinMap = capabilityBuiltinSpi.listBuiltinTools().stream().collect(Collectors.toMap(BuiltinToolVO::getId, Function.identity()));
         List<CapabilityFullVO> result = new ArrayList<>();
         for (CapabilityVO c : caps) {
@@ -104,6 +110,36 @@ public class InstanceCapabilityController extends BaseController {
                 default -> null;
             };
             vo.setName(name);
+            switch (c.getCapabilityType()) {
+                case "mcp" -> {
+                    McpVO m = mcpById.get(c.getCapabilityId());
+                    if (m != null) {
+                        vo.setCompressEnabled(m.getCompressEnabled());
+                        vo.setAccessMode(m.getAccessMode());
+                        vo.setSecurityLevel(m.getSecurityLevel());
+                        vo.setApprovalScope(m.getApprovalScope());
+                    }
+                }
+                case "cli" -> {
+                    CliVO cli = cliById.get(c.getCapabilityId());
+                    if (cli != null) {
+                        vo.setCompressEnabled(cli.getCompressEnabled());
+                        vo.setAccessMode(cli.getAccessMode());
+                        vo.setSecurityLevel(cli.getSecurityLevel());
+                        vo.setApprovalScope(cli.getApprovalScope());
+                    }
+                }
+                case "builtin" -> {
+                    BuiltinToolVO b = builtinMap.get(c.getCapabilityId());
+                    if (b != null) {
+                        vo.setCompressEnabled(b.isCompressEnabled());
+                        vo.setAccessMode(b.getAccessMode());
+                        vo.setSecurityLevel(b.getSecurityLevel());
+                        vo.setApprovalScope(b.getApprovalScope());
+                    }
+                }
+                default -> { }
+            }
             if ("skill".equals(c.getCapabilityType())) {
                 SkillVO skill = skillById.get(c.getCapabilityId());
                 if (skill != null) {

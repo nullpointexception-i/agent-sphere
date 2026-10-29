@@ -8,6 +8,8 @@ import type { InstanceVO, SessionVO, UsageData, UserVO } from '../types';
 import { useTimelineStream } from '../useTimelineStream';
 import { PictureIcon, SendIcon, StopIcon } from '../icons';
 import { WidgetTimeline } from './WidgetTimeline';
+import { WidgetClarificationDrawer } from './WidgetClarificationDrawer';
+import { WidgetToolApprovalDrawer } from './WidgetToolApprovalDrawer';
 import { cacheHitRate, formatTokens } from './Usage';
 
 const AGENT_PAGE_SIZE = 5;
@@ -67,6 +69,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   // 选中
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+  const [clarificationSubmitting, setClarificationSubmitting] = useState(false);
+  const [inputHeight, setInputHeight] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // 会话重命名
@@ -156,6 +161,20 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const agentListRef = useRef<HTMLDivElement>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = chatInputRef.current;
+    if (!el) {
+      setInputHeight(0);
+      return;
+    }
+    const update = () => setInputHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [selectedSessionId, sending, inputText, attachment]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const loadAgents = useCallback(
@@ -544,7 +563,11 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   // 终态 SSE（完成/失败/取消/等待澄清）为 false —— 不再扫描 rows，避免历史残留行干扰。
   const runActive = timeline.runActive;
   const inputLocked =
-    sending || runActive || timeline.pendingUserRows.length > 0;
+    sending ||
+    runActive ||
+    timeline.pendingUserRows.length > 0 ||
+    timeline.toolApproval != null ||
+    timeline.clarification != null;
 
   // 解锁后把焦点还给输入框，方便连发
   useEffect(() => {
@@ -552,6 +575,28 @@ export function CopilotView({ config, user }: CopilotViewProps) {
       inputRef.current?.focus();
     }
   }, [inputLocked, selectedSessionId]);
+
+  const handleResolveToolApproval = async (
+    decisions: Array<{ callId: string; decision: string }>,
+  ) => {
+    setApprovalSubmitting(true);
+    try {
+      await timeline.resolveToolApproval(decisions);
+    } finally {
+      setApprovalSubmitting(false);
+    }
+  };
+
+  const handleResolveClarifications = async (
+    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+  ) => {
+    setClarificationSubmitting(true);
+    try {
+      await timeline.resolveClarifications(answers);
+    } finally {
+      setClarificationSubmitting(false);
+    }
+  };
 
   return (
     <div className="aw-view">
@@ -825,7 +870,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 <div className="aw-business-autochat-hint">如需聊天机器人请申请开通</div>
               </div>
             ) : (
-            <div className="aw-chat-input">
+            <div ref={chatInputRef} className="aw-chat-input">
               {runActive ? (
                 <div className="aw-tl-divider">
                   <span className="aw-running-dot" />
@@ -910,6 +955,19 @@ export function CopilotView({ config, user }: CopilotViewProps) {
               </div>
             </div>
             )}
+            <WidgetToolApprovalDrawer
+              batch={timeline.toolApproval}
+              submitting={approvalSubmitting}
+              bottomOffset={inputHeight}
+              onResolve={handleResolveToolApproval}
+            />
+            <WidgetClarificationDrawer
+              batch={timeline.clarification}
+              submitting={clarificationSubmitting}
+              bottomOffset={inputHeight}
+              onResolve={handleResolveClarifications}
+              onCancel={() => void handleStop()}
+            />
           </div>
         ) : (
           <div className="aw-empty">

@@ -81,6 +81,11 @@ public class CompactionService {
     /** 预算下限（占 max_input）：即使输出额度配置异常也不至于把预算压到无法工作。 */
     private static final double MIN_INPUT_BUDGET_RATIO = 0.25;
     private static final long SUMMARY_MIN_TOKENS = 256L;
+    /** 自适应 target 至少要给 tail 留的 token（配置 min-tail-tokens 的兜底下限）。 */
+    private static final long MIN_ADAPTIVE_TAIL_TOKENS = 2_000L;
+    /** target 与触发预算之间至少留的余量，避免压缩后立刻再次触发。 */
+    private static final long TARGET_HEADROOM_TOKENS = 1_024L;
+    private static final double TARGET_HEADROOM_RATIO = 0.02;
     /** 单个 run 的用户/助手正文在压缩输入中的最大字符数（超出标记省略）。 */
     private static final int COMPACTION_FIELD_MAX_CHARS = 2000;
     /** 单个 run 的工具参数在压缩输入中的最大字符数。 */
@@ -95,7 +100,7 @@ public class CompactionService {
     /** run-local 压缩输入的单条消息/工具结果上限。 */
     private static final int RUN_COMPACTION_MESSAGE_MAX_CHARS = 2_000;
     private static final int RUN_COMPACTION_TOOL_RESULT_MAX_CHARS = 1_000;
-    private static final int RUN_COMPACTION_INPUT_MAX_CHARS = 200_000;
+    private static final int RUN_COMPACTION_INPUT_MAX_CHARS = 900_000;
     private static final String RUN_TAIL_IMAGE_OMITTED = "[image omitted after run compaction]";
     private static final TypeReference<List<ChatMessageDTO>> MESSAGE_LIST_TYPE = new TypeReference<>() {};
 
@@ -147,6 +152,11 @@ public class CompactionService {
     /** 压缩决策快照（供 runner 做 cooldown/硬上限判断，避免重复估算）。 */
     public record CompactionDecision(boolean shouldCompact, long messageTokens, long toolTokens,
                                      long fixedTokens, long estimated, long budget, long maxInputTokens) {
+    }
+
+    /** run-local 压缩目标计算快照（供日志和单测）。 */
+    record CompactionTarget(long configuredTarget, long fixedTokens, long tailFloor,
+                            long budget, long targetCeiling, long target, boolean feasible) {
     }
 
     public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route,
@@ -564,6 +574,26 @@ public class CompactionService {
         }
     }
 
+    CompactionTarget resolveCompactionTarget(long maxInputTokens, long budget, long prefixTokens,
+                                             long toolTokens, long summaryReserve,
+                                             AgentRuntimeProperties.RunnerConfig.CompactionConfig compaction) {
+        long configured = (long) (maxInputTokens * compaction.getTargetRatio());
+        long fixed = prefixTokens + toolTokens + summaryReserve;
+        long minTail = Math.max(MIN_ADAPTIVE_TAIL_TOKENS, compaction.getMinTailTokens());
+        long tailFloor = Math.max(minTail, (long) (maxInputTokens * compaction.getTailRatio()));
+        long headroom = Math.max(TARGET_HEADROOM_TOKENS,
+                (long) (maxInputTokens * TARGET_HEADROOM_RATIO));
+        long ceiling = budget - headroom;
+        if (!compaction.isAdaptiveTargetEnabled()) {
+            return new CompactionTarget(configured, fixed, tailFloor, budget, ceiling,
+                    configured, configured > fixed + MIN_ADAPTIVE_TAIL_TOKENS);
+        }
+        long adaptive = Math.max(configured, fixed + tailFloor);
+        long target = Math.min(adaptive, ceiling);
+        return new CompactionTarget(configured, fixed, tailFloor, budget, ceiling, target,
+                target > fixed + MIN_ADAPTIVE_TAIL_TOKENS);
+    }
+
     private RunCompactionResult doCompactRun(Long sessionId, Long runId, SessionVO session,
                                              ModelRouteFullVO route, List<ChatMessageDTO> messages,
                                              int currentRunStart, List<ToolDefinitionDTO> toolDefs,
@@ -573,17 +603,27 @@ public class CompactionService {
         long maxOutputTokens = route.getMaxOutputTokens() != null ? route.getMaxOutputTokens()
                 : RunnerConstants.DEFAULT_MAX_OUTPUT_TOKENS;
         var compaction = agentRuntimeProperties.getRunner().getCompaction();
-        long target = (long) (maxInputTokens * compaction.getTargetRatio());
         long toolTokens = estimateToolTokens(toolDefs);
         long prefixTokens = estimateMessagesTokens(messages.subList(0, userIndex + 1));
         long summaryCap = resolveSummaryCap(maxInputTokens);
         long summaryReserve = summaryCap;
-        long availableForTail = target - prefixTokens - toolTokens - summaryReserve;
-        if (availableForTail <= 0) {
-            log.warn("Run compaction cannot reach target: run={}, prefix={}, tools={}, summaryReserve={}, target={}",
-                    runId, prefixTokens, toolTokens, summaryReserve, target);
+        long budget = resolveInputBudget(maxInputTokens, effectiveMaxOutputTokens);
+        CompactionTarget targetInfo = resolveCompactionTarget(
+                maxInputTokens, budget, prefixTokens, toolTokens, summaryReserve, compaction);
+        long target = targetInfo.target();
+        if (!targetInfo.feasible()) {
+            log.warn("Run compaction target infeasible: run={}, configured={}, fixed={}, tailFloor={}, "
+                            + "budget={}, ceiling={}, target={}",
+                    runId, targetInfo.configuredTarget(), targetInfo.fixedTokens(), targetInfo.tailFloor(),
+                    targetInfo.budget(), targetInfo.targetCeiling(), target);
             return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
         }
+        log.debug("Run compaction target: run={}, configured={}, adaptive={}, fixed={}, tailFloor={}, "
+                        + "budget={}, ceiling={}, target={}",
+                runId, targetInfo.configuredTarget(), compaction.isAdaptiveTargetEnabled(),
+                targetInfo.fixedTokens(), targetInfo.tailFloor(), targetInfo.budget(),
+                targetInfo.targetCeiling(), target);
+        long availableForTail = target - targetInfo.fixedTokens();
         long tailBudgetTokens = Math.min((long) (maxInputTokens * compaction.getTailRatio()), availableForTail);
         TailSelection selection = selectRunTail(messages, userIndex, tailBudgetTokens);
         int tailStart = selection.tailStart();
@@ -593,7 +633,7 @@ public class CompactionService {
             return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
         }
 
-        // 摘要输入只含 user/assistant/tool 工作消息，排除 time/todo/loop 等动态 system 槽
+        // 摘要输入只含 user/assistant/tool 工作消息，排除 time/todos/loop 等动态 system 槽
         List<ChatMessageDTO> toSummarize = workMessages(messages.subList(userIndex + 1, tailStart));
         String userText = truncateField(contentText(messages.get(userIndex).getContent()),
                 RUN_COMPACTION_MESSAGE_MAX_CHARS);
@@ -601,8 +641,7 @@ public class CompactionService {
         String previousSummary = previous != null ? previous.getSummaryAfter() : null;
 
         long inputLimit = (long) (maxInputTokens * compaction.getInputRatio());
-        int maxInputChars = (int) Math.min(RUN_COMPACTION_INPUT_MAX_CHARS,
-                Math.max(1_000, Math.round(inputLimit * RunnerConstants.TOKEN_ESTIMATE_DIVISOR)));
+        int maxInputChars = Math.clamp(Math.round(inputLimit * RunnerConstants.TOKEN_ESTIMATE_DIVISOR), 1_000, RUN_COMPACTION_INPUT_MAX_CHARS);
         String rendered = renderChatMessagesForCompaction(toSummarize, maxInputChars);
         if (rendered.isBlank()) {
             return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);

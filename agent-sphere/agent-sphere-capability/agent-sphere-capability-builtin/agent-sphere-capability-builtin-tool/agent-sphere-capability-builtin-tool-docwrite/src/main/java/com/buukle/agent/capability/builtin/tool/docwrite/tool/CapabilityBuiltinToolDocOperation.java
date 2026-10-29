@@ -17,6 +17,7 @@ import com.buukle.agent.instance.spi.DocumentSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 
 import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -30,10 +31,6 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
 
     static final String ACTION_CREATE = "create";
     static final String ACTION_APPEND = "append";
-    static final String ACTION_LIST = "list";
-    static final String ACTION_COUNT = "count";
-    static final String ACTION_SEARCH_TITLE = "search_by_title";
-    static final String ACTION_GET = "get";
     static final String ACTION_PATCH = "patch";
 
     static final String OP_REPLACE_SECTION = "replace_section";
@@ -41,19 +38,10 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
     static final String OP_REPLACE_TEXT = "replace_text";
 
     private static final String TOOL_DESCRIPTION = """
-            Create, append, list, read, or patch a user-visible document.
+            Create, append, or patch a user-visible document.
+            Use the document read tool to list, search, or read documents before writing.
             action=create: create a new document (requires title, content)
             action=append: add content to an existing document (requires documentId, content, optional title)
-            action=list: list all documents in the current workspace (returns id, title, preview per doc)
-            action=count: count all documents in the current workspace (returns total count).
-              Use this to determine pagination size for list.
-            action=search_by_title: search documents by title keyword in the current workspace (requires keyword, returns id, title, preview per matching doc).
-            action=get: get content from a specific document (requires documentId).
-              Optional modes to control what to fetch:
-              - structure=true: return only the outline (headings with line numbers)
-              - sectionHeading=text: return the section under the matching heading
-              - startLine=n (with optional endLine=m): return specific line range
-              Default (no options): return the full document content.
             action=patch: make targeted edits to a document without overwriting the full content (requires documentId, operation).
               operation=replace_section: replace the section under a matching heading (requires headingSearch, content)
               operation=insert_after: insert new content after a matching heading (requires headingSearch, content)
@@ -79,8 +67,8 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         ToolInfoVO info = new ToolInfoVO();
         info.setName(BuiltinToolConstants.NAME_PREFIX + CapabilityBuiltinToolDocOperation.class.getSimpleName());
         info.setDescription(TOOL_DESCRIPTION);
-        info.setDisplayNameCn("文档操作");
-        info.setDisplayNameEn("Doc Operation");
+        info.setDisplayNameCn("文档写入");
+        info.setDisplayNameEn("Doc Write");
         info.setParamSchema(ToolSchemaUtil.generateParamSchema(DocWriteExecuteContext.class));
         info.setResponseSchema(ToolSchemaUtil.generateParamSchema(DocWriteResultVO.class));
         return info;
@@ -112,15 +100,12 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
             return switch (action) {
             case ACTION_CREATE -> handleCreate(dwCtx);
             case ACTION_APPEND -> handleAppend(dwCtx, documentId);
-            case ACTION_LIST -> handleList(dwCtx);
-            case ACTION_COUNT -> handleCount(dwCtx);
-            case ACTION_SEARCH_TITLE -> handleSearchByTitle(dwCtx);
-            case ACTION_GET -> handleGet(dwCtx, documentId);
             case ACTION_PATCH -> handlePatch(dwCtx, documentId);
             default -> {
                 log.warn("Unknown docwrite action: {}", action);
                 DocWriteResultVO r = new DocWriteResultVO();
                 r.setAction(action);
+                r.setPreview("Unknown action. Supported: create, append, patch");
                 yield r;
             }
         };
@@ -180,149 +165,6 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         r.setDocumentId(documentId);
         r.setTitle(title);
         r.setAction(ACTION_APPEND);
-        r.setPreview(preview);
-        return r;
-    }
-
-    private DocWriteResultVO handleList(DocWriteExecuteContext ctx) {
-        Long sessionId = ctx.getSessionId();
-        if (sessionId == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_LIST);
-            r.setPreview("sessionId is required");
-            return r;
-        }
-        Long instanceId = resolveInstanceId(sessionId);
-        String createdBy = resolveCreator(sessionId);
-        List<DocumentVO> docs = documentSpi.listByInstanceAndCreator(instanceId, createdBy, ctx.getPage(), ctx.getPageSize());
-        List<DocWriteResultVO.DocReadSummaryVO> summaries = docs.stream()
-                .map(d -> {
-                    String raw = d.getContent() != null ? d.getContent().replaceAll("[#*`\\n\\r]+", " ").trim() : "";
-                    String preview = raw.length() > 100 ? raw.substring(0, 100) + "…" : raw;
-                    return new DocWriteResultVO.DocReadSummaryVO(
-                            d.getId(), d.getTitle(), preview, d.getCreatedAt() != null ? d.getCreatedAt().toString() : null);
-                })
-                .toList();
-        DocWriteResultVO r = new DocWriteResultVO();
-        r.setAction(ACTION_LIST);
-        r.setDocuments(summaries);
-        r.setTotal(summaries.size());
-        return r;
-    }
-
-    private DocWriteResultVO handleCount(DocWriteExecuteContext ctx) {
-        Long sessionId = ctx.getSessionId();
-        if (sessionId == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_COUNT);
-            r.setPreview("sessionId is required");
-            return r;
-        }
-        Long instanceId = resolveInstanceId(sessionId);
-        String createdBy = resolveCreator(sessionId);
-        long total = documentSpi.countByInstanceAndCreator(instanceId, createdBy);
-        DocWriteResultVO r = new DocWriteResultVO();
-        r.setAction(ACTION_COUNT);
-        r.setTotal((int) total);
-        r.setPreview("Total documents: " + total);
-        return r;
-    }
-
-    private DocWriteResultVO handleSearchByTitle(DocWriteExecuteContext ctx) {
-        Long sessionId = ctx.getSessionId();
-        if (sessionId == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_SEARCH_TITLE);
-            r.setPreview("sessionId is required");
-            return r;
-        }
-        String keyword = ctx.getKeyword();
-        if (keyword == null || keyword.isBlank()) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_SEARCH_TITLE);
-            r.setPreview("keyword is required");
-            return r;
-        }
-        Long instanceId = resolveInstanceId(sessionId);
-        String createdBy = resolveCreator(sessionId);
-        List<DocumentVO> docs = documentSpi.searchByTitle(instanceId, createdBy, keyword, ctx.getPage(), ctx.getPageSize());
-        List<DocWriteResultVO.DocReadSummaryVO> summaries = docs.stream()
-                .map(d -> {
-                    String raw = d.getContent() != null ? d.getContent().replaceAll("[#*`\\n\\r]+", " ").trim() : "";
-                    String preview = raw.length() > 100 ? raw.substring(0, 100) + "…" : raw;
-                    return new DocWriteResultVO.DocReadSummaryVO(
-                            d.getId(), d.getTitle(), preview, d.getCreatedAt() != null ? d.getCreatedAt().toString() : null);
-                })
-                .toList();
-        DocWriteResultVO r = new DocWriteResultVO();
-        r.setAction(ACTION_SEARCH_TITLE);
-        r.setDocuments(summaries);
-        r.setTotal(summaries.size());
-        r.setPreview("Found " + summaries.size() + " document(s) matching \"" + keyword + "\"");
-        return r;
-    }
-
-    private DocWriteResultVO handleGet(DocWriteExecuteContext ctx, Long documentId) {
-        if (documentId == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_GET);
-            r.setPreview("documentId is required");
-            return r;
-        }
-        DocumentVO doc = documentSpi.getById(documentId);
-        if (doc == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_GET);
-            r.setPreview("Document not found: " + documentId);
-            return r;
-        }
-
-        String content = doc.getContent() != null ? doc.getContent() : "";
-        String[] lines = content.split("\n", -1);
-
-        // Structure mode: return outline only
-        if (Boolean.TRUE.equals(ctx.getStructure())) {
-            List<HeadingInfo> headings = MarkdownParser.parseHeadings(content);
-            DocWriteResultVO r = baseResult(doc);
-            r.setHeadings(headings);
-            r.setTotalLines(lines.length);
-            r.setTotal(headings.size());
-            return r;
-        }
-
-        // Section mode: return content under a matching heading
-        if (ctx.getSectionHeading() != null) {
-            String section = MarkdownParser.extractSection(content, ctx.getSectionHeading());
-            if (section == null) {
-                List<HeadingInfo> headings = MarkdownParser.parseHeadings(content);
-                DocWriteResultVO r = baseResult(doc);
-                r.setPreview("Section not found: \"" + ctx.getSectionHeading() + "\". Available headings:");
-                r.setHeadings(headings);
-                r.setTotalLines(lines.length);
-                r.setTotal(headings.size());
-                return r;
-            }
-            String preview = section.length() > PREVIEW_LENGTH ? section.substring(0, PREVIEW_LENGTH) + "..." : section;
-            DocWriteResultVO r = baseResult(doc);
-            r.setContent(section);
-            r.setPreview(preview);
-            return r;
-        }
-
-        // Line range mode: return specific lines
-        if (ctx.getStartLine() != null) {
-            String extracted = MarkdownParser.extractLines(content, ctx.getStartLine(), ctx.getEndLine());
-            String preview = extracted.length() > PREVIEW_LENGTH ? extracted.substring(0, PREVIEW_LENGTH) + "..." : extracted;
-            DocWriteResultVO r = baseResult(doc);
-            r.setContent(extracted);
-            r.setPreview(preview);
-            return r;
-        }
-
-        // Default: full content
-        String preview = content.length() > PREVIEW_LENGTH ? content.substring(0, PREVIEW_LENGTH) + "..." : content;
-        DocWriteResultVO r = baseResult(doc);
-        r.setContent(content);
         r.setPreview(preview);
         return r;
     }
@@ -464,14 +306,6 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         r.setTitle(title);
         r.setAction(ACTION_PATCH);
         r.setPreview(preview);
-        return r;
-    }
-
-    private DocWriteResultVO baseResult(DocumentVO doc) {
-        DocWriteResultVO r = new DocWriteResultVO();
-        r.setDocumentId(doc.getId());
-        r.setTitle(doc.getTitle());
-        r.setAction(ACTION_GET);
         return r;
     }
 

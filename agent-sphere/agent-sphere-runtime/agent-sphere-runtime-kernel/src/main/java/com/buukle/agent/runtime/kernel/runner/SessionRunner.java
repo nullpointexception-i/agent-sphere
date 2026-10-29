@@ -2,6 +2,8 @@ package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.ToolApprovalDecision;
+import com.buukle.agent.common.constant.ToolSecurityLevel;
 import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
@@ -9,9 +11,11 @@ import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.ToolApprovalVO;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.complete.*;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
@@ -43,8 +47,10 @@ import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.service.CompactionService.RunCompactionResult;
 import com.buukle.agent.runtime.kernel.service.TitleService;
+import com.buukle.agent.runtime.kernel.tool.ToolAccessGuard;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
 import lombok.RequiredArgsConstructor;
@@ -57,7 +63,11 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -90,6 +100,8 @@ public class SessionRunner {
     private final RedissonClient redissonClient;
     private final ChatAttachmentResolver attachmentResolver;
     private final LlmRequestConfigurer llmRequestConfigurer;
+    private final ToolApprovalGrantSpi toolApprovalGrantSpi;
+    private final ToolApprovalService toolApprovalService;
 
     /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
     private volatile ScreenshotObservationSupport screenshotObservationSupport;
@@ -225,6 +237,133 @@ public class SessionRunner {
         // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
         boolean toolsEverExecuted = loopCount > 0;
         int silentTurns = 0;
+
+        String approvalResumeId = topCtx != null ? topCtx.getApprovalResumeId() : null;
+        if (approvalResumeId != null && currentRun != null) {
+            ToolApprovalVO approval = toolApprovalService.getByApprovalId(approvalResumeId);
+            if (approval == null || !"APPROVED".equals(approval.getStatus())) {
+                currentRun.setStatus(RunStatus.FAILED.name());
+                currentRun.setErrorMessage("Tool approval is no longer resumable: " + approvalResumeId);
+                runSpi.updateRun(currentRun);
+                eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(currentRunId)
+                                .setErrorMessage(currentRun.getErrorMessage())
+                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                return true;
+            }
+            String systemPrompt = runPromptBuilder.buildSystemPrompt(topCtx);
+            if (systemPrompt != null && !systemPrompt.isBlank()) {
+                messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
+            }
+            int historyBase = messages.size();
+            HistoryLoader.HistoryResult history = historyLoader.loadResult(sessionId, currentRunId, true);
+            if (history != null) {
+                messages.addAll(history.messages());
+            }
+            currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
+
+            List<RuntimeTool> resumeTools = topCtx.getTools() != null ? topCtx.getTools() : List.of();
+            List<ToolApprovalService.ApprovalCall> approvalCalls =
+                    toolApprovalService.calls(approval, resumeTools);
+            Set<String> resumeCallIds = new HashSet<>();
+            for (ToolApprovalService.ApprovalCall call : approvalCalls) {
+                resumeCallIds.add(call.call().id());
+            }
+            // 审批挂起时工具记录仍是 PENDING；HistoryLoader 可能补一条失败占位 tool 消息。
+            // 恢复时要先移除这些占位，避免同一 callId 出现两条 tool 消息。
+            messages.removeIf(m -> LlmApiConstant.ROLE_TOOL.equals(m.getRole())
+                    && resumeCallIds.contains(m.getToolCallId()));
+            Map<String, ToolApprovalDecision> decisions = toolApprovalService.decisions(approval);
+            Map<String, String> denied = new HashMap<>();
+            for (ToolApprovalService.ApprovalCall call : approvalCalls) {
+                String callId = call.call().id();
+                String reason = ToolAccessGuard.denyReason(
+                        call.tool(), call.call().arguments(), currentRun.getRunMode());
+                if (reason == null && call.pending()
+                        && decisions.getOrDefault(callId, ToolApprovalDecision.DENY)
+                        == ToolApprovalDecision.DENY) {
+                    reason = userDeniedJson(call.call().name());
+                }
+                if (reason == null
+                        && ToolSecurityLevel.from(call.tool().getSecurityLevel()).requiresApproval()
+                        && toolApprovalGrantSpi.isDenied(sessionId, currentRunId, call.tool().getToolRef())) {
+                    reason = userDeniedJson(call.call().name());
+                }
+                if (reason == null && !call.pending()
+                        && ToolSecurityLevel.from(call.tool().getSecurityLevel()).requiresApproval()
+                        && !toolApprovalGrantSpi.isGranted(sessionId, currentRunId,
+                        call.tool().getToolRef(), call.tool().getApprovalScope())) {
+                    reason = userDeniedJson(call.call().name());
+                }
+                if (reason != null) {
+                    denied.put(callId, reason);
+                }
+            }
+
+            for (ToolApprovalService.ApprovalCall call : approvalCalls) {
+                String callId = call.call().id();
+                eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
+                        new RuntimeEventDataVO()
+                                .setSessionId(sessionId)
+                                .setRunId(currentRunId)
+                                .setToolName(call.call().name())
+                                .setDisplayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
+                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
+                                .setArgumentsJson(call.call().arguments())
+                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId)));
+                String result;
+                if (denied.containsKey(callId)) {
+                    result = denied.get(callId);
+                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setToolName(call.call().name())
+                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
+                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
+                                    .setArtifact(result)
+                                    .setErrorMessage("User denied tool execution")
+                                    .setArgumentsJson(call.call().arguments())
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId)));
+                } else {
+                    try {
+                        result = toolExecutor.execute(call.call(),
+                                SubRunExecutionContext.root(sessionId, currentRunId, topCtx), resumeTools);
+                    } catch (Exception e) {
+                        result = "{\"error\":\"" + e.getMessage() + "\"}";
+                    }
+                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setToolName(call.call().name())
+                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
+                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
+                                    .setArtifact(result)
+                                    .setCompressEnabled(compressEnabled(call.call().name(), resumeTools))
+                                    .setArgumentsJson(call.call().arguments())
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId)));
+                }
+                String toolMessage = result;
+                if (call.call().name().equals(
+                        InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId())) {
+                    toolMessage = RunnerConstants.TODO_WRITE_ACK;
+                }
+                messages.add(new ChatMessageDTO()
+                        .setRole(LlmApiConstant.ROLE_TOOL)
+                        .setToolCallId(callId)
+                        .setContent(toolMessage));
+            }
+            toolApprovalService.consume(approvalResumeId);
+            topCtx.setApprovalResumeId(null);
+            refreshTodolistSlot(sessionId, messages);
+            hasToolCalls = true;
+            toolsEverExecuted = true;
+            loopCount++;
+        }
+
         loop:
         while (loopCount < maxLoopCount) {
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
@@ -438,6 +577,10 @@ public class SessionRunner {
             skipCompaction = false;
             compactionRetries = 0;
 
+            Map<String, String> deniedReasons = new HashMap<>();
+            boolean hasFinishCall = turn.toolCalls().stream()
+                    .anyMatch(tc -> FinishConstants.TOOL_NAME.equals(tc.name()));
+
             List<ToolCallDTO> toolCallDTOs = new ArrayList<>();
             for (TurnToolCall tc : turn.toolCalls()) {
                 toolCallDTOs.add(ToolCallDTO.builder()
@@ -458,6 +601,51 @@ public class SessionRunner {
                 assistantTurn.setContent(turn.content());
             }
             messages.add(assistantTurn);
+
+            if (!hasFinishCall) {
+                List<ToolApprovalService.ApprovalCall> allCalls = new ArrayList<>();
+                boolean pendingApproval = false;
+                String runMode = currentRun.getRunMode();
+                for (TurnToolCall tc : turn.toolCalls()) {
+                    RuntimeTool rt = tools.stream()
+                            .filter(t -> tc.name().equals(t.getLlmToolName()))
+                            .findFirst().orElse(null);
+                    if (rt == null) continue;
+                    String denied = ToolAccessGuard.denyReason(rt, tc.arguments(), runMode);
+                    if (denied != null) {
+                        deniedReasons.put(tc.id(), denied);
+                        allCalls.add(new ToolApprovalService.ApprovalCall(tc, rt));
+                        continue;
+                    }
+                    if (ToolSecurityLevel.from(rt.getSecurityLevel()).requiresApproval()) {
+                        if (toolApprovalGrantSpi.isDenied(sessionId, currentRunId, rt.getToolRef())) {
+                            deniedReasons.put(tc.id(), userDeniedJson(tc.name()));
+                            allCalls.add(new ToolApprovalService.ApprovalCall(tc, rt));
+                        } else if (!toolApprovalGrantSpi.isGranted(sessionId, currentRunId,
+                                rt.getToolRef(), rt.getApprovalScope())) {
+                            allCalls.add(new ToolApprovalService.ApprovalCall(tc, rt, true));
+                            pendingApproval = true;
+                        } else {
+                            allCalls.add(new ToolApprovalService.ApprovalCall(tc, rt));
+                        }
+                    } else {
+                        allCalls.add(new ToolApprovalService.ApprovalCall(tc, rt));
+                    }
+                }
+                if (pendingApproval) {
+                    toolApprovalService.createPending(sessionId, currentRunId, allCalls);
+                    parked = true;
+                    compactionService.snapshotRunTail(currentRunId, messages, currentRunStart);
+                    currentRun.setStatus(RunStatus.AWAITING_USER.name());
+                    runSpi.updateRun(currentRun);
+                    eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.AWAITING_USER,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    break loop;
+                }
+            }
 
             for (TurnToolCall tc : turn.toolCalls()) {
                 String runPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
@@ -501,6 +689,20 @@ public class SessionRunner {
                 String artifact = sr.error() != null
                         ? "{\"error\":\"" + sr.error() + "\"}"
                         : (sr.result() != null ? sr.result() : "");
+                if (deniedReasons.containsKey(matching.id())) {
+                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sid)
+                                    .setRunId(rid)
+                                    .setToolName(matching.name())
+                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
+                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
+                                    .setArtifact(artifact)
+                                    .setErrorMessage("User denied tool execution")
+                                    .setArgumentsJson(matching.arguments())
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
+                    return;
+                }
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
                         new RuntimeEventDataVO()
                                 .setSessionId(sid)
@@ -509,6 +711,7 @@ public class SessionRunner {
                                 .setDisplayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
                                 .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
                                 .setArtifact(artifact)
+                                .setCompressEnabled(compressEnabled(matching.name(), tl))
                                 .setArgumentsJson(matching.arguments())
                                 .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
             });
@@ -579,9 +782,14 @@ public class SessionRunner {
 
             for (int i = 0; i < turn.toolCalls().size(); i++) {
                 int fi = i;
-                fibers.submit(turn.toolCalls().get(fi).id(),
-                        () -> toolExecutor.execute(turn.toolCalls().get(fi),
-                                SubRunExecutionContext.root(sid, rid, ctx), tl));
+                TurnToolCall tc = turn.toolCalls().get(fi);
+                if (deniedReasons.containsKey(tc.id())) {
+                    fibers.submit(tc.id(), () -> deniedReasons.get(tc.id()));
+                } else {
+                    fibers.submit(tc.id(),
+                            () -> toolExecutor.execute(tc,
+                                    SubRunExecutionContext.root(sid, rid, ctx), tl));
+                }
             }
             var results = fibers.awaitAll(() -> isRunCancelled(rid) || isSessionCancelled(sid));
 
@@ -919,6 +1127,20 @@ public class SessionRunner {
                 || args.contains("\"action\":\"clickAt\"");
     }
 
+    private static String userDeniedJson(String toolName) {
+        return "{\"error\":\"USER_DENIED\",\"message\":\"User denied this tool call. "
+                + "Do not retry this tool in this run.\",\"tool\":\"" + toolName + "\"}";
+    }
+
+    private static boolean compressEnabled(String toolName, List<RuntimeTool> tools) {
+        if (tools == null) return false;
+        return tools.stream()
+                .filter(t -> toolName != null && toolName.equals(t.getLlmToolName()))
+                .findFirst()
+                .map(RuntimeTool::isCompressEnabled)
+                .orElse(false);
+    }
+
     private TurnResult runTurn(Long sessionId, Long runId, List<ChatMessageDTO> messages,
                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
                                KernelContext ctx, AtomicReference<String> turnReasoning,
@@ -999,6 +1221,10 @@ public class SessionRunner {
 
                     String apiKey = resolveApiKey(route);
                     // 只投影请求副本：canonical messages 保留完整工具结果，供压缩/快照使用。
+                    Map<String, Boolean> compressByTool = new HashMap<>();
+                    for (RuntimeTool t : tools) {
+                        compressByTool.put(t.getLlmToolName(), t.isCompressEnabled());
+                    }
                     ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
                             .setModel(route.getModelName())
                             .setStream(true)
@@ -1006,7 +1232,8 @@ public class SessionRunner {
                                     properties.getRunner().getLiveToolResultMaxChars(),
                                     properties.getRunner().getLiveToolResultBudgetChars(),
                                     properties.getRunner().getLiveToolResultKeepRecent(),
-                                    properties.getRunner().getLiveBrowserFullMaxChars()));
+                                    properties.getRunner().getLiveBrowserFullMaxChars(),
+                                    compressByTool));
                     if (!toolDefs.isEmpty()) {
                         request.setTools(toolDefs);
                     }

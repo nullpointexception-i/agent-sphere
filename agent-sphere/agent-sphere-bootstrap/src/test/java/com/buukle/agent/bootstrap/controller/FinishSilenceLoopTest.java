@@ -8,6 +8,7 @@ import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -24,6 +25,7 @@ import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -145,7 +147,7 @@ class FinishSilenceLoopTest {
                 eventPublisher, routeListBuilder, new FallbackRouteExecutor(), historyLoader,
                 compactionService, inputManager, new RunPromptBuilder(), toolExecutor, titleService,
                 toolCallRecordSpi, redis, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class)));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
     }
 
     /** 按轮次脚本化模型输出；turn 从 0 开始。 */

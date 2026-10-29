@@ -36,6 +36,8 @@ public class AgentTimeline {
     private Long refToolCallId;
     private Long refSubAgentRunId;
     private Long refClarificationId;
+    /** 工具授权记录 id（TOOL_APPROVAL 行）。 */
+    private Long refApprovalId;
     /** 压缩记录 id（COMPACTION 行：正文从 agent_compact_record.summary_after 解析）。 */
     private Long refCompactId;
     private String status;

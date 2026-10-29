@@ -23,4 +23,8 @@ public class CreateMcpDTO implements Serializable {
     private String authConfig;
     @Size(max = 5000)
     private String toolDefinitions;
+    private Boolean compressEnabled;
+    private String accessMode;
+    private String securityLevel;
+    private String approvalScope;
 }

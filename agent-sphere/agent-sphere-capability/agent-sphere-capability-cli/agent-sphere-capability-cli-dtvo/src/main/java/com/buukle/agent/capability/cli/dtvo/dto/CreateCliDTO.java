@@ -19,4 +19,8 @@ public class CreateCliDTO implements Serializable {
     @NotBlank
     @Size(min = 1, max = 500)
     private String workingDir;
+    private Boolean compressEnabled;
+    private String accessMode;
+    private String securityLevel;
+    private String approvalScope;
 }

@@ -21,7 +21,10 @@ public class AgentPendingClarification {
     private String clarificationId;
     private String title;
     private String type;
+    private Boolean multiple;
     private String options;
+    /** L2 tool approval: JSON array of pending tool calls. */
+    private String toolCallsJson;
     private String userResponse;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

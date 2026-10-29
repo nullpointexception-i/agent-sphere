@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,7 +42,7 @@ class LiveToolResultPolicyTest {
                 tool("call-new", "browser-new"));
 
         List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
-                messages, 100, 1_000, 2, 20_000);
+                messages, 100, 1_000, 2, 20_000, Map.of(BROWSER, true));
 
         assertEquals("browser-old", projected.get(1).getContent());
         assertEquals("browser-new", projected.get(3).getContent());
@@ -60,7 +61,7 @@ class LiveToolResultPolicyTest {
                 tool("call-large", large));
 
         List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
-                messages, 100, 1_000, 2, 20_000);
+                messages, 100, 1_000, 2, 20_000, Map.of(BROWSER, true));
 
         String small = String.valueOf(projected.get(1).getContent());
         String big = String.valueOf(projected.get(3).getContent());
@@ -81,11 +82,24 @@ class LiveToolResultPolicyTest {
                 tool("call-skills", raw));
 
         List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
-                messages, 4_000, 50_000, 2, 20_000);
+                messages, 4_000, 50_000, 2, 20_000, Map.of(SKILL_LIBRARY, true));
 
         String content = String.valueOf(projected.get(1).getContent());
         assertTrue(content.contains("\"skillId\":150"), content);
         assertTrue(content.contains("\"total\":9"), content);
+    }
+
+    @Test
+    void compressionDisabledKeepsFullNonBrowserContent() {
+        String longContent = "x".repeat(10_000);
+        List<ChatMessageDTO> messages = List.of(
+                assistantCall("call-skill", SKILL_LIBRARY),
+                tool("call-skill", longContent));
+
+        List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
+                messages, 100, 1_000, 1, 20_000, Map.of());
+
+        assertEquals(longContent, projected.get(1).getContent());
     }
 
     @Test
@@ -97,7 +111,7 @@ class LiveToolResultPolicyTest {
                 tool("call-new", "skill-new"));
 
         List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
-                messages, 100, 10, 1, 20_000);
+                messages, 100, 10, 1, 20_000, Map.of(SKILL, true));
 
         // 最近 1 条保留；更旧的超出预算 → 带 callId 的省略引用
         assertEquals("skill-new", projected.get(3).getContent());

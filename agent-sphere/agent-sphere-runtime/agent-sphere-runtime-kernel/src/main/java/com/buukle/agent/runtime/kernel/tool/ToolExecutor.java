@@ -83,6 +83,12 @@ public class ToolExecutor {
             String type = tool.getCapabilityType();
             Map<String, Object> binding = tool.getExecBinding();
             String args = tc.arguments() != null ? tc.arguments() : RunnerConstants.EMPTY_JSON_ARGS;
+            String runMode = ctx.getKernelContext() != null && ctx.getKernelContext().getRun() != null
+                    ? ctx.getKernelContext().getRun().getRunMode() : null;
+            String denied = ToolAccessGuard.denyReason(tool, args, runMode);
+            if (denied != null) {
+                return denied;
+            }
 
             // delegate 统一执行入口（pseudo-tool）：main 内联或 subagent 隔离，深度由策略统一 +1
             if (SubAgentConstants.DELEGATE_TOOL.equals(tc.name())) {
@@ -103,11 +109,13 @@ public class ToolExecutor {
                     JsonNode argsNode = JSON.readTree(args);
                     String title = argsNode.has("title") ? argsNode.get("title").asText() : "";
                     String clarifyType = argsNode.has("type") ? argsNode.get("type").asText() : ChatClarification.CLARIFYING_DEFAULT_TYPE;
+                    boolean multiple = argsNode.path(ChatClarification.CLARIFYING_JSON_MULTIPLE).asBoolean(false);
                     String optionsJson = argsNode.has("options") ? argsNode.get("options").toString() : null;
                     String clarificationId = java.util.UUID.randomUUID().toString().substring(0, CLARIFICATION_ID_LENGTH);
                     // 先建库、再发 PENDING 事件：Timeline 建澄清行时需 lookupClarificationRef 查得到记录，
                     // 否则行 refClarificationId=null，刷新后 resolveContent 取不到 response/options（只剩"已应答"）。
-                    clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType, optionsJson, clarificationId);
+                    clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType,
+                            multiple, optionsJson, clarificationId);
                     eventPublisher.publishEvent(new RuntimeEventVO(
                             ClarificationStatus.PENDING,
                             new RuntimeEventDataVO()
@@ -115,6 +123,7 @@ public class ToolExecutor {
                                     .setSessionId(sessionId)
                                     .setPrompt(title)
                                     .setType(clarifyType)
+                                    .setMultiple(multiple)
                                     .setArgumentsJson(optionsJson)
                                     .setClarificationId(clarificationId)));
                     return JSON.writeValueAsString(Map.of(

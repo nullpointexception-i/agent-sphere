@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Markdown } from '../markdown';
-import { CheckIcon, CopyIcon } from '../icons';
+import {
+  ApprovalIcon,
+  BrainIcon,
+  CheckIcon,
+  ClockIcon,
+  CloseIcon,
+  CopyIcon,
+  MessageIcon,
+  PauseIcon,
+  RefreshIcon,
+  ToolIcon,
+} from '../icons';
 import { stripSubAgentMarkerPrefix } from '../subAgentMarker';
 import { browserResult, isBrowserTool, toolFamily } from '../toolRenderers';
 import { DocCard, GenericCard, TodoCard } from './ToolCard';
@@ -27,18 +38,22 @@ export interface WidgetTimelineProps {
 
 // ---------------------------------------------------------------- utils
 
-// finish 是内部协议工具（builtin_12）：答案已作为助手正文展示，工具行不再渲染（与主站一致）。
+// 内部协议工具：finish 的答案已作为助手正文展示，ask_clarification 由澄清行展示。
 const FINISH_TOOL_NAME = 'builtin_12';
+const ASK_CLARIFICATION_TOOL_NAME = 'builtin_7';
 
-function isFinishToolRow(row: TimelineRow): boolean {
+function isInternalToolRow(row: TimelineRow): boolean {
   if (!row || row.kind !== 'tool') {
     return false;
   }
   const content = row.content;
   return (
     content?.toolName === FINISH_TOOL_NAME ||
+    content?.toolName === ASK_CLARIFICATION_TOOL_NAME ||
     content?.displayName === '完成任务' ||
-    content?.displayName === 'Finish'
+    content?.displayName === 'Finish' ||
+    content?.displayName === '请求澄清' ||
+    content?.displayName === 'Ask Clarification'
   );
 }
 
@@ -87,24 +102,6 @@ function prettyJson(raw?: string | null): string {
   } catch {
     return raw;
   }
-}
-
-function parseOptions(raw?: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.map((o: unknown) =>
-        typeof o === 'string'
-          ? o
-          : ((o as { value?: unknown; label?: unknown })?.value ??
-            (o as { label?: unknown })?.label),
-      ).filter((v: unknown): v is string => typeof v === 'string' && !!v);
-    }
-  } catch {
-    // ignore
-  }
-  return [];
 }
 
 function Md({ text }: { text: string }) {
@@ -195,6 +192,10 @@ function ToolRow({
   loadFile: (fileKey: string) => Promise<string>;
 }) {
   const c = row.content || {};
+  if (c.toolName === 'builtin_13' || c.displayName === '当前时间'
+      || c.displayName === 'Current Time') {
+    return <CurrentTimeRow content={c} state={row.state} />;
+  }
   const family = toolFamily(c, c.displayName);
   const name = c.displayName || row.title || 'tool';
   const isBrowser = isBrowserTool(c, c.displayName);
@@ -210,11 +211,11 @@ function ToolRow({
     <div>
       {!hideHead && (
         <div className="aw-tl-tool-head">
-          <span style={{ opacity: 0.7 }}>🛠️</span>
+          <ToolIcon />
           <TypographyStrong>{name}</TypographyStrong>
           {family !== 'todo' &&
             (stateLabel ? (
-              <span className="aw-tool-failed">✕ {stateLabel}</span>
+              <span className="aw-tool-failed"><CloseIcon size={11} /> {stateLabel}</span>
             ) : (
               <StateTag state={row.state} />
             ))}
@@ -243,95 +244,170 @@ function TypographyStrong({ children }: { children: ReactNode }) {
   );
 }
 
-function ClarifyRow({
-  row,
-  onRespondClarify,
-  onCancelClarify,
-}: {
-  row: TimelineRow;
-  onRespondClarify: (runId: number, clarificationId: string, response: string) => void;
-  onCancelClarify?: () => void;
-}) {
-  const c = row.content || {};
-  const [text, setText] = useState('');
-  const options = useMemo(() => parseOptions(c.options), [c.options]);
-  const runId = row.runId ?? row.refRunId;
-  const clarificationId = String(
-    c.clarificationId || row.refClarificationId || '',
-  );
-  const respond = (value: string) => {
-    const v = String(value ?? '').trim();
-    if (!v || runId == null) return;
-    onRespondClarify(runId, clarificationId, v);
-    setText('');
-  };
+function parseJsonArray(raw?: string): any[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function CurrentTimeRow({ content, state }: { content: any; state?: string | null }) {
+  let time = '';
+  let timezone = '';
+  try {
+    const artifact = content.artifact ? JSON.parse(content.artifact) : null;
+    time = typeof artifact?.time === 'string' ? artifact.time : '';
+    timezone = typeof artifact?.timezone === 'string' ? artifact.timezone : '';
+  } catch {
+    // ignore malformed artifact
+  }
+  const display = time
+    ? time.replace('T', ' ').replace(/([+-]\d{2}:\d{2})$/, '').slice(0, 16)
+    : '';
   return (
-    <div>
-      <strong>{String(c.title || row.title || '澄清')}</strong>{' '}
-      <StateTag state={row.state} />
-      {row.state === 'PENDING' ? (
-        <div className="aw-tl-clarify-options">
-          {options.length === 0 && (
-            <button
-              type="button"
-              className="aw-tl-clarify-option"
-              onClick={() => respond('confirmed')}
-            >
-              确认
-            </button>
-          )}
-          {options.map((o) => (
-            <button
-              key={o}
-              type="button"
-              className="aw-tl-clarify-option"
-              onClick={() => respond(o)}
-            >
-              {o}
-            </button>
-          ))}
-          <div className="aw-clarify-answer-wrap" style={{ width: '100%' }}>
-            <input
-              className="aw-clarify-answer-input"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="输入澄清内容…"
-            />
-            <button
-              type="button"
-              className="aw-clarify-submit"
-              disabled={!text.trim()}
-              onClick={() => respond(text)}
-            >
-              提交
-            </button>
-            <button
-              type="button"
-              className="aw-clarify-submit"
-              style={{ background: '#fff', color: '#8c8c8c' }}
-              onClick={() => onCancelClarify?.()}
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ marginTop: 6 }}>
-          <span style={{ color: '#9ca3af' }}>已应答</span>
-          {c.response ? <span>：{String(c.response)}</span> : null}
-        </div>
-      )}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <ClockIcon />
+      <TypographyStrong>当前时间</TypographyStrong>
+      {display ? <span style={{ fontSize: 12 }}>· {display}</span> : null}
+      {timezone ? <span style={{ color: '#9ca3af', fontSize: 11 }}>{timezone}</span> : null}
+      <StateTag state={state} />
     </div>
   );
 }
 
-// ---------------------------------------------------------------- sub-agent
+const APPROVAL_DECISION_LABEL: Record<string, string> = {
+  ALLOW_ONCE: '允许一次',
+  ALLOW_RUN: '本次消息内允许',
+  ALLOW_SESSION: '本次会话内允许',
+  DENY: '拒绝',
+};
+
+function ToolApprovalRow({ row }: { row: TimelineRow }) {
+  const c = row.content || {};
+  const calls = parseJsonArray(c.toolCalls);
+  const decisions = parseJsonArray(c.decisions);
+  const byCall = new Map<string, string>();
+  for (const d of decisions) {
+    if (d?.callId) byCall.set(String(d.callId), String(d.decision || 'DENY'));
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <ApprovalIcon />
+        <TypographyStrong>{c.text || row.title || '工具授权'}</TypographyStrong>
+        <StateTag state={row.state} />
+      </div>
+      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {calls.map((call: any, index: number) => {
+          const decision = byCall.get(String(call.callId));
+          return (
+            <div key={String(call.callId || index)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ToolIcon />
+              <span style={{ fontSize: 12 }}>
+                {call.displayName || call.toolName || '工具'}
+                {call.action ? ` · ${call.action}` : ''}
+              </span>
+              {decision ? (
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: decision === 'DENY' ? '#cf1322' : '#1677ff',
+                    border: `1px solid ${decision === 'DENY' ? '#ffccc7' : '#91caff'}`,
+                    borderRadius: 4,
+                    padding: '0 4px',
+                  }}
+                >
+                  {APPROVAL_DECISION_LABEL[decision] || decision}
+                </span>
+              ) : (
+                <span style={{ color: '#9ca3af', fontSize: 11 }}>等待处理</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ClarifyRow({
+  row,
+}: {
+  row: TimelineRow;
+  onRespondClarify?: (runId: number, clarificationId: string, response: string) => void;
+  onCancelClarify?: () => void;
+}) {
+  const c = row.content || {};
+  const options = parseJsonArray(c.options);
+  const labelOf = (value: string) => {
+    const hit = options.find((o: any) => String(o?.value ?? o?.label) === value);
+    return hit?.label ? String(hit.label) : value;
+  };
+  let selected: string[] = [];
+  let text = '';
+  if (c.response) {
+    try {
+      const parsed = JSON.parse(String(c.response));
+      if (parsed && typeof parsed === 'object') {
+        selected = Array.isArray(parsed.selected) ? parsed.selected.map(String) : [];
+        text = typeof parsed.text === 'string' ? parsed.text : '';
+      } else {
+        text = String(c.response);
+      }
+    } catch {
+      text = String(c.response);
+    }
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <MessageIcon />
+        <strong>{String(c.title || row.title || '澄清')}</strong>
+        <StateTag state={row.state} />
+      </div>
+      <div style={{ marginTop: 6, color: '#8c8c8c' }}>
+        {row.state === 'PENDING' ? (
+          '请在底部浮层中作答'
+        ) : c.response === '__dismissed__' || row.state === 'CANCELLED' ? (
+          '已取消'
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {selected.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {selected.map((value) => (
+                  <span
+                    key={value}
+                    style={{
+                      color: '#1677ff',
+                      border: '1px solid #91caff',
+                      background: '#e6f4ff',
+                      borderRadius: 4,
+                      padding: '0 6px',
+                      fontSize: 11,
+                    }}
+                  >
+                    {labelOf(value)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {text ? <span style={{ color: '#333' }}>{text}</span> : null}
+            {selected.length === 0 && !text ? '已应答' : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function SubAgentLlmItem({ s }: { s: any }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>🧠</span>
+        <BrainIcon />
         <strong style={{ fontSize: 12 }}>模型推理</strong>
         {s.modelName ? (
           <span
@@ -384,7 +460,7 @@ function SubAgentToolItem({
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>🛠️</span>
+        <ToolIcon />
         <TypographyStrong>
           {s.displayNameCn || s.displayNameEn || s.toolName || '工具'}
         </TypographyStrong>
@@ -498,14 +574,14 @@ function SubAgentCard({
   return (
     <div className="aw-subagent">
       <div className="aw-subagent-head">
-        <span>⚙️</span>
+        <BrainIcon />
         <strong>
           {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
             '子 Agent'}
         </strong>
         <StateTag state={row.state} />
         {open && isRunning ? (
-          <span style={{ color: '#9ca3af', fontSize: 11 }}>⟳ 实时更新中</span>
+          <span style={{ color: '#9ca3af', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}><RefreshIcon size={11} /> 实时更新中</span>
         ) : null}
       </div>
       <div style={{ marginTop: 4 }}>
@@ -657,9 +733,9 @@ function RowView({
           {running ? (
             <span className="aw-running-dot" />
           ) : failed ? (
-            <span style={{ color: '#ff4d4f' }}>✕</span>
+            <CloseIcon size={12} className="aw-icon-failed" />
           ) : (
-            <span>🔄</span>
+            <RefreshIcon />
           )}
           <span>{row.title || '上下文压缩'}</span>
         </div>
@@ -689,9 +765,11 @@ function RowView({
         {row.state === 'RUNNING' ? (
           <span className="aw-running-dot" />
         ) : failed ? (
-          <span style={{ color: '#ff4d4f' }}>✕</span>
+          <CloseIcon size={12} className="aw-icon-failed" />
+        ) : row.state === 'AWAITING_USER' ? (
+          <PauseIcon size={12} />
         ) : (
-          <span>•</span>
+          <CheckIcon size={12} />
         )}
         <span>{parts.join(' · ') || text}</span>
         <UsageChip usage={c.usage ?? undefined} />
@@ -712,6 +790,8 @@ function RowView({
         return <AssistantRow row={row} />;
       case 'tool':
         return <ToolRow row={row} loadFile={loadFile} />;
+      case 'tool_approval':
+        return <ToolApprovalRow row={row} />;
       case 'clarification':
         return (
           <ClarifyRow
@@ -811,7 +891,7 @@ export function WidgetTimeline({
   const items = useMemo(() => {
     const groups = new Map<string, TimelineRow[]>();
     for (const r of rows) {
-      if (isFinishToolRow(r)) {
+      if (isInternalToolRow(r)) {
         continue;
       }
       if (r.kind !== 'subagent') continue;

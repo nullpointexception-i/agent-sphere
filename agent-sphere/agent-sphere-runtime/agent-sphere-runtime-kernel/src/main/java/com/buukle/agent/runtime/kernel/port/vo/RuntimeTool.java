@@ -24,4 +24,12 @@ public class RuntimeTool implements Serializable {
     private String description;
     private String parametersSchemaJson;
     private Map<String, Object> execBinding;
+    /** Tool result may be compressed in live/history projection. */
+    private boolean compressEnabled;
+    /** READ / WRITE / READ_WRITE. */
+    private String accessMode;
+    /** L1 / L2. */
+    private String securityLevel;
+    /** SESSION / RUN / ONCE (L2 only). */
+    private String approvalScope;
 }

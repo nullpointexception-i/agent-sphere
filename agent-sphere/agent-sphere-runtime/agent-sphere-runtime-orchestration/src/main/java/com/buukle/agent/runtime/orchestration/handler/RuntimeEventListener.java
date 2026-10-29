@@ -9,10 +9,12 @@ import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
+import com.buukle.agent.instance.dtvo.vo.ToolApprovalVO;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.AgentUserInLoopRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.ToolApprovalSpi;
 import com.buukle.agent.runtime.kernel.ReasoningBufferStore;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
@@ -45,6 +47,7 @@ public class RuntimeEventListener {
     private final AgentRuntimeProperties runtimeProperties;
     private final ReasoningBufferStore reasoningBufferStore;
     private final TimelineRecorder timelineRecorder;
+    private final ToolApprovalSpi toolApprovalSpi;
 
     private static RuntimeEventVO transformForFrontend(RuntimeEventVO event) {
         EventType type = event.getEventType();
@@ -111,6 +114,7 @@ public class RuntimeEventListener {
                 .setKind(src.getKind())
                 .setType(src.getType())
                 .setClarificationId(src.getClarificationId())
+                .setMultiple(src.getMultiple())
                 .setPrompt(src.getPrompt());
 
         String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
@@ -133,7 +137,7 @@ public class RuntimeEventListener {
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_COMPLETED -> "✅ Run completed";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_FAILED -> "❌ Run failed";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_CANCELLED -> "⏹️ Run cancelled";
-            case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_AWAITING_USER -> "⏸️ Awaiting user clarification";
+            case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_AWAITING_USER -> "⏸️ Awaiting user confirmation";
             default -> "";
         };
         dst.setResponse(text);
@@ -155,6 +159,7 @@ public class RuntimeEventListener {
             case FlowEventType f -> handleFlow(data, f);
             case ChromeCommandEventType s -> handleChromeCommand(event, data);
             case ClarificationStatus s -> handleClarification(data, s);
+            case ToolApprovalStatus s -> handleToolApproval(data, s);
         }
 
         Long sessionId = data != null ? data.getSessionId() : null;
@@ -318,6 +323,28 @@ public class RuntimeEventListener {
                 data.getClarificationId(), state, data.getPrompt());
     }
 
+    private void handleToolApproval(RuntimeEventDataVO data, ToolApprovalStatus status) {
+        if (data.getRunId() == null || data.getApprovalId() == null) {
+            return;
+        }
+        ToolApprovalVO approval = toolApprovalSpi.getByApprovalId(data.getApprovalId());
+        if (approval == null) {
+            return;
+        }
+        String state = switch (status) {
+            case TOOL_APPROVAL_PENDING -> TimelineState.PENDING.getCode();
+            case TOOL_APPROVAL_RESPONDED -> TimelineState.ANSWERED.getCode();
+            case TOOL_APPROVAL_DISMISSED -> TimelineState.CANCELLED.getCode();
+        };
+        String title = switch (status) {
+            case TOOL_APPROVAL_PENDING -> "等待工具授权";
+            case TOOL_APPROVAL_RESPONDED -> "已处理工具授权";
+            case TOOL_APPROVAL_DISMISSED -> "已取消工具授权";
+        };
+        timelineRecorder.recordToolApproval(data.getSessionId(), data.getRunId(),
+                data.getApprovalId(), approval.getId(), state, title);
+    }
+
     private void flushReasoning(RunVO run) {
         String reasoning = reasoningBufferStore.drain(run.getId());
         if (reasoning == null) {
@@ -379,9 +406,12 @@ public class RuntimeEventListener {
                 AgentToolCallRecordVO vo = toolCallRecordSpi.getLatestByStepId(stepId);
                 if (vo == null) return;
                 String raw = data.getArtifact();
-                String compressed = LiveToolResultPolicy.isSkillLibraryTool(data.getToolName())
-                        ? ToolResultCompressor.compressKeepArrays(raw, RunnerConstants.TOOL_RESULT_MAX_CHARS)
-                        : ToolResultCompressor.compress(raw, RunnerConstants.TOOL_RESULT_MAX_CHARS);
+                String compressed = null;
+                if (Boolean.TRUE.equals(data.getCompressEnabled())) {
+                    compressed = LiveToolResultPolicy.isSkillLibraryTool(data.getToolName())
+                            ? ToolResultCompressor.compressKeepArrays(raw, RunnerConstants.TOOL_RESULT_MAX_CHARS)
+                            : ToolResultCompressor.compress(raw, RunnerConstants.TOOL_RESULT_MAX_CHARS);
+                }
                 toolCallRecordSpi.updateStatus(vo.getId(), status.name(), raw, null);
                 if (compressed != null) {
                     toolCallRecordSpi.updateCompressedArtifact(vo.getId(), compressed);

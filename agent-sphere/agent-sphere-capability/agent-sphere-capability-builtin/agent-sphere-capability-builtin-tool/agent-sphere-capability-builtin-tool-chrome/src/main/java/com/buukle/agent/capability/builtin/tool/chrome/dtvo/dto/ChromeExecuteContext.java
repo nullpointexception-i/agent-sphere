@@ -27,7 +27,10 @@ public class ChromeExecuteContext extends ExecuteContext {
 
     @Schema(example = "document.title",
             description = "executeJS only. Read-only; must return small JSON. Navigation writes are rejected "
-                    + "(js_navigation_blocked). Use click to open/return.")
+                    + "(js_navigation_blocked). Use click to open/return. NEVER use executeJS for long loops, "
+                    + "polling, sleeps, delays, or waiting; call the global wait tool instead. Split many items "
+                    + "into small steps and keep each executeJS under ~7 seconds. No setTimeout/setInterval/"
+                    + "long await loops.")
     private String code;
 
     @Schema(example = "snapshot", description = "getContent mode: snapshot/summary/axtree/query/extract/containers/ready.")

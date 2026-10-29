@@ -15,6 +15,8 @@ import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.RunMode;
+import com.buukle.agent.common.constant.ToolAccessMode;
 import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.instance.dtvo.vo.CapabilityFullVO;
 import com.buukle.agent.instance.dtvo.vo.CapabilityVO;
@@ -43,10 +45,16 @@ import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.*;
 public class ContextPreparer {
 
     private static final String DEFAULT_EMPTY_SCHEMA = "{\"type\":\"object\",\"properties\":{}}";
-    private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (clear, friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"confirm=yes/no; choice=provide 2-5 concise distinct options; input=free-form answer\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Short display text shown to the user (max ~20 chars, a concise option phrase, NOT a full sentence, NOT placeholder like 'http://')\"},\"value\":{\"type\":\"string\",\"description\":\"Machine value sent back to the agent when the user picks this option\"},\"description\":{\"type\":\"string\",\"description\":\"Optional short explanation for the option\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"description\":\"2-5 concise, distinct choices (required when type=choice). No duplicates, no placeholder URLs, no full sentences.\"},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"}},\"required\":[\"title\",\"type\"]}";
+    private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (clear, friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"confirm=yes/no; choice=provide 2-5 concise distinct options; input=free-form answer\"},\"multiple\":{\"type\":\"boolean\",\"description\":\"For type=choice: true when the user may select more than one option.\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Short display text shown to the user (max ~20 chars, a concise option phrase, NOT a full sentence, NOT placeholder like 'http://')\"},\"value\":{\"type\":\"string\",\"description\":\"Machine value sent back to the agent when the user picks this option\"},\"description\":{\"type\":\"string\",\"description\":\"Optional short explanation for the option\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"description\":\"2-5 concise, distinct choices (required when type=choice). No duplicates, no placeholder URLs, no full sentences.\"},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"}},\"required\":[\"title\",\"type\"]}";
 
     private static final String WAIT_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"ms\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":600000,\"description\":\"Milliseconds to wait (100-600000). The run suspends immediately and resumes automatically afterwards. Use it to give dynamic content time to appear or settle.\"}},\"required\":[\"ms\"],\"additionalProperties\":false}";
     private static final String FINISH_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"enum\":[\"success\",\"failed\",\"blocked\"],\"description\":\"success=work done and verified; failed=tried but could not complete; blocked=cannot proceed without something external (login/permission/missing data)\"},\"summary\":{\"type\":\"string\",\"description\":\"Complete, self-contained answer for the user; the run's final reply is taken from it\"}},\"required\":[\"status\",\"summary\"],\"additionalProperties\":false}";
+    private static final Set<String> READ_ONLY_CONTROL_TOOLS = Set.of(
+            LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId(),
+            LLM_PREFIX_BUILTIN + BuiltinToolEnum.FINISH.getId(),
+            LLM_PREFIX_BUILTIN + BuiltinToolEnum.ASK_CLARIFICATION.getId(),
+            LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId(),
+            SubAgentConstants.DELEGATE_TOOL);
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
     private final CapabilitySkillSpi skillSpi;
@@ -76,7 +84,7 @@ public class ContextPreparer {
                 validated.getAgentInstance().getId());
         List<CapabilityFullVO> fullCapabilities = resolveFullCapabilities(capabilities);
         List<RuntimeTool> tools = resolveTools(capabilities, validated,
-                Boolean.TRUE.equals(run.getNoClarification()));
+                Boolean.TRUE.equals(run.getNoClarification()), run);
 
         return KernelContext.builder()
                 .agentInstance(validated.getAgentInstance())
@@ -126,7 +134,8 @@ public class ContextPreparer {
     }
 
     // ---- New RuntimeTool resolution ----
-    private List<RuntimeTool> resolveTools(List<CapabilityVO> capabilities, ValidationResult validated, boolean noClarification) {
+    private List<RuntimeTool> resolveTools(List<CapabilityVO> capabilities, ValidationResult validated,
+                                           boolean noClarification, RunVO run) {
         List<RuntimeTool> result = new ArrayList<>();
         for (CapabilityVO cap : capabilities) {
             if (!STATUS_ENABLED.equals(cap.getStatus())) continue;
@@ -160,7 +169,12 @@ public class ContextPreparer {
                     .displayNameEn(tool.getDisplayNameEn())
                     .description(tool.getDescription() != null ? tool.getDescription() : "")
                     .parametersSchemaJson(tool.getParamSchema())
-                    .execBinding(binding).build());
+                    .execBinding(binding)
+                    .compressEnabled(tool.isCompressEnabled())
+                    .accessMode(tool.getAccessMode())
+                    .securityLevel(tool.getSecurityLevel())
+                    .approvalScope(tool.getApprovalScope())
+                    .build());
         }
         // 启用 delegate 时注册唯一执行入口 pseudo-tool：skill 本体不再注册为 tool，
         // 由主 agent 通过 delegate 自行决定内联执行（main）或隔离子 Agent（subagent）。
@@ -249,6 +263,10 @@ public class ContextPreparer {
                     .parametersSchemaJson(FINISH_PARAM_SCHEMA)
                     .execBinding(finishBinding).build());
         }
+        if (run != null && RunMode.from(run.getRunMode()).readOnly()) {
+            result.removeIf(tool -> !READ_ONLY_CONTROL_TOOLS.contains(tool.getLlmToolName())
+                    && ToolAccessMode.from(tool.getAccessMode()) != ToolAccessMode.READ);
+        }
         Set<String> seen = new HashSet<>();
         List<RuntimeTool> deduped = new ArrayList<>();
         for (RuntimeTool t : result) {
@@ -275,7 +293,12 @@ public class ContextPreparer {
                     .displayNameEn(tool.getDisplayNameEn())
                     .description(tool.getDescription() != null ? tool.getDescription() : "")
                     .parametersSchemaJson(tool.getParamSchema())
-                    .execBinding(binding).build());
+                    .execBinding(binding)
+                    .compressEnabled(tool.isCompressEnabled())
+                    .accessMode(tool.getAccessMode())
+                    .securityLevel(tool.getSecurityLevel())
+                    .approvalScope(tool.getApprovalScope())
+                    .build());
         }
     }
 
@@ -292,7 +315,12 @@ public class ContextPreparer {
                 .displayName(cli.getName())
                 .description("")
                 .parametersSchemaJson(cli.getParamSchema())
-                .execBinding(binding).build());
+                .execBinding(binding)
+                .compressEnabled(Boolean.TRUE.equals(cli.getCompressEnabled()))
+                .accessMode(cli.getAccessMode())
+                .securityLevel(cli.getSecurityLevel())
+                .approvalScope(cli.getApprovalScope())
+                .build());
     }
 
     void resolveMcpTools(McpVO mcp, CapabilityVO cap, List<RuntimeTool> result) {
@@ -317,7 +345,12 @@ public class ContextPreparer {
                             .displayName(tool.getName())
                             .description(tool.getDescription() != null ? tool.getDescription() : "")
                             .parametersSchemaJson(tool.getInputSchema())
-                            .execBinding(binding).build());
+                            .execBinding(binding)
+                            .compressEnabled(Boolean.TRUE.equals(mcp.getCompressEnabled()))
+                            .accessMode(mcp.getAccessMode())
+                            .securityLevel(mcp.getSecurityLevel())
+                            .approvalScope(mcp.getApprovalScope())
+                            .build());
                 }
                 return;
             }
@@ -339,6 +372,11 @@ public class ContextPreparer {
                 .displayName(mcp.getName())
                 .description(mcp.getDescription() != null ? mcp.getDescription() : "")
                 .parametersSchemaJson(DEFAULT_EMPTY_SCHEMA)
-                .execBinding(binding).build());
+                .execBinding(binding)
+                .compressEnabled(Boolean.TRUE.equals(mcp.getCompressEnabled()))
+                .accessMode(mcp.getAccessMode())
+                .securityLevel(mcp.getSecurityLevel())
+                .approvalScope(mcp.getApprovalScope())
+                .build());
     }
 }

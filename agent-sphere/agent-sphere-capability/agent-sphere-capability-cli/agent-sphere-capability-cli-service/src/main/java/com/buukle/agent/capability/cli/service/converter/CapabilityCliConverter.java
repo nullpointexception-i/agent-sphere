@@ -1,6 +1,9 @@
 package com.buukle.agent.capability.cli.service.converter;
 
 import com.buukle.agent.capability.cli.domain.CapabilityCli;
+import com.buukle.agent.common.constant.ToolAccessMode;
+import com.buukle.agent.common.constant.ToolApprovalScope;
+import com.buukle.agent.common.constant.ToolSecurityLevel;
 import com.buukle.agent.capability.cli.dtvo.dto.CreateCliDTO;
 import com.buukle.agent.capability.cli.dtvo.enums.CliCapabilityEnum;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
@@ -21,6 +24,10 @@ public class CapabilityCliConverter {
         vo.setParamSchema(cli.getParamSchema());
         vo.setWorkingDir(cli.getWorkingDir());
         vo.setStatus(cli.getStatus());
+        vo.setCompressEnabled(Boolean.TRUE.equals(cli.getCompressEnabled()));
+        vo.setAccessMode(cli.getAccessMode());
+        vo.setSecurityLevel(cli.getSecurityLevel());
+        vo.setApprovalScope(cli.getApprovalScope());
         vo.setCreatedAt(cli.getCreatedAt() != null ? cli.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(cli.getCreatedBy());
         vo.setUpdatedBy(cli.getUpdatedBy());
@@ -35,6 +42,10 @@ public class CapabilityCliConverter {
         cli.setParamSchema(dto.getParamSchema());
         cli.setWorkingDir(dto.getWorkingDir());
         cli.setStatus(CliCapabilityEnum.STATUS_ENABLED);
+        cli.setCompressEnabled(Boolean.TRUE.equals(dto.getCompressEnabled()));
+        cli.setAccessMode(dto.getAccessMode() != null ? dto.getAccessMode() : ToolAccessMode.READ_WRITE.name());
+        cli.setSecurityLevel(dto.getSecurityLevel() != null ? dto.getSecurityLevel() : ToolSecurityLevel.L1.name());
+        cli.setApprovalScope(dto.getApprovalScope() != null ? dto.getApprovalScope() : ToolApprovalScope.ONCE.name());
         return cli;
     }
 }

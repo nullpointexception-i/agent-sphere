@@ -4,6 +4,7 @@
  */
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { DocIcon } from '../icons';
 import {
   docSummary,
   extractTodos,
@@ -144,7 +145,10 @@ export function DocCard({ content }: { content: ToolContent }) {
   }
   return (
     <div className="aw-tool-doc">
-      <div>📄 {summary}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <DocIcon />
+        <span>{summary}</span>
+      </div>
       {preview && <div className="aw-tool-doc-preview">{preview.slice(0, 60)}</div>}
     </div>
   );

@@ -23,4 +23,6 @@ public class KernelContext implements Serializable {
     private ModelRouteFullVO modelRoute;
     private List<ModelRouteFullVO> fallbackRoutes;
     private String userMessage;
+    /** Non-null when this wake resumes an approved L2 tool batch. */
+    private String approvalResumeId;
 }

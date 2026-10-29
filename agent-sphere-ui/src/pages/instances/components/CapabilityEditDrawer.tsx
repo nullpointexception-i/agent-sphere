@@ -1,6 +1,6 @@
 import { PlusOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Modal, Table, Tabs, Tag } from 'antd';
+import { App, Button, Drawer, Modal, Space, Table, Tabs, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import CapabilityPicker from './CapabilityPicker';
@@ -168,6 +168,10 @@ export default function CapabilityEditDrawer({
                       name: b.name,
                       displayNameCn: b.displayNameCn,
                       displayNameEn: b.displayNameEn,
+                      compressEnabled: b.compressEnabled,
+                      accessMode: b.accessMode,
+                      securityLevel: b.securityLevel,
+                      approvalScope: b.approvalScope,
                       _auto: true,
                     }))
                 : [];
@@ -253,6 +257,25 @@ export default function CapabilityEditDrawer({
                             </span>
                           );
                         },
+                      },
+                      {
+                        title: intl.formatMessage({
+                          id: 'pages.capabilities.accessMode',
+                          defaultMessage: 'Policy',
+                        }),
+                        width: 190,
+                        render: (_: any, r: any) => (
+                          <Space size={4} wrap>
+                            {r.compressEnabled ? <Tag color="blue">compress</Tag> : null}
+                            <Tag>{r.accessMode || 'READ_WRITE'}</Tag>
+                            <Tag color={r.securityLevel === 'L2' ? 'orange' : 'default'}>
+                              {r.securityLevel || 'L1'}
+                              {r.securityLevel === 'L2'
+                                ? ` / ${r.approvalScope || 'ONCE'}`
+                                : ''}
+                            </Tag>
+                          </Space>
+                        ),
                       },
                       {
                         title: '',

@@ -8,6 +8,7 @@ import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.domain.AgentRun;
 import com.buukle.agent.instance.domain.AgentSubAgentRun;
 import com.buukle.agent.instance.domain.AgentTimeline;
+import com.buukle.agent.instance.domain.AgentToolApproval;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
 import com.buukle.agent.instance.dtvo.enums.TimelineContentKey;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
@@ -21,6 +22,7 @@ import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.repository.AgentSubAgentRunMapper;
 import com.buukle.agent.instance.repository.AgentTimelineMapper;
+import com.buukle.agent.instance.repository.AgentToolApprovalMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.repository.RunMapper;
 import com.buukle.agent.instance.service.util.ScreenshotRefParser;
@@ -67,6 +69,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
     private final AgentSubAgentRunMapper subAgentRunMapper;
     private final AgentLlmInteractionRecordMapper interactionMapper;
     private final AgentCompactRecordMapper compactRecordMapper;
+    private final AgentToolApprovalMapper toolApprovalMapper;
 
     @Override
     public long nextSeq(Long sessionId) {
@@ -99,6 +102,29 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             save(row);
         } catch (Exception e) {
             log.warn("Timeline record failed (session={} seq={} kind={}): {}", sessionId, seq, kind, e.getMessage());
+        }
+        return seq;
+    }
+
+    @Override
+    public long recordApproval(Long sessionId, Long runId, String kind, String subtype, String state, String title,
+                               Long refRunId, Long refApprovalId) {
+        long seq = nextSeq(sessionId);
+        AgentTimeline row = new AgentTimeline();
+        row.setSessionId(sessionId);
+        row.setRunId(runId);
+        row.setSeq(seq);
+        row.setKind(kind);
+        row.setSubtype(subtype);
+        row.setState(state != null && !state.isBlank() ? state : TimelineState.RUNNING.getCode());
+        row.setTitle(cap(title, TITLE_CAP));
+        row.setRefRunId(refRunId);
+        row.setRefApprovalId(refApprovalId);
+        row.setStatus(STATUS_ACTIVE);
+        try {
+            save(row);
+        } catch (Exception e) {
+            log.warn("Timeline approval record failed (session={} seq={}): {}", sessionId, seq, e.getMessage());
         }
         return seq;
     }
@@ -318,12 +344,26 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     }
                     content.putIfAbsent(TimelineContentKey.DISPLAY_NAME.getCode(), row.getTitle());
                 }
+                case TOOL_APPROVAL -> {
+                    if (row.getRefApprovalId() != null) {
+                        AgentToolApproval approval = toolApprovalMapper.selectById(row.getRefApprovalId());
+                        if (approval != null) {
+                            content.put(TimelineContentKey.APPROVAL_ID.getCode(), approval.getApprovalId());
+                            content.put(TimelineContentKey.STATUS.getCode(), approval.getStatus());
+                            content.put(TimelineContentKey.DECISIONS.getCode(), approval.getDecisionsJson());
+                            content.put(TimelineContentKey.TOOL_CALLS.getCode(), approval.getToolCallsJson());
+                        }
+                    }
+                    content.putIfAbsent(TimelineContentKey.TEXT.getCode(), row.getTitle());
+                }
                 case CLARIFICATION -> {
                     if (row.getRefClarificationId() != null) {
                         AgentPendingClarification c = clarificationMapper.selectById(row.getRefClarificationId());
                         if (c != null) {
                             content.put(TimelineContentKey.CLARIFICATION_ID.getCode(), c.getClarificationId());
                             content.put(TimelineContentKey.TITLE.getCode(), c.getTitle());
+                            content.put(TimelineContentKey.TYPE.getCode(), c.getType());
+                            content.put(TimelineContentKey.MULTIPLE.getCode(), Boolean.TRUE.equals(c.getMultiple()));
                             content.put(TimelineContentKey.OPTIONS.getCode(), c.getOptions());
                             content.put(TimelineContentKey.RESPONSE.getCode(), c.getUserResponse());
                         }

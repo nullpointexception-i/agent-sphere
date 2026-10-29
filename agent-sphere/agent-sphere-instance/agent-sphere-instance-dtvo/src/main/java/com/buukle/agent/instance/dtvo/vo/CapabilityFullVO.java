@@ -14,4 +14,8 @@ public class CapabilityFullVO extends CapabilityVO {
     private String toolSchema;
     private String displayNameCn;
     private String displayNameEn;
+    private Boolean compressEnabled;
+    private String accessMode;
+    private String securityLevel;
+    private String approvalScope;
 }

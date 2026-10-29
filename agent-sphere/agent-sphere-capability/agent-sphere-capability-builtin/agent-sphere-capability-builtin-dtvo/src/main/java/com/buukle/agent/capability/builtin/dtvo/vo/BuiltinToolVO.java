@@ -14,4 +14,8 @@ public class BuiltinToolVO implements Serializable {
     private boolean needConfig;
     private String displayNameCn;
     private String displayNameEn;
+    private boolean compressEnabled;
+    private String accessMode;
+    private String securityLevel;
+    private String approvalScope;
 }

@@ -180,6 +180,25 @@ class HistoryLoaderTest {
     }
 
     @Test
+    void missingCompressedArtifactFallsBackToRawArtifact() {
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
+                interaction("assistant text", "2026-10-29 04:12:21")));
+        AgentToolCallRecordVO call = toolCall(1L, "call-raw", "04:12:22");
+        call.setArtifact("raw-full");
+        call.setCompressedArtifact(null);
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(call));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        String content = messages.stream()
+                .filter(m -> "call-raw".equals(m.getToolCallId()))
+                .map(m -> String.valueOf(m.getContent()))
+                .findFirst().orElse("");
+        assertEquals("raw-full", content);
+    }
+
+    @Test
     void resumeNeverIncludesReasoning() {
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         AgentLlmInteractionRecordVO first = interaction("visible reply", "2026-10-29 04:12:21");

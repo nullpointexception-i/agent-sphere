@@ -28,7 +28,8 @@ public class EventTypeDeserializer extends JsonDeserializer<EventType> {
                 FlowEventType.class,
                 SessionStatus.class,
                 ChromeCommandEventType.class,
-                ClarificationStatus.class);
+                ClarificationStatus.class,
+                ToolApprovalStatus.class);
         for (Class<? extends Enum<?>> type : types) {
             for (Object constant : type.getEnumConstants()) {
                 EventType eventType = (EventType) constant;

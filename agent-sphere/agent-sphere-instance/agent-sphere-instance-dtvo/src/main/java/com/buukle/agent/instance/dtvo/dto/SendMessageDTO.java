@@ -14,5 +14,7 @@ public class SendMessageDTO implements Serializable {
     private Long modelRouteId;
     private String delivery;
     private Boolean noClarification;
+    /** Optional override for the next run; null uses session.runMode. */
+    private String runMode;
     private List<String> attachmentKeys;
 }

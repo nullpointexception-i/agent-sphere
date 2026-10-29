@@ -4,6 +4,7 @@ import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
@@ -25,6 +26,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -103,7 +105,9 @@ class SessionRunnerAttachmentTest {
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
                 toolCallRecordSpi, redissonClient, attachmentResolver,
                 new com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer(
-                        org.mockito.Mockito.mock(com.buukle.agent.common.config.SystemConfigSpi.class)));
+                        org.mockito.Mockito.mock(com.buukle.agent.common.config.SystemConfigSpi.class)),
+                org.mockito.Mockito.mock(com.buukle.agent.instance.spi.ToolApprovalGrantSpi.class),
+                org.mockito.Mockito.mock(com.buukle.agent.runtime.kernel.service.ToolApprovalService.class));
     }
 
     // ---------- hasAttachmentImage ----------

@@ -44,6 +44,11 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             10. Waiting: use the global `wait` tool or getContent(mode=ready, selectors, waitMs). Chrome has NO wait action.
             11. closeDialogs
             12. executeJS — LAST RESORT (strict CSP may block). READ-ONLY ONLY; must return small JSON. Navigation writes are rejected (js_navigation_blocked). Do not retry csp_blocked/detached — re-read snapshot and use click/type.
+              NEVER use executeJS for long-running loops, polling, sleeps, delays, or waiting.
+              - Need to wait: call the global `wait` tool.
+              - Need to process many items: split into small steps; each executeJS is one short single-purpose read.
+              - Do not use setTimeout / setInterval / long await loops inside executeJS.
+              - Keep each executeJS under ~7 seconds.
             13. Tabs: links opening a new tab auto-switch (`_newTabId`/`_newTabUrl`); pass `tabId` to target one.
             14. Per-command timeout: seconds 2-30 (navigate 30s, executeJS 30s, others 15s).
             15. frameId=0 addresses the TOP frame only; null broadcasts across same-origin frames.

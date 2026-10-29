@@ -2,6 +2,12 @@ import { useIntl } from '@umijs/max';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStyles } from '../../style';
 import { cacheHitRate, contextUsagePercent, formatTokens } from '../Usage';
+import ClarificationDrawer, {
+  type ClarificationBatch,
+} from '../ClarificationDrawer';
+import ToolApprovalDrawer, {
+  type ToolApprovalBatch,
+} from '../ToolApprovalDrawer';
 import Footer from './Footer';
 import Header from './Header';
 import type { SubAgentLiveMap, SubAgentTimelineItem } from './subAgentTypes';
@@ -38,6 +44,19 @@ interface ChatMainProps {
   onTogglePanel: () => void;
   /** 会话级用量聚合（聊天区最下方吸底悬浮展示）。 */
   sessionUsage?: any;
+  runMode?: 'WRITE' | 'READ_ONLY';
+  onRunModeChange?: (mode: 'WRITE' | 'READ_ONLY') => void;
+  toolApprovalBatch?: ToolApprovalBatch | null;
+  toolApprovalSubmitting?: boolean;
+  onResolveToolApproval?: (
+    decisions: Array<{ callId: string; decision: string }>,
+  ) => void;
+  clarificationBatch?: ClarificationBatch | null;
+  clarificationSubmitting?: boolean;
+  onResolveClarifications?: (
+    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+  ) => void;
+  onCancelClarifications?: () => void;
 }
 
 export default function ChatMain({
@@ -64,6 +83,15 @@ export default function ChatMain({
   sessionPanelOpen,
   onTogglePanel,
   sessionUsage,
+  runMode = 'WRITE',
+  onRunModeChange,
+  toolApprovalBatch,
+  toolApprovalSubmitting,
+  onResolveToolApproval,
+  clarificationBatch,
+  clarificationSubmitting,
+  onResolveClarifications,
+  onCancelClarifications,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const intl = useIntl();
@@ -116,6 +144,8 @@ export default function ChatMain({
     contextPercent != null ? ` · ${usageContextLabel} ${contextPercent}%` : '';
   const usageFullText = `${usageBaseText}${usagePromptPart}${usageCompletionPart}${usageCachePart}${usageContextPart}`;
   const messagesRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  const [footerHeight, setFooterHeight] = useState(0);
   const timelineWrapRef = useRef<HTMLDivElement>(null);
   const usageBarRef = useRef<HTMLDivElement>(null);
   const usageScrollRef = useRef<HTMLDivElement>(null);
@@ -223,26 +253,44 @@ export default function ChatMain({
 
   // 单一事实来源：澄清卡只渲染 timeline；messages 不再参与运行态锁定，
   // 避免 messages 里残留的 pending 澄清把 Footer 永久锁在「执行中/停止」。
-  const hasPendingClarifications = timeline.some(
-    (r: any) => r.kind === 'clarification' && r.state === 'PENDING',
-  );
+  const hasPendingClarifications =
+    Boolean(clarificationBatch?.items?.length) ||
+    timeline.some(
+      (r: any) => r.kind === 'clarification' && r.state === 'PENDING',
+    );
 
   // 实例未开放主站会话时禁用输入（服务端同样会拦，这里只为体验一致）
   const consoleBlocked =
     instances.find((i: any) => i.id === currentSession?.agentInstanceId)
       ?.allowConsoleSession === false;
 
+  useEffect(() => {
+    const el = footerRef.current;
+    if (!el) {
+      setFooterHeight(0);
+      return;
+    }
+    const update = () => setFooterHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasMessages, consoleBlocked, inputValue, sending]);
+
   const footerProps = {
     inputValue,
     onInputValueChange,
     sending,
     hasPendingClarifications,
+    hasPendingToolApproval: Boolean(toolApprovalBatch),
     onSendMessage,
     onCancel: onCancelSend,
     onExpandOpen,
     sessionKey,
     sessionId: currentSession?.id,
     consoleBlocked,
+    runMode,
+    onRunModeChange,
   };
 
   return (
@@ -257,132 +305,152 @@ export default function ChatMain({
         sessionPanelOpen={sessionPanelOpen}
         onTogglePanel={onTogglePanel}
       />
-      {hasMessages ? (
-        <div ref={messagesRef} className={styles.messages}>
-          <div
-            ref={timelineWrapRef}
-            style={{ width: '100%', minWidth: 0, flexShrink: 0 }}
-          >
-            <TimelineList
-              rows={timeline}
-              hasMore={timelineHasMore}
-              onLoadOlder={onLoadOlderTimeline}
-              onRespondClarify={onRespondClarify}
-              onCancelClarification={(row: any) =>
-                onCancelClarification?.({
-                  ...row,
-                  sessionId: currentSession?.id,
-                })
-              }
-              loadSubAgentSteps={loadSubAgentSteps}
-              subAgentLive={subAgentLive}
-            />
-          </div>
-          {sessionUsage && Number(sessionUsage.totalTokens) > 0 && (
+      <div className={styles.chatStage}>
+        {hasMessages ? (
+          <div ref={messagesRef} className={styles.messages}>
             <div
-              ref={usageBarRef}
-              onMouseEnter={handleUsageEnter}
-              onMouseLeave={handleUsageLeave}
-              style={{
-                position: 'sticky',
-                bottom: 8,
-                marginTop: 8,
-                alignSelf: 'center',
-                maxWidth: 'min(720px, 100%)',
-                width: usageCompact ? 'min(720px, 100%)' : 'fit-content',
-                padding: '6px 16px',
-                borderRadius: 999,
-                background: 'rgba(255, 255, 255, 0.72)',
-                WebkitBackdropFilter: 'blur(8px)',
-                backdropFilter: 'blur(8px)',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                border: '1px solid rgba(0,0,0,0.06)',
-                fontSize: 12,
-                color: 'rgba(0,0,0,0.55)',
-                zIndex: 10,
-                pointerEvents: 'auto',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                boxSizing: 'border-box',
-              }}
+              ref={timelineWrapRef}
+              style={{ width: '100%', minWidth: 0, flexShrink: 0 }}
             >
-              <div
-                ref={usageScrollRef}
-                className={styles.usageBarScroll}
-                onPointerDown={() => {
-                  usagePausedRef.current = true;
-                }}
-                style={{
-                  display: 'block',
-                  maxWidth: '100%',
-                  overflowX: usageHovered ? 'auto' : 'hidden',
-                  overflowY: 'hidden',
-                  whiteSpace: 'nowrap',
-                  textOverflow: usageHovered ? 'clip' : 'ellipsis',
-                  textAlign: usageHovered ? 'left' : 'center',
-                  cursor: usageHovered ? 'text' : 'default',
-                }}
-              >
-                {usageBaseText}
-                {showPromptCompletion && usagePromptPart}
-                {showPromptCompletion && usageCompletionPart}
-                {sessionCacheRate != null && (
-                  <span
-                    title={`${intl.formatMessage(
-                      {
-                        id: 'pages.chat.usage.cacheDetail',
-                        defaultMessage: 'Hit {hit} / miss {miss}',
-                      },
-                      {
-                        hit: formatTokens(sessionUsage.cacheHitTokens),
-                        miss: formatTokens(sessionUsage.cacheMissTokens),
-                      },
-                    )} · ${intl.formatMessage({
-                      id: 'pages.chat.sessionUsage.scope',
-                      defaultMessage:
-                        'Session total (incl. compaction/title/sub-agents)',
-                    })}`}
-                  >
-                    {usageCachePart}
-                  </span>
-                )}
-                {contextPercent != null && (
-                  <span
-                    title={`${formatTokens(sessionUsage.latestPromptTokens)} / ${formatTokens(currentRoute?.maxInputTokens)}`}
-                  >
-                    {usageContextPart}
-                  </span>
-                )}
-              </div>
-              <span
-                ref={usageFullMeasureRef}
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  visibility: 'hidden',
-                  whiteSpace: 'nowrap',
-                  pointerEvents: 'none',
-                  fontSize: 12,
-                  lineHeight: '18px',
-                }}
-              >
-                {usageFullText}
-              </span>
+              <TimelineList
+                rows={timeline}
+                hasMore={timelineHasMore}
+                onLoadOlder={onLoadOlderTimeline}
+                onRespondClarify={onRespondClarify}
+                onCancelClarification={(row: any) =>
+                  onCancelClarification?.({
+                    ...row,
+                    sessionId: currentSession?.id,
+                  })
+                }
+                loadSubAgentSteps={loadSubAgentSteps}
+                subAgentLive={subAgentLive}
+              />
             </div>
-          )}
-        </div>
-      ) : (
-        <div className={styles.footerCenter}>
-          <Footer {...footerProps} />
-        </div>
-      )}
-      {hasMessages && (
-        <div className={styles.footer}>
-          <Footer {...footerProps} />
-        </div>
-      )}
+            {sessionUsage &&
+              Number(sessionUsage.totalTokens) > 0 &&
+              !toolApprovalBatch &&
+              !clarificationBatch?.items?.length && (
+                <div
+                  ref={usageBarRef}
+                  onMouseEnter={handleUsageEnter}
+                  onMouseLeave={handleUsageLeave}
+                  style={{
+                    position: 'sticky',
+                    bottom: 8,
+                    marginTop: 8,
+                    alignSelf: 'center',
+                    maxWidth: 'min(720px, 100%)',
+                    width: usageCompact ? 'min(720px, 100%)' : 'fit-content',
+                    padding: '6px 16px',
+                    borderRadius: 999,
+                    background: 'rgba(255, 255, 255, 0.72)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    backdropFilter: 'blur(8px)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    border: '1px solid rgba(0,0,0,0.06)',
+                    fontSize: 12,
+                    color: 'rgba(0,0,0,0.55)',
+                    zIndex: 10,
+                    pointerEvents: 'auto',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <div
+                    ref={usageScrollRef}
+                    className={styles.usageBarScroll}
+                    onPointerDown={() => {
+                      usagePausedRef.current = true;
+                    }}
+                    style={{
+                      display: 'block',
+                      maxWidth: '100%',
+                      overflowX: usageHovered ? 'auto' : 'hidden',
+                      overflowY: 'hidden',
+                      whiteSpace: 'nowrap',
+                      textOverflow: usageHovered ? 'clip' : 'ellipsis',
+                      textAlign: usageHovered ? 'left' : 'center',
+                      cursor: usageHovered ? 'text' : 'default',
+                    }}
+                  >
+                    {usageBaseText}
+                    {showPromptCompletion && usagePromptPart}
+                    {showPromptCompletion && usageCompletionPart}
+                    {sessionCacheRate != null && (
+                      <span
+                        title={`${intl.formatMessage(
+                          {
+                            id: 'pages.chat.usage.cacheDetail',
+                            defaultMessage: 'Hit {hit} / miss {miss}',
+                          },
+                          {
+                            hit: formatTokens(sessionUsage.cacheHitTokens),
+                            miss: formatTokens(sessionUsage.cacheMissTokens),
+                          },
+                        )} · ${intl.formatMessage({
+                          id: 'pages.chat.sessionUsage.scope',
+                          defaultMessage:
+                            'Session total (incl. compaction/title/sub-agents)',
+                        })}`}
+                      >
+                        {usageCachePart}
+                      </span>
+                    )}
+                    {contextPercent != null && (
+                      <span
+                        title={`${formatTokens(sessionUsage.latestPromptTokens)} / ${formatTokens(currentRoute?.maxInputTokens)}`}
+                      >
+                        {usageContextPart}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    ref={usageFullMeasureRef}
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      visibility: 'hidden',
+                      whiteSpace: 'nowrap',
+                      pointerEvents: 'none',
+                      fontSize: 12,
+                      lineHeight: '18px',
+                    }}
+                  >
+                    {usageFullText}
+                  </span>
+                </div>
+              )}
+          </div>
+        ) : (
+          <div className={styles.footerCenter}>
+            <Footer {...footerProps} />
+          </div>
+        )}
+        {hasMessages && (
+          <div ref={footerRef} className={styles.footer}>
+            <Footer {...footerProps} />
+          </div>
+        )}
+        <ToolApprovalDrawer
+          open={!!toolApprovalBatch}
+          batch={toolApprovalBatch || null}
+          submitting={toolApprovalSubmitting}
+          bottomOffset={footerHeight}
+          onResolve={(decisions) => onResolveToolApproval?.(decisions)}
+        />
+        <ClarificationDrawer
+          open={!!clarificationBatch?.items?.length}
+          batch={clarificationBatch || null}
+          submitting={clarificationSubmitting}
+          bottomOffset={footerHeight}
+          onResolve={(answers) => onResolveClarifications?.(answers)}
+          onCancel={onCancelClarifications}
+        />
+      </div>
     </>
   );
 }

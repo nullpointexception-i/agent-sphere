@@ -33,6 +33,7 @@ public class TimelineRecorder {
     private final ConcurrentHashMap<Long, Long> assistantSeqByRun = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> toolSeqByRunStep = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> clarificationSeqByRun = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> approvalSeqByRun = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> runStatusSeqByRun = new ConcurrentHashMap<>();
     /** 压缩行：同一 publishId（= 一次压缩尝试）复用一行，终态后释放。 */
     private final ConcurrentHashMap<String, Long> compactionSeqByPublishId = new ConcurrentHashMap<>();
@@ -260,6 +261,26 @@ public class TimelineRecorder {
             }
         } catch (Exception e) {
             log.warn("Timeline clarification row failed: {}", e.getMessage());
+        }
+    }
+
+    public void recordToolApproval(Long sessionId, Long runId, String approvalId, Long refApprovalId,
+                                   String state, String title) {
+        if (runId == null || approvalId == null || approvalId.isBlank()) {
+            return;
+        }
+        try {
+            String key = runId + ":" + approvalId;
+            Long seq = approvalSeqByRun.get(key);
+            if (seq == null) {
+                seq = timelineSpi.recordApproval(sessionId, runId, TimelineKind.TOOL_APPROVAL.getCode(),
+                        state, state, title, runId, refApprovalId);
+                approvalSeqByRun.put(key, seq);
+            } else {
+                timelineSpi.update(sessionId, seq, state, null, title);
+            }
+        } catch (Exception e) {
+            log.warn("Timeline tool approval row failed: {}", e.getMessage());
         }
     }
 

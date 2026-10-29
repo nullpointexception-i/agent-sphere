@@ -25,6 +25,8 @@ public class RuntimeEventDataVO {
     private String status;
     private String assistantReply;
     private String artifact;
+    /** Whether this tool result is allowed to be compressed in live/history projection. */
+    private Boolean compressEnabled;
     private String reasoningType;
     private String reasoningSubType;
     private String publishId;
@@ -32,6 +34,8 @@ public class RuntimeEventDataVO {
     private Boolean firstFrame;
     private String screenshot;
     private String clarificationId;
+    /** Choice clarification: whether multiple options may be selected. */
+    private Boolean multiple;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
     /** 触发该子 Agent 的父工具调用 id（同批次并行子 Agent 共享，用于前端成组展示）。 */
@@ -42,4 +46,8 @@ public class RuntimeEventDataVO {
     private String kind;
     /** 压缩记录 id（CompactionStatus 事件携带；timeline 行据此回填 ref_compact_id）。 */
     private Long compactRecordId;
+    /** L2 tool approval id (drawer key). */
+    private String approvalId;
+    /** L2 tool approval calls JSON (toolCallId/toolName/displayName/action/arguments/scope). */
+    private String toolCallsJson;
 }

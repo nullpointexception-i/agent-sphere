@@ -26,6 +26,35 @@ export interface UsageData {
   cacheMissTokens?: number | null;
 }
 
+export interface ToolApprovalCall {
+  callId: string;
+  toolName: string;
+  displayName?: string;
+  action?: string;
+  arguments?: string;
+  approvalScope?: 'ONCE' | 'RUN' | 'SESSION';
+}
+
+export interface ToolApprovalBatch {
+  approvalId: string;
+  runId: number;
+  calls: ToolApprovalCall[];
+}
+
+export interface ClarificationItem {
+  clarificationId: string;
+  runId: number;
+  title?: string;
+  type?: string;
+  multiple?: boolean;
+  options?: string;
+}
+
+export interface ClarificationBatch {
+  runId: number;
+  items: ClarificationItem[];
+}
+
 export interface InstanceVO {
   id: number;
   name: string;
@@ -112,6 +141,9 @@ export interface TimelineRow {
     args?: string;
     artifact?: string;
     clarificationId?: string;
+    approvalId?: string;
+    decisions?: string;
+    toolCalls?: string;
     options?: string;
     response?: string;
     state?: string;

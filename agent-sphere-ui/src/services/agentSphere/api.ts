@@ -148,6 +148,11 @@ export const agentApi = {
         method: 'PUT',
         data: { title },
       }),
+    updateRunMode: (id: number, runMode: string) =>
+      request<any>(`${BASE}/instance/sessions/${id}/run-mode`, {
+        method: 'PUT',
+        data: { runMode },
+      }),
     updateSummary: (id: number, summary: string) =>
       request<void>(`${BASE}/instance/sessions/${id}/summary`, {
         method: 'PUT',
@@ -171,12 +176,13 @@ export const agentApi = {
       message: string,
       modelRouteId?: number,
       attachmentKeys?: string[],
+      runMode?: string,
     ) =>
       request<{ runId: number; status: string; assistantReply?: string }>(
         `${BASE}/runtime/${id}/chat`,
         {
           method: 'POST',
-          data: { message, modelRouteId, attachmentKeys },
+          data: { message, modelRouteId, attachmentKeys, runMode },
         },
       ),
     getTodos: (id: number) =>
@@ -202,6 +208,16 @@ export const agentApi = {
     clarify: (sessionId: number, runId: number, response: string, clarificationId?: string) =>
       request<any>(`${BASE}/runtime/${sessionId}/run/${runId}/clarify`, {
         method: 'POST', data: { response, clarificationId },
+      }),
+    pendingClarifications: (sessionId: number) =>
+      request<any[]>(`${BASE}/runtime/${sessionId}/clarifications/pending`),
+    resolveClarifications: (
+      sessionId: number,
+      runId: number,
+      answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+    ) =>
+      request<any>(`${BASE}/runtime/${sessionId}/run/${runId}/clarifications/resolve`, {
+        method: 'POST', data: { answers },
       }),
   },
 
@@ -269,6 +285,21 @@ export const agentApi = {
     ) =>
       request<{ points: any[]; hasMore: boolean }>(
         `${BASE}/instance/runs/${runId}/usage-series?sessionId=${sessionId}&afterId=${afterId}&limit=${limit}`,
+      ),
+  },
+
+  toolApprovals: {
+    pending: (sessionId: number) =>
+      request<any>(`${BASE}/runtime/${sessionId}/tool-approvals/pending`),
+    resolve: (
+      sessionId: number,
+      runId: number,
+      approvalId: string,
+      decisions: Array<{ callId: string; decision: string }>,
+    ) =>
+      request<void>(
+        `${BASE}/runtime/${sessionId}/run/${runId}/tool-approvals/${approvalId}`,
+        { method: 'POST', data: { decisions } },
       ),
   },
 

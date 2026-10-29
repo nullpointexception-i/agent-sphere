@@ -9,6 +9,7 @@ import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.orchestration.handler.TimelineRecorder;
 import com.buukle.agent.runtime.orchestration.orchestrator.RuntimeOrchestrator;
 import com.buukle.agent.runtime.orchestration.service.ChatAttachmentService;
@@ -27,6 +28,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -65,7 +67,7 @@ class ChatRuntimeServiceStopTest {
     @BeforeEach
     void setUp() {
         service = new ChatRuntimeService(orchestrator, runSpi, sessionSpi, eventPublisher,
-                clarificationMapper, sessionRunner, timelineRecorder, chatAttachmentService, pendingWaitSpi);
+                clarificationMapper, sessionRunner, timelineRecorder, chatAttachmentService, pendingWaitSpi, mock(ToolApprovalService.class));
         AuthContext.setSuperAdmin(true); // 跳过会话归属校验（本测试只关心停止逻辑）
         lenient().when(clarificationMapper.selectList(any())).thenReturn(List.of());
     }

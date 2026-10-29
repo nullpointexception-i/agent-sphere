@@ -69,6 +69,8 @@ Retention days and the kill switch for cleanup live in `agent_system_config` (`c
 | `live-browser-full-max-chars` | `20000` | Browser results up to this size are kept full; larger pages become `read_tool_result` references |
 | `compaction.budget-ratio` | `0.7` | Fallback compaction threshold (ratio of max input) when the merged sampling config has no output-token cap; with a cap the budget is `max_input - output_cap - margin` |
 | `compaction.target-ratio` | `0.55` | Post-compaction target (messages + tools + fixed) |
+| `compaction.adaptive-target-enabled` | `true` | Raise target when fixed overhead + tail exceeds the configured target |
+| `compaction.min-tail-tokens` | `2000` | Minimum tail reserve used by adaptive target |
 | `compaction.input-ratio` | `0.35` | Compaction input budget ratio |
 | `compaction.tail-ratio` | `0.25` | Run-local tail budget ratio |
 | `compaction.summary-max-tokens` | `4000` | Absolute summary cap |

@@ -16,6 +16,8 @@ public class AgentSession {
     @TableField("cached_in_redis")
     private Boolean cachedInRedis;
     private String status;
+    /** Session-level run mode preference: WRITE / READ_ONLY. */
+    private String runMode;
     private String summary;
     private LocalDateTime summaryUpdatedAt;
     private Long summaryModelRouteId;

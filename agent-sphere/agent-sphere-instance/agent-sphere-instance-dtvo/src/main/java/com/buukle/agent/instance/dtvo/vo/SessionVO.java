@@ -10,6 +10,7 @@ public class SessionVO implements Serializable {
     private String title;
     private Long agentInstanceId;
     private String status;
+    private String runMode;
     private String summary;
     private String summaryUpdatedAt;
     private Long summaryModelRouteId;

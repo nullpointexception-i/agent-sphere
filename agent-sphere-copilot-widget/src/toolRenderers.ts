@@ -34,7 +34,7 @@ export interface ToolContent {
 export type ToolFamily = 'todo' | 'doc' | 'other';
 
 const TODO_KEYWORD = /待办|todo/i;
-const DOC_KEYWORD = /文档|document|docwrite/i;
+const DOC_KEYWORD = /文档|document|docwrite|docread/i;
 
 function safeParseJson(s?: string): any {
   if (!s) return null;

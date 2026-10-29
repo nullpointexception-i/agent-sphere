@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 public sealed interface EventType
         permits RunStatus, ToolCallStatus, CompactionStatus,
         UserInLoopRecordStatus, FlowEventType, SessionStatus,
-        ChromeCommandEventType, ClarificationStatus {
+        ChromeCommandEventType, ClarificationStatus, ToolApprovalStatus {
     @JsonValue
     String value();
 }

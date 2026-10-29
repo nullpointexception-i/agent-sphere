@@ -7,7 +7,7 @@ import {
 } from '@ant-design/icons';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
-import { App, Button, DatePicker, Form, Input, Modal } from 'antd';
+import { App, Button, DatePicker, Form, Input, Modal, Select, Space, Switch, Tag } from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
@@ -56,6 +56,24 @@ export default function CliList() {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.accessMode',
+        defaultMessage: 'Policy',
+      }),
+      key: 'policy',
+      width: 220,
+      render: (_: any, r: any) => (
+        <Space size={4} wrap>
+          {r.compressEnabled ? <Tag color="blue">compress</Tag> : null}
+          <Tag>{r.accessMode || 'READ_WRITE'}</Tag>
+          <Tag color={r.securityLevel === 'L2' ? 'orange' : 'default'}>
+            {r.securityLevel || 'L1'}
+            {r.securityLevel === 'L2' ? ` / ${r.approvalScope || 'ONCE'}` : ''}
+          </Tag>
+        </Space>
+      ),
     },
     {
       title: intl.formatMessage({ id: 'pages.table.created' }),
@@ -341,6 +359,59 @@ export default function CliList() {
             )}
           >
             <Input.TextArea rows={6} maxLength={5000} />
+          </Form.Item>
+          <Form.Item
+            name="compressEnabled"
+            label={intl.formatMessage({
+              id: 'pages.capabilities.compressEnabled',
+              defaultMessage: 'Compress tool results',
+            })}
+            initialValue={false}
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="accessMode"
+            label={intl.formatMessage({
+              id: 'pages.capabilities.accessMode',
+              defaultMessage: 'Access mode',
+            })}
+            initialValue="READ_WRITE"
+          >
+            <Select
+              options={[
+                { value: 'READ', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.read', defaultMessage: 'Read' }) },
+                { value: 'WRITE', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.write', defaultMessage: 'Write' }) },
+                { value: 'READ_WRITE', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.readWrite', defaultMessage: 'Read/write' }) },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="securityLevel"
+            label={intl.formatMessage({
+              id: 'pages.capabilities.securityLevel',
+              defaultMessage: 'Security level',
+            })}
+            initialValue="L1"
+          >
+            <Select options={[{ value: 'L1', label: 'L1' }, { value: 'L2', label: 'L2' }]} />
+          </Form.Item>
+          <Form.Item
+            name="approvalScope"
+            label={intl.formatMessage({
+              id: 'pages.capabilities.approvalScope',
+              defaultMessage: 'L2 approval scope',
+            })}
+            initialValue="ONCE"
+          >
+            <Select
+              options={[
+                { value: 'SESSION', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.session', defaultMessage: 'Session' }) },
+                { value: 'RUN', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.run', defaultMessage: 'Run' }) },
+                { value: 'ONCE', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.once', defaultMessage: 'Once' }) },
+              ]}
+            />
           </Form.Item>
           <Form.Item
             name="workingDir"

@@ -121,14 +121,16 @@ buukle:
       live-tool-result-keep-recent: 2               # 非浏览器结果始终保留的最近条数 / Recent non-browser results kept
       live-browser-full-max-chars: 20000            # 浏览器单条结果保留全文的上限；超过才转 callId 引用 / Browser result full-text cap
       compaction:
-        budget-ratio: 0.7                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio
-        target-ratio: 0.55                         # 压缩后目标（含 tools/fixed）/ Post-compaction target
-        input-ratio: 0.35                          # 压缩输入预算比例 / Compaction input ratio
-        tail-ratio: 0.25                           # run-local tail 预算比例 / Run-local tail ratio
-        summary-max-tokens: 4000                   # 摘要绝对上限 / Summary absolute cap
-        summary-max-ratio: 0.12                    # 摘要上限占 maxInput 比例 / Summary cap ratio
-        cooldown-turns: 4                          # 压缩冷却轮数 / Compaction cooldown turns
-        max-per-run: 12                            # 单 run 压缩次数上限 / Max compactions per run
+        budget-ratio: 0.85                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio
+        target-ratio: 0.25                          # 压缩后目标（含 tools/fixed）/ Post-compaction target
+        adaptive-target-enabled: true               # 固定开销+tail 放不下 target 时自动抬高 / Adaptive target
+        min-tail-tokens: 2000                       # 自适应 target 至少为 tail 保留的 token / Min tail reserve
+        input-ratio: 0.35                           # 压缩输入预算比例 / Compaction input ratio
+        tail-ratio: 0.25                            # run-local tail 预算比例 / Run-local tail ratio
+        summary-max-tokens: 4000                    # 摘要绝对上限 / Summary absolute cap
+        summary-max-ratio: 0.12                     # 摘要上限占 maxInput 比例 / Summary cap ratio
+        cooldown-turns: 4                           # 压缩冷却轮数 / Compaction cooldown turns
+        max-per-run: 12                             # 单 run 压缩次数上限 / Max compactions per run
 
     # ============================================================
     # 工具执行配置 / Tool Config

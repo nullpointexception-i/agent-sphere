@@ -48,7 +48,8 @@ public final class LiveToolResultPolicy {
     }
 
     public static List<ChatMessageDTO> project(List<ChatMessageDTO> messages, int maxChars, int budgetChars,
-                                               int keepRecent, int browserFullMaxChars) {
+                                               int keepRecent, int browserFullMaxChars,
+                                               Map<String, Boolean> compressByTool) {
         if (messages == null || messages.isEmpty()) {
             return messages;
         }
@@ -80,16 +81,19 @@ public final class LiveToolResultPolicy {
                 continue;
             }
             String name = callNames.get(m.getToolCallId());
+            boolean compress = compressByTool != null && Boolean.TRUE.equals(compressByTool.get(name));
             if (isBrowserTool(name)) {
-                if (content.length() > browserFullMaxChars) {
+                if (compress && content.length() > browserFullMaxChars) {
                     m.setContent(browserReference(m.getToolCallId(), content));
                 }
                 continue;
             }
 
-            String compressed = isSkillLibraryTool(name)
-                    ? ToolResultCompressor.compressKeepArrays(content, maxChars)
-                    : ToolResultCompressor.compress(content, maxChars);
+            String compressed = !compress
+                    ? content
+                    : (isSkillLibraryTool(name)
+                        ? ToolResultCompressor.compressKeepArrays(content, maxChars)
+                        : ToolResultCompressor.compress(content, maxChars));
             if (keptNonBrowser < keepRecent) {
                 m.setContent(compressed);
                 keptNonBrowser++;

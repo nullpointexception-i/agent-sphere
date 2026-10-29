@@ -69,6 +69,15 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     }
 
     @Override
+    public SessionVO updateRunMode(Long id, String runMode) {
+        AgentSession session = getById(id);
+        if (session == null) throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);
+        session.setRunMode(com.buukle.agent.common.constant.RunMode.from(runMode).name());
+        updateById(session);
+        return sessionConverter.toVO(session);
+    }
+
+    @Override
     public List<SessionVO> listSessions(int offset, int limit, String keyword) {
         List<AgentSession> sessions = lambdaQuery()
                 .eq(AgentSession::getStatus, SessionEnum.STATUS_ACTIVE)

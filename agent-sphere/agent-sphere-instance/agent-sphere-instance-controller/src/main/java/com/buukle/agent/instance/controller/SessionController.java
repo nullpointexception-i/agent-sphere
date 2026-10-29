@@ -4,6 +4,7 @@ import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.dto.UpdateSessionDTO;
+import com.buukle.agent.instance.dtvo.dto.UpdateSessionRunModeDTO;
 import com.buukle.agent.instance.dtvo.dto.UpdateSummaryDTO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.service.SessionService;
@@ -44,6 +45,12 @@ public class SessionController extends BaseController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UpdateSessionDTO dto) {
         return ok(sessionService.updateSession(id, dto.getTitle()));
+    }
+
+    @PutMapping("/{id}/run-mode")
+    public ResponseEntity<?> updateRunMode(@PathVariable Long id,
+                                           @Valid @RequestBody UpdateSessionRunModeDTO dto) {
+        return ok(sessionService.updateRunMode(id, dto.getRunMode()));
     }
 
     @PutMapping("/{id}/summary")

@@ -1,10 +1,23 @@
 import {
   ArrowRightOutlined,
+  BulbOutlined,
+  CheckCircleOutlined,
   CheckOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
   CloseOutlined,
   CopyOutlined,
   DownOutlined,
+  FileTextOutlined,
+  LoadingOutlined,
+  MessageOutlined,
+  PauseCircleOutlined,
   RightOutlined,
+  RobotOutlined,
+  SafetyCertificateOutlined,
+  StopOutlined,
+  SyncOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
@@ -53,24 +66,29 @@ const KIND_LABEL: Record<string, string> = {
   assistant: '助手',
   tool: '工具',
   clarification: '澄清',
+  tool_approval: '工具授权',
   subagent: '子 Agent',
   compaction: '压缩',
   run_status: '状态',
   error: '错误',
 };
 
-// finish 是内部协议工具（builtin_12）：答案已作为助手正文展示，工具行不再渲染（主站/widget 两端一致）。
+// 内部协议工具：finish 的答案已作为助手正文展示，ask_clarification 由澄清行展示。
 const FINISH_TOOL_NAME = 'builtin_12';
+const ASK_CLARIFICATION_TOOL_NAME = 'builtin_7';
 
-function isFinishToolRow(row: any): boolean {
+function isInternalToolRow(row: any): boolean {
   if (!row || row.kind !== 'tool') {
     return false;
   }
   const content = row.content;
   return (
     content?.toolName === FINISH_TOOL_NAME ||
+    content?.toolName === ASK_CLARIFICATION_TOOL_NAME ||
     content?.displayName === '完成任务' ||
-    content?.displayName === 'Finish'
+    content?.displayName === 'Finish' ||
+    content?.displayName === '请求澄清' ||
+    content?.displayName === 'Ask Clarification'
   );
 }
 
@@ -406,7 +424,7 @@ function DocCard({ content }: { content: any }) {
   return (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 12, opacity: 0.7 }}>📄</span>
+        <FileTextOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
         <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
           文档操作
         </Typography.Text>
@@ -455,7 +473,7 @@ function GenericCard({
   return (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 12, opacity: 0.7 }}>🛠️</span>
+        <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
         <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
           {displayName}
         </Typography.Text>
@@ -491,6 +509,10 @@ function GenericCard({
 
 function ToolCard({ row }: any) {
   const content = row.content || {};
+  if (content.toolName === 'builtin_13' || content.displayName === '当前时间'
+      || content.displayName === 'Current Time') {
+    return <CurrentTimeCard content={content} state={row.state} />;
+  }
   const family = toolFamily(content, content.displayName);
   const name = content.displayName || row.title || 'tool';
   // 「委派子 Agent」工具调用在下方已由 SubAgentCard 完整展示，顶部标题行冗余，隐藏。
@@ -509,7 +531,7 @@ function ToolCard({ row }: any) {
     <div>
       {!hideTitleRow && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, opacity: 0.7 }}>🛠️</span>
+          <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
           <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
             {name}
           </Typography.Text>
@@ -535,86 +557,156 @@ function ToolCard({ row }: any) {
   );
 }
 
-function ClarificationCard({
-  row,
-  onRespondClarify,
-  onCancelClarification,
-}: any) {
+function CurrentTimeCard({ content, state }: any) {
+  let time = '';
+  let timezone = '';
+  try {
+    const artifact = content.artifact ? JSON.parse(content.artifact) : null;
+    time = typeof artifact?.time === 'string' ? artifact.time : '';
+    timezone = typeof artifact?.timezone === 'string' ? artifact.timezone : '';
+  } catch {
+    // ignore malformed artifact
+  }
+  const display = time
+    ? time.replace('T', ' ').replace(/([+-]\d{2}:\d{2})$/, '').slice(0, 16)
+    : '';
+  return (
+    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <ClockCircleOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
+      <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
+        当前时间
+      </Typography.Text>
+      {display && (
+        <>
+          <Typography.Text type="secondary">·</Typography.Text>
+          <Typography.Text style={{ fontSize: 12 }}>{display}</Typography.Text>
+        </>
+      )}
+      {timezone && (
+        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+          {timezone}
+        </Typography.Text>
+      )}
+      <StateTag state={state} small />
+    </div>
+  );
+}
+
+const APPROVAL_DECISION_LABEL: Record<string, string> = {
+  ALLOW_ONCE: '允许一次',
+  ALLOW_RUN: '本次消息内允许',
+  ALLOW_SESSION: '本次会话内允许',
+  DENY: '拒绝',
+};
+
+function parseJsonArray(raw?: string): any[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function ToolApprovalCard({ row }: any) {
   const content = row.content || {};
-  const [text, setText] = useState('');
-  const options = (() => {
-    try {
-      const parsed = JSON.parse(content.options || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  })();
-  // clarificationId 只存在于 content 里（后端 AgentTimelineServiceImpl 组装 content 时写入）。
-  // 顶层 row 上没有这个字段 —— 两个回调都必须用同一个来源，否则本地保护键与 API 调用
-  // 用的 id 可能不一致，导致乐观态防回退失效。
-  const clarificationId = content.clarificationId;
-  const respond = (value: string) => {
-    const v = String(value ?? '').trim();
-    if (!v) return;
-    onRespondClarify?.({ runId: row.runId, clarificationId }, v);
-    setText('');
-  };
-  const cancel = () =>
-    onCancelClarification?.({ runId: row.runId, clarificationId });
+  const calls = parseJsonArray(content.toolCalls);
+  const decisions = parseJsonArray(content.decisions);
+  const byCall = new Map<string, string>();
+  for (const d of decisions) {
+    if (d?.callId) byCall.set(String(d.callId), String(d.decision || 'DENY'));
+  }
   return (
     <div>
-      <Typography.Text strong>
-        {content.title || row.title || '澄清'}
-      </Typography.Text>
-      <StateTag state={row.state} />
-      <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {row.state === 'PENDING' ? (
-          <>
-            {options.length === 0 && (
-              <Button size="small" onClick={() => respond('confirmed')}>
-                确认
-              </Button>
-            )}
-            {options.map((o: any) => (
-              <Button
-                key={String(o.value ?? o.label ?? o.title)}
-                size="small"
-                onClick={() => respond(o.value ?? o.label)}
-              >
-                {o.label || o.value}
-              </Button>
-            ))}
-            <Input.TextArea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="输入澄清内容…"
-              autoSize={{ minRows: 2, maxRows: 4 }}
-              style={{ marginTop: 6 }}
-            />
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <Button
-                type="primary"
-                size="small"
-                disabled={!text.trim()}
-                onClick={() => respond(text)}
-              >
-                提交
-              </Button>
-              {onCancelClarification && (
-                <Button size="small" onClick={cancel}>
-                  取消
-                </Button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <SafetyCertificateOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
+        <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
+          {content.text || row.title || '工具授权'}
+        </Typography.Text>
+        <StateTag state={row.state} />
+      </div>
+      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {calls.map((call: any, index: number) => {
+          const decision = byCall.get(String(call.callId));
+          return (
+            <div key={String(call.callId || index)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
+              <Typography.Text style={{ fontSize: 12 }}>
+                {call.displayName || call.toolName || '工具'}
+                {call.action ? ` · ${call.action}` : ''}
+              </Typography.Text>
+              {decision ? (
+                <Tag color={decision === 'DENY' ? 'red' : 'blue'} style={{ margin: 0 }}>
+                  {APPROVAL_DECISION_LABEL[decision] || decision}
+                </Tag>
+              ) : (
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                  等待处理
+                </Typography.Text>
               )}
             </div>
-          </>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ClarificationCard({ row }: any) {
+  const content = row.content || {};
+  const options = parseJsonArray(content.options);
+  const labelOf = (value: string) => {
+    const hit = options.find((o: any) => String(o?.value ?? o?.label) === value);
+    return hit?.label ? String(hit.label) : value;
+  };
+  let selected: string[] = [];
+  let text = '';
+  if (content.response) {
+    try {
+      const parsed = JSON.parse(String(content.response));
+      if (parsed && typeof parsed === 'object') {
+        selected = Array.isArray(parsed.selected) ? parsed.selected.map(String) : [];
+        text = typeof parsed.text === 'string' ? parsed.text : '';
+      } else {
+        text = String(content.response);
+      }
+    } catch {
+      text = String(content.response);
+    }
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <MessageOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
+        <Typography.Text strong>
+          {content.title || row.title || '澄清'}
+        </Typography.Text>
+        <StateTag state={row.state} />
+      </div>
+      <div style={{ marginTop: 6 }}>
+        {row.state === 'PENDING' ? (
+          <Typography.Text type="secondary">
+            请在底部浮层中作答
+          </Typography.Text>
+        ) : content.response === '__dismissed__' || row.state === 'CANCELLED' ? (
+          <Typography.Text type="secondary">已取消</Typography.Text>
         ) : (
-          <>
-            <Typography.Text type="secondary">已应答</Typography.Text>
-            {content.response && (
-              <Typography.Text>{String(content.response)}</Typography.Text>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {selected.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {selected.map((value) => (
+                  <Tag key={value} color="blue" style={{ margin: 0 }}>
+                    {labelOf(value)}
+                  </Tag>
+                ))}
+              </div>
             )}
-          </>
+            {text && <Typography.Text>{text}</Typography.Text>}
+            {selected.length === 0 && !text && (
+              <Typography.Text type="secondary">已应答</Typography.Text>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -632,7 +724,7 @@ function SubAgentLlmItem({ s }: any) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>🧠</span>
+        <BulbOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>模型推理</Typography.Text>
         {s.modelName && (
           <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>
@@ -685,7 +777,7 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>🛠️</span>
+        <ToolOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>
           {s.displayNameCn || s.displayNameEn || s.toolName || '工具'}
         </Typography.Text>
@@ -822,7 +914,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>⚙️</span>
+        <RobotOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>
           {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
             '子 Agent'}
@@ -830,7 +922,8 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
         <StateTag state={row.state} />
         {open && isRunning && (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            ⟳ 实时更新中
+            <LoadingOutlined spin style={{ fontSize: 11, marginRight: 4 }} />
+            实时更新中
           </Typography.Text>
         )}
       </div>
@@ -1073,11 +1166,11 @@ function RowCard({
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
           {running ? (
-            '⟳'
+            <LoadingOutlined spin style={{ fontSize: 12 }} />
           ) : failed ? (
             <CloseOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
           ) : (
-            '🔄'
+            <SyncOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
           )}{' '}
           {row.title || '上下文压缩'}
         </Divider>
@@ -1127,11 +1220,15 @@ function RowCard({
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
           {row.state === 'RUNNING' ? (
-            '⟳'
+            <LoadingOutlined spin style={{ fontSize: 12 }} />
           ) : isRunFailed ? (
-            <CloseOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
+            <CloseCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
+          ) : row.state === 'AWAITING_USER' ? (
+            <PauseCircleOutlined style={{ fontSize: 12 }} />
+          ) : row.state === 'CANCELLED' ? (
+            <StopOutlined style={{ fontSize: 12 }} />
           ) : (
-            '•'
+            <CheckCircleOutlined style={{ fontSize: 12 }} />
           )}{' '}
           {parts.join(' · ')}
         </Divider>
@@ -1154,6 +1251,8 @@ function RowCard({
         return <AssistantCard row={row} />;
       case 'tool':
         return <ToolCard row={row} />;
+      case 'tool_approval':
+        return <ToolApprovalCard row={row} />;
       case 'clarification':
         return (
           <ClarificationCard
@@ -1271,7 +1370,7 @@ export default function TimelineList({
       { type: 'row'; row: any } | { type: 'group'; key: string; members: any[] }
     > = [];
     for (const r of rows) {
-      if (isFinishToolRow(r)) {
+      if (isInternalToolRow(r)) {
         continue;
       }
       const k = parallelGroupKey(r);

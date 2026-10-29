@@ -385,6 +385,20 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 - 前端两侧同步：widget 读 `allowWidgetSession`（只认严格 `true`，对齐列默认 FALSE）；
   主站读 `allowConsoleSession`，关闭时禁用发送并提示。**服务端才是强约束**，前端只为体验一致。
 
+## Capability tool policy / run mode
+
+- MCP / CLI 定义表（`capability_mcp` / `capability_cli`）持有 `compress_enabled`、`access_mode`
+  (`READ/WRITE/READ_WRITE`)、`security_level` (`L1/L2`)、`approval_scope` (`SESSION/RUN/ONCE`)；
+  builtin 默认值在 `BuiltinToolEnum`。实例绑定只继承，不再存一份。
+- `agent_session.run_mode` 持久化 `WRITE/READ_ONLY`；新 run 创建时快照到 `agent_run.run_mode`。
+  READ_ONLY 下：READ 允许；WRITE 拒绝；MCP/CLI READ_WRITE 允许；builtin READ_WRITE（浏览器）按 action
+  放行读动作（含 navigate/scroll/hover），拒绝 click/type/executeJS 等写动作；TODOWRITE/FINISH/
+  ASK_CLARIFICATION/WAIT 始终允许。
+- L2 独立于读写属性：执行前批量询问用户；`SESSION/RUN` 首次批准后授权持久化，`ONCE` 每次询问。
+  审批走独立 `agent_tool_approval` + `agent_tool_approval_grant(status)`，前端是底部 Tabs 抽屉，
+  **不再复用 clarification/timeline**；用户可逐 call 选择 deny/once/run/session。
+- `compress_enabled` 只约束 live/history 工具结果；compaction 摘要仍按预算截断。
+
 ## 新增内置工具（builtin tool）
 
 一个内置工具 = 一个独立 maven 模块 + `@Component implements CapabilityBuiltinToolSpi`。
@@ -592,7 +606,9 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
 - 压缩调用必须 `thinking=disabled`（`callLLM` 在 `applyGlobal` 后覆盖）：全局 thinking=true 会把 4k 输出预算耗在
   reasoning 上，线上出现 completion=4000、reasoning 5–11k、content 为空（记录 FAILED）。
 - 压缩策略：`target-ratio=0.55`、`input-ratio=0.35`、`tail-ratio=0.25`、`summary-max-tokens=4000`、
-  `cooldown-turns=4`、`max-per-run=12`；fixed+tools+summary 已超 target 时返回 NO_PROGRESS，不写成功记录。
+  `cooldown-turns=4`、`max-per-run=12`；target 支持自适应（`adaptive-target-enabled`）：当
+  `fixed + tail` 超过配置 target 时自动抬高，且不超过触发预算减去 headroom；仍不可行才返回 NO_PROGRESS。
+  `min-tail-tokens` 是自适应 target 的 tail 兜底。
 - live 工具结果预算：`LiveToolResultPolicy` 只投影**请求副本**，不修改 canonical `messages`；canonical 保留完整
   工具结果，run-local 压缩/挂起快照才能看到原文。非浏览器单条 4k、总 50k、最近 2 条保留；浏览器结果
   默认保留全文，仅单条超过 `live-browser-full-max-chars`（默认 20k 字符，大页面）时替换为带 `callId`

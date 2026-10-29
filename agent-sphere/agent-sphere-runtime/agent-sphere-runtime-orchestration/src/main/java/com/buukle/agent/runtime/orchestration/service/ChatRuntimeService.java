@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.orchestration.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.error.CommonErrorCode;
@@ -8,12 +9,15 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
+import com.buukle.agent.instance.dtvo.dto.ResolveClarificationsDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
+import com.buukle.agent.instance.dtvo.vo.ClarificationVO;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.ToolApprovalVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.PendingWaitSpi;
@@ -29,17 +33,22 @@ import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
+import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.orchestrator.RuntimeOrchestrator;
 import com.buukle.agent.runtime.orchestration.handler.TimelineRecorder;
 import com.buukle.agent.util.TextSanitizer;
+import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -56,6 +65,7 @@ public class ChatRuntimeService {
     private final ChatAttachmentService chatAttachmentService;
     /** 停止 WAITING 停车态的 run 时，取消其名下未唤醒的挂起记录，避免 waker 恢复已停止的 run。 */
     private final PendingWaitSpi pendingWaitSpi;
+    private final ToolApprovalService toolApprovalService;
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
@@ -87,8 +97,11 @@ public class ChatRuntimeService {
         // 任务路径是服务端内部调用、不携带来源，SessionSurfaceHolder.current() 返回 INTERNAL → 放行。
         sessionSpi.assertSurfaceAllowed(sessionId);
         sessionSpi.touchSession(sessionId);
+        SessionVO session = sessionSpi.getSession(sessionId);
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);
+        createRunDTO.setRunMode(RunMode.from(
+                dto.getRunMode() != null ? dto.getRunMode() : session.getRunMode()).name());
         createRunDTO.setUserMessage(TextSanitizer.sanitize(dto.getMessage()));
         createRunDTO.setType(RunEnum.TYPE_AUTO);
         createRunDTO.setNoClarification(dto.getNoClarification());
@@ -329,6 +342,8 @@ public class ChatRuntimeService {
         pending.setUserResponse(response);
         clarificationMapper.updateById(pending);
 
+        String resumeText = ChatClarification.CLARIFICATION_RESUME_PREFIX + response;
+
         // Notify frontend which clarification was responded and with what text
         eventPublisher.publishEvent(new RuntimeEventVO(
                 ClarificationStatus.RESPONDED,
@@ -346,8 +361,7 @@ public class ChatRuntimeService {
             originalRun.setStatus(RunStatus.RUNNING.name());
             runSpi.updateRun(originalRun);
             log.info("Clarification resume: reusing runId={} for session={}", runId, sessionId);
-            orchestrator.asyncHandleUserMessage(originalRun, sessionId,
-                    ChatClarification.CLARIFICATION_RESUME_PREFIX + response, null, true);
+            orchestrator.asyncHandleUserMessage(originalRun, sessionId, resumeText, null, true);
 
             ChatMessageResponseVO result = new ChatMessageResponseVO();
             result.setRunId(runId);
@@ -356,10 +370,12 @@ public class ChatRuntimeService {
         }
 
         // Fork — create a new run
+        SessionVO session = sessionSpi.getSession(sessionId);
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);
         createRunDTO.setUserMessage(ChatClarification.CLARIFICATION_RESUME_PREFIX + response);
         createRunDTO.setType(RunEnum.TYPE_AUTO);
+        createRunDTO.setRunMode(RunMode.from(session.getRunMode()).name());
         RunVO run = runSpi.createRun(createRunDTO);
         log.info("Clarification fork: new runId={} for session={} from previous runId={}", run.getId(), sessionId, runId);
 
@@ -370,12 +386,180 @@ public class ChatRuntimeService {
                         .setRunId(run.getId())
                         .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
 
-        orchestrator.asyncHandleUserMessage(run, sessionId, ChatClarification.CLARIFICATION_RESUME_PREFIX + response, null, true);
+        orchestrator.asyncHandleUserMessage(run, sessionId, resumeText, null, true);
 
         ChatMessageResponseVO result = new ChatMessageResponseVO();
         result.setRunId(run.getId());
         result.setStatus(ChatConstant.RESPONSE_STATUS_PROCESSING);
         return result;
+    }
+
+    public List<ClarificationVO> pendingClarifications(Long sessionId) {
+        assertSessionOwnership(sessionId);
+        List<AgentPendingClarification> rows = clarificationMapper.selectList(
+                new LambdaQueryWrapper<AgentPendingClarification>()
+                        .eq(AgentPendingClarification::getSessionId, sessionId)
+                        .isNull(AgentPendingClarification::getUserResponse)
+                        .orderByAsc(AgentPendingClarification::getCreatedAt));
+        RunVO active = runSpi.findActiveRun(sessionId);
+        if (active != null) {
+            rows = rows.stream()
+                    .filter(row -> active.getId().equals(row.getRunId()))
+                    .toList();
+        }
+        List<ClarificationVO> out = new ArrayList<>();
+        for (AgentPendingClarification row : rows) {
+            ClarificationVO vo = new ClarificationVO();
+            vo.setClarificationId(row.getClarificationId());
+            vo.setRunId(row.getRunId());
+            vo.setSessionId(row.getSessionId());
+            vo.setMessageId(row.getMessageId());
+            vo.setTitle(row.getTitle());
+            vo.setType(row.getType());
+            vo.setMultiple(Boolean.TRUE.equals(row.getMultiple()));
+            vo.setOptions(row.getOptions());
+            vo.setStatus("pending");
+            out.add(vo);
+        }
+        return out;
+    }
+
+    public ChatMessageResponseVO resolveClarifications(Long sessionId, Long runId,
+                                                       ResolveClarificationsDTO dto) {
+        assertSessionOwnership(sessionId);
+        List<AgentPendingClarification> pending = clarificationMapper.selectList(
+                new LambdaQueryWrapper<AgentPendingClarification>()
+                        .eq(AgentPendingClarification::getRunId, runId)
+                        .isNull(AgentPendingClarification::getUserResponse)
+                        .orderByAsc(AgentPendingClarification::getCreatedAt));
+        if (pending.isEmpty()) {
+            return processingResponse(runId);
+        }
+        Map<String, ResolveClarificationsDTO.Answer> answers = new LinkedHashMap<>();
+        if (dto != null && dto.getAnswers() != null) {
+            for (ResolveClarificationsDTO.Answer answer : dto.getAnswers()) {
+                if (answer != null && answer.getClarificationId() != null) {
+                    answers.put(answer.getClarificationId(), answer);
+                }
+            }
+        }
+        for (AgentPendingClarification row : pending) {
+            ResolveClarificationsDTO.Answer answer = answers.get(row.getClarificationId());
+            if (answer == null || (isEmpty(answer.getSelected())
+                    && (answer.getText() == null || answer.getText().isBlank()))) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "Every pending clarification must be answered");
+            }
+        }
+
+        StringBuilder resumeText = new StringBuilder(ChatClarification.CLARIFICATION_RESUME_PREFIX);
+        for (AgentPendingClarification row : pending) {
+            ResolveClarificationsDTO.Answer answer = answers.get(row.getClarificationId());
+            String responseJson = answerJson(answer);
+            row.setUserResponse(responseJson);
+            clarificationMapper.updateById(row);
+            eventPublisher.publishEvent(new RuntimeEventVO(
+                    ClarificationStatus.RESPONDED,
+                    new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(runId)
+                            .setClarificationId(row.getClarificationId())
+                            .setMultiple(Boolean.TRUE.equals(row.getMultiple()))
+                            .setResponse(answerText(answer))));
+            resumeText.append("\nQ: ").append(row.getTitle() == null ? "" : row.getTitle())
+                    .append("\nA: ").append(answerText(answer));
+        }
+        sessionSpi.touchSession(sessionId);
+        return resumeRunWithText(sessionId, runId, resumeText.toString());
+    }
+
+    private ChatMessageResponseVO resumeRunWithText(Long sessionId, Long runId, String resumeText) {
+        RunVO originalRun = runSpi.getRun(runId);
+        if (originalRun != null && RunStatus.AWAITING_USER.name().equals(originalRun.getStatus())) {
+            originalRun.setStatus(RunStatus.RUNNING.name());
+            runSpi.updateRun(originalRun);
+            orchestrator.asyncHandleUserMessage(originalRun, sessionId, resumeText, null, true);
+            return processingResponse(runId);
+        }
+
+        SessionVO session = sessionSpi.getSession(sessionId);
+        CreateRunDTO createRunDTO = new CreateRunDTO();
+        createRunDTO.setSessionId(sessionId);
+        createRunDTO.setUserMessage(resumeText);
+        createRunDTO.setType(RunEnum.TYPE_AUTO);
+        createRunDTO.setRunMode(RunMode.from(session.getRunMode()).name());
+        RunVO run = runSpi.createRun(createRunDTO);
+        eventPublisher.publishEvent(new RuntimeEventVO(
+                RunStatus.PENDING,
+                new RuntimeEventDataVO()
+                        .setSessionId(sessionId)
+                        .setRunId(run.getId())
+                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
+        orchestrator.asyncHandleUserMessage(run, sessionId, resumeText, null, true);
+        return processingResponse(run.getId());
+    }
+
+    private static ChatMessageResponseVO processingResponse(Long runId) {
+        ChatMessageResponseVO result = new ChatMessageResponseVO();
+        result.setRunId(runId);
+        result.setStatus(ChatConstant.RESPONSE_STATUS_PROCESSING);
+        return result;
+    }
+
+    private static boolean isEmpty(List<String> values) {
+        return values == null || values.isEmpty();
+    }
+
+    private static String answerJson(ResolveClarificationsDTO.Answer answer) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("selected", answer.getSelected() == null ? List.of() : answer.getSelected());
+        payload.put("text", answer.getText() == null ? "" : answer.getText());
+        return JsonUtils.toJson(payload);
+    }
+
+    private static String answerText(ResolveClarificationsDTO.Answer answer) {
+        String selected = answer.getSelected() == null ? "" : String.join(", ", answer.getSelected());
+        String text = answer.getText() == null ? "" : answer.getText().trim();
+        if (selected.isBlank()) return text;
+        if (text.isBlank()) return selected;
+        return selected + "; " + text;
+    }
+
+    public com.buukle.agent.instance.dtvo.vo.ToolApprovalVO pendingToolApproval(Long sessionId) {
+        assertSessionOwnership(sessionId);
+        return toolApprovalService.getPending(sessionId);
+    }
+
+    public void resolveToolApproval(Long sessionId, Long runId, String approvalId, String decisionsJson) {
+        assertSessionOwnership(sessionId);
+        ToolApprovalVO approval = toolApprovalService.getByApprovalId(approvalId);
+        if (approval == null
+                || !runId.equals(approval.getRunId())
+                || !sessionId.equals(approval.getSessionId())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "Tool approval not found");
+        }
+        if ("PENDING".equals(approval.getStatus())) {
+            if (!toolApprovalService.resolve(sessionId, runId, approvalId, decisionsJson)) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "Tool approval is not pending or decisions are invalid");
+            }
+        } else if (!"APPROVED".equals(approval.getStatus())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "Tool approval is already closed");
+        }
+
+        RunVO run = runSpi.getRun(runId);
+        if (run != null && RunStatus.AWAITING_USER.name().equals(run.getStatus())) {
+            run.setStatus(RunStatus.RUNNING.name());
+            runSpi.updateRun(run);
+            orchestrator.asyncResumeToolApproval(run, sessionId, approvalId);
+        }
+    }
+
+    private static boolean isApprovalResponse(String response) {
+        if (response == null) return false;
+        String v = response.trim().toLowerCase(java.util.Locale.ROOT);
+        return v.equals("allow") || v.equals("approve") || v.equals("approved")
+                || v.equals("yes") || v.equals("允许") || v.equals("确认");
     }
 
     /**
@@ -385,7 +569,6 @@ public class ChatRuntimeService {
     public void stopSession(Long sessionId) {
         assertSessionOwnership(sessionId);
         sessionRunner.cancelSession(sessionId);
-
         RunVO active = runSpi.findActiveRun(sessionId);
         if (active == null) {
             // 无活动 run：清除标志，避免误杀之后新发起的 run；
@@ -403,6 +586,7 @@ public class ChatRuntimeService {
             // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止；同时写 run 级取消键兜底，
             // 避免“session 键被收口清空早于被中断的子 Agent 回收”造成子 Agent 空窗续跑。
             sessionRunner.cancelRun(active.getId());
+            toolApprovalService.cancelByRunId(active.getId());
         }
         // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止，收口处消费标志并发布终态
     }
@@ -440,6 +624,7 @@ public class ChatRuntimeService {
             if (cancelledWaits > 0) {
                 log.info("Stop run {}: cancelled {} pending wait record(s)", runId, cancelledWaits);
             }
+            toolApprovalService.cancelByRunId(runId);
 
             eventPublisher.publishEvent(new RuntimeEventVO(
                     RunStatus.CANCELLED,
@@ -450,6 +635,7 @@ public class ChatRuntimeService {
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
         } else {
             sessionRunner.cancelRun(runId);
+            toolApprovalService.cancelByRunId(runId);
         }
     }
 

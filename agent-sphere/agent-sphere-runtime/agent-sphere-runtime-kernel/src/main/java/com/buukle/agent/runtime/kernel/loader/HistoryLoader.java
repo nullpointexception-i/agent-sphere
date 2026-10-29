@@ -331,7 +331,9 @@ public class HistoryLoader {
         } else if (overBudget.contains(c.getId())) {
             result = RunnerConstants.TOOL_RESULT_BUDGET_OMITTED;
         } else if (ToolCallRecordStatus.SUCCEEDED.name().equals(c.getStatus())) {
-            result = c.getCompressedArtifact() != null ? c.getCompressedArtifact() : "";
+            result = c.getCompressedArtifact() != null
+                    ? c.getCompressedArtifact()
+                    : (c.getArtifact() != null ? c.getArtifact() : "");
         } else {
             result = c.getErrorMessage() != null
                     ? "{\"error\":\"" + c.getErrorMessage() + "\"}"

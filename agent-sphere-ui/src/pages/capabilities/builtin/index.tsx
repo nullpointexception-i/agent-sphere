@@ -1,6 +1,6 @@
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
-import { Modal } from 'antd';
+import { Modal, Space, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 
@@ -45,6 +45,26 @@ export default function BuiltinList() {
       dataIndex: 'name',
       key: 'name',
       render: (_: any, record: any) => localizedName(record),
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.accessMode',
+        defaultMessage: 'Policy',
+      }),
+      key: 'policy',
+      width: 220,
+      render: (_: any, record: any) => (
+        <Space size={4} wrap>
+          {record.compressEnabled ? <Tag color="blue">compress</Tag> : null}
+          <Tag>{record.accessMode || 'READ_WRITE'}</Tag>
+          <Tag color={record.securityLevel === 'L2' ? 'orange' : 'default'}>
+            {record.securityLevel || 'L1'}
+            {record.securityLevel === 'L2'
+              ? ` / ${record.approvalScope || 'ONCE'}`
+              : ''}
+          </Tag>
+        </Space>
+      ),
     },
     {
       title: intl.formatMessage({ id: 'pages.capabilities.paramSchema' }),

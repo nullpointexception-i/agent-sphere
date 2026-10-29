@@ -16,7 +16,9 @@ public class ClarificationVO implements Serializable {
     private Long messageId;
     private String title;
     private String type;
+    private Boolean multiple;
     private String options;
+    private String toolCallsJson;
     private String userResponse;
     private String status;
 }

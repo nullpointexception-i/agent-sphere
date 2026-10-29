@@ -25,6 +25,8 @@ import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
 import Landing from './components/Landing';
 import SessionPanel from './components/SessionPanel';
+import type { ClarificationBatch } from './components/ClarificationDrawer';
+import type { ToolApprovalBatch } from './components/ToolApprovalDrawer';
 import { SESSION_USAGE_REFRESH_EVENT } from './components/Usage';
 import Sidebar from './components/Sidebar';
 import { useStyles } from './style';
@@ -78,6 +80,11 @@ export default function Chat() {
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sseConnected, setSseConnected] = useState(false);
   const [sessionUsage, setSessionUsage] = useState<any>(null);
+  const [runMode, setRunMode] = useState<'WRITE' | 'READ_ONLY'>('WRITE');
+  const [toolApprovalBatch, setToolApprovalBatch] = useState<ToolApprovalBatch | null>(null);
+  const [toolApprovalSubmitting, setToolApprovalSubmitting] = useState(false);
+  const [clarificationBatch, setClarificationBatch] = useState<ClarificationBatch | null>(null);
+  const [clarificationSubmitting, setClarificationSubmitting] = useState(false);
   const [instances, setInstances] = useState<any[]>([]);
   const [chosenInstance, setChosenInstance] = useState('');
   const [currentInstanceObj, setCurrentInstanceObj] = useState<any>(null);
@@ -354,6 +361,10 @@ export default function Chat() {
       if (!last) return;
       const st = String(last.state || '');
       setSending(st === 'RUNNING' || st === 'PENDING' || st === 'WAITING');
+      if (st === 'AWAITING_USER') {
+        void refreshPendingToolApproval(sid);
+        void refreshPendingClarifications(sid);
+      }
     } catch {
       /* ignore */
     }
@@ -389,6 +400,34 @@ export default function Chat() {
   useEffect(() => {
     if (currentSession?.id) void refreshSessionUsage(currentSession.id);
   }, [currentSession?.id]);
+
+  useEffect(() => {
+    setRunMode(currentSession?.runMode === 'READ_ONLY' ? 'READ_ONLY' : 'WRITE');
+    setToolApprovalBatch(null);
+  }, [currentSession?.id, currentSession?.runMode]);
+
+  const handleRunModeChange = async (mode: 'WRITE' | 'READ_ONLY') => {
+    setRunMode(mode);
+    if (!currentSession?.id) return;
+    try {
+      const updated = await agentApi.sessions.updateRunMode(
+        currentSession.id,
+        mode,
+      );
+      setCurrentSession((prev: any) =>
+        prev?.id === currentSession.id
+          ? { ...prev, runMode: updated?.runMode || mode }
+          : prev,
+      );
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === currentSession.id ? { ...s, runMode: updated?.runMode || mode } : s,
+        ),
+      );
+    } catch {
+      // keep local toggle; next session reload restores server value
+    }
+  };
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -589,6 +628,148 @@ export default function Chat() {
     }
   }, []);
 
+  const parseToolApproval = useCallback((payload: any): ToolApprovalBatch | null => {
+    if (!payload?.approvalId || !payload?.toolCallsJson) return null;
+    try {
+      const calls = JSON.parse(payload.toolCallsJson);
+      if (!Array.isArray(calls) || calls.length === 0) return null;
+      return {
+        approvalId: String(payload.approvalId),
+        runId: Number(payload.runId),
+        calls,
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const refreshPendingToolApproval = useCallback(async (sid: number) => {
+    try {
+      const vo = await agentApi.toolApprovals.pending(sid);
+      if (!vo?.approvalId || !vo?.toolCallsJson) {
+        setToolApprovalBatch(null);
+        return;
+      }
+      const calls = JSON.parse(vo.toolCallsJson);
+      const pendingCalls = Array.isArray(calls)
+        ? calls.filter((c: any) => c?.pending !== false)
+        : [];
+      if (pendingCalls.length === 0) {
+        setToolApprovalBatch(null);
+        return;
+      }
+      setToolApprovalBatch({
+        approvalId: String(vo.approvalId),
+        runId: Number(vo.runId),
+        calls: pendingCalls,
+      });
+    } catch {
+      // keep current drawer on transient errors
+    }
+  }, []);
+
+  const resolveToolApproval = async (
+    decisions: Array<{ callId: string; decision: string }>,
+  ) => {
+    if (!toolApprovalBatch || !currentSession?.id) return;
+    setToolApprovalSubmitting(true);
+    try {
+      await agentApi.toolApprovals.resolve(
+        currentSession.id,
+        toolApprovalBatch.runId,
+        toolApprovalBatch.approvalId,
+        decisions,
+      );
+      setToolApprovalBatch(null);
+      await refreshPendingToolApproval(currentSession.id);
+    } catch (e: any) {
+      message.error(e?.message || 'Tool approval failed');
+    } finally {
+      setToolApprovalSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentSession?.id) {
+      void refreshPendingToolApproval(currentSession.id);
+    }
+  }, [currentSession?.id, refreshPendingToolApproval]);
+
+  const refreshPendingClarifications = useCallback(async (sid: number) => {
+    try {
+      const rows = await agentApi.sessions.pendingClarifications(sid);
+      const pending = (rows || []).filter(
+        (row: any) => row?.clarificationId && row?.type !== 'tool_approval',
+      );
+      if (pending.length === 0) {
+        setClarificationBatch(null);
+        return;
+      }
+      setClarificationBatch({
+        runId: Number(pending[0].runId),
+        items: pending.map((row: any) => ({
+          clarificationId: String(row.clarificationId),
+          runId: Number(row.runId),
+          title: row.title,
+          type: row.type,
+          multiple: row.multiple === true,
+          options: row.options,
+        })),
+      });
+    } catch {
+      // keep current drawer on transient errors
+    }
+  }, []);
+
+  const resolveClarifications = async (
+    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+  ) => {
+    if (!clarificationBatch || !currentSession?.id) return;
+    setClarificationSubmitting(true);
+    try {
+      await agentApi.sessions.resolveClarifications(
+        currentSession.id,
+        clarificationBatch.runId,
+        answers,
+      );
+      setClarificationBatch(null);
+      await refreshPendingClarifications(currentSession.id);
+      void refreshLatest(currentSession.id);
+    } catch (e: any) {
+      message.error(e?.message || '澄清提交失败，请重试');
+      await refreshPendingClarifications(currentSession.id);
+    } finally {
+      setClarificationSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentSession?.id) {
+      void refreshPendingClarifications(currentSession.id);
+    }
+  }, [currentSession?.id, refreshPendingClarifications]);
+
+  // SSE 事件可能丢失或在连接建立前发出：run 活跃期间做短时有界轮询，
+  // 确保审批/澄清浮层不依赖单一路径也能出现。
+  useEffect(() => {
+    if (!currentSession?.id || !sending) return;
+    const sid = currentSession.id;
+    const timer = window.setInterval(() => {
+      void refreshPendingToolApproval(sid);
+      void refreshPendingClarifications(sid);
+    }, 2000);
+    const stop = window.setTimeout(() => window.clearInterval(timer), 30000);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(stop);
+    };
+  }, [
+    currentSession?.id,
+    sending,
+    refreshPendingToolApproval,
+    refreshPendingClarifications,
+  ]);
+
   const connectSSE = useCallback((sid: number) => {
     if (abortRef.current) abortRef.current.abort();
     // 切会话时清空本地已应答标记（仅内存，避免跨会话误抑制刷新）
@@ -625,6 +806,8 @@ export default function Chat() {
             void refreshLatest(sid);
             void reconcileSendLock(sid);
           }
+          void refreshPendingToolApproval(sid);
+          void refreshPendingClarifications(sid);
         },
         onMessage: (payload) => {
           try {
@@ -634,6 +817,24 @@ export default function Chat() {
 
             // 会话守卫：忽略非当前会话的事件，防止旧会话仍在流式时污染当前 messages/timeline（串台/重复）
             if (currentSessionIdRef.current !== sid) return;
+
+            if (evtType === 'TOOL_APPROVAL_PENDING') {
+              const batch = parseToolApproval(d);
+              if (batch) setToolApprovalBatch(batch);
+              void refreshLatest(sid);
+              return;
+            }
+            if (
+              evtType === 'TOOL_APPROVAL_RESPONDED' ||
+              evtType === 'TOOL_APPROVAL_DISMISSED'
+            ) {
+              setToolApprovalBatch((prev) =>
+                prev && prev.approvalId === String(d?.approvalId) ? null : prev,
+              );
+              void refreshPendingToolApproval(sid);
+              void refreshLatest(sid);
+              return;
+            }
 
             // 子 Agent 实时：纯 SSE 驱动逐步构建（content/reasoning/tool 事件均带 subAgentRunId）
             if (d?.subAgentRunId != null) {
@@ -689,6 +890,10 @@ export default function Chat() {
               tlSubType === 'run_awaiting_user'
             ) {
               setSending(false);
+              if (tlSubType === 'run_awaiting_user') {
+                void refreshPendingToolApproval(sid);
+                void refreshPendingClarifications(sid);
+              }
               if (stopFallbackRef.current) {
                 clearTimeout(stopFallbackRef.current);
                 stopFallbackRef.current = null;
@@ -966,6 +1171,10 @@ export default function Chat() {
                 subType === 'run_awaiting_user'
               ) {
                 setSending(false);
+                if (subType === 'run_awaiting_user') {
+                  void refreshPendingToolApproval(sid);
+                  void refreshPendingClarifications(sid);
+                }
                 if (stopFallbackRef.current) {
                   clearTimeout(stopFallbackRef.current);
                   stopFallbackRef.current = null;
@@ -1044,7 +1253,8 @@ export default function Chat() {
                   applyClarificationState(prev, d, 'CANCELLED'),
                 );
               }
-              // clarification_pending 不写 messages：澄清卡由 refreshLatest 渲染的 timeline 行承载
+              // 澄清统一走底部浮层；timeline 只保留审计行。
+              void refreshPendingClarifications(sid);
               return;
             }
             if (evtType === 'content_token') {
@@ -1116,6 +1326,8 @@ export default function Chat() {
               sid,
               pendingMsg,
               modelRoute ? Number(modelRoute) : undefined,
+              undefined,
+              runMode,
             );
             if (res?.runId) {
               currentRunIdRef.current = res.runId;
@@ -1264,7 +1476,13 @@ export default function Chat() {
   const sendMessage = async (attachmentKeys?: string[]) => {
     const hasAttachment =
       Array.isArray(attachmentKeys) && attachmentKeys.length > 0;
-    if ((!inputValue.trim() && !hasAttachment) || !currentSession || sending) {
+    if (
+      (!inputValue.trim() && !hasAttachment) ||
+      !currentSession ||
+      sending ||
+      toolApprovalBatch ||
+      clarificationBatch
+    ) {
       return;
     }
 
@@ -1297,6 +1515,7 @@ export default function Chat() {
         msg,
         selectedModelRouteId,
         attachmentKeys,
+        runMode,
       );
       if (res?.runId) {
         currentRunIdRef.current = res.runId;
@@ -1522,6 +1741,20 @@ export default function Chat() {
               onRespondClarify={handleTimelineClarify}
               subAgentLive={subAgentLive}
               sessionUsage={sessionUsage}
+              runMode={runMode}
+              onRunModeChange={handleRunModeChange}
+              toolApprovalBatch={toolApprovalBatch}
+              toolApprovalSubmitting={toolApprovalSubmitting}
+              onResolveToolApproval={resolveToolApproval}
+              clarificationBatch={clarificationBatch}
+              clarificationSubmitting={clarificationSubmitting}
+              onResolveClarifications={resolveClarifications}
+              onCancelClarifications={() => {
+                if (currentSession?.id) {
+                  setClarificationBatch(null);
+                  agentApi.runs.sessionStop(currentSession.id).catch(() => {});
+                }
+              }}
               loadSubAgentSteps={async (id: number) => {
                 try {
                   return await agentApi.sessions.getSubAgentTimeline(id);

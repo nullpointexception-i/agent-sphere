@@ -12,7 +12,12 @@ import {
   updateCursors,
   type TimelineCursors,
 } from './timeline';
-import type { SubAgentTimelineItemVO, TimelineRow } from './types';
+import type {
+  ClarificationBatch,
+  SubAgentTimelineItemVO,
+  TimelineRow,
+  ToolApprovalBatch,
+} from './types';
 
 /** 子 Agent 实时步骤（纯 SSE 聚合，终态由一次性历史拉取校正）。 */
 export type SubAgentLiveStep =
@@ -102,11 +107,36 @@ interface TimelineStream {
   connect: (sessionId: number, token: string, apiBase: string) => void;
   /** 乐观提交澄清后登记已应答（防 refreshLatest 回退乐观态）。 */
   markClarificationAnswered: (runId: number, clarificationId?: string | null) => void;
+  /** L2 tool approval batch shown in the bottom drawer. */
+  toolApproval: ToolApprovalBatch | null;
+  resolveToolApproval: (decisions: Array<{ callId: string; decision: string }>) => Promise<void>;
+  clarification: ClarificationBatch | null;
+  resolveClarifications: (
+    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+  ) => Promise<void>;
 }
 
 /** 子 Agent LIVE 占位行 seq：负且按 subAgentRunId 唯一（避免同 seq 冲突）。 */
 function placeholderSeq(subAgentRunId: number): number {
   return -(Math.abs(subAgentRunId) + 1);
+}
+
+function parseApproval(payload: any): ToolApprovalBatch | null {
+  if (!payload?.approvalId || !payload?.toolCallsJson) return null;
+  try {
+    const calls = JSON.parse(payload.toolCallsJson);
+    const pending = Array.isArray(calls)
+      ? calls.filter((c: any) => c?.pending !== false)
+      : [];
+    if (pending.length === 0) return null;
+    return {
+      approvalId: String(payload.approvalId),
+      runId: Number(payload.runId),
+      calls: pending,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function useTimelineStream(api: ApiClient): TimelineStream {
@@ -116,6 +146,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
   const [subAgentLiveMap, setSubAgentLiveMap] = useState<SubAgentLiveMap>({});
   const [pendingUserRows, setPendingUserRows] = useState<TimelineRow[]>([]);
   const [runActive, setRunActiveState] = useState(false);
+  const [toolApproval, setToolApproval] = useState<ToolApprovalBatch | null>(null);
+  const [clarification, setClarification] = useState<ClarificationBatch | null>(null);
   const pendingSeqRef = useRef(0);
   const cursorsRef = useRef<TimelineCursors>({ oldestSeq: null, newestSeq: null });
   const sessionIdRef = useRef<number | null>(null);
@@ -390,12 +422,73 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
   }, []);
 
   // ---- 整包事件 → timeline（assistant 打字机 + 子 Agent live + 拉新触发）----
+  const loadPendingApproval = useCallback(
+    async (sid: number) => {
+      try {
+        const vo = await api.pendingToolApproval(sid);
+        if (!vo?.approvalId || !vo?.toolCallsJson) {
+          setToolApproval(null);
+          return;
+        }
+        const batch = parseApproval(vo);
+        setToolApproval(batch);
+      } catch {
+        // keep current drawer on transient errors
+      }
+    },
+    [api],
+  );
+
+  const loadPendingClarifications = useCallback(
+    async (sid: number) => {
+      try {
+        const rows = await api.pendingClarifications(sid);
+        const pending = (rows || []).filter(
+          (row) => row?.clarificationId && row?.type !== 'tool_approval',
+        );
+        if (pending.length === 0) {
+          setClarification(null);
+          return;
+        }
+        setClarification({
+          runId: Number(pending[0].runId),
+          items: pending.map((row) => ({
+            clarificationId: String(row.clarificationId),
+            runId: Number(row.runId),
+            title: row.title,
+            type: row.type,
+            multiple: row.multiple === true,
+            options: row.options,
+          })),
+        });
+      } catch {
+        // keep current drawer on transient errors
+      }
+    },
+    [api],
+  );
+
   const handleSseEvent = useCallback(
     (parsed: Record<string, unknown>) => {
       const evtType = String(parsed.eventType || parsed.type || '');
       const d = (parsed.data ?? parsed) as Record<string, any>;
       const sid = sessionIdRef.current;
       if (sid == null || !Number.isFinite(sid)) return;
+
+      if (evtType === 'TOOL_APPROVAL_PENDING') {
+        const batch = parseApproval(d);
+        if (batch) setToolApproval(batch);
+        void refreshLatest(sid);
+        return;
+      }
+      if (evtType === 'TOOL_APPROVAL_RESPONDED' || evtType === 'TOOL_APPROVAL_DISMISSED') {
+        setToolApproval((prev) =>
+          prev && prev.approvalId === String(d?.approvalId) ? null : prev,
+        );
+        void loadPendingApproval(sid);
+        void refreshLatest(sid);
+        return;
+      }
 
       // 子 Agent 实时：纯 SSE 聚合 live + 头行占位
       if (d?.subAgentRunId != null) {
@@ -516,6 +609,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
 
       // 澄清：本地就地更新 + 记录已应答（防 refreshLatest 回退）
       if (String(evtType).startsWith('clarification_')) {
+        void loadPendingClarifications(sid);
         if (evtType === 'clarification_responded') {
           const respondedKey = clarificationKey(d?.runId, d?.clarificationId);
           if (respondedKey) answeredClarificationKeysRef.current.add(respondedKey);
@@ -555,6 +649,11 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         }
       }
 
+      if (tlSubType === 'run_awaiting_user') {
+        void loadPendingApproval(sid);
+        void loadPendingClarifications(sid);
+      }
+
       if (
         tlSubType === 'tool_call_succeeded' ||
         tlSubType === 'tool_call_failed'
@@ -568,7 +667,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         void refreshLatest(sid);
       }
     },
-    [handleSubAgentLiveEvent, refreshLatest, refreshTail],
+    [handleSubAgentLiveEvent, refreshLatest, refreshTail, loadPendingApproval, loadPendingClarifications],
   );
 
   const clearReconnectTimer = useCallback(() => {
@@ -603,6 +702,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
           onOpen: () => {
             reconnectAttemptRef.current = 0;
             clearReconnectTimer();
+            void loadPendingApproval(sessionId);
+            void loadPendingClarifications(sessionId);
           },
           onMessage: (payload: string) => {
             try {
@@ -619,7 +720,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         controller.signal,
       ).catch(() => scheduleReconnect());
     },
-    [clearReconnectTimer, handleSseEvent],
+    [clearReconnectTimer, handleSseEvent, loadPendingApproval, loadPendingClarifications],
   );
 
   // 会话切换即重建：先断开旧流、清空状态；由 CopilotView 在选会话时调用 connect()。
@@ -638,11 +739,15 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       setRunActiveState(false);
       setHasMore(false);
       setLoadingOlder(false);
+      setToolApproval(null);
+      setClarification(null);
 
       void loadInitial(sessionId);
+      void loadPendingApproval(sessionId);
+      void loadPendingClarifications(sessionId);
       openStream(sessionId, token, apiBase);
     },
-    [clearReconnectTimer, loadInitial, openStream],
+    [clearReconnectTimer, loadInitial, loadPendingApproval, loadPendingClarifications, openStream],
   );
 
   /** 乐观提交澄清后立即登记已应答，防止 refreshLatest 用旧 PENDING 回退。
@@ -665,6 +770,29 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     [api],
   );
 
+  const resolveToolApproval = useCallback(
+    async (decisions: Array<{ callId: string; decision: string }>) => {
+      const sid = sessionIdRef.current;
+      if (!sid || !toolApproval) return;
+      await api.resolveToolApproval(sid, toolApproval.runId, toolApproval.approvalId, decisions);
+      setToolApproval(null);
+      await loadPendingApproval(sid);
+    },
+    [api, toolApproval, loadPendingApproval],
+  );
+
+  const resolveClarifications = useCallback(
+    async (answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>) => {
+      const sid = sessionIdRef.current;
+      if (!sid || !clarification) return;
+      await api.resolveClarifications(sid, clarification.runId, answers);
+      setClarification(null);
+      await loadPendingClarifications(sid);
+      void refreshLatest(sid);
+    },
+    [api, clarification, loadPendingClarifications, refreshLatest],
+  );
+
   return {
     rows,
     hasMore,
@@ -683,5 +811,9 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     loadSubAgentSteps,
     connect,
     markClarificationAnswered,
+    toolApproval,
+    resolveToolApproval,
+    clarification,
+    resolveClarifications,
   };
 }

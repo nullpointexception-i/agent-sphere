@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.service.converter;
 
+import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.instance.domain.AgentRun;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
@@ -24,6 +25,7 @@ public class RunConverter {
         vo.setIntentClassification(run.getIntentClassification());
         vo.setAttachments(parseAttachments(run.getAttachments()));
         vo.setStatus(run.getStatus());
+        vo.setRunMode(run.getRunMode());
         vo.setLoopCapped(run.getLoopCapped());
         vo.setLoopCount(run.getLoopCount());
         vo.setLoopLimit(run.getLoopLimit());
@@ -41,6 +43,7 @@ public class RunConverter {
         run.setAttachments(dto.getAttachments() != null && !dto.getAttachments().isEmpty()
                 ? JsonUtils.toJson(dto.getAttachments()) : null);
         run.setStatus(RunEnum.STATUS_PENDING);
+        run.setRunMode(dto.getRunMode() != null ? dto.getRunMode() : RunMode.WRITE.name());
         return run;
     }
 
@@ -56,6 +59,7 @@ public class RunConverter {
         run.setAttachments(vo.getAttachments() != null && !vo.getAttachments().isEmpty()
                 ? JsonUtils.toJson(vo.getAttachments()) : null);
         run.setStatus(vo.getStatus());
+        run.setRunMode(vo.getRunMode());
         run.setLoopCapped(vo.getLoopCapped());
         run.setLoopCount(vo.getLoopCount());
         run.setLoopLimit(vo.getLoopLimit());

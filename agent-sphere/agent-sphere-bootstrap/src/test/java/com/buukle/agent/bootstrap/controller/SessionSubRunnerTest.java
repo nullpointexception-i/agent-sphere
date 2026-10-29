@@ -98,7 +98,9 @@ class SessionSubRunnerTest {
                 subAgentRunSpi,
                 timelineProvider,
                 mock(ChatAttachmentResolver.class),
-                new LlmRequestConfigurer(mock(com.buukle.agent.common.config.SystemConfigSpi.class)));
+                new LlmRequestConfigurer(mock(com.buukle.agent.common.config.SystemConfigSpi.class)),
+                mock(com.buukle.agent.instance.spi.ToolApprovalGrantSpi.class),
+                mock(com.buukle.agent.runtime.kernel.service.ToolApprovalService.class));
     }
 
     private RuntimeTool delegateTool(String system) {

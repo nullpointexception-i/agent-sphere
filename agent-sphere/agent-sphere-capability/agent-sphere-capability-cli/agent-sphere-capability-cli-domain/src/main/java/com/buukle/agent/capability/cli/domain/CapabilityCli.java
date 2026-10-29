@@ -15,6 +15,10 @@ public class CapabilityCli {
     private String paramSchema;
     private String workingDir;
     private String status;
+    private Boolean compressEnabled;
+    private String accessMode;
+    private String securityLevel;
+    private String approvalScope;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

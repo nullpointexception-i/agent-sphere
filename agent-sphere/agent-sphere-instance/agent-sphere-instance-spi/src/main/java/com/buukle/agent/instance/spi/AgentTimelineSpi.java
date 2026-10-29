@@ -16,6 +16,10 @@ public interface AgentTimelineSpi {
                 Long refRunId, Long refInteractionId, Long refToolCallId,
                 Long refSubAgentRunId, Long refClarificationId);
 
+    /** 记录工具授权行（refApprovalId 指向 agent_tool_approval.id）。 */
+    long recordApproval(Long sessionId, Long runId, String kind, String subtype, String state, String title,
+                        Long refRunId, Long refApprovalId);
+
     /**
      * 更新行状态/标题（幂等；state 为空则跳过）。
      */
