@@ -591,11 +591,15 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
   按 `tail-ratio` 预算选，并保证最新一条浏览器结果进入 tail；压缩/重组后由 `refreshTodolistSlot` 从 DB 重新注入 todo 槽。
 - 压缩调用必须 `thinking=disabled`（`callLLM` 在 `applyGlobal` 后覆盖）：全局 thinking=true 会把 4k 输出预算耗在
   reasoning 上，线上出现 completion=4000、reasoning 5–11k、content 为空（记录 FAILED）。
-- 压缩策略：`target-ratio=0.55`、`input-ratio=0.35`、`tail-ratio=0.25`、`summary-max-tokens=2000`、
+- 压缩策略：`target-ratio=0.55`、`input-ratio=0.35`、`tail-ratio=0.25`、`summary-max-tokens=4000`、
   `cooldown-turns=4`、`max-per-run=12`；fixed+tools+summary 已超 target 时返回 NO_PROGRESS，不写成功记录。
-- live 工具结果预算：非浏览器单条 4k、总 50k、最近 2 条保留；**浏览器只保留最近一条全文，更早的用占位符**
-  （`LiveToolResultPolicy`）。完整 artifact 仍在 DB，模型可用 getContent 回读。`HistoryLoader` 回退重建时
-  最近一条浏览器工具使用原始 `artifact`，其余用 `compressedArtifact`。
+- live 工具结果预算：`LiveToolResultPolicy` 只投影**请求副本**，不修改 canonical `messages`；canonical 保留完整
+  工具结果，run-local 压缩/挂起快照才能看到原文。非浏览器单条 4k、总 50k、最近 2 条保留；浏览器结果
+  默认保留全文，仅单条超过 `live-browser-full-max-chars`（默认 20k 字符，大页面）时替换为带 `callId`
+  的引用，不做 keepArrays 摘要、不设浏览器总预算。
+- 模型可用 `builtin_14`（`read_tool_result`，`needConfig=false` 默认内置）按 `callId` 分页回读历史
+  artifact（`offset`/`maxChars`，单次上限 8k）。`HistoryLoader` 回退重建时浏览器结果按同一阈值恢复全文，
+  超阈值输出带 `callId` 的引用。
 - 时间不再注入 messages；需要时模型调用 `builtin_13`（`CURRENT_TIME`，Asia/Shanghai，返回
   time/timezone/epochMillis/weekday）。`builtin_13` 是 `needConfig=false` 的自动包含工具。
 - builtin_5（Chrome）description/schema 与 `PROMPT_TOOLS_FOOTER` 只做文案/描述精简；**不改变工具集合、

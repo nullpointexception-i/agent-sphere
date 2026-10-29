@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
+import com.buukle.agent.instance.domain.vo.SessionUsageVO;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
@@ -13,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +40,34 @@ class AgentLlmInteractionRecordServiceImplTest {
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), "fixture"),
                 AgentLlmInteractionRecord.class);
+    }
+
+    @Test
+    void usageSummaryIncludesLatestContextPromptTokens() {
+        SessionUsageVO aggregate = new SessionUsageVO();
+        aggregate.setSessionId(1L);
+        aggregate.setTotalTokens(1000L);
+        aggregate.setCacheHitTokens(600L);
+        aggregate.setCacheMissTokens(400L);
+        when(mapper.sumUsageBySession(1L)).thenReturn(aggregate);
+        when(mapper.selectLatestPromptTokens(1L, "CHAT_REPLY")).thenReturn(42_000L);
+
+        SessionUsageVO vo = service.usageSummary(1L);
+
+        assertEquals(42_000L, vo.getLatestPromptTokens());
+        assertEquals(60.0, vo.getCacheHitRate());
+    }
+
+    @Test
+    void usageSummaryKeepsLatestPromptNullWhenNoChatReply() {
+        SessionUsageVO aggregate = new SessionUsageVO();
+        aggregate.setSessionId(1L);
+        when(mapper.sumUsageBySession(1L)).thenReturn(aggregate);
+        when(mapper.selectLatestPromptTokens(1L, "CHAT_REPLY")).thenReturn(null);
+
+        SessionUsageVO vo = service.usageSummary(1L);
+
+        org.junit.jupiter.api.Assertions.assertNull(vo.getLatestPromptTokens());
     }
 
     @Test

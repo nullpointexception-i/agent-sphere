@@ -87,4 +87,18 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
                                             @Param("sessionId") Long sessionId,
                                             @Param("afterId") long afterId,
                                             @Param("limit") int limit);
+
+    /** 会话最近一次主 Agent 指定类型交互的 prompt tokens（当前上下文占用）。 */
+    @Select("""
+            SELECT prompt_tokens
+            FROM agent_llm_interaction_record
+            WHERE session_id = #{sessionId}
+              AND interaction_type = #{interactionType}
+              AND sub_agent_run_id IS NULL
+              AND delete_flag = 0
+            ORDER BY id DESC
+            LIMIT 1
+            """)
+    Long selectLatestPromptTokens(@Param("sessionId") Long sessionId,
+                                  @Param("interactionType") String interactionType);
 }

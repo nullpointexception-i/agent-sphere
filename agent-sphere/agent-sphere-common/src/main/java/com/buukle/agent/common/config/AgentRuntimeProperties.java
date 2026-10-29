@@ -62,12 +62,14 @@ public class AgentRuntimeProperties {
          * 大多数抖动窗口。
          */
         private int llmTurnMaxRetries = 3;
-        /** live 工具结果单条压缩上限（浏览器类除外；浏览器只保留最近一条全文）。 */
+        /** live 非浏览器工具结果单条压缩上限。 */
         private int liveToolResultMaxChars = 4000;
         /** live 非浏览器工具结果总预算；超出后更旧的结果用省略标记。 */
         private int liveToolResultBudgetChars = 50000;
         /** 非浏览器工具结果始终完整保留的最近条数。 */
         private int liveToolResultKeepRecent = 2;
+        /** 浏览器结果保留全文的单条字符上限；超过后改为 callId 引用（大页面）。 */
+        private int liveBrowserFullMaxChars = 20000;
         private CompactionConfig compaction = new CompactionConfig();
 
         @Data

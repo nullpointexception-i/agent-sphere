@@ -1,6 +1,7 @@
+import { useIntl } from '@umijs/max';
 import { useEffect, useRef } from 'react';
 import { useStyles } from '../../style';
-import { formatTokens } from '../Usage';
+import { contextUsagePercent, formatTokens } from '../Usage';
 import Footer from './Footer';
 import Header from './Header';
 import type { SubAgentLiveMap, SubAgentTimelineItem } from './subAgentTypes';
@@ -63,7 +64,15 @@ export default function ChatMain({
   sessionUsage,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
+  const intl = useIntl();
   const { styles } = useStyles();
+  const currentRoute = modelRoutes.find(
+    (r: any) => r.id === selectedModelRouteId,
+  );
+  const contextPercent = contextUsagePercent(
+    sessionUsage?.latestPromptTokens,
+    currentRoute?.maxInputTokens,
+  );
   const messagesRef = useRef<HTMLDivElement>(null);
   const timelineWrapRef = useRef<HTMLDivElement>(null);
 
@@ -177,13 +186,37 @@ export default function ChatMain({
                 whiteSpace: 'nowrap',
               }}
             >
-              ♨ 会话用量 · {formatTokens(sessionUsage.totalTokens)} tokens
+              ♨{' '}
+              {intl.formatMessage({
+                id: 'pages.chat.sessionUsage.title',
+                defaultMessage: 'Session usage',
+              })}{' '}
+              · {formatTokens(sessionUsage.totalTokens)} tokens
               {formatTokens(sessionUsage.promptTokens) !== '0' &&
-                ` · prompt ${formatTokens(sessionUsage.promptTokens)}`}
+                ` · ${intl.formatMessage({
+                  id: 'pages.chat.sessionUsage.prompt',
+                  defaultMessage: 'prompt',
+                })} ${formatTokens(sessionUsage.promptTokens)}`}
               {formatTokens(sessionUsage.completionTokens) !== '0' &&
-                ` · completion ${formatTokens(sessionUsage.completionTokens)}`}
+                ` · ${intl.formatMessage({
+                  id: 'pages.chat.sessionUsage.completion',
+                  defaultMessage: 'completion',
+                })} ${formatTokens(sessionUsage.completionTokens)}`}
               {sessionUsage.cacheHitRate != null &&
-                ` · cache ${sessionUsage.cacheHitRate}%`}
+                ` · ${intl.formatMessage({
+                  id: 'pages.chat.sessionUsage.cache',
+                  defaultMessage: 'cache',
+                })} ${sessionUsage.cacheHitRate}%`}
+              {contextPercent != null && (
+                <span
+                  title={`${formatTokens(sessionUsage.latestPromptTokens)} / ${formatTokens(currentRoute?.maxInputTokens)}`}
+                >
+                  {` · ${intl.formatMessage({
+                    id: 'pages.chat.sessionUsage.context',
+                    defaultMessage: 'current context',
+                  })} ${contextPercent}%`}
+                </span>
+              )}
             </div>
           )}
         </div>

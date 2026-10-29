@@ -116,9 +116,10 @@ buukle:
       turn-timeout: 180s                           # 单轮 LLM 调用超时 / Single LLM turn timeout
       llm-turn-max-retries: 3                      # 单轮 LLM 失败(非取消)重试次数(指数退避 1s→2s→4s) / Per-turn LLM retries (exp. backoff 1s→2s→4s)
       max-screenshots-per-run: 20                  # 单 run 浏览器截图观察注入上限（防烧 token） / Max screenshot observations per run
-      live-tool-result-max-chars: 4000              # live 工具结果单条压缩上限（浏览器除外）/ Live tool result per-message cap
+      live-tool-result-max-chars: 4000              # live 非浏览器工具结果单条压缩上限 / Live non-browser per-message cap
       live-tool-result-budget-chars: 50000          # live 非浏览器工具结果总预算 / Live non-browser tool result budget
       live-tool-result-keep-recent: 2               # 非浏览器结果始终保留的最近条数 / Recent non-browser results kept
+      live-browser-full-max-chars: 20000            # 浏览器单条结果保留全文的上限；超过才转 callId 引用 / Browser result full-text cap
       compaction:
         budget-ratio: 0.7                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio
         target-ratio: 0.55                         # 压缩后目标（含 tools/fixed）/ Post-compaction target

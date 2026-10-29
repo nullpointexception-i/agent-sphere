@@ -11,6 +11,7 @@ import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
+import com.buukle.agent.runtime.kernel.service.ToolResultReadService;
 import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
 import com.buukle.agent.runtime.kernel.runner.sub.SubAgentConstants;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
@@ -50,6 +51,8 @@ class ToolExecutorSkillTest {
     @Mock
     PendingWaitSpi pendingWaitSpi;
     @Mock
+    ToolResultReadService toolResultReadService;
+    @Mock
     DelegateService delegateService;
     @Mock
     TaskMcpCredentialStore taskMcpCredentialStore;
@@ -59,7 +62,23 @@ class ToolExecutorSkillTest {
     @BeforeEach
     void setUp() {
         toolExecutor = new ToolExecutor(mcpSpis, builtinSpi, cliExecutorService, sessionTodoSpi,
-                eventPublisher, clarificationSpi, pendingWaitSpi, delegateService, taskMcpCredentialStore);
+                eventPublisher, clarificationSpi, pendingWaitSpi, delegateService, toolResultReadService, taskMcpCredentialStore);
+    }
+
+    @Test
+    void readToolResult_dispatchesToReadService() {
+        given(toolResultReadService.read(9L, "{\"callId\":\"c\"}"))
+                .willReturn("{\"content\":\"x\"}");
+        RuntimeTool readTool = RuntimeTool.builder()
+                .capabilityType("builtin")
+                .llmToolName("builtin_14")
+                .build();
+
+        String result = toolExecutor.execute(
+                new TurnToolCall("call_r", "builtin_14", "{\"callId\":\"c\"}"),
+                9L, 1L, List.of(readTool));
+
+        assertEquals("{\"content\":\"x\"}", result);
     }
 
     private RuntimeTool delegateTool() {

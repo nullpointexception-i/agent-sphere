@@ -133,6 +133,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
             vo.setCacheHitTokens(0L);
             vo.setCacheMissTokens(0L);
         }
+        vo.setLatestPromptTokens(mapper.selectLatestPromptTokens(sessionId, INTERACTION_TYPE_CHAT_REPLY));
         Long total = vo.getTotalTokens() != null ? vo.getTotalTokens() : 0L;
         Long hit = vo.getCacheHitTokens() != null ? vo.getCacheHitTokens() : 0L;
         Long miss = vo.getCacheMissTokens() != null ? vo.getCacheMissTokens() : 0L;

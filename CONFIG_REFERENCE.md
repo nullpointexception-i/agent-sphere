@@ -63,9 +63,10 @@ Retention days and the kill switch for cleanup live in `agent_system_config` (`c
 | `turn-timeout` | `180s` | Single LLM turn timeout |
 | `llm-turn-max-retries` | `3` | Per-turn retries on a transient failure, exponential backoff 1s→2s→4s (README §3.1b) |
 | `max-screenshots-per-run` | `20` | Max screenshot observations injected per run (token guard) |
-| `live-tool-result-max-chars` | `4000` | Per-message cap for live tool results (browser results are excluded; latest browser result is kept full) |
-| `live-tool-result-budget-chars` | `50000` | Total live non-browser tool-result budget; older results are omitted |
+| `live-tool-result-max-chars` | `4000` | Per-message cap for live non-browser tool results |
+| `live-tool-result-budget-chars` | `50000` | Total live non-browser tool-result budget; older results become `read_tool_result` references |
 | `live-tool-result-keep-recent` | `2` | Recent non-browser tool results always kept |
+| `live-browser-full-max-chars` | `20000` | Browser results up to this size are kept full; larger pages become `read_tool_result` references |
 | `compaction.budget-ratio` | `0.7` | Fallback compaction threshold (ratio of max input) when the merged sampling config has no output-token cap; with a cap the budget is `max_input - output_cap - margin` |
 | `compaction.target-ratio` | `0.55` | Post-compaction target (messages + tools + fixed) |
 | `compaction.input-ratio` | `0.35` | Compaction input budget ratio |

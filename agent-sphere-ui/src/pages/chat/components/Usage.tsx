@@ -18,6 +18,15 @@ export function formatTokens(n?: number | null): string {
   return String(n);
 }
 
+/** 当前上下文占模型上行比例(%)：最近 prompt / maxInputTokens；无有效分母返回 null。 */
+export function contextUsagePercent(
+  latestPrompt?: number | null,
+  maxInput?: number | null,
+): number | null {
+  if (latestPrompt == null || maxInput == null || maxInput <= 0) return null;
+  return Math.round((latestPrompt * 1000) / maxInput) / 10;
+}
+
 /** 缓存命中率(%)：hit / (hit+miss)；无基数返回 null。 */
 export function cacheHitRate(u?: UsageData): number | null {
   if (!u) return null;

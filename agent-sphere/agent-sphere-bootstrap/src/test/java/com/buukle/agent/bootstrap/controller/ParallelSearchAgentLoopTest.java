@@ -43,6 +43,7 @@ import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
+import com.buukle.agent.runtime.kernel.service.ToolResultReadService;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.TitleService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
@@ -221,7 +222,7 @@ class ParallelSearchAgentLoopTest {
             assertNull(route.getApiKeyId());
             ToolExecutor executor = new ToolExecutor(List.of(mcp), builtin, mock(CliExecutorService.class),
                     mock(SessionTodoSpi.class), mock(ApplicationEventPublisher.class), mock(ClarificationSpi.class), mock(PendingWaitSpi.class),
-                    mock(DelegateService.class), new TaskMcpCredentialStore(redis));
+                    mock(DelegateService.class), mock(ToolResultReadService.class), new TaskMcpCredentialStore(redis));
             if (!enabled) {
                 assertTrue(ctx.getTools().stream().noneMatch(t -> CAPABILITY_TYPE_MCP.equals(t.getCapabilityType())));
                 assertTrue(executor.execute(new TurnToolCall(SEARCH_CALL, "mcp_91_0", "{}"),

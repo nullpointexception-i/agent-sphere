@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.kernel.loader;
 
+import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.instance.dtvo.vo.AgentCompactRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
@@ -49,7 +50,8 @@ class HistoryLoaderTest {
 
     @BeforeEach
     void setUp() {
-        loader = new HistoryLoader(runSpi, compactRecordSpi, toolCallRecordSpi, interactionSpi);
+        loader = new HistoryLoader(runSpi, compactRecordSpi, toolCallRecordSpi, interactionSpi,
+                new AgentRuntimeProperties());
         RunVO run = new RunVO();
         run.setId(RUN_ID);
         run.setSessionId(SESSION_ID);
@@ -124,6 +126,57 @@ class HistoryLoaderTest {
         assertEquals("call-2", messages.get(3).getToolCalls().get(0).getId());
         assertEquals("tool", messages.get(4).getRole());
         assertEquals("call-2", messages.get(4).getToolCallId());
+    }
+
+    @Test
+    void browserHistoryKeepsFullTextBelowThreshold() {
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
+                interaction("first assistant text", "2026-10-29 04:12:21"),
+                interaction("second assistant text", "2026-10-29 04:12:26")));
+
+        String oldArtifact = "{\"data\":{\"_url\":\"https://example.com/a\",\"matches\":["
+                + "{\"text\":\"news-a\"},{\"text\":\"news-b\"},"
+                + "{\"text\":\"news-c\"},{\"text\":\"news-d\"}]}}";
+        AgentToolCallRecordVO oldCall = toolCall(1L, "call-old", "04:12:22");
+        oldCall.setArtifact(oldArtifact);
+        oldCall.setCompressedArtifact("collapsed-old");
+        AgentToolCallRecordVO newCall = toolCall(2L, "call-new", "04:12:28");
+        newCall.setArtifact("new-full");
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(newCall, oldCall));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        String oldContent = messages.stream()
+                .filter(m -> "call-old".equals(m.getToolCallId()))
+                .map(m -> String.valueOf(m.getContent()))
+                .findFirst().orElse("");
+        String newContent = messages.stream()
+                .filter(m -> "call-new".equals(m.getToolCallId()))
+                .map(m -> String.valueOf(m.getContent()))
+                .findFirst().orElse("");
+        assertEquals(oldArtifact, oldContent, "小页面应恢复完整原文，而不是摘要/压缩结果");
+        assertEquals("new-full", newContent);
+    }
+
+    @Test
+    void browserHistoryUsesCallIdReferenceForLargePage() {
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
+                interaction("assistant text", "2026-10-29 04:12:21")));
+
+        AgentToolCallRecordVO large = toolCall(1L, "call-large", "04:12:22");
+        large.setArtifact("x".repeat(20_001));
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(large));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        String content = messages.stream()
+                .filter(m -> "call-large".equals(m.getToolCallId()))
+                .map(m -> String.valueOf(m.getContent()))
+                .findFirst().orElse("");
+        assertTrue(content.contains("read_tool_result"));
+        assertTrue(content.contains("call-large"));
     }
 
     @Test

@@ -1,4 +1,5 @@
 import { Line } from '@ant-design/plots';
+import { useIntl } from '@umijs/max';
 import { Button, Card, Empty, Segmented, Space, Spin, Statistic, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
@@ -26,11 +27,31 @@ const LIMIT = 300;
 const REFRESH_MS = 5_000;
 
 const METRICS = [
-  { name: '上下文', key: 'promptTokens' },
-  { name: '缓存命中', key: 'cacheHitTokens' },
-  { name: '缓存未命中', key: 'cacheMissTokens' },
-  { name: '输出', key: 'completionTokens' },
-  { name: '总量', key: 'totalTokens' },
+  {
+    key: 'promptTokens',
+    id: 'pages.chat.usageTrend.seriesPrompt',
+    defaultMessage: 'Context',
+  },
+  {
+    key: 'cacheHitTokens',
+    id: 'pages.chat.usageTrend.seriesCacheHit',
+    defaultMessage: 'Cache hit',
+  },
+  {
+    key: 'cacheMissTokens',
+    id: 'pages.chat.usageTrend.seriesCacheMiss',
+    defaultMessage: 'Cache miss',
+  },
+  {
+    key: 'completionTokens',
+    id: 'pages.chat.usageTrend.seriesCompletion',
+    defaultMessage: 'Output',
+  },
+  {
+    key: 'totalTokens',
+    id: 'pages.chat.usageTrend.seriesTotal',
+    defaultMessage: 'Total',
+  },
 ] as const;
 
 export default function UsageTrend({
@@ -38,6 +59,7 @@ export default function UsageTrend({
   runId,
   sessionId,
 }: UsageTrendProps) {
+  const intl = useIntl();
   const [points, setPoints] = useState<UsagePoint[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -138,18 +160,30 @@ export default function UsageTrend({
         )
       : null;
 
+  const metrics = useMemo(
+    () =>
+      METRICS.map((m) => ({
+        key: m.key,
+        name: intl.formatMessage({
+          id: m.id,
+          defaultMessage: m.defaultMessage,
+        }),
+      })),
+    [intl],
+  );
+
   const chartData = useMemo(() => {
     const seqById = new Map<number, number>();
     points.forEach((p, i) => seqById.set(p.id, i + 1));
     return visiblePoints.flatMap((p) =>
-      METRICS.map((m) => ({
+      metrics.map((m) => ({
         x: seqById.get(p.id) ?? 0,
         y: Number(p[m.key]) || 0,
         series: m.name,
         point: p,
       })),
     );
-  }, [visiblePoints, points]);
+  }, [visiblePoints, points, metrics]);
 
   useEffect(() => {
     const seqById = new Map<number, number>();
@@ -201,7 +235,10 @@ export default function UsageTrend({
   return (
     <Card
       size="small"
-      title="Token 趋势"
+      title={intl.formatMessage({
+        id: 'pages.chat.usageTrend.title',
+        defaultMessage: 'Token Trend',
+      })}
       style={{ marginBottom: 12 }}
       extra={
         <Space size={8}>
@@ -210,19 +247,38 @@ export default function UsageTrend({
             value={mode}
             onChange={changeMode}
             options={[
-              { label: '主对话', value: 'main' },
-              { label: '全部模型交互', value: 'all' },
+              {
+                label: intl.formatMessage({
+                  id: 'pages.chat.usageTrend.modeMain',
+                  defaultMessage: 'Main chat',
+                }),
+                value: 'main',
+              },
+              {
+                label: intl.formatMessage({
+                  id: 'pages.chat.usageTrend.modeAll',
+                  defaultMessage: 'All model calls',
+                }),
+                value: 'all',
+              },
             ]}
           />
           <Button size="small" disabled={!zoomed} onClick={resetZoom}>
-            重置缩放
+            {intl.formatMessage({
+              id: 'pages.chat.usageTrend.resetZoom',
+              defaultMessage: 'Reset zoom',
+            })}
           </Button>
-          <Button
-            size="small"
-            type="text"
-            onClick={toggleCollapsed}
-          >
-            {collapsed ? '展开' : '收起'}
+          <Button size="small" type="text" onClick={toggleCollapsed}>
+            {collapsed
+              ? intl.formatMessage({
+                  id: 'pages.chat.usageTrend.expand',
+                  defaultMessage: 'Expand',
+                })
+              : intl.formatMessage({
+                  id: 'pages.chat.usageTrend.collapse',
+                  defaultMessage: 'Collapse',
+                })}
           </Button>
         </Space>
       }
@@ -231,22 +287,34 @@ export default function UsageTrend({
         <>
           <Space size={24} style={{ marginBottom: 8 }}>
             <Statistic
-              title="最新上下文"
+              title={intl.formatMessage({
+                id: 'pages.chat.usageTrend.latestContext',
+                defaultMessage: 'Latest context',
+              })}
               value={formatTokens(latest?.promptTokens)}
               valueStyle={{ fontSize: 14 }}
             />
             <Statistic
-              title="峰值"
+              title={intl.formatMessage({
+                id: 'pages.chat.usageTrend.peak',
+                defaultMessage: 'Peak',
+              })}
               value={formatTokens(peak)}
               valueStyle={{ fontSize: 14 }}
             />
             <Statistic
-              title="平均"
+              title={intl.formatMessage({
+                id: 'pages.chat.usageTrend.average',
+                defaultMessage: 'Average',
+              })}
               value={formatTokens(average)}
               valueStyle={{ fontSize: 14 }}
             />
             <Statistic
-              title="缓存命中率"
+              title={intl.formatMessage({
+                id: 'pages.chat.usageTrend.cacheRate',
+                defaultMessage: 'Cache hit rate',
+              })}
               value={cacheRate == null ? '-' : `${cacheRate}%`}
               valueStyle={{ fontSize: 14 }}
             />
@@ -256,7 +324,12 @@ export default function UsageTrend({
               <Spin />
             </div>
           ) : points.length === 0 ? (
-            <Empty description="暂无交互数据" />
+            <Empty
+              description={intl.formatMessage({
+                id: 'pages.chat.usageTrend.empty',
+                defaultMessage: 'No interaction data yet',
+              })}
+            />
           ) : (
             <Line
               key={chartKey}
@@ -267,14 +340,44 @@ export default function UsageTrend({
               height={240}
               autoFit
               legend={{ color: { position: 'top' } }}
-              axis={{ x: { title: '交互序号' }, y: { title: 'tokens' } }}
+              axis={{
+                x: {
+                  title: intl.formatMessage({
+                    id: 'pages.chat.usageTrend.xAxis',
+                    defaultMessage: 'Interaction #',
+                  }),
+                },
+                y: {
+                  title: intl.formatMessage({
+                    id: 'pages.chat.usageTrend.yAxis',
+                    defaultMessage: 'tokens',
+                  }),
+                },
+              }}
               interactions={[{ type: 'brushXFilter' }] as any}
               onReady={onReady}
             />
           )}
           <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-            仅显示最近 {LIMIT} 条{hasMore ? '（还有更早数据）' : ''}
-            {zoomed ? ' · 已放大，自动刷新暂停' : ''}
+            {intl.formatMessage(
+              {
+                id: 'pages.chat.usageTrend.window',
+                defaultMessage: 'Showing latest {limit}',
+              },
+              { limit: LIMIT },
+            )}
+            {hasMore
+              ? intl.formatMessage({
+                  id: 'pages.chat.usageTrend.older',
+                  defaultMessage: ' (older data available)',
+                })
+              : ''}
+            {zoomed
+              ? ` · ${intl.formatMessage({
+                  id: 'pages.chat.usageTrend.zoomed',
+                  defaultMessage: 'Zoomed in, auto-refresh paused',
+                })}`
+              : ''}
           </Typography.Text>
         </>
       )}

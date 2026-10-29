@@ -5,6 +5,7 @@ import com.buukle.agent.capability.builtin.dtvo.vo.BuiltinToolVO;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.FinishConstants;
+import com.buukle.agent.runtime.kernel.constants.ToolResultReadConstants;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
 import com.buukle.agent.capability.cli.spi.CapabilityCliSpi;
@@ -210,6 +211,23 @@ public class ContextPreparer {
                     .description(WaitConstants.DESCRIPTION)
                     .parametersSchemaJson(WAIT_PARAM_SCHEMA)
                     .execBinding(waitBinding).build());
+        }
+        // 默认注册 read_tool_result：回读被上下文预算省略的历史浏览器/工具结果。
+        if (capabilities != null && !capabilities.isEmpty()) {
+            long readId = BuiltinToolEnum.READ_TOOL_RESULT.getId();
+            Map<String, Object> readBinding = new HashMap<>();
+            readBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ToolResultReadConstants.INTERNAL_NAME);
+            result.add(RuntimeTool.builder()
+                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                    .capabilityId(readId)
+                    .llmToolName(LLM_PREFIX_BUILTIN + readId)
+                    .toolRef(ToolRefs.builtin(ToolResultReadConstants.INTERNAL_NAME))
+                    .displayName(ToolResultReadConstants.DISPLAY_NAME)
+                    .displayNameCn(ToolResultReadConstants.DISPLAY_NAME_CN)
+                    .displayNameEn(ToolResultReadConstants.DISPLAY_NAME)
+                    .description(ToolResultReadConstants.DESCRIPTION)
+                    .parametersSchemaJson(ToolResultReadConstants.PARAM_SCHEMA)
+                    .execBinding(readBinding).build());
         }
         // 默认注册 finish：agentic run 的唯一合法结束方式。
         // 「没有工具调用」既可能是做完、也可能是放弃，只靠沉默无法区分 —— finish 让它变成显式声明。

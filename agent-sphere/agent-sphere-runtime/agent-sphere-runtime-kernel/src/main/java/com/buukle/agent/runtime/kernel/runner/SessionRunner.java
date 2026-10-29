@@ -651,12 +651,6 @@ public class SessionRunner {
                 }
             }
 
-            // live 工具结果预算：浏览器只保留最近一条全文，非浏览器按单条/总预算压缩。
-            LiveToolResultPolicy.apply(messages,
-                    properties.getRunner().getLiveToolResultMaxChars(),
-                    properties.getRunner().getLiveToolResultBudgetChars(),
-                    properties.getRunner().getLiveToolResultKeepRecent());
-
             boolean todowriteCalled = turn.toolCalls().stream().anyMatch(tc ->
                     tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId()));
             if (todowriteCalled && !messages.isEmpty()) {
@@ -1004,10 +998,15 @@ public class SessionRunner {
                     }
 
                     String apiKey = resolveApiKey(route);
+                    // 只投影请求副本：canonical messages 保留完整工具结果，供压缩/快照使用。
                     ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
                             .setModel(route.getModelName())
                             .setStream(true)
-                            .setMessages(new ArrayList<>(messages));
+                            .setMessages(LiveToolResultPolicy.project(messages,
+                                    properties.getRunner().getLiveToolResultMaxChars(),
+                                    properties.getRunner().getLiveToolResultBudgetChars(),
+                                    properties.getRunner().getLiveToolResultKeepRecent(),
+                                    properties.getRunner().getLiveBrowserFullMaxChars()));
                     if (!toolDefs.isEmpty()) {
                         request.setTools(toolDefs);
                     }

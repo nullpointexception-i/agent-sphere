@@ -22,6 +22,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
+import com.buukle.agent.runtime.kernel.service.ToolResultReadService;
 import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
 import com.buukle.agent.runtime.kernel.runner.sub.SubAgentConstants;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -57,6 +58,7 @@ public class ToolExecutor {
     private final ClarificationSpi clarificationSpi;
     private final PendingWaitSpi pendingWaitSpi;
     private final DelegateService delegateService;
+    private final ToolResultReadService toolResultReadService;
     /** 任务级 MCP 凭证来源。 */
     private final TaskMcpCredentialStore taskMcpCredentialStore;
 
@@ -147,6 +149,11 @@ public class ToolExecutor {
             // 这里绝对不能 sleep —— 一睡就占住 maxParallel 信号量并撞上 tool.execution-timeout，
             // 而「等超过 60s」恰恰是常规工具语义下无法满足的需求。只写一条挂起记录就返回，
             // SessionRunner 循环判定后 break 退出，到点由 PendingWaitWakeScheduler 唤醒。
+            if (CAPABILITY_TYPE_BUILTIN.equals(type)
+                    && tc.name().equals(LLM_PREFIX_BUILTIN + BuiltinToolEnum.READ_TOOL_RESULT.getId())) {
+                return toolResultReadService.read(sessionId, args);
+            }
+
             if (CAPABILITY_TYPE_BUILTIN.equals(type) && WaitConstants.TOOL_NAME.equals(tc.name())) {
                 try {
                     JsonNode argsNode = JSON.readTree(args);

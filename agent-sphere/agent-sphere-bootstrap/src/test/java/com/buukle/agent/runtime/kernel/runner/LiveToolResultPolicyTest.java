@@ -11,22 +11,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LiveToolResultPolicyTest {
 
     private static final String BROWSER = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.CHROME.getId();
     private static final String SKILL = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.SKILL_LIBRARY.getId();
 
-    private static ChatMessageDTO assistant(String... names) {
-        List<ToolCallDTO> calls = new ArrayList<>();
-        for (int i = 0; i < names.length; i++) {
-            calls.add(ToolCallDTO.builder()
-                    .id("call-" + i + "-" + names[i])
-                    .type("function")
-                    .function(FunctionDefinitionDTO.builder().name(names[i]).arguments("{}").build())
-                    .build());
-        }
-        return new ChatMessageDTO().setRole("assistant").setToolCalls(calls);
+    private static ChatMessageDTO assistantCall(String callId, String name) {
+        return new ChatMessageDTO().setRole("assistant").setToolCalls(List.of(
+                ToolCallDTO.builder()
+                        .id(callId)
+                        .type("function")
+                        .function(FunctionDefinitionDTO.builder().name(name).arguments("{}").build())
+                        .build()));
     }
 
     private static ChatMessageDTO tool(String callId, String content) {
@@ -34,31 +32,58 @@ class LiveToolResultPolicyTest {
     }
 
     @Test
-    void keepsLatestBrowserFullAndReplacesOlderBrowserResults() {
+    void projectKeepsCanonicalMessagesUntouchedAndSmallBrowserFull() {
         List<ChatMessageDTO> messages = List.of(
-                assistant(BROWSER),
-                tool("call-0-" + BROWSER, "browser-old"),
-                assistant(BROWSER),
-                tool("call-0-" + BROWSER, "browser-latest"));
+                assistantCall("call-old", BROWSER),
+                tool("call-old", "browser-old"),
+                assistantCall("call-new", BROWSER),
+                tool("call-new", "browser-new"));
 
-        LiveToolResultPolicy.apply(messages, 100, 1_000, 2);
+        List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
+                messages, 100, 1_000, 2, 20_000);
 
-        assertEquals(LiveToolResultPolicy.BROWSER_OMITTED, messages.get(1).getContent());
-        assertEquals("browser-latest", messages.get(3).getContent());
+        assertEquals("browser-old", projected.get(1).getContent());
+        assertEquals("browser-new", projected.get(3).getContent());
+        assertEquals("browser-old", messages.get(1).getContent(), "canonical messages 不得被投影修改");
+    }
+
+    @Test
+    void projectReplacesOnlyLargeBrowserResultWithCallIdReference() {
+        String large = "x".repeat(20_001);
+        List<ChatMessageDTO> messages = List.of(
+                assistantCall("call-small", BROWSER),
+                tool("call-small", "{\"data\":{\"_url\":\"https://example.com/a\",\"matches\":["
+                        + "{\"text\":\"news-a\"},{\"text\":\"news-b\"},"
+                        + "{\"text\":\"news-c\"},{\"text\":\"news-d\"}]}}"),
+                assistantCall("call-large", BROWSER),
+                tool("call-large", large));
+
+        List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
+                messages, 100, 1_000, 2, 20_000);
+
+        String small = String.valueOf(projected.get(1).getContent());
+        String big = String.valueOf(projected.get(3).getContent());
+        assertTrue(small.contains("news-d"), "小页面应保留完整原文（数组不折叠）");
+        assertTrue(big.contains("read_tool_result"));
+        assertTrue(big.contains("call-large"));
+        assertEquals(large, messages.get(3).getContent());
     }
 
     @Test
     void keepsRecentNonBrowserAndOmitsOlderOverBudget() {
         List<ChatMessageDTO> messages = List.of(
-                assistant(SKILL),
-                tool("call-0-" + SKILL, "skill-old"),
-                assistant(SKILL),
-                tool("call-0-" + SKILL, "skill-new"));
+                assistantCall("call-old", SKILL),
+                tool("call-old", "skill-old"),
+                assistantCall("call-new", SKILL),
+                tool("call-new", "skill-new"));
 
-        LiveToolResultPolicy.apply(messages, 100, 10, 1);
+        List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
+                messages, 100, 10, 1, 20_000);
 
-        // 最近 1 条保留；更旧的超出预算 → 省略
-        assertEquals("skill-new", messages.get(3).getContent());
-        assertEquals("[Tool result omitted due to context limit]", messages.get(1).getContent());
+        // 最近 1 条保留；更旧的超出预算 → 带 callId 的省略引用
+        assertEquals("skill-new", projected.get(3).getContent());
+        String old = String.valueOf(projected.get(1).getContent());
+        assertTrue(old.contains("read_tool_result"));
+        assertTrue(old.contains("call-old"));
     }
 }

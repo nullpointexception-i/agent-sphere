@@ -13,6 +13,7 @@ import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
+import com.buukle.agent.runtime.kernel.service.ToolResultReadService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +61,8 @@ class WaitBuiltinToolTest {
     @Mock
     PendingWaitSpi pendingWaitSpi;
     @Mock
+    ToolResultReadService toolResultReadService;
+    @Mock
     DelegateService delegateService;
     @Mock
     TaskMcpCredentialStore taskMcpCredentialStore;
@@ -69,7 +72,7 @@ class WaitBuiltinToolTest {
     @BeforeEach
     void setUp() {
         toolExecutor = new ToolExecutor(mcpSpis, builtinSpi, cliExecutorService, sessionTodoSpi,
-                eventPublisher, clarificationSpi, pendingWaitSpi, delegateService, taskMcpCredentialStore);
+                eventPublisher, clarificationSpi, pendingWaitSpi, delegateService, toolResultReadService, taskMcpCredentialStore);
     }
 
     private static RuntimeTool waitTool() {

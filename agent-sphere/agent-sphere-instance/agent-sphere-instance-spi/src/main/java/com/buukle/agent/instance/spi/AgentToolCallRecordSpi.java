@@ -28,6 +28,9 @@ public interface AgentToolCallRecordSpi {
      */
     AgentToolCallRecordVO getByRunAndCallId(Long runId, String callId);
 
+    /** 按 sessionId + 模型侧 tool call id 定位（read_tool_result 回读历史 artifact 用）。 */
+    AgentToolCallRecordVO getBySessionAndCallId(Long sessionId, String callId);
+
     AgentToolCallRecordVO getLatestBySessionAndToolName(Long sessionId, String toolName);
 
     List<AgentToolCallRecordVO> listBySessionId(Long sessionId, Long runId);

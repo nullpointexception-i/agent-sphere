@@ -17,6 +17,8 @@ public class SessionUsageVO implements Serializable {
     private Long totalTokens;
     private Long cacheHitTokens;
     private Long cacheMissTokens;
+    /** 最近一次主 Agent CHAT_REPLY 的 prompt tokens（当前上下文占用）；无记录时为 null。 */
+    private Long latestPromptTokens;
     /** 缓存命中率（0-100，无用量时为 null）。 */
     private Double cacheHitRate;
 }

@@ -12,7 +12,8 @@ public enum BuiltinToolEnum {
     WAIT(10),
     TEXT_CONTAINS(11),
     FINISH(12),
-    CURRENT_TIME(13);
+    CURRENT_TIME(13),
+    READ_TOOL_RESULT(14);
 
     private final int id;
 
