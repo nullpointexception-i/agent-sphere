@@ -124,7 +124,8 @@ buukle:
         target-ratio: 0.55                         # 压缩后目标（含 tools/fixed）/ Post-compaction target
         input-ratio: 0.35                          # 压缩输入预算比例 / Compaction input ratio
         tail-ratio: 0.25                           # run-local tail 预算比例 / Run-local tail ratio
-        summary-max-tokens: 2000                   # 摘要硬上限 / Summary hard cap
+        summary-max-tokens: 4000                   # 摘要绝对上限 / Summary absolute cap
+        summary-max-ratio: 0.12                    # 摘要上限占 maxInput 比例 / Summary cap ratio
         cooldown-turns: 4                          # 压缩冷却轮数 / Compaction cooldown turns
         max-per-run: 12                            # 单 run 压缩次数上限 / Max compactions per run
 

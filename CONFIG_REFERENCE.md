@@ -70,7 +70,8 @@ Retention days and the kill switch for cleanup live in `agent_system_config` (`c
 | `compaction.target-ratio` | `0.55` | Post-compaction target (messages + tools + fixed) |
 | `compaction.input-ratio` | `0.35` | Compaction input budget ratio |
 | `compaction.tail-ratio` | `0.25` | Run-local tail budget ratio |
-| `compaction.summary-max-tokens` | `2000` | Hard summary cap |
+| `compaction.summary-max-tokens` | `4000` | Absolute summary cap |
+| `compaction.summary-max-ratio` | `0.12` | Summary cap as a ratio of max input (route-aware) |
 | `compaction.cooldown-turns` | `4` | Minimum turns between run-local compactions (hard ceiling overrides) |
 | `compaction.max-per-run` | `12` | Max run-local compactions per run |
 

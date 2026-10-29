@@ -10,6 +10,7 @@ import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.model.dtvo.complete.FinishReason;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
@@ -38,6 +39,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.CompactionPromptConstant;
 import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
+import com.buukle.agent.runtime.kernel.util.SummarySanitizer;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -96,6 +98,11 @@ public class CompactionService {
     private static final int RUN_COMPACTION_INPUT_MAX_CHARS = 200_000;
     private static final String RUN_TAIL_IMAGE_OMITTED = "[image omitted after run compaction]";
     private static final TypeReference<List<ChatMessageDTO>> MESSAGE_LIST_TYPE = new TypeReference<>() {};
+
+    /** 一次压缩模型调用的结果（finish_reason/error 用于判断摘要是否完整）。 */
+    private record CompactionCallResult(String content, String finishReason, String error,
+                                        Integer completionTokens) {
+    }
 
     /** 一次 run-local 压缩的真实结果（COMPLETED 时携带替换后的 messages）。 */
     public record RunCompactionResult(CompactionOutcome outcome, List<ChatMessageDTO> messages,
@@ -314,21 +321,22 @@ public class CompactionService {
         publishCompaction(CompactionStatus.RUNNING, sessionId, runId, publishId, record.getId(), detail);
 
         try {
+            long summaryCap = resolveSummaryCap(maxInputTokens);
             long summaryMaxLen = Math.min(
                     (long) (maxOutputTokens * OUTPUT_RATIO),
-                    Math.min(agentRuntimeProperties.getRunner().getCompaction().getSummaryMaxTokens(),
-                            charsToTokens(compactInput.text().length()) * 2 / 3));
+                    Math.min(summaryCap, charsToTokens(compactInput.text().length()) * 2 / 3));
             summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
-            String newSummary = callLLM(
+            CompactionCallResult summaryResult = generateCompleteSummary(
                     CompactionPromptConstant.buildPrompt(session.getSummary(), compactInput.text(), summaryMaxLen),
-                    route, sessionId, runId, publishId, (int) summaryMaxLen);
-
-            if (newSummary == null || newSummary.isBlank()) {
-                String reason = "压缩模型未返回内容";
+                    route, sessionId, runId, publishId, summaryMaxLen, maxOutputTokens);
+            if (!isCompleteSummary(summaryResult)) {
+                String reason = incompleteReason(summaryResult);
+                log.warn("Session compaction summary incomplete for session {}: {}", sessionId, reason);
                 compactRecordSpi.updateFailed(record.getId(), reason);
                 publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
                 return CompactionOutcome.NO_PROGRESS;
             }
+            String newSummary = summaryResult.content();
             long summaryTokens = charsToTokens(newSummary.length());
             // compact record 是 HistoryLoader 的权威来源：先落记录（摘要 + 游标同一条 UPDATE）。
             compactRecordSpi.updateCompleted(record.getId(), session.getSummary(), newSummary,
@@ -564,7 +572,8 @@ public class CompactionService {
         long target = (long) (maxInputTokens * compaction.getTargetRatio());
         long toolTokens = estimateToolTokens(toolDefs);
         long prefixTokens = estimateMessagesTokens(messages.subList(0, userIndex + 1));
-        long summaryReserve = compaction.getSummaryMaxTokens();
+        long summaryCap = resolveSummaryCap(maxInputTokens);
+        long summaryReserve = summaryCap;
         long availableForTail = target - prefixTokens - toolTokens - summaryReserve;
         if (availableForTail <= 0) {
             log.warn("Run compaction cannot reach target: run={}, prefix={}, tools={}, summaryReserve={}, target={}",
@@ -598,7 +607,7 @@ public class CompactionService {
 
         long summaryMaxLen = Math.min(
                 (long) (maxOutputTokens * OUTPUT_RATIO),
-                Math.min(compaction.getSummaryMaxTokens(), charsToTokens(compactPrompt.length()) * 2 / 3));
+                Math.min(summaryCap, charsToTokens(compactPrompt.length()) * 2 / 3));
         summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
 
         String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
@@ -608,15 +617,17 @@ public class CompactionService {
         publishCompaction(CompactionStatus.RUNNING, sessionId, runId, publishId, record.getId(), detail);
 
         try {
-            String summary = callLLM(
+            CompactionCallResult summaryResult = generateCompleteSummary(
                     CompactionPromptConstant.buildPrompt(previousSummary, compactPrompt, summaryMaxLen),
-                    route, sessionId, runId, publishId, (int) summaryMaxLen);
-            if (summary == null || summary.isBlank()) {
-                String reason = "压缩模型未返回内容";
+                    route, sessionId, runId, publishId, summaryMaxLen, maxOutputTokens);
+            if (!isCompleteSummary(summaryResult)) {
+                String reason = incompleteReason(summaryResult);
+                log.warn("Run compaction summary incomplete for run {}: {}", runId, reason);
                 compactRecordSpi.updateFailed(record.getId(), reason);
                 publishCompaction(CompactionStatus.FAILED, sessionId, runId, publishId, record.getId(), reason);
-                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
+                return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, target);
             }
+            String summary = summaryResult.content();
 
             // 新消息：prefix（去掉旧 run summary）→ 新 run summary 插到 leading system 末尾 → 当前 user + tail
             List<ChatMessageDTO> prefix = new ArrayList<>(messages.subList(0, userIndex));
@@ -877,8 +888,8 @@ public class CompactionService {
         return copy;
     }
 
-    private String callLLM(String messagesText, ModelRouteFullVO route, Long sessionId, Long runId,
-                           String publishId, int hardMaxTokens) {
+    private CompactionCallResult callLLM(String messagesText, ModelRouteFullVO route, Long sessionId, Long runId,
+                                         String publishId, int hardMaxTokens) {
         try {
             ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
                     .setModel(route.getModelName())
@@ -896,6 +907,12 @@ public class CompactionService {
             request.setMaxTokens(hardMaxTokens);
             String apiKeyValue = resolveApiKey(route);
             StringBuilder content = new StringBuilder();
+            java.util.concurrent.atomic.AtomicReference<String> finishReasonRef =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicReference<String> errorRef =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicReference<Map<String, Object>> usageRef =
+                    new java.util.concurrent.atomic.AtomicReference<>();
             var future = kernelLlmService.stream(
                     route.getCompany(), route.getBaseUrl(), apiKeyValue, route.getModelName(),
                     request,
@@ -917,6 +934,11 @@ public class CompactionService {
                             // 摘要模型的思考不展示（避免和压缩正文混在一起）。
                             case LLMEvent.ReasoningDelta r -> {
                             }
+                            case LLMEvent.Finish f -> {
+                                finishReasonRef.set(f.reason());
+                                usageRef.set(f.usage());
+                            }
+                            case LLMEvent.Error e -> errorRef.set(e.message());
                             default -> {
                             }
                         }
@@ -924,11 +946,73 @@ public class CompactionService {
                     new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
                             .setInteractionType(LlmInteractionType.COMPACTION));
             future.get(agentRuntimeProperties.getLlm().getStreamTimeout().getSeconds(), TimeUnit.SECONDS);
-            return content.toString();
+            Integer completionTokens = usageInt(usageRef.get(), "completion_tokens", "completionTokens");
+            return new CompactionCallResult(content.toString(), finishReasonRef.get(), errorRef.get(), completionTokens);
         } catch (Exception e) {
             log.warn("LLM compaction call failed", e);
+            return new CompactionCallResult("", null, e.getMessage(), null);
         }
-        return "";
+    }
+
+    /** 首次摘要不完整（length/content_filter/结构不闭合）时，用绝对上限重试一次。 */
+    private CompactionCallResult generateCompleteSummary(String prompt, ModelRouteFullVO route,
+                                                         Long sessionId, Long runId, String publishId,
+                                                         long summaryMaxLen, long maxOutputTokens) {
+        CompactionCallResult first = callLLM(prompt, route, sessionId, runId, publishId, (int) summaryMaxLen);
+        if (isCompleteSummary(first)) {
+            log.info("Compaction summary complete: finishReason={}, completionTokens={}, maxTokens={}",
+                    first.finishReason(), first.completionTokens(), summaryMaxLen);
+            return first;
+        }
+        int retryMax = (int) Math.min(4000L,
+                Math.min(Math.max(summaryMaxLen, 4000L), Math.max(256L, (long) (maxOutputTokens * OUTPUT_RATIO))));
+        log.warn("Compaction summary incomplete (finishReason={}, completionTokens={}); retrying with maxTokens={}",
+                first.finishReason(), first.completionTokens(), retryMax);
+        String retryPrompt = prompt + "\n\nIMPORTANT: Your previous output was cut off. Produce a COMPLETE summary "
+                + "within " + retryMax + " tokens. Prioritize the most important facts; no raw JSON or code blocks; "
+                + "end with a complete sentence and never leave an unterminated code fence/JSON/quote.";
+        CompactionCallResult retried = callLLM(retryPrompt, route, sessionId, runId, publishId, retryMax);
+        if (isCompleteSummary(retried)) {
+            log.info("Compaction summary complete after retry: finishReason={}, completionTokens={}, maxTokens={}",
+                    retried.finishReason(), retried.completionTokens(), retryMax);
+        }
+        return retried;
+    }
+
+    private static boolean isCompleteSummary(CompactionCallResult result) {
+        if (result == null || result.error() != null
+                || result.content() == null || result.content().isBlank()) {
+            return false;
+        }
+        if (FinishReason.LENGTH.equals(result.finishReason())
+                || FinishReason.CONTENT_FILTER.equals(result.finishReason())) {
+            return false;
+        }
+        return SummarySanitizer.isComplete(result.content());
+    }
+
+    private static String incompleteReason(CompactionCallResult result) {
+        if (result == null) return "压缩模型未返回内容";
+        if (result.error() != null) return "压缩调用失败: " + result.error();
+        if (result.content() == null || result.content().isBlank()) return "压缩模型未返回内容";
+        if (FinishReason.LENGTH.equals(result.finishReason())) return "摘要被 max_tokens 截断";
+        if (FinishReason.CONTENT_FILTER.equals(result.finishReason())) return "摘要被内容安全策略拦截";
+        return "摘要结构不完整";
+    }
+
+    private static Integer usageInt(Map<String, Object> usage, String... keys) {
+        if (usage == null) return null;
+        for (String key : keys) {
+            Object value = usage.get(key);
+            if (value instanceof Number n) return n.intValue();
+        }
+        return null;
+    }
+
+    long resolveSummaryCap(long maxInputTokens) {
+        var compaction = agentRuntimeProperties.getRunner().getCompaction();
+        long ratioCap = (long) (maxInputTokens * compaction.getSummaryMaxRatio());
+        return Math.max(512L, Math.min(compaction.getSummaryMaxTokens(), ratioCap));
     }
 
     private String resolveApiKey(ModelRouteFullVO route) {

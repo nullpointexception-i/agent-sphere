@@ -69,6 +69,9 @@ public class LlmContextValidator {
                 "runner.compaction.tail-ratio must be between 0 and 1, got: " + runner.getCompaction().getTailRatio());
         require(runner.getCompaction().getSummaryMaxTokens() >= 256,
                 "runner.compaction.summary-max-tokens must be >= 256, got: " + runner.getCompaction().getSummaryMaxTokens());
+        require(runner.getCompaction().getSummaryMaxRatio() > 0 && runner.getCompaction().getSummaryMaxRatio() < 1,
+                "runner.compaction.summary-max-ratio must be between 0 and 1, got: "
+                        + runner.getCompaction().getSummaryMaxRatio());
         require(runner.getCompaction().getCooldownTurns() >= 0,
                 "runner.compaction.cooldown-turns must be >= 0, got: " + runner.getCompaction().getCooldownTurns());
         require(runner.getCompaction().getMaxPerRun() >= 1,

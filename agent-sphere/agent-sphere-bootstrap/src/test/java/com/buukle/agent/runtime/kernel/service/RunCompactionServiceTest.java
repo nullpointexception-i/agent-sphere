@@ -7,6 +7,7 @@ import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.model.dtvo.complete.FinishReason;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
@@ -190,6 +191,39 @@ class RunCompactionServiceTest {
                 m.getContent() instanceof String s && (s.contains("Current server time")
                         || s.contains(RunnerConstants.PROMPT_TODOLIST_HEADER.trim())
                         || s.startsWith(RunnerConstants.LOOP_BUDGET_PREFIX))));
+    }
+
+    @Test
+    void summaryCapIsRouteAware() {
+        // 32k 路由：min(4000, 32000*0.12)=3840；128k 路由：min(4000, 15360)=4000
+        org.junit.jupiter.api.Assertions.assertEquals(3840, service.resolveSummaryCap(32_000L));
+        org.junit.jupiter.api.Assertions.assertEquals(4000, service.resolveSummaryCap(128_000L));
+        org.junit.jupiter.api.Assertions.assertEquals(4000, service.resolveSummaryCap(1_000_000L));
+    }
+
+    @Test
+    void lengthTruncatedSummaryIsRejectedAndRetried() {
+        org.mockito.Mockito.reset(kernelLlmService);
+        when(kernelLlmService.stream(anyString(), anyString(), any(), anyString(),
+                any(), any(), any())).thenAnswer(inv -> {
+            lastRequest.set(inv.getArgument(4));
+            @SuppressWarnings("unchecked")
+            Consumer<LLMEvent> onEvent = inv.getArgument(5);
+            onEvent.accept(new LLMEvent.TextDelta("## Goal\n- partial {\"detail\":\"Not"));
+            onEvent.accept(new LLMEvent.Finish(FinishReason.LENGTH,
+                    java.util.Map.of("completion_tokens", 2000)));
+            return CompletableFuture.completedFuture(null);
+        });
+
+        CompactionService.RunCompactionResult result = service.compactRun(
+                SESSION_ID, RUN_ID, null, messages(), 1, null, null);
+
+        assertEquals(CompactionOutcome.NO_PROGRESS, result.outcome());
+        verify(compactRecordSpi).updateFailed(org.mockito.ArgumentMatchers.eq(99L),
+                org.mockito.ArgumentMatchers.anyString());
+        verify(compactRecordSpi, org.mockito.Mockito.never()).completeRunCompact(any(), any(), any(), any(), any());
+        verify(kernelLlmService, org.mockito.Mockito.times(2)).stream(anyString(), anyString(), any(),
+                anyString(), any(), any(), any());
     }
 
     @Test

@@ -601,6 +601,21 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
 - builtin_5（Chrome）description/schema 与 `PROMPT_TOOLS_FOOTER` 只做文案/描述精简；**不改变工具集合、
   needConfig、绑定关系**。
 
+**压缩摘要必须完整，截断摘要不得落库。** 线上 session 860 的 compact record id=49 就是被
+`max_tokens=2000` 截断的摘要（`finish_reason=length`、`completion_tokens=2000`，结尾停在
+`{"detail":"Not`），但旧代码只判断 `isBlank`，把残缺文本写成 COMPLETED 并作为后续所有 run 的
+`[Conversation summary]`，还把它作为下一次压缩的 `existingSummary`，形成 id 40–49 的连续截断链。
+
+- 摘要上限路由自适应：`summaryCap = max(512, min(summary-max-tokens(4000), maxInputTokens × summary-max-ratio(0.12)))`；
+  再与 `maxOutputTokens × 2/3`、输入 token 的 2/3 取 min。
+- `callLLM` 必须捕获 `LLMEvent.Finish` / `LLMEvent.Error`，返回 finishReason/error；`doCompact` /
+  `doCompactRun` 仅在 `stop`（或无 finish 但结构完整）且 `SummarySanitizer.isComplete` 时写 COMPLETED。
+  `length`/`content_filter`/异常 → 用绝对上限重试一次；仍不完整 → FAILED，**不更新 session.summary、
+  不推进 compacted_upto_run_id**，保留旧摘要/游标。
+- `SummarySanitizer` 只做 `isComplete`（代码围栏奇偶、`{}`/`[]` 平衡、结尾字符），**不做读取时 sanitize**；
+  `HistoryLoader` 原样使用旧摘要。已有残缺摘要不会被自动修复，只会在下一次完整压缩成功后覆盖。
+- 摘要 prompt 必须禁止原始 JSON/代码块/长表格，并要求完整收尾；不要把“be as detailed as necessary”写回。
+
 **`StaleRunningRunReconciler` 是 DB 层最后一道网。** 每 `stale-reconcile-interval`（默认 1m）扫
 `findStaleByStatus(RUNNING, now - stale-reconcile-minutes)`（默认 30m），**且 session owner 租约不存在**
 才动手（活副本每 60s 续约，长工具/长 LLM 调用不会被误杀）：置 FAILED + 发终态事件；若 session state
