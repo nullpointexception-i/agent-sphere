@@ -3,7 +3,7 @@ import { useIntl } from '@umijs/max';
 import { Button, Card, Empty, Segmented, Space, Spin, Statistic, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
-import { formatTokens } from '../Usage';
+import { cacheHitRate, formatTokens } from '../Usage';
 
 interface UsagePoint {
   id: number;
@@ -151,14 +151,20 @@ export default function UsageTrend({
           mainPoints.length,
       )
     : 0;
-  const cacheRate =
-    latest && Number(latest.promptTokens)
-      ? Math.round(
-          ((Number(latest.cacheHitTokens) || 0) /
-            Number(latest.promptTokens)) *
-            100,
-        )
-      : null;
+  const windowUsage = useMemo(
+    () => ({
+      cacheHitTokens: visiblePoints.reduce(
+        (sum, p) => sum + (Number(p.cacheHitTokens) || 0),
+        0,
+      ),
+      cacheMissTokens: visiblePoints.reduce(
+        (sum, p) => sum + (Number(p.cacheMissTokens) || 0),
+        0,
+      ),
+    }),
+    [visiblePoints],
+  );
+  const cacheRate = cacheHitRate(windowUsage);
 
   const metrics = useMemo(
     () =>
@@ -311,10 +317,31 @@ export default function UsageTrend({
               valueStyle={{ fontSize: 14 }}
             />
             <Statistic
-              title={intl.formatMessage({
-                id: 'pages.chat.usageTrend.cacheRate',
-                defaultMessage: 'Cache hit rate',
-              })}
+              title={
+                <span
+                  title={`${intl.formatMessage(
+                    {
+                      id: 'pages.chat.usageTrend.cacheDetail',
+                      defaultMessage: 'Hit {hit} / miss {miss}',
+                    },
+                    {
+                      hit: formatTokens(windowUsage.cacheHitTokens),
+                      miss: formatTokens(windowUsage.cacheMissTokens),
+                    },
+                  )} · ${intl.formatMessage(
+                    {
+                      id: 'pages.chat.usageTrend.window',
+                      defaultMessage: 'Showing latest {limit}',
+                    },
+                    { limit: LIMIT },
+                  )}`}
+                >
+                  {intl.formatMessage({
+                    id: 'pages.chat.usageTrend.cacheRate',
+                    defaultMessage: 'Window cache hit rate',
+                  })}
+                </span>
+              }
               value={cacheRate == null ? '-' : `${cacheRate}%`}
               valueStyle={{ fontSize: 14 }}
             />
@@ -378,6 +405,10 @@ export default function UsageTrend({
                   defaultMessage: 'Zoomed in, auto-refresh paused',
                 })}`
               : ''}
+            {` · ${intl.formatMessage({
+              id: 'pages.chat.usageTrend.rawSeriesHint',
+              defaultMessage: 'Hit/miss lines are raw tokens per interaction',
+            })}`}
           </Typography.Text>
         </>
       )}

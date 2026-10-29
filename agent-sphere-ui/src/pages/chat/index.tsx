@@ -25,6 +25,7 @@ import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
 import Landing from './components/Landing';
 import SessionPanel from './components/SessionPanel';
+import { SESSION_USAGE_REFRESH_EVENT } from './components/Usage';
 import Sidebar from './components/Sidebar';
 import { useStyles } from './style';
 
@@ -388,6 +389,19 @@ export default function Chat() {
   useEffect(() => {
     if (currentSession?.id) void refreshSessionUsage(currentSession.id);
   }, [currentSession?.id]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const sid = Number(
+        (event as CustomEvent<{ sessionId?: number }>).detail?.sessionId,
+      );
+      if (sid && currentSessionIdRef.current === sid) {
+        void refreshSessionUsage(sid);
+      }
+    };
+    window.addEventListener(SESSION_USAGE_REFRESH_EVENT, handler);
+    return () => window.removeEventListener(SESSION_USAGE_REFRESH_EVENT, handler);
+  }, []);
 
   const handleTimelineClarify = async (row: any, response: string) => {
     if (!currentSession?.id || !row?.runId) return;

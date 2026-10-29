@@ -63,7 +63,7 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
             """)
     com.buukle.agent.instance.domain.vo.SessionUsageVO sumUsageBySession(@Param("sessionId") Long sessionId);
 
-    /** 最近 N 条主 Agent LLM 交互的 token 指标（按 id 倒序取窗口，再升序返回）。 */
+    /** 最近 N 条 LLM 交互的 token 指标（含子 Agent；主对话模式由前端过滤 CHAT_REPLY）。 */
     @Select("""
             SELECT id, interaction_type, model_name, created_at,
                    prompt_tokens, completion_tokens, total_tokens,
@@ -75,7 +75,6 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
               FROM agent_llm_interaction_record
               WHERE run_id = #{runId}
                 AND session_id = #{sessionId}
-                AND sub_agent_run_id IS NULL
                 AND delete_flag = 0
                 AND id > #{afterId}
               ORDER BY id DESC

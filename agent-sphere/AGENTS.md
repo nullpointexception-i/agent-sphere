@@ -655,6 +655,17 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
 - 列表/详情 SQL 都必须带 `run_id` + `session_id` + `delete_flag`，避免跨 run/会话读取。
 - 新增活动字段时先判断是否属于列表列；默认只进详情 VO，不要回加到大字段查询。
 
+## Usage / cache-hit scopes
+
+Three deliberately different scopes; keep labels explicit:
+
+- 吸底 `会话累计 · 全部模型调用`：`sumUsageBySession`，跨所有 run，含压缩/标题生成/子 Agent。
+- `Run 累计 · 全部模型调用（含压缩/子 Agent）`：`getRunUsage` / `sumUsageByRunIds`。
+- `Token 趋势` 窗口：`usage-series` 最近 300 条；`主对话` 仅前端过滤 `CHAT_REPLY`，`全部模型交互`
+  含压缩与子 Agent。缓存率必须对当前 `visiblePoints` 求和，不能取最新一条。
+
+统一公式 `hit / (hit + miss)`、1 位小数；图表里的命中/未命中曲线是单次交互原始 token 数，不是百分比。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).

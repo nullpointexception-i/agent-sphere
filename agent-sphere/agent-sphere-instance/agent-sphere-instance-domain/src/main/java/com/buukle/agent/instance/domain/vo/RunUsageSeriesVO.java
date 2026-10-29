@@ -6,7 +6,7 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.List;
 
-/** 最近 N 条主 Agent LLM 交互的 token 序列。 */
+/** 最近 N 条 LLM 交互的 token 序列。 */
 @Data
 @AllArgsConstructor
 public class RunUsageSeriesVO implements Serializable {

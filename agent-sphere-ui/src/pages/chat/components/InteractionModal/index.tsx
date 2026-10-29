@@ -15,6 +15,7 @@ interface InteractionModalProps {
 }
 
 const PAGE_SIZE = 10;
+const USAGE_REFRESH_MS = 5_000;
 
 const TYPE_COLORS: Record<string, string> = {
   LLM_REPLY: 'blue',
@@ -53,6 +54,7 @@ export default function InteractionModal({
   const [detailLoadingKey, setDetailLoadingKey] = useState<string | null>(null);
   const [runUsage, setRunUsage] = useState<any>(null);
   const { message } = App.useApp();
+  const runCacheRate = cacheHitRate(runUsage);
 
   useEffect(() => {
     if (!open || runId == null || sessionId == null) return;
@@ -60,10 +62,15 @@ export default function InteractionModal({
     setRecords([]);
     setTotal(0);
     loadActivities(runId, sessionId, 1);
-    agentApi.runs
-      .usage(runId)
-      .then(setRunUsage)
-      .catch(() => setRunUsage(null));
+    const refreshRunUsage = () => {
+      agentApi.runs
+        .usage(runId)
+        .then(setRunUsage)
+        .catch(() => setRunUsage(null));
+    };
+    refreshRunUsage();
+    const timer = window.setInterval(refreshRunUsage, USAGE_REFRESH_MS);
+    return () => window.clearInterval(timer);
   }, [open, runId, sessionId]);
 
   const loadActivities = async (rid: number, sid: number, p: number) => {
@@ -223,13 +230,48 @@ export default function InteractionModal({
               color: 'rgba(0,0,0,0.45)',
             }}
           >
-            Run SUM · {formatTokens(runUsage.totalTokens)} tokens
+            {intl.formatMessage({
+              id: 'pages.chat.runUsage.title',
+              defaultMessage: 'Run total',
+            })}{' '}
+            ·{' '}
+            {intl.formatMessage({
+              id: 'pages.chat.runUsage.allModels',
+              defaultMessage: 'All model calls (incl. compaction/sub-agents)',
+            })}{' '}
+            · {formatTokens(runUsage.totalTokens)} tokens
             {formatTokens(runUsage.promptTokens) !== '0' &&
-              ` · prompt ${formatTokens(runUsage.promptTokens)}`}
+              ` · ${intl.formatMessage({
+                id: 'pages.chat.sessionUsage.prompt',
+                defaultMessage: 'prompt',
+              })} ${formatTokens(runUsage.promptTokens)}`}
             {formatTokens(runUsage.completionTokens) !== '0' &&
-              ` · completion ${formatTokens(runUsage.completionTokens)}`}
-            {cacheHitRate(runUsage) != null &&
-              ` · cache ${cacheHitRate(runUsage)}%`}
+              ` · ${intl.formatMessage({
+                id: 'pages.chat.sessionUsage.completion',
+                defaultMessage: 'completion',
+              })} ${formatTokens(runUsage.completionTokens)}`}
+            {runCacheRate != null && (
+              <span
+                title={`${intl.formatMessage(
+                  {
+                    id: 'pages.chat.usage.cacheDetail',
+                    defaultMessage: 'Hit {hit} / miss {miss}',
+                  },
+                  {
+                    hit: formatTokens(runUsage.cacheHitTokens),
+                    miss: formatTokens(runUsage.cacheMissTokens),
+                  },
+                )} · ${intl.formatMessage({
+                  id: 'pages.chat.runUsage.scope',
+                  defaultMessage: 'Run total (incl. compaction/sub-agents)',
+                })}`}
+              >
+                {` · ${intl.formatMessage({
+                  id: 'pages.chat.sessionUsage.cache',
+                  defaultMessage: 'cache',
+                })} ${runCacheRate}%`}
+              </span>
+            )}
           </div>
         )}
         <Spin spinning={loading}>

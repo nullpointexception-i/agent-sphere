@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import InteractionModal from '../InteractionModal';
-import { cacheHitRate, formatTokens } from '../Usage';
+import {
+  cacheHitRate,
+  formatTokens,
+  SESSION_USAGE_REFRESH_EVENT,
+} from '../Usage';
 
 interface RunDrawerProps {
   open: boolean;
@@ -39,6 +43,11 @@ export default function RunDrawer({
     if (!open || sessionId == null) return;
     setKeyword('');
     setPage(1);
+    window.dispatchEvent(
+      new CustomEvent(SESSION_USAGE_REFRESH_EVENT, {
+        detail: { sessionId },
+      }),
+    );
   }, [open, sessionId]);
 
   const loadRuns = useCallback(async (sid: number, p: number, kw: string) => {
@@ -108,8 +117,27 @@ export default function RunDrawer({
           <span style={{ fontSize: 12 }}>
             {formatTokens(u.totalTokens)}
             {rate != null ? (
-              <span style={{ color: 'rgba(0,0,0,0.35)', marginLeft: 6 }}>
-                cache {rate}%
+              <span
+                style={{ color: 'rgba(0,0,0,0.35)', marginLeft: 6 }}
+                title={`${intl.formatMessage(
+                  {
+                    id: 'pages.chat.usage.cacheDetail',
+                    defaultMessage: 'Hit {hit} / miss {miss}',
+                  },
+                  {
+                    hit: formatTokens(u.cacheHitTokens),
+                    miss: formatTokens(u.cacheMissTokens),
+                  },
+                )} · ${intl.formatMessage({
+                  id: 'pages.chat.runUsage.scope',
+                  defaultMessage: 'Run total (incl. compaction/sub-agents)',
+                })}`}
+              >
+                {intl.formatMessage({
+                  id: 'pages.chat.sessionUsage.cache',
+                  defaultMessage: 'cache',
+                })}{' '}
+                {rate}%
               </span>
             ) : null}
           </span>

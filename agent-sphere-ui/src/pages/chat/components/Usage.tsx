@@ -1,5 +1,7 @@
 import { Tooltip, Typography } from 'antd';
 
+export const SESSION_USAGE_REFRESH_EVENT = 'agent:session-usage-refresh';
+
 export interface UsageData {
   promptTokens?: number | null;
   completionTokens?: number | null;

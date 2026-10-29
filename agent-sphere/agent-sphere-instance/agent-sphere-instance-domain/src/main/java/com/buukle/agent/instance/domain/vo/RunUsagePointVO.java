@@ -5,7 +5,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-/** 单次主 Agent LLM 交互的 token 指标（不含 request/response 大字段）。 */
+/** 单次 LLM 交互的 token 指标（不含 request/response 大字段）。 */
 @Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class RunUsagePointVO implements Serializable {

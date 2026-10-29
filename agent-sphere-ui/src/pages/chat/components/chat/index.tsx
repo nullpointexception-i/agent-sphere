@@ -1,7 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { useEffect, useRef } from 'react';
 import { useStyles } from '../../style';
-import { contextUsagePercent, formatTokens } from '../Usage';
+import { cacheHitRate, contextUsagePercent, formatTokens } from '../Usage';
 import Footer from './Footer';
 import Header from './Header';
 import type { SubAgentLiveMap, SubAgentTimelineItem } from './subAgentTypes';
@@ -73,6 +73,7 @@ export default function ChatMain({
     sessionUsage?.latestPromptTokens,
     currentRoute?.maxInputTokens,
   );
+  const sessionCacheRate = cacheHitRate(sessionUsage);
   const messagesRef = useRef<HTMLDivElement>(null);
   const timelineWrapRef = useRef<HTMLDivElement>(null);
 
@@ -189,7 +190,12 @@ export default function ChatMain({
               ♨{' '}
               {intl.formatMessage({
                 id: 'pages.chat.sessionUsage.title',
-                defaultMessage: 'Session usage',
+                defaultMessage: 'Session total',
+              })}{' '}
+              ·{' '}
+              {intl.formatMessage({
+                id: 'pages.chat.sessionUsage.allModels',
+                defaultMessage: 'All model calls',
               })}{' '}
               · {formatTokens(sessionUsage.totalTokens)} tokens
               {formatTokens(sessionUsage.promptTokens) !== '0' &&
@@ -202,11 +208,29 @@ export default function ChatMain({
                   id: 'pages.chat.sessionUsage.completion',
                   defaultMessage: 'completion',
                 })} ${formatTokens(sessionUsage.completionTokens)}`}
-              {sessionUsage.cacheHitRate != null &&
-                ` · ${intl.formatMessage({
-                  id: 'pages.chat.sessionUsage.cache',
-                  defaultMessage: 'cache',
-                })} ${sessionUsage.cacheHitRate}%`}
+              {sessionCacheRate != null && (
+                <span
+                  title={`${intl.formatMessage(
+                    {
+                      id: 'pages.chat.usage.cacheDetail',
+                      defaultMessage: 'Hit {hit} / miss {miss}',
+                    },
+                    {
+                      hit: formatTokens(sessionUsage.cacheHitTokens),
+                      miss: formatTokens(sessionUsage.cacheMissTokens),
+                    },
+                  )} · ${intl.formatMessage({
+                    id: 'pages.chat.sessionUsage.scope',
+                    defaultMessage:
+                      'Session total (incl. compaction/title/sub-agents)',
+                  })}`}
+                >
+                  {` · ${intl.formatMessage({
+                    id: 'pages.chat.sessionUsage.cache',
+                    defaultMessage: 'cache',
+                  })} ${sessionCacheRate}%`}
+                </span>
+              )}
               {contextPercent != null && (
                 <span
                   title={`${formatTokens(sessionUsage.latestPromptTokens)} / ${formatTokens(currentRoute?.maxInputTokens)}`}
