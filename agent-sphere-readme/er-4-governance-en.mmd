@@ -1,0 +1,99 @@
+erDiagram
+    agent_document }o--o| agent_session : "session_id"
+
+    agent_session {
+        bigint id PK "session id (full fields in 4.3.1)"
+    }
+
+    sys_audit_log {
+        bigserial id PK "primary key"
+        bigint user_id "actor id"
+        varchar username "actor"
+        varchar action "action"
+        varchar resource_type "resource type"
+        varchar resource_id "resource id"
+        text detail "detail"
+        varchar ip_address "IP address"
+        varchar user_agent "user agent"
+        boolean success "succeeded"
+        text error_message "error message"
+        timestamp created_at "occurred at (7/90-day purge)"
+        smallint delete_flag "logical delete"
+    }
+
+    agent_system_config {
+        bigserial id PK "primary key"
+        varchar config_group "config group"
+        varchar config_key "config key"
+        text config_value "config value"
+        boolean is_secret "is secret"
+        varchar description "description"
+        smallint delete_flag "logical delete"
+        varchar created_by "created by"
+        varchar updated_by "updated by"
+        timestamp created_at "created at"
+        timestamp updated_at "updated at"
+    }
+
+    agent_session_cleanup_run {
+        bigserial id PK "primary key"
+        varchar trigger_type "trigger CRON/MANUAL"
+        boolean dry_run "dry run"
+        varchar status "status RUNNING/SUCCESS/SKIPPED/FAILED"
+        integer retention_days "session retention days"
+        integer file_retention_days "file retention days"
+        timestamp cutoff "session cutoff"
+        timestamp file_cutoff "file cutoff"
+        integer total_sessions "total sessions (denominator)"
+        integer session_count "sessions processed"
+        bigint total_rows "rows deleted"
+        bigint skipped_active_sessions "active sessions skipped"
+        integer batches "batches executed"
+        boolean truncated "stopped by batch limit"
+        bigint elapsed_ms "elapsed (ms)"
+        jsonb table_stats "per-table delete stats"
+        varchar skip_reason "skip reason"
+        text error_message "error message"
+        timestamp started_at "started at"
+        timestamp finished_at "finished at"
+        varchar remark "remark"
+        smallint delete_flag "logical delete"
+        varchar created_by "created by"
+        varchar updated_by "updated by"
+        timestamp created_at "created at"
+        timestamp updated_at "updated at"
+    }
+
+    agent_file_store {
+        bigserial id PK "primary key"
+        varchar biz_key "business key"
+        varchar file_key "file key (external reference)"
+        varchar file_name "file name"
+        bytea content "file content"
+        bigint size_bytes "size in bytes"
+        varchar content_type "MIME type"
+        varchar status "status"
+        varchar remark "remark"
+        smallint delete_flag "logical delete"
+        varchar created_by "created by"
+        varchar updated_by "updated by"
+        timestamp created_at "created at"
+        timestamp updated_at "updated at"
+    }
+
+    agent_document {
+        bigserial id PK "primary key"
+        varchar title "document title"
+        text content "document content"
+        varchar content_type "content type"
+        bigint session_id FK "source session"
+        bigint instance_id "instance id"
+        bigint run_id "producing run"
+        varchar share_token "share token"
+        bigint tenant_id "tenant id"
+        varchar created_by "created by"
+        varchar updated_by "updated by"
+        timestamp created_at "created at"
+        timestamp updated_at "updated at"
+        smallint delete_flag "logical delete"
+    }

@@ -1,0 +1,99 @@
+erDiagram
+    agent_document }o--o| agent_session : "session_id"
+
+    agent_session {
+        bigint id PK "会话ID(详见会话运行域)"
+    }
+
+    sys_audit_log {
+        bigserial id PK "主键"
+        bigint user_id "操作人ID"
+        varchar username "操作人"
+        varchar action "动作"
+        varchar resource_type "资源类型"
+        varchar resource_id "资源ID"
+        text detail "详情"
+        varchar ip_address "IP地址"
+        varchar user_agent "User-Agent"
+        boolean success "是否成功"
+        text error_message "错误信息"
+        timestamp created_at "发生时间(7/90天清理)"
+        smallint delete_flag "逻辑删除"
+    }
+
+    agent_system_config {
+        bigserial id PK "主键"
+        varchar config_group "配置分组"
+        varchar config_key "配置键"
+        text config_value "配置值"
+        boolean is_secret "是否敏感"
+        varchar description "说明"
+        smallint delete_flag "逻辑删除"
+        varchar created_by "创建人"
+        varchar updated_by "更新人"
+        timestamp created_at "创建时间"
+        timestamp updated_at "更新时间"
+    }
+
+    agent_session_cleanup_run {
+        bigserial id PK "主键"
+        varchar trigger_type "触发方式 CRON/MANUAL"
+        boolean dry_run "是否预演"
+        varchar status "状态 RUNNING/SUCCESS/SKIPPED/FAILED"
+        integer retention_days "会话保留天数"
+        integer file_retention_days "文件保留天数"
+        timestamp cutoff "会话截止时间"
+        timestamp file_cutoff "文件截止时间"
+        integer total_sessions "会话总数(分母)"
+        integer session_count "已处理会话数"
+        bigint total_rows "已删除行数"
+        bigint skipped_active_sessions "活跃会话跳过数"
+        integer batches "已执行批次"
+        boolean truncated "是否被批上限截断"
+        bigint elapsed_ms "耗时(ms)"
+        jsonb table_stats "分表删除明细"
+        varchar skip_reason "跳过原因"
+        text error_message "错误信息"
+        timestamp started_at "开始时间"
+        timestamp finished_at "结束时间"
+        varchar remark "备注"
+        smallint delete_flag "逻辑删除"
+        varchar created_by "创建人"
+        varchar updated_by "更新人"
+        timestamp created_at "创建时间"
+        timestamp updated_at "更新时间"
+    }
+
+    agent_file_store {
+        bigserial id PK "主键"
+        varchar biz_key "业务键"
+        varchar file_key "文件键(对外引用)"
+        varchar file_name "文件名"
+        bytea content "文件内容"
+        bigint size_bytes "字节数"
+        varchar content_type "MIME类型"
+        varchar status "状态"
+        varchar remark "备注"
+        smallint delete_flag "逻辑删除"
+        varchar created_by "创建人"
+        varchar updated_by "更新人"
+        timestamp created_at "创建时间"
+        timestamp updated_at "更新时间"
+    }
+
+    agent_document {
+        bigserial id PK "主键"
+        varchar title "文档标题"
+        text content "文档内容"
+        varchar content_type "内容类型"
+        bigint session_id FK "来源会话"
+        bigint instance_id "实例ID"
+        bigint run_id "产出run"
+        varchar share_token "分享令牌"
+        bigint tenant_id "租户ID"
+        varchar created_by "创建人"
+        varchar updated_by "更新人"
+        timestamp created_at "创建时间"
+        timestamp updated_at "更新时间"
+        smallint delete_flag "逻辑删除"
+    }
