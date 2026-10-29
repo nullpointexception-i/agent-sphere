@@ -8,12 +8,12 @@ import java.util.List;
 @Data
 public class RunActivityListVO implements Serializable {
     private int total;
-    private List<RunActivityVO> records;
+    private List<RunActivitySummaryVO> records;
 
     public RunActivityListVO() {
     }
 
-    public RunActivityListVO(int total, List<RunActivityVO> records) {
+    public RunActivityListVO(int total, List<RunActivitySummaryVO> records) {
         this.total = total;
         this.records = records;
     }

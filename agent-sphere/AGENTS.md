@@ -625,6 +625,17 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
 - `todowrite` 的工具回执只保留 `TODO_WRITE_ACK` 短确认；完整清单由尾部待办槽（每次从 DB artifact
   刷新）提供，避免同一份计划在 tool 消息和历史里重复。待办仍是全量替换协议，不能改成增量。
 
+## Run activity 列表/详情
+
+`GET /api/v1/instance/runs/{runId}/activities` 只返回 `RunActivitySummaryVO` 元数据，**不要**在列表 SQL
+里 SELECT `request_body` / `response_body` / `reasoning` / `reply_content` / `arguments_json` / `artifact`。
+线上 run 2299 有 246 次 LLM 交互，`request_body` 合计约 **97 MB**；旧列表页 10 条就会传输数 MB。
+
+- 大字段按需走 `GET /api/v1/instance/runs/{runId}/activities/{activityType}/{id}?sessionId=...`
+  （`activityType` = `llm_interaction` / `tool_call`）；前端 `InteractionModal` 的详情按钮异步调用。
+- 列表/详情 SQL 都必须带 `run_id` + `session_id` + `delete_flag`，避免跨 run/会话读取。
+- 新增活动字段时先判断是否属于列表列；默认只进详情 VO，不要回加到大字段查询。
+
 ## Conventions
 
 - JVM default + Jackson timezone: `Asia/Shanghai` (set in `Application.java` and `application.yml`).

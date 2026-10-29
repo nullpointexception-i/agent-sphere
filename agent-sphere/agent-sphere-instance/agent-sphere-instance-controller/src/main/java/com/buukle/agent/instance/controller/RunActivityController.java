@@ -23,4 +23,14 @@ public class RunActivityController extends BaseController {
             @RequestParam(defaultValue = "20") int limit) {
         return ok(runActivityService.listByRun(runId, sessionId, offset, limit));
     }
+
+    /** 列表只返回元数据；完整 request/response/args/artifact 在点击详情时按需拉取。 */
+    @GetMapping("/{runId}/activities/{activityType}/{id}")
+    public ResponseEntity<?> getActivity(
+            @PathVariable Long runId,
+            @PathVariable String activityType,
+            @PathVariable Long id,
+            @RequestParam Long sessionId) {
+        return ok(runActivityService.getActivity(runId, sessionId, activityType, id));
+    }
 }

@@ -250,6 +250,16 @@ export const agentApi = {
       request<{ total: number; records: any[] }>(
         `${BASE}/instance/runs/${runId}/activities?sessionId=${sessionId}&offset=${offset}&limit=${limit}`,
       ),
+    // 列表不返回大字段；详情按需拉取完整 request/response/args/artifact
+    get: (
+      runId: number,
+      sessionId: number,
+      activityType: string,
+      id: number,
+    ) =>
+      request<any>(
+        `${BASE}/instance/runs/${runId}/activities/${activityType}/${id}?sessionId=${sessionId}`,
+      ),
   },
 
   modelProviders: {

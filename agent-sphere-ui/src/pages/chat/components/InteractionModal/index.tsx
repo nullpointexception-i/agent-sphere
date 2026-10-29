@@ -1,5 +1,5 @@
 import { useIntl } from '@umijs/max';
-import { Button, Empty, Modal, Spin, Table, Tag } from 'antd';
+import { App, Button, Empty, Modal, Spin, Table, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
@@ -49,7 +49,9 @@ export default function InteractionModal({
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [detailRecord, setDetailRecord] = useState<any>(null);
+  const [detailLoadingKey, setDetailLoadingKey] = useState<string | null>(null);
   const [runUsage, setRunUsage] = useState<any>(null);
+  const { message } = App.useApp();
 
   useEffect(() => {
     if (!open || runId == null || sessionId == null) return;
@@ -161,9 +163,30 @@ export default function InteractionModal({
         <Button
           type="link"
           size="small"
-          onClick={(e) => {
+          loading={detailLoadingKey === `${r.activityType}-${r.id}`}
+          onClick={async (e) => {
             e.stopPropagation();
-            setDetailRecord(r);
+            const key = `${r.activityType}-${r.id}`;
+            if (detailLoadingKey) return;
+            setDetailLoadingKey(key);
+            try {
+              const full = await agentApi.activities.get(
+                runId!,
+                sessionId!,
+                r.activityType,
+                r.id,
+              );
+              setDetailRecord(full);
+            } catch {
+              message.error(
+                intl.formatMessage({
+                  id: 'pages.chat.detailLoadFailed',
+                  defaultMessage: 'Failed to load detail',
+                }),
+              );
+            } finally {
+              setDetailLoadingKey(null);
+            }
           }}
         >
           {intl.formatMessage({

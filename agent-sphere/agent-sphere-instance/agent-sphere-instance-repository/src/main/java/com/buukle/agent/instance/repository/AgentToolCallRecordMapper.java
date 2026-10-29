@@ -2,6 +2,7 @@ package com.buukle.agent.instance.repository;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
+import com.buukle.agent.instance.domain.vo.RunActivitySummaryVO;
 import com.buukle.agent.instance.domain.vo.RunActivityVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -32,34 +33,63 @@ public interface AgentToolCallRecordMapper extends BaseMapper<AgentToolCallRecor
 
     @Select("""
             SELECT id, activity_type, created_at, session_id,
-                   interaction_type, model_name, request_body, response_body, reasoning, reply_content, http_status,
-                   duration_ms, llm_error_message, success,
-                   usage, prompt_tokens, completion_tokens, total_tokens, cache_hit_tokens, cache_miss_tokens,
-                   step_id, tool_name, display_name_cn, display_name_en,
-                   arguments_json, artifact, tool_status, tool_error_message
+                   interaction_type, model_name, http_status, duration_ms, success,
+                   prompt_tokens, completion_tokens, total_tokens, cache_hit_tokens, cache_miss_tokens,
+                   step_id, tool_name, display_name_cn, display_name_en, tool_status
             FROM (
               SELECT id, 'llm_interaction' AS activity_type, created_at, session_id,
-                     interaction_type, model_name, request_body, response_body, reasoning, reply_content, http_status,
-                     duration_ms, error_message AS llm_error_message, success,
-                     usage, prompt_tokens, completion_tokens, total_tokens, cache_hit_tokens, cache_miss_tokens,
+                     interaction_type, model_name, http_status, duration_ms, success,
+                     prompt_tokens, completion_tokens, total_tokens, cache_hit_tokens, cache_miss_tokens,
                      NULL AS step_id, NULL AS tool_name, NULL AS display_name_cn, NULL AS display_name_en,
-                     NULL AS arguments_json, NULL AS artifact, NULL AS tool_status, NULL AS tool_error_message
+                     NULL AS tool_status
               FROM agent_llm_interaction_record
               WHERE run_id = #{runId} AND delete_flag = 0
               UNION ALL
               SELECT id, 'tool_call', created_at, session_id,
-                     NULL, NULL, NULL, NULL, NULL, NULL,
-                     NULL, NULL, NULL,
-                     NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                     step_id, tool_name, display_name_cn, display_name_en, arguments_json, artifact, status, error_message
+                     NULL, NULL, NULL, NULL, NULL,
+                     NULL, NULL, NULL, NULL, NULL,
+                     step_id, tool_name, display_name_cn, display_name_en, status
               FROM agent_tool_call_record
               WHERE run_id = #{runId} AND session_id = #{sessionId} AND delete_flag = 0
             ) AS activities
             ORDER BY created_at DESC, id DESC
             LIMIT #{limit} OFFSET #{offset}
             """)
-    List<RunActivityVO> selectActivitiesByRun(@Param("runId") Long runId,
-                                              @Param("sessionId") Long sessionId,
-                                              @Param("limit") int limit,
-                                              @Param("offset") int offset);
+    List<RunActivitySummaryVO> selectActivitiesByRun(@Param("runId") Long runId,
+                                                     @Param("sessionId") Long sessionId,
+                                                     @Param("limit") int limit,
+                                                     @Param("offset") int offset);
+
+    /** 详情：按需读取完整 LLM 交互记录。 */
+    @Select("""
+            SELECT id, 'llm_interaction' AS activity_type, created_at, session_id,
+                   interaction_type, model_name, request_body, response_body, reasoning, reply_content, http_status,
+                   duration_ms, error_message AS llm_error_message, success,
+                   usage, prompt_tokens, completion_tokens, total_tokens, cache_hit_tokens, cache_miss_tokens,
+                   NULL AS step_id, NULL AS tool_name, NULL AS display_name_cn, NULL AS display_name_en,
+                   NULL AS arguments_json, NULL AS artifact, NULL AS tool_status, NULL AS tool_error_message
+            FROM agent_llm_interaction_record
+            WHERE id = #{id} AND run_id = #{runId} AND session_id = #{sessionId} AND delete_flag = 0
+            """)
+    RunActivityVO selectLlmActivityDetail(@Param("runId") Long runId,
+                                          @Param("sessionId") Long sessionId,
+                                          @Param("id") Long id);
+
+    /** 详情：按需读取完整工具调用记录。 */
+    @Select("""
+            SELECT id, 'tool_call' AS activity_type, created_at, session_id,
+                   NULL AS interaction_type, NULL AS model_name, NULL AS request_body, NULL AS response_body,
+                   NULL AS reasoning, NULL AS reply_content, NULL AS http_status, NULL AS duration_ms,
+                   NULL AS llm_error_message, NULL AS success,
+                   NULL AS usage, NULL AS prompt_tokens, NULL AS completion_tokens, NULL AS total_tokens,
+                   NULL AS cache_hit_tokens, NULL AS cache_miss_tokens,
+                   step_id, tool_name, display_name_cn, display_name_en,
+                   arguments_json, artifact, status AS tool_status, error_message AS tool_error_message
+            FROM agent_tool_call_record
+            WHERE id = #{id} AND run_id = #{runId} AND session_id = #{sessionId} AND delete_flag = 0
+            """)
+    RunActivityVO selectToolActivityDetail(@Param("runId") Long runId,
+                                           @Param("sessionId") Long sessionId,
+                                           @Param("id") Long id);
+
 }
