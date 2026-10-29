@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: crpi-2jeh8zb0taelsoax.cn-wulanchabu.personal.cr.aliyuncs.com/nullpointexception/agent-sphere-backend:sha-d145a63
+        image: crpi-2jeh8zb0taelsoax.cn-wulanchabu.personal.cr.aliyuncs.com/nullpointexception/agent-sphere-backend:sha-c7c0bc6
         ports:
         - containerPort: 8080
         envFrom:
