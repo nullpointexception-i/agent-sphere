@@ -429,7 +429,11 @@ public class CompactionService {
         for (AgentToolCallRecordVO c : calls) {
             boolean succeeded = ToolCallRecordStatus.SUCCEEDED.name().equals(c.getStatus());
             String result = succeeded
-                    ? ToolResultCompressor.compress(c.getArtifact(), RunnerConstants.COMPACTION_TOOL_RESULT_MAX_CHARS)
+                    ? (LiveToolResultPolicy.isSkillLibraryTool(c.getToolName())
+                        ? ToolResultCompressor.compressKeepArrays(c.getArtifact(),
+                            RunnerConstants.COMPACTION_TOOL_RESULT_MAX_CHARS)
+                        : ToolResultCompressor.compress(c.getArtifact(),
+                            RunnerConstants.COMPACTION_TOOL_RESULT_MAX_CHARS))
                     : "error: " + truncateField(c.getErrorMessage() != null ? c.getErrorMessage() : "unknown",
                             COMPACTION_ARGS_MAX_CHARS);
             String artifact = result != null ? result : "";

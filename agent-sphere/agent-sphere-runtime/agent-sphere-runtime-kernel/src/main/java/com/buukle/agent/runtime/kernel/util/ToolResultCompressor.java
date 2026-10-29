@@ -31,6 +31,8 @@ public class ToolResultCompressor {
 
     private static String compress(String raw, int maxValueChars, boolean keepArrays) {
         if (raw == null || raw.isBlank()) return raw;
+        // 未超预算时不要解析/折叠：短 JSON 里的数组（技能列表、候选列表等）必须原样保留。
+        if (raw.length() <= maxValueChars) return raw;
         try {
             Object node = MAPPER.readValue(raw, Object.class);
             Object compressed = jsonCompress(node, 0, maxValueChars, keepArrays);

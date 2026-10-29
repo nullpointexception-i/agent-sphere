@@ -597,6 +597,9 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
   工具结果，run-local 压缩/挂起快照才能看到原文。非浏览器单条 4k、总 50k、最近 2 条保留；浏览器结果
   默认保留全文，仅单条超过 `live-browser-full-max-chars`（默认 20k 字符，大页面）时替换为带 `callId`
   的引用，不做 keepArrays 摘要、不设浏览器总预算。
+- 技能库 `builtin_8` 的 `list` 结果是数组，**不得被通用压缩器折叠成前 3 条**：`ToolResultCompressor`
+  对未超预算的 JSON 原样返回；超预算时技能库结果走 `compressKeepArrays`。`search` 是
+  `search_by_title` 的别名，`get` 支持 `skillId` 或精确 `name`。
 - 模型可用 `builtin_14`（`read_tool_result`，`needConfig=false` 默认内置）按 `callId` 分页回读历史
   artifact（`offset`/`maxChars`，单次上限 8k）。`HistoryLoader` 回退重建时浏览器结果按同一阈值恢复全文，
   超阈值输出带 `callId` 的引用。

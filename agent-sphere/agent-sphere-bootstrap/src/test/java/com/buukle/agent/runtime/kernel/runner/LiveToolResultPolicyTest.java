@@ -17,6 +17,7 @@ class LiveToolResultPolicyTest {
 
     private static final String BROWSER = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.CHROME.getId();
     private static final String SKILL = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.SKILL_LIBRARY.getId();
+    private static final String SKILL_LIBRARY = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.SKILL_LIBRARY.getId();
 
     private static ChatMessageDTO assistantCall(String callId, String name) {
         return new ChatMessageDTO().setRole("assistant").setToolCalls(List.of(
@@ -67,6 +68,24 @@ class LiveToolResultPolicyTest {
         assertTrue(big.contains("read_tool_result"));
         assertTrue(big.contains("call-large"));
         assertEquals(large, messages.get(3).getContent());
+    }
+
+    @Test
+    void skillLibraryListKeepsAllItems() {
+        String raw = "{\"action\":\"list\",\"skills\":["
+                + "{\"skillId\":83},{\"skillId\":88},{\"skillId\":89},"
+                + "{\"skillId\":90},{\"skillId\":84},{\"skillId\":62},"
+                + "{\"skillId\":85},{\"skillId\":150},{\"skillId\":18}],\"total\":9}";
+        List<ChatMessageDTO> messages = List.of(
+                assistantCall("call-skills", SKILL_LIBRARY),
+                tool("call-skills", raw));
+
+        List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
+                messages, 4_000, 50_000, 2, 20_000);
+
+        String content = String.valueOf(projected.get(1).getContent());
+        assertTrue(content.contains("\"skillId\":150"), content);
+        assertTrue(content.contains("\"total\":9"), content);
     }
 
     @Test

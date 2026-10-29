@@ -36,17 +36,20 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
     static final String ACTION_LIST = "list";
     static final String ACTION_COUNT = "count";
     static final String ACTION_SEARCH_TITLE = "search_by_title";
+    static final String ACTION_SEARCH_ALIAS = "search";
     static final String ACTION_GET = "get";
 
     static final int PREVIEW_LENGTH = 200;
     static final String MARKDOWN_FENCE = "```json";
 
     private static final String TOOL_DESCRIPTION = """
-            发现与渐进式读取技能文档（list/count/search/get；get 可按大纲 structure、段落 sectionHeading、行范围读取）。
+            发现与渐进式读取技能文档：list / count / search / search_by_title / get。
+            - list: 返回全部绑定技能；支持 keyword 过滤、page/pageSize 分页（默认 20）。
+            - search（search_by_title 的别名）: 按技能名称关键字查找。
+            - get: 用 skillId 或精确 name 读取；可用 structure 看大纲、sectionHeading 读某节、startLine/endLine 读行范围。
             技能正文结构约定：# 技能名 + ## stepN 步骤 + ### stepN.M 子步骤（步骤标识取自标题首词，如 step1 / step1.1）。
-            采用某技能时：先用 get 读取它（大纲返回技能名/版本与各步骤标题），把步骤标题里的标识（step1 / step1.1）与返回的 skillId
-            记进你的任务清单条目（todowrite 的 skillId/stepId 字段）；执行该步骤前再用
-            get(skillId=…, sectionHeading=stepId) 读取该节正文（H2 段落会连带返回其下 H3 子步骤）。
+            采用某技能时：先 get 读取它，把步骤标识与 skillId 记进任务清单（todowrite 的 skillId/stepId）；
+            执行该步骤前再用 get(skillId=…, sectionHeading=stepId) 读取该节正文。
             读取技能本身不会改动你的任务清单。
             """;
 
@@ -103,13 +106,12 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
             return switch (action) {
             case ACTION_LIST -> handleList(swCtx);
             case ACTION_COUNT -> handleCount(swCtx);
-            case ACTION_SEARCH_TITLE -> handleSearchByTitle(swCtx);
+            case ACTION_SEARCH_TITLE, ACTION_SEARCH_ALIAS -> handleSearchByTitle(swCtx);
             case ACTION_GET -> handleGet(swCtx, skillId);
             default -> {
                 log.warn("Unknown skill library action: {}", action);
-                SkillWriteResultVO r = new SkillWriteResultVO();
-                r.setAction(action);
-                yield r;
+                yield error(action, "Unknown action: " + action
+                        + ". Allowed: list/count/search/search_by_title/get");
             }
         };
         } catch (Exception e) {
@@ -127,6 +129,14 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
             return error(ACTION_LIST, "sessionId is required and must resolve to an agent instance");
         }
         List<SkillVO> skills = boundSkills(session.instanceId());
+        String keyword = ctx.getKeyword();
+        if (keyword != null && !keyword.isBlank()) {
+            String key = keyword.trim().toLowerCase(java.util.Locale.ROOT);
+            skills = skills.stream()
+                    .filter(s -> s.getName() != null
+                            && s.getName().toLowerCase(java.util.Locale.ROOT).contains(key))
+                    .toList();
+        }
         int page = Math.max(1, ctx.getPage());
         int pageSize = Math.max(1, ctx.getPageSize());
         List<SkillWriteResultVO.SkillSummaryVO> summaries = skillSummaries(paginate(skills, page, pageSize));
@@ -206,12 +216,26 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
     }
 
     private SkillWriteResultVO handleGet(SkillWriteExecuteContext ctx, Long skillId) {
-        if (skillId == null) {
-            return error(ACTION_GET, "skillId is required");
-        }
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
             return error(ACTION_GET, "sessionId is required and must resolve to an agent instance");
+        }
+        if (skillId == null && ctx.getName() != null && !ctx.getName().isBlank()) {
+            String name = ctx.getName().trim();
+            List<SkillVO> matches = boundSkills(session.instanceId()).stream()
+                    .filter(s -> s.getName() != null && s.getName().equalsIgnoreCase(name))
+                    .toList();
+            if (matches.size() == 1) {
+                skillId = matches.get(0).getId();
+            } else if (matches.isEmpty()) {
+                return error(ACTION_GET, "Skill name is not bound to the current agent instance: " + name);
+            } else {
+                return error(ACTION_GET, "Multiple skills match name \"" + name + "\": "
+                        + matches.stream().map(SkillVO::getId).toList());
+            }
+        }
+        if (skillId == null) {
+            return error(ACTION_GET, "skillId or exact name is required");
         }
         if (!isSkillBound(session.instanceId(), skillId)) {
             return error(ACTION_GET, "Skill " + skillId + " is not bound to the current agent instance");

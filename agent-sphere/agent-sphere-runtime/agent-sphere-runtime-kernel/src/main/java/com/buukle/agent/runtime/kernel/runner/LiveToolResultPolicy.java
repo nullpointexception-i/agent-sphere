@@ -29,6 +29,8 @@ import java.util.Map;
 public final class LiveToolResultPolicy {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String SKILL_LIBRARY_TOOL =
+            InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.SKILL_LIBRARY.getId();
 
     private LiveToolResultPolicy() {
     }
@@ -39,6 +41,10 @@ public final class LiveToolResultPolicy {
 
     public static boolean isBrowserTool(String toolName) {
         return browserToolName().equals(toolName);
+    }
+
+    public static boolean isSkillLibraryTool(String toolName) {
+        return SKILL_LIBRARY_TOOL.equals(toolName);
     }
 
     public static List<ChatMessageDTO> project(List<ChatMessageDTO> messages, int maxChars, int budgetChars,
@@ -81,7 +87,9 @@ public final class LiveToolResultPolicy {
                 continue;
             }
 
-            String compressed = ToolResultCompressor.compress(content, maxChars);
+            String compressed = isSkillLibraryTool(name)
+                    ? ToolResultCompressor.compressKeepArrays(content, maxChars)
+                    : ToolResultCompressor.compress(content, maxChars);
             if (keptNonBrowser < keepRecent) {
                 m.setContent(compressed);
                 keptNonBrowser++;

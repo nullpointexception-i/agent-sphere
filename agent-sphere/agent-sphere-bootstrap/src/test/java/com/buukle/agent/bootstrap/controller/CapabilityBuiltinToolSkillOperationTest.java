@@ -148,6 +148,74 @@ class CapabilityBuiltinToolSkillOperationTest {
     }
 
     @Test
+    void list_keywordFiltersBoundSkills() {
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(
+                cap("skill", 100L), cap("skill", 101L)));
+        when(skillSpi.listSkillsByIds(List.of(100L, 101L))).thenReturn(List.of(
+                skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION),
+                skill(101L, "resume-optimizer", null, VALID_DEFINITION)));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("list");
+        ctx.setKeyword("boss");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+
+        assertEquals(1, r.getSkills().size());
+        assertEquals(100L, r.getSkills().get(0).getSkillId());
+    }
+
+    @Test
+    void searchAliasMatchesSkillName() {
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.listSkillsByIds(List.of(100L))).thenReturn(List.of(
+                skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION)));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("search");
+        ctx.setKeyword("greet");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+
+        assertEquals(1, r.getSkills().size());
+        assertEquals(100L, r.getSkills().get(0).getSkillId());
+    }
+
+    @Test
+    void get_resolvesBoundSkillByExactName() {
+        when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
+        when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
+        when(skillSpi.listSkillsByIds(List.of(100L))).thenReturn(List.of(
+                skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION)));
+        when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION));
+
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("get");
+        ctx.setName("boss-chat-audit-and-greet");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+
+        assertEquals(100L, r.getSkillId());
+        assertNotNull(r.getContent());
+    }
+
+    @Test
+    void unknownActionReturnsAllowedActions() {
+        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        ctx.setSessionId(1L);
+        ctx.setAction("bogus");
+
+        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+
+        assertTrue(r.getPreview().contains("Allowed: list/count/search/search_by_title/get"));
+    }
+
+    @Test
     void get_rejectsSkillNotBoundToCurrentInstance() {
         when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 200L)));

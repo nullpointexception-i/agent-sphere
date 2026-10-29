@@ -16,6 +16,7 @@ import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.ReasoningBufferStore;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
+import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEnvelope;
@@ -378,7 +379,9 @@ public class RuntimeEventListener {
                 AgentToolCallRecordVO vo = toolCallRecordSpi.getLatestByStepId(stepId);
                 if (vo == null) return;
                 String raw = data.getArtifact();
-                String compressed = ToolResultCompressor.compress(raw, RunnerConstants.TOOL_RESULT_MAX_CHARS);
+                String compressed = LiveToolResultPolicy.isSkillLibraryTool(data.getToolName())
+                        ? ToolResultCompressor.compressKeepArrays(raw, RunnerConstants.TOOL_RESULT_MAX_CHARS)
+                        : ToolResultCompressor.compress(raw, RunnerConstants.TOOL_RESULT_MAX_CHARS);
                 toolCallRecordSpi.updateStatus(vo.getId(), status.name(), raw, null);
                 if (compressed != null) {
                     toolCallRecordSpi.updateCompressedArtifact(vo.getId(), compressed);
