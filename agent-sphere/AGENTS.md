@@ -606,10 +606,15 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
   按 `tail-ratio` 预算选，并保证最新一条浏览器结果进入 tail；压缩/重组后由 `refreshTodolistSlot` 从 DB 重新注入 todo 槽。
 - 压缩调用必须 `thinking=disabled`（`callLLM` 在 `applyGlobal` 后覆盖）：全局 thinking=true 会把 4k 输出预算耗在
   reasoning 上，线上出现 completion=4000、reasoning 5–11k、content 为空（记录 FAILED）。
-- 压缩策略：`target-ratio=0.55`、`input-ratio=0.35`、`tail-ratio=0.25`、`summary-max-tokens=10000`、
-  `summary-compress-rounds=3`、`cooldown-turns=4`、`max-per-run=12`；target 支持自适应（`adaptive-target-enabled`）：当
-  `fixed + tail` 超过配置 target 时自动抬高，且不超过触发预算减去 headroom；仍不可行才返回 NO_PROGRESS。
-  `min-tail-tokens` 是自适应 target 的 tail 兜底。
+- 压缩策略：`summary-max-tokens=10000`、`summary-compress-rounds=3`、`input-ratio=0.35`、
+  `cooldown-turns=4`、`max-per-run=12`。优先使用 `compaction.tiers` 的绝对 token 档位：
+  32k→22k 触发/18k 目标/4k 输出，64k→50k/20k/8k，128k→100k/40k/16k，256k→200k/80k，
+  512k→400k/160k，1M→780k/312k；档位间线性插值，超出最后一档按比例外推。64k 聊天
+  `max_tokens` 必须限制为 8k，否则 50k 触发 + 16k 输出会溢出。无档位时才回退 ratio/自适应 target；
+  `min-tail-tokens` 仍是 tail 兜底。
+- 压缩估算用 `LiveToolResultPolicy.project()` 后的请求消息（不是 canonical 全量工具结果），
+  并用最近一次主 Agent `CHAT_REPLY` 的 `prompt_tokens / 字符估算` 做按路由 EWMA 校准
+  （进程内、TTL 24h，clamp 0.8–1.5）；无校准时回退 1.1 安全系数。
 - live 工具结果预算：`LiveToolResultPolicy` 只投影**请求副本**，不修改 canonical `messages`；canonical 保留完整
   工具结果，run-local 压缩/挂起快照才能看到原文。非浏览器单条 4k、总 50k、最近 2 条保留；浏览器结果
   默认保留全文，仅单条超过 `live-browser-full-max-chars`（默认 20k 字符，大页面）时替换为带 `callId`

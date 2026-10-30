@@ -132,6 +132,32 @@ buukle:
         summary-max-ratio: 0.12                     # 摘要上限占 maxInput 比例 / Summary cap ratio
         cooldown-turns: 4                           # 压缩冷却轮数 / Compaction cooldown turns
         max-per-run: 12                             # 单 run 压缩次数上限 / Max compactions per run
+        # 按上下文档位给绝对预算；档位之间线性插值，超出最后一档按最后一档比例外推。
+        tiers:
+          - max-input-tokens: 32000                 # 32k：固定开销约 14k，best-effort
+            trigger-tokens: 22000
+            target-tokens: 18000
+            chat-max-output-tokens: 4000
+          - max-input-tokens: 64000                 # 64k：50k 触发 + 8k 输出 + 5% 余量
+            trigger-tokens: 50000
+            target-tokens: 20000
+            chat-max-output-tokens: 8192
+          - max-input-tokens: 128000                # 128k：100k 触发，保留约 28k
+            trigger-tokens: 100000
+            target-tokens: 40000
+            chat-max-output-tokens: 16000
+          - max-input-tokens: 256000                # 256k
+            trigger-tokens: 200000
+            target-tokens: 80000
+            chat-max-output-tokens: 16000
+          - max-input-tokens: 512000                # 512k
+            trigger-tokens: 400000
+            target-tokens: 160000
+            chat-max-output-tokens: 16000
+          - max-input-tokens: 1000000               # 1M
+            trigger-tokens: 780000
+            target-tokens: 312000
+            chat-max-output-tokens: 16000
 
     # ============================================================
     # 工具执行配置 / Tool Config

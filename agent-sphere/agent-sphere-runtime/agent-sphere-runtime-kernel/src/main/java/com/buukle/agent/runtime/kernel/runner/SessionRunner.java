@@ -1253,10 +1253,22 @@ public class SessionRunner {
                         throw new RuntimeException("Run cancelled");
                     }
 
-                    // ★ 压缩检查：使用实际 route（和 LLM 调用同源）。
+                    // 只投影请求副本：canonical messages 保留完整工具结果，供压缩/快照使用。
+                    Map<String, Boolean> compressByTool = new HashMap<>();
+                    for (RuntimeTool t : tools) {
+                        compressByTool.put(t.getLlmToolName(), t.isCompressEnabled());
+                    }
+                    List<ChatMessageDTO> projectedMessages = LiveToolResultPolicy.project(messages,
+                            properties.getRunner().getLiveToolResultMaxChars(),
+                            properties.getRunner().getLiveToolResultBudgetChars(),
+                            properties.getRunner().getLiveToolResultKeepRecent(),
+                            properties.getRunner().getLiveBrowserFullMaxChars(),
+                            compressByTool);
+
+                    // ★ 压缩检查：必须用实际会发给模型的投影消息，避免 canonical 工具结果把估算放大。
                     // skipCompaction 仅在「重试耗尽、压缩已被证明救不回来」的下一轮为 true。
                     CompactionService.CompactionDecision decision = compactionService.evaluate(
-                            messages, route, toolDefs, effectiveMaxOutputTokens);
+                            projectedMessages, route, toolDefs, effectiveMaxOutputTokens);
                     if (!skipCompaction && decision != null && decision.shouldCompact()) {
                         compactionTriggered.set(true);
                         compactionDecisionRef.set(decision);
@@ -1264,25 +1276,22 @@ public class SessionRunner {
                     }
 
                     String apiKey = resolveApiKey(route);
-                    // 只投影请求副本：canonical messages 保留完整工具结果，供压缩/快照使用。
-                    Map<String, Boolean> compressByTool = new HashMap<>();
-                    for (RuntimeTool t : tools) {
-                        compressByTool.put(t.getLlmToolName(), t.isCompressEnabled());
-                    }
                     ChatCompletionRequestDTO request = new ChatCompletionRequestDTO()
                             .setModel(route.getModelName())
                             .setStream(true)
-                            .setMessages(LiveToolResultPolicy.project(messages,
-                                    properties.getRunner().getLiveToolResultMaxChars(),
-                                    properties.getRunner().getLiveToolResultBudgetChars(),
-                                    properties.getRunner().getLiveToolResultKeepRecent(),
-                                    properties.getRunner().getLiveBrowserFullMaxChars(),
-                                    compressByTool));
+                            .setMessages(projectedMessages);
                     if (!toolDefs.isEmpty()) {
                         request.setTools(toolDefs);
                     }
                     // 采样参数接线：全局系统配置兜底 + 实例级 config 覆盖；并行工具行为保持默认开启（与现有多工具批一致）
                     llmRequestConfigurer.apply(request, instanceConfig);
+                    Integer chatMaxOutputTokens = compactionService.resolveChatMaxOutputTokens(
+                            route.getMaxInputTokens() != null
+                                    ? route.getMaxInputTokens() : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS,
+                            effectiveMaxOutputTokens);
+                    if (chatMaxOutputTokens != null && chatMaxOutputTokens > 0) {
+                        request.setMaxTokens(chatMaxOutputTokens);
+                    }
                     if (request.getParallelToolCalls() == null) {
                         request.setParallelToolCalls(true);
                     }
@@ -1360,7 +1369,10 @@ public class SessionRunner {
                                 }
                             },
                             new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
-                                    .setInteractionType(LlmInteractionType.CHAT_REPLY));
+                                    .setInteractionType(LlmInteractionType.CHAT_REPLY)
+                                    .setModelRouteId(route.getId())
+                                    .setEstimatedPromptTokens((int) compactionService.estimatePromptTokens(
+                                            projectedMessages, toolDefs)));
 
                     future.whenComplete((v, ex) -> streamDone.countDown());
 

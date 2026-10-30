@@ -9,6 +9,7 @@ import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionEvent;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
+import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class LlmInteractionPersistListener {
     private final AgentLlmInteractionRecordSpi interactionRecordSpi;
     private final RunSpi runSpi;
     private final TimelineRecorder timelineRecorder;
+    private final CompactionService compactionService;
 
     @EventListener
     public void handle(LlmInteractionEvent event) {
@@ -51,6 +53,14 @@ public class LlmInteractionPersistListener {
             vo.setTotalTokens(usage.getTotalTokens());
             vo.setCacheHitTokens(usage.getCacheHitTokens());
             vo.setCacheMissTokens(usage.getCacheMissTokens());
+            if (event.isSuccess() && meta.getInteractionType() == LlmInteractionType.CHAT_REPLY
+                    && meta.getSubAgentRunId() == null
+                    && meta.getModelRouteId() != null
+                    && meta.getEstimatedPromptTokens() != null
+                    && usage.getPromptTokens() != null) {
+                compactionService.recordCalibration(meta.getModelRouteId(),
+                        meta.getEstimatedPromptTokens(), usage.getPromptTokens());
+            }
         }
 
         try {

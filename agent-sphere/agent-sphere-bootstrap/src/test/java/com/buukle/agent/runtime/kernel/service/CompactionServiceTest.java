@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.service;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.config.AgentRuntimeProperties.RunnerConfig.CompactionTier;
 import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -38,10 +39,11 @@ import static org.mockito.Mockito.mock;
 class CompactionServiceTest {
 
     private CompactionService service;
+    private AgentRuntimeProperties props;
 
     @BeforeEach
     void setUp() {
-        AgentRuntimeProperties props = new AgentRuntimeProperties();
+        props = new AgentRuntimeProperties();
         props.getRunner().getCompaction().setBudgetRatio(0.7);
         service = new CompactionService(props,
                 mock(RunSpi.class), mock(SessionSpi.class), mock(KernelLlmService.class),
@@ -222,6 +224,85 @@ class CompactionServiceTest {
         run.setSessionId(1L);
         run.setUserMessage(userMessage);
         return run;
+    }
+
+    @Test
+    void tierSelectionInterpolatesAndUsesTierOutputCap() {
+        props.getRunner().getCompaction().setTiers(List.of(
+                tier(64_000L, 50_000L, 20_000L, 8_192L),
+                tier(128_000L, 100_000L, 40_000L, 16_000L)));
+
+        CompactionTier at64 = service.resolveTier(64_000L);
+        assertEquals(50_000L, at64.getTriggerTokens());
+        assertEquals(20_000L, at64.getTargetTokens());
+        assertEquals(8_192L, at64.getChatMaxOutputTokens());
+
+        CompactionTier at96 = service.resolveTier(96_000L);
+        assertEquals(75_000L, at96.getTriggerTokens());
+        assertEquals(30_000L, at96.getTargetTokens());
+        assertEquals(16_000L, at96.getChatMaxOutputTokens());
+    }
+
+    @Test
+    void tierTargetReservesSummaryAndTailInsideAbsoluteTarget() {
+        props.getRunner().getCompaction().setTiers(List.of(
+                tier(64_000L, 50_000L, 20_000L, 8_192L)));
+        CompactionService.CompactionTarget target = service.resolveTierTarget(
+                64_000L, 50_000L, 14_000L, 1_000L, 7_680L,
+                props.getRunner().getCompaction(), service.resolveTier(64_000L));
+
+        assertTrue(target.feasible());
+        assertEquals(20_000L, target.target());
+        assertEquals(18_000L, target.fixedTokens(), "14k prefix + 1k tools + 3k summary");
+        assertEquals(2_000L, target.tailFloor());
+    }
+
+    @Test
+    void chatOutputCapUsesTierAndRespectsLowerInstanceCap() {
+        props.getRunner().getCompaction().setTiers(List.of(
+                tier(64_000L, 50_000L, 20_000L, 8_192L)));
+
+        assertEquals(8_192, service.resolveChatMaxOutputTokens(64_000L, null));
+        assertEquals(8_192, service.resolveChatMaxOutputTokens(64_000L, 16_000));
+        assertEquals(2_000, service.resolveChatMaxOutputTokens(64_000L, 2_000));
+    }
+
+    @Test
+    void calibrationCanPreventFalsePositiveCompaction() {
+        props.getRunner().getCompaction().setTiers(List.of(
+                tier(64_000L, 50_000L, 20_000L, 8_192L)));
+        ModelRouteFullVO route = route(201L, 64_000L);
+        List<ChatMessageDTO> messages = List.of(
+                new ChatMessageDTO().setRole("user").setContent("x".repeat(100_000)));
+
+        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+                "无校准：100k 字符估算约 55.5k，超过 50k 触发线");
+
+        service.recordCalibration(201L, 10_000, 8_000); // ratio 0.8
+        assertFalse(service.shouldCompact(messages, route, List.of(), null),
+                "校准后估算约 46.7k，不应误触发");
+    }
+
+    @Test
+    void calibrationIgnoresAbnormalRatio() {
+        props.getRunner().getCompaction().setTiers(List.of(
+                tier(64_000L, 50_000L, 20_000L, 8_192L)));
+        ModelRouteFullVO route = route(202L, 64_000L);
+        List<ChatMessageDTO> messages = List.of(
+                new ChatMessageDTO().setRole("user").setContent("x".repeat(100_000)));
+
+        service.recordCalibration(202L, 10_000, 30_000); // ratio 3.0，异常
+        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+                "异常比例必须丢弃，不能把估算放大到离谱");
+    }
+
+    private static CompactionTier tier(long maxInput, long trigger, long target, long output) {
+        CompactionTier tier = new CompactionTier();
+        tier.setMaxInputTokens(maxInput);
+        tier.setTriggerTokens(trigger);
+        tier.setTargetTokens(target);
+        tier.setChatMaxOutputTokens(output);
+        return tier;
     }
 
     @Test

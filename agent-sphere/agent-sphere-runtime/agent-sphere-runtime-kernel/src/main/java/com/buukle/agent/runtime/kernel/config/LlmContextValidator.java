@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.config;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.config.AgentRuntimeProperties.RunnerConfig.CompactionTier;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -79,6 +80,16 @@ public class LlmContextValidator {
                 "runner.compaction.cooldown-turns must be >= 0, got: " + runner.getCompaction().getCooldownTurns());
         require(runner.getCompaction().getMaxPerRun() >= 1,
                 "runner.compaction.max-per-run must be >= 1, got: " + runner.getCompaction().getMaxPerRun());
+        if (runner.getCompaction().getTiers() != null) {
+            for (CompactionTier tier : runner.getCompaction().getTiers()) {
+                require(tier.getMaxInputTokens() > 0,
+                        "runner.compaction.tiers[].max-input-tokens must be > 0");
+                require(tier.getTriggerTokens() > tier.getTargetTokens(),
+                        "runner.compaction.tiers[].trigger-tokens must be > target-tokens");
+                require(tier.getTargetTokens() > 0,
+                        "runner.compaction.tiers[].target-tokens must be > 0");
+            }
+        }
         require(runner.getLiveToolResultMaxChars() >= 1,
                 "runner.live-tool-result-max-chars must be >= 1, got: " + runner.getLiveToolResultMaxChars());
         require(runner.getLiveToolResultBudgetChars() >= runner.getLiveToolResultMaxChars(),

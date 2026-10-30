@@ -5,6 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Component
@@ -96,6 +98,21 @@ public class AgentRuntimeProperties {
             private int cooldownTurns = 4;
             /** 单 run run-local 压缩次数上限。 */
             private int maxPerRun = 12;
+            /** 按上下文长度分档；为空时使用上面的 ratio 配置。 */
+            private List<CompactionTier> tiers = new ArrayList<>();
+        }
+
+        /** 一个上下文档位的绝对 token 预算。 */
+        @Data
+        public static class CompactionTier {
+            /** 该档位适用的最大上下文长度（含）。 */
+            private long maxInputTokens;
+            /** 触发压缩的输入 token 上限。 */
+            private long triggerTokens;
+            /** 压缩后的目标输入 token 上限。 */
+            private long targetTokens;
+            /** 该档位聊天请求的 max_tokens 上限；0/null 表示不额外限制。 */
+            private Long chatMaxOutputTokens;
         }
     }
 
