@@ -87,7 +87,9 @@ public class AgentRuntimeProperties {
             /** run-local tail 预算占 maxInput 的比例。 */
             private double tailRatio = 0.25;
             /** 摘要绝对上限（tokens）。 */
-            private long summaryMaxTokens = 4000;
+            private long summaryMaxTokens = 10000;
+            /** 摘要超限时最多再压缩几轮（不含首轮）。 */
+            private int summaryCompressRounds = 3;
             /** 摘要上限占 maxInput 的比例（路由自适应）。 */
             private double summaryMaxRatio = 0.12;
             /** 压缩后至少间隔的轮数（硬上限超限时不受限）。 */

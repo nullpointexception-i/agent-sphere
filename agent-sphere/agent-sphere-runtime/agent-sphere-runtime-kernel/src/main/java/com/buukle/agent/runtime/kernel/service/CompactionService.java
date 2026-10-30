@@ -67,7 +67,6 @@ public class CompactionService {
 
     public static final String COMPACTED_SENTINEL = "__COMPACTED__";
 
-    private static final double OUTPUT_RATIO = 2.0 / 3;
     /** 估算安全系数：中文/JSON 的字符密度波动大，留 10% 余量避免「估算没到阈值、实际已超上下文」。 */
     private static final double ESTIMATE_SAFETY_RATIO = 1.1;
     /** 工具 schema / 纯 JSON 以 ASCII 为主，字符/token 明显高于中文正文；用 1.8 会严重高估。 */
@@ -332,9 +331,8 @@ public class CompactionService {
 
         try {
             long summaryCap = resolveSummaryCap(maxInputTokens);
-            long summaryMaxLen = Math.min(
-                    (long) (maxOutputTokens * OUTPUT_RATIO),
-                    Math.min(summaryCap, charsToTokens(compactInput.text().length()) * 2 / 3));
+            long summaryMaxLen = Math.min(summaryCap,
+                    Math.min(maxOutputTokens, charsToTokens(compactInput.text().length()) * 2 / 3));
             summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
             CompactionCallResult summaryResult = generateCompleteSummary(
                     CompactionPromptConstant.buildPrompt(session.getSummary(), compactInput.text(), summaryMaxLen),
@@ -648,9 +646,8 @@ public class CompactionService {
         }
         String compactPrompt = "User request:\n" + userText + "\n\nMessages:\n" + rendered;
 
-        long summaryMaxLen = Math.min(
-                (long) (maxOutputTokens * OUTPUT_RATIO),
-                Math.min(summaryCap, charsToTokens(compactPrompt.length()) * 2 / 3));
+        long summaryMaxLen = Math.min(summaryCap,
+                Math.min(maxOutputTokens, charsToTokens(compactPrompt.length()) * 2 / 3));
         summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
 
         String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
@@ -997,29 +994,59 @@ public class CompactionService {
         }
     }
 
-    /** 首次摘要不完整（length/content_filter/结构不闭合）时，用绝对上限重试一次。 */
+    /**
+     * 生成不超过目标 token 的完整摘要。
+     *
+     * <p>首轮允许模型完整输出（生成上限高于目标），避免 max_tokens 硬截断；若结果超预算或
+     * finish_reason=length，则把该结果作为输入继续压缩，最多 {@code summary-compress-rounds} 轮。
+     * 仍不满足时裁剪到目标预算。
+     */
     private CompactionCallResult generateCompleteSummary(String prompt, ModelRouteFullVO route,
                                                          Long sessionId, Long runId, String publishId,
-                                                         long summaryMaxLen, long maxOutputTokens) {
-        CompactionCallResult first = callLLM(prompt, route, sessionId, runId, publishId, (int) summaryMaxLen);
-        if (isCompleteSummary(first)) {
-            log.info("Compaction summary complete: finishReason={}, completionTokens={}, maxTokens={}",
-                    first.finishReason(), first.completionTokens(), summaryMaxLen);
-            return first;
+                                                         long targetTokens, long maxOutputTokens) {
+        int rounds = Math.max(1, agentRuntimeProperties.getRunner().getCompaction().getSummaryCompressRounds());
+        int generationCap = (int) summaryGenerationCap(targetTokens, maxOutputTokens);
+        String currentPrompt = prompt;
+        CompactionCallResult last = null;
+        for (int round = 1; round <= rounds; round++) {
+            CompactionCallResult result = callLLM(currentPrompt, route, sessionId, runId, publishId, generationCap);
+            last = result;
+            if (result == null || result.error() != null
+                    || result.content() == null || result.content().isBlank()) {
+                log.warn("Compaction summary round {}/{} failed: {}", round, rounds,
+                        result == null ? "null result"
+                                : (result.error() != null ? result.error() : "empty content"));
+                continue;
+            }
+            long tokens = charsToTokens(result.content().length());
+            if (isCompleteSummary(result) && tokens <= targetTokens) {
+                log.info("Compaction summary complete: round={}/{}, finishReason={}, completionTokens={}, tokens={}, target={}, maxTokens={}",
+                        round, rounds, result.finishReason(), result.completionTokens(),
+                        tokens, targetTokens, generationCap);
+                return result;
+            }
+            log.warn("Compaction summary over budget or incomplete: round={}/{}, finishReason={}, completionTokens={}, tokens={}, target={}; compressing again",
+                    round, rounds, result.finishReason(), result.completionTokens(), tokens, targetTokens);
+            currentPrompt = CompactionPromptConstant.buildReducePrompt(result.content(), targetTokens);
         }
-        int retryMax = (int) Math.min(4000L,
-                Math.min(Math.max(summaryMaxLen, 4000L), Math.max(256L, (long) (maxOutputTokens * OUTPUT_RATIO))));
-        log.warn("Compaction summary incomplete (finishReason={}, completionTokens={}); retrying with maxTokens={}",
-                first.finishReason(), first.completionTokens(), retryMax);
-        String retryPrompt = prompt + "\n\nIMPORTANT: Your previous output was cut off. Produce a COMPLETE summary "
-                + "within " + retryMax + " tokens. Prioritize the most important facts; no raw JSON or code blocks; "
-                + "end with a complete sentence and never leave an unterminated code fence/JSON/quote.";
-        CompactionCallResult retried = callLLM(retryPrompt, route, sessionId, runId, publishId, retryMax);
-        if (isCompleteSummary(retried)) {
-            log.info("Compaction summary complete after retry: finishReason={}, completionTokens={}, maxTokens={}",
-                    retried.finishReason(), retried.completionTokens(), retryMax);
+        if (last == null || last.content() == null || last.content().isBlank()) {
+            return last;
         }
-        return retried;
+        String trimmed = SummarySanitizer.trimToTokenBudget(last.content(), targetTokens);
+        if (trimmed == null || trimmed.isBlank()) {
+            log.warn("Compaction summary trim failed after {} rounds: originalTokens={}, target={}",
+                    rounds, charsToTokens(last.content().length()), targetTokens);
+            return new CompactionCallResult("", last.finishReason(), "摘要裁剪失败", last.completionTokens());
+        }
+        log.warn("Compaction summary trimmed after {} rounds: originalTokens={}, trimmedTokens={}, target={}",
+                rounds, charsToTokens(last.content().length()), charsToTokens(trimmed.length()), targetTokens);
+        return new CompactionCallResult(trimmed, null, null, last.completionTokens());
+    }
+
+    private static long summaryGenerationCap(long targetTokens, long maxOutputTokens) {
+        long desired = Math.max(targetTokens * 2, targetTokens + 2_000L);
+        long routeCap = Math.max(256L, maxOutputTokens);
+        return Math.max(SUMMARY_MIN_TOKENS, Math.min(routeCap, desired));
     }
 
     private static boolean isCompleteSummary(CompactionCallResult result) {

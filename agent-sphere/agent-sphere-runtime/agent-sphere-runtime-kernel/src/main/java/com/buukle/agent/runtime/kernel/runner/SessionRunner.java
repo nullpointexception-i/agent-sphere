@@ -222,9 +222,12 @@ public class SessionRunner {
         LoopLimitSource loopSource = loopLimit.source();
         log.info("Run {} execution source={}, effective loop limit={}", currentRunId, loopSource, maxLoopCount);
         int compactionRetries = 0;
+        int consecutiveCompactionFailures = 0;
         // 压缩重试耗尽后置位：本轮不再压缩，直接带超上下文发给模型。
         // 否则「每轮压缩 → 仍超预算 → 再压缩」只会耗到重试上限，而旧实现的 break 会让 run 永远停在 RUNNING。
         boolean skipCompaction = false;
+        // 同一 run 连续失败达到上限后彻底关闭压缩，避免每个工具轮都重新烧一次摘要调用。
+        boolean compactionDisabledForRun = false;
         /** 当前 run 的第一条内存消息在 messages 中的下标（压缩重组时据此保留当前 run，不重放数据库）。 */
         int currentRunStart = -1;
         /** 当前 run 的 run-local 压缩次数（上限 2 次，不随工具轮重置）。 */
@@ -481,16 +484,21 @@ public class SessionRunner {
             switch (turn.outcome()) {
                 case COMPACTED -> {
                     CompactionOutcome outcome = turn.compactionOutcome();
-                    boolean exhausted = compactionRetries++ >= 3;
-                    if (outcome != CompactionOutcome.COMPLETED || exhausted) {
-                        // 没有真实进展（无历史/无进展/失败）或已尝试够多次：带当前上下文直接发。
-                        // 模型接受就继续；拒绝则是 400 → ERROR 终态，不再做无效的压缩循环。
-                        log.warn("Compaction did not make progress (outcome={}, attempts={}) for run {}; sending oversized context",
-                                outcome, compactionRetries, currentRunId);
+                    if (outcome != CompactionOutcome.COMPLETED) {
+                        // 没有真实进展：本轮带当前上下文直接发；连续失败达到上限后本 run 不再压缩。
+                        compactionRetries++;
+                        consecutiveCompactionFailures++;
+                        if (consecutiveCompactionFailures >= RunnerConstants.MAX_CONSECUTIVE_COMPACTION_FAILURES) {
+                            compactionDisabledForRun = true;
+                        }
+                        log.warn("Compaction did not make progress (outcome={}, attempts={}, consecutiveFailures={}, disabled={}) for run {}; sending oversized context",
+                                outcome, compactionRetries, consecutiveCompactionFailures,
+                                compactionDisabledForRun, currentRunId);
                         skipCompaction = true;
                         hasToolCalls = true;
                         continue;
                     }
+                    consecutiveCompactionFailures = 0;
                     log.info("Compaction completed, reassembling history (attempt {})", compactionRetries);
                     // 只替换可压缩的历史前缀；当前 run 的内存消息（user / 工具轮 / 观察）原样保留。
                     // 旧实现清空后从数据库重放，而 HistoryLoader 默认排除当前 run —— 工具轮会丢上下文、
@@ -512,11 +520,17 @@ public class SessionRunner {
                 }
                 case RUN_COMPACTED -> {
                     if (turn.rebuiltMessages() == null) {
-                        log.warn("Run compaction returned no rebuilt messages for run {}; sending as-is", currentRunId);
+                        consecutiveCompactionFailures++;
+                        if (consecutiveCompactionFailures >= RunnerConstants.MAX_CONSECUTIVE_COMPACTION_FAILURES) {
+                            compactionDisabledForRun = true;
+                        }
+                        log.warn("Run compaction returned no rebuilt messages for run {} (consecutiveFailures={}, disabled={}); sending as-is",
+                                currentRunId, consecutiveCompactionFailures, compactionDisabledForRun);
                         skipCompaction = true;
                         hasToolCalls = true;
                         continue;
                     }
+                    consecutiveCompactionFailures = 0;
                     runCompactionAttempts++;
                     runCompactionCount++;
                     lastRunCompactionLoop = loopCount;
@@ -598,9 +612,9 @@ public class SessionRunner {
                 }
             }
 
-            // 这一轮真正发出去了（工具轮）：解除「跳过压缩」并重置重试计数，
-            // 下一轮重新按阈值判断，避免一次压缩失败让整条 run 永久关闭压缩。
-            skipCompaction = false;
+            // 这一轮真正发出去了（工具轮）：重置本轮重试计数；若本 run 已连续失败到上限，
+            // 保持关闭压缩，避免每个工具轮都重新尝试一次注定失败的摘要调用。
+            skipCompaction = compactionDisabledForRun;
             compactionRetries = 0;
 
             Map<String, String> deniedReasons = new HashMap<>();

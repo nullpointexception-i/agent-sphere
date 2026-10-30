@@ -538,8 +538,9 @@ sampling config（实例优先、全局兜底）；有值时预算 = `max_input 
 - 游标 = 实际纳入的最后一条 run；空 run 可以安全推进。`estimateRunTokens` 已删除：
   渲染与估算共用 `renderRun`（用户/助手正文各截 2,000 字符、工具参数 500、工具结果 500），
   避免「估了参数却摘要不到」。
-- 摘要硬上限 `SUMMARY_MAX_TOKENS_CAP=4000`，并作为压缩请求的 `max_tokens`（写在 prompt 里的
-  “MUST NOT exceed” 不是硬约束）。
+- 摘要目标上限 `summary-max-tokens=10000`；压缩请求的 `max_tokens` 允许高于目标（最多约 2×），
+  超预算时把上一轮摘要作为输入继续压缩，最多 `summary-compress-rounds=3` 轮，仍超限才裁剪。
+  （写在 prompt 里的 “MUST NOT exceed” 不是硬约束。）
 - compact record 是 HistoryLoader 的权威来源：先 `updateCompleted`（摘要 + 游标同一条 UPDATE），
   再 best-effort 更新 `session.summary`。`tokenCount` 记摘要 token 数。
 
@@ -605,8 +606,8 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
   按 `tail-ratio` 预算选，并保证最新一条浏览器结果进入 tail；压缩/重组后由 `refreshTodolistSlot` 从 DB 重新注入 todo 槽。
 - 压缩调用必须 `thinking=disabled`（`callLLM` 在 `applyGlobal` 后覆盖）：全局 thinking=true 会把 4k 输出预算耗在
   reasoning 上，线上出现 completion=4000、reasoning 5–11k、content 为空（记录 FAILED）。
-- 压缩策略：`target-ratio=0.55`、`input-ratio=0.35`、`tail-ratio=0.25`、`summary-max-tokens=4000`、
-  `cooldown-turns=4`、`max-per-run=12`；target 支持自适应（`adaptive-target-enabled`）：当
+- 压缩策略：`target-ratio=0.55`、`input-ratio=0.35`、`tail-ratio=0.25`、`summary-max-tokens=10000`、
+  `summary-compress-rounds=3`、`cooldown-turns=4`、`max-per-run=12`；target 支持自适应（`adaptive-target-enabled`）：当
   `fixed + tail` 超过配置 target 时自动抬高，且不超过触发预算减去 headroom；仍不可行才返回 NO_PROGRESS。
   `min-tail-tokens` 是自适应 target 的 tail 兜底。
 - live 工具结果预算：`LiveToolResultPolicy` 只投影**请求副本**，不修改 canonical `messages`；canonical 保留完整
@@ -629,14 +630,16 @@ HistoryLoader 默认排除当前 run，工具轮会丢 assistant(tool_calls)/too
 `{"detail":"Not`），但旧代码只判断 `isBlank`，把残缺文本写成 COMPLETED 并作为后续所有 run 的
 `[Conversation summary]`，还把它作为下一次压缩的 `existingSummary`，形成 id 40–49 的连续截断链。
 
-- 摘要上限路由自适应：`summaryCap = max(512, min(summary-max-tokens(4000), maxInputTokens × summary-max-ratio(0.12)))`；
-  再与 `maxOutputTokens × 2/3`、输入 token 的 2/3 取 min。
+- 摘要上限路由自适应：`summaryCap = max(512, min(summary-max-tokens(10000), maxInputTokens × summary-max-ratio(0.12)))`；
+  再与 `maxOutputTokens`、输入 token 的 2/3 取 min。
 - `callLLM` 必须捕获 `LLMEvent.Finish` / `LLMEvent.Error`，返回 finishReason/error；`doCompact` /
   `doCompactRun` 仅在 `stop`（或无 finish 但结构完整）且 `SummarySanitizer.isComplete` 时写 COMPLETED。
-  `length`/`content_filter`/异常 → 用绝对上限重试一次；仍不完整 → FAILED，**不更新 session.summary、
+  `length`/`content_filter`/超预算 → 把返回摘要作为输入继续压缩（最多 3 轮）；3 轮仍不满足才用
+  `SummarySanitizer.trimToTokenBudget` 裁剪到目标预算。异常且无内容 → FAILED，**不更新 session.summary、
   不推进 compacted_upto_run_id**，保留旧摘要/游标。
-- `SummarySanitizer` 只做 `isComplete`（代码围栏奇偶、`{}`/`[]` 平衡、结尾字符），**不做读取时 sanitize**；
-  `HistoryLoader` 原样使用旧摘要。已有残缺摘要不会被自动修复，只会在下一次完整压缩成功后覆盖。
+- `SummarySanitizer` 提供 `isComplete`（代码围栏奇偶、`{}`/`[]` 平衡、结尾字符）和
+  `trimToTokenBudget`（只在 3 轮压缩后兜底裁剪）；`HistoryLoader` 读取时不 sanitize。已有残缺摘要不会被自动修复，
+  只会在下一次完整压缩成功后覆盖。
 - 摘要 prompt 必须禁止原始 JSON/代码块/长表格，并要求完整收尾；不要把“be as detailed as necessary”写回。
 
 **`StaleRunningRunReconciler` 是 DB 层最后一道网。** 每 `stale-reconcile-interval`（默认 1m）扫

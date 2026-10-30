@@ -109,6 +109,8 @@ public final class RunnerConstants {
      * 所以沉默只能是异常。给 2 轮容错是照顾小模型偶发的「只说不做」。
      */
     public static final int MAX_SILENT_TURNS = 2;
+    /** 同一 run 连续压缩失败达到该次数后，停止继续压缩，避免每轮重复烧 token。 */
+    public static final int MAX_CONSECUTIVE_COMPACTION_FAILURES = 2;
 
     /** 静默追问消息的 marker（每轮重建尾部时据此清理旧副本，避免累积）。 */
     public static final String SILENT_TURN_NUDGE_PREFIX = "\n\n[NO TOOL CALL] ";

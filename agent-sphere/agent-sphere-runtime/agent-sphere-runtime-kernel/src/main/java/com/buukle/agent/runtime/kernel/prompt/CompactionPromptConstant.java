@@ -26,6 +26,18 @@ public final class CompactionPromptConstant {
                     + "  prioritize Goal / Progress / Next Steps / Key Context and stop cleanly.\n\n"
                     + "Now process the following. Stay within the token limit and produce a COMPLETE summary:\n";
 
+
+    /** 摘要超过目标预算时，把上一轮摘要作为输入再压缩。 */
+    public static String buildReducePrompt(String existingSummary, long maxSummaryTokens) {
+        return "You are compressing an existing conversation summary. Output ONLY the compressed summary, no extra text.\n\n"
+                + "Keep the exact section format: ## Goal, ## Progress, ## Decisions, ## Next Steps, ## Key Context.\n"
+                + "Preserve the newest facts, decisions, file paths, configuration values, and next steps; compress older details first.\n"
+                + "Do not add new facts. Do not output raw JSON, code blocks, or long tables.\n"
+                + "Your summary MUST NOT exceed " + maxSummaryTokens + " tokens. This is a hard limit: finish every section "
+                + "and end with a complete sentence. Never leave an unterminated code fence, JSON object/array, or quote.\n\n"
+                + "Existing summary:\n" + existingSummary;
+    }
+
     private CompactionPromptConstant() {
     }
 

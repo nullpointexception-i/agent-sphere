@@ -127,7 +127,8 @@ buukle:
         min-tail-tokens: 2000                       # 自适应 target 至少为 tail 保留的 token / Min tail reserve
         input-ratio: 0.35                           # 压缩输入预算比例 / Compaction input ratio
         tail-ratio: 0.25                            # run-local tail 预算比例 / Run-local tail ratio
-        summary-max-tokens: 4000                    # 摘要绝对上限 / Summary absolute cap
+        summary-max-tokens: 10000                   # 摘要绝对上限（tokens） / Summary absolute cap
+        summary-compress-rounds: 3                  # 超限时最多再压缩轮数 / Max summary re-compression rounds
         summary-max-ratio: 0.12                     # 摘要上限占 maxInput 比例 / Summary cap ratio
         cooldown-turns: 4                           # 压缩冷却轮数 / Compaction cooldown turns
         max-per-run: 12                             # 单 run 压缩次数上限 / Max compactions per run

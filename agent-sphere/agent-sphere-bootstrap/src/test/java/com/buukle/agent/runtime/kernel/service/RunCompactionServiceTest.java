@@ -195,35 +195,66 @@ class RunCompactionServiceTest {
 
     @Test
     void summaryCapIsRouteAware() {
-        // 32k 路由：min(4000, 32000*0.12)=3840；128k 路由：min(4000, 15360)=4000
+        // 32k 路由：min(10000, 32000*0.12)=3840；128k / 1M 路由都封顶 10000
         org.junit.jupiter.api.Assertions.assertEquals(3840, service.resolveSummaryCap(32_000L));
-        org.junit.jupiter.api.Assertions.assertEquals(4000, service.resolveSummaryCap(128_000L));
-        org.junit.jupiter.api.Assertions.assertEquals(4000, service.resolveSummaryCap(1_000_000L));
+        org.junit.jupiter.api.Assertions.assertEquals(10000, service.resolveSummaryCap(128_000L));
+        org.junit.jupiter.api.Assertions.assertEquals(10000, service.resolveSummaryCap(1_000_000L));
     }
 
     @Test
-    void lengthTruncatedSummaryIsRejectedAndRetried() {
+    void summaryOverTargetIsCompressedAgain() {
         org.mockito.Mockito.reset(kernelLlmService);
+        String tooLong = "x".repeat(20_000);
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
         when(kernelLlmService.stream(anyString(), anyString(), any(), anyString(),
                 any(), any(), any())).thenAnswer(inv -> {
             lastRequest.set(inv.getArgument(4));
             @SuppressWarnings("unchecked")
             Consumer<LLMEvent> onEvent = inv.getArgument(5);
-            onEvent.accept(new LLMEvent.TextDelta("## Goal\n- partial {\"detail\":\"Not"));
-            onEvent.accept(new LLMEvent.Finish(FinishReason.LENGTH,
-                    java.util.Map.of("completion_tokens", 2000)));
+            onEvent.accept(new LLMEvent.TextDelta(
+                    calls.incrementAndGet() == 1 ? tooLong : "## Goal\nshort"));
+            onEvent.accept(new LLMEvent.Finish(FinishReason.STOP,
+                    java.util.Map.of("completion_tokens", 100)));
             return CompletableFuture.completedFuture(null);
         });
 
         CompactionService.RunCompactionResult result = service.compactRun(
                 SESSION_ID, RUN_ID, null, messages(), 1, null, null);
 
-        assertEquals(CompactionOutcome.NO_PROGRESS, result.outcome());
-        verify(compactRecordSpi).updateFailed(org.mockito.ArgumentMatchers.eq(99L),
-                org.mockito.ArgumentMatchers.anyString());
-        verify(compactRecordSpi, org.mockito.Mockito.never()).completeRunCompact(any(), any(), any(), any(), any());
-        verify(kernelLlmService, org.mockito.Mockito.times(2)).stream(anyString(), anyString(), any(),
-                anyString(), any(), any(), any());
+        assertEquals(CompactionOutcome.COMPLETED, result.outcome());
+        assertEquals(2, calls.get(), "首轮超 10k 后必须把返回值再压缩一次");
+        verify(compactRecordSpi).completeRunCompact(org.mockito.ArgumentMatchers.eq(99L),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq("## Goal\nshort"),
+                any(), anyString());
+    }
+
+    @Test
+    void summaryStillOverTargetAfterRoundsIsTrimmed() {
+        org.mockito.Mockito.reset(kernelLlmService);
+        String tooLong = ("x".repeat(100) + "。").repeat(200);
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        when(kernelLlmService.stream(anyString(), anyString(), any(), anyString(),
+                any(), any(), any())).thenAnswer(inv -> {
+            lastRequest.set(inv.getArgument(4));
+            @SuppressWarnings("unchecked")
+            Consumer<LLMEvent> onEvent = inv.getArgument(5);
+            calls.incrementAndGet();
+            onEvent.accept(new LLMEvent.TextDelta(tooLong));
+            onEvent.accept(new LLMEvent.Finish(FinishReason.LENGTH,
+                    java.util.Map.of("completion_tokens", 4096)));
+            return CompletableFuture.completedFuture(null);
+        });
+
+        CompactionService.RunCompactionResult result = service.compactRun(
+                SESSION_ID, RUN_ID, null, messages(), 1, null, null);
+
+        assertEquals(CompactionOutcome.COMPLETED, result.outcome());
+        assertEquals(3, calls.get(), "最多 3 轮压缩");
+        org.mockito.ArgumentCaptor<String> summary = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(compactRecordSpi).completeRunCompact(org.mockito.ArgumentMatchers.eq(99L),
+                org.mockito.ArgumentMatchers.isNull(), summary.capture(), any(), anyString());
+        assertTrue(com.buukle.agent.runtime.kernel.util.SummarySanitizer.isComplete(summary.getValue()));
+        assertTrue(summary.getValue().length() <= 3840 * com.buukle.agent.runtime.kernel.constants.RunnerConstants.TOKEN_ESTIMATE_DIVISOR);
     }
 
     @Test
