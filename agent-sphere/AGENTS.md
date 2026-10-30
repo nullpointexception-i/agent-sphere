@@ -64,7 +64,7 @@ Env overrides (defaults): `DB_HOST` (127.0.0.1), `DB_PORT` (5432), `DB_USERNAME`
 
 ## Flyway
 
-Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql` (currently V1–V81; check the directory for the current highest number before adding a new one). `baseline-on-migrate: true`, baseline 0. Add new `V<n>` files; never edit applied migrations.
+Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql` (currently V1–V105; check the directory for the current highest number before adding a new one). `baseline-on-migrate: true`, baseline 0. Add new `V<n>` files; never edit applied migrations.
 
 ## Session data cleanup (disk reclamation)
 
@@ -721,4 +721,4 @@ Three deliberately different scopes; keep labels explicit:
 
 ## Git
 
-GitHub flow: feature branch off `main` → PR. No CI configured — run `mvn test` before pushing.
+GitHub flow: feature branch off `main` → PR. No test CI (only the deploy workflow) — run `mvn test` before pushing.
