@@ -55,6 +55,16 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     }
 
     @Override
+    public RunVO getRunMeta(Long id) {
+        if (id == null) return null;
+        AgentRun run = lambdaQuery()
+                .eq(AgentRun::getId, id)
+                .select(AgentRun.class, i -> !REASONING_PROPERTY.equals(i.getProperty()))
+                .one();
+        return run != null ? runConverter.toVO(run) : null;
+    }
+
+    @Override
     public RunVO findActiveRun(Long sessionId) {
         AgentRun run = lambdaQuery()
                 .eq(AgentRun::getSessionId, sessionId)
@@ -83,6 +93,29 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .last("LIMIT " + Math.max(1, limit))
                 .list()
                 .stream().map(runConverter::toVO).toList();
+    }
+
+    @Override
+    public List<Long> findStaleRunIdsByStatus(String status, LocalDateTime olderThan, int limit) {
+        if (status == null || olderThan == null) {
+            return List.of();
+        }
+        return lambdaQuery()
+                .select(AgentRun::getId)
+                .eq(AgentRun::getStatus, status)
+                .lt(AgentRun::getUpdatedAt, olderThan)
+                .orderByAsc(AgentRun::getId)
+                .last("LIMIT " + Math.max(1, limit))
+                .list().stream().map(AgentRun::getId).toList();
+    }
+
+    @Override
+    public boolean existsRunAfterId(Long sessionId, Long runId) {
+        if (sessionId == null || runId == null) return false;
+        return lambdaQuery()
+                .eq(AgentRun::getSessionId, sessionId)
+                .gt(AgentRun::getId, runId)
+                .count() > 0;
     }
 
     @Override

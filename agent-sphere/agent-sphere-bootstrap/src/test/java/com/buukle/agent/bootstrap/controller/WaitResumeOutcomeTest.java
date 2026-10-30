@@ -11,6 +11,7 @@ import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
+import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.orchestration.handler.TimelineRecorder;
@@ -86,7 +87,7 @@ class WaitResumeOutcomeTest {
     @BeforeEach
     void setUp() {
         service = new ChatRuntimeService(orchestrator, runSpi, sessionSpi, eventPublisher,
-                clarificationMapper, sessionRunner, timelineRecorder, chatAttachmentService, pendingWaitSpi, mock(ToolApprovalService.class));
+                clarificationMapper, sessionRunner, timelineRecorder, chatAttachmentService, pendingWaitSpi, mock(ToolApprovalService.class), mock(SessionInputManager.class));
     }
 
     @AfterEach

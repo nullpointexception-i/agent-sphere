@@ -352,7 +352,7 @@ export default function Footer({
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
         <Segmented
           size="small"
           value={runMode}

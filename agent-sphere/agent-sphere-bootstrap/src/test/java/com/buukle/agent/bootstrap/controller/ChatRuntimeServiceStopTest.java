@@ -8,6 +8,7 @@ import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
+import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.orchestration.handler.TimelineRecorder;
@@ -67,7 +68,7 @@ class ChatRuntimeServiceStopTest {
     @BeforeEach
     void setUp() {
         service = new ChatRuntimeService(orchestrator, runSpi, sessionSpi, eventPublisher,
-                clarificationMapper, sessionRunner, timelineRecorder, chatAttachmentService, pendingWaitSpi, mock(ToolApprovalService.class));
+                clarificationMapper, sessionRunner, timelineRecorder, chatAttachmentService, pendingWaitSpi, mock(ToolApprovalService.class), mock(SessionInputManager.class));
         AuthContext.setSuperAdmin(true); // 跳过会话归属校验（本测试只关心停止逻辑）
         lenient().when(clarificationMapper.selectList(any())).thenReturn(List.of());
     }

@@ -364,12 +364,36 @@ public class SessionRunner {
             loopCount++;
         }
 
+        if (topCtx != null && topCtx.isRecoveryResume() && currentRun != null) {
+            toolCallRecordSpi.failRunningByRunId(currentRunId, "interrupted by server restart");
+            String systemPrompt = runPromptBuilder.buildSystemPrompt(topCtx);
+            if (systemPrompt != null && !systemPrompt.isBlank()) {
+                messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
+            }
+            int historyBase = messages.size();
+            HistoryLoader.HistoryResult history = historyLoader.loadResult(sessionId, currentRunId, true);
+            if (history != null) {
+                messages.addAll(history.messages());
+            }
+            currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
+            hasToolCalls = true;
+            toolsEverExecuted = true;
+            topCtx.setRecoveryResume(false);
+            log.info("Recovered interrupted run {} with {} history message(s)", currentRunId, messages.size());
+        }
+
         loop:
         while (loopCount < maxLoopCount) {
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
             log.info("------******************--------run:{}-loopCount:{}", currentRunId, loopCount);
             SessionInputManager.InputMessage input = null;
-            if (!hasToolCalls) {
+            if (hasToolCalls && inputManager.hasPending(sessionId)) {
+                input = inputManager.promoteInput(sessionId);
+                if (input != null) {
+                    hasToolCalls = false;
+                }
+            }
+            if (input == null && !hasToolCalls) {
                 input = inputManager.promoteInput(sessionId);
             }
             if (input == null && !hasToolCalls) break;
@@ -518,6 +542,10 @@ public class SessionRunner {
                     break loop;
                 }
                 case COMPLETE -> {
+                    if (inputManager.hasPending(sessionId)) {
+                        hasToolCalls = false;
+                        continue;
+                    }
                     // L2：agentic 流程里的沉默不是完成。模型必须以 finish 显式收口；
                     // 连续静默超过上限就判失败 —— 否则「只说了几句就放弃」会被记成成功。
                     if (toolsEverExecuted) {
@@ -547,9 +575,7 @@ public class SessionRunner {
                     // ——线上 run 1575（status=empty/stopReason=POOL_EXHAUSTED，池子跑完的完整结论）
                     // 就是这样被回成 {"error":"run loop limit reached"} 的。
                     // 真截断只在下面的工具轮分支标记。
-                    String reply = allContent.length() > 0
-                            ? allContent.toString()
-                            : turnReasoningRef.get();
+                    String reply = allContent.toString();
                     if (reply != null && !reply.isBlank()) {
                         currentRun.setAssistantReply(reply);
                     }
@@ -599,6 +625,10 @@ public class SessionRunner {
             // 正文（若有）必须保留：否则压缩/tail/resume 都只剩 tool 调用，模型看不到自己说过什么
             if (turn.content() != null && !turn.content().isBlank()) {
                 assistantTurn.setContent(turn.content());
+            }
+            String turnReasoning = turnReasoningRef.get();
+            if (turnReasoning != null && !turnReasoning.isBlank()) {
+                assistantTurn.setReasoningContent(turnReasoning);
             }
             messages.add(assistantTurn);
 
@@ -764,7 +794,7 @@ public class SessionRunner {
                 String declaredStatus = jsonField(finishCall.arguments(), FinishConstants.JSON_STATUS);
                 String reply = declaredSummary != null && !declaredSummary.isBlank()
                         ? declaredSummary
-                        : (allContent.length() > 0 ? allContent.toString() : turnReasoningRef.get());
+                        : allContent.toString();
                 if (reply != null && !reply.isBlank()) {
                     currentRun.setAssistantReply(reply);
                 }

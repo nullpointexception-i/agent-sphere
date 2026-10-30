@@ -191,6 +191,10 @@ export const agentApi = {
       request<any>(`${BASE}/instance/sessions/${id}/toolcalls/latest`),
     toolStats: (id: number, runId?: number | null) =>
       request<any>(`${BASE}/instance/sessions/${id}/tool-stats${runId != null ? `?runId=${runId}` : ''}`),
+    pendingQueue: (id: number) =>
+      request<any[]>(`${BASE}/runtime/${id}/queue`),
+    withdrawQueue: (id: number, queueId: string) =>
+      request<{ result: string }>(`${BASE}/runtime/${id}/queue/${queueId}`, { method: 'DELETE' }),
     feedback: (sessionId: number, interactionId: number, runId: number | null | undefined, value: string) =>
       request<any>(`${BASE}/instance/sessions/${sessionId}/messages/${interactionId}/feedback${runId != null ? `?runId=${runId}` : ''}`, {
         method: 'POST', data: { value },

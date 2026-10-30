@@ -647,6 +647,9 @@ function GenericCard({
 function ToolCard({ row }: any) {
   const intl = useIntl();
   const content = row.content || {};
+  if (/^mcp_\d+_\d+$/.test(content.toolName || '')) {
+    return <McpToolCard content={content} state={row.state} />;
+  }
   if (content.toolName === 'builtin_10' || content.displayName === '等待'
       || content.displayName === 'Wait') {
     return <WaitCard content={content} state={row.state} />;
@@ -727,6 +730,40 @@ function WaitCard({ content, state }: any) {
           )}
         </Typography.Text>
       )}
+      <StateTag state={state} small />
+    </div>
+  );
+}
+
+function McpToolCard({ content, state }: any) {
+  const intl = useIntl();
+  const name = content.displayName || content.toolName || intl.formatMessage({
+    id: 'pages.chat.tool.tool', defaultMessage: 'Tool',
+  });
+  let action = '';
+  let resultStatus = '';
+  try {
+    const args = content.args ? JSON.parse(content.args) : null;
+    action = args?.action || args?.operation || '';
+  } catch {
+    // ignore
+  }
+  try {
+    const artifact = content.artifact ? JSON.parse(content.artifact) : null;
+    resultStatus = artifact?.status || artifact?.data?.status || artifact?.data?.action || artifact?.action || '';
+  } catch {
+    if (typeof content.artifact === 'string' && content.artifact.length <= 40) {
+      resultStatus = content.artifact;
+    }
+  }
+  return (
+    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
+      <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
+        {name}
+      </Typography.Text>
+      {action && <Typography.Text type="secondary" style={{ fontSize: 12 }}>· {action}</Typography.Text>}
+      {resultStatus && <Tag style={{ margin: 0, fontSize: 10 }} color="blue">{String(resultStatus)}</Tag>}
       <StateTag state={state} small />
     </div>
   );

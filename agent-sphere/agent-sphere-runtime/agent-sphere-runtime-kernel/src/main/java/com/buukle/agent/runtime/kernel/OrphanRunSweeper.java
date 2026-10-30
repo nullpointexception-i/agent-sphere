@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.kernel;
 
+import com.buukle.agent.common.event.InterruptedRunRecoveryEvent;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -34,13 +35,12 @@ public class OrphanRunSweeper {
 
     @Scheduled(fixedDelayString = "${buukle.agent.distributed.orphan-sweep-interval:PT30S}")
     public void sweep() {
-        for (String key : redissonClient.getKeys().getKeysByPattern(
-                DistributedRuntimeConstants.KEY_STATE_PREFIX + "*")) {
-            String suffix = key.substring(DistributedRuntimeConstants.KEY_STATE_PREFIX.length());
+        for (Long sessionId : redissonClient.<Long>getSet(
+                DistributedRuntimeConstants.KEY_ACTIVE_SESSIONS).readAll()) {
             try {
-                sweepSession(Long.valueOf(suffix));
-            } catch (NumberFormatException e) {
-                // 非会话键，忽略
+                sweepSession(sessionId);
+            } catch (Exception e) {
+                log.warn("Orphan sweep failed for session {}", sessionId, e);
             }
         }
     }
@@ -65,23 +65,36 @@ public class OrphanRunSweeper {
             if (owner.isExists()) {
                 return;
             }
-            log.warn("Orphan run detected for session {} (owner lease expired), marking FAILED", sessionId);
+            log.warn("Orphan run detected for session {} (owner lease expired)", sessionId);
             RunVO active = runSpi.findActiveRun(sessionId);
             if (active != null) {
                 flushReasoning(active);
-                active.setStatus(RunStatus.FAILED.name());
-                runSpi.updateRun(active);
-                // 必须发终态事件：只写 DB 的话，该会话 timeline 会永久停在运行中，
-                // 前端锁着“执行中”+停止按钮，只有刷新才一致（旧实现欠这条）。
-                eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(active.getId())
-                                .setAssistantReply("执行中断：执行副本失联（owner 租约过期）")
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + active.getId())));
+                if (runSpi.existsRunAfterId(sessionId, active.getId())) {
+                    active.setStatus(RunStatus.FAILED.name());
+                    active.setErrorMessage("interrupted by server restart and superseded by newer run");
+                    runSpi.updateRun(active);
+                    eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(active.getId())
+                                    .setAssistantReply(active.getErrorMessage())
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + active.getId())));
+                    stateBucket.delete();
+                    var activeSessions = redissonClient.getSet(DistributedRuntimeConstants.KEY_ACTIVE_SESSIONS);
+                    if (activeSessions != null) activeSessions.remove(sessionId);
+                    coordinator.wake(sessionId);
+                } else {
+                    // 没有更新 run：交给 recovery 恢复原 run；不要在这里 FAILED。
+                    eventPublisher.publishEvent(new InterruptedRunRecoveryEvent(
+                            sessionId, active.getId(), "owner lease expired"));
+                    log.warn("Interrupted run {} (session {}) queued for recovery", active.getId(), sessionId);
+                }
+            } else {
+                stateBucket.delete();
+                var activeSessions = redissonClient.getSet(DistributedRuntimeConstants.KEY_ACTIVE_SESSIONS);
+                    if (activeSessions != null) activeSessions.remove(sessionId);
+                coordinator.wake(sessionId);
             }
-            stateBucket.delete();
-            coordinator.wake(sessionId);
         } finally {
             lock.unlock();
         }

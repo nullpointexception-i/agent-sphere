@@ -18,11 +18,15 @@ public final class DistributedRuntimeConstants {
     // ---- 键前缀 ----
     public static final String KEY_LOCK_PREFIX = KEY_PREFIX + "lock:";
     public static final String KEY_STATE_PREFIX = KEY_PREFIX + "state:";
+    /** 当前有运行态会话的 Redis Set（避免 orphan sweep 全量扫描 state:*）。 */
+    public static final String KEY_ACTIVE_SESSIONS = KEY_PREFIX + "active-sessions";
     public static final String KEY_OWNER_PREFIX = KEY_PREFIX + "owner:";
     public static final String KEY_PENDING_RUN_PREFIX = KEY_PREFIX + "pending-run:";
     /** KernelContext 分布式缓存（RMapCache，key=sessionId，条目 TTL）。 */
     public static final String KEY_CTX = KEY_PREFIX + "ctx";
     public static final String KEY_QUEUE_PREFIX = KEY_PREFIX + "queue:";
+    public static final String KEY_QUEUE_LOCK_PREFIX = KEY_PREFIX + "queue-lock:";
+    public static final String KEY_QUEUE_CONSUMED_PREFIX = KEY_PREFIX + "queue-consumed:";
     public static final String KEY_STEER_PREFIX = KEY_PREFIX + "steer:";
     public static final String KEY_CANCEL_RUN_PREFIX = KEY_PREFIX + "cancel-run:";
     public static final String KEY_CANCEL_SESSION_PREFIX = KEY_PREFIX + "cancel-session:";
@@ -61,6 +65,14 @@ public final class DistributedRuntimeConstants {
 
     public static String sessionQueueKey(Long sessionId) {
         return KEY_QUEUE_PREFIX + sessionId;
+    }
+
+    public static String sessionQueueLockKey(Long sessionId) {
+        return KEY_QUEUE_LOCK_PREFIX + sessionId;
+    }
+
+    public static String sessionQueueConsumedKey(Long sessionId) {
+        return KEY_QUEUE_CONSUMED_PREFIX + sessionId;
     }
 
     public static String sessionSteerKey(Long sessionId) {

@@ -81,6 +81,7 @@ export default function Chat() {
   const [sseConnected, setSseConnected] = useState(false);
   const [sessionUsage, setSessionUsage] = useState<any>(null);
   const [toolStats, setToolStats] = useState<any>(null);
+  const [queuedMessages, setQueuedMessages] = useState<any[]>([]);
   const [runMode, setRunMode] = useState<'WRITE' | 'READ_ONLY'>('WRITE');
   const [toolApprovalBatch, setToolApprovalBatch] = useState<ToolApprovalBatch | null>(null);
   const [toolApprovalSubmitting, setToolApprovalSubmitting] = useState(false);
@@ -408,11 +409,37 @@ export default function Chat() {
     }
   };
 
+  const refreshQueue = async (sid: number) => {
+    if (!sid) return;
+    try {
+      const rows = await agentApi.sessions.pendingQueue(sid);
+      setQueuedMessages(Array.isArray(rows) ? rows : []);
+    } catch {
+      // ignore
+    }
+  };
+
+  const withdrawQueued = async (queueId: string) => {
+    if (!currentSession?.id || !queueId) return;
+    try {
+      const res = await agentApi.sessions.withdrawQueue(currentSession.id, queueId);
+      if (res?.result === 'ALREADY_CONSUMED') {
+        message.warning('消息已开始执行，无法撤回');
+      } else if (res?.result === 'NOT_FOUND') {
+        message.warning('排队消息不存在');
+      }
+      await refreshQueue(currentSession.id);
+    } catch (e: any) {
+      message.error(e?.message || '撤回失败');
+    }
+  };
+
   useEffect(() => {
     setToolStats(null);
     if (currentSession?.id) {
       void refreshSessionUsage(currentSession.id);
       void refreshToolStats(currentSession.id);
+      void refreshQueue(currentSession.id);
     }
   }, [currentSession?.id]);
 
@@ -426,6 +453,13 @@ export default function Chat() {
       void refreshToolStats(currentSession.id);
     }
   }, [sessionPanelOpen, currentSession?.id]);
+
+  useEffect(() => {
+    if (!currentSession?.id || queuedMessages.length === 0) return;
+    const sid = currentSession.id;
+    const timer = window.setInterval(() => void refreshQueue(sid), 2000);
+    return () => window.clearInterval(timer);
+  }, [currentSession?.id, queuedMessages.length]);
 
   const handleRunModeChange = async (mode: 'WRITE' | 'READ_ONLY') => {
     setRunMode(mode);
@@ -1542,6 +1576,14 @@ export default function Chat() {
         attachmentKeys,
         runMode,
       );
+      if (res?.status === 'QUEUED') {
+        setQueuedMessages((prev) => [
+          ...prev,
+          { queueId: res.queueId, text: msg, createdAt: Date.now() },
+        ]);
+        setSending(false);
+        return;
+      }
       if (res?.runId) {
         currentRunIdRef.current = res.runId;
         runUserMessageRef.current.set(res.runId, msg);
@@ -1767,6 +1809,8 @@ export default function Chat() {
               subAgentLive={subAgentLive}
               runMode={runMode}
               onRunModeChange={handleRunModeChange}
+              queuedMessages={queuedMessages}
+              onWithdrawQueued={withdrawQueued}
               toolApprovalBatch={toolApprovalBatch}
               toolApprovalSubmitting={toolApprovalSubmitting}
               onResolveToolApproval={resolveToolApproval}

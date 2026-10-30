@@ -179,6 +179,16 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
     }
 
     @Override
+    public int failRunningByRunId(Long runId, String errorMessage) {
+        if (runId == null) return 0;
+        return mapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<AgentToolCallRecord>()
+                .eq(AgentToolCallRecord::getRunId, runId)
+                .in(AgentToolCallRecord::getStatus, List.of("PENDING", "RUNNING"))
+                .set(AgentToolCallRecord::getStatus, com.buukle.agent.instance.dtvo.enums.ToolCallRecordStatus.FAILED.name())
+                .set(AgentToolCallRecord::getErrorMessage, errorMessage));
+    }
+
+    @Override
     public long countByRunId(Long runId) {
         if (runId == null) {
             return 0;

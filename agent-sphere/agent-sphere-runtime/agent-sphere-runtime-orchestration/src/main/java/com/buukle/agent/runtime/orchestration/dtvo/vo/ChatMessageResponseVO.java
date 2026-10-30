@@ -8,4 +8,5 @@ import java.io.Serializable;
 public class ChatMessageResponseVO implements Serializable {
     private Long runId;
     private String status;
+    private String queueId;
 }

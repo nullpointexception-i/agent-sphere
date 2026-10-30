@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel;
 
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
+import com.buukle.agent.common.event.InterruptedRunRecoveryEvent;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
@@ -53,18 +54,21 @@ public class StaleRunningRunReconciler {
     private final SessionRunCoordinator coordinator;
     private final ApplicationEventPublisher eventPublisher;
     private final long staleMinutes;
+    private final long recoveryGraceMinutes;
 
     public StaleRunningRunReconciler(RedissonClient redissonClient, RunSpi runSpi,
                                      AgentCompactRecordSpi compactRecordSpi,
                                      SessionRunCoordinator coordinator,
                                      ApplicationEventPublisher eventPublisher,
-                                     @Value("${buukle.agent.run.stale-reconcile-minutes:30}") long staleMinutes) {
+                                     @Value("${buukle.agent.run.stale-reconcile-minutes:30}") long staleMinutes,
+                                     @Value("${buukle.agent.run.recovery-grace-minutes:2}") long recoveryGraceMinutes) {
         this.redissonClient = redissonClient;
         this.runSpi = runSpi;
         this.compactRecordSpi = compactRecordSpi;
         this.coordinator = coordinator;
         this.eventPublisher = eventPublisher;
         this.staleMinutes = staleMinutes;
+        this.recoveryGraceMinutes = recoveryGraceMinutes;
     }
 
     @Scheduled(fixedDelayString = "${buukle.agent.run.stale-reconcile-interval:PT1M}")
@@ -85,6 +89,7 @@ public class StaleRunningRunReconciler {
             if (staleCompactions > 0) {
                 log.warn("Marked {} stale compaction record(s) FAILED", staleCompactions);
             }
+            recoverInterrupted();
             LocalDateTime cutoff = LocalDateTime.now().minusMinutes(Math.max(1, staleMinutes));
             List<RunVO> stale = runSpi.findStaleByStatus(RunStatus.RUNNING.name(), cutoff, BATCH_LIMIT);
             if (stale.isEmpty()) {
@@ -116,6 +121,31 @@ public class StaleRunningRunReconciler {
         }
     }
 
+    private void recoverInterrupted() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(Math.max(1, recoveryGraceMinutes));
+        List<Long> candidates = runSpi.findStaleRunIdsByStatus(
+                RunStatus.RUNNING.name(), cutoff, BATCH_LIMIT);
+        for (Long runId : candidates) {
+            RunVO run = runSpi.getRunMeta(runId);
+            if (run == null || !RunStatus.RUNNING.name().equals(run.getStatus())) {
+                continue;
+            }
+            Long sessionId = run.getSessionId();
+            if (sessionId == null
+                    || redissonClient.getBucket(
+                    DistributedRuntimeConstants.sessionOwnerKey(sessionId)).isExists()) {
+                continue;
+            }
+            if (runSpi.existsRunAfterId(sessionId, runId)) {
+                failRun(run, "interrupted by server restart and superseded by newer run");
+                continue;
+            }
+            eventPublisher.publishEvent(new InterruptedRunRecoveryEvent(
+                    sessionId, runId, "owner lease absent after restart"));
+            log.warn("Interrupted run {} (session {}) queued for recovery", runId, sessionId);
+        }
+    }
+
     private void rescue(RunVO candidate) {
         Long runId = candidate.getId();
         Long sessionId = candidate.getSessionId();
@@ -127,18 +157,25 @@ public class StaleRunningRunReconciler {
             return;
         }
         // findStaleByStatus 是快照：重新读一次，避免给刚完成的 run 补一刀。
-        RunVO fresh = runSpi.getRun(runId);
+        RunVO fresh = runSpi.getRunMeta(runId);
         if (fresh == null || !RunStatus.RUNNING.name().equals(fresh.getStatus())) {
             return;
         }
+        failRun(fresh, RunnerConstants.RUN_STALE_MSG);
+        log.warn("Stale RUNNING run {} (session {}) marked FAILED", runId, sessionId);
+    }
+
+    private void failRun(RunVO fresh, String reason) {
+        Long runId = fresh.getId();
+        Long sessionId = fresh.getSessionId();
         fresh.setStatus(RunStatus.FAILED.name());
-        fresh.setErrorMessage(RunnerConstants.RUN_STALE_MSG);
+        fresh.setErrorMessage(reason);
         runSpi.updateRun(fresh);
         eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
                 new RuntimeEventDataVO()
                         .setSessionId(sessionId)
                         .setRunId(runId)
-                        .setErrorMessage(RunnerConstants.RUN_STALE_MSG)
+                        .setErrorMessage(reason)
                         .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
 
         // 死 run 的 session 若还停在 RUNNING（副本崩溃场景），顺手复位；残留排队输入交给 wake 继续跑。
@@ -148,8 +185,9 @@ public class StaleRunningRunReconciler {
         if (SessionRunCoordinator.State.RUNNING.name().equals(state)
                 || SessionRunCoordinator.State.RUNNING_WITH_PENDING.name().equals(state)) {
             stateBucket.delete();
+            var activeSessions = redissonClient.getSet(DistributedRuntimeConstants.KEY_ACTIVE_SESSIONS);
+            if (activeSessions != null) activeSessions.remove(sessionId);
             coordinator.wake(sessionId);
         }
-        log.warn("Stale RUNNING run {} (session {}) marked FAILED", runId, sessionId);
     }
 }

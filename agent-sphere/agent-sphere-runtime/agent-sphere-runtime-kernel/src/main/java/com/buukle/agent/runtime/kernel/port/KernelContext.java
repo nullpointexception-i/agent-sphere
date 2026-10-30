@@ -25,4 +25,6 @@ public class KernelContext implements Serializable {
     private String userMessage;
     /** Non-null when this wake resumes an approved L2 tool batch. */
     private String approvalResumeId;
+    /** True when resuming an interrupted run after server restart. */
+    private boolean recoveryResume;
 }

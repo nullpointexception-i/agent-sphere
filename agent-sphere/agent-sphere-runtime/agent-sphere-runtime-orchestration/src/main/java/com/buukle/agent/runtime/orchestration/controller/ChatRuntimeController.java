@@ -40,6 +40,18 @@ public class ChatRuntimeController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/{sessionId}/queue")
+    public ResponseEntity<?> pendingQueue(@PathVariable Long sessionId) {
+        return ResponseEntity.ok(chatRuntimeService.pendingQueue(sessionId));
+    }
+
+    @DeleteMapping("/{sessionId}/queue/{queueId}")
+    public ResponseEntity<?> withdrawQueue(@PathVariable Long sessionId,
+                                           @PathVariable String queueId) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "result", chatRuntimeService.withdrawQueue(sessionId, queueId).name()));
+    }
+
     @GetMapping("/{sessionId}/tool-approvals/pending")
     public ResponseEntity<?> pendingToolApproval(@PathVariable Long sessionId) {
         return ResponseEntity.ok(chatRuntimeService.pendingToolApproval(sessionId));

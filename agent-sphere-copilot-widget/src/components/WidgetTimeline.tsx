@@ -192,6 +192,9 @@ function ToolRow({
   loadFile: (fileKey: string) => Promise<string>;
 }) {
   const c = row.content || {};
+  if (/^mcp_\d+_\d+$/.test(String(c.toolName || ''))) {
+    return <McpToolRow content={c} state={row.state} />;
+  }
   if (c.toolName === 'builtin_13' || c.displayName === '当前时间'
       || c.displayName === 'Current Time') {
     return <CurrentTimeRow content={c} state={row.state} />;
@@ -252,6 +255,38 @@ function parseJsonArray(raw?: string): any[] {
   } catch {
     return [];
   }
+}
+
+function McpToolRow({ content, state }: { content: any; state?: string | null }) {
+  let action = '';
+  let resultStatus = '';
+  try {
+    const args = content.args ? JSON.parse(content.args) : null;
+    action = args?.action || args?.operation || '';
+  } catch {
+    // ignore
+  }
+  try {
+    const artifact = content.artifact ? JSON.parse(content.artifact) : null;
+    resultStatus = artifact?.status || artifact?.data?.status || artifact?.data?.action || artifact?.action || '';
+  } catch {
+    if (typeof content.artifact === 'string' && content.artifact.length <= 40) {
+      resultStatus = content.artifact;
+    }
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <ToolIcon />
+      <TypographyStrong>{content.displayName || content.toolName || '工具'}</TypographyStrong>
+      {action ? <span style={{ fontSize: 12, color: '#6b7280' }}>· {action}</span> : null}
+      {resultStatus ? (
+        <span style={{ fontSize: 11, color: '#1677ff', border: '1px solid #91caff', borderRadius: 4, padding: '0 4px' }}>
+          {String(resultStatus)}
+        </span>
+      ) : null}
+      <StateTag state={state} />
+    </div>
+  );
 }
 
 function CurrentTimeRow({ content, state }: { content: any; state?: string | null }) {

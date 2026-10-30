@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.kernel;
 
+import com.buukle.agent.common.event.InterruptedRunRecoveryEvent;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
@@ -73,7 +74,7 @@ class StaleRunningRunReconcilerTest {
         lenient().when(redissonClient.<String>getBucket(DistributedRuntimeConstants.sessionStateKey(SESSION_ID)))
                 .thenReturn(stateBucket);
         reconciler = new StaleRunningRunReconciler(redissonClient, runSpi, compactRecordSpi,
-                coordinator, eventPublisher, 30);
+                coordinator, eventPublisher, 30, 2);
     }
 
     private RunVO run(String status) {
@@ -94,7 +95,7 @@ class StaleRunningRunReconcilerTest {
         RunVO run = run(RunStatus.RUNNING.name());
         staleCandidates(run);
         when(ownerBucket.isExists()).thenReturn(false);
-        when(runSpi.getRun(RUN_ID)).thenReturn(run);
+        when(runSpi.getRunMeta(RUN_ID)).thenReturn(run);
         lenient().when(stateBucket.get()).thenReturn(SessionRunCoordinator.State.RUNNING.name());
 
         reconciler.reconcile();
@@ -112,7 +113,7 @@ class StaleRunningRunReconcilerTest {
         RunVO run = run(RunStatus.RUNNING.name());
         staleCandidates(run);
         when(ownerBucket.isExists()).thenReturn(false);
-        when(runSpi.getRun(RUN_ID)).thenReturn(run);
+        when(runSpi.getRunMeta(RUN_ID)).thenReturn(run);
         lenient().when(stateBucket.get()).thenReturn(SessionRunCoordinator.State.IDLE.name());
 
         reconciler.reconcile();
@@ -138,12 +139,42 @@ class StaleRunningRunReconcilerTest {
     void runThatJustCompletedIsNotTouched() throws Exception {
         staleCandidates(run(RunStatus.RUNNING.name()));
         when(ownerBucket.isExists()).thenReturn(false);
-        when(runSpi.getRun(RUN_ID)).thenReturn(run(RunStatus.COMPLETED.name()));
+        when(runSpi.getRunMeta(RUN_ID)).thenReturn(run(RunStatus.COMPLETED.name()));
 
         reconciler.reconcile();
 
         verify(runSpi, never()).updateRun(any());
         verify(eventPublisher, never()).publishEvent(any(RuntimeEventVO.class));
+    }
+
+    @Test
+    void interruptedRunWithoutNewerRun_isQueuedForRecovery() throws Exception {
+        RunVO run = run(RunStatus.RUNNING.name());
+        when(runSpi.findStaleRunIdsByStatus(eq(RunStatus.RUNNING.name()), any(LocalDateTime.class), anyInt()))
+                .thenReturn(List.of(RUN_ID));
+        when(ownerBucket.isExists()).thenReturn(false);
+        when(runSpi.getRunMeta(RUN_ID)).thenReturn(run);
+        when(runSpi.existsRunAfterId(SESSION_ID, RUN_ID)).thenReturn(false);
+
+        reconciler.reconcile();
+
+        verify(eventPublisher).publishEvent(any(InterruptedRunRecoveryEvent.class));
+        verify(runSpi, never()).updateRun(any());
+    }
+
+    @Test
+    void interruptedRunWithNewerRun_isFailedAsSuperseded() throws Exception {
+        RunVO run = run(RunStatus.RUNNING.name());
+        when(runSpi.findStaleRunIdsByStatus(eq(RunStatus.RUNNING.name()), any(LocalDateTime.class), anyInt()))
+                .thenReturn(List.of(RUN_ID));
+        when(ownerBucket.isExists()).thenReturn(false);
+        when(runSpi.getRunMeta(RUN_ID)).thenReturn(run);
+        when(runSpi.existsRunAfterId(SESSION_ID, RUN_ID)).thenReturn(true);
+
+        reconciler.reconcile();
+
+        verify(runSpi).updateRun(run);
+        assertEquals(RunStatus.FAILED.name(), run.getStatus());
     }
 
     @Test

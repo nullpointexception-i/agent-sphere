@@ -62,6 +62,7 @@ public class SessionRunCoordinator {
             String state = stateBucket(sessionId).get();
             if (state == null || State.IDLE.name().equals(state)) {
                 stateBucket(sessionId).set(State.RUNNING.name());
+                activeSessions().add(sessionId);
                 setOwner(sessionId);
                 submitRun(sessionId);
                 return;
@@ -95,6 +96,7 @@ public class SessionRunCoordinator {
                         submitRun(sessionId);
                     } else {
                         stateBucket(sessionId).set(State.IDLE.name());
+                        activeSessions().remove(sessionId);
                         clearOwner(sessionId);
                     }
                 } finally {
@@ -112,6 +114,10 @@ public class SessionRunCoordinator {
 
     private void clearOwner(Long sessionId) {
         redissonClient.getBucket(DistributedRuntimeConstants.sessionOwnerKey(sessionId)).delete();
+    }
+
+    private org.redisson.api.RSet<Long> activeSessions() {
+        return redissonClient.getSet(DistributedRuntimeConstants.KEY_ACTIVE_SESSIONS);
     }
 
     private RBucket<String> stateBucket(Long sessionId) {

@@ -39,6 +39,26 @@ public class RuntimeOrchestrator {
     }
 
     @Async("runtimeAsyncExecutor")
+    public void asyncResumeInterruptedRun(RunVO run, Long sessionId) {
+        log.info("Async interrupted run recovery: runId={}, sessionId={}", run.getId(), sessionId);
+        try {
+            ValidationResult validated = validator.validate(sessionId, null);
+            KernelContext ctx = preparer.prepare(run, validated, "");
+            ctx.setRecoveryResume(true);
+            coordinator.wake(sessionId, ctx, run.getId());
+        } catch (Exception e) {
+            log.error("Interrupted run recovery failed: sessionId={}, runId={}", sessionId, run.getId(), e);
+            eventPublisher.publishEvent(new RuntimeEventVO(
+                    RunStatus.FAILED,
+                    new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(run.getId())
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
+                            .setErrorMessage(e.getMessage())));
+        }
+    }
+
+    @Async("runtimeAsyncExecutor")
     public void asyncResumeToolApproval(RunVO run, Long sessionId, String approvalId) {
         log.info("Async tool approval resume: runId={}, sessionId={}, approvalId={}",
                 run.getId(), sessionId, approvalId);

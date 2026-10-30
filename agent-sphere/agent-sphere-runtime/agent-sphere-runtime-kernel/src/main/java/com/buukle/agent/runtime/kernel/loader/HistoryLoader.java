@@ -165,7 +165,7 @@ public class HistoryLoader {
                 .findFirst().orElse(null);
         if (includeCurrent && currentRun != null) {
             currentRunStart = messages.size();
-            appendCurrentRunWithAssistantText(messages, currentRun, callsByRun.get(currentRun.getId()), overBudget);
+            appendRunWithAssistantText(messages, currentRun, callsByRun.get(currentRun.getId()), overBudget);
         } else if (restoreCurrentRun && hasRunSummary) {
             if (runTail != null && !runTail.isEmpty()) {
                 currentRunStart = messages.size();
@@ -175,7 +175,7 @@ public class HistoryLoader {
                         excludeRunId);
                 if (currentRun != null) {
                     currentRunStart = messages.size();
-                    appendCurrentRunWithAssistantText(messages, currentRun,
+                    appendRunWithAssistantText(messages, currentRun,
                             callsByRun.get(currentRun.getId()), overBudget);
                 }
             }
@@ -186,26 +186,16 @@ public class HistoryLoader {
 
     private void appendRun(List<ChatMessageDTO> messages, RunVO run,
                            List<AgentToolCallRecordVO> calls, Set<Long> overBudget) {
-        if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
-            messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_USER)
-                    .setContent(run.getUserMessage()));
-        }
-        appendToolCalls(messages, calls, overBudget);
-        if (run.getAssistantReply() != null && !run.getAssistantReply().isBlank()) {
-            messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_ASSISTANT)
-                    .setContent(run.getAssistantReply()));
-        }
+        appendRunWithAssistantText(messages, run, calls, overBudget);
     }
 
     /**
-     * 当前 run 的恢复：tool 记录按时间配对到各轮 CHAT_REPLY，assistant 正文取 reply_content；
-     * reasoning 明确不进入上下文。配对失败时回退为普通 tool 记录重建。
+     * run 的历史重建：tool 记录按时间配对到各轮 CHAT_REPLY，assistant 正文取 reply_content；
+     * reasoning 只写入 assistant.reasoning_content，不写入正文。配对失败时回退为普通 tool 记录重建。
      */
-    private void appendCurrentRunWithAssistantText(List<ChatMessageDTO> messages, RunVO run,
-                                                   List<AgentToolCallRecordVO> calls,
-                                                   Set<Long> overBudget) {
+    private void appendRunWithAssistantText(List<ChatMessageDTO> messages, RunVO run,
+                                            List<AgentToolCallRecordVO> calls,
+                                            Set<Long> overBudget) {
         if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
             messages.add(new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_USER)
@@ -242,6 +232,9 @@ public class HistoryLoader {
                 }
                 if (!turnCalls.isEmpty()) {
                     assistant.setToolCalls(toToolCalls(turnCalls));
+                }
+                if (cur.getReasoning() != null && !cur.getReasoning().isBlank()) {
+                    assistant.setReasoningContent(cur.getReasoning());
                 }
                 messages.add(assistant);
                 for (AgentToolCallRecordVO call : turnCalls) {

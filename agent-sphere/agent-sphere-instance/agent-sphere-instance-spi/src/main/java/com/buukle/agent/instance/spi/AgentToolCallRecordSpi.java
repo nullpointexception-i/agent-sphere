@@ -39,6 +39,8 @@ public interface AgentToolCallRecordSpi {
 
     long countByRunId(Long runId);
 
+    int failRunningByRunId(Long runId, String errorMessage);
+
     long countBySessionId(Long sessionId);
 
     Long getLatestRunIdWithToolCalls(Long sessionId);

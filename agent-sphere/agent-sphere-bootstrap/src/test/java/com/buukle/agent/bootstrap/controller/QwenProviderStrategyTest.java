@@ -7,6 +7,7 @@ import com.buukle.agent.model.dtvo.dto.complete.ThinkingDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
 import com.buukle.agent.model.service.adapter.strategy.ProviderStrategyFactory;
+import com.buukle.agent.model.service.adapter.strategy.impl.DeepseekProviderStrategy;
 import com.buukle.agent.model.service.adapter.strategy.impl.OpenaiProviderStrategy;
 import com.buukle.agent.model.service.adapter.strategy.impl.QwenProviderStrategy;
 import com.buukle.agent.util.json.JsonUtils;
@@ -122,6 +123,35 @@ class QwenProviderStrategyTest {
 
         assertFalse(JsonUtils.toJson(req).contains("\"content\""),
                 "只有 Qwen 策略才补 content，不能影响其它厂商");
+    }
+
+
+    @Test
+    void openaiStrategy_stripsReasoningContentFromAllMessages() {
+        ChatMessageDTO assistant = assistantToolCall().setReasoningContent("private reasoning");
+        ChatMessageDTO reply = new ChatMessageDTO().setRole("assistant")
+                .setContent("done").setReasoningContent("final reasoning");
+        ChatCompletionRequestDTO req = request(assistant, reply);
+
+        new OpenaiProviderStrategy().adaptRequest(req);
+
+        assertNull(assistant.getReasoningContent(), "OpenAI 不接受 reasoning_content");
+        assertNull(reply.getReasoningContent());
+        assertFalse(JsonUtils.toJson(req).contains("reasoning_content"));
+    }
+
+    @Test
+    void deepseekStrategy_keepsReasoningAndFillsMissingKeyOnToolTurns() {
+        ChatMessageDTO withReasoning = assistantToolCall().setReasoningContent("real reasoning");
+        ChatMessageDTO withoutReasoning = assistantToolCall();
+        ChatMessageDTO plain = new ChatMessageDTO().setRole("assistant").setContent("done");
+        ChatCompletionRequestDTO req = request(withReasoning, withoutReasoning, plain);
+
+        new DeepseekProviderStrategy().adaptRequest(req);
+
+        assertEquals("real reasoning", withReasoning.getReasoningContent());
+        assertEquals("", withoutReasoning.getReasoningContent(), "工具轮必须带 reasoning_content 键");
+        assertNull(plain.getReasoningContent(), "非工具轮不需要补 reasoning_content");
     }
 
     @Test

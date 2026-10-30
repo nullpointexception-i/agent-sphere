@@ -32,6 +32,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
+import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
@@ -66,10 +67,26 @@ public class ChatRuntimeService {
     /** 停止 WAITING 停车态的 run 时，取消其名下未唤醒的挂起记录，避免 waker 恢复已停止的 run。 */
     private final PendingWaitSpi pendingWaitSpi;
     private final ToolApprovalService toolApprovalService;
+    private final SessionInputManager inputManager;
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
         assertMessageOrAttachment(dto);
+        assertSessionOwnership(sessionId);
+        sessionSpi.assertSurfaceAllowed(sessionId);
+
+        RunVO active = runSpi.findActiveRun(sessionId);
+        if (active != null) {
+            String queueId = inputManager.queue(sessionId, dto.getMessage(),
+                    dto.getModelRouteId(), false,
+                    chatAttachmentService.resolve(dto.getAttachmentKeys()));
+            ChatMessageResponseVO queued = new ChatMessageResponseVO();
+            queued.setRunId(active.getId());
+            queued.setStatus("QUEUED");
+            queued.setQueueId(queueId);
+            sessionSpi.touchSession(sessionId);
+            return queued;
+        }
 
         RunVO run = createRun(sessionId, dto);
         startRun(run, sessionId, dto, false);
@@ -523,6 +540,16 @@ public class ChatRuntimeService {
         if (selected.isBlank()) return text;
         if (text.isBlank()) return selected;
         return selected + "; " + text;
+    }
+
+    public List<SessionInputManager.InputMessage> pendingQueue(Long sessionId) {
+        assertSessionOwnership(sessionId);
+        return inputManager.listPending(sessionId);
+    }
+
+    public SessionInputManager.WithdrawResult withdrawQueue(Long sessionId, String queueId) {
+        assertSessionOwnership(sessionId);
+        return inputManager.withdraw(sessionId, queueId);
     }
 
     public com.buukle.agent.instance.dtvo.vo.ToolApprovalVO pendingToolApproval(Long sessionId) {

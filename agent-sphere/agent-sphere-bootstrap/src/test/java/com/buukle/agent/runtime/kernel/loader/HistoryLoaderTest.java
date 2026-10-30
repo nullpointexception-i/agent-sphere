@@ -29,7 +29,7 @@ import static org.mockito.Mockito.when;
  * Resume 恢复：
  * - 有 run-local 记录：summary 始终作为 leading system，tail 只在 restoreCurrentRun 时注入；
  *   否则当前 run 的尾部由 SessionRunner 保留，避免重复。
- * - 无 run-local 记录：恢复持久化 tool 历史 + 逐轮 assistant 正文；reasoning 不进入上下文。
+ * - 无 run-local 记录：恢复持久化 tool 历史 + 逐轮 assistant 正文；reasoning 走 reasoning_content，不进入正文。
  */
 @ExtendWith(MockitoExtension.class)
 class HistoryLoaderTest {
@@ -199,7 +199,7 @@ class HistoryLoaderTest {
     }
 
     @Test
-    void resumeNeverIncludesReasoning() {
+    void resumeKeepsReasoningOutOfVisibleContent() {
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         AgentLlmInteractionRecordVO first = interaction("visible reply", "2026-10-29 04:12:21");
         first.setReasoning("secret reasoning");
@@ -207,6 +207,11 @@ class HistoryLoaderTest {
 
         List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
 
+        ChatMessageDTO assistant = messages.stream()
+                .filter(m -> "assistant".equals(m.getRole()))
+                .findFirst().orElseThrow();
+        assertEquals("visible reply", assistant.getContent());
+        assertEquals("secret reasoning", assistant.getReasoningContent());
         assertFalse(messages.stream().anyMatch(m ->
                 m.getContent() instanceof String s && s.contains("secret reasoning")));
     }

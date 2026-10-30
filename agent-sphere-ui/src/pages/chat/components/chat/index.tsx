@@ -53,6 +53,8 @@ interface ChatMainProps {
     answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
   ) => void;
   onCancelClarifications?: () => void;
+  queuedMessages?: any[];
+  onWithdrawQueued?: (queueId: string) => void;
 }
 
 export default function ChatMain({
@@ -87,6 +89,8 @@ export default function ChatMain({
   clarificationSubmitting,
   onResolveClarifications,
   onCancelClarifications,
+  queuedMessages = [],
+  onWithdrawQueued,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const intl = useIntl();
@@ -207,6 +211,37 @@ export default function ChatMain({
         ) : (
           <div className={styles.footerCenter}>
             <Footer {...footerProps} />
+          </div>
+        )}
+        {queuedMessages.length > 0 && (
+          <div style={{ padding: '4px 16px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {queuedMessages.map((item: any) => (
+              <div
+                key={item.queueId}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  color: '#8c8c8c',
+                  background: '#fffbe6',
+                  border: '1px solid #ffe58f',
+                  borderRadius: 8,
+                  padding: '4px 8px',
+                }}
+              >
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  排队中：{item.text}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onWithdrawQueued?.(item.queueId)}
+                  style={{ border: 'none', background: 'transparent', color: '#1677ff', cursor: 'pointer' }}
+                >
+                  撤回
+                </button>
+              </div>
+            ))}
           </div>
         )}
         {hasMessages && (

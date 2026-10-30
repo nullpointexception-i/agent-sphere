@@ -1,6 +1,7 @@
 package com.buukle.agent.model.service.adapter.strategy.impl;
 
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
 import com.buukle.agent.model.service.adapter.record.ContentToolCallResult;
 import com.buukle.agent.model.service.adapter.strategy.ProviderStrategy;
@@ -11,6 +12,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class DeepseekProviderStrategy implements ProviderStrategy {
+
+    private static final String ROLE_ASSISTANT = "assistant";
 
     @Override
     public ModelProviderCompany getCompany() {
@@ -28,6 +31,19 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
         request.setLogprobs(null);
         request.setTopLogprobs(null);
         request.setLogitBias(null);
+        // DeepSeek thinking + tools: assistant.reasoning_content of previous turns must be passed
+        // back. Ensure the key exists on tool-call turns even when no reasoning was recorded.
+        if (request.getMessages() != null) {
+            for (ChatMessageDTO m : request.getMessages()) {
+                if (m == null || !ROLE_ASSISTANT.equals(m.getRole())) {
+                    continue;
+                }
+                boolean hasToolCalls = m.getToolCalls() != null && !m.getToolCalls().isEmpty();
+                if (hasToolCalls && m.getReasoningContent() == null) {
+                    m.setReasoningContent("");
+                }
+            }
+        }
     }
 
     @Override
