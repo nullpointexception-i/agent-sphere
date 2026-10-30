@@ -219,7 +219,7 @@ function Block({
   );
 }
 
-function AssistantCard({ row, sessionId }: any) {
+function AssistantCard({ row, sessionId, isLatest }: any) {
   const intl = useIntl();
   const { message } = App.useApp();
   const content = row.content || {};
@@ -227,7 +227,7 @@ function AssistantCard({ row, sessionId }: any) {
   const reply = typeof content.reply === 'string' ? content.reply.trim() : '';
   const hasThinking = thinking.length > 0 && thinking !== '{}';
   const hasReply = reply.length > 0 && reply !== '{}';
-  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [thinkingOpen, setThinkingOpen] = useState(Boolean(isLatest && !hasReply));
   const [feedback, setFeedback] = useState<string | undefined>(content.feedback);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCount, setShareCount] = useState(3);
@@ -235,6 +235,9 @@ function AssistantCard({ row, sessionId }: any) {
   useEffect(() => {
     setFeedback(content.feedback);
   }, [content.feedback]);
+  useEffect(() => {
+    if (hasReply) setThinkingOpen(false);
+  }, [hasReply]);
   useEffect(() => {
     if (!thinkingOpen) return;
     const el = thinkingBoxRef.current;
@@ -245,6 +248,7 @@ function AssistantCard({ row, sessionId }: any) {
     content.durationMs != null && Number(content.durationMs) > 0
       ? Math.max(1, Math.round(Number(content.durationMs) / 1000))
       : null;
+  const isThinking = hasThinking && !hasReply;
   const interactionId = row.refInteractionId;
   const submitFeedback = async (value: 'LIKE' | 'DISLIKE') => {
     if (!sessionId || interactionId == null) return;
@@ -291,18 +295,23 @@ function AssistantCard({ row, sessionId }: any) {
               gap: 4,
             }}
           >
-            {seconds != null
-              ? intl.formatMessage(
-                  {
-                    id: 'pages.chat.assistant.thoughtForSeconds',
-                    defaultMessage: 'Thought for {seconds}s',
-                  },
-                  { seconds },
-                )
-              : intl.formatMessage({
-                  id: 'pages.chat.assistant.thought',
-                  defaultMessage: 'Thought',
-                })}
+            {isThinking
+              ? intl.formatMessage({
+                  id: 'pages.chat.assistant.thinking',
+                  defaultMessage: 'Thinking',
+                })
+              : seconds != null
+                ? intl.formatMessage(
+                    {
+                      id: 'pages.chat.assistant.thoughtForSeconds',
+                      defaultMessage: 'Thought for {seconds}s',
+                    },
+                    { seconds },
+                  )
+                : intl.formatMessage({
+                    id: 'pages.chat.assistant.thought',
+                    defaultMessage: 'Thought',
+                  })}
             {thinkingOpen ? <DownOutlined /> : <RightOutlined />}
           </button>
           {thinkingOpen && (
@@ -638,6 +647,10 @@ function GenericCard({
 function ToolCard({ row }: any) {
   const intl = useIntl();
   const content = row.content || {};
+  if (content.toolName === 'builtin_10' || content.displayName === '等待'
+      || content.displayName === 'Wait') {
+    return <WaitCard content={content} state={row.state} />;
+  }
   if (content.toolName === 'builtin_13' || content.displayName === '当前时间'
       || content.displayName === 'Current Time') {
     return <CurrentTimeCard content={content} state={row.state} />;
@@ -685,6 +698,36 @@ function ToolCard({ row }: any) {
           stateLabel={stateLabel}
         />
       )}
+    </div>
+  );
+}
+
+function WaitCard({ content, state }: any) {
+  const intl = useIntl();
+  let seconds: number | null = null;
+  try {
+    const args = content.args ? JSON.parse(content.args) : null;
+    if (args?.ms != null) {
+      seconds = Math.max(1, Math.round(Number(args.ms) / 1000));
+    }
+  } catch {
+    // ignore malformed args
+  }
+  return (
+    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <ClockCircleOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
+      <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
+        {intl.formatMessage({ id: 'pages.chat.tool.wait', defaultMessage: 'Wait' })}
+      </Typography.Text>
+      {seconds != null && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {intl.formatMessage(
+            { id: 'pages.chat.tool.waitForSeconds', defaultMessage: '{seconds}s' },
+            { seconds },
+          )}
+        </Typography.Text>
+      )}
+      <StateTag state={state} small />
     </div>
   );
 }
@@ -1286,6 +1329,7 @@ function ParallelSubAgentTabs({
 function RowCard({
   row,
   sessionId,
+  isLatestAssistant,
   onRespondClarify,
   onCancelClarification,
   loadSubAgentSteps,
@@ -1388,7 +1432,7 @@ function RowCard({
           </>
         );
       case 'assistant':
-        return <AssistantCard row={row} sessionId={sessionId} />;
+        return <AssistantCard row={row} sessionId={sessionId} isLatest={isLatestAssistant} />;
       case 'tool':
         return <ToolCard row={row} />;
       case 'tool_approval':
@@ -1500,6 +1544,13 @@ export default function TimelineList({
   // 同批次并行子 Agent（共享 parentToolCallId 且 ≥2 个）合并为横向 Tab；
   // 单个子 Agent / 缺分组键的过渡态仍走原 RowCard，保证行为不变。
   // 同一 subId 的占位行与权威行可能短暂共存，去重时优先保留权威行（seq>=0）。
+  const latestAssistantSeq = useMemo(() => {
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      if (rows[i]?.kind === 'assistant') return rows[i].seq;
+    }
+    return null;
+  }, [rows]);
+
   const items = useMemo(() => {
     const counts = new Map<string, number>();
     for (const r of rows) {
@@ -1552,6 +1603,9 @@ export default function TimelineList({
             key={`${it.row.seq}-${it.row.kind}`}
             row={it.row}
             sessionId={sessionId}
+            isLatestAssistant={
+              it.row.kind === 'assistant' && it.row.seq === latestAssistantSeq
+            }
             onRespondClarify={onRespondClarify}
             onCancelClarification={onCancelClarification}
             loadSubAgentSteps={loadSubAgentSteps}
