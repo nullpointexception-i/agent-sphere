@@ -376,6 +376,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                             content.put(TimelineContentKey.TYPE.getCode(), c.getType());
                             content.put(TimelineContentKey.MULTIPLE.getCode(), Boolean.TRUE.equals(c.getMultiple()));
                             content.put(TimelineContentKey.OPTIONS.getCode(), c.getOptions());
+                            content.put(TimelineContentKey.DESCRIPTION.getCode(), c.getDescription());
                             content.put(TimelineContentKey.RESPONSE.getCode(), c.getUserResponse());
                         }
                     } else {

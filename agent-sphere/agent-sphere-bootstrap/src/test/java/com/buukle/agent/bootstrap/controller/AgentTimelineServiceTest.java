@@ -1,6 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
+import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.domain.AgentTimeline;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
 import com.buukle.agent.instance.dtvo.enums.TimelineContentKey;
@@ -9,6 +10,7 @@ import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.domain.AgentCompactRecord;
 import com.buukle.agent.instance.repository.AgentCompactRecordMapper;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
+import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.service.MessageFeedbackService;
 import com.buukle.agent.instance.service.impl.AgentTimelineServiceImpl;
@@ -35,6 +37,8 @@ class AgentTimelineServiceTest {
     AgentCompactRecordMapper compactRecordMapper;
     @Mock
     AgentLlmInteractionRecordMapper interactionMapper;
+    @Mock
+    AgentPendingClarificationMapper clarificationMapper;
     @Mock
     MessageFeedbackService messageFeedbackService;
 
@@ -93,6 +97,28 @@ class AgentTimelineServiceTest {
     }
 
     @Test
+    void resolveContent_clarification_includesOptionsDescriptionAndResponse() throws Exception {
+        AgentPendingClarification rec = new AgentPendingClarification();
+        rec.setClarificationId("c-1");
+        rec.setTitle("选择方向");
+        rec.setType("choice");
+        rec.setOptions("[{\"label\":\"A\",\"value\":\"a\"}]");
+        rec.setDescription("请选择后继续");
+        rec.setUserResponse("{\"selected\":[\"a\"],\"text\":\"\"}");
+        given(clarificationMapper.selectById(218L)).willReturn(rec);
+
+        AgentTimeline row = new AgentTimeline();
+        row.setKind("clarification");
+        row.setRefClarificationId(218L);
+
+        Map<String, Object> content = invokeResolveContent(row);
+
+        assertEquals("[{\"label\":\"A\",\"value\":\"a\"}]", content.get(TimelineContentKey.OPTIONS.getCode()));
+        assertEquals("请选择后继续", content.get(TimelineContentKey.DESCRIPTION.getCode()));
+        assertEquals("{\"selected\":[\"a\"],\"text\":\"\"}", content.get(TimelineContentKey.RESPONSE.getCode()));
+    }
+
+    @Test
     void resolveContent_assistantWithoutReply_doesNotExposeReasoningAsReply() throws Exception {
         AgentLlmInteractionRecord rec = new AgentLlmInteractionRecord();
         rec.setId(107227L);
@@ -142,8 +168,8 @@ class AgentTimelineServiceTest {
     @SuppressWarnings("unchecked")
     private Map<String, Object> invokeResolveContent(AgentTimeline row) throws Exception {
         AgentTimelineServiceImpl svc = new AgentTimelineServiceImpl(
-                null, null, toolCallMapper, null, null, interactionMapper, compactRecordMapper, null,
-                messageFeedbackService);
+                null, null, toolCallMapper, clarificationMapper, null, interactionMapper,
+                compactRecordMapper, null, messageFeedbackService);
         Method m = AgentTimelineServiceImpl.class.getDeclaredMethod(
                 "resolveContent", AgentTimeline.class, Map.class, Map.class);
         m.setAccessible(true);

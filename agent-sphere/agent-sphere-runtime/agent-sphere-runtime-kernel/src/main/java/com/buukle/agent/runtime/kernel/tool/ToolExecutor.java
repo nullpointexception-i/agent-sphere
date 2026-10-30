@@ -111,11 +111,12 @@ public class ToolExecutor {
                     String clarifyType = argsNode.has("type") ? argsNode.get("type").asText() : ChatClarification.CLARIFYING_DEFAULT_TYPE;
                     boolean multiple = argsNode.path(ChatClarification.CLARIFYING_JSON_MULTIPLE).asBoolean(false);
                     String optionsJson = argsNode.has("options") ? argsNode.get("options").toString() : null;
+                    String description = argsNode.has("description") ? argsNode.get("description").asText() : null;
                     String clarificationId = java.util.UUID.randomUUID().toString().substring(0, CLARIFICATION_ID_LENGTH);
                     // 先建库、再发 PENDING 事件：Timeline 建澄清行时需 lookupClarificationRef 查得到记录，
                     // 否则行 refClarificationId=null，刷新后 resolveContent 取不到 response/options（只剩"已应答"）。
                     clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType,
-                            multiple, optionsJson, clarificationId);
+                            multiple, optionsJson, description, clarificationId);
                     eventPublisher.publishEvent(new RuntimeEventVO(
                             ClarificationStatus.PENDING,
                             new RuntimeEventDataVO()

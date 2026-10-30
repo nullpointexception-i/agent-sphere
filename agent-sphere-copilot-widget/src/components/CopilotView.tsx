@@ -851,6 +851,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 onCancelClarify={() => {
                   void handleStop();
                 }}
+                preparingTool={timeline.preparingTool}
               />
               {sessionUsage && Number(sessionUsage.totalTokens) > 0 ? (
                 <div className="aw-session-usage">

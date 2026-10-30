@@ -22,7 +22,7 @@ public class ClarificationService implements ClarificationSpi {
 
     @Override
     public Long createPending(Long sessionId, Long runId, Long messageId, String title, String type,
-                              boolean multiple, String optionsJson, String clarificationId) {
+                              boolean multiple, String optionsJson, String description, String clarificationId) {
         AgentPendingClarification entity = new AgentPendingClarification();
         entity.setSessionId(sessionId);
         entity.setRunId(runId);
@@ -32,6 +32,7 @@ public class ClarificationService implements ClarificationSpi {
         entity.setType(type);
         entity.setMultiple(multiple);
         entity.setOptions(optionsJson);
+        entity.setDescription(description);
         clarificationMapper.insert(entity);
         return entity.getId();
     }
@@ -102,6 +103,7 @@ public class ClarificationService implements ClarificationSpi {
             vo.setType(p.getType());
             vo.setMultiple(Boolean.TRUE.equals(p.getMultiple()));
             vo.setOptions(p.getOptions());
+            vo.setDescription(p.getDescription());
             vo.setToolCallsJson(p.getToolCallsJson());
             vo.setUserResponse(p.getUserResponse());
             String status;

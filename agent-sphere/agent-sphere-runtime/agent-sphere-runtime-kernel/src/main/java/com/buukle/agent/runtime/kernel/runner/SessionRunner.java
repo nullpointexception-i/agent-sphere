@@ -1295,6 +1295,23 @@ public class SessionRunner {
                                                         .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                                         .setPublishId(UUID.randomUUID().toString())));
                                     }
+                                    case LLMEvent.ToolInputStart start -> {
+                                        // 参数可能还要流式生成几十秒（如整篇文档），先给前端一个
+                                        // “正在生成调用参数”的即时反馈；审批卡仍等参数完整后创建。
+                                        eventPublisher.publishEvent(new RuntimeEventVO(
+                                                FlowEventType.REASONING_TOKEN,
+                                                new RuntimeEventDataVO()
+                                                        .setSessionId(sessionId)
+                                                        .setRunId(runId)
+                                                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + start.id())
+                                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_INPUT_PREPARING)
+                                                        .setToolName(start.name())
+                                                        .setDisplayNameCn(toolExecutor.resolveDisplayName(start.name(), tools))
+                                                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(start.name(), tools))
+                                                        .setResponse("⚙️ " + toolExecutor.resolveDisplayName(start.name(), tools)
+                                                                + "：正在生成调用参数…")));
+                                    }
                                     case LLMEvent.ToolCall tc -> {
                                         String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
                                         toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));

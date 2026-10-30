@@ -89,6 +89,8 @@ interface TimelineStream {
   pendingUserRows: TimelineRow[];
   /** 事件驱动的“当前会话是否有 run 在跑”（run_running/打字机=true；终态=false）。 */
   runActive: boolean;
+  /** 工具参数仍在流式生成时的即时提示。 */
+  preparingTool: { publishId?: string; name?: string } | null;
   loadInitial: (sessionId: number) => Promise<void>;
   loadOlder: (sessionId: number) => Promise<void>;
   refreshLatest: (sessionId: number) => Promise<void>;
@@ -146,6 +148,10 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
   const [subAgentLiveMap, setSubAgentLiveMap] = useState<SubAgentLiveMap>({});
   const [pendingUserRows, setPendingUserRows] = useState<TimelineRow[]>([]);
   const [runActive, setRunActiveState] = useState(false);
+  const [preparingTool, setPreparingTool] = useState<{
+    publishId?: string;
+    name?: string;
+  } | null>(null);
   const [toolApproval, setToolApproval] = useState<ToolApprovalBatch | null>(null);
   const [clarification, setClarification] = useState<ClarificationBatch | null>(null);
   const pendingSeqRef = useRef(0);
@@ -459,6 +465,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
             type: row.type,
             multiple: row.multiple === true,
             options: row.options,
+            description: row.description,
           })),
         });
       } catch {
@@ -523,6 +530,29 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       }
 
       const tlSubType = String(d?.reasoningSubType || d?.status || evtType);
+
+      if (tlSubType === 'tool_input_preparing') {
+        setPreparingTool({
+          publishId: d?.publishId ? String(d.publishId) : undefined,
+          name:
+            d?.displayNameCn ||
+            d?.displayNameEn ||
+            d?.toolName ||
+            '工具',
+        });
+      } else if (
+        tlSubType === 'tool_call_started' ||
+        tlSubType === 'tool_call_in_progress' ||
+        tlSubType === 'run_pending' ||
+        tlSubType === 'tool_call_succeeded' ||
+        tlSubType === 'tool_call_failed' ||
+        tlSubType === 'run_completed' ||
+        tlSubType === 'run_failed' ||
+        tlSubType === 'run_cancelled' ||
+        tlSubType === 'run_awaiting_user'
+      ) {
+        setPreparingTool(null);
+      }
 
       // 上下文压缩：RUNNING 本地插行（后端已回填 seq/kind），输出 token 追加到正文
       if (d?.seq != null && d?.kind === 'compaction') {
@@ -737,6 +767,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       setSubAgentLiveMap({});
       setPendingUserRows([]);
       setRunActiveState(false);
+      setPreparingTool(null);
       setHasMore(false);
       setLoadingOlder(false);
       setToolApproval(null);
@@ -800,6 +831,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     subAgentLiveMap,
     pendingUserRows,
     runActive,
+    preparingTool,
     loadInitial,
     loadOlder,
     refreshLatest,

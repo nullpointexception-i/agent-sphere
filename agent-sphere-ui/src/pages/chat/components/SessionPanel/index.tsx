@@ -1,11 +1,10 @@
 import {
   BarChartOutlined,
   CheckSquareOutlined,
-  SafetyCertificateOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { Divider, Empty, Tag } from 'antd';
+import { Divider, Empty, Tabs, Tag } from 'antd';
 import { cacheHitRate, contextUsagePercent, formatTokens } from '../Usage';
 
 interface TodoItem {
@@ -234,102 +233,109 @@ export default function SessionPanel({
             })}
           </span>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          <StatRow
-            label={intl.formatMessage({
-              id: 'pages.chat.sessionPanel.sessionToolCalls',
-              defaultMessage: 'Session tool calls',
-            })}
-            value={stats.sessionToolCallCount || 0}
-          />
-          <StatRow
-            label={intl.formatMessage({
-              id: 'pages.chat.sessionPanel.currentRunToolCalls',
-              defaultMessage: 'Current run tool calls',
-            })}
-            value={stats.currentRunToolCallCount || 0}
-          />
-          <StatRow
-            label={intl.formatMessage({
-              id: 'pages.chat.sessionPanel.latestRunToolCalls',
-              defaultMessage: 'Last run tool calls',
-            })}
-            value={stats.latestRunToolCallCount || 0}
-          />
-
-          <Divider style={{ margin: '10px 0 6px' }} />
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#8c8c8c', marginBottom: 4 }}>
-            {intl.formatMessage({
-              id: 'pages.chat.sessionPanel.sessionUsage',
-              defaultMessage: 'Session usage',
-            })}
-          </div>
-          <UsageRow label="Prompt" value={formatTokens(sessionUsage?.promptTokens)} />
-          <UsageRow label="Completion" value={formatTokens(sessionUsage?.completionTokens)} />
-          <UsageRow label="Total" value={formatTokens(sessionUsage?.totalTokens)} />
-          <UsageRow
-            label="Cache"
-            value={cacheRate != null ? `${cacheRate}%` : '-'}
-          />
-          <UsageRow
-            label={intl.formatMessage({
-              id: 'pages.chat.sessionPanel.currentContext',
-              defaultMessage: 'Current context',
-            })}
-            value={contextPercent != null ? `${contextPercent}%` : '-'}
-          />
-
-          <Divider style={{ margin: '10px 0 6px' }} />
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: '#8c8c8c',
-              marginBottom: 4,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            <SafetyCertificateOutlined />
-            {intl.formatMessage({
-              id: 'pages.chat.sessionPanel.authorizedTools',
-              defaultMessage: 'Authorized tools',
-            })}
-          </div>
-          {authorizedTools.length === 0 ? (
-            <div style={{ fontSize: 12, color: '#aaa', padding: '4px 0' }}>
-              {intl.formatMessage({
-                id: 'pages.chat.sessionPanel.noAuthorizedTools',
-                defaultMessage: 'No persistent authorizations',
-              })}
-            </div>
-          ) : (
-            authorizedTools.map((tool, i) => (
-              <div
-                key={`${tool.toolRef}-${tool.scope}-${i}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '4px 0',
-                  fontSize: 12,
-                }}
-              >
-                <ToolOutlined style={{ color: '#8c8c8c' }} />
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {tool.displayName || tool.toolRef}
-                </span>
-                <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="orange">
-                  {tool.securityLevel || 'L2'}
-                </Tag>
-                <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
-                  {scopeLabel(tool.scope)}
-                </Tag>
-              </div>
-            ))
-          )}
-        </div>
+        <Tabs
+          size="small"
+          style={{ flex: 1, minHeight: 0 }}
+          items={[
+            {
+              key: 'tools',
+              label: intl.formatMessage({
+                id: 'pages.chat.sessionPanel.tabTools',
+                defaultMessage: 'Tool calls',
+              }),
+              children: (
+                <div style={{ overflowY: 'auto', height: '100%' }}>
+                  <StatRow
+                    label={intl.formatMessage({
+                      id: 'pages.chat.sessionPanel.sessionToolCalls',
+                      defaultMessage: 'Session tool calls',
+                    })}
+                    value={stats.sessionToolCallCount || 0}
+                  />
+                  <StatRow
+                    label={intl.formatMessage({
+                      id: 'pages.chat.sessionPanel.currentRunToolCalls',
+                      defaultMessage: 'Current run tool calls',
+                    })}
+                    value={stats.currentRunToolCallCount || 0}
+                  />
+                  <StatRow
+                    label={intl.formatMessage({
+                      id: 'pages.chat.sessionPanel.latestRunToolCalls',
+                      defaultMessage: 'Last run tool calls',
+                    })}
+                    value={stats.latestRunToolCallCount || 0}
+                  />
+                </div>
+              ),
+            },
+            {
+              key: 'usage',
+              label: intl.formatMessage({
+                id: 'pages.chat.sessionPanel.tabUsage',
+                defaultMessage: 'Usage',
+              }),
+              children: (
+                <div style={{ overflowY: 'auto', height: '100%' }}>
+                  <UsageRow label="Prompt" value={formatTokens(sessionUsage?.promptTokens)} />
+                  <UsageRow label="Completion" value={formatTokens(sessionUsage?.completionTokens)} />
+                  <UsageRow label="Total" value={formatTokens(sessionUsage?.totalTokens)} />
+                  <UsageRow label="Cache" value={cacheRate != null ? `${cacheRate}%` : '-'} />
+                  <UsageRow
+                    label={intl.formatMessage({
+                      id: 'pages.chat.sessionPanel.currentContext',
+                      defaultMessage: 'Current context',
+                    })}
+                    value={contextPercent != null ? `${contextPercent}%` : '-'}
+                  />
+                </div>
+              ),
+            },
+            {
+              key: 'authorized',
+              label: intl.formatMessage({
+                id: 'pages.chat.sessionPanel.tabAuthorized',
+                defaultMessage: 'Authorized',
+              }),
+              children: (
+                <div style={{ overflowY: 'auto', height: '100%' }}>
+                  {authorizedTools.length === 0 ? (
+                    <div style={{ fontSize: 12, color: '#aaa', padding: '4px 0' }}>
+                      {intl.formatMessage({
+                        id: 'pages.chat.sessionPanel.noAuthorizedTools',
+                        defaultMessage: 'No persistent authorizations',
+                      })}
+                    </div>
+                  ) : (
+                    authorizedTools.map((tool, i) => (
+                      <div
+                        key={`${tool.toolRef}-${tool.scope}-${i}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '4px 0',
+                          fontSize: 12,
+                        }}
+                      >
+                        <ToolOutlined style={{ color: '#8c8c8c' }} />
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {tool.displayName || tool.toolRef}
+                        </span>
+                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="orange">
+                          {tool.securityLevel || 'L2'}
+                        </Tag>
+                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                          {scopeLabel(tool.scope)}
+                        </Tag>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ),
+            },
+          ]}
+        />
       </div>
     </div>
   );

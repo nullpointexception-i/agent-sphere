@@ -48,6 +48,7 @@ export interface ClarificationItem {
   type?: string;
   multiple?: boolean;
   options?: string;
+  description?: string;
 }
 
 export interface ClarificationBatch {

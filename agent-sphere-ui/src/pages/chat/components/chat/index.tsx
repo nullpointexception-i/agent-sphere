@@ -28,6 +28,8 @@ interface ChatMainProps {
   loadSubAgentSteps: (id: number) => Promise<SubAgentTimelineItem[]>;
   /** 子 Agent 实时步骤（SSE 纯驱动，按 subAgentRunId 聚合）。 */
   subAgentLive?: SubAgentLiveMap;
+  /** 工具参数仍在生成时的即时提示。 */
+  preparingTool?: { publishId?: string; name?: string } | null;
   hasMoreHistory: boolean;
   onLoadMoreHistory: () => void;
   inputValue: string;
@@ -72,6 +74,7 @@ export default function ChatMain({
   onCancelClarification,
   loadSubAgentSteps,
   subAgentLive,
+  preparingTool,
   inputValue,
   onInputValueChange,
   sending,
@@ -205,6 +208,7 @@ export default function ChatMain({
                 }
                 loadSubAgentSteps={loadSubAgentSteps}
                 subAgentLive={subAgentLive}
+                preparingTool={preparingTool}
               />
             </div>
           </div>

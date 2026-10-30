@@ -68,6 +68,7 @@ interface TimelineListProps {
   onCancelClarification?: (row: any) => void;
   loadSubAgentSteps?: (subId: number) => Promise<any[]>;
   subAgentLive?: SubAgentLiveMap;
+  preparingTool?: { publishId?: string; name?: string } | null;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -227,7 +228,10 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
   const reply = typeof content.reply === 'string' ? content.reply.trim() : '';
   const hasThinking = thinking.length > 0 && thinking !== '{}';
   const hasReply = reply.length > 0 && reply !== '{}';
-  const [thinkingOpen, setThinkingOpen] = useState(Boolean(isLatest && !hasReply));
+  const isRunning = !row.state || row.state === 'RUNNING';
+  const [thinkingOpen, setThinkingOpen] = useState(
+    Boolean(isLatest && !hasReply && isRunning),
+  );
   const [feedback, setFeedback] = useState<string | undefined>(content.feedback);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCount, setShareCount] = useState(3);
@@ -236,8 +240,8 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
     setFeedback(content.feedback);
   }, [content.feedback]);
   useEffect(() => {
-    if (hasReply) setThinkingOpen(false);
-  }, [hasReply]);
+    if (hasReply || !isLatest || !isRunning) setThinkingOpen(false);
+  }, [hasReply, isLatest, isRunning]);
   useEffect(() => {
     if (!thinkingOpen) return;
     const el = thinkingBoxRef.current;
@@ -875,10 +879,8 @@ function ClarificationCard({ row }: any) {
   const intl = useIntl();
   const content = row.content || {};
   const options = parseJsonArray(content.options);
-  const labelOf = (value: string) => {
-    const hit = options.find((o: any) => String(o?.value ?? o?.label) === value);
-    return hit?.label ? String(hit.label) : value;
-  };
+  const description =
+    typeof content.description === 'string' ? content.description.trim() : '';
   let selected: string[] = [];
   let text = '';
   if (content.response) {
@@ -894,6 +896,8 @@ function ClarificationCard({ row }: any) {
       text = String(content.response);
     }
   }
+  const cancelled =
+    content.response === '__dismissed__' || row.state === 'CANCELLED';
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -903,29 +907,49 @@ function ClarificationCard({ row }: any) {
         </Typography.Text>
         <StateTag state={row.state} />
       </div>
-      <div style={{ marginTop: 6 }}>
+      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {description ? (
+          <Typography.Paragraph
+            style={{ whiteSpace: 'pre-wrap', marginBottom: 0, color: '#595959', fontSize: 12 }}
+          >
+            {description}
+          </Typography.Paragraph>
+        ) : null}
         {row.state === 'PENDING' ? (
           <Typography.Text type="secondary">
             {intl.formatMessage({ id: 'pages.chat.tool.waitingInDrawer', defaultMessage: 'Answer in the bottom panel' })}
           </Typography.Text>
-        ) : content.response === '__dismissed__' || row.state === 'CANCELLED' ? (
-          <Typography.Text type="secondary">{intl.formatMessage({ id: 'pages.chat.tool.cancelled', defaultMessage: 'Cancelled' })}</Typography.Text>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {selected.length > 0 && (
+          <>
+            {options.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {selected.map((value) => (
-                  <Tag key={value} color="blue" style={{ margin: 0 }}>
-                    {labelOf(value)}
-                  </Tag>
-                ))}
+                {options.map((o: any, index: number) => {
+                  const value = String(o?.value ?? o?.label ?? '');
+                  const label = String(o?.label ?? value);
+                  const isSelected = selected.includes(value);
+                  return (
+                    <Tag
+                      key={`${value}-${index}`}
+                      color={isSelected ? 'blue' : undefined}
+                      style={{ margin: 0, opacity: isSelected || cancelled ? 1 : 0.7 }}
+                    >
+                      {label}
+                    </Tag>
+                  );
+                })}
               </div>
-            )}
-            {text && <Typography.Text>{text}</Typography.Text>}
-            {selected.length === 0 && !text && (
-              <Typography.Text type="secondary">{intl.formatMessage({ id: 'pages.chat.tool.answered', defaultMessage: 'Answered' })}</Typography.Text>
-            )}
-          </div>
+            ) : null}
+            {text ? <Typography.Text>{text}</Typography.Text> : null}
+            {cancelled ? (
+              <Typography.Text type="secondary">
+                {intl.formatMessage({ id: 'pages.chat.tool.cancelled', defaultMessage: 'Cancelled' })}
+              </Typography.Text>
+            ) : selected.length === 0 && !text ? (
+              <Typography.Text type="secondary">
+                {intl.formatMessage({ id: 'pages.chat.tool.answered', defaultMessage: 'Answered' })}
+              </Typography.Text>
+            ) : null}
+          </>
         )}
       </div>
     </div>
@@ -1577,7 +1601,9 @@ export default function TimelineList({
   onCancelClarification,
   loadSubAgentSteps,
   subAgentLive,
+  preparingTool,
 }: TimelineListProps) {
+  const intl = useIntl();
   // 同批次并行子 Agent（共享 parentToolCallId 且 ≥2 个）合并为横向 Tab；
   // 单个子 Agent / 缺分组键的过渡态仍走原 RowCard，保证行为不变。
   // 同一 subId 的占位行与权威行可能短暂共存，去重时优先保留权威行（seq>=0）。
@@ -1658,6 +1684,27 @@ export default function TimelineList({
           />
         ),
       )}
+      {preparingTool ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            color: '#8c8c8c',
+            padding: '4px 0',
+          }}
+        >
+          <LoadingOutlined spin style={{ fontSize: 12 }} />
+          <span>
+            {preparingTool.name || '工具'} ·{' '}
+            {intl.formatMessage({
+              id: 'pages.chat.tool.preparingArguments',
+              defaultMessage: 'Generating call arguments…',
+            })}
+          </span>
+        </div>
+      ) : null}
     </>
   );
 }

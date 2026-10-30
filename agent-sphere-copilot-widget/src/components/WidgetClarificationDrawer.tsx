@@ -119,6 +119,11 @@ export function WidgetClarificationDrawer({
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: 14 }}>
         <div style={{ fontWeight: 600, marginBottom: 8 }}>{current.title}</div>
+        {current.description ? (
+          <div style={{ whiteSpace: 'pre-wrap', color: '#4b5563', fontSize: 12, marginBottom: 10 }}>
+            {current.description}
+          </div>
+        ) : null}
         {current.type === 'confirm' ? (
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             {[

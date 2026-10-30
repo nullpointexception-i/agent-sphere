@@ -435,6 +435,7 @@ public class ChatRuntimeService {
             vo.setType(row.getType());
             vo.setMultiple(Boolean.TRUE.equals(row.getMultiple()));
             vo.setOptions(row.getOptions());
+            vo.setDescription(row.getDescription());
             vo.setStatus("pending");
             out.add(vo);
         }

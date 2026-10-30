@@ -73,6 +73,10 @@ export default function Chat() {
   const [timeline, setTimeline] = useState<any[]>([]);
   const [timelineHasMore, setTimelineHasMore] = useState(false);
   const [subAgentLive, setSubAgentLive] = useState<SubAgentLiveMap>({});
+  const [preparingTool, setPreparingTool] = useState<{
+    publishId?: string;
+    name?: string;
+  } | null>(null);
   const oldestSeqRef = useRef<number | null>(null);
   const newestSeqRef = useRef<number | null>(null);
   const [inputValue, setInputValue] = useState('');
@@ -770,6 +774,7 @@ export default function Chat() {
           type: row.type,
           multiple: row.multiple === true,
           options: row.options,
+          description: row.description,
         })),
       });
     } catch {
@@ -936,6 +941,29 @@ export default function Chat() {
             const tlSubType = String(
               d?.reasoningSubType || d?.status || evtType,
             );
+
+            if (tlSubType === 'tool_input_preparing') {
+              setPreparingTool({
+                publishId: d?.publishId ? String(d.publishId) : undefined,
+                name:
+                  d?.displayNameCn ||
+                  d?.displayNameEn ||
+                  d?.toolName ||
+                  '工具',
+              });
+            } else if (
+              tlSubType === 'tool_call_started' ||
+              tlSubType === 'tool_call_in_progress' ||
+              tlSubType === 'run_pending' ||
+              tlSubType === 'tool_call_succeeded' ||
+              tlSubType === 'tool_call_failed' ||
+              tlSubType === 'run_completed' ||
+              tlSubType === 'run_failed' ||
+              tlSubType === 'run_cancelled' ||
+              tlSubType === 'run_awaiting_user'
+            ) {
+              setPreparingTool(null);
+            }
 
             // run 运行态/终态：顶层兜底解锁/置位，不依赖 reasoning_token 信封，
             // 避免终态事件以其他信封到达时 sending 永久卡住。
@@ -1433,6 +1461,7 @@ export default function Chat() {
         runUserMessageRef.current = new Map();
         setTodos([]);
         setToolCalls([]);
+        setPreparingTool(null);
         setSessionPanelOpen(true);
         // 统一 Timeline：重置并加载首尾一页（每页由后端 keyset 控制）
         setTimeline([]);
@@ -1807,6 +1836,7 @@ export default function Chat() {
               onLoadOlderTimeline={loadOlderTimeline}
               onRespondClarify={handleTimelineClarify}
               subAgentLive={subAgentLive}
+              preparingTool={preparingTool}
               runMode={runMode}
               onRunModeChange={handleRunModeChange}
               queuedMessages={queuedMessages}

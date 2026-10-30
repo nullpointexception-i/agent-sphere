@@ -19,6 +19,7 @@ export interface ClarificationItem {
   type?: string;
   multiple?: boolean;
   options?: string;
+  description?: string;
 }
 
 export interface ClarificationBatch {
@@ -118,6 +119,13 @@ export default function ClarificationDrawer({
               <Typography.Text strong>
                 {item.title || item.clarificationId}
               </Typography.Text>
+              {item.description ? (
+                <Typography.Paragraph
+                  style={{ whiteSpace: 'pre-wrap', marginBottom: 0, color: '#595959' }}
+                >
+                  {item.description}
+                </Typography.Paragraph>
+              ) : null}
               {type === 'confirm' ? (
                 <Radio.Group
                   value={answer.selected[0]}

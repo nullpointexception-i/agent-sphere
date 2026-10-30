@@ -23,6 +23,8 @@ public class AgentPendingClarification {
     private String type;
     private Boolean multiple;
     private String options;
+    /** Additional context/instructions shown to the user before answering. */
+    private String description;
     /** L2 tool approval: JSON array of pending tool calls. */
     private String toolCallsJson;
     private String userResponse;

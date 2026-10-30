@@ -8,7 +8,7 @@ import java.util.Map;
 
 public interface ClarificationSpi {
     Long createPending(Long sessionId, Long runId, Long messageId, String title, String type,
-                       boolean multiple, String optionsJson, String clarificationId);
+                       boolean multiple, String optionsJson, String description, String clarificationId);
 
     /** L2 tool approval: one pending clarification carrying the batch of tool calls. */
     Long createToolApprovalPending(Long sessionId, Long runId, String title, String optionsJson,

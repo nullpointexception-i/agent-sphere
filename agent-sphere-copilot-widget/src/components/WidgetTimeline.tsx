@@ -34,6 +34,7 @@ export interface WidgetTimelineProps {
   onRespondClarify: (runId: number, clarificationId: string, response: string) => void;
   /** 取消当前会话待处理澄清（停止 run）。 */
   onCancelClarify?: () => void;
+  preparingTool?: { publishId?: string; name?: string } | null;
 }
 
 // ---------------------------------------------------------------- utils
@@ -139,15 +140,20 @@ function AssistantRow({ row }: { row: TimelineRow }) {
   const c = row.content || {};
   const thinking = c.thinking || '';
   const reply = c.reply || '';
-  const [thinkingOpen, setThinkingOpen] = useState(true);
+  const [thinkingOpen, setThinkingOpen] = useState(
+    !row.state || row.state === 'RUNNING',
+  );
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const thinkBoxRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (!autoCollapsed && reply.trim().length > 0) {
+    const shouldCollapse =
+      reply.trim().length > 0 ||
+      (!!row.state && row.state !== 'RUNNING');
+    if (!autoCollapsed && shouldCollapse) {
       setAutoCollapsed(true);
       setThinkingOpen(false);
     }
-  }, [reply, autoCollapsed]);
+  }, [reply, row.state, autoCollapsed]);
   // 思考流式增长时贴底滚动
   useEffect(() => {
     const el = thinkBoxRef.current;
@@ -377,10 +383,8 @@ function ClarifyRow({
 }) {
   const c = row.content || {};
   const options = parseJsonArray(c.options);
-  const labelOf = (value: string) => {
-    const hit = options.find((o: any) => String(o?.value ?? o?.label) === value);
-    return hit?.label ? String(hit.label) : value;
-  };
+  const description =
+    typeof c.description === 'string' ? c.description.trim() : '';
   let selected: string[] = [];
   let text = '';
   if (c.response) {
@@ -396,6 +400,7 @@ function ClarifyRow({
       text = String(c.response);
     }
   }
+  const cancelled = c.response === '__dismissed__' || row.state === 'CANCELLED';
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -403,35 +408,46 @@ function ClarifyRow({
         <strong>{String(c.title || row.title || '澄清')}</strong>
         <StateTag state={row.state} />
       </div>
-      <div style={{ marginTop: 6, color: '#8c8c8c' }}>
+      <div style={{ marginTop: 6, color: '#8c8c8c', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {description ? (
+          <div style={{ whiteSpace: 'pre-wrap', color: '#4b5563', fontSize: 12 }}>{description}</div>
+        ) : null}
         {row.state === 'PENDING' ? (
           '请在底部浮层中作答'
-        ) : c.response === '__dismissed__' || row.state === 'CANCELLED' ? (
-          '已取消'
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {selected.length > 0 ? (
+          <>
+            {options.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {selected.map((value) => (
-                  <span
-                    key={value}
-                    style={{
-                      color: '#1677ff',
-                      border: '1px solid #91caff',
-                      background: '#e6f4ff',
-                      borderRadius: 4,
-                      padding: '0 6px',
-                      fontSize: 11,
-                    }}
-                  >
-                    {labelOf(value)}
-                  </span>
-                ))}
+                {options.map((o: any, index: number) => {
+                  const value = String(o?.value ?? o?.label ?? '');
+                  const label = String(o?.label ?? value);
+                  const isSelected = selected.includes(value);
+                  return (
+                    <span
+                      key={`${value}-${index}`}
+                      style={{
+                        color: isSelected ? '#1677ff' : '#595959',
+                        border: `1px solid ${isSelected ? '#91caff' : '#e5e7eb'}`,
+                        background: isSelected ? '#e6f4ff' : 'transparent',
+                        borderRadius: 4,
+                        padding: '0 6px',
+                        fontSize: 11,
+                        opacity: isSelected || cancelled ? 1 : 0.7,
+                      }}
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
               </div>
             ) : null}
             {text ? <span style={{ color: '#333' }}>{text}</span> : null}
-            {selected.length === 0 && !text ? '已应答' : null}
-          </div>
+            {cancelled ? (
+              <span>已取消</span>
+            ) : selected.length === 0 && !text ? (
+              <span>已应答</span>
+            ) : null}
+          </>
         )}
       </div>
     </div>
@@ -921,6 +937,7 @@ export function WidgetTimeline({
   loadFile,
   onRespondClarify,
   onCancelClarify,
+  preparingTool,
 }: WidgetTimelineProps) {
   // 同一 parentToolCallId 的多个 subagent 行（≥2）合并为并行 Tab
   const items = useMemo(() => {
@@ -1010,6 +1027,21 @@ export function WidgetTimeline({
           ))}
         </>
       )}
+      {preparingTool ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 0',
+            color: '#6b7280',
+            fontSize: 12,
+          }}
+        >
+          <RefreshIcon />
+          <span>{preparingTool.name || '工具'} · 正在生成调用参数…</span>
+        </div>
+      ) : null}
     </div>
   );
 }

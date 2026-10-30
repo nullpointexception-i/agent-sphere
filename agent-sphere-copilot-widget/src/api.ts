@@ -309,6 +309,7 @@ export interface ClarificationVO {
   type?: string;
   multiple?: boolean;
   options?: string;
+  description?: string;
   status?: string;
 }
 

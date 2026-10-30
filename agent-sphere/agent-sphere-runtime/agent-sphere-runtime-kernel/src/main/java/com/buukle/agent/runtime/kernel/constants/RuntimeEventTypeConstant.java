@@ -27,6 +27,8 @@ public final class RuntimeEventTypeConstant {
     /** 压缩模型的流式输出（CONTENT_TOKEN）：前端打印到 compaction 行正文，不并入 assistant。 */
     public static final String REASONING_SUB_TYPE_COMPACTION_OUTPUT = "compaction_output";
 
+    /** 工具参数仍在流式生成（审批卡要等参数完整才创建）。 */
+    public static final String REASONING_SUB_TYPE_TOOL_INPUT_PREPARING = "tool_input_preparing";
     public static final String REASONING_SUB_TYPE_TOOL_CALL_STARTED = "tool_call_started";
     public static final String REASONING_SUB_TYPE_TOOL_CALL_IN_PROGRESS = "tool_call_in_progress";
     public static final String REASONING_SUB_TYPE_TOOL_CALL_SUCCEEDED = "tool_call_succeeded";

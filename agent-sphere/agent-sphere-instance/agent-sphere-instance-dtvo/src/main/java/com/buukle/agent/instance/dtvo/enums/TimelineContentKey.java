@@ -18,6 +18,7 @@ public enum TimelineContentKey {
     TYPE("type"),
     MULTIPLE("multiple"),
     OPTIONS("options"),
+    DESCRIPTION("description"),
     RESPONSE("response"),
     STATE("state"),
     STARTED_AT("startedAt"),
