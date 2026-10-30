@@ -293,17 +293,16 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     }
                 }
                 case ASSISTANT -> {
-                    // 每轮 LLM 调用行：正文直接引用该轮 interaction 记录的 reasoning/reply_content（response_body 兜底）
+                    // 每轮 LLM 调用行：正文直接引用该轮 interaction 记录的 reasoning/reply_content（response_body 仅审计）
                     if (row.getRefInteractionId() != null) {
                         AgentLlmInteractionRecord rec = interactionMapper.selectById(row.getRefInteractionId());
                         if (rec != null) {
                             if (rec.getReasoning() != null && !rec.getReasoning().isBlank()) {
                                 content.put(TimelineContentKey.THINKING.getCode(), cap(rec.getReasoning(), CONTENT_CAP));
                             }
+                            // 只认 reply_content：response_body 是 reasoning + 正文的审计合并文本，
+                            // 工具轮/澄清轮没有正文时若回退到它，会把 reasoning 当成可见回复。
                             String reply = rec.getReplyContent();
-                            if ((reply == null || reply.isBlank()) && rec.getResponseBody() != null) {
-                                reply = rec.getResponseBody();
-                            }
                             if (reply != null && !reply.isBlank()) {
                                 content.put(TimelineContentKey.REPLY.getCode(), cap(reply, CONTENT_CAP));
                             }

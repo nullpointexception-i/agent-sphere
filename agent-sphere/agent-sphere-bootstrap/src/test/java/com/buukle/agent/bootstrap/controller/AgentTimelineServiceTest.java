@@ -1,5 +1,6 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
 import com.buukle.agent.instance.domain.AgentTimeline;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
 import com.buukle.agent.instance.dtvo.enums.TimelineContentKey;
@@ -7,7 +8,9 @@ import com.buukle.agent.instance.dtvo.vo.AgentTimelineVO;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.domain.AgentCompactRecord;
 import com.buukle.agent.instance.repository.AgentCompactRecordMapper;
+import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
+import com.buukle.agent.instance.service.MessageFeedbackService;
 import com.buukle.agent.instance.service.impl.AgentTimelineServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +33,10 @@ class AgentTimelineServiceTest {
     AgentToolCallRecordMapper toolCallMapper;
     @Mock
     AgentCompactRecordMapper compactRecordMapper;
+    @Mock
+    AgentLlmInteractionRecordMapper interactionMapper;
+    @Mock
+    MessageFeedbackService messageFeedbackService;
 
     @Test
     void parseAttachments_validJson_returnsList() {
@@ -86,6 +93,26 @@ class AgentTimelineServiceTest {
     }
 
     @Test
+    void resolveContent_assistantWithoutReply_doesNotExposeReasoningAsReply() throws Exception {
+        AgentLlmInteractionRecord rec = new AgentLlmInteractionRecord();
+        rec.setId(107227L);
+        rec.setReasoning("The user asks ... ambiguous.");
+        rec.setReplyContent(null);
+        rec.setResponseBody("The user asks ... ambiguous.");
+        given(interactionMapper.selectById(107227L)).willReturn(rec);
+
+        AgentTimeline row = new AgentTimeline();
+        row.setKind("assistant");
+        row.setRefInteractionId(107227L);
+
+        Map<String, Object> content = invokeResolveContent(row);
+
+        assertEquals("The user asks ... ambiguous.", content.get(TimelineContentKey.THINKING.getCode()));
+        assertNull(content.get(TimelineContentKey.REPLY.getCode()),
+                "response_body 合并了 reasoning，不能回退成可见回复");
+    }
+
+    @Test
     void resolveContent_compaction_usesSummaryAfter() throws Exception {
         AgentCompactRecord rec = new AgentCompactRecord();
         rec.setSummaryAfter("## Goal\n压缩后的摘要");
@@ -115,7 +142,8 @@ class AgentTimelineServiceTest {
     @SuppressWarnings("unchecked")
     private Map<String, Object> invokeResolveContent(AgentTimeline row) throws Exception {
         AgentTimelineServiceImpl svc = new AgentTimelineServiceImpl(
-                null, null, toolCallMapper, null, null, null, compactRecordMapper, null, null);
+                null, null, toolCallMapper, null, null, interactionMapper, compactRecordMapper, null,
+                messageFeedbackService);
         Method m = AgentTimelineServiceImpl.class.getDeclaredMethod(
                 "resolveContent", AgentTimeline.class, Map.class, Map.class);
         m.setAccessible(true);
