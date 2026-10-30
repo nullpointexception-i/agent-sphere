@@ -7,9 +7,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -205,12 +208,51 @@ public class LlmContextValidator {
     private void dumpConfig(String prefix, Object obj) {
         if (obj == null) return;
 
+        if (obj instanceof Collection<?> collection) {
+            int index = 0;
+            for (Object item : collection) {
+                String itemKey = prefix + "[" + index + "]";
+                if (item == null) {
+                    index++;
+                    continue;
+                }
+                if (isConfigClass(item.getClass())) {
+                    dumpConfig(itemKey, item);
+                } else {
+                    log.info("  {} = {}", itemKey, maskIfSensitive(prefix, item));
+                }
+                index++;
+            }
+            return;
+        }
+        if (obj instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String itemKey = prefix + "[" + entry.getKey() + "]";
+                Object value = entry.getValue();
+                if (value != null && isConfigClass(value.getClass())) {
+                    dumpConfig(itemKey, value);
+                } else {
+                    log.info("  {} = {}", itemKey, maskIfSensitive(prefix, value));
+                }
+            }
+            return;
+        }
+        if (obj.getClass().isArray()) {
+            String display = obj instanceof Object[] array
+                    ? Arrays.deepToString(array) : String.valueOf(obj);
+            log.info("  {} = {}", prefix, maskIfSensitive(prefix, display));
+            return;
+        }
+
         for (Field field : obj.getClass().getDeclaredFields()) {
-            field.setAccessible(true);
+            if (field.isSynthetic() || Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
             String name = field.getName();
             String fullKey = prefix.isEmpty() ? name : prefix + "." + name;
 
             try {
+                field.setAccessible(true);
                 Object value = field.get(obj);
                 if (value == null) continue;
                 if (value == obj) continue;
@@ -221,7 +263,7 @@ public class LlmContextValidator {
                     String displayValue = maskIfSensitive(name, value);
                     log.info("  {} = {}", fullKey, displayValue);
                 }
-            } catch (IllegalAccessException e) {
+            } catch (RuntimeException | IllegalAccessException e) {
                 log.warn("  {} = <unreadable>", fullKey);
             }
         }
@@ -229,6 +271,10 @@ public class LlmContextValidator {
 
     private boolean isConfigClass(Class<?> clazz) {
         return !clazz.isPrimitive()
+                && !clazz.isArray()
+                && !Collection.class.isAssignableFrom(clazz)
+                && !Map.class.isAssignableFrom(clazz)
+                && !clazz.getName().startsWith("java.")
                 && clazz != String.class
                 && clazz != Boolean.class
                 && clazz != Integer.class
