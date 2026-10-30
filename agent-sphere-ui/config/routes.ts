@@ -240,6 +240,16 @@ export default [
     ],
   },
   {
+    path: '/share',
+    layout: false,
+    routes: [
+      {
+        path: '/share/:shareToken',
+        component: './share/chat',
+      },
+    ],
+  },
+  {
     path: '/s',
     layout: false,
     routes: [

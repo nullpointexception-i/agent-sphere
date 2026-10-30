@@ -13,6 +13,8 @@ public class AgentToolApprovalGrant {
     private Long sessionId;
     private Long runId;
     private String toolRef;
+    private String displayName;
+    private String securityLevel;
     private String scope;
     private String approvedBy;
     private String status;

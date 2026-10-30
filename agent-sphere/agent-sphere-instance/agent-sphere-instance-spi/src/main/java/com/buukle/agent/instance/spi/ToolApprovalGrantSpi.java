@@ -6,7 +6,10 @@ public interface ToolApprovalGrantSpi {
 
     boolean isDenied(Long sessionId, Long runId, String toolRef);
 
-    void grant(Long sessionId, Long runId, String toolRef, String scope, String approvedBy);
+    void grant(Long sessionId, Long runId, String toolRef, String displayName,
+               String securityLevel, String scope, String approvedBy);
+
+    java.util.List<com.buukle.agent.instance.dtvo.vo.ToolApprovalGrantVO> listApprovedBySession(Long sessionId);
 
     void deny(Long sessionId, Long runId, String toolRef, String approvedBy);
 }

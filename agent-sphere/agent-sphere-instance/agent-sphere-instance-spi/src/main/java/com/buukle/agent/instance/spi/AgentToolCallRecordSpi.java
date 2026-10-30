@@ -38,4 +38,8 @@ public interface AgentToolCallRecordSpi {
     List<AgentToolCallRecordVO> listByRunId(Long runId, int offset, int limit);
 
     long countByRunId(Long runId);
+
+    long countBySessionId(Long sessionId);
+
+    Long getLatestRunIdWithToolCalls(Long sessionId);
 }

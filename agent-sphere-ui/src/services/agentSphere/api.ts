@@ -189,6 +189,16 @@ export const agentApi = {
       request<any>(`${BASE}/instance/sessions/${id}/todos`),
     getLatestToolCalls: (id: number) =>
       request<any>(`${BASE}/instance/sessions/${id}/toolcalls/latest`),
+    toolStats: (id: number, runId?: number | null) =>
+      request<any>(`${BASE}/instance/sessions/${id}/tool-stats${runId != null ? `?runId=${runId}` : ''}`),
+    feedback: (sessionId: number, interactionId: number, runId: number | null | undefined, value: string) =>
+      request<any>(`${BASE}/instance/sessions/${sessionId}/messages/${interactionId}/feedback${runId != null ? `?runId=${runId}` : ''}`, {
+        method: 'POST', data: { value },
+      }),
+    share: (sessionId: number, runId: number, runCount: number) =>
+      request<{ shareToken: string }>(`${BASE}/instance/sessions/${sessionId}/share`, {
+        method: 'POST', data: { runId, runCount },
+      }),
     getSubAgentRuns: (id: number) =>
       request<any[]>(`${BASE}/instance/sessions/${id}/sub-agent-runs`),
     getSubAgentTimeline: (id: number) =>

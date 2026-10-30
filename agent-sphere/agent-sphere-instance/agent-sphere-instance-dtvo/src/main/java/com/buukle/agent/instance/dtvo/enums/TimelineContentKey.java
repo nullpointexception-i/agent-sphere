@@ -6,6 +6,7 @@ public enum TimelineContentKey {
     THINKING("thinking"),
     REPLY("reply"),
     DISPLAY_NAME("displayName"),
+    DISPLAY_NAME_EN("displayNameEn"),
     STATUS("status"),
     ARGS("args"),
     ARTIFACT("artifact"),
@@ -32,6 +33,7 @@ public enum TimelineContentKey {
     IMAGES("images"),
     /** 用量聚合（{promptTokens, completionTokens, totalTokens, cacheHitTokens, cacheMissTokens}；assistant / run_status 行）。 */
     USAGE("usage"),
+    FEEDBACK("feedback"),
     /** 工具名（TOOL 行；用于前端识别内部协议工具，如 finish/builtin_12）。 */
     TOOL_NAME("toolName");
 

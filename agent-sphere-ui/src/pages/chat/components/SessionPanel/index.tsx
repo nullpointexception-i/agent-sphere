@@ -1,34 +1,42 @@
-import { CheckSquareOutlined, ToolOutlined } from '@ant-design/icons';
+import {
+  BarChartOutlined,
+  CheckSquareOutlined,
+  SafetyCertificateOutlined,
+  ToolOutlined,
+} from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { Divider, Empty, Tag, Tooltip } from 'antd';
+import { Divider, Empty, Tag } from 'antd';
+import { cacheHitRate, contextUsagePercent, formatTokens } from '../Usage';
 
 interface TodoItem {
   content: string;
   status: string;
   priority: string;
-  /** 来源技能 id；非技能条目为 null/undefined。 */
   skillId?: number | null;
-  /** 来源技能步骤标识，如 step1 / step1.1。 */
   stepId?: string | null;
 }
 
-interface ToolCallItem {
-  name: string;
-  status: string;
-  displayNameCn?: string;
-  displayNameEn?: string;
-  _publishId?: string;
-  _runId?: number;
-  ts?: number;
+interface AuthorizedTool {
+  toolRef?: string;
+  displayName?: string;
+  securityLevel?: string;
+  scope?: string;
+}
+
+interface ToolStats {
+  sessionToolCallCount?: number;
+  currentRunToolCallCount?: number;
+  latestRunToolCallCount?: number;
+  authorizedTools?: AuthorizedTool[];
 }
 
 interface SessionPanelProps {
   open: boolean;
   onClose: () => void;
   todos: TodoItem[];
-  toolCalls: ToolCallItem[];
-  messages: any[];
-  runUserMessages: Map<number, string>;
+  toolStats?: ToolStats | null;
+  sessionUsage?: any;
+  maxInputTokens?: number | null;
 }
 
 const statusIcon = (s: string) => {
@@ -50,53 +58,59 @@ const statusIcon = (s: string) => {
   }
 };
 
-function groupByRunId(items: ToolCallItem[]): Record<string, ToolCallItem[]> {
-  const groups: Record<string, ToolCallItem[]> = {};
-  for (const item of items) {
-    const key = item._runId != null ? String(item._runId) : 'unknown';
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(item);
-  }
-  return groups;
+function StatRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0', fontSize: 12 }}>
+      <span style={{ color: '#8c8c8c' }}>{label}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{value}</span>
+    </div>
+  );
 }
 
-function userMessageLabel(
-  runUserMessages: Map<number, string>,
-  runId: number,
-): string {
-  const msg = runUserMessages.get(runId);
-  if (!msg) return `Run #${runId}`;
-  const raw = (msg || '')
-    .replace(/^[\s\u{1F300}-\u{1FFFF}▶️✅❌🔄]+/u, '')
-    .trim();
-  return raw.length > 10 ? `「${raw.slice(0, 10)}…」` : `「${raw}」`;
+function UsageRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '2px 0', fontSize: 12 }}>
+      <span style={{ color: '#8c8c8c' }}>{label}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+    </div>
+  );
 }
 
 export default function SessionPanel({
   open,
   onClose,
   todos,
-  toolCalls,
-  runUserMessages,
+  toolStats,
+  sessionUsage,
+  maxInputTokens,
 }: SessionPanelProps) {
   const intl = useIntl();
   if (!open) return null;
 
-  const locale = intl.locale;
-  const toolLabel = (tc: ToolCallItem) =>
-    locale === 'en-US'
-      ? tc.displayNameEn || tc.name
-      : tc.displayNameCn || tc.name;
-
-  const toolGroups = groupByRunId(toolCalls);
-  const sortedRunIds = Object.keys(toolGroups).sort(
-    (a, b) => Number(b) - Number(a),
+  const stats = toolStats || {};
+  const authorizedTools = stats.authorizedTools || [];
+  const cacheRate = cacheHitRate(sessionUsage);
+  const contextPercent = contextUsagePercent(
+    sessionUsage?.latestPromptTokens,
+    maxInputTokens,
   );
+  const scopeLabel = (scope?: string) => {
+    if (scope === 'SESSION') {
+      return intl.formatMessage({
+        id: 'pages.chat.sessionPanel.scopeSession',
+        defaultMessage: 'This session',
+      });
+    }
+    return intl.formatMessage({
+      id: 'pages.chat.sessionPanel.scopeRun',
+      defaultMessage: 'This message',
+    });
+  };
 
   return (
     <div
       style={{
-        width: 280,
+        width: 300,
         flexShrink: 0,
         borderLeft: '1px solid #e8e8e8',
         padding: '0 16px',
@@ -122,24 +136,12 @@ export default function SessionPanel({
             defaultMessage: 'Session Panel',
           })}
         </strong>
-        <a
-          onClick={onClose}
-          style={{ fontSize: 14, color: '#999', cursor: 'pointer' }}
-        >
+        <a onClick={onClose} style={{ fontSize: 14, color: '#999', cursor: 'pointer' }}>
           ✕
         </a>
       </div>
 
-      {/* Todo List */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div
           style={{
             fontWeight: 500,
@@ -185,8 +187,7 @@ export default function SessionPanel({
                 <span>{statusIcon(t.status)}</span>
                 <span
                   style={{
-                    textDecoration:
-                      t.status === 'cancelled' ? 'line-through' : undefined,
+                    textDecoration: t.status === 'cancelled' ? 'line-through' : undefined,
                     opacity: t.status === 'cancelled' ? 0.5 : 1,
                     flex: 1,
                   }}
@@ -194,30 +195,14 @@ export default function SessionPanel({
                   {t.content}
                 </span>
                 {(t.skillId != null || t.stepId) && (
-                  <Tag
-                    color="purple"
-                    style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px' }}
-                    title={
-                      t.skillId != null && t.stepId
-                        ? `技能 #${t.skillId} · 步骤 ${t.stepId}`
-                        : t.skillId != null
-                          ? `技能 #${t.skillId}`
-                          : `步骤 ${t.stepId}`
-                    }
-                  >
+                  <Tag color="purple" style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px' }}>
                     {t.skillId != null ? `skill#${t.skillId}` : ''}
                     {t.stepId ? ` ${t.stepId}` : ''}
                   </Tag>
                 )}
                 <Tag
                   style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px' }}
-                  color={
-                    t.priority === 'high'
-                      ? 'red'
-                      : t.priority === 'medium'
-                        ? 'orange'
-                        : 'blue'
-                  }
+                  color={t.priority === 'high' ? 'red' : t.priority === 'medium' ? 'orange' : 'blue'}
                 >
                   {t.priority}
                 </Tag>
@@ -229,16 +214,7 @@ export default function SessionPanel({
 
       <Divider style={{ margin: '4px 0', flexShrink: 0 }} />
 
-      {/* Tool Calls */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div
           style={{
             fontWeight: 500,
@@ -250,88 +226,108 @@ export default function SessionPanel({
             gap: 6,
           }}
         >
-          <ToolOutlined />
+          <BarChartOutlined />
           <span>
             {intl.formatMessage({
-              id: 'pages.chat.toolCalls',
-              defaultMessage: 'Tool Calls',
-            })}{' '}
-            ({toolCalls.length})
+              id: 'pages.chat.sessionPanel.overview',
+              defaultMessage: 'Run overview',
+            })}
           </span>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {toolCalls.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={intl.formatMessage({
-                id: 'pages.chat.toolCalls.empty',
-                defaultMessage: 'No tool calls yet',
+          <StatRow
+            label={intl.formatMessage({
+              id: 'pages.chat.sessionPanel.sessionToolCalls',
+              defaultMessage: 'Session tool calls',
+            })}
+            value={stats.sessionToolCallCount || 0}
+          />
+          <StatRow
+            label={intl.formatMessage({
+              id: 'pages.chat.sessionPanel.currentRunToolCalls',
+              defaultMessage: 'Current run tool calls',
+            })}
+            value={stats.currentRunToolCallCount || 0}
+          />
+          <StatRow
+            label={intl.formatMessage({
+              id: 'pages.chat.sessionPanel.latestRunToolCalls',
+              defaultMessage: 'Last run tool calls',
+            })}
+            value={stats.latestRunToolCallCount || 0}
+          />
+
+          <Divider style={{ margin: '10px 0 6px' }} />
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#8c8c8c', marginBottom: 4 }}>
+            {intl.formatMessage({
+              id: 'pages.chat.sessionPanel.sessionUsage',
+              defaultMessage: 'Session usage',
+            })}
+          </div>
+          <UsageRow label="Prompt" value={formatTokens(sessionUsage?.promptTokens)} />
+          <UsageRow label="Completion" value={formatTokens(sessionUsage?.completionTokens)} />
+          <UsageRow label="Total" value={formatTokens(sessionUsage?.totalTokens)} />
+          <UsageRow
+            label="Cache"
+            value={cacheRate != null ? `${cacheRate}%` : '-'}
+          />
+          <UsageRow
+            label={intl.formatMessage({
+              id: 'pages.chat.sessionPanel.currentContext',
+              defaultMessage: 'Current context',
+            })}
+            value={contextPercent != null ? `${contextPercent}%` : '-'}
+          />
+
+          <Divider style={{ margin: '10px 0 6px' }} />
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#8c8c8c',
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <SafetyCertificateOutlined />
+            {intl.formatMessage({
+              id: 'pages.chat.sessionPanel.authorizedTools',
+              defaultMessage: 'Authorized tools',
+            })}
+          </div>
+          {authorizedTools.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#aaa', padding: '4px 0' }}>
+              {intl.formatMessage({
+                id: 'pages.chat.sessionPanel.noAuthorizedTools',
+                defaultMessage: 'No persistent authorizations',
               })}
-              style={{ fontSize: 12, margin: '16px 0' }}
-            />
+            </div>
           ) : (
-            sortedRunIds.map((runId) => {
-              const label = userMessageLabel(runUserMessages, Number(runId));
-              return (
-                <div key={runId}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: '#bbb',
-                      padding: '4px 0',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {label}
-                  </div>
-                  {[...toolGroups[runId]].reverse().map((tc, i) => (
-                    <div
-                      key={tc._publishId || i}
-                      style={{
-                        padding: '3px 0',
-                        fontSize: 13,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
-                    >
-                      <span>{statusIcon(tc.status)}</span>
-                      <Tooltip title={tc.name}>
-                        <span
-                          style={{
-                            flex: 1,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            cursor: 'default',
-                          }}
-                        >
-                          {toolLabel(tc)}
-                        </span>
-                      </Tooltip>
-                      <Tag
-                        style={{
-                          fontSize: 10,
-                          lineHeight: '16px',
-                          flexShrink: 0,
-                        }}
-                        color={
-                          tc.status === 'succeeded'
-                            ? 'green'
-                            : tc.status === 'failed'
-                              ? 'red'
-                              : tc.status === 'started'
-                                ? 'blue'
-                                : 'orange'
-                        }
-                      >
-                        {tc.status}
-                      </Tag>
-                    </div>
-                  ))}
-                </div>
-              );
-            })
+            authorizedTools.map((tool, i) => (
+              <div
+                key={`${tool.toolRef}-${tool.scope}-${i}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 0',
+                  fontSize: 12,
+                }}
+              >
+                <ToolOutlined style={{ color: '#8c8c8c' }} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {tool.displayName || tool.toolRef}
+                </span>
+                <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="orange">
+                  {tool.securityLevel || 'L2'}
+                </Tag>
+                <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                  {scopeLabel(tool.scope)}
+                </Tag>
+              </div>
+            ))
           )}
         </div>
       </div>

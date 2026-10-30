@@ -3,10 +3,13 @@ package com.buukle.agent.instance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.common.constant.ToolApprovalScope;
 import com.buukle.agent.instance.domain.AgentToolApprovalGrant;
+import com.buukle.agent.instance.dtvo.vo.ToolApprovalGrantVO;
 import com.buukle.agent.instance.repository.AgentToolApprovalGrantMapper;
 import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -81,11 +84,14 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
     }
 
     @Override
-    public void grant(Long sessionId, Long runId, String toolRef, String scope, String approvedBy) {
+    public void grant(Long sessionId, Long runId, String toolRef, String displayName,
+                      String securityLevel, String scope, String approvedBy) {
         ToolApprovalScope approvalScope = ToolApprovalScope.from(scope);
         if (approvalScope == ToolApprovalScope.ONCE || toolRef == null || toolRef.isBlank()) {
             return;
         }
+        String resolvedName = displayName == null || displayName.isBlank() ? toolRef : displayName;
+        String resolvedLevel = securityLevel == null || securityLevel.isBlank() ? "L2" : securityLevel;
         LambdaQueryWrapper<AgentToolApprovalGrant> existingQuery = new LambdaQueryWrapper<AgentToolApprovalGrant>()
                 .eq(AgentToolApprovalGrant::getToolRef, toolRef)
                 .eq(AgentToolApprovalGrant::getScope, approvalScope.name());
@@ -98,6 +104,8 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         if (existing != null) {
             existing.setStatus("APPROVED");
             existing.setApprovedBy(approvedBy);
+            existing.setDisplayName(resolvedName);
+            existing.setSecurityLevel(resolvedLevel);
             mapper.updateById(existing);
             return;
         }
@@ -105,9 +113,30 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         grant.setSessionId(sessionId);
         grant.setRunId(approvalScope == ToolApprovalScope.RUN ? runId : null);
         grant.setToolRef(toolRef);
+        grant.setDisplayName(resolvedName);
+        grant.setSecurityLevel(resolvedLevel);
         grant.setScope(approvalScope.name());
         grant.setApprovedBy(approvedBy);
         grant.setStatus("APPROVED");
         mapper.insert(grant);
+    }
+
+    @Override
+    public List<ToolApprovalGrantVO> listApprovedBySession(Long sessionId) {
+        if (sessionId == null) return List.of();
+        return mapper.selectList(new LambdaQueryWrapper<AgentToolApprovalGrant>()
+                        .eq(AgentToolApprovalGrant::getSessionId, sessionId)
+                        .eq(AgentToolApprovalGrant::getStatus, "APPROVED")
+                        .orderByDesc(AgentToolApprovalGrant::getId))
+                .stream().map(g -> {
+                    ToolApprovalGrantVO vo = new ToolApprovalGrantVO();
+                    vo.setToolRef(g.getToolRef());
+                    vo.setDisplayName(g.getDisplayName() != null && !g.getDisplayName().isBlank()
+                            ? g.getDisplayName() : g.getToolRef());
+                    vo.setSecurityLevel(g.getSecurityLevel() != null && !g.getSecurityLevel().isBlank()
+                            ? g.getSecurityLevel() : "L2");
+                    vo.setScope(g.getScope());
+                    return vo;
+                }).toList();
     }
 }

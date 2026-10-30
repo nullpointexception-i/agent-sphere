@@ -80,6 +80,7 @@ export default function Chat() {
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sseConnected, setSseConnected] = useState(false);
   const [sessionUsage, setSessionUsage] = useState<any>(null);
+  const [toolStats, setToolStats] = useState<any>(null);
   const [runMode, setRunMode] = useState<'WRITE' | 'READ_ONLY'>('WRITE');
   const [toolApprovalBatch, setToolApprovalBatch] = useState<ToolApprovalBatch | null>(null);
   const [toolApprovalSubmitting, setToolApprovalSubmitting] = useState(false);
@@ -397,14 +398,34 @@ export default function Chat() {
     }
   };
 
+  const refreshToolStats = async (sid: number) => {
+    if (!sid) return;
+    try {
+      const stats = await agentApi.sessions.toolStats(sid, currentRunIdRef.current);
+      setToolStats(stats);
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
-    if (currentSession?.id) void refreshSessionUsage(currentSession.id);
+    setToolStats(null);
+    if (currentSession?.id) {
+      void refreshSessionUsage(currentSession.id);
+      void refreshToolStats(currentSession.id);
+    }
   }, [currentSession?.id]);
 
   useEffect(() => {
     setRunMode(currentSession?.runMode === 'READ_ONLY' ? 'READ_ONLY' : 'WRITE');
     setToolApprovalBatch(null);
   }, [currentSession?.id, currentSession?.runMode]);
+
+  useEffect(() => {
+    if (sessionPanelOpen && currentSession?.id) {
+      void refreshToolStats(currentSession.id);
+    }
+  }, [sessionPanelOpen, currentSession?.id]);
 
   const handleRunModeChange = async (mode: 'WRITE' | 'READ_ONLY') => {
     setRunMode(mode);
@@ -682,6 +703,7 @@ export default function Chat() {
       );
       setToolApprovalBatch(null);
       await refreshPendingToolApproval(currentSession.id);
+      await refreshToolStats(currentSession.id);
     } catch (e: any) {
       message.error(e?.message || 'Tool approval failed');
     } finally {
@@ -1032,6 +1054,7 @@ export default function Chat() {
                     : subType === 'tool_call_succeeded'
                       ? 'succeeded'
                       : 'failed';
+                if (currentSession?.id) void refreshToolStats(currentSession.id);
                 setToolCalls((prev) =>
                   prev.map((tc) =>
                     tc._publishId === publishId
@@ -1147,6 +1170,7 @@ export default function Chat() {
                 const name =
                   d?.displayNameCn || d?.displayName || d?.toolName || '';
                 const nameEn = d?.displayNameEn || name;
+                if (currentSession?.id) void refreshToolStats(currentSession.id);
                 setToolCalls((prev) => [
                   ...prev,
                   {
@@ -1171,6 +1195,7 @@ export default function Chat() {
                 subType === 'run_awaiting_user'
               ) {
                 setSending(false);
+                if (currentSession?.id) void refreshToolStats(currentSession.id);
                 if (subType === 'run_awaiting_user') {
                   void refreshPendingToolApproval(sid);
                   void refreshPendingClarifications(sid);
@@ -1740,7 +1765,6 @@ export default function Chat() {
               onLoadOlderTimeline={loadOlderTimeline}
               onRespondClarify={handleTimelineClarify}
               subAgentLive={subAgentLive}
-              sessionUsage={sessionUsage}
               runMode={runMode}
               onRunModeChange={handleRunModeChange}
               toolApprovalBatch={toolApprovalBatch}
@@ -1792,9 +1816,9 @@ export default function Chat() {
           open={sessionPanelOpen}
           onClose={() => setSessionPanelOpen(false)}
           todos={todos}
-          toolCalls={toolCalls}
-          messages={messages}
-          runUserMessages={runUserMessageRef.current}
+          toolStats={toolStats}
+          sessionUsage={sessionUsage}
+          maxInputTokens={modelRoutes.find((r: any) => r.id === selectedModelRouteId)?.maxInputTokens}
         />
       </div>
       <ExpandModal

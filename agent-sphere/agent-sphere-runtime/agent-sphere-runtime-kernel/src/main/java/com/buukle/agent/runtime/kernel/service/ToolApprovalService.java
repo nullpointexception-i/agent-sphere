@@ -83,12 +83,22 @@ public class ToolApprovalService {
             String callId = String.valueOf(row.getOrDefault("callId", ""));
             ToolApprovalDecision d = decisions.getOrDefault(callId, ToolApprovalDecision.DENY);
             String toolRef = String.valueOf(row.getOrDefault("toolRef", ""));
+            String displayName = String.valueOf(row.getOrDefault("displayName", toolRef));
+            if ("null".equals(displayName) || displayName.isBlank()) {
+                displayName = toolRef;
+            }
+            String securityLevel = String.valueOf(row.getOrDefault("securityLevel", "L2"));
+            if ("null".equals(securityLevel) || securityLevel.isBlank()) {
+                securityLevel = "L2";
+            }
             if (d == ToolApprovalDecision.DENY) {
                 grantSpi.deny(sessionId, runId, toolRef, "user");
             } else if (d == ToolApprovalDecision.ALLOW_SESSION) {
-                grantSpi.grant(sessionId, runId, toolRef, ToolApprovalScope.SESSION.name(), "user");
+                grantSpi.grant(sessionId, runId, toolRef, displayName, securityLevel,
+                        ToolApprovalScope.SESSION.name(), "user");
             } else if (d == ToolApprovalDecision.ALLOW_RUN) {
-                grantSpi.grant(sessionId, runId, toolRef, ToolApprovalScope.RUN.name(), "user");
+                grantSpi.grant(sessionId, runId, toolRef, displayName, securityLevel,
+                        ToolApprovalScope.RUN.name(), "user");
             }
         }
         eventPublisher.publishEvent(new RuntimeEventVO(
@@ -231,6 +241,8 @@ public class ToolApprovalService {
             row.put("toolRef", c.tool().getToolRef());
             row.put("toolName", c.tool().getLlmToolName());
             row.put("displayName", c.tool().getDisplayName());
+            row.put("displayNameEn", c.tool().getDisplayNameEn());
+            row.put("securityLevel", c.tool().getSecurityLevel());
             row.put("action", action(c.call().arguments()));
             row.put("arguments", c.call().arguments());
             row.put("approvalScope", ToolApprovalScope.from(c.tool().getApprovalScope()).name());

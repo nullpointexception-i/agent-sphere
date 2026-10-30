@@ -34,6 +34,10 @@ import { errorConfig } from './requestErrorConfig';
 
 const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
+const isPublicPath = (pathname: string) =>
+  pathname === loginPath ||
+  pathname.startsWith('/share/') ||
+  pathname.startsWith('/s/');
 
 const CHUNK_RELOAD_KEY = 'agent-sphere-ui:chunk-reloaded';
 const VERSION_PARAM = '_v';
@@ -129,7 +133,7 @@ export async function getInitialState(): Promise<{
     return undefined;
   };
   const { location } = history;
-  if (location.pathname !== loginPath) {
+  if (!isPublicPath(location.pathname)) {
     const currentUser = await fetchUserInfo();
     // permissions 取 /auth/me 刷新后的新鲜值，而非登录时快照
     const fresh = getStoredUser();
@@ -184,7 +188,7 @@ export const layout: RunTimeLayoutConfig = ({
     footerRender: false,
     onPageChange: () => {
       const { location } = history;
-      if (!initialState?.currentUser && location.pathname !== loginPath) {
+      if (!initialState?.currentUser && !isPublicPath(location.pathname)) {
         history.replace(
           `${loginPath}?redirect=${encodeURIComponent(location.pathname + location.search + location.hash)}`,
         );

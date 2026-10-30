@@ -2,6 +2,7 @@ package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
 import com.buukle.agent.instance.domain.AgentPendingClarification;
@@ -25,6 +26,7 @@ import com.buukle.agent.instance.repository.AgentTimelineMapper;
 import com.buukle.agent.instance.repository.AgentToolApprovalMapper;
 import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.repository.RunMapper;
+import com.buukle.agent.instance.service.MessageFeedbackService;
 import com.buukle.agent.instance.service.util.ScreenshotRefParser;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
 import lombok.RequiredArgsConstructor;
@@ -70,6 +72,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
     private final AgentLlmInteractionRecordMapper interactionMapper;
     private final AgentCompactRecordMapper compactRecordMapper;
     private final AgentToolApprovalMapper toolApprovalMapper;
+    private final MessageFeedbackService messageFeedbackService;
 
     @Override
     public long nextSeq(Long sessionId) {
@@ -305,10 +308,18 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                                 content.put(TimelineContentKey.REPLY.getCode(), cap(reply, CONTENT_CAP));
                             }
                             // 迭代级用量：该次 LLM 调用的归一化用量（有值才附）
+                            if (rec.getDurationMs() != null) {
+                                content.put(TimelineContentKey.DURATION_MS.getCode(), rec.getDurationMs());
+                            }
                             if (rec.getTotalTokens() != null) {
                                 content.put(TimelineContentKey.USAGE.getCode(), usageMap(
                                         rec.getPromptTokens(), rec.getCompletionTokens(), rec.getTotalTokens(),
                                         rec.getCacheHitTokens(), rec.getCacheMissTokens()));
+                            }
+                            String feedback = messageFeedbackService.getFeedback(
+                                    rec.getId(), AuthContext.getUserId());
+                            if (feedback != null) {
+                                content.put(TimelineContentKey.FEEDBACK.getCode(), feedback);
                             }
                         }
                     } else {
@@ -329,6 +340,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                         AgentToolCallRecord rec = toolCallMapper.selectById(row.getRefToolCallId());
                         if (rec != null) {
                             content.put(TimelineContentKey.DISPLAY_NAME.getCode(), rec.getDisplayNameCn() != null ? rec.getDisplayNameCn() : rec.getToolName());
+                            content.put(TimelineContentKey.DISPLAY_NAME_EN.getCode(), rec.getDisplayNameEn() != null ? rec.getDisplayNameEn() : rec.getToolName());
                             content.put(TimelineContentKey.TOOL_NAME.getCode(), rec.getToolName());
                             content.put(TimelineContentKey.STATUS.getCode(), rec.getStatus());
                             if (rec.getArgumentsJson() != null) content.put(TimelineContentKey.ARGS.getCode(), cap(rec.getCompressedArguments() != null ? rec.getCompressedArguments() : rec.getArgumentsJson(), CONTENT_CAP));

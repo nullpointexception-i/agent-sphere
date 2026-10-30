@@ -143,7 +143,7 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         if (runId != null) {
             query.eq(AgentToolCallRecord::getRunId, runId);
         } else {
-            Long latest = getLatestRunIdWithToolCalls(sessionId);
+            Long latest = findLatestRunIdWithToolCalls(sessionId);
             if (latest != null) {
                 query.eq(AgentToolCallRecord::getRunId, latest);
             }
@@ -166,6 +166,19 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
     }
 
     @Override
+    public long countBySessionId(Long sessionId) {
+        if (sessionId == null) return 0;
+        Long count = mapper.selectCount(new LambdaQueryWrapper<AgentToolCallRecord>()
+                .eq(AgentToolCallRecord::getSessionId, sessionId));
+        return count != null ? count : 0;
+    }
+
+    @Override
+    public Long getLatestRunIdWithToolCalls(Long sessionId) {
+        return findLatestRunIdWithToolCalls(sessionId);
+    }
+
+    @Override
     public long countByRunId(Long runId) {
         if (runId == null) {
             return 0;
@@ -174,7 +187,7 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
                 .eq(AgentToolCallRecord::getRunId, runId));
     }
 
-    private Long getLatestRunIdWithToolCalls(Long sessionId) {
+    private Long findLatestRunIdWithToolCalls(Long sessionId) {
         var w = new LambdaQueryWrapper<AgentToolCallRecord>()
                 .eq(AgentToolCallRecord::getSessionId, sessionId)
                 .orderByDesc(AgentToolCallRecord::getId)

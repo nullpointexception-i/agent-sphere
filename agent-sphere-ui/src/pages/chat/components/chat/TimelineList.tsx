@@ -9,12 +9,17 @@ import {
   CopyOutlined,
   DownOutlined,
   FileTextOutlined,
+  DislikeFilled,
+  DislikeOutlined,
+  LikeFilled,
+  LikeOutlined,
   LoadingOutlined,
   MessageOutlined,
   PauseCircleOutlined,
   RightOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  ShareAltOutlined,
   StopOutlined,
   SyncOutlined,
   ToolOutlined,
@@ -28,11 +33,14 @@ import {
   Divider,
   Image,
   Input,
+  Modal,
+  Radio,
   Tabs,
   Tag,
   Typography,
 } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIntl } from '@umijs/max';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
 import UsageChip, { formatTokens } from '../Usage';
@@ -54,6 +62,7 @@ import {
 interface TimelineListProps {
   rows: any[];
   hasMore: boolean;
+  sessionId?: number;
   onLoadOlder: () => void;
   onRespondClarify?: (c: any, resp: string) => void;
   onCancelClarification?: (row: any) => void;
@@ -137,6 +146,15 @@ function CopyButton({ text }: { text: string }) {
       icon={copied ? <CheckOutlined /> : <CopyOutlined />}
       onClick={onCopy}
       title="复制"
+      style={{
+        width: 24,
+        height: 24,
+        padding: 0,
+        border: '1px solid #e5e7eb',
+        borderRadius: 6,
+        background: '#fff',
+        color: '#8c8c8c',
+      }}
     />
   );
 }
@@ -201,55 +219,162 @@ function Block({
   );
 }
 
-function AssistantCard({ row }: any) {
+function AssistantCard({ row, sessionId }: any) {
+  const intl = useIntl();
+  const { message } = App.useApp();
   const content = row.content || {};
-  const thinking = content.thinking || '';
-  const reply = content.reply || '';
-  const [thinkingOpen, setThinkingOpen] = useState(true);
-  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const thinking = typeof content.thinking === 'string' ? content.thinking.trim() : '';
+  const reply = typeof content.reply === 'string' ? content.reply.trim() : '';
+  const hasThinking = thinking.length > 0 && thinking !== '{}';
+  const hasReply = reply.length > 0 && reply !== '{}';
+  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [feedback, setFeedback] = useState<string | undefined>(content.feedback);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareCount, setShareCount] = useState(3);
   const thinkingBoxRef = useRef<HTMLPreElement | null>(null);
-  // 流式思考持续增长：展开且内容变化时自动滚底（与子 Agent 步骤容器行为一致）
+  useEffect(() => {
+    setFeedback(content.feedback);
+  }, [content.feedback]);
   useEffect(() => {
     if (!thinkingOpen) return;
     const el = thinkingBoxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [thinking, thinkingOpen]);
-  useEffect(() => {
-    if (!autoCollapsed && reply.trim().length > 0) {
-      setAutoCollapsed(true);
-      setThinkingOpen(false);
+
+  const seconds =
+    content.durationMs != null && Number(content.durationMs) > 0
+      ? Math.max(1, Math.round(Number(content.durationMs) / 1000))
+      : null;
+  const interactionId = row.refInteractionId;
+  const submitFeedback = async (value: 'LIKE' | 'DISLIKE') => {
+    if (!sessionId || interactionId == null) return;
+    const next = feedback === value ? 'NONE' : value;
+    const previous = feedback;
+    setFeedback(next === 'NONE' ? undefined : next);
+    try {
+      await agentApi.sessions.feedback(sessionId, interactionId, row.runId, next);
+    } catch (e: any) {
+      setFeedback(previous);
+      message.error(e?.message || 'Feedback failed');
     }
-  }, [reply, autoCollapsed]);
+  };
+  const share = async () => {
+    if (!sessionId || row.runId == null) return;
+    try {
+      const res = await agentApi.sessions.share(sessionId, row.runId, shareCount);
+      if (res?.shareToken) {
+        setShareOpen(false);
+        window.open(`${window.location.origin}/share/${res.shareToken}`, '_blank', 'noopener,noreferrer');
+      }
+    } catch (e: any) {
+      message.error(e?.message || 'Share failed');
+    }
+  };
+
   return (
     <div>
-      <Block
-        title={`Model Reason${thinking ? '' : '（无）'}`}
-        open={thinkingOpen}
-        onToggle={() => setThinkingOpen((o) => !o)}
-      >
-        <pre
-          ref={thinkingBoxRef}
-          style={{
-            whiteSpace: 'pre-wrap',
-            fontSize: 12,
-            color: '#8c8c8c',
-            maxHeight: 240,
-            overflow: 'auto',
-          }}
-        >
-          {thinking || '（无推理内容）'}
-        </pre>
-      </Block>
-      <Block defaultOpen title={'回复'}>
-        <div style={{ fontSize: 13 }}>
-          {reply ? (
-            <XMarkdown content={reply} />
-          ) : (
-            <Typography.Text type="secondary">（流式中…）</Typography.Text>
+      {hasThinking && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setThinkingOpen((v) => !v)}
+            style={{
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: '#8c8c8c',
+              fontWeight: 600,
+              fontSize: 12,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {seconds != null
+              ? intl.formatMessage(
+                  {
+                    id: 'pages.chat.assistant.thoughtForSeconds',
+                    defaultMessage: 'Thought for {seconds}s',
+                  },
+                  { seconds },
+                )
+              : intl.formatMessage({
+                  id: 'pages.chat.assistant.thought',
+                  defaultMessage: 'Thought',
+                })}
+            {thinkingOpen ? <DownOutlined /> : <RightOutlined />}
+          </button>
+          {thinkingOpen && (
+            <pre
+              ref={thinkingBoxRef}
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontSize: 12,
+                color: '#8c8c8c',
+                maxHeight: 240,
+                overflow: 'auto',
+                marginTop: 4,
+              }}
+            >
+              {thinking}
+            </pre>
           )}
         </div>
-      </Block>
+      )}
+      {hasReply && (
+        <div style={{ fontSize: 13 }}>
+          <XMarkdown content={reply} />
+        </div>
+      )}
+      {(hasReply || hasThinking) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+          <Button
+            type="text"
+            size="small"
+            icon={feedback === 'LIKE' ? <LikeFilled /> : <LikeOutlined />}
+            onClick={() => submitFeedback('LIKE')}
+            title={intl.formatMessage({ id: 'pages.chat.assistant.like', defaultMessage: 'Like' })}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={feedback === 'DISLIKE' ? <DislikeFilled /> : <DislikeOutlined />}
+            onClick={() => submitFeedback('DISLIKE')}
+            title={intl.formatMessage({ id: 'pages.chat.assistant.dislike', defaultMessage: 'Dislike' })}
+          />
+          <Button
+            type="text"
+            size="small"
+            icon={<ShareAltOutlined />}
+            onClick={() => setShareOpen(true)}
+            title={intl.formatMessage({ id: 'pages.chat.assistant.share', defaultMessage: 'Share' })}
+          />
+          {hasReply && <CopyButton text={reply} />}
+        </div>
+      )}
       <UsageChip usage={content.usage} />
+      <Modal
+        open={shareOpen}
+        title={intl.formatMessage({ id: 'pages.chat.assistant.shareTitle', defaultMessage: 'Share conversation' })}
+        onCancel={() => setShareOpen(false)}
+        onOk={share}
+        okText={intl.formatMessage({ id: 'pages.chat.assistant.shareConfirm', defaultMessage: 'Create link' })}
+        cancelText={intl.formatMessage({ id: 'pages.chat.assistant.cancel', defaultMessage: 'Cancel' })}
+      >
+        <div style={{ marginBottom: 8, color: '#8c8c8c' }}>
+          {intl.formatMessage({
+            id: 'pages.chat.assistant.shareCountHint',
+            defaultMessage: 'Choose how many conversation turns to share',
+          })}
+        </div>
+        <Radio.Group value={shareCount} onChange={(e) => setShareCount(e.target.value)}>
+          <Radio.Button value={1}>1</Radio.Button>
+          <Radio.Button value={3}>3</Radio.Button>
+          <Radio.Button value={5}>5</Radio.Button>
+          <Radio.Button value={10}>10</Radio.Button>
+        </Radio.Group>
+      </Modal>
     </div>
   );
 }
@@ -306,6 +431,7 @@ function JsonBlock({ label, json }: { label: string; json?: string }) {
 }
 
 function TodoCard({ content }: { content: any }) {
+  const intl = useIntl();
   const todos = extractTodos(content);
   const realTotal = todoTotal(content);
   const { done } = todoProgress(todos);
@@ -342,13 +468,13 @@ function TodoCard({ content }: { content: any }) {
       >
         <span style={{ fontSize: 12, opacity: 0.7 }}>☑️</span>
         <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
-          待办进度
+          {intl.formatMessage({ id: 'pages.chat.tool.todoProgress', defaultMessage: 'Todo progress' })}
         </Typography.Text>
         {summaryChip}
       </div>
       {todos.length === 0 ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          无待办项
+          {intl.formatMessage({ id: 'pages.chat.tool.noTodos', defaultMessage: 'No todo items' })}
         </Typography.Text>
       ) : (
         sorted.map((t, i) => {
@@ -407,12 +533,13 @@ function TodoCard({ content }: { content: any }) {
           );
         })
       )}
-      <JsonBlock label="查看原始待办" json={content.args || content.artifact} />
+      <JsonBlock label={intl.formatMessage({ id: 'pages.chat.tool.rawTodo', defaultMessage: 'View raw todo data' })} json={content.args || content.artifact} />
     </div>
   );
 }
 
 function DocCard({ content }: { content: any }) {
+  const intl = useIntl();
   const summary = docSummary(content);
   const artifact = content.artifact;
   let artifactObj: any = null;
@@ -426,7 +553,7 @@ function DocCard({ content }: { content: any }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <FileTextOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
         <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
-          文档操作
+          {intl.formatMessage({ id: 'pages.chat.tool.docOperation', defaultMessage: 'Document operation' })}
         </Typography.Text>
         <ArrowRightOutlined style={{ fontSize: 11, color: '#a0a0a0' }} />
         <Typography.Text strong style={{ fontSize: 12 }}>
@@ -465,11 +592,12 @@ function GenericCard({
   hideJson?: boolean;
   stateLabel?: string;
 }) {
+  const intl = useIntl();
   const summary = genericSummary(content);
   const displayName =
-    content.displayName ||
+    (intl.locale === 'en-US' ? content.displayNameEn || content.displayName : content.displayName || content.displayNameEn) ||
     (family === 'todo' ? '待办写入' : content.toolName) ||
-    '工具';
+    intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
   return (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -501,24 +629,28 @@ function GenericCard({
           </span>
         )}
       </div>
-      {!hideJson && <JsonBlock label="查看原始参数" json={content.args} />}
-      {!hideJson && <JsonBlock label="查看原始结果" json={content.artifact} />}
+      {!hideJson && <JsonBlock label={intl.formatMessage({ id: 'pages.chat.tool.rawArgs', defaultMessage: 'View raw arguments' })} json={content.args} />}
+      {!hideJson && <JsonBlock label={intl.formatMessage({ id: 'pages.chat.tool.rawResult', defaultMessage: 'View raw result' })} json={content.artifact} />}
     </div>
   );
 }
 
 function ToolCard({ row }: any) {
+  const intl = useIntl();
   const content = row.content || {};
   if (content.toolName === 'builtin_13' || content.displayName === '当前时间'
       || content.displayName === 'Current Time') {
     return <CurrentTimeCard content={content} state={row.state} />;
   }
   const family = toolFamily(content, content.displayName);
-  const name = content.displayName || row.title || 'tool';
+  const name = (intl.locale === 'en-US'
+    ? content.displayNameEn || content.displayName
+    : content.displayName || content.displayNameEn) || row.title || intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
   // 「委派子 Agent」工具调用在下方已由 SubAgentCard 完整展示，顶部标题行冗余，隐藏。
   const isDelegate = /委派|子 ?agent/i.test(name);
   // 浏览器工具：后端把超时/失败编码进 artifact（row.state 恒为 SUCCEEDED），此处按 artifact 解析真实状态。
   const isBrowser = isBrowserTool(content, content.displayName);
+  const isSkillLibrary = content.toolName === 'builtin_8' || /技能库|skill library/i.test(name);
   const brow = browserResult(content, content.displayName);
   const stateLabel = brow.failed
     ? brow.errorCategory === 'timeout'
@@ -549,7 +681,7 @@ function ToolCard({ row }: any) {
         <GenericCard
           content={content}
           family={family}
-          hideJson={isDelegate || isBrowser}
+          hideJson={isDelegate || isBrowser || isSkillLibrary}
           stateLabel={stateLabel}
         />
       )}
@@ -558,6 +690,7 @@ function ToolCard({ row }: any) {
 }
 
 function CurrentTimeCard({ content, state }: any) {
+  const intl = useIntl();
   let time = '';
   let timezone = '';
   try {
@@ -574,7 +707,7 @@ function CurrentTimeCard({ content, state }: any) {
     <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
       <ClockCircleOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
       <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-        当前时间
+        {intl.formatMessage({ id: 'pages.chat.tool.currentTime', defaultMessage: 'Current time' })}
       </Typography.Text>
       {display && (
         <>
@@ -592,12 +725,6 @@ function CurrentTimeCard({ content, state }: any) {
   );
 }
 
-const APPROVAL_DECISION_LABEL: Record<string, string> = {
-  ALLOW_ONCE: '允许一次',
-  ALLOW_RUN: '本次消息内允许',
-  ALLOW_SESSION: '本次会话内允许',
-  DENY: '拒绝',
-};
 
 function parseJsonArray(raw?: string): any[] {
   if (!raw) return [];
@@ -610,6 +737,7 @@ function parseJsonArray(raw?: string): any[] {
 }
 
 function ToolApprovalCard({ row }: any) {
+  const intl = useIntl();
   const content = row.content || {};
   const calls = parseJsonArray(content.toolCalls);
   const decisions = parseJsonArray(content.decisions);
@@ -622,7 +750,11 @@ function ToolApprovalCard({ row }: any) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <SafetyCertificateOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-          {content.text || row.title || '工具授权'}
+          {row.state === 'PENDING'
+            ? intl.formatMessage({ id: 'pages.chat.tool.approvalWaiting', defaultMessage: 'Waiting for tool approval' })
+            : row.state === 'CANCELLED'
+              ? intl.formatMessage({ id: 'pages.chat.tool.approvalCancelled', defaultMessage: 'Tool approval cancelled' })
+              : intl.formatMessage({ id: 'pages.chat.tool.approvalHandled', defaultMessage: 'Tool approval handled' })}
         </Typography.Text>
         <StateTag state={row.state} />
       </div>
@@ -633,16 +765,22 @@ function ToolApprovalCard({ row }: any) {
             <div key={String(call.callId || index)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
               <Typography.Text style={{ fontSize: 12 }}>
-                {call.displayName || call.toolName || '工具'}
+                {(intl.locale === 'en-US' ? call.displayNameEn || call.displayName : call.displayName || call.displayNameEn) || call.toolName || intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' })}
                 {call.action ? ` · ${call.action}` : ''}
               </Typography.Text>
               {decision ? (
                 <Tag color={decision === 'DENY' ? 'red' : 'blue'} style={{ margin: 0 }}>
-                  {APPROVAL_DECISION_LABEL[decision] || decision}
+                  {intl.formatMessage({
+                    id: decision === 'DENY' ? 'pages.chat.tool.deny'
+                      : decision === 'ALLOW_RUN' ? 'pages.chat.tool.allowRun'
+                        : decision === 'ALLOW_SESSION' ? 'pages.chat.tool.allowSession'
+                          : 'pages.chat.tool.allowOnce',
+                    defaultMessage: decision,
+                  })}
                 </Tag>
               ) : (
                 <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                  等待处理
+                  {intl.formatMessage({ id: 'pages.chat.tool.waiting', defaultMessage: 'Waiting' })}
                 </Typography.Text>
               )}
             </div>
@@ -654,6 +792,7 @@ function ToolApprovalCard({ row }: any) {
 }
 
 function ClarificationCard({ row }: any) {
+  const intl = useIntl();
   const content = row.content || {};
   const options = parseJsonArray(content.options);
   const labelOf = (value: string) => {
@@ -687,10 +826,10 @@ function ClarificationCard({ row }: any) {
       <div style={{ marginTop: 6 }}>
         {row.state === 'PENDING' ? (
           <Typography.Text type="secondary">
-            请在底部浮层中作答
+            {intl.formatMessage({ id: 'pages.chat.tool.waitingInDrawer', defaultMessage: 'Answer in the bottom panel' })}
           </Typography.Text>
         ) : content.response === '__dismissed__' || row.state === 'CANCELLED' ? (
-          <Typography.Text type="secondary">已取消</Typography.Text>
+          <Typography.Text type="secondary">{intl.formatMessage({ id: 'pages.chat.tool.cancelled', defaultMessage: 'Cancelled' })}</Typography.Text>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {selected.length > 0 && (
@@ -704,7 +843,7 @@ function ClarificationCard({ row }: any) {
             )}
             {text && <Typography.Text>{text}</Typography.Text>}
             {selected.length === 0 && !text && (
-              <Typography.Text type="secondary">已应答</Typography.Text>
+              <Typography.Text type="secondary">{intl.formatMessage({ id: 'pages.chat.tool.answered', defaultMessage: 'Answered' })}</Typography.Text>
             )}
           </div>
         )}
@@ -715,6 +854,7 @@ function ClarificationCard({ row }: any) {
 
 /** 子 Agent 单步：LLM 交互对齐主 Agent（Model Reason + 回复），标题不再裸展示内部枚举名。 */
 function SubAgentLlmItem({ s }: any) {
+  const intl = useIntl();
   const reasoningBoxRef = useRef<HTMLPreElement | null>(null);
   // 子 Agent 流式推理持续增长：贴底滚动（与主 Agent 思考容器一致）
   useEffect(() => {
@@ -725,7 +865,7 @@ function SubAgentLlmItem({ s }: any) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <BulbOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
-        <Typography.Text strong>模型推理</Typography.Text>
+        <Typography.Text strong>{intl.formatMessage({ id: 'pages.chat.tool.thought', defaultMessage: 'Model reason' })}</Typography.Text>
         {s.modelName && (
           <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>
             {s.modelName}
@@ -754,7 +894,7 @@ function SubAgentLlmItem({ s }: any) {
         </Block>
       )}
       {s.reply && (
-        <Block defaultOpen title="回复">
+        <Block defaultOpen title={intl.formatMessage({ id: 'pages.chat.tool.reply', defaultMessage: 'Reply' })}>
           <div style={{ fontSize: 12 }}>
             <XMarkdown content={s.reply} />
           </div>
@@ -771,6 +911,7 @@ function SubAgentLlmItem({ s }: any) {
 
 /** 子 Agent 单步：工具调用对齐主 Agent 工具卡（🛠️ 显示名 + 状态 + 详情）。 */
 function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
+  const intl = useIntl();
   const argsJson = s.argumentsJson
     ? JSON.stringify(JSON.parse(s.argumentsJson), null, 2)
     : s.argumentsJson;
@@ -779,7 +920,7 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <ToolOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>
-          {s.displayNameCn || s.displayNameEn || s.toolName || '工具'}
+          {(intl.locale === 'en-US' ? s.displayNameEn || s.displayNameCn : s.displayNameCn || s.displayNameEn) || s.toolName || intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' })}
         </Typography.Text>
         <StateTag state={s.toolStatus || s.status} />
       </div>
@@ -787,7 +928,7 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
         <UserImages images={s.images} />
       )}
       {/* 受控：最新一条 Tool 详情默认展开，下一条到来时关闭之前的（单一展开） */}
-      <Block title="详情" open={detailOpen} onToggle={onDetailToggle}>
+      <Block title={intl.formatMessage({ id: 'pages.chat.tool.details', defaultMessage: 'Details' })} open={detailOpen} onToggle={onDetailToggle}>
         {argsJson && (
           <pre
             style={{
@@ -823,6 +964,7 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
 }
 
 function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
+  const intl = useIntl();
   const [open, setOpen] = useState(false);
   const [steps, setSteps] = useState<any[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -917,7 +1059,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
         <RobotOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>
           {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
-            '子 Agent'}
+            intl.formatMessage({ id: 'pages.chat.tool.subagent', defaultMessage: 'Sub-agent' })}
         </Typography.Text>
         <StateTag state={row.state} />
         {open && isRunning && (
@@ -935,7 +1077,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
           style={{ padding: 0, fontSize: 12 }}
         >
           {open ? <DownOutlined /> : <RightOutlined />}
-          {open ? '收起步骤' : '展开步骤'}
+          {open ? intl.formatMessage({ id: 'pages.chat.tool.collapse', defaultMessage: 'Collapse' }) : intl.formatMessage({ id: 'pages.chat.tool.expand', defaultMessage: 'Expand' })}
         </Button>
         {open && (
           <div
@@ -979,7 +1121,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
               })
             ) : (
               <Typography.Text type="secondary">
-                {isRunning ? '（等待实时步骤…）' : '（无详细步骤）'}
+                {isRunning ? intl.formatMessage({ id: 'pages.chat.tool.waitingSteps', defaultMessage: 'Waiting for live steps…' }) : intl.formatMessage({ id: 'pages.chat.tool.noSteps', defaultMessage: 'No detailed steps' })}
               </Typography.Text>
             )}
           </div>
@@ -1076,6 +1218,7 @@ function ParallelSubAgentTabs({
   loadSubAgentSteps,
   subAgentLive,
 }: any) {
+  const intl = useIntl();
   const keys = members.map((m: any) => subAgentMemberKey(m));
   const [activeKey, setActiveKey] = useState<string | undefined>(undefined);
   const effectiveKey =
@@ -1098,7 +1241,7 @@ function ParallelSubAgentTabs({
           marginBottom: 2,
         }}
       >
-        <Tag style={{ margin: 0 }}>子 Agent</Tag>
+        <Tag style={{ margin: 0 }}>{intl.formatMessage({ id: 'pages.chat.tool.subagent', defaultMessage: 'Sub-agent' })}</Tag>
         <Tag style={{ margin: 0, fontSize: 11, color: '#999' }}>
           ×{members.length} 并行
         </Tag>
@@ -1113,7 +1256,7 @@ function ParallelSubAgentTabs({
         items={members.map((m: any, i: number) => {
           const name =
             stripSubAgentMarkerPrefix(m.content?.displayName || m.title) ||
-            `子 Agent ${i + 1}`;
+            `${intl.formatMessage({ id: 'pages.chat.tool.subagent', defaultMessage: 'Sub-agent' })} ${i + 1}`;
           return {
             key: subAgentMemberKey(m),
             label: (
@@ -1142,6 +1285,7 @@ function ParallelSubAgentTabs({
 
 function RowCard({
   row,
+  sessionId,
   onRespondClarify,
   onCancelClarification,
   loadSubAgentSteps,
@@ -1151,11 +1295,7 @@ function RowCard({
   const isUser = row.kind === 'user';
   // 复制目标：用户消息 / 助手回复正文（markdown 原文）
   const isAssistant = row.kind === 'assistant';
-  const copyText = isUser
-    ? row.content?.text || row.title || ''
-    : isAssistant
-      ? row.content?.reply || ''
-      : '';
+  const copyText = isUser ? row.content?.text || row.title || '' : '';
 
   // 压缩行：分割线 + 压缩模型的实时输出（生成中逐 token 追加，刷新后取 summary_after）
   if (row.kind === 'compaction') {
@@ -1248,7 +1388,7 @@ function RowCard({
           </>
         );
       case 'assistant':
-        return <AssistantCard row={row} />;
+        return <AssistantCard row={row} sessionId={sessionId} />;
       case 'tool':
         return <ToolCard row={row} />;
       case 'tool_approval':
@@ -1350,6 +1490,7 @@ function RowCard({
 export default function TimelineList({
   rows,
   hasMore,
+  sessionId,
   onLoadOlder,
   onRespondClarify,
   onCancelClarification,
@@ -1410,6 +1551,7 @@ export default function TimelineList({
           <RowCard
             key={`${it.row.seq}-${it.row.kind}`}
             row={it.row}
+            sessionId={sessionId}
             onRespondClarify={onRespondClarify}
             onCancelClarification={onCancelClarification}
             loadSubAgentSteps={loadSubAgentSteps}

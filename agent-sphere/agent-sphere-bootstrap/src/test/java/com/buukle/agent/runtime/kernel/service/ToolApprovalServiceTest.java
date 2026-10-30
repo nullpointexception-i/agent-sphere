@@ -83,7 +83,7 @@ class ToolApprovalServiceTest {
         when(approvalSpi.getByApprovalId("a1")).thenReturn(approval(callsJson(ToolApprovalScope.SESSION)));
         assertTrue(service.resolve(1L, 2L, "a1",
                 "[{\"callId\":\"call-1\",\"decision\":\"ALLOW_SESSION\"}]"));
-        verify(grantSpi, atLeastOnce()).grant(eq(1L), eq(2L), eq("builtin:6"), eq("SESSION"), anyString());
+        verify(grantSpi, atLeastOnce()).grant(eq(1L), eq(2L), eq("builtin:6"), anyString(), anyString(), eq("SESSION"), anyString());
         verify(approvalSpi).resolve(eq("a1"), anyString(), eq("APPROVED"), eq("user"));
     }
 
@@ -102,7 +102,7 @@ class ToolApprovalServiceTest {
         when(approvalSpi.getByApprovalId("a1")).thenReturn(approval(callsJson(ToolApprovalScope.ONCE)));
         assertTrue(service.resolve(1L, 2L, "a1",
                 "[{\"callId\":\"call-1\",\"decision\":\"ALLOW_ONCE\"}]"));
-        verify(grantSpi, never()).grant(eq(1L), eq(2L), anyString(), anyString(), anyString());
+        verify(grantSpi, never()).grant(eq(1L), eq(2L), anyString(), anyString(), anyString(), anyString(), anyString());
         verify(grantSpi, never()).deny(eq(1L), eq(2L), anyString(), anyString());
     }
 
