@@ -243,6 +243,9 @@ export default {
   'pages.chat.tool.approvalCancelled': '已取消工具授权',
   'pages.chat.tool.wait': '等待',
   'pages.chat.tool.waitForSeconds': '{seconds} 秒',
+  'pages.chat.tool.waitCompleted': '等待完成',
+  'pages.chat.tool.waitFailed': '等待失败',
+  'pages.chat.tool.waitRunning': '等待中',
   'pages.chat.assistant.thinking': '思考中',
   'pages.chat.runMode.write': '写模式',
   'pages.chat.runMode.readOnly': '只读模式',
@@ -597,7 +600,8 @@ export default {
   'pages.admin.settings.cleanup.noData': '统计中…',
   'pages.admin.settings.cleanup.progress.hint':
     '已处理 {done} / {total} 个会话 · 已清理 {rows} 行 · 已用 {elapsed} ms',
-  'pages.admin.settings.cleanup.alreadyRunning': '已有清理在执行，切换到它的进度',
+  'pages.admin.settings.cleanup.alreadyRunning':
+    '已有清理在执行，切换到它的进度',
   'pages.admin.settings.cleanup.rows': '删除行数',
   'pages.admin.settings.cleanup.skipped': '本次未执行',
   'pages.admin.settings.cleanup.failed': '执行失败，请查看后端日志',
@@ -607,12 +611,14 @@ export default {
   'pages.admin.settings.cleanup.real.btn': '立即清理',
   'pages.admin.settings.cleanup.runs.btn': '执行记录',
   'pages.admin.settings.cleanup.modal.title': '会话清理报告',
-  'pages.admin.settings.cleanup.alert.dryRun': '这是预演结果，尚未删除任何数据。',
+  'pages.admin.settings.cleanup.alert.dryRun':
+    '这是预演结果，尚未删除任何数据。',
   'pages.admin.settings.cleanup.alert.irreversible':
     '清理为不可逆硬删：关联会话、运行记录、交互正文、截图附件均已永久删除，无法恢复。',
   'pages.admin.settings.cleanup.alert.activeBlocked':
     '另有 {count} 个会话因仍有进行中的运行或任务被保护，本次未清理。若这个数量长期偏大，说明保留天数相对业务节奏太激进。',
-  'pages.admin.settings.cleanup.alert.truncated': '本轮已达批次上限，仍有数据未清理，可稍后再次执行。',
+  'pages.admin.settings.cleanup.alert.truncated':
+    '本轮已达批次上限，仍有数据未清理，可稍后再次执行。',
   'pages.admin.settings.cleanup.cutoff': '过期判定线',
   'pages.admin.settings.cleanup.retention': '保留天数',
   'pages.admin.settings.cleanup.sessions': '会话数',
@@ -647,7 +653,8 @@ export default {
   'pages.admin.settings.cleanup.runs.col.startedAt': '开始时间',
   'pages.admin.settings.cleanup.runs.skipReason': '跳过原因',
   'pages.admin.settings.cleanup.runs.errorMessage': '错误',
-  'pages.admin.settings.cleanup.runs.truncated': '本轮已达批次上限，仍有数据未清理',
+  'pages.admin.settings.cleanup.runs.truncated':
+    '本轮已达批次上限，仍有数据未清理',
   'pages.admin.settings.plugin.upload.btn': '上传安装包',
   'pages.admin.settings.plugin.upload.success': '上传成功',
   'pages.admin.settings.plugin.delete.btn': '删除',
@@ -790,7 +797,8 @@ export default {
   'pages.chat.usageTrend.window': '仅显示最近 {limit} 条',
   'pages.chat.usageTrend.older': '（还有更早数据）',
   'pages.chat.usageTrend.zoomed': '已放大，自动刷新暂停',
-  'pages.chat.usageTrend.rawSeriesHint': '命中/未命中曲线为单次交互原始 token 数',
+  'pages.chat.usageTrend.rawSeriesHint':
+    '命中/未命中曲线为单次交互原始 token 数',
   'pages.chat.loadFailed': '加载失败',
   'pages.delete.success': '已删除',
   'pages.update.success': '已更新',
@@ -901,5 +909,6 @@ export default {
   'pages.admin.settings.skillSyncRuns.col.startedAt': '开始时间',
   'pages.admin.settings.skillSyncRuns.skipReason': '跳过原因',
   'pages.admin.settings.skillSyncRuns.errorMessage': '错误',
-  'pages.admin.settings.skillSync.alreadyRunning': '已有同步在执行，切换到它的进度',
+  'pages.admin.settings.skillSync.alreadyRunning':
+    '已有同步在执行，切换到它的进度',
 };

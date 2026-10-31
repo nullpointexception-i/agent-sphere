@@ -32,6 +32,7 @@ import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.util.json.JsonUtils;
+import com.buukle.agent.util.json.ToolCallReason;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.buukle.agent.model.dtvo.complete.FinishReason;
 import com.buukle.agent.runtime.kernel.contract.CompactionOutcome;
@@ -664,7 +665,7 @@ public class SessionRunner {
                         .type(RunnerConstants.TOOL_TYPE_FUNCTION)
                         .function(FunctionDefinitionDTO.builder()
                                 .name(tc.name())
-                                .arguments(tc.arguments())
+                                .arguments(ToolCallReason.strip(tc.arguments()))
                                 .build())
                         .build());
             }

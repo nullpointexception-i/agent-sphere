@@ -89,6 +89,7 @@ Instance-level `agent_instance.max_loop_count` overrides all of these for that i
 | `submit-timeout` | `30s` | Tool submission timeout |
 | `execution-timeout` | `60s` | Single batch tool execution timeout |
 | `cli-timeout` | `30s` | CLI tool timeout |
+| `call-reason-enabled` | `true` | Inject a `_reason` argument into every visible tool schema for the tool-card call reason |
 
 ### `tool.web-read` / `tool.web-fetch`
 

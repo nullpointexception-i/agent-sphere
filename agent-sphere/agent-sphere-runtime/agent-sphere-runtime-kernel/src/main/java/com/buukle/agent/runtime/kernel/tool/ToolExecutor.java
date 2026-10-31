@@ -26,6 +26,7 @@ import com.buukle.agent.runtime.kernel.service.CliExecutorService;
 import com.buukle.agent.runtime.kernel.service.ToolResultReadService;
 import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
 import com.buukle.agent.runtime.kernel.runner.sub.SubAgentConstants;
+import com.buukle.agent.util.json.ToolCallReason;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -83,7 +84,8 @@ public class ToolExecutor {
         try {
             String type = tool.getCapabilityType();
             Map<String, Object> binding = tool.getExecBinding();
-            String args = tc.arguments() != null ? tc.arguments() : RunnerConstants.EMPTY_JSON_ARGS;
+            String args = ToolCallReason.strip(
+                    tc.arguments() != null ? tc.arguments() : RunnerConstants.EMPTY_JSON_ARGS);
             String runMode = ctx.getKernelContext() != null && ctx.getKernelContext().getRun() != null
                     ? ctx.getKernelContext().getRun().getRunMode() : null;
             String denied = ToolAccessGuard.denyReason(tool, args, runMode);

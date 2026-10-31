@@ -18,6 +18,7 @@ import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
 import com.buukle.agent.util.json.JsonUtils;
+import com.buukle.agent.util.json.ToolCallReason;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -306,7 +307,7 @@ public class HistoryLoader {
                 .type(RunnerConstants.TOOL_TYPE_FUNCTION)
                 .function(FunctionDefinitionDTO.builder()
                         .name(c.getToolName())
-                        .arguments(c.getArgumentsJson())
+                        .arguments(ToolCallReason.strip(c.getArgumentsJson()))
                         .build())
                 .build();
     }

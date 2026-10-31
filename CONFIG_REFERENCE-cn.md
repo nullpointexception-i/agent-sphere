@@ -76,6 +76,7 @@ Spring 标准块（`spring.*`、`logging.*`、`mybatis-plus.*`、`server.*`）�
 | `submit-timeout` | `30s` | 工具提交超时 |
 | `execution-timeout` | `60s` | 单批工具执行超时 |
 | `cli-timeout` | `30s` | CLI 工具超时 |
+| `call-reason-enabled` | `true` | 给所有可见工具 schema 注入 `_reason` 参数，用于工具卡展示调用理由 |
 
 ### `tool.web-read` / `tool.web-fetch`
 

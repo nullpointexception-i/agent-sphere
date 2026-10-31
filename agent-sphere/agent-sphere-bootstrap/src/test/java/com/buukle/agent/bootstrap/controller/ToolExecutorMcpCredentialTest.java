@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -99,6 +100,23 @@ class ToolExecutorMcpCredentialTest {
 
         verify(mcpSpi).executeTool(eq("http://bole/api/v1/mcp/sourcing"),
                 eq("check_candidate_history"), eq("{}"), eq(CREDENTIAL));
+    }
+
+    @Test
+    void callReasonIsStrippedBeforeMcpForwarding() {
+        org.mockito.Mockito.when(credentialStore.get(SESSION_ID)).thenReturn(null);
+        org.mockito.Mockito.when(mcpSpi.executeTool(anyString(), anyString(), anyString(), any()))
+                .thenReturn("{}");
+
+        toolExecutor.execute(new TurnToolCall("t1", "check_candidate_history",
+                        "{\"candidateId\":7,\"_reason\":\"复核候选人\"}"),
+                SESSION_ID, 1L, mcpTool());
+
+        ArgumentCaptor<String> args = ArgumentCaptor.forClass(String.class);
+        verify(mcpSpi).executeTool(anyString(), anyString(), args.capture(), any());
+        assertFalse(args.getValue().contains("_reason"),
+                "保留参数不能发给 MCP server");
+        assertTrue(args.getValue().contains("candidateId"));
     }
 
     @Test

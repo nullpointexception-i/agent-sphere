@@ -14,6 +14,7 @@ import {
   textContainsView,
   todoProgress,
   todoTotal,
+  toolCallReason,
   toolFamily,
   toolResultText,
   webPageView,
@@ -116,7 +117,21 @@ describe('toolRenderers', () => {
       const s = docSummary({
         args: JSON.stringify({ action: 'read', documentId: 7 }),
       });
-      expect(s).toBe('read document#7');
+      expect(s).toBe('read document #7');
+    });
+
+    it('prefers artifact/meta title over documentId', () => {
+      const fromArtifact = docSummary({
+        args: JSON.stringify({ action: 'read', documentId: 7 }),
+        artifact: JSON.stringify({ documentId: 7, title: '季度报告' }),
+      });
+      expect(fromArtifact).toBe('read document 季度报告');
+
+      const fromMeta = docSummary({
+        args: JSON.stringify({ action: 'patch', documentId: 7 }),
+        meta: { documentId: 7, title: '季度报告' },
+      });
+      expect(fromMeta).toBe('patch document 季度报告');
     });
   });
 
@@ -371,6 +386,14 @@ describe('toolRenderers', () => {
         },
       ]);
       expect(toolResultText(content)).toContain('Wrapped');
+    });
+  });
+
+  describe('toolCallReason', () => {
+    it('prefers meta.reason and falls back to args._reason', () => {
+      expect(toolCallReason({ meta: { reason: ' 检查页面 ' } })).toBe('检查页面');
+      expect(toolCallReason({ args: JSON.stringify({ _reason: '读取文档' }) })).toBe('读取文档');
+      expect(toolCallReason({})).toBe('');
     });
   });
 });

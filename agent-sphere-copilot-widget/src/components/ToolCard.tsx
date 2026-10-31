@@ -290,9 +290,19 @@ export function DocCard({ content }: { content: ToolContent }) {
   }
   return (
     <div className="aw-tool-doc">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <DocIcon />
-        <span>{summary}</span>
+        <span
+          title={summary}
+          style={{
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {summary}
+        </span>
       </div>
       {detail && (
         <div style={{ fontSize: 11, color: '#9ca3af' }}>{detail}</div>

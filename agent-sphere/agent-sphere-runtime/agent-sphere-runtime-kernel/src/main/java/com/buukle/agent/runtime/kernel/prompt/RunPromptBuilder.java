@@ -3,16 +3,20 @@ package com.buukle.agent.runtime.kernel.prompt;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.runner.sub.SubAgentConstants;
+import com.buukle.agent.util.json.ToolCallReason;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +27,10 @@ public class RunPromptBuilder {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
+
+    /** 是否给工具 schema 注入 `_reason`；关闭后历史数据仍可展示。 */
+    @Value("${buukle.agent.tool.call-reason-enabled:true}")
+    private boolean callReasonEnabled = true;
 
     public String buildSystemPrompt(KernelContext ctx) {
         StringBuilder sb = new StringBuilder();
@@ -42,6 +50,9 @@ public class RunPromptBuilder {
             }
         }
         sb.append(RunnerConstants.PROMPT_TOOLS_FOOTER);
+        if (callReasonEnabled && tools != null && !tools.isEmpty()) {
+            sb.append(RunnerConstants.PROMPT_CALL_REASON_RULES);
+        }
         boolean hasTools = tools != null && !tools.isEmpty();
         boolean canAskUser = hasTools && tools.stream()
                 .anyMatch(t -> ChatClarification.CLARIFICATION_TOOL_NAME.equals(t.getLlmToolName()));
@@ -114,6 +125,9 @@ public class RunPromptBuilder {
         for (RuntimeTool tool : sorted) {
             try {
                 Map<String, Object> params = JSON.readValue(tool.getParametersSchemaJson(), MAP_TYPE);
+                if (callReasonEnabled && !FinishConstants.TOOL_NAME.equals(tool.getLlmToolName())) {
+                    injectCallReason(params);
+                }
                 defs.add(ToolDefinitionDTO.builder()
                         .type(RunnerConstants.TOOL_TYPE_FUNCTION)
                         .function(FunctionDefinitionDTO.builder()
@@ -127,5 +141,29 @@ public class RunPromptBuilder {
             }
         }
         return defs;
+    }
+
+    /** 给工具 schema 注入非必填的 `_reason`，不覆盖工具已有同名字段。 */
+    @SuppressWarnings("unchecked")
+    private static void injectCallReason(Map<String, Object> params) {
+        if (params == null) {
+            return;
+        }
+        Object rawProperties = params.get("properties");
+        Map<String, Object> properties;
+        if (rawProperties instanceof Map<?, ?>) {
+            properties = (Map<String, Object>) rawProperties;
+        } else {
+            properties = new LinkedHashMap<>();
+            params.put("properties", properties);
+        }
+        if (properties.containsKey(ToolCallReason.REASON_KEY)) {
+            return;
+        }
+        Map<String, Object> reason = new LinkedHashMap<>();
+        reason.put("type", "string");
+        reason.put("description", ToolCallReason.SCHEMA_DESCRIPTION);
+        reason.put("maxLength", ToolCallReason.MAX_REASON_CHARS);
+        properties.put(ToolCallReason.REASON_KEY, reason);
     }
 }

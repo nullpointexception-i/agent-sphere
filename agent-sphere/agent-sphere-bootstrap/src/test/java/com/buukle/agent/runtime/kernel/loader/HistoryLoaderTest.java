@@ -129,6 +129,25 @@ class HistoryLoaderTest {
     }
 
     @Test
+    void toolHistoryArgsStripCallReason() {
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
+                interaction("assistant text", "2026-10-29 04:12:21")));
+        AgentToolCallRecordVO call = toolCall(1L, "call-1", "04:12:22");
+        call.setArgumentsJson("{\"url\":\"https://example.com\",\"_reason\":\"检查页面\"}");
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(call));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        ChatMessageDTO assistant = messages.stream()
+                .filter(m -> "assistant".equals(m.getRole()) && m.getToolCalls() != null)
+                .findFirst().orElseThrow();
+        String args = assistant.getToolCalls().get(0).getFunction().getArguments();
+        assertFalse(args.contains("_reason"), "模型历史不应重复携带调用理由");
+        assertTrue(args.contains("https://example.com"));
+    }
+
+    @Test
     void browserHistoryKeepsFullTextBelowThreshold() {
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(

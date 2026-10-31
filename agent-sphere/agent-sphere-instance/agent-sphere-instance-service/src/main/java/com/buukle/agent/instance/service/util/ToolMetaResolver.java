@@ -5,6 +5,7 @@ import com.buukle.agent.instance.domain.AgentToolCallRecord;
 import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 import com.buukle.agent.instance.dtvo.enums.ToolCallRecordStatus;
 import com.buukle.agent.util.json.JsonUtils;
+import com.buukle.agent.util.json.ToolCallReason;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.net.URI;
@@ -41,6 +42,7 @@ public final class ToolMetaResolver {
         String tool = record.getToolName() == null ? "" : record.getToolName();
 
         put(meta, "status", record.getStatus());
+        put(meta, "reason", ToolCallReason.extract(record.getArgumentsJson()));
         Long durationMs = durationMs(record);
         if (durationMs != null) {
             meta.put("durationMs", durationMs);

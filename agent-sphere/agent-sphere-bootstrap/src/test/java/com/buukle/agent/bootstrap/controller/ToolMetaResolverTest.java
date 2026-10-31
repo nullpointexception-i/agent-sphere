@@ -18,7 +18,7 @@ class ToolMetaResolverTest {
     @Test
     void buildsWebMetaWithDurationAndBodyChars() {
         AgentToolCallRecord record = record("builtin_2",
-                "{\"url\":\"https://example.com/a\"}",
+                "{\"url\":\"https://example.com/a\",\"_reason\":\"读取页面确认内容\"}",
                 "{\"title\":\"Example\",\"markdown\":\"hello\",\"statusCode\":200}");
         record.setCreatedAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0));
         record.setUpdatedAt(record.getCreatedAt().plusNanos(1_200_000_000L));
@@ -26,6 +26,7 @@ class ToolMetaResolverTest {
         Map<String, Object> meta = ToolMetaResolver.build(record, null);
 
         assertEquals(1200L, meta.get("durationMs"));
+        assertEquals("读取页面确认内容", meta.get("reason"));
         assertEquals("https://example.com/a", meta.get("url"));
         assertEquals("example.com", meta.get("host"));
         assertEquals("Example", meta.get("title"));

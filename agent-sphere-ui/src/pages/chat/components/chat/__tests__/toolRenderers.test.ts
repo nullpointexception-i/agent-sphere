@@ -10,6 +10,7 @@ import {
   skillView,
   textContainsView,
   todoProgress,
+  toolCallReason,
   toolFamily,
   toolResultText,
   webPageView,
@@ -73,7 +74,13 @@ describe('toolRenderers', () => {
       const todos = extractTodos({
         args: JSON.stringify({
           todos: [
-            { content: '1. 打开页面', status: 'pending', priority: 'medium', skillId: 123, stepId: 'step1' },
+            {
+              content: '1. 打开页面',
+              status: 'pending',
+              priority: 'medium',
+              skillId: 123,
+              stepId: 'step1',
+            },
           ],
         }),
       });
@@ -98,6 +105,24 @@ describe('toolRenderers', () => {
     it('renders action + document when no title', () => {
       const s = docSummary({ args: JSON.stringify({ action: 'update' }) });
       expect(s).toBe('update document');
+    });
+
+    it('prefers meta/artifact title and falls back to #documentId', () => {
+      expect(
+        docSummary({
+          args: JSON.stringify({ action: 'read', documentId: 7 }),
+          artifact: JSON.stringify({ documentId: 7, title: '季度报告' }),
+        }),
+      ).toBe('read document 季度报告');
+      expect(
+        docSummary({
+          args: JSON.stringify({ action: 'patch', documentId: 7 }),
+          meta: { documentId: 7, title: '季度报告' },
+        }),
+      ).toBe('patch document 季度报告');
+      expect(
+        docSummary({ args: JSON.stringify({ action: 'read', documentId: 7 }) }),
+      ).toBe('read document #7');
     });
   });
 
@@ -294,7 +319,9 @@ describe('toolRenderers', () => {
     });
 
     it('returns empty list for non-search payloads', () => {
-      expect(searchResultView({ artifact: JSON.stringify({ status: 'ok' }) })).toEqual([]);
+      expect(
+        searchResultView({ artifact: JSON.stringify({ status: 'ok' }) }),
+      ).toEqual([]);
     });
 
     it('unwraps MCP content[].text JSON payloads', () => {
@@ -304,7 +331,11 @@ describe('toolRenderers', () => {
             {
               type: 'text',
               text: JSON.stringify([
-                { title: 'Wrapped', url: 'https://wrapped.example/x', description: 'from text' },
+                {
+                  title: 'Wrapped',
+                  url: 'https://wrapped.example/x',
+                  description: 'from text',
+                },
               ]),
             },
           ],
@@ -319,6 +350,18 @@ describe('toolRenderers', () => {
         },
       ]);
       expect(toolResultText(content)).toContain('Wrapped');
+    });
+  });
+
+  describe('toolCallReason', () => {
+    it('prefers meta.reason and falls back to args._reason', () => {
+      expect(toolCallReason({ meta: { reason: ' 检查页面 ' } })).toBe(
+        '检查页面',
+      );
+      expect(
+        toolCallReason({ args: JSON.stringify({ _reason: '读取文档' }) }),
+      ).toBe('读取文档');
+      expect(toolCallReason({})).toBe('');
     });
   });
 });

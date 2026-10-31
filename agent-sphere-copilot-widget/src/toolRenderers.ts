@@ -107,20 +107,35 @@ export function toolFamily(
   return 'other';
 }
 
-/** 文档工具摘要：`create document <title>`。 */
+/** 文档工具摘要：`create document <title>`；标题优先 meta/artifact，缺失回退 #documentId。 */
 export function docSummary(content: ToolContent): string {
-  const payload = parsePayload(content);
-  const action = typeof payload?.action === 'string' ? payload.action : '操作';
-  const title =
-    typeof payload?.title === 'string' && payload.title.trim()
-      ? payload.title.trim()
-      : typeof payload?.documentId === 'string' ||
-          typeof payload?.documentId === 'number'
-        ? `#${payload.documentId}`
-        : '';
-  return title
-    ? `${action} document${title.startsWith('#') ? '' : ' '}${title}`
-    : `${action} document`;
+  const args = safeParseJson(content?.args) || {};
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  const action =
+    firstNonBlank(args.action, artifact.action, meta.action) || 'document';
+  const title = docTitle(args, artifact, meta);
+  const label = action === 'document' ? 'document' : `${action} document`;
+  return title ? `${label} ${title}` : label;
+}
+
+/** 文档摘要里的标题：meta > artifact > args > #documentId。 */
+function docTitle(args: any, artifact: any, meta: any): string {
+  const title = [meta?.title, artifact?.title, args?.title].find(
+    (value) => typeof value === 'string' && value.trim(),
+  );
+  if (title) {
+    return title.trim();
+  }
+  const documentId = meta?.documentId ?? artifact?.documentId ?? args?.documentId;
+  return documentId != null ? `#${documentId}` : '';
+}
+
+function firstNonBlank(...values: any[]): string {
+  const value = values.find(
+    (item) => typeof item === 'string' && item.trim() !== '',
+  );
+  return value ? value.trim() : '';
 }
 
 /** 通用工具摘要：基于 args 关键字段推导动作；无规则时回退显示工具名。 */
@@ -428,15 +443,12 @@ export function cliView(content: ToolContent): CliView {
 
 /** 中文文档动作摘要；保留 docSummary 的英文行为给测试/英文界面。 */
 export function docSummaryZh(content: ToolContent): string {
-  const payload = parsePayload(content);
-  const action = typeof payload?.action === 'string' ? payload.action : '';
-  const title =
-    typeof payload?.title === 'string' && payload.title.trim()
-      ? payload.title.trim()
-      : typeof payload?.documentId === 'string' ||
-          typeof payload?.documentId === 'number'
-        ? `#${payload.documentId}`
-        : '';
+  const args = safeParseJson(content?.args) || {};
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  const action =
+    firstNonBlank(args.action, artifact.action, meta.action) || '';
+  const title = docTitle(args, artifact, meta);
   const actionZh: Record<string, string> = {
     create: '创建文档',
     update: '更新文档',
@@ -599,6 +611,17 @@ export function toolResultText(content: ToolContent): string {
     if (texts.length) return texts.join('\n\n');
   }
   return typeof content?.artifact === 'string' ? content.artifact : '';
+}
+
+/** 工具调用理由：后端 meta 优先，旧数据回退解析 args._reason。 */
+export function toolCallReason(content: ToolContent): string {
+  const meta = content?.meta || {};
+  if (typeof meta.reason === 'string' && meta.reason.trim()) {
+    return meta.reason.replace(/\s+/g, ' ').trim();
+  }
+  const args = safeParseJson(content?.args);
+  const reason = args?._reason;
+  return typeof reason === 'string' ? reason.replace(/\s+/g, ' ').trim() : '';
 }
 
 /** MCP 搜索类工具的数组结果：标题 + 域名 + 摘要。 */

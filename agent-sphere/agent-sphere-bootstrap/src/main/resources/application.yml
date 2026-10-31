@@ -167,6 +167,7 @@ buukle:
       submit-timeout: 30s                          # 工具提交超时 / Tool submit timeout
       execution-timeout: 60s                       # 工具执行超时 / Tool execution timeout
       cli-timeout: 30s                             # CLI 工具超时 / CLI tool timeout
+      call-reason-enabled: true                    # 注入工具调用理由 _reason / Inject tool call reason
 
       # 以下 web-read / web-fetch / web-read-advanced / web-fetch-advanced / js-render
       # 绑定到 ToolConfig.webRead 等字段。此前它们被误缩进到 wait: 之下，而 wait 没有对应的

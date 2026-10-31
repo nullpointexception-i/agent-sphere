@@ -23,6 +23,7 @@ import {
   searchResultView,
   skillView,
   textContainsView,
+  toolCallReason,
   toolFamily,
   toolResultText,
   webPageView,
@@ -222,6 +223,10 @@ function ToolRowBody({
   if (/^mcp_\d+_\d+$/.test(String(c.toolName || ''))) {
     return <McpToolRow content={c} state={row.state} />;
   }
+  if (c.toolName === 'builtin_10' || c.displayName === '等待'
+      || c.displayName === 'Wait') {
+    return <WaitRow content={c} state={row.state} />;
+  }
   if (c.toolName === 'builtin_13' || c.displayName === '当前时间'
       || c.displayName === 'Current Time') {
     return <CurrentTimeRow content={c} state={row.state} />;
@@ -310,9 +315,26 @@ function ToolRow(props: {
   const ms = typeof raw === 'number' ? raw : undefined;
   const durationText = formatToolDuration(ms);
   const slow = typeof ms === 'number' && ms >= SLOW_TOOL_MS;
+  const reason = toolCallReason(props.row?.content || {});
   return (
     <div>
       <ToolRowBody {...props} />
+      {reason && (
+        <div
+          title={reason}
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            lineHeight: '16px',
+            color: '#8c8c8c',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          理由：{reason.slice(0, 120)}
+        </div>
+      )}
       {durationText && (
         <div
           style={{
@@ -437,14 +459,12 @@ function TextContainsRow({
   const matched = !failed && view.hit === true;
   const unknown = !failed && view.hit === null;
   const background = failed ? '#fff1f0' : matched ? '#f6ffed' : unknown ? '#f0f5ff' : '#fafafa';
-  const border = failed ? '#ffa39e' : matched ? '#b7eb8f' : unknown ? '#adc6ff' : '#e8e8e8';
   const showState = failed || String(state ?? '').toLowerCase() !== 'succeeded';
   return (
     <div
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${border}`,
         borderRadius: 8,
         background,
       }}
@@ -549,7 +569,6 @@ function ProgressRow({ content, state }: { content: any; state?: string | null }
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: '1px solid #e6f4ff',
         borderRadius: 8,
         background: '#f0f7ff',
       }}
@@ -641,7 +660,6 @@ function WebPageRow({
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: view.error ? '#fff1f0' : '#fafafa',
       }}
@@ -725,7 +743,6 @@ function SkillRow({
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: view.error ? '#fff1f0' : '#fafafa',
       }}
@@ -794,7 +811,6 @@ function ReadToolResultRow({
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: view.error ? '#fff1f0' : '#fafafa',
       }}
@@ -842,7 +858,6 @@ function CliRow({ content, state }: { content: any; state?: string | null }) {
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${ok ? '#e8e8e8' : '#ffa39e'}`,
         borderRadius: 8,
         background: ok ? '#fafafa' : '#fff1f0',
       }}
@@ -946,7 +961,6 @@ function BrowserRow({
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${brow.failed ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: brow.failed ? '#fff1f0' : '#fafafa',
       }}
@@ -1021,6 +1035,34 @@ function BrowserRow({
         </div>
       )}
       <RawData content={content} />
+    </div>
+  );
+}
+
+function WaitRow({ content, state }: { content: any; state?: string | null }) {
+  let seconds: number | null = null;
+  try {
+    const args = content.args ? JSON.parse(content.args) : null;
+    if (args?.ms != null) {
+      seconds = Math.max(1, Math.round(Number(args.ms) / 1000));
+    }
+  } catch {
+    // ignore malformed args
+  }
+  const normalized = String(state ?? '').toLowerCase();
+  const failed = normalized === 'failed' || normalized === 'error';
+  const completed =
+    !failed && ['succeeded', 'completed', 'success'].includes(normalized);
+  const color = failed ? '#cf1322' : completed ? '#389e0d' : '#8c8c8c';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <ClockIcon />
+      <span style={{ fontSize: 12, fontWeight: 600, color }}>
+        {failed ? '等待失败' : completed ? '等待完成' : '等待中'}
+      </span>
+      {seconds != null && !failed ? (
+        <span style={{ color: '#9ca3af', fontSize: 11 }}>{seconds}s</span>
+      ) : null}
     </div>
   );
 }
@@ -1238,6 +1280,7 @@ function SubAgentToolItem({
   onDetailToggle: () => void;
   loadFile: (fileKey: string) => Promise<string>;
 }) {
+  const reason = toolCallReason({ args: s.argumentsJson });
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1247,6 +1290,22 @@ function SubAgentToolItem({
         </TypographyStrong>
         <StateTag state={s.toolStatus || s.status} />
       </div>
+      {reason && (
+        <div
+          title={reason}
+          style={{
+            marginTop: 3,
+            fontSize: 11,
+            lineHeight: '16px',
+            color: '#8c8c8c',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          理由：{reason.slice(0, 120)}
+        </div>
+      )}
       {Array.isArray(s.images) && s.images.length > 0 && (
         <UserImages images={s.images} loadFile={loadFile} />
       )}

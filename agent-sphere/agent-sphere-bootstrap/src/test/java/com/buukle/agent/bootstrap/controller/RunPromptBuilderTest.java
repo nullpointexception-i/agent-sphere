@@ -3,13 +3,16 @@ package com.buukle.agent.bootstrap.controller;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
+import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
+import com.buukle.agent.util.json.ToolCallReason;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -114,6 +117,26 @@ class RunPromptBuilderTest {
                 List.of("builtin_1", "builtin_5", "cli_1"),
                 names,
                 "工具定义应按名称稳定排序，避免遍历顺序变动破坏缓存前缀");
+    }
+
+    @Test
+    void buildToolDefinitions_injectsCallReasonButNotFinish() {
+        List<ToolDefinitionDTO> defs = builder.buildToolDefinitions(
+                List.of(tool("builtin_5"), tool(FinishConstants.TOOL_NAME)));
+
+        Map<String, Object> normalParams = defs.stream()
+                .filter(d -> "builtin_5".equals(d.getFunction().getName()))
+                .findFirst().orElseThrow().getFunction().getParameters();
+        Map<String, Object> normalProps = (Map<String, Object>) normalParams.get("properties");
+        assertTrue(normalProps.containsKey(ToolCallReason.REASON_KEY),
+                "可见工具 schema 必须注入 _reason");
+
+        Map<String, Object> finishParams = defs.stream()
+                .filter(d -> FinishConstants.TOOL_NAME.equals(d.getFunction().getName()))
+                .findFirst().orElseThrow().getFunction().getParameters();
+        Map<String, Object> finishProps = (Map<String, Object>) finishParams.get("properties");
+        assertFalse(finishProps.containsKey(ToolCallReason.REASON_KEY),
+                "finish 是内部隐藏工具，不注入调用理由");
     }
 
     @Test

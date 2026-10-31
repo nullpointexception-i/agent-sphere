@@ -46,6 +46,7 @@ import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.tool.ToolAccessGuard;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
+import com.buukle.agent.util.json.ToolCallReason;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
@@ -529,7 +530,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                         .type(RunnerConstants.TOOL_TYPE_FUNCTION)
                         .function(FunctionDefinitionDTO.builder()
                                 .name(tc.name())
-                                .arguments(tc.arguments())
+                                .arguments(ToolCallReason.strip(tc.arguments()))
                                 .build())
                         .build()));
         // DeepSeek thinking 模式要求把上一轮的 reasoning_content 原样回传，否则 400

@@ -96,9 +96,11 @@ export default {
   'pages.instances.completionProtocol': 'Completion Protocol',
   'pages.instances.completionProtocol.extra':
     'Follows the model route by default; task instances can force strict finish',
-  'pages.instances.completionProtocol.inherit': 'Follow model route (recommended)',
+  'pages.instances.completionProtocol.inherit':
+    'Follow model route (recommended)',
   'pages.instances.completionProtocol.strict': 'Force strict finish',
-  'pages.instances.completionProtocol.implicit': 'Force implicit text completion',
+  'pages.instances.completionProtocol.implicit':
+    'Force implicit text completion',
   'pages.models.completionProtocol': 'Completion Protocol',
   'pages.models.completionProtocol.extra':
     'Whether this model reliably ends agentic runs with the finish tool',
@@ -148,7 +150,8 @@ export default {
   'pages.capabilities.mcp.args': 'Arguments (JSON)',
   'pages.capabilities.mcp.argsInvalid': 'Arguments are not valid JSON',
   'pages.capabilities.mcp.testSuccess': 'Connected, found {count} tools',
-  'pages.capabilities.mcp.serverUrlInvalid': 'Must start with http:// or https://',
+  'pages.capabilities.mcp.serverUrlInvalid':
+    'Must start with http:// or https://',
   'pages.capabilities.mcp.authConfig': 'Auth Headers (JSON)',
   'pages.capabilities.mcp.authConfigPlaceholder':
     '{{"Authorization":"Bearer <token>"}}',
@@ -175,7 +178,8 @@ export default {
   'pages.chat.toolApproval.selected': '{selected}/{total} selected',
   'pages.chat.toolApproval.submit': 'Submit',
   'pages.chat.toolApproval.denyAll': 'Deny all',
-  'pages.chat.toolApproval.denyAllConfirm': 'Deny all tool calls in this batch?',
+  'pages.chat.toolApproval.denyAllConfirm':
+    'Deny all tool calls in this batch?',
   'pages.chat.clarification.title': 'Your input is needed',
   'pages.chat.clarification.answered': 'Answered',
   'pages.chat.clarification.selected': '{selected}/{total} answered',
@@ -204,7 +208,8 @@ export default {
   'pages.chat.assistant.dislike': 'Dislike',
   'pages.chat.assistant.share': 'Share',
   'pages.chat.assistant.shareTitle': 'Share conversation',
-  'pages.chat.assistant.shareCountHint': 'Choose how many conversation turns to share',
+  'pages.chat.assistant.shareCountHint':
+    'Choose how many conversation turns to share',
   'pages.chat.assistant.shareConfirm': 'Create share link',
   'pages.chat.assistant.cancel': 'Cancel',
   'pages.share.title': 'Shared from AgentSphere',
@@ -245,6 +250,9 @@ export default {
   'pages.chat.tool.approvalCancelled': 'Tool approval cancelled',
   'pages.chat.tool.wait': 'Wait',
   'pages.chat.tool.waitForSeconds': '{seconds}s',
+  'pages.chat.tool.waitCompleted': 'Wait completed',
+  'pages.chat.tool.waitFailed': 'Wait failed',
+  'pages.chat.tool.waitRunning': 'Waiting',
   'pages.chat.assistant.thinking': 'Thinking',
   'pages.chat.runMode.write': 'Write',
   'pages.chat.runMode.readOnly': 'Read only',
@@ -629,12 +637,14 @@ export default {
   'pages.admin.settings.cleanup.real.btn': 'Clean Now',
   'pages.admin.settings.cleanup.runs.btn': 'Run History',
   'pages.admin.settings.cleanup.modal.title': 'Session Cleanup Report',
-  'pages.admin.settings.cleanup.alert.dryRun': 'Preview only — nothing has been deleted.',
+  'pages.admin.settings.cleanup.alert.dryRun':
+    'Preview only — nothing has been deleted.',
   'pages.admin.settings.cleanup.alert.irreversible':
     'Cleanup is an irreversible hard delete: sessions, runs, interaction payloads and screenshots are permanently removed.',
   'pages.admin.settings.cleanup.alert.activeBlocked':
     '{count} sessions were skipped because runs or tasks are still active. A persistently large number means the retention window is too aggressive.',
-  'pages.admin.settings.cleanup.alert.truncated': 'Batch limit reached; some data is still pending. Run again later.',
+  'pages.admin.settings.cleanup.alert.truncated':
+    'Batch limit reached; some data is still pending. Run again later.',
   'pages.admin.settings.cleanup.cutoff': 'Expiry cutoff',
   'pages.admin.settings.cleanup.retention': 'Retention (days)',
   'pages.admin.settings.cleanup.sessions': 'Sessions',
@@ -644,7 +654,8 @@ export default {
   'pages.admin.settings.cleanup.confirm': 'Delete {count} sessions',
   'pages.admin.settings.cleanup.vacuumHint': 'Disk reclaim hint',
   'pages.admin.settings.cleanup.done': 'Cleanup finished',
-  'pages.admin.settings.cleanup.skippedByLock': 'Another cleanup is running, skipped',
+  'pages.admin.settings.cleanup.skippedByLock':
+    'Another cleanup is running, skipped',
   'pages.admin.settings.cleanup.disabled': 'Cleanup is disabled, nothing ran',
   'pages.admin.settings.cleanup.runs.title': 'Session Cleanup Runs',
   'pages.admin.settings.cleanup.runs.filterTrigger': 'Trigger',
@@ -669,7 +680,8 @@ export default {
   'pages.admin.settings.cleanup.runs.col.startedAt': 'Started at',
   'pages.admin.settings.cleanup.runs.skipReason': 'Skip reason',
   'pages.admin.settings.cleanup.runs.errorMessage': 'Error',
-  'pages.admin.settings.cleanup.runs.truncated': 'Batch limit reached, data still pending',
+  'pages.admin.settings.cleanup.runs.truncated':
+    'Batch limit reached, data still pending',
   'pages.admin.settings.plugin.upload.btn': 'Upload Package',
   'pages.admin.settings.plugin.upload.success': 'Uploaded',
   'pages.admin.settings.plugin.delete.btn': 'Delete',
@@ -791,9 +803,11 @@ export default {
   'pages.chat.sessionUsage.cache': 'cache',
   'pages.chat.sessionUsage.context': 'current context',
   'pages.chat.sessionUsage.allModels': 'All model calls',
-  'pages.chat.sessionUsage.scope': 'Session total (incl. compaction/title/sub-agents)',
+  'pages.chat.sessionUsage.scope':
+    'Session total (incl. compaction/title/sub-agents)',
   'pages.chat.runUsage.title': 'Run total',
-  'pages.chat.runUsage.allModels': 'All model calls (incl. compaction/sub-agents)',
+  'pages.chat.runUsage.allModels':
+    'All model calls (incl. compaction/sub-agents)',
   'pages.chat.runUsage.scope': 'Run total (incl. compaction/sub-agents)',
   'pages.chat.usage.cacheDetail': 'Hit {hit} / miss {miss}',
   'pages.chat.usageTrend.title': 'Token Trend',
@@ -818,7 +832,8 @@ export default {
   'pages.chat.usageTrend.window': 'Showing latest {limit}',
   'pages.chat.usageTrend.older': ' (older data available)',
   'pages.chat.usageTrend.zoomed': 'Zoomed in, auto-refresh paused',
-  'pages.chat.usageTrend.rawSeriesHint': 'Hit/miss lines are raw tokens per interaction',
+  'pages.chat.usageTrend.rawSeriesHint':
+    'Hit/miss lines are raw tokens per interaction',
   'pages.chat.loadFailed': 'Load failed',
   'pages.delete.success': 'Deleted',
   'pages.update.success': 'Updated',
@@ -913,7 +928,8 @@ export default {
   'pages.admin.settings.skillSync.failed': 'Sync failed, check backend logs',
   'pages.admin.settings.skillSync.stale':
     'This record has been running for too long; the process may have died. Check backend logs.',
-  'pages.admin.settings.skillSync.allSynced': 'All copies are already up to date.',
+  'pages.admin.settings.skillSync.allSynced':
+    'All copies are already up to date.',
   'pages.admin.settings.skillSyncRuns.title': 'Skill Sync Runs',
   'pages.admin.settings.skillSyncRuns.filterTrigger': 'Trigger',
   'pages.admin.settings.skillSyncRuns.filterStatus': 'Status',
@@ -933,5 +949,6 @@ export default {
   'pages.admin.settings.skillSyncRuns.col.startedAt': 'Started at',
   'pages.admin.settings.skillSyncRuns.skipReason': 'Skip reason',
   'pages.admin.settings.skillSyncRuns.errorMessage': 'Error',
-  'pages.admin.settings.skillSync.alreadyRunning': 'A sync is already running, switching to its progress',
+  'pages.admin.settings.skillSync.alreadyRunning':
+    'A sync is already running, switching to its progress',
 };

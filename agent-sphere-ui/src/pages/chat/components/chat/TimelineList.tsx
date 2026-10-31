@@ -67,6 +67,7 @@ import {
   textContainsView,
   todoProgress,
   todoTotal,
+  toolCallReason,
   toolFamily,
   toolResultText,
   webPageView,
@@ -635,7 +636,6 @@ function TodoCard({ content }: { content: any }) {
     <div
       style={{
         marginTop: 4,
-        border: '1px solid #d9d9d9',
         borderRadius: 8,
         padding: '8px 12px',
       }}
@@ -761,6 +761,10 @@ function DocCard({ content }: { content: any }) {
         ? artifactObj.totalLines
         : null;
   const version = meta.version != null ? meta.version : artifactObj?.version;
+  const documentTitle =
+    [meta.title, artifactObj?.title, argsObj?.title]
+      .find((value) => typeof value === 'string' && value.trim())
+      ?.trim() || '';
   const documentContent =
     typeof artifactObj?.content === 'string'
       ? artifactObj.content
@@ -769,17 +773,34 @@ function DocCard({ content }: { content: any }) {
         : '';
   return (
     <div style={{ marginTop: 4 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}
+      >
         <FileTextOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
-        <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
+        <Typography.Text
+          style={{ fontSize: 12, color: '#8c8c8c', flexShrink: 0 }}
+        >
           {content.displayName ||
             intl.formatMessage({
               id: 'pages.chat.tool.docOperation',
               defaultMessage: 'Document operation',
             })}
         </Typography.Text>
-        <ArrowRightOutlined style={{ fontSize: 11, color: '#a0a0a0' }} />
-        <Typography.Text strong style={{ fontSize: 12 }}>
+        <ArrowRightOutlined
+          style={{ fontSize: 11, color: '#a0a0a0', flexShrink: 0 }}
+        />
+        <Typography.Text
+          strong
+          title={summary}
+          style={{
+            fontSize: 12,
+            minWidth: 0,
+            maxWidth: 420,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {summary}
         </Typography.Text>
       </div>
@@ -806,12 +827,12 @@ function DocCard({ content }: { content: any }) {
               .filter(Boolean)
               .join(' · ')}
           </Typography.Text>
-          {(artifactObj?.preview || artifactObj?.title) && (
+          {(artifactObj?.preview || documentTitle) && (
             <Typography.Text
               type="secondary"
               style={{ display: 'block', fontSize: 11, lineHeight: '16px' }}
             >
-              {artifactObj.title || (isEn ? 'Document' : '文档')}
+              {documentTitle || (isEn ? 'Document' : '文档')}
               {artifactObj.preview
                 ? `：${String(artifactObj.preview).slice(0, 60)}…`
                 : ''}
@@ -819,7 +840,7 @@ function DocCard({ content }: { content: any }) {
           )}
           <div>
             <ContentPreviewButton
-              title={artifactObj?.title || (isEn ? 'Document' : '文档')}
+              title={documentTitle || (isEn ? 'Document' : '文档')}
               content={documentContent}
             />
           </div>
@@ -1013,10 +1034,30 @@ function ToolCardBody({ row }: any) {
 }
 
 function ToolCard({ row }: any) {
+  const intl = useIntl();
   const duration = row?.content?.meta?.durationMs;
+  const reason = toolCallReason(row?.content || {});
   return (
     <div>
       <ToolCardBody row={row} />
+      {reason && (
+        <div
+          title={reason}
+          style={{
+            marginTop: 4,
+            maxWidth: 560,
+            fontSize: 11,
+            lineHeight: '16px',
+            color: '#8c8c8c',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {intl.locale === 'en-US' ? 'Reason: ' : '理由：'}
+          {reason.slice(0, 120)}
+        </div>
+      )}
       <ToolDuration ms={typeof duration === 'number' ? duration : undefined} />
     </div>
   );
@@ -1033,18 +1074,33 @@ function WaitCard({ content, state }: any) {
   } catch {
     // ignore malformed args
   }
+  const normalizedState = String(state ?? '').toLowerCase();
+  const failed = normalizedState === 'failed' || normalizedState === 'error';
+  const completed =
+    !failed && ['succeeded', 'completed', 'success'].includes(normalizedState);
+  const labelId = failed
+    ? 'pages.chat.tool.waitFailed'
+    : completed
+      ? 'pages.chat.tool.waitCompleted'
+      : 'pages.chat.tool.waitRunning';
+  const defaultLabel = failed
+    ? 'Wait failed'
+    : completed
+      ? 'Wait completed'
+      : 'Waiting';
+  const color = failed ? '#cf1322' : completed ? '#389e0d' : '#8c8c8c';
   return (
     <div
       style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}
     >
-      <ClockCircleOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
-      <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
+      <ClockCircleOutlined style={{ fontSize: 12, color }} />
+      <Typography.Text strong style={{ fontSize: 12, color }}>
         {intl.formatMessage({
-          id: 'pages.chat.tool.wait',
-          defaultMessage: 'Wait',
+          id: labelId,
+          defaultMessage: defaultLabel,
         })}
       </Typography.Text>
-      {seconds != null && (
+      {seconds != null && !failed && (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {intl.formatMessage(
             {
@@ -1055,7 +1111,6 @@ function WaitCard({ content, state }: any) {
           )}
         </Typography.Text>
       )}
-      <StateTag state={state} small />
     </div>
   );
 }
@@ -1262,20 +1317,12 @@ function TextContainsCard({ content, state }: any) {
       : unknown
         ? '#f0f5ff'
         : '#fafafa';
-  const border = failed
-    ? '#ffa39e'
-    : matched
-      ? '#b7eb8f'
-      : unknown
-        ? '#adc6ff'
-        : '#e8e8e8';
   const showState = failed || String(state ?? '').toLowerCase() !== 'succeeded';
   return (
     <div
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${border}`,
         borderRadius: 8,
         background,
         maxWidth: 560,
@@ -1423,7 +1470,6 @@ function ProgressCard({ content, state }: any) {
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: '1px solid #e6f4ff',
         borderRadius: 8,
         background: '#f0f7ff',
         maxWidth: 560,
@@ -1519,7 +1565,6 @@ function WebPageCard({
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: view.error ? '#fff1f0' : '#fafafa',
         maxWidth: 560,
@@ -1638,7 +1683,6 @@ function SkillCard({
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: view.error ? '#fff1f0' : '#fafafa',
         maxWidth: 560,
@@ -1703,7 +1747,6 @@ function ReadToolResultCard({ content, state }: any) {
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: view.error ? '#fff1f0' : '#fafafa',
         maxWidth: 560,
@@ -1765,7 +1808,6 @@ function CliCard({ content, state }: any) {
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${ok ? '#e8e8e8' : '#ffa39e'}`,
         borderRadius: 8,
         background: ok ? '#fafafa' : '#fff1f0',
         maxWidth: 560,
@@ -1877,7 +1919,6 @@ function BrowserCard({ content, state }: any) {
       style={{
         marginTop: 4,
         padding: '7px 10px',
-        border: `1px solid ${brow.failed ? '#ffa39e' : '#e8e8e8'}`,
         borderRadius: 8,
         background: brow.failed ? '#fff1f0' : '#fafafa',
         maxWidth: 560,
@@ -2249,6 +2290,7 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
   const argsJson = s.argumentsJson
     ? JSON.stringify(JSON.parse(s.argumentsJson), null, 2)
     : s.argumentsJson;
+  const reason = toolCallReason({ args: s.argumentsJson });
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2265,6 +2307,23 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
         </Typography.Text>
         <StateTag state={s.toolStatus || s.status} />
       </div>
+      {reason && (
+        <div
+          title={reason}
+          style={{
+            marginTop: 3,
+            fontSize: 11,
+            lineHeight: '16px',
+            color: '#8c8c8c',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {intl.locale === 'en-US' ? 'Reason: ' : '理由：'}
+          {reason.slice(0, 120)}
+        </div>
+      )}
       {Array.isArray(s.images) && s.images.length > 0 && (
         <UserImages images={s.images} />
       )}
@@ -2692,8 +2751,6 @@ function RowCard({
             style={{
               fontSize: 12,
               color: '#8c8c8c',
-              background: '#fafafa',
-              border: '1px solid #f0f0f0',
               borderRadius: 6,
               padding: '6px 10px',
               maxHeight: 260,
