@@ -819,7 +819,14 @@ export default function InstanceList() {
         confirmLoading={submitting}
         width={560}
       >
-        <Form form={form} layout="vertical" initialValues={{ maxLoopCount: 0 }}>
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{
+            maxLoopCount: 0,
+            completionProtocol: 'MODEL_DEFAULT',
+          }}
+        >
           <Form.Item
             name="name"
             label={labelWithRule(
@@ -957,6 +964,46 @@ export default function InstanceList() {
               max={2000}
               placeholder="系统默认"
               style={{ width: '100%' }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="completionProtocol"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.instances.completionProtocol',
+                defaultMessage: '完成协议',
+              }),
+              intl.formatMessage({
+                id: 'pages.instances.completionProtocol.extra',
+                defaultMessage:
+                  '默认跟随模型路由；任务型实例可强制 strict finish',
+              }),
+            )}
+          >
+            <Select
+              options={[
+                {
+                  value: 'MODEL_DEFAULT',
+                  label: intl.formatMessage({
+                    id: 'pages.instances.completionProtocol.inherit',
+                    defaultMessage: '跟随模型路由（推荐）',
+                  }),
+                },
+                {
+                  value: 'STRICT_FINISH',
+                  label: intl.formatMessage({
+                    id: 'pages.instances.completionProtocol.strict',
+                    defaultMessage: '强制严格 finish',
+                  }),
+                },
+                {
+                  value: 'IMPLICIT_TEXT',
+                  label: intl.formatMessage({
+                    id: 'pages.instances.completionProtocol.implicit',
+                    defaultMessage: '强制兼容普通文本',
+                  }),
+                },
+              ]}
             />
           </Form.Item>
           <Form.Item

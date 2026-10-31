@@ -19,6 +19,8 @@ public class AgentModelRoute {
     private String status;
     private String company;
     private Boolean supportsAttachment;
+    /** Completion contract for this model route: STRICT_FINISH / IMPLICIT_TEXT. */
+    private String completionProtocol;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

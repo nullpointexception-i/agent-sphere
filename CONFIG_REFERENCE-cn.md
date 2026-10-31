@@ -58,6 +58,7 @@ Spring 标准块（`spring.*`、`logging.*`、`mybatis-plus.*`、`server.*`）�
 | 键 | 默认值 | 说明 |
 |---|---|---|
 | `max-loop-count` | `128` | 单次 run 最大循环次数（`CHAT` 源，见 README §3.1a） |
+| `max-silent-turns` | `2` | 使用工具后允许连续无工具回复的容错轮数，超过后严格模式失败 |
 | `task-max-loop-count` | `2000` | 任务触发 run 的更高轮次上限（`TASK` 源） |
 | `max-reasoning-chars` | `500000` | 单 run 推理落库长度上限（字符） |
 | `turn-timeout` | `180s` | 单轮 LLM 调用超时 |

@@ -48,6 +48,8 @@ public class AgentRuntimeProperties {
     @Data
     public static class RunnerConfig {
         private int maxLoopCount = 25;
+        /** Agentic run 连续无工具回复的最大容错轮数；超过后终止，防止无界模型调用。 */
+        private int maxSilentTurns = 2;
         /** 任务触发的 run 使用更高轮次上限（覆盖 maxLoopCount），缺省回落 maxLoopCount。 */
         private Integer taskMaxLoopCount;
         /** 单个 run 内允许注入的浏览器截图观察次数上限（防模型无限截图烧 token）。 */

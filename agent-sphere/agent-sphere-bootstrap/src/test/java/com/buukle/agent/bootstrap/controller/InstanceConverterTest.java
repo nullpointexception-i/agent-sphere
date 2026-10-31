@@ -49,6 +49,24 @@ class InstanceConverterTest {
         assertNull(converter.toVO(do_).getAllowWidgetSession());
     }
 
+    @Test
+    void completionProtocol_modelDefaultClearsOverride() {
+        CreateInstanceDTO inherit = new CreateInstanceDTO();
+        inherit.setName("chat");
+        inherit.setCompletionProtocol("MODEL_DEFAULT");
+        assertNull(converter.toDO(inherit).getCompletionProtocol(),
+                "MODEL_DEFAULT 必须落为 NULL，表示跟随模型路由");
+
+        CreateInstanceDTO strict = new CreateInstanceDTO();
+        strict.setName("task");
+        strict.setCompletionProtocol("STRICT_FINISH");
+        assertEquals("STRICT_FINISH", converter.toDO(strict).getCompletionProtocol());
+
+        AgentInstance existing = new AgentInstance();
+        existing.setCompletionProtocol("IMPLICIT_TEXT");
+        assertEquals("IMPLICIT_TEXT", converter.toVO(existing).getCompletionProtocol());
+    }
+
     private static CreateInstanceDTO toCreateDto(Boolean console, Boolean widget) {
         CreateInstanceDTO dto = new CreateInstanceDTO();
         dto.setName("Headhunter Assist");

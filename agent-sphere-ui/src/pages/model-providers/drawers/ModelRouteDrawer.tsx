@@ -316,6 +316,40 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
             <Switch />
           </Form.Item>
           <Form.Item
+            name="completionProtocol"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.models.completionProtocol',
+                defaultMessage: 'Completion Protocol',
+              }),
+              intl.formatMessage({
+                id: 'pages.models.completionProtocol.extra',
+                defaultMessage:
+                  'Whether this model reliably ends agentic runs with the finish tool',
+              }),
+            )}
+            initialValue="STRICT_FINISH"
+          >
+            <Select
+              options={[
+                {
+                  value: 'STRICT_FINISH',
+                  label: intl.formatMessage({
+                    id: 'pages.models.completionProtocol.strict',
+                    defaultMessage: 'Strict finish (recommended)',
+                  }),
+                },
+                {
+                  value: 'IMPLICIT_TEXT',
+                  label: intl.formatMessage({
+                    id: 'pages.models.completionProtocol.implicit',
+                    defaultMessage: 'Allow implicit text completion',
+                  }),
+                },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
             name="weight"
             label={intl.formatMessage({ id: 'pages.table.weight' })}
             initialValue="100"
@@ -428,6 +462,13 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
                 value: viewRoute?.supportsAttachment
                   ? intl.formatMessage({ id: 'pages.table.enabled' })
                   : intl.formatMessage({ id: 'pages.table.disabled' }),
+              },
+              {
+                label: intl.formatMessage({
+                  id: 'pages.models.completionProtocol',
+                  defaultMessage: 'Completion Protocol',
+                }),
+                value: viewRoute?.completionProtocol || 'STRICT_FINISH',
               },
               {
                 label: intl.formatMessage({

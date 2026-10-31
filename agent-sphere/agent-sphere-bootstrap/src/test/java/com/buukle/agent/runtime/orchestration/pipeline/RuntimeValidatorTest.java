@@ -53,6 +53,7 @@ class RuntimeValidatorTest {
         route.setStatus("ACTIVE");
         route.setMaxInputTokens(maxInput);
         route.setMaxOutputTokens(maxOutput);
+        route.setCompletionProtocol("STRICT_FINISH");
         return route;
     }
 
@@ -64,6 +65,7 @@ class RuntimeValidatorTest {
         instance.setModelRouteId(4L);
         ModelRouteVO primary = route(4L, 20_000L, 384_000L);
         primary.setFallbackIds("3");
+        primary.setCompletionProtocol("IMPLICIT_TEXT");
         ModelRouteVO fallback = route(3L, 1_000_000L, 384_000L);
 
         when(sessionSpi.getSession(1L)).thenReturn(session);
@@ -79,5 +81,9 @@ class RuntimeValidatorTest {
         assertEquals(1, result.getFallbackRoutes().size());
         assertEquals(1_000_000L, result.getFallbackRoutes().get(0).getMaxInputTokens().longValue(),
                 "fallback route 同样不能丢 max_input_tokens");
+        assertEquals("IMPLICIT_TEXT", result.getModelRoute().getCompletionProtocol(),
+                "primary route 的完成协议必须在 ModelRouteFullVO 上保留");
+        assertEquals("STRICT_FINISH", result.getFallbackRoutes().get(0).getCompletionProtocol(),
+                "fallback route 同样不能丢完成协议");
     }
 }

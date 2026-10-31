@@ -22,6 +22,8 @@ public class RunVO implements Serializable {
     private String status;
     /** Snapshot of session run mode at creation: WRITE / READ_ONLY. */
     private String runMode;
+    /** Snapshot of the instance completion contract for this run. */
+    private String completionProtocol;
     /** 命中循环次数上限被强收口（任务守卫据此判失败） */
     private Boolean loopCapped;
     /**

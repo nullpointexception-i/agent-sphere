@@ -58,6 +58,7 @@ Retention days and the kill switch for cleanup live in `agent_system_config` (`c
 | Key | Default | Description |
 |---|---|---|
 | `max-loop-count` | `128` | Max loop count per run (the `CHAT` source; see README §3.1a) |
+| `max-silent-turns` | `2` | Consecutive tool-free turns tolerated after tool use before strict runs fail |
 | `task-max-loop-count` | `2000` | Higher limit for task-triggered runs (the `TASK` source) |
 | `max-reasoning-chars` | `500000` | Max persisted reasoning characters per run |
 | `turn-timeout` | `180s` | Single LLM turn timeout |

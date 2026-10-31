@@ -21,4 +21,6 @@ public class CreateRouteDTO implements Serializable {
     private Long maxOutputTokens;
     private String company;
     private Boolean supportsAttachment;
+    /** STRICT_FINISH by default; IMPLICIT_TEXT only for compatible conversational models. */
+    private String completionProtocol;
 }

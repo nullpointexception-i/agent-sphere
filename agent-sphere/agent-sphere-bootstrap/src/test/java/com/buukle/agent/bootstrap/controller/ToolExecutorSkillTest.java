@@ -8,6 +8,7 @@ import com.buukle.agent.instance.spi.PendingWaitSpi;
 import com.buukle.agent.instance.spi.SessionTodoSpi;
 import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
+import com.buukle.agent.runtime.kernel.constants.ProgressConstants;
 import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;
@@ -79,6 +80,23 @@ class ToolExecutorSkillTest {
                 9L, 1L, List.of(readTool));
 
         assertEquals("{\"content\":\"x\"}", result);
+    }
+
+    @Test
+    void progress_isRuntimeProtocolAndDoesNotInvokeBuiltinSpi() {
+        RuntimeTool progressTool = RuntimeTool.builder()
+                .capabilityType("builtin")
+                .llmToolName(ProgressConstants.TOOL_NAME)
+                .toolRef(ToolRefs.builtin(ProgressConstants.INTERNAL_NAME))
+                .build();
+
+        String result = toolExecutor.execute(
+                new TurnToolCall("call_progress", ProgressConstants.TOOL_NAME,
+                        "{\"summary\":\"research complete\",\"nextAction\":\"verify\",\"percent\":50}"),
+                9L, 1L, List.of(progressTool));
+
+        assertTrue(result.contains(ProgressConstants.STATUS_REPORTED));
+        org.mockito.Mockito.verifyNoInteractions(builtinSpi);
     }
 
     private RuntimeTool delegateTool() {

@@ -77,6 +77,7 @@ public class RouteListBuilder {
         full.setMaxOutputTokens(route.getMaxOutputTokens());
         full.setCompany(route.getCompany());
         full.setSupportsAttachment(route.getSupportsAttachment());
+        full.setCompletionProtocol(route.getCompletionProtocol());
         if (route.getProviderId() != null) {
             try {
                 ModelProviderVO provider = modelProviderSpi.getProvider(route.getProviderId());

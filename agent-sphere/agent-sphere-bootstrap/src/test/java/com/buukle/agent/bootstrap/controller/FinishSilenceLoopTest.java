@@ -1,6 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
@@ -20,6 +21,8 @@ import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
+import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
@@ -29,6 +32,7 @@ import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RBucket;
@@ -47,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -182,6 +187,14 @@ class FinishSilenceLoopTest {
 
         assertEquals("FAILED", run.getStatus(),
                 "agentic 流程里连续静默必须判失败 —— 旧实现会把它当成正常完成");
+        ArgumentCaptor<RuntimeEventVO> events = ArgumentCaptor.forClass(RuntimeEventVO.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(events.capture());
+        boolean reportsRealCount = events.getAllValues().stream()
+                .filter(e -> RunStatus.FAILED.equals(e.getEventType()))
+                .map(e -> e.getData().getErrorMessage())
+                .anyMatch(msg -> msg != null && msg.contains("3"));
+        org.junit.jupiter.api.Assertions.assertTrue(reportsRealCount,
+                "错误原因必须记录实际的第三次静默，而不是旧计数 2");
     }
 
     @Test
@@ -209,5 +222,17 @@ class FinishSilenceLoopTest {
         assertEquals("COMPLETED", run.getStatus(), "从未用过工具的纯聊天，回文本就该算完成");
         assertEquals("4", run.getAssistantReply());
         verify(inputManager).clear(SESSION_ID);
+    }
+
+    @Test
+    void implicitTextProtocol_completesNonEmptyStopTextAfterToolUse() {
+        SessionRunner runner = newRunner(25, "objective");
+        run.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
+        scriptModel(turn -> turn == 0 ? new LLMEvent[]{tool("builtin_2")} : new LLMEvent[]{text("done")});
+
+        runner.run(SESSION_ID);
+
+        assertEquals("COMPLETED", run.getStatus());
+        assertEquals("done", run.getAssistantReply());
     }
 }

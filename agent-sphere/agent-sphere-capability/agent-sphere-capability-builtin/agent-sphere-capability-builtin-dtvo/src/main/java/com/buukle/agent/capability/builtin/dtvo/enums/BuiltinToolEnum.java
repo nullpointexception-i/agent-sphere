@@ -18,7 +18,8 @@ public enum BuiltinToolEnum {
     FINISH(12, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     CURRENT_TIME(13, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     READ_TOOL_RESULT(14, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
-    DOC_READ(15, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false);
+    DOC_READ(15, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
+    PROGRESS(16, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false);
 
     private final int id;
     private final ToolAccessMode accessMode;

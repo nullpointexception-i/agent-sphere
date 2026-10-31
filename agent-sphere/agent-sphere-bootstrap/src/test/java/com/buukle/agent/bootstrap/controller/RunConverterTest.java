@@ -106,6 +106,23 @@ class RunConverterTest {
     }
 
     @Test
+    void completionProtocol_roundTripsButStartsNullForFirstEntryResolution() {
+        CreateRunDTO dto = new CreateRunDTO();
+        dto.setSessionId(1L);
+        dto.setType(RunEnum.TYPE_AUTO);
+        dto.setUserMessage("hi");
+        assertNull(converter.toDO(dto).getCompletionProtocol(),
+                "新 run 必须留空，等 RuntimeOrchestrator 解析实例/路由后固化");
+
+        RunVO vo = new RunVO();
+        vo.setId(1L);
+        vo.setCompletionProtocol("IMPLICIT_TEXT");
+        AgentRun run = converter.toDO(vo);
+        assertEquals("IMPLICIT_TEXT", run.getCompletionProtocol());
+        assertEquals("IMPLICIT_TEXT", converter.toVO(run).getCompletionProtocol());
+    }
+
+    @Test
     void loopLimit_nullStaysNullSoFirstEntryStillResolves() {
         // 存量 run 的 loop_limit 为 NULL：必须原样透传，不能被默认值覆盖，
         // 否则首次进入就没机会解析出正确的（可能更大的）预算。

@@ -48,6 +48,7 @@ public class RouteConverter {
         vo.setStatus(route.getStatus());
         vo.setCompany(route.getCompany());
         vo.setSupportsAttachment(route.getSupportsAttachment());
+        vo.setCompletionProtocol(route.getCompletionProtocol());
         vo.setCreatedAt(route.getCreatedAt() != null ? route.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(route.getCreatedBy());
         vo.setUpdatedBy(route.getUpdatedBy());
@@ -67,6 +68,10 @@ public class RouteConverter {
         route.setCompany(dto.getCompany());
         if (dto.getSupportsAttachment() != null) {
             route.setSupportsAttachment(dto.getSupportsAttachment());
+        }
+        if (dto.getCompletionProtocol() != null && !dto.getCompletionProtocol().isBlank()) {
+            route.setCompletionProtocol(com.buukle.agent.common.constant.CompletionProtocol
+                    .from(dto.getCompletionProtocol()).name());
         }
         return route;
     }

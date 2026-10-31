@@ -64,7 +64,7 @@ Env overrides (defaults): `DB_HOST` (127.0.0.1), `DB_PORT` (5432), `DB_USERNAME`
 
 ## Flyway
 
-Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql` (currently V1–V105; check the directory for the current highest number before adding a new one). `baseline-on-migrate: true`, baseline 0. Add new `V<n>` files; never edit applied migrations.
+Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql` (currently V1–V107; check the directory for the current highest number before adding a new one). `baseline-on-migrate: true`, baseline 0. Add new `V<n>` files; never edit applied migrations.
 
 ## Session data cleanup (disk reclamation)
 

@@ -1,6 +1,6 @@
 import { UploadOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, InputNumber, Switch, Upload } from 'antd';
+import { App, Button, Drawer, Form, Input, InputNumber, Select, Switch, Upload } from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -29,6 +29,7 @@ export default function InfoEditDrawer({
     form.setFieldsValue({
       ...record,
       maxLoopCount: record.maxLoopCount ?? 0,
+      completionProtocol: record.completionProtocol || 'MODEL_DEFAULT',
     });
   }, [open, record]);
 
@@ -190,6 +191,45 @@ export default function InfoEditDrawer({
             max={2000}
             placeholder="系统默认"
             style={{ width: '100%' }}
+          />
+        </Form.Item>
+        <Form.Item
+          name="completionProtocol"
+          label={labelWithRule(
+            intl.formatMessage({
+              id: 'pages.instances.completionProtocol',
+              defaultMessage: '完成协议',
+            }),
+            intl.formatMessage({
+              id: 'pages.instances.completionProtocol.extra',
+              defaultMessage: '严格模式要求调用 finish；兼容模式允许工具后用最终文本收口',
+            }),
+          )}
+        >
+          <Select
+            options={[
+              {
+                value: 'MODEL_DEFAULT',
+                label: intl.formatMessage({
+                  id: 'pages.instances.completionProtocol.inherit',
+                  defaultMessage: '跟随模型路由（推荐）',
+                }),
+              },
+              {
+                value: 'STRICT_FINISH',
+                label: intl.formatMessage({
+                  id: 'pages.instances.completionProtocol.strict',
+                  defaultMessage: '强制严格 finish',
+                }),
+              },
+              {
+                value: 'IMPLICIT_TEXT',
+                label: intl.formatMessage({
+                  id: 'pages.instances.completionProtocol.implicit',
+                  defaultMessage: '强制兼容普通文本',
+                }),
+              },
+            ]}
           />
         </Form.Item>
         <Form.Item

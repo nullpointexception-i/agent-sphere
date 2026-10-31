@@ -93,6 +93,17 @@ export default {
   'pages.instances.maxLoopCount': 'Max Loop Count',
   'pages.instances.maxLoopCount.extra':
     'Max loops per run; 0=system default, >0=override, required',
+  'pages.instances.completionProtocol': 'Completion Protocol',
+  'pages.instances.completionProtocol.extra':
+    'Follows the model route by default; task instances can force strict finish',
+  'pages.instances.completionProtocol.inherit': 'Follow model route (recommended)',
+  'pages.instances.completionProtocol.strict': 'Force strict finish',
+  'pages.instances.completionProtocol.implicit': 'Force implicit text completion',
+  'pages.models.completionProtocol': 'Completion Protocol',
+  'pages.models.completionProtocol.extra':
+    'Whether this model reliably ends agentic runs with the finish tool',
+  'pages.models.completionProtocol.strict': 'Strict finish (recommended)',
+  'pages.models.completionProtocol.implicit': 'Allow implicit text completion',
   'pages.instances.config': 'Advanced Config (JSON)',
   'pages.instances.config.extra':
     'Sampling params JSON (same shape as Completions config); empty = use global system default',

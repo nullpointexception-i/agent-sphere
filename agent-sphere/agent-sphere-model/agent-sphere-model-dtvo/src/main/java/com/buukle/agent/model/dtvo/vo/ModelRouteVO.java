@@ -18,6 +18,7 @@ public class ModelRouteVO implements Serializable {
     private String company;
     private String providerName;
     private Boolean supportsAttachment;
+    private String completionProtocol;
     private Boolean apiKeyConfigured;
     private String createdAt;
     private String createdBy;

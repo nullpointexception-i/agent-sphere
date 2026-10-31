@@ -39,7 +39,8 @@ public final class FinishConstants {
     public static final String DESCRIPTION =
             "Declare that the task is COMPLETE and end the run. This is the ONLY legitimate way to finish an "
                     + "agentic task — ending your turn with plain text is treated as an error (the loop will ask "
-                    + "you to continue or retry). Call it once you have actually finished the work, not to ask a "
+                    + "you to continue or retry). For an intermediate milestone, call progress instead. "
+                    + "Call finish once you have actually finished the work, not to ask a "
                     + "question and not to pause.\n\n"
                     + "- status=success: the requested work was done and verified.\n"
                     + "- status=failed: you tried but could not complete it (state what blocked you).\n"

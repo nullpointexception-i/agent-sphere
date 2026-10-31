@@ -20,6 +20,8 @@ public class AgentRun {
     private String status;
     /** Snapshot of session run mode at creation: WRITE / READ_ONLY. */
     private String runMode;
+    /** Snapshot of the instance completion contract for this run. */
+    private String completionProtocol;
     /** 聊天图片附件引用 JSON（[{"fileKey","contentType"}]）；Timeline USER 行回显用。 */
     private String attachments;
     /** 命中循环次数上限被强收口（任务守卫据此判失败，避免"半成品"冒充完成）。 */

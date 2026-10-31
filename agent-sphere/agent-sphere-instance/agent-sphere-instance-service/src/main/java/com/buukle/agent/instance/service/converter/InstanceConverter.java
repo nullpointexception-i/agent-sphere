@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.service.converter;
 
+import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.enums.InstanceEnum;
@@ -27,6 +28,7 @@ public class InstanceConverter {
         vo.setAllowConsoleSession(instance.getAllowConsoleSession());
         vo.setAllowWidgetSession(instance.getAllowWidgetSession());
         vo.setMaxLoopCount(instance.getMaxLoopCount());
+        vo.setCompletionProtocol(instance.getCompletionProtocol());
         vo.setConfig(instance.getConfig());
         vo.setCreatedAt(instance.getCreatedAt() != null ? instance.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(instance.getCreatedBy());
@@ -50,6 +52,9 @@ public class InstanceConverter {
         instance.setAllowConsoleSession(dto.getAllowConsoleSession());
         instance.setAllowWidgetSession(dto.getAllowWidgetSession());
         instance.setMaxLoopCount(normalizeLoop(dto.getMaxLoopCount()));
+        // null / MODEL_DEFAULT = follow the model route default (stored as NULL).
+        instance.setCompletionProtocol(CompletionProtocol.isInherit(dto.getCompletionProtocol())
+                ? null : CompletionProtocol.from(dto.getCompletionProtocol()).name());
         instance.setConfig(normalizeConfig(dto.getConfig()));
         instance.setStatus(InstanceEnum.STATUS_ENABLED);
         return instance;

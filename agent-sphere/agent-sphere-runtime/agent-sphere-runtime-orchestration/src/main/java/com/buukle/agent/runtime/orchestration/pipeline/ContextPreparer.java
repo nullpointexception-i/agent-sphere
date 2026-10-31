@@ -5,6 +5,7 @@ import com.buukle.agent.capability.builtin.dtvo.vo.BuiltinToolVO;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.FinishConstants;
+import com.buukle.agent.runtime.kernel.constants.ProgressConstants;
 import com.buukle.agent.runtime.kernel.constants.ToolResultReadConstants;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
@@ -49,11 +50,13 @@ public class ContextPreparer {
 
     private static final String WAIT_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"ms\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":600000,\"description\":\"Milliseconds to wait (100-600000). The run suspends immediately and resumes automatically afterwards. Use it to give dynamic content time to appear or settle.\"}},\"required\":[\"ms\"],\"additionalProperties\":false}";
     private static final String FINISH_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"enum\":[\"success\",\"failed\",\"blocked\"],\"description\":\"success=work done and verified; failed=tried but could not complete; blocked=cannot proceed without something external (login/permission/missing data)\"},\"summary\":{\"type\":\"string\",\"description\":\"Complete, self-contained answer for the user; the run's final reply is taken from it\"}},\"required\":[\"status\",\"summary\"],\"additionalProperties\":false}";
+    private static final String PROGRESS_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":1000,\"description\":\"Meaningful intermediate milestone\"},\"nextAction\":{\"type\":\"string\",\"maxLength\":500,\"description\":\"What the agent will do next\"},\"percent\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100,\"description\":\"Optional approximate completion percentage\"}},\"required\":[\"summary\"],\"additionalProperties\":false}";
     private static final Set<String> READ_ONLY_CONTROL_TOOLS = Set.of(
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.FINISH.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.ASK_CLARIFICATION.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId(),
+            LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROGRESS.getId(),
             SubAgentConstants.DELEGATE_TOOL);
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
@@ -242,6 +245,23 @@ public class ContextPreparer {
                     .description(ToolResultReadConstants.DESCRIPTION)
                     .parametersSchemaJson(ToolResultReadConstants.PARAM_SCHEMA)
                     .execBinding(readBinding).build());
+        }
+        // 默认注册 progress：显式报告中间进度，避免模型用普通文本伪装中间轮次。
+        {
+            long progressId = BuiltinToolEnum.PROGRESS.getId();
+            Map<String, Object> progressBinding = new HashMap<>();
+            progressBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ProgressConstants.INTERNAL_NAME);
+            result.add(RuntimeTool.builder()
+                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                    .capabilityId(progressId)
+                    .llmToolName(LLM_PREFIX_BUILTIN + progressId)
+                    .toolRef(ToolRefs.builtin(ProgressConstants.INTERNAL_NAME))
+                    .displayName(ProgressConstants.DISPLAY_NAME)
+                    .displayNameCn(ProgressConstants.DISPLAY_NAME_CN)
+                    .displayNameEn(ProgressConstants.DISPLAY_NAME)
+                    .description(ProgressConstants.DESCRIPTION)
+                    .parametersSchemaJson(PROGRESS_PARAM_SCHEMA)
+                    .execBinding(progressBinding).build());
         }
         // 默认注册 finish：agentic run 的唯一合法结束方式。
         // 「没有工具调用」既可能是做完、也可能是放弃，只靠沉默无法区分 —— finish 让它变成显式声明。

@@ -3,6 +3,7 @@ package com.buukle.agent.runtime.kernel.runner;
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.constant.ToolApprovalDecision;
+import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.constant.ToolSecurityLevel;
 import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
@@ -240,6 +241,7 @@ public class SessionRunner {
         // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
         boolean toolsEverExecuted = loopCount > 0;
         int silentTurns = 0;
+        int maxSilentTurns = Math.max(0, properties.getRunner().getMaxSilentTurns());
 
         String approvalResumeId = topCtx != null ? topCtx.getApprovalResumeId() : null;
         if (approvalResumeId != null && currentRun != null) {
@@ -562,25 +564,37 @@ public class SessionRunner {
                     }
                     // L2：agentic 流程里的沉默不是完成。模型必须以 finish 显式收口；
                     // 连续静默超过上限就判失败 —— 否则「只说了几句就放弃」会被记成成功。
-                    if (toolsEverExecuted) {
-                        if (silentTurns < RunnerConstants.MAX_SILENT_TURNS) {
-                            silentTurns++;
-                            log.warn("Run {} ended a turn without any tool call (silent turn {}/{})",
-                                    currentRunId, silentTurns, RunnerConstants.MAX_SILENT_TURNS);
+                    CompletionProtocol completionProtocol = CompletionProtocol.from(
+                            currentRun != null ? currentRun.getCompletionProtocol() : null);
+                    boolean implicitText = completionProtocol == CompletionProtocol.IMPLICIT_TEXT
+                            && turn.content() != null && !turn.content().isBlank()
+                            && (turn.finishReason() == null || FinishReason.STOP.equals(turn.finishReason()));
+                    if (toolsEverExecuted && !implicitText) {
+                        int currentSilentTurn = silentTurns + 1;
+                        silentTurns = currentSilentTurn;
+                        if (currentSilentTurn <= maxSilentTurns) {
+                            log.warn("Run {} ended a turn without any tool call (silent turn {}/{}, finishReason={}, contentChars={})",
+                                    currentRunId, currentSilentTurn, maxSilentTurns,
+                                    turn.finishReason(), turn.content() == null ? 0 : turn.content().length());
                             continue;
                         }
-                        log.warn("Run {} kept replying without tools for {} turn(s); failing it",
-                                currentRunId, silentTurns);
+                        log.warn("Run {} kept replying without tools for {} turn(s); failing it (maxSilentTurns={}, finishReason={}, contentChars={})",
+                                currentRunId, currentSilentTurn, maxSilentTurns, turn.finishReason(),
+                                turn.content() == null ? 0 : turn.content().length());
                         currentRun.setStatus(RunStatus.FAILED.name());
                         runSpi.updateRun(currentRun);
                         eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
                                 new RuntimeEventDataVO()
                                         .setSessionId(sessionId)
                                         .setRunId(currentRunId)
-                                        .setErrorMessage("模型连续 " + silentTurns
+                                        .setErrorMessage("模型连续 " + currentSilentTurn
                                                 + " 轮未调用任何工具，也未调用 finish 收口")
                                         .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
                         break loop;
+                    }
+                    if (implicitText) {
+                        log.warn("Run {} completed by implicit text after tool use (completionProtocol={}, finishReason={}, contentChars={})",
+                                currentRunId, completionProtocol, turn.finishReason(), turn.content().length());
                     }
                     // 注意：这里<b>不能</b>置 loopCapped。走到本分支说明模型在最后一轮主动交付了答案，
                     // 那是一次正常完成，不是被上限截断。旧实现在此也置 loopCapped，导致

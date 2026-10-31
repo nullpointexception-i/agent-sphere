@@ -52,6 +52,10 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
             }
         }
         boolean clearLoop = dto.getMaxLoopCount() != null && dto.getMaxLoopCount() == 0;
+        // MODEL_DEFAULT / blank = clear the instance override and follow the model route again.
+        boolean clearCompletionProtocol = dto.getCompletionProtocol() != null
+                && com.buukle.agent.common.constant.CompletionProtocol
+                        .isInherit(dto.getCompletionProtocol());
         AgentInstance instance = instanceConverter.toDO(dto);
         instance.setId(id);
         updateById(instance);
@@ -60,6 +64,13 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
             lambdaUpdate()
                     .eq(AgentInstance::getId, id)
                     .set(AgentInstance::getMaxLoopCount, null)
+                    .update();
+        }
+        if (clearCompletionProtocol) {
+            // updateById ignores null fields, so clearing the override needs an explicit SET NULL.
+            lambdaUpdate()
+                    .eq(AgentInstance::getId, id)
+                    .set(AgentInstance::getCompletionProtocol, null)
                     .update();
         }
         if (dto.getConfig() != null && dto.getConfig().isBlank()) {

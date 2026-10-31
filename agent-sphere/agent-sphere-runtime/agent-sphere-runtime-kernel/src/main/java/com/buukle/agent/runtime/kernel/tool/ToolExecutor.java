@@ -12,6 +12,7 @@ import com.buukle.agent.instance.spi.SessionTodoSpi;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.constants.FinishConstants;
+import com.buukle.agent.runtime.kernel.constants.ProgressConstants;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.runtime.kernel.contract.CliExecutionBinding;
@@ -152,6 +153,28 @@ public class ToolExecutor {
                 } catch (Exception e) {
                     log.warn("Failed to process finish", e);
                     return "{\"status\":\"" + FinishConstants.STATUS_FINISHED + "\"}";
+                }
+            }
+
+            // progress 是纯运行时协议工具：记录正常 tool lifecycle，但不执行外部副作用。
+            if (CAPABILITY_TYPE_BUILTIN.equals(type) && ProgressConstants.TOOL_NAME.equals(tc.name())) {
+                try {
+                    JsonNode argsNode = JSON.readTree(args);
+                    String summary = argsNode.path(ProgressConstants.JSON_SUMMARY).asText("").trim();
+                    String nextAction = argsNode.path(ProgressConstants.JSON_NEXT_ACTION).asText("").trim();
+                    JsonNode percentNode = argsNode.get(ProgressConstants.JSON_PERCENT);
+                    boolean validPercent = percentNode == null
+                            || (percentNode.isIntegralNumber() && percentNode.asInt() >= 0 && percentNode.asInt() <= 100);
+                    if (summary.isEmpty() || summary.length() > ProgressConstants.MAX_SUMMARY_CHARS
+                            || nextAction.length() > ProgressConstants.MAX_NEXT_ACTION_CHARS || !validPercent) {
+                        return "{\"error\":\"Invalid progress payload\"}";
+                    }
+                    return JSON.writeValueAsString(Map.of(
+                            "status", ProgressConstants.STATUS_REPORTED,
+                            ProgressConstants.JSON_SUMMARY, summary));
+                } catch (Exception e) {
+                    log.warn("Failed to process progress", e);
+                    return "{\"error\":\"Invalid progress payload\"}";
                 }
             }
 

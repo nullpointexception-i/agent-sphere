@@ -1,6 +1,8 @@
 package com.buukle.agent.runtime.orchestration.orchestrator;
 
+import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.SessionRunCoordinator;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
@@ -31,6 +33,7 @@ public class RuntimeOrchestrator {
     private final ApplicationEventPublisher eventPublisher;
     private final SessionRunCoordinator coordinator;
     private final SessionInputManager inputManager;
+    private final RunSpi runSpi;
 
 
     @Async("runtimeAsyncExecutor")
@@ -43,6 +46,7 @@ public class RuntimeOrchestrator {
         log.info("Async interrupted run recovery: runId={}, sessionId={}", run.getId(), sessionId);
         try {
             ValidationResult validated = validator.validate(sessionId, null);
+            snapshotCompletionProtocol(run, validated);
             KernelContext ctx = preparer.prepare(run, validated, "");
             ctx.setRecoveryResume(true);
             coordinator.wake(sessionId, ctx, run.getId());
@@ -64,6 +68,7 @@ public class RuntimeOrchestrator {
                 run.getId(), sessionId, approvalId);
         try {
             ValidationResult validated = validator.validate(sessionId, null);
+            snapshotCompletionProtocol(run, validated);
             KernelContext ctx = preparer.prepare(run, validated, "");
             ctx.setApprovalResumeId(approvalId);
             coordinator.wake(sessionId, ctx, run.getId());
@@ -85,6 +90,7 @@ public class RuntimeOrchestrator {
         log.info("Async execution start: runId={}, sessionId={}", run.getId(), sessionId);
         try {
             ValidationResult validated = validator.validate(sessionId, overrideRouteId);
+            snapshotCompletionProtocol(run, validated);
             log.info("Validation passed: sessionId={}, instanceId={}, routeId={}",
                     sessionId, validated.getAgentInstance().getId(), validated.getModelRoute().getId());
 
@@ -108,5 +114,26 @@ public class RuntimeOrchestrator {
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
                             .setErrorMessage(e.getMessage())));
         }
+    }
+
+    /**
+     * Pin the effective completion protocol on first entry only.
+     *
+     * <p>Resolution order: instance override > model route default > STRICT_FINISH.
+     * Once written, resume/fallback paths must keep the snapshot so a mid-run model
+     * switch cannot silently relax the completion guardrail.
+     */
+    private void snapshotCompletionProtocol(RunVO run, ValidationResult validated) {
+        if (run == null || validated == null || validated.getAgentInstance() == null) {
+            return;
+        }
+        if (run.getCompletionProtocol() != null && !run.getCompletionProtocol().isBlank()) {
+            return;
+        }
+        String instanceOverride = validated.getAgentInstance().getCompletionProtocol();
+        String routeDefault = validated.getModelRoute() != null
+                ? validated.getModelRoute().getCompletionProtocol() : null;
+        run.setCompletionProtocol(CompletionProtocol.resolve(instanceOverride, routeDefault).name());
+        runSpi.updateRun(run);
     }
 }

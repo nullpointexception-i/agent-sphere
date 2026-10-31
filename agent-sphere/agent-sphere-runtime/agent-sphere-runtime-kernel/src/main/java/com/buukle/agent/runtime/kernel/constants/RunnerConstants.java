@@ -39,8 +39,10 @@ public final class RunnerConstants {
             You may call multiple INDEPENDENT tools in one turn (parallel); dependent tools need separate turns.
             When calling the task list tool, JSON must be valid (commas between properties):
             {"todos": [{"content": "...", "status": "pending", "priority": "high"}]}
-            CRITICAL: call tools through the function-calling API (tool_calls); never describe them as JSON/text.
-            CRITICAL — EXECUTE, DO NOT ASK: when the user gave a clear instruction, execute it immediately with
+             CRITICAL: call tools through the function-calling API (tool_calls); never describe them as JSON/text.
+             INTERMEDIATE PROGRESS: when the work is not complete but you need to report a milestone, call progress
+             with a concise summary and optional nextAction. Do not use plain text as a progress protocol.
+             CRITICAL — EXECUTE, DO NOT ASK: when the user gave a clear instruction, execute it immediately with
             tools. Do NOT ask "what do you want to do". If exactly one detail is missing, use the clarification
             tool once when available, otherwise proceed with the best available assumption; never ask
             consecutive clarifications.
@@ -102,13 +104,6 @@ public final class RunnerConstants {
      */
     public static final String LOOP_BUDGET_PREFIX = "\n\n[LOOP BUDGET] ";
 
-    /**
-     * 静默追问上限：用过工具之后，连续这么多轮「没有任何工具调用」即判 run 失败。
-     *
-     * <p>「没有工具调用」是二义信号（做完 / 放弃），agentic 流程里只允许用 {@code finish} 显式收口，
-     * 所以沉默只能是异常。给 2 轮容错是照顾小模型偶发的「只说不做」。
-     */
-    public static final int MAX_SILENT_TURNS = 2;
     /** 同一 run 连续压缩失败达到该次数后，停止继续压缩，避免每轮重复烧 token。 */
     public static final int MAX_CONSECUTIVE_COMPACTION_FAILURES = 2;
 

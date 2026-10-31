@@ -92,6 +92,17 @@ export default {
   'pages.instances.maxLoopCount': '最大循环次数',
   'pages.instances.maxLoopCount.extra':
     '单次 run 最大循环数；0=系统默认，>0=覆盖，必填',
+  'pages.instances.completionProtocol': '完成协议',
+  'pages.instances.completionProtocol.extra':
+    '默认跟随模型路由；任务型实例可强制 strict finish',
+  'pages.instances.completionProtocol.inherit': '跟随模型路由（推荐）',
+  'pages.instances.completionProtocol.strict': '强制严格 finish',
+  'pages.instances.completionProtocol.implicit': '强制兼容普通文本',
+  'pages.models.completionProtocol': '完成协议',
+  'pages.models.completionProtocol.extra':
+    '该模型是否稳定用 finish 工具收口 agentic 任务',
+  'pages.models.completionProtocol.strict': '严格 finish（推荐）',
+  'pages.models.completionProtocol.implicit': '允许普通文本收口',
   'pages.instances.config': '高级配置 (JSON)',
   'pages.instances.config.extra':
     '采样参数 JSON（与 Completions config 同形状）；留空 = 使用全局系统默认',
