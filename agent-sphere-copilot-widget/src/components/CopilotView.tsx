@@ -15,6 +15,7 @@ import { cacheHitRate, formatTokens } from './Usage';
 const AGENT_PAGE_SIZE = 5;
 const SESSION_PAGE_SIZE = 5;
 const SCROLL_END_THRESHOLD = 20;
+const CHAT_STICK_THRESHOLD = 160;
 const ACTIVE_SESSION_KEY = 'agent-sphere-widget:active-session';
 
 interface CopilotViewProps {
@@ -161,7 +162,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const agentListRef = useRef<HTMLDivElement>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
   const chatBodyRef = useRef<HTMLDivElement>(null);
+  const chatContentRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLDivElement>(null);
+  const chatStickRef = useRef(true);
+  const chatProgrammaticScrollRef = useRef(false);
+  const chatLastScrollHeightRef = useRef(0);
+  const chatLastScrollTopRef = useRef(0);
 
   useEffect(() => {
     const el = chatInputRef.current;
@@ -390,30 +396,64 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, timeline.runActive, api]);
 
-  // 进入会话先滚到底一次；随后流式/刚发送时保持钉底（翻旧页 prepend 不动）
+  // 进入会话先滚到底一次；随后任何内容增长都保持钉底（翻旧页 prepend 不动）
   const initialScrollDoneRef = useRef(false);
   useEffect(() => {
     initialScrollDoneRef.current = false;
+    chatStickRef.current = true;
   }, [selectedSessionId]);
 
+  const scrollChatToBottom = useCallback((force = false) => {
+    const el = chatBodyRef.current;
+    if (!el) return;
+    if (!force && !chatStickRef.current) return;
+    chatProgrammaticScrollRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    chatLastScrollHeightRef.current = el.scrollHeight;
+    chatLastScrollTopRef.current = el.scrollTop;
+    requestAnimationFrame(() => {
+      chatProgrammaticScrollRef.current = false;
+    });
+  }, []);
+
+  // 长消息、待办、截图等异步内容会改变内容高度；观察内容层而不是滚动层。
+  useEffect(() => {
+    const el = chatBodyRef.current;
+    const inner = chatContentRef.current;
+    if (!el || !inner) return;
+    chatLastScrollHeightRef.current = el.scrollHeight;
+    chatLastScrollTopRef.current = el.scrollTop;
+    const ro = new ResizeObserver(() => {
+      chatLastScrollHeightRef.current = el.scrollHeight;
+      scrollChatToBottom();
+    });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [selectedSessionId, scrollChatToBottom]);
+
+  const lastTimelineRow = timeline.rows[timeline.rows.length - 1];
+  const lastTimelineKey = [
+    timeline.rows.length,
+    lastTimelineRow?.seq ?? '',
+    lastTimelineRow?.state ?? '',
+    timeline.pendingUserRows.length,
+  ].join(':');
   useEffect(() => {
     const el = chatBodyRef.current;
     if (!el) return;
-    const lastRow = timeline.rows[timeline.rows.length - 1];
     const hasPending = timeline.pendingUserRows.length > 0;
-    if (!initialScrollDoneRef.current && (timeline.rows.length > 0 || hasPending)) {
+    if (
+      !initialScrollDoneRef.current &&
+      (timeline.rows.length > 0 || hasPending)
+    ) {
       initialScrollDoneRef.current = true;
-      el.scrollTop = el.scrollHeight;
-      return;
+      const raf = requestAnimationFrame(() => scrollChatToBottom(true));
+      return () => cancelAnimationFrame(raf);
     }
-    if (hasPending) {
-      el.scrollTop = el.scrollHeight;
-      return;
-    }
-    if (lastRow && (lastRow.state === 'RUNNING' || lastRow.kind === 'user')) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [selectedSessionId, timeline.rows, timeline.pendingUserRows]);
+    if (!chatStickRef.current) return;
+    const raf = requestAnimationFrame(() => scrollChatToBottom());
+    return () => cancelAnimationFrame(raf);
+  }, [selectedSessionId, lastTimelineKey, scrollChatToBottom]);
 
   const respondTimelineClarify = useCallback(
     (runId: number, clarificationId: string, response: string) => {
@@ -508,6 +548,19 @@ export function CopilotView({ config, user }: CopilotViewProps) {
 
   const handleChatBodyScroll = (event: UIEvent<HTMLDivElement>) => {
     const el = event.currentTarget;
+    if (!chatProgrammaticScrollRef.current) {
+      const height = el.scrollHeight;
+      const scrollTop = el.scrollTop;
+      const grew = height > chatLastScrollHeightRef.current + 1;
+      const userScrolledUp = scrollTop < chatLastScrollTopRef.current - 1;
+      chatLastScrollHeightRef.current = height;
+      chatLastScrollTopRef.current = scrollTop;
+      const distance = height - scrollTop - el.clientHeight;
+      // 内容增长触发的 scroll 不代表用户离开底部
+      if (!(grew && chatStickRef.current && !userScrolledUp)) {
+        chatStickRef.current = distance < CHAT_STICK_THRESHOLD;
+      }
+    }
     // 靠近顶部才加载更早消息；滚到底部时不能触发加载（否则会翻出全量）
     if (
       el.scrollTop < SCROLL_END_THRESHOLD &&
@@ -834,36 +887,38 @@ export function CopilotView({ config, user }: CopilotViewProps) {
               className="aw-chat-body"
               onScroll={handleChatBodyScroll}
             >
-              <WidgetTimeline
-                rows={timeline.rows}
-                hasMore={timeline.hasMore}
-                loadingOlder={timeline.loadingOlder}
-                onLoadOlder={() => {
-                  if (selectedSessionId != null) {
-                    void timeline.loadOlder(selectedSessionId);
-                  }
-                }}
-                pendingUserRows={timeline.pendingUserRows}
-                subAgentLiveMap={timeline.subAgentLiveMap}
-                loadSubAgentSteps={timeline.loadSubAgentSteps}
-                loadFile={loadFile}
-                onRespondClarify={respondTimelineClarify}
-                onCancelClarify={() => {
-                  void handleStop();
-                }}
-                preparingTool={timeline.preparingTool}
-              />
-              {sessionUsage && Number(sessionUsage.totalTokens) > 0 ? (
-                <div className="aw-session-usage">
-                  ♨ 会话用量 · {formatTokens(sessionUsage.totalTokens)} tokens
-                  {sessionUsage.promptTokens
-                    ? ` · prompt ${formatTokens(sessionUsage.promptTokens)}`
-                    : ''}
-                  {cacheHitRate(sessionUsage) != null
-                    ? ` · cache ${cacheHitRate(sessionUsage)}%`
-                    : ''}
-                </div>
-              ) : null}
+              <div ref={chatContentRef}>
+                <WidgetTimeline
+                  rows={timeline.rows}
+                  hasMore={timeline.hasMore}
+                  loadingOlder={timeline.loadingOlder}
+                  onLoadOlder={() => {
+                    if (selectedSessionId != null) {
+                      void timeline.loadOlder(selectedSessionId);
+                    }
+                  }}
+                  pendingUserRows={timeline.pendingUserRows}
+                  subAgentLiveMap={timeline.subAgentLiveMap}
+                  loadSubAgentSteps={timeline.loadSubAgentSteps}
+                  loadFile={loadFile}
+                  onRespondClarify={respondTimelineClarify}
+                  onCancelClarify={() => {
+                    void handleStop();
+                  }}
+                  preparingTool={timeline.preparingTool}
+                />
+                {sessionUsage && Number(sessionUsage.totalTokens) > 0 ? (
+                  <div className="aw-session-usage">
+                    ♨ 会话用量 · {formatTokens(sessionUsage.totalTokens)} tokens
+                    {sessionUsage.promptTokens
+                      ? ` · prompt ${formatTokens(sessionUsage.promptTokens)}`
+                      : ''}
+                    {cacheHitRate(sessionUsage) != null
+                      ? ` · cache ${cacheHitRate(sessionUsage)}%`
+                      : ''}
+                  </div>
+                ) : null}
+              </div>
             </div>
             {widgetSessionBlocked ? (
               <div className="aw-business-autochat">

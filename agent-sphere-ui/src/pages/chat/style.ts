@@ -98,6 +98,8 @@ export const useStyles = createStyles(({ css, token }) => ({
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* 关闭浏览器滚动锚定：长消息/图片插入时会自动改 scrollTop，误判用户离开底部 */
+    overflow-anchor: none;
     padding: ${token.paddingMD}px;
     display: flex;
     flex-direction: column;

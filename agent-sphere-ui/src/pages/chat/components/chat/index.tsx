@@ -52,7 +52,11 @@ interface ChatMainProps {
   clarificationBatch?: ClarificationBatch | null;
   clarificationSubmitting?: boolean;
   onResolveClarifications?: (
-    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+    answers: Array<{
+      clarificationId: string;
+      selected?: string[];
+      text?: string;
+    }>,
   ) => void;
   onCancelClarifications?: () => void;
   queuedMessages?: any[];
@@ -112,26 +116,74 @@ export default function ChatMain({
   // - ResizeObserver 观察内容包裹层，任何内容高度变化（子 Agent 展开/异步步骤/SSE 流式/工具块展开/图片加载/大块合并）
   //   都在「用户原本在底部」时滚到底，不打断向上回看 / 加载更早。
   const stickRef = useRef(true);
+  const programmaticScrollRef = useRef(false);
+  const lastScrollHeightRef = useRef(0);
+  const lastScrollTopRef = useRef(0);
   useEffect(() => {
     const el = messagesRef.current;
     const inner = timelineWrapRef.current;
     if (!el || !inner) return;
-    const maybeStick = () => {
-      if (stickRef.current) el.scrollTop = el.scrollHeight;
+    lastScrollHeightRef.current = el.scrollHeight;
+    lastScrollTopRef.current = el.scrollTop;
+
+    const scrollToBottom = () => {
+      if (!stickRef.current) return;
+      programmaticScrollRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      lastScrollHeightRef.current = el.scrollHeight;
+      lastScrollTopRef.current = el.scrollTop;
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false;
+      });
     };
     const onScroll = () => {
-      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+      if (programmaticScrollRef.current) return;
+      const height = el.scrollHeight;
+      const scrollTop = el.scrollTop;
+      const grew = height > lastScrollHeightRef.current + 1;
+      const userScrolledUp = scrollTop < lastScrollTopRef.current - 1;
+      lastScrollHeightRef.current = height;
+      lastScrollTopRef.current = scrollTop;
+      const distance = height - scrollTop - el.clientHeight;
+      // 内容增长本身也会触发 scroll（滚动锚定/浏览器夹紧），不能据此判定用户离开底部
+      if (grew && stickRef.current && !userScrolledUp) return;
+      stickRef.current = distance < 160;
     };
     onScroll();
     el.addEventListener('scroll', onScroll, { passive: true });
-    const ro = new ResizeObserver(maybeStick);
+    const ro = new ResizeObserver(() => {
+      lastScrollHeightRef.current = el.scrollHeight;
+      scrollToBottom();
+    });
     ro.observe(inner);
-    maybeStick();
+    scrollToBottom();
     return () => {
       el.removeEventListener('scroll', onScroll);
       ro.disconnect();
     };
   }, [hasMessages]);
+
+  // 长消息 / 待办 / 截图等新行到达时，ResizeObserver 之外再补一次钉底。
+  const lastTimelineKey = (() => {
+    const last = timeline[timeline.length - 1];
+    return `${timeline.length}:${last?.seq ?? ''}:${last?.state ?? ''}`;
+  })();
+  useEffect(() => {
+    if (!stickRef.current) return;
+    const el = messagesRef.current;
+    if (!el) return;
+    const raf = requestAnimationFrame(() => {
+      if (!stickRef.current) return;
+      programmaticScrollRef.current = true;
+      el.scrollTop = el.scrollHeight;
+      lastScrollHeightRef.current = el.scrollHeight;
+      lastScrollTopRef.current = el.scrollTop;
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false;
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [lastTimelineKey]);
 
   // 单一事实来源：澄清卡只渲染 timeline；messages 不再参与运行态锁定，
   // 避免 messages 里残留的 pending 澄清把 Footer 永久锁在「执行中/停止」。
@@ -218,7 +270,14 @@ export default function ChatMain({
           </div>
         )}
         {queuedMessages.length > 0 && (
-          <div style={{ padding: '4px 16px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div
+            style={{
+              padding: '4px 16px 0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
             {queuedMessages.map((item: any) => (
               <div
                 key={item.queueId}
@@ -234,13 +293,25 @@ export default function ChatMain({
                   padding: '4px 8px',
                 }}
               >
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span
+                  style={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   排队中：{item.text}
                 </span>
                 <button
                   type="button"
                   onClick={() => onWithdrawQueued?.(item.queueId)}
-                  style={{ border: 'none', background: 'transparent', color: '#1677ff', cursor: 'pointer' }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#1677ff',
+                    cursor: 'pointer',
+                  }}
                 >
                   撤回
                 </button>

@@ -376,6 +376,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* 关闭滚动锚定：长消息/图片插入时不擅自改 scrollTop */
+  overflow-anchor: none;
   scrollbar-width: thin;
   font-size: 12px;
 }
