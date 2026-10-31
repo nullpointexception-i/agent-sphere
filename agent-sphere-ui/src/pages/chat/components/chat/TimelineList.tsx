@@ -6,19 +6,23 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined,
   CloseOutlined,
+  CodeOutlined,
   CopyOutlined,
-  DownOutlined,
-  FileTextOutlined,
   DislikeFilled,
   DislikeOutlined,
+  DownOutlined,
+  FileTextOutlined,
+  GlobalOutlined,
   LikeFilled,
   LikeOutlined,
   LoadingOutlined,
   MessageOutlined,
   PauseCircleOutlined,
+  ReadOutlined,
   RightOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  SearchOutlined,
   ShareAltOutlined,
   StopOutlined,
   SyncOutlined,
@@ -26,6 +30,7 @@ import {
 } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
+import { useIntl } from '@umijs/max';
 import {
   App,
   Button,
@@ -40,7 +45,6 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useIntl } from '@umijs/max';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
 import UsageChip, { formatTokens } from '../Usage';
@@ -48,15 +52,24 @@ import { stripSubAgentMarkerPrefix } from './subAgentMarker';
 import type { SubAgentLiveMap } from './subAgentTypes';
 import {
   browserResult,
+  cliView,
   docSummary,
+  docSummaryZh,
   extractTodos,
   genericSummary,
   isBrowserTool,
+  progressView,
+  readToolResultView,
+  searchResultView,
+  skillView,
   type TodoItem,
   type ToolFamily,
+  textContainsView,
   todoProgress,
   todoTotal,
   toolFamily,
+  toolResultText,
+  webPageView,
 } from './toolRenderers';
 
 interface TimelineListProps {
@@ -224,7 +237,8 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
   const intl = useIntl();
   const { message } = App.useApp();
   const content = row.content || {};
-  const thinking = typeof content.thinking === 'string' ? content.thinking.trim() : '';
+  const thinking =
+    typeof content.thinking === 'string' ? content.thinking.trim() : '';
   const reply = typeof content.reply === 'string' ? content.reply.trim() : '';
   const hasThinking = thinking.length > 0 && thinking !== '{}';
   const hasReply = reply.length > 0 && reply !== '{}';
@@ -232,7 +246,9 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
   const [thinkingOpen, setThinkingOpen] = useState(
     Boolean(isLatest && !hasReply && isRunning),
   );
-  const [feedback, setFeedback] = useState<string | undefined>(content.feedback);
+  const [feedback, setFeedback] = useState<string | undefined>(
+    content.feedback,
+  );
   const [shareOpen, setShareOpen] = useState(false);
   const [shareCount, setShareCount] = useState(3);
   const thinkingBoxRef = useRef<HTMLPreElement | null>(null);
@@ -260,7 +276,12 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
     const previous = feedback;
     setFeedback(next === 'NONE' ? undefined : next);
     try {
-      await agentApi.sessions.feedback(sessionId, interactionId, row.runId, next);
+      await agentApi.sessions.feedback(
+        sessionId,
+        interactionId,
+        row.runId,
+        next,
+      );
     } catch (e: any) {
       setFeedback(previous);
       message.error(e?.message || 'Feedback failed');
@@ -269,10 +290,18 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
   const share = async () => {
     if (!sessionId || row.runId == null) return;
     try {
-      const res = await agentApi.sessions.share(sessionId, row.runId, shareCount);
+      const res = await agentApi.sessions.share(
+        sessionId,
+        row.runId,
+        shareCount,
+      );
       if (res?.shareToken) {
         setShareOpen(false);
-        window.open(`${window.location.origin}/share/${res.shareToken}`, '_blank', 'noopener,noreferrer');
+        window.open(
+          `${window.location.origin}/share/${res.shareToken}`,
+          '_blank',
+          'noopener,noreferrer',
+        );
       }
     } catch (e: any) {
       message.error(e?.message || 'Share failed');
@@ -341,27 +370,45 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
         </div>
       )}
       {(hasReply || hasThinking) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 6,
+          }}
+        >
           <Button
             type="text"
             size="small"
             icon={feedback === 'LIKE' ? <LikeFilled /> : <LikeOutlined />}
             onClick={() => submitFeedback('LIKE')}
-            title={intl.formatMessage({ id: 'pages.chat.assistant.like', defaultMessage: 'Like' })}
+            title={intl.formatMessage({
+              id: 'pages.chat.assistant.like',
+              defaultMessage: 'Like',
+            })}
           />
           <Button
             type="text"
             size="small"
-            icon={feedback === 'DISLIKE' ? <DislikeFilled /> : <DislikeOutlined />}
+            icon={
+              feedback === 'DISLIKE' ? <DislikeFilled /> : <DislikeOutlined />
+            }
             onClick={() => submitFeedback('DISLIKE')}
-            title={intl.formatMessage({ id: 'pages.chat.assistant.dislike', defaultMessage: 'Dislike' })}
+            title={intl.formatMessage({
+              id: 'pages.chat.assistant.dislike',
+              defaultMessage: 'Dislike',
+            })}
           />
           <Button
             type="text"
             size="small"
             icon={<ShareAltOutlined />}
             onClick={() => setShareOpen(true)}
-            title={intl.formatMessage({ id: 'pages.chat.assistant.share', defaultMessage: 'Share' })}
+            title={intl.formatMessage({
+              id: 'pages.chat.assistant.share',
+              defaultMessage: 'Share',
+            })}
           />
           {hasReply && <CopyButton text={reply} />}
         </div>
@@ -369,11 +416,20 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
       <UsageChip usage={content.usage} />
       <Modal
         open={shareOpen}
-        title={intl.formatMessage({ id: 'pages.chat.assistant.shareTitle', defaultMessage: 'Share conversation' })}
+        title={intl.formatMessage({
+          id: 'pages.chat.assistant.shareTitle',
+          defaultMessage: 'Share conversation',
+        })}
         onCancel={() => setShareOpen(false)}
         onOk={share}
-        okText={intl.formatMessage({ id: 'pages.chat.assistant.shareConfirm', defaultMessage: 'Create link' })}
-        cancelText={intl.formatMessage({ id: 'pages.chat.assistant.cancel', defaultMessage: 'Cancel' })}
+        okText={intl.formatMessage({
+          id: 'pages.chat.assistant.shareConfirm',
+          defaultMessage: 'Create link',
+        })}
+        cancelText={intl.formatMessage({
+          id: 'pages.chat.assistant.cancel',
+          defaultMessage: 'Cancel',
+        })}
       >
         <div style={{ marginBottom: 8, color: '#8c8c8c' }}>
           {intl.formatMessage({
@@ -381,7 +437,10 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
             defaultMessage: 'Choose how many conversation turns to share',
           })}
         </div>
-        <Radio.Group value={shareCount} onChange={(e) => setShareCount(e.target.value)}>
+        <Radio.Group
+          value={shareCount}
+          onChange={(e) => setShareCount(e.target.value)}
+        >
           <Radio.Button value={1}>1</Radio.Button>
           <Radio.Button value={3}>3</Radio.Button>
           <Radio.Button value={5}>5</Radio.Button>
@@ -417,29 +476,139 @@ function sortTodos(todos: TodoItem[]): TodoItem[] {
   );
 }
 
-/** 原文 JSON 折叠块（默认关闭，不丢细节）。 */
-function JsonBlock({ label, json }: { label: string; json?: string }) {
-  if (!json) return null;
-  let pretty = json;
-  try {
-    pretty = JSON.stringify(JSON.parse(json), null, 2);
-  } catch {
-    /* 保持原文 */
+function formatToolDuration(ms?: number) {
+  if (typeof ms !== 'number' || ms < 0) return '';
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`;
   }
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m${Math.round(seconds % 60)}s`;
+}
+
+/** 超过该耗时视为慢工具（红色 + ⚠）。 */
+const SLOW_TOOL_MS = 5000;
+
+/** 工具耗时：超过 5s 视为慢工具，红色 + ⚠ 提醒。 */
+function ToolDuration({ ms }: { ms?: number }) {
+  const text = formatToolDuration(ms);
+  if (!text || typeof ms !== 'number') return null;
+  const slow = ms >= SLOW_TOOL_MS;
   return (
-    <Block title={label} faint>
+    <div
+      title={slow ? '慢工具' : '工具耗时'}
+      style={{
+        marginTop: 4,
+        fontSize: 10.5,
+        color: slow ? '#cf1322' : '#a0a0a0',
+        userSelect: 'none',
+      }}
+    >
+      {slow ? `⚠ ${text}` : text}
+    </div>
+  );
+}
+
+/** 长内容预览：正文超过阈值时提供弹窗，避免把整页正文挤进时间线。 */
+function ContentPreviewButton({
+  title,
+  content,
+}: {
+  title: string;
+  content?: string | null;
+}) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const [open, setOpen] = useState(false);
+  if (!content || content.length < 200) return null;
+  return (
+    <>
+      <Button
+        type="link"
+        size="small"
+        style={{ padding: 0, height: 'auto', fontSize: 11 }}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
+      >
+        {isEn
+          ? `Preview (${content.length.toLocaleString()} chars)`
+          : `预览全文（${content.length.toLocaleString()} 字符）`}
+      </Button>
+      <Modal
+        open={open}
+        title={title}
+        footer={null}
+        width={760}
+        onCancel={() => setOpen(false)}
+      >
+        <pre
+          style={{
+            margin: 0,
+            maxHeight: '60vh',
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            fontSize: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          {content}
+        </pre>
+      </Modal>
+    </>
+  );
+}
+
+/** 参数 + 结果收口为一个折叠块，避免每个工具占两行裸 JSON。 */
+function RawDataBlock({ content, label }: { content: any; label?: string }) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  return (
+    <details style={{ marginTop: 5 }}>
+      <summary
+        style={{
+          cursor: 'pointer',
+          fontSize: 10.5,
+          color: '#a0a0a0',
+          userSelect: 'none',
+        }}
+      >
+        {label || (isEn ? 'Raw data' : '查看原始数据')}
+      </summary>
+      <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
+        {isEn ? 'Arguments' : '参数'}
+      </div>
       <pre
         style={{
           whiteSpace: 'pre-wrap',
           fontSize: 10.5,
           color: '#999',
-          maxHeight: 140,
+          maxHeight: 120,
           overflow: 'auto',
+          margin: '2px 0 0',
         }}
       >
-        {pretty}
+        {prettyJsonSafe(content.args)}
       </pre>
-    </Block>
+      <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
+        {isEn ? 'Result' : '结果'}
+      </div>
+      <pre
+        style={{
+          whiteSpace: 'pre-wrap',
+          fontSize: 10.5,
+          color: '#999',
+          maxHeight: 120,
+          overflow: 'auto',
+          margin: '2px 0 0',
+        }}
+      >
+        {prettyJsonSafe(content.artifact)}
+      </pre>
+    </details>
   );
 }
 
@@ -481,13 +650,19 @@ function TodoCard({ content }: { content: any }) {
       >
         <span style={{ fontSize: 12, opacity: 0.7 }}>☑️</span>
         <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
-          {intl.formatMessage({ id: 'pages.chat.tool.todoProgress', defaultMessage: 'Todo progress' })}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.todoProgress',
+            defaultMessage: 'Todo progress',
+          })}
         </Typography.Text>
         {summaryChip}
       </div>
       {todos.length === 0 ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {intl.formatMessage({ id: 'pages.chat.tool.noTodos', defaultMessage: 'No todo items' })}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.noTodos',
+            defaultMessage: 'No todo items',
+          })}
         </Typography.Text>
       ) : (
         sorted.map((t, i) => {
@@ -546,14 +721,15 @@ function TodoCard({ content }: { content: any }) {
           );
         })
       )}
-      <JsonBlock label={intl.formatMessage({ id: 'pages.chat.tool.rawTodo', defaultMessage: 'View raw todo data' })} json={content.args || content.artifact} />
+      <RawDataBlock content={content} />
     </div>
   );
 }
 
 function DocCard({ content }: { content: any }) {
   const intl = useIntl();
-  const summary = docSummary(content);
+  const isEn = intl.locale === 'en-US';
+  const summary = isEn ? docSummary(content) : docSummaryZh(content);
   const artifact = content.artifact;
   let artifactObj: any = null;
   try {
@@ -561,33 +737,92 @@ function DocCard({ content }: { content: any }) {
   } catch {
     artifactObj = null;
   }
+  let argsObj: any = null;
+  try {
+    argsObj = content.args ? JSON.parse(content.args) : null;
+  } catch {
+    argsObj = null;
+  }
+  const meta = content.meta || {};
+  const documentId =
+    meta.documentId != null ? meta.documentId : artifactObj?.documentId;
+  const contentChars =
+    typeof meta.chars === 'number'
+      ? meta.chars
+      : typeof artifactObj?.content === 'string'
+        ? artifactObj.content.length
+        : typeof argsObj?.content === 'string'
+          ? argsObj.content.length
+          : null;
+  const totalLines =
+    meta.totalLines != null
+      ? meta.totalLines
+      : typeof artifactObj?.totalLines === 'number'
+        ? artifactObj.totalLines
+        : null;
+  const version = meta.version != null ? meta.version : artifactObj?.version;
+  const documentContent =
+    typeof artifactObj?.content === 'string'
+      ? artifactObj.content
+      : typeof argsObj?.content === 'string'
+        ? argsObj.content
+        : '';
   return (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <FileTextOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
         <Typography.Text style={{ fontSize: 12, color: '#8c8c8c' }}>
-          {intl.formatMessage({ id: 'pages.chat.tool.docOperation', defaultMessage: 'Document operation' })}
+          {content.displayName ||
+            intl.formatMessage({
+              id: 'pages.chat.tool.docOperation',
+              defaultMessage: 'Document operation',
+            })}
         </Typography.Text>
         <ArrowRightOutlined style={{ fontSize: 11, color: '#a0a0a0' }} />
         <Typography.Text strong style={{ fontSize: 12 }}>
           {summary}
         </Typography.Text>
       </div>
-      {artifactObj?.documentId && (
+      {(documentId != null || contentChars != null) && (
         <div style={{ marginTop: 4 }}>
           <Typography.Text
             type="secondary"
             style={{ fontSize: 11, lineHeight: '16px' }}
           >
-            {(artifactObj.preview || artifactObj.title || '') && (
-              <>
-                {artifactObj.title || '文档'}
-                {artifactObj.preview
-                  ? `：${String(artifactObj.preview).slice(0, 60)}…`
-                  : ''}
-              </>
-            )}
+            {[
+              documentId != null ? `documentId=${documentId}` : null,
+              version != null ? `v${version}` : null,
+              contentChars != null
+                ? isEn
+                  ? `${contentChars.toLocaleString()} chars`
+                  : `正文 ${contentChars.toLocaleString()} 字符`
+                : null,
+              totalLines != null
+                ? isEn
+                  ? `${totalLines} lines`
+                  : `${totalLines} 行`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
           </Typography.Text>
+          {(artifactObj?.preview || artifactObj?.title) && (
+            <Typography.Text
+              type="secondary"
+              style={{ display: 'block', fontSize: 11, lineHeight: '16px' }}
+            >
+              {artifactObj.title || (isEn ? 'Document' : '文档')}
+              {artifactObj.preview
+                ? `：${String(artifactObj.preview).slice(0, 60)}…`
+                : ''}
+            </Typography.Text>
+          )}
+          <div>
+            <ContentPreviewButton
+              title={artifactObj?.title || (isEn ? 'Document' : '文档')}
+              content={documentContent}
+            />
+          </div>
         </div>
       )}
     </div>
@@ -608,7 +843,9 @@ function GenericCard({
   const intl = useIntl();
   const summary = genericSummary(content);
   const displayName =
-    (intl.locale === 'en-US' ? content.displayNameEn || content.displayName : content.displayName || content.displayNameEn) ||
+    (intl.locale === 'en-US'
+      ? content.displayNameEn || content.displayName
+      : content.displayName || content.displayNameEn) ||
     (family === 'todo' ? '待办写入' : content.toolName) ||
     intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
   return (
@@ -642,35 +879,101 @@ function GenericCard({
           </span>
         )}
       </div>
-      {!hideJson && <JsonBlock label={intl.formatMessage({ id: 'pages.chat.tool.rawArgs', defaultMessage: 'View raw arguments' })} json={content.args} />}
-      {!hideJson && <JsonBlock label={intl.formatMessage({ id: 'pages.chat.tool.rawResult', defaultMessage: 'View raw result' })} json={content.artifact} />}
+      {!hideJson && <RawDataBlock content={content} />}
     </div>
   );
 }
 
-function ToolCard({ row }: any) {
+function ToolCardBody({ row }: any) {
   const intl = useIntl();
   const content = row.content || {};
   if (/^mcp_\d+_\d+$/.test(content.toolName || '')) {
     return <McpToolCard content={content} state={row.state} />;
   }
-  if (content.toolName === 'builtin_10' || content.displayName === '等待'
-      || content.displayName === 'Wait') {
+  if (
+    content.toolName === 'builtin_10' ||
+    content.displayName === '等待' ||
+    content.displayName === 'Wait'
+  ) {
     return <WaitCard content={content} state={row.state} />;
   }
-  if (content.toolName === 'builtin_13' || content.displayName === '当前时间'
-      || content.displayName === 'Current Time') {
+  if (
+    content.toolName === 'builtin_13' ||
+    content.displayName === '当前时间' ||
+    content.displayName === 'Current Time'
+  ) {
     return <CurrentTimeCard content={content} state={row.state} />;
   }
+  if (
+    content.toolName === 'builtin_11' ||
+    content.displayName === '文本包含判断' ||
+    content.displayName === 'Text Contains'
+  ) {
+    return <TextContainsCard content={content} state={row.state} />;
+  }
+  if (
+    content.toolName === 'builtin_16' ||
+    content.displayName === '报告进度' ||
+    content.displayName === 'Progress'
+  ) {
+    return <ProgressCard content={content} state={row.state} />;
+  }
+  if (
+    content.toolName === 'builtin_4' ||
+    content.displayName === '网页读取' ||
+    content.displayName === 'Web Read'
+  ) {
+    return <WebPageCard content={content} state={row.state} kind="read" />;
+  }
+  if (
+    content.toolName === 'builtin_2' ||
+    content.displayName === '网页获取' ||
+    content.displayName === 'Web Fetch'
+  ) {
+    return <WebPageCard content={content} state={row.state} kind="fetch" />;
+  }
+  if (
+    content.toolName === 'builtin_8' ||
+    content.displayName === '技能库' ||
+    content.displayName === 'Skill Library'
+  ) {
+    return <SkillCard content={content} state={row.state} kind="library" />;
+  }
+  if (
+    content.toolName === 'builtin_9' ||
+    content.displayName === '技能管理' ||
+    content.displayName === 'Skill Manage'
+  ) {
+    return <SkillCard content={content} state={row.state} kind="manage" />;
+  }
+  if (
+    content.toolName === 'builtin_14' ||
+    /回读工具结果|read tool result/i.test(content.displayName || '')
+  ) {
+    return <ReadToolResultCard content={content} state={row.state} />;
+  }
+  if (/^cli_\d+$/.test(content.toolName || '')) {
+    return <CliCard content={content} state={row.state} />;
+  }
+  if (
+    content.toolName === 'builtin_5' ||
+    isBrowserTool(content, content.displayName)
+  ) {
+    return <BrowserCard content={content} state={row.state} />;
+  }
   const family = toolFamily(content, content.displayName);
-  const name = (intl.locale === 'en-US'
-    ? content.displayNameEn || content.displayName
-    : content.displayName || content.displayNameEn) || row.title || intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
+  const name =
+    (intl.locale === 'en-US'
+      ? content.displayNameEn || content.displayName
+      : content.displayName || content.displayNameEn) ||
+    row.title ||
+    intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
   // 「委派子 Agent」工具调用在下方已由 SubAgentCard 完整展示，顶部标题行冗余，隐藏。
   const isDelegate = /委派|子 ?agent/i.test(name);
   // 浏览器工具：后端把超时/失败编码进 artifact（row.state 恒为 SUCCEEDED），此处按 artifact 解析真实状态。
   const isBrowser = isBrowserTool(content, content.displayName);
-  const isSkillLibrary = content.toolName === 'builtin_8' || /技能库|skill library/i.test(name);
+  const isSkillLibrary =
+    content.toolName === 'builtin_8' || /技能库|skill library/i.test(name);
   const brow = browserResult(content, content.displayName);
   const stateLabel = brow.failed
     ? brow.errorCategory === 'timeout'
@@ -709,6 +1012,16 @@ function ToolCard({ row }: any) {
   );
 }
 
+function ToolCard({ row }: any) {
+  const duration = row?.content?.meta?.durationMs;
+  return (
+    <div>
+      <ToolCardBody row={row} />
+      <ToolDuration ms={typeof duration === 'number' ? duration : undefined} />
+    </div>
+  );
+}
+
 function WaitCard({ content, state }: any) {
   const intl = useIntl();
   let seconds: number | null = null;
@@ -721,15 +1034,23 @@ function WaitCard({ content, state }: any) {
     // ignore malformed args
   }
   return (
-    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div
+      style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}
+    >
       <ClockCircleOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
       <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-        {intl.formatMessage({ id: 'pages.chat.tool.wait', defaultMessage: 'Wait' })}
+        {intl.formatMessage({
+          id: 'pages.chat.tool.wait',
+          defaultMessage: 'Wait',
+        })}
       </Typography.Text>
       {seconds != null && (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {intl.formatMessage(
-            { id: 'pages.chat.tool.waitForSeconds', defaultMessage: '{seconds}s' },
+            {
+              id: 'pages.chat.tool.waitForSeconds',
+              defaultMessage: '{seconds}s',
+            },
             { seconds },
           )}
         </Typography.Text>
@@ -741,9 +1062,16 @@ function WaitCard({ content, state }: any) {
 
 function McpToolCard({ content, state }: any) {
   const intl = useIntl();
-  const name = content.displayName || content.toolName || intl.formatMessage({
-    id: 'pages.chat.tool.tool', defaultMessage: 'Tool',
-  });
+  const name =
+    content.displayName ||
+    content.toolName ||
+    intl.formatMessage({
+      id: 'pages.chat.tool.tool',
+      defaultMessage: 'Tool',
+    });
+  const server =
+    typeof content.meta?.server === 'string' ? content.meta.server : '';
+  const results = searchResultView(content);
   let action = '';
   let resultStatus = '';
   try {
@@ -754,21 +1082,93 @@ function McpToolCard({ content, state }: any) {
   }
   try {
     const artifact = content.artifact ? JSON.parse(content.artifact) : null;
-    resultStatus = artifact?.status || artifact?.data?.status || artifact?.data?.action || artifact?.action || '';
+    resultStatus =
+      artifact?.status ||
+      artifact?.data?.status ||
+      artifact?.data?.action ||
+      artifact?.action ||
+      '';
   } catch {
     if (typeof content.artifact === 'string' && content.artifact.length <= 40) {
       resultStatus = content.artifact;
     }
   }
   return (
-    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-      <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
-      <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-        {name}
-      </Typography.Text>
-      {action && <Typography.Text type="secondary" style={{ fontSize: 12 }}>· {action}</Typography.Text>}
-      {resultStatus && <Tag style={{ margin: 0, fontSize: 10 }} color="blue">{String(resultStatus)}</Tag>}
-      <StateTag state={state} small />
+    <div>
+      <div
+        style={{
+          marginTop: 4,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
+        <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
+          {name}
+        </Typography.Text>
+        {server && (
+          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+            · {server}
+          </Typography.Text>
+        )}
+        {action && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            · {action}
+          </Typography.Text>
+        )}
+        {resultStatus && (
+          <Tag style={{ margin: 0, fontSize: 10 }} color="blue">
+            {String(resultStatus)}
+          </Tag>
+        )}
+        <StateTag state={state} small />
+      </div>
+      {results.length > 0 && (
+        <div
+          style={{
+            marginTop: 5,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
+          {results.map((result) => (
+            <div
+              key={result.url || result.title}
+              style={{ fontSize: 11, lineHeight: '16px', minWidth: 0 }}
+            >
+              <div
+                title={result.url || result.title}
+                style={{
+                  color: '#1677ff',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {result.title}
+              </div>
+              <div
+                title={result.summary}
+                style={{
+                  color: '#a0a0a0',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {[result.host, result.summary].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div>
+        <ContentPreviewButton title={name} content={toolResultText(content)} />
+      </div>
+      <RawDataBlock content={content} />
     </div>
   );
 }
@@ -785,13 +1185,21 @@ function CurrentTimeCard({ content, state }: any) {
     // ignore malformed artifact
   }
   const display = time
-    ? time.replace('T', ' ').replace(/([+-]\d{2}:\d{2})$/, '').slice(0, 16)
+    ? time
+        .replace('T', ' ')
+        .replace(/([+-]\d{2}:\d{2})$/, '')
+        .slice(0, 16)
     : '';
   return (
-    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div
+      style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}
+    >
       <ClockCircleOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
       <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-        {intl.formatMessage({ id: 'pages.chat.tool.currentTime', defaultMessage: 'Current time' })}
+        {intl.formatMessage({
+          id: 'pages.chat.tool.currentTime',
+          defaultMessage: 'Current time',
+        })}
       </Typography.Text>
       {display && (
         <>
@@ -809,6 +1217,755 @@ function CurrentTimeCard({ content, state }: any) {
   );
 }
 
+const TEXT_MATCH_MODE_LABEL: Record<string, { zh: string; en: string }> = {
+  EXACT: { zh: '精确匹配', en: 'exact' },
+  IGNORE_CASE: { zh: '忽略大小写', en: 'ignore case' },
+  TRIMMED: { zh: '去首尾空白', en: 'trimmed' },
+  IGNORE_CASE_TRIMMED: {
+    zh: '忽略大小写 + 去空白',
+    en: 'ignore case + trimmed',
+  },
+};
+
+function prettyJsonSafe(raw?: string) {
+  if (!raw) return '';
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+/** 文本包含判断：结果优先，参数只保留 needle/mode/长度，避免两个裸 JSON 折叠块。 */
+function TextContainsCard({ content, state }: any) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const view = textContainsView(content);
+  const mode = TEXT_MATCH_MODE_LABEL[view.mode] || {
+    zh: view.mode,
+    en: view.mode.toLowerCase(),
+  };
+  const failed = view.error != null;
+  const matched = !failed && view.hit === true;
+  const unknown = !failed && view.hit === null;
+  const accent = failed
+    ? '#cf1322'
+    : matched
+      ? '#389e0d'
+      : unknown
+        ? '#1677ff'
+        : '#8c8c8c';
+  const background = failed
+    ? '#fff1f0'
+    : matched
+      ? '#f6ffed'
+      : unknown
+        ? '#f0f5ff'
+        : '#fafafa';
+  const border = failed
+    ? '#ffa39e'
+    : matched
+      ? '#b7eb8f'
+      : unknown
+        ? '#adc6ff'
+        : '#e8e8e8';
+  const showState = failed || String(state ?? '').toLowerCase() !== 'succeeded';
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: '7px 10px',
+        border: `1px solid ${border}`,
+        borderRadius: 8,
+        background,
+        maxWidth: 560,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <SearchOutlined style={{ fontSize: 12, color: accent }} />
+        <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
+          {isEn ? 'Text contains' : '文本包含判断'}
+        </Typography.Text>
+        <Tag
+          color={matched ? 'green' : unknown ? 'blue' : 'default'}
+          style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+        >
+          {failed
+            ? isEn
+              ? 'failed'
+              : '失败'
+            : matched
+              ? isEn
+                ? 'matched'
+                : '命中'
+              : unknown
+                ? isEn
+                  ? 'unknown'
+                  : '无结果'
+                : isEn
+                  ? 'not found'
+                  : '未命中'}
+        </Tag>
+        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+          {mode[isEn ? 'en' : 'zh']}
+        </Typography.Text>
+        {showState && <StateTag state={state} small />}
+      </div>
+      {failed && (
+        <Typography.Text
+          type="danger"
+          style={{ display: 'block', marginTop: 4, fontSize: 11 }}
+        >
+          {view.error}
+        </Typography.Text>
+      )}
+      {(view.needle || view.haystackChars != null) && (
+        <div
+          style={{
+            marginTop: 5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            minWidth: 0,
+            fontSize: 11,
+            color: '#8c8c8c',
+          }}
+        >
+          {view.needle && (
+            <>
+              <span style={{ flexShrink: 0 }}>{isEn ? 'needle' : '查找'}</span>
+              <Typography.Text
+                code
+                title={view.needle}
+                style={{
+                  fontSize: 11,
+                  maxWidth: 280,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {view.needle}
+              </Typography.Text>
+            </>
+          )}
+          {view.haystackChars != null && (
+            <span style={{ flexShrink: 0 }}>
+              · {isEn ? 'target' : '目标'} {view.haystackChars.toLocaleString()}{' '}
+              {isEn ? 'chars' : '字符'}
+            </span>
+          )}
+        </div>
+      )}
+      <details style={{ marginTop: 5 }}>
+        <summary
+          style={{
+            cursor: 'pointer',
+            fontSize: 10.5,
+            color: '#a0a0a0',
+            userSelect: 'none',
+          }}
+        >
+          {isEn ? 'Raw data' : '查看原始数据'}
+        </summary>
+        <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
+          {isEn ? 'Arguments' : '参数'}
+        </div>
+        <pre
+          style={{
+            whiteSpace: 'pre-wrap',
+            fontSize: 10.5,
+            color: '#999',
+            maxHeight: 120,
+            overflow: 'auto',
+            margin: '2px 0 0',
+          }}
+        >
+          {prettyJsonSafe(content.args)}
+        </pre>
+        <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
+          {isEn ? 'Result' : '结果'}
+        </div>
+        <pre
+          style={{
+            whiteSpace: 'pre-wrap',
+            fontSize: 10.5,
+            color: '#999',
+            maxHeight: 120,
+            overflow: 'auto',
+            margin: '2px 0 0',
+          }}
+        >
+          {prettyJsonSafe(content.artifact)}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
+function isSucceededState(state: any) {
+  return String(state ?? '').toLowerCase() === 'succeeded';
+}
+
+function ProgressCard({ content, state }: any) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const view = progressView(content);
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: '7px 10px',
+        border: '1px solid #e6f4ff',
+        borderRadius: 8,
+        background: '#f0f7ff',
+        maxWidth: 560,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <SyncOutlined
+          spin={String(state ?? '').toLowerCase() === 'running'}
+          style={{ fontSize: 12, color: '#1677ff' }}
+        />
+        <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
+          {isEn ? 'Progress' : '报告进度'}
+        </Typography.Text>
+        {view.percent != null && (
+          <Tag
+            color="blue"
+            style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+          >
+            {view.percent}%
+          </Tag>
+        )}
+        {!isSucceededState(state) && <StateTag state={state} small />}
+      </div>
+      {view.summary && (
+        <div style={{ marginTop: 5, fontSize: 12, color: '#434343' }}>
+          {view.summary}
+        </div>
+      )}
+      {view.nextAction && (
+        <div style={{ marginTop: 3, fontSize: 11, color: '#8c8c8c' }}>
+          {isEn ? 'Next: ' : '下一步：'}
+          {view.nextAction}
+        </div>
+      )}
+      {view.percent != null && (
+        <div
+          style={{
+            marginTop: 6,
+            height: 4,
+            borderRadius: 2,
+            background: '#d6e4ff',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              width: `${view.percent}%`,
+              height: '100%',
+              background: '#1677ff',
+            }}
+          />
+        </div>
+      )}
+      <RawDataBlock content={content} />
+    </div>
+  );
+}
+
+function WebPageCard({
+  content,
+  state,
+  kind,
+}: {
+  content: any;
+  state?: string;
+  kind: 'read' | 'fetch';
+}) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const view = webPageView(content);
+  let body = '';
+  try {
+    const artifact = content.artifact ? JSON.parse(content.artifact) : null;
+    body =
+      typeof artifact?.markdown === 'string'
+        ? artifact.markdown
+        : typeof artifact?.content === 'string'
+          ? artifact.content
+          : '';
+  } catch {
+    // ignore malformed artifact
+  }
+  let host = view.url;
+  try {
+    host = new URL(view.url).host || view.url;
+  } catch {
+    // keep raw url
+  }
+  const okStatus =
+    view.statusCode != null && view.statusCode >= 200 && view.statusCode < 400;
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: '7px 10px',
+        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
+        borderRadius: 8,
+        background: view.error ? '#fff1f0' : '#fafafa',
+        maxWidth: 560,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <GlobalOutlined
+          style={{ fontSize: 12, color: view.error ? '#cf1322' : '#1677ff' }}
+        />
+        <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
+          {content.displayName ||
+            (kind === 'read'
+              ? intl.formatMessage({
+                  id: 'pages.chat.tool.webRead',
+                  defaultMessage: 'Web read',
+                })
+              : intl.formatMessage({
+                  id: 'pages.chat.tool.webFetch',
+                  defaultMessage: 'Web fetch',
+                }))}
+        </Typography.Text>
+        {view.statusCode != null && (
+          <Tag
+            color={okStatus ? 'green' : 'red'}
+            style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+          >
+            {view.statusCode}
+          </Tag>
+        )}
+        {!isSucceededState(state) && <StateTag state={state} small />}
+      </div>
+      {host && (
+        <div
+          title={view.url}
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: '#1677ff',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {host}
+        </div>
+      )}
+      {view.title && (
+        <div style={{ marginTop: 3, fontSize: 12, color: '#434343' }}>
+          {view.title}
+        </div>
+      )}
+      {view.error ? (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#cf1322' }}>
+          {view.error}
+        </div>
+      ) : (
+        view.chars != null && (
+          <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
+            {isEn
+              ? `${view.chars.toLocaleString()} chars`
+              : `正文 ${view.chars.toLocaleString()} 字符`}
+          </div>
+        )
+      )}
+      {!view.error && (
+        <div>
+          <ContentPreviewButton
+            title={view.title || host || view.url}
+            content={body}
+          />
+        </div>
+      )}
+      <RawDataBlock content={content} />
+    </div>
+  );
+}
+
+function SkillCard({
+  content,
+  state,
+  kind,
+}: {
+  content: any;
+  state?: string;
+  kind: 'library' | 'manage';
+}) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const view = skillView(content);
+  const title =
+    content.displayName ||
+    (kind === 'library'
+      ? intl.formatMessage({
+          id: 'pages.chat.tool.skillLibrary',
+          defaultMessage: 'Skill library',
+        })
+      : intl.formatMessage({
+          id: 'pages.chat.tool.skillManage',
+          defaultMessage: 'Skill manage',
+        }));
+  const summary =
+    kind === 'library' && view.total != null
+      ? isEn
+        ? `${view.total} skills`
+        : `${view.total} 个技能`
+      : view.action;
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: '7px 10px',
+        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
+        borderRadius: 8,
+        background: view.error ? '#fff1f0' : '#fafafa',
+        maxWidth: 560,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <ReadOutlined
+          style={{ fontSize: 12, color: view.error ? '#cf1322' : '#722ed1' }}
+        />
+        <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
+          {title}
+        </Typography.Text>
+        <Tag
+          color="purple"
+          style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+        >
+          {summary}
+        </Tag>
+        {!isSucceededState(state) && <StateTag state={state} small />}
+      </div>
+      {view.preview && (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
+          {view.preview.slice(0, 180)}
+          {view.preview.length > 180 ? '…' : ''}
+        </div>
+      )}
+      {view.names.length > 0 && (
+        <div
+          style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}
+        >
+          {view.names.map((name) => (
+            <Tag key={name} style={{ margin: 0, fontSize: 10 }}>
+              {name}
+            </Tag>
+          ))}
+        </div>
+      )}
+      {view.error && (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#cf1322' }}>
+          {view.error}
+        </div>
+      )}
+      <RawDataBlock content={content} />
+    </div>
+  );
+}
+
+function ReadToolResultCard({ content, state }: any) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const view = readToolResultView(content);
+  const end = view.nextOffset ?? view.totalChars;
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: '7px 10px',
+        border: `1px solid ${view.error ? '#ffa39e' : '#e8e8e8'}`,
+        borderRadius: 8,
+        background: view.error ? '#fff1f0' : '#fafafa',
+        maxWidth: 560,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <FileTextOutlined
+          style={{ fontSize: 12, color: view.error ? '#cf1322' : '#8c8c8c' }}
+        />
+        <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
+          {isEn ? 'Read tool result' : '回读工具结果'}
+        </Typography.Text>
+        {view.callId && (
+          <Typography.Text code style={{ fontSize: 10 }}>
+            {view.callId}
+          </Typography.Text>
+        )}
+        {!isSucceededState(state) && <StateTag state={state} small />}
+      </div>
+      {view.totalChars != null ? (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
+          {isEn ? 'chars' : '字符'} {view.offset ?? 0}–{end ?? view.totalChars}{' '}
+          / {view.totalChars.toLocaleString()}
+          {view.truncated ? (isEn ? ' · truncated' : ' · 已截断') : ''}
+        </div>
+      ) : (
+        !view.error && (
+          <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
+            {view.toolName || view.callId}
+          </div>
+        )
+      )}
+      {view.error && (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#cf1322' }}>
+          {view.error}
+        </div>
+      )}
+      <RawDataBlock content={content} />
+    </div>
+  );
+}
+
+function CliCard({ content, state }: any) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const view = cliView(content);
+  const output = (view.stderr || view.stdout || '').trim();
+  const firstLine = view.firstLine || output.split('\n')[0] || '';
+  const ok = view.exitCode === 0 && !view.error;
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: '7px 10px',
+        border: `1px solid ${ok ? '#e8e8e8' : '#ffa39e'}`,
+        borderRadius: 8,
+        background: ok ? '#fafafa' : '#fff1f0',
+        maxWidth: 560,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <CodeOutlined
+          style={{ fontSize: 12, color: ok ? '#8c8c8c' : '#cf1322' }}
+        />
+        <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
+          {content.displayName || (isEn ? 'Command' : '命令执行')}
+        </Typography.Text>
+        {view.exitCode != null && (
+          <Tag
+            color={view.exitCode === 0 ? 'green' : 'red'}
+            style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+          >
+            exit {view.exitCode}
+          </Tag>
+        )}
+        {!isSucceededState(state) && <StateTag state={state} small />}
+      </div>
+      {firstLine && (
+        <div
+          title={output}
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: ok ? '#595959' : '#cf1322',
+            fontFamily: 'monospace',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {firstLine.slice(0, 160)}
+        </div>
+      )}
+      {view.error && (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#cf1322' }}>
+          {view.error}
+        </div>
+      )}
+      <div>
+        <ContentPreviewButton
+          title={content.displayName || (isEn ? 'Command output' : '命令输出')}
+          content={output}
+        />
+      </div>
+      <RawDataBlock content={content} />
+    </div>
+  );
+}
+
+function BrowserCard({ content, state }: any) {
+  const intl = useIntl();
+  const isEn = intl.locale === 'en-US';
+  const brow = browserResult(content, content.displayName);
+  let args: any = {};
+  let artifact: any = {};
+  try {
+    args = content.args ? JSON.parse(content.args) : {};
+  } catch {
+    // ignore malformed args
+  }
+  try {
+    artifact = content.artifact ? JSON.parse(content.artifact) : {};
+  } catch {
+    // ignore malformed artifact
+  }
+  const action =
+    typeof content.meta?.action === 'string'
+      ? content.meta.action
+      : typeof args.action === 'string'
+        ? args.action
+        : '';
+  const url =
+    typeof content.meta?.url === 'string'
+      ? content.meta.url
+      : typeof args.url === 'string'
+        ? args.url
+        : artifact?.data?.url;
+  let host = '';
+  try {
+    host = url ? new URL(url).host : '';
+  } catch {
+    host = '';
+  }
+  const tabId = content.meta?.tabId ?? args.tabId ?? artifact?.data?.tabId;
+  const target =
+    args.ref != null
+      ? `ref #${args.ref}`
+      : typeof args.selector === 'string'
+        ? args.selector
+        : typeof args.text === 'string'
+          ? args.text
+          : '';
+  const method = brow.method || '';
+  const resultType = brow.resultType || '';
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: '7px 10px',
+        border: `1px solid ${brow.failed ? '#ffa39e' : '#e8e8e8'}`,
+        borderRadius: 8,
+        background: brow.failed ? '#fff1f0' : '#fafafa',
+        maxWidth: 560,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <GlobalOutlined
+          style={{ fontSize: 12, color: brow.failed ? '#cf1322' : '#1677ff' }}
+        />
+        <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
+          {isEn ? 'Browser' : '浏览器'}
+        </Typography.Text>
+        {action && (
+          <Tag
+            color="blue"
+            style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+          >
+            {action}
+          </Tag>
+        )}
+        {brow.failed && brow.errorCategory && (
+          <Tag
+            color="red"
+            style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+          >
+            {brow.errorCategory}
+          </Tag>
+        )}
+        {brow.failed && !brow.errorCategory && (
+          <Tag
+            color="red"
+            style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
+          >
+            {isEn ? 'failed' : '失败'}
+          </Tag>
+        )}
+        {!brow.failed && !isSucceededState(state) && (
+          <StateTag state={state} small />
+        )}
+      </div>
+      {(host || tabId != null) && (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
+          {host}
+          {host && tabId != null ? ' · ' : ''}
+          {tabId != null ? `tab ${tabId}` : ''}
+        </div>
+      )}
+      {target && (
+        <div
+          title={target}
+          style={{
+            marginTop: 3,
+            fontSize: 11,
+            color: '#595959',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {target}
+        </div>
+      )}
+      {(method || resultType) && (
+        <div style={{ marginTop: 3, fontSize: 10.5, color: '#a0a0a0' }}>
+          {[method, resultType].filter(Boolean).join(' · ')}
+        </div>
+      )}
+      {brow.warning && (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#d46b08' }}>
+          ⚠ {brow.warning}
+        </div>
+      )}
+      {brow.errorMessage && (
+        <div style={{ marginTop: 4, fontSize: 11, color: '#cf1322' }}>
+          {brow.errorMessage}
+        </div>
+      )}
+      <RawDataBlock content={content} />
+    </div>
+  );
+}
 
 function parseJsonArray(raw?: string): any[] {
   if (!raw) return [];
@@ -835,36 +1992,72 @@ function ToolApprovalCard({ row }: any) {
         <SafetyCertificateOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
           {row.state === 'PENDING'
-            ? intl.formatMessage({ id: 'pages.chat.tool.approvalWaiting', defaultMessage: 'Waiting for tool approval' })
+            ? intl.formatMessage({
+                id: 'pages.chat.tool.approvalWaiting',
+                defaultMessage: 'Waiting for tool approval',
+              })
             : row.state === 'CANCELLED'
-              ? intl.formatMessage({ id: 'pages.chat.tool.approvalCancelled', defaultMessage: 'Tool approval cancelled' })
-              : intl.formatMessage({ id: 'pages.chat.tool.approvalHandled', defaultMessage: 'Tool approval handled' })}
+              ? intl.formatMessage({
+                  id: 'pages.chat.tool.approvalCancelled',
+                  defaultMessage: 'Tool approval cancelled',
+                })
+              : intl.formatMessage({
+                  id: 'pages.chat.tool.approvalHandled',
+                  defaultMessage: 'Tool approval handled',
+                })}
         </Typography.Text>
         <StateTag state={row.state} />
       </div>
-      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div
+        style={{
+          marginTop: 6,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+        }}
+      >
         {calls.map((call: any, index: number) => {
           const decision = byCall.get(String(call.callId));
           return (
-            <div key={String(call.callId || index)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div
+              key={String(call.callId || index)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
               <ToolOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
               <Typography.Text style={{ fontSize: 12 }}>
-                {(intl.locale === 'en-US' ? call.displayNameEn || call.displayName : call.displayName || call.displayNameEn) || call.toolName || intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' })}
+                {(intl.locale === 'en-US'
+                  ? call.displayNameEn || call.displayName
+                  : call.displayName || call.displayNameEn) ||
+                  call.toolName ||
+                  intl.formatMessage({
+                    id: 'pages.chat.tool.tool',
+                    defaultMessage: 'Tool',
+                  })}
                 {call.action ? ` · ${call.action}` : ''}
               </Typography.Text>
               {decision ? (
-                <Tag color={decision === 'DENY' ? 'red' : 'blue'} style={{ margin: 0 }}>
+                <Tag
+                  color={decision === 'DENY' ? 'red' : 'blue'}
+                  style={{ margin: 0 }}
+                >
                   {intl.formatMessage({
-                    id: decision === 'DENY' ? 'pages.chat.tool.deny'
-                      : decision === 'ALLOW_RUN' ? 'pages.chat.tool.allowRun'
-                        : decision === 'ALLOW_SESSION' ? 'pages.chat.tool.allowSession'
-                          : 'pages.chat.tool.allowOnce',
+                    id:
+                      decision === 'DENY'
+                        ? 'pages.chat.tool.deny'
+                        : decision === 'ALLOW_RUN'
+                          ? 'pages.chat.tool.allowRun'
+                          : decision === 'ALLOW_SESSION'
+                            ? 'pages.chat.tool.allowSession'
+                            : 'pages.chat.tool.allowOnce',
                     defaultMessage: decision,
                   })}
                 </Tag>
               ) : (
                 <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                  {intl.formatMessage({ id: 'pages.chat.tool.waiting', defaultMessage: 'Waiting' })}
+                  {intl.formatMessage({
+                    id: 'pages.chat.tool.waiting',
+                    defaultMessage: 'Waiting',
+                  })}
                 </Typography.Text>
               )}
             </div>
@@ -887,7 +2080,9 @@ function ClarificationCard({ row }: any) {
     try {
       const parsed = JSON.parse(String(content.response));
       if (parsed && typeof parsed === 'object') {
-        selected = Array.isArray(parsed.selected) ? parsed.selected.map(String) : [];
+        selected = Array.isArray(parsed.selected)
+          ? parsed.selected.map(String)
+          : [];
         text = typeof parsed.text === 'string' ? parsed.text : '';
       } else {
         text = String(content.response);
@@ -907,17 +2102,32 @@ function ClarificationCard({ row }: any) {
         </Typography.Text>
         <StateTag state={row.state} />
       </div>
-      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div
+        style={{
+          marginTop: 6,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}
+      >
         {description ? (
           <Typography.Paragraph
-            style={{ whiteSpace: 'pre-wrap', marginBottom: 0, color: '#595959', fontSize: 12 }}
+            style={{
+              whiteSpace: 'pre-wrap',
+              marginBottom: 0,
+              color: '#595959',
+              fontSize: 12,
+            }}
           >
             {description}
           </Typography.Paragraph>
         ) : null}
         {row.state === 'PENDING' ? (
           <Typography.Text type="secondary">
-            {intl.formatMessage({ id: 'pages.chat.tool.waitingInDrawer', defaultMessage: 'Answer in the bottom panel' })}
+            {intl.formatMessage({
+              id: 'pages.chat.tool.waitingInDrawer',
+              defaultMessage: 'Answer in the bottom panel',
+            })}
           </Typography.Text>
         ) : (
           <>
@@ -931,7 +2141,10 @@ function ClarificationCard({ row }: any) {
                     <Tag
                       key={`${value}-${index}`}
                       color={isSelected ? 'blue' : undefined}
-                      style={{ margin: 0, opacity: isSelected || cancelled ? 1 : 0.7 }}
+                      style={{
+                        margin: 0,
+                        opacity: isSelected || cancelled ? 1 : 0.7,
+                      }}
                     >
                       {label}
                     </Tag>
@@ -942,11 +2155,17 @@ function ClarificationCard({ row }: any) {
             {text ? <Typography.Text>{text}</Typography.Text> : null}
             {cancelled ? (
               <Typography.Text type="secondary">
-                {intl.formatMessage({ id: 'pages.chat.tool.cancelled', defaultMessage: 'Cancelled' })}
+                {intl.formatMessage({
+                  id: 'pages.chat.tool.cancelled',
+                  defaultMessage: 'Cancelled',
+                })}
               </Typography.Text>
             ) : selected.length === 0 && !text ? (
               <Typography.Text type="secondary">
-                {intl.formatMessage({ id: 'pages.chat.tool.answered', defaultMessage: 'Answered' })}
+                {intl.formatMessage({
+                  id: 'pages.chat.tool.answered',
+                  defaultMessage: 'Answered',
+                })}
               </Typography.Text>
             ) : null}
           </>
@@ -969,7 +2188,12 @@ function SubAgentLlmItem({ s }: any) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <BulbOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
-        <Typography.Text strong>{intl.formatMessage({ id: 'pages.chat.tool.thought', defaultMessage: 'Model reason' })}</Typography.Text>
+        <Typography.Text strong>
+          {intl.formatMessage({
+            id: 'pages.chat.tool.thought',
+            defaultMessage: 'Model reason',
+          })}
+        </Typography.Text>
         {s.modelName && (
           <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>
             {s.modelName}
@@ -998,7 +2222,13 @@ function SubAgentLlmItem({ s }: any) {
         </Block>
       )}
       {s.reply && (
-        <Block defaultOpen title={intl.formatMessage({ id: 'pages.chat.tool.reply', defaultMessage: 'Reply' })}>
+        <Block
+          defaultOpen
+          title={intl.formatMessage({
+            id: 'pages.chat.tool.reply',
+            defaultMessage: 'Reply',
+          })}
+        >
           <div style={{ fontSize: 12 }}>
             <XMarkdown content={s.reply} />
           </div>
@@ -1024,7 +2254,14 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <ToolOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>
-          {(intl.locale === 'en-US' ? s.displayNameEn || s.displayNameCn : s.displayNameCn || s.displayNameEn) || s.toolName || intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' })}
+          {(intl.locale === 'en-US'
+            ? s.displayNameEn || s.displayNameCn
+            : s.displayNameCn || s.displayNameEn) ||
+            s.toolName ||
+            intl.formatMessage({
+              id: 'pages.chat.tool.tool',
+              defaultMessage: 'Tool',
+            })}
         </Typography.Text>
         <StateTag state={s.toolStatus || s.status} />
       </div>
@@ -1032,7 +2269,14 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
         <UserImages images={s.images} />
       )}
       {/* 受控：最新一条 Tool 详情默认展开，下一条到来时关闭之前的（单一展开） */}
-      <Block title={intl.formatMessage({ id: 'pages.chat.tool.details', defaultMessage: 'Details' })} open={detailOpen} onToggle={onDetailToggle}>
+      <Block
+        title={intl.formatMessage({
+          id: 'pages.chat.tool.details',
+          defaultMessage: 'Details',
+        })}
+        open={detailOpen}
+        onToggle={onDetailToggle}
+      >
         {argsJson && (
           <pre
             style={{
@@ -1163,7 +2407,10 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
         <RobotOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>
           {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
-            intl.formatMessage({ id: 'pages.chat.tool.subagent', defaultMessage: 'Sub-agent' })}
+            intl.formatMessage({
+              id: 'pages.chat.tool.subagent',
+              defaultMessage: 'Sub-agent',
+            })}
         </Typography.Text>
         <StateTag state={row.state} />
         {open && isRunning && (
@@ -1181,7 +2428,15 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
           style={{ padding: 0, fontSize: 12 }}
         >
           {open ? <DownOutlined /> : <RightOutlined />}
-          {open ? intl.formatMessage({ id: 'pages.chat.tool.collapse', defaultMessage: 'Collapse' }) : intl.formatMessage({ id: 'pages.chat.tool.expand', defaultMessage: 'Expand' })}
+          {open
+            ? intl.formatMessage({
+                id: 'pages.chat.tool.collapse',
+                defaultMessage: 'Collapse',
+              })
+            : intl.formatMessage({
+                id: 'pages.chat.tool.expand',
+                defaultMessage: 'Expand',
+              })}
         </Button>
         {open && (
           <div
@@ -1225,7 +2480,15 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
               })
             ) : (
               <Typography.Text type="secondary">
-                {isRunning ? intl.formatMessage({ id: 'pages.chat.tool.waitingSteps', defaultMessage: 'Waiting for live steps…' }) : intl.formatMessage({ id: 'pages.chat.tool.noSteps', defaultMessage: 'No detailed steps' })}
+                {isRunning
+                  ? intl.formatMessage({
+                      id: 'pages.chat.tool.waitingSteps',
+                      defaultMessage: 'Waiting for live steps…',
+                    })
+                  : intl.formatMessage({
+                      id: 'pages.chat.tool.noSteps',
+                      defaultMessage: 'No detailed steps',
+                    })}
               </Typography.Text>
             )}
           </div>
@@ -1345,7 +2608,12 @@ function ParallelSubAgentTabs({
           marginBottom: 2,
         }}
       >
-        <Tag style={{ margin: 0 }}>{intl.formatMessage({ id: 'pages.chat.tool.subagent', defaultMessage: 'Sub-agent' })}</Tag>
+        <Tag style={{ margin: 0 }}>
+          {intl.formatMessage({
+            id: 'pages.chat.tool.subagent',
+            defaultMessage: 'Sub-agent',
+          })}
+        </Tag>
         <Tag style={{ margin: 0, fontSize: 11, color: '#999' }}>
           ×{members.length} 并行
         </Tag>
@@ -1493,7 +2761,13 @@ function RowCard({
           </>
         );
       case 'assistant':
-        return <AssistantCard row={row} sessionId={sessionId} isLatest={isLatestAssistant} />;
+        return (
+          <AssistantCard
+            row={row}
+            sessionId={sessionId}
+            isLatest={isLatestAssistant}
+          />
+        );
       case 'tool':
         return <ToolCard row={row} />;
       case 'tool_approval':

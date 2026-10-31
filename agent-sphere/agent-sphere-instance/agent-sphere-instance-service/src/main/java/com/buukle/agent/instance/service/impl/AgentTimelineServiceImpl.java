@@ -2,6 +2,7 @@ package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
@@ -28,6 +29,7 @@ import com.buukle.agent.instance.repository.AgentToolCallRecordMapper;
 import com.buukle.agent.instance.repository.RunMapper;
 import com.buukle.agent.instance.service.MessageFeedbackService;
 import com.buukle.agent.instance.service.util.ScreenshotRefParser;
+import com.buukle.agent.instance.service.util.ToolMetaResolver;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +75,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
     private final AgentCompactRecordMapper compactRecordMapper;
     private final AgentToolApprovalMapper toolApprovalMapper;
     private final MessageFeedbackService messageFeedbackService;
+    private final CapabilityMcpSpi mcpSpi;
 
     @Override
     public long nextSeq(Long sessionId) {
@@ -351,6 +354,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                                     content.put(TimelineContentKey.IMAGES.getCode(), images);
                                 }
                             }
+                            content.put(TimelineContentKey.META.getCode(), ToolMetaResolver.build(rec, mcpSpi));
                         }
                     }
                     content.putIfAbsent(TimelineContentKey.DISPLAY_NAME.getCode(), row.getTitle());

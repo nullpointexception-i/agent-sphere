@@ -238,6 +238,7 @@ public class CapabilityBuiltinToolDocRead implements CapabilityBuiltinToolSpi {
     private DocWriteResultVO baseResult(DocumentVO doc) {
         DocWriteResultVO r = new DocWriteResultVO();
         r.setDocumentId(doc.getId());
+        r.setVersion(doc.getVersion());
         r.setTitle(doc.getTitle());
         r.setAction(ACTION_GET);
         return r;

@@ -49,7 +49,7 @@ Spring 标准块（`spring.*`、`logging.*`、`mybatis-plus.*`、`server.*`）�
 | `connect-timeout` | `30s` | LLM API 连接超时 |
 | `read-timeout` | `60s` | LLM API 读取超时 |
 | `stream-read-timeout` | `120s` | 流式读取超时 |
-| `stream-timeout` | `120s` | 流式总超时（含思考） |
+| `stream-timeout` | `600s` | 流式总超时（含思考） |
 | `stream-max-retries` | `2` | 流式瞬时失败（未收到任何分片）重试次数 |
 | `stream-retry-delay` | `1s` | 流式重试固定退避 |
 
@@ -61,7 +61,7 @@ Spring 标准块（`spring.*`、`logging.*`、`mybatis-plus.*`、`server.*`）�
 | `max-silent-turns` | `2` | 使用工具后允许连续无工具回复的容错轮数，超过后严格模式失败 |
 | `task-max-loop-count` | `2000` | 任务触发 run 的更高轮次上限（`TASK` 源） |
 | `max-reasoning-chars` | `500000` | 单 run 推理落库长度上限（字符） |
-| `turn-timeout` | `180s` | 单轮 LLM 调用超时 |
+| `turn-timeout` | `660s` | 单轮 LLM 调用超时（必须大于 `stream-timeout`） |
 | `llm-turn-max-retries` | `3` | 单轮瞬时失败重试次数，指数退避 1s→2s→4s（README §3.1b） |
 | `max-screenshots-per-run` | `20` | 单 run 浏览器截图观察注入上限（防烧 token） |
 | `compaction.budget-ratio` | `0.7` | 压缩触发阈值（占最大输入 token 的比例） |

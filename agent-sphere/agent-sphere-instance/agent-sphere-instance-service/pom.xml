@@ -64,5 +64,10 @@
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-tasks-dtvo</artifactId>
         </dependency>
+        <!-- Timeline tool meta: resolve MCP server display name from mcp_<id>_<idx>. -->
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-capability-mcp-spi</artifactId>
+        </dependency>
     </dependencies>
 </project>

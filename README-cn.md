@@ -310,8 +310,8 @@ budget = maxInputTokens × budget-ratio (默认 0.7)
 | `llm.connect-timeout` | 30s | 连接 LLM API 的超时 |
 | `llm.read-timeout` | 60s | 读取响应的超时 |
 | `llm.stream-read-timeout` | 120s | 流式读取超时 |
-| `llm.stream-timeout` | 120s | 流式调用总超时 |
-| `runner.turn-timeout` | 180s | 单轮 LLM 调用总超时 |
+| `llm.stream-timeout` | 600s | 流式调用总超时 |
+| `runner.turn-timeout` | 660s | 单轮 LLM 调用总超时（必须大于 `stream-timeout`） |
 
 ### 3.4 浏览器操作流程
 
@@ -482,10 +482,10 @@ AgentSphere 支持 **用户澄清（User Clarification）** 机制，使 LLM 在
 | `session.max-concurrent-runs` | 10 | 最大并发执行数 |
 | `runner.max-loop-count` | 128 | 单次 run 最大循环次数（§3.1a） |
 | `runner.task-max-loop-count` | 2000 | 任务触发 run 的更高轮次上限（§3.1a） |
-| `runner.turn-timeout` | 180s | 单轮 LLM 调用超时 |
+| `runner.turn-timeout` | 660s | 单轮 LLM 调用超时（必须大于 `stream-timeout`） |
 | `runner.llm-turn-max-retries` | 3 | 单轮重试次数，指数退避（§3.1b） |
 | `runner.compaction.budget-ratio` | 0.7 | 压缩触发阈值（maxInputTokens 比例） |
-| `llm.stream-timeout` | 120s | 流式调用总超时 |
+| `llm.stream-timeout` | 600s | 流式调用总超时 |
 | `tool.max-parallel` | 3 | 工具最大并行数 |
 | `distributed.owner-lease` | 5m | 会话执行者 owner 租约（多副本接管） |
 | `distributed.orphan-sweep-interval` | 30s | 孤儿 run 清扫间隔（租约过期 → FAILED → 续跑） |

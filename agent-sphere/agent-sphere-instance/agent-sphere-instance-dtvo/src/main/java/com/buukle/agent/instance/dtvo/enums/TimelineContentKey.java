@@ -36,7 +36,9 @@ public enum TimelineContentKey {
     USAGE("usage"),
     FEEDBACK("feedback"),
     /** 工具名（TOOL 行；用于前端识别内部协议工具，如 finish/builtin_12）。 */
-    TOOL_NAME("toolName");
+    TOOL_NAME("toolName"),
+    /** 工具标准化元数据（durationMs / statusCode / chars / exitCode / server …）。 */
+    META("meta");
 
     private final String code;
 

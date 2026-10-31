@@ -24,6 +24,7 @@ public class DocumentServiceImpl implements DocumentSpi {
     @Transactional
     public Long create(DocumentVO vo) {
         AgentDocument entity = toEntity(vo);
+        entity.setVersion(1);
         mapper.insert(entity);
         return entity.getId();
     }
@@ -71,10 +72,15 @@ public class DocumentServiceImpl implements DocumentSpi {
     @Override
     @Transactional
     public void update(Long id, String title, String content) {
+        AgentDocument existing = mapper.selectById(id);
+        if (existing == null) {
+            return;
+        }
         AgentDocument entity = new AgentDocument();
         entity.setId(id);
         entity.setTitle(title);
         entity.setContent(content);
+        entity.setVersion((existing.getVersion() == null ? 0 : existing.getVersion()) + 1);
         mapper.updateById(entity);
     }
 
@@ -149,6 +155,7 @@ public class DocumentServiceImpl implements DocumentSpi {
         vo.setTitle(e.getTitle());
         vo.setContent(e.getContent());
         vo.setContentType(e.getContentType());
+        vo.setVersion(e.getVersion());
         vo.setSessionId(e.getSessionId());
         vo.setInstanceId(e.getInstanceId());
         vo.setRunId(e.getRunId());

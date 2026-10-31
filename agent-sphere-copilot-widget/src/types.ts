@@ -141,6 +141,8 @@ export interface TimelineRow {
     agentRef?: string;
     args?: string;
     artifact?: string;
+    /** 后端 ToolMetaResolver 下发的标准化展示字段。 */
+    meta?: Record<string, any>;
     clarificationId?: string;
     approvalId?: string;
     decisions?: string;

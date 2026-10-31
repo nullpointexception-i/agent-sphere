@@ -312,8 +312,8 @@ Dynamic adjustment:
 | `llm.connect-timeout` | 30s | Timeout for connecting to LLM API |
 | `llm.read-timeout` | 60s | Timeout for reading response |
 | `llm.stream-read-timeout` | 120s | Stream read timeout |
-| `llm.stream-timeout` | 120s | Total timeout for streaming calls |
-| `runner.turn-timeout` | 180s | Total timeout for a single LLM turn |
+| `llm.stream-timeout` | 600s | Total timeout for streaming calls |
+| `runner.turn-timeout` | 660s | Total timeout for a single LLM turn (must exceed `stream-timeout`) |
 
 ### 3.4 Browser Operation Flow
 
@@ -484,10 +484,10 @@ The keys you are most likely to touch, all under `buukle.agent.*`. **This is a s
 | `session.max-concurrent-runs` | 10 | Maximum concurrent executions |
 | `runner.max-loop-count` | 128 | Maximum loop count per run (§3.1a) |
 | `runner.task-max-loop-count` | 2000 | Higher loop limit for task-triggered runs (§3.1a) |
-| `runner.turn-timeout` | 180s | Single LLM turn timeout |
+| `runner.turn-timeout` | 660s | Single LLM turn timeout (must exceed `stream-timeout`) |
 | `runner.llm-turn-max-retries` | 3 | Per-turn retries with exponential backoff (§3.1b) |
 | `runner.compaction.budget-ratio` | 0.7 | Compaction trigger threshold (ratio of maxInputTokens) |
-| `llm.stream-timeout` | 120s | Total streaming call timeout |
+| `llm.stream-timeout` | 600s | Total streaming call timeout |
 | `tool.max-parallel` | 3 | Maximum parallel tool executions |
 | `distributed.owner-lease` | 5m | Session executor owner lease (multi-replica takeover) |
 | `distributed.orphan-sweep-interval` | 30s | Orphan-run sweep interval (stale owner → FAILED → re-wake) |

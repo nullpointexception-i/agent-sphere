@@ -169,7 +169,7 @@ class AgentTimelineServiceTest {
     private Map<String, Object> invokeResolveContent(AgentTimeline row) throws Exception {
         AgentTimelineServiceImpl svc = new AgentTimelineServiceImpl(
                 null, null, toolCallMapper, clarificationMapper, null, interactionMapper,
-                compactRecordMapper, null, messageFeedbackService);
+                compactRecordMapper, null, messageFeedbackService, null);
         Method m = AgentTimelineServiceImpl.class.getDeclaredMethod(
                 "resolveContent", AgentTimeline.class, Map.class, Map.class);
         m.setAccessible(true);

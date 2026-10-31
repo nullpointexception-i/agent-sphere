@@ -102,7 +102,7 @@ buukle:
       connect-timeout: 30s                         # LLM API 连接超时 / LLM API connect timeout
       read-timeout: 60s                            # LLM API 读取超时 / LLM API read timeout
       stream-read-timeout: 120s                    # 流式读取超时 / Stream read timeout
-      stream-timeout: 120s                         # 流式总超时（含思考）/ Stream total timeout (incl. reasoning)
+      stream-timeout: 600s                         # 流式总超时（含思考）；长文/大输出需要更长预算 / Stream total timeout
       stream-max-retries: 2                        # 流式瞬时失败(chunks=0)重试次数 / Stream transient retries
       stream-retry-delay: 1s                       # 流式重试固定退避 / Stream retry fixed backoff
 
@@ -113,7 +113,7 @@ buukle:
       max-loop-count: 128                          # 单次 run 最大循环次数 / Max loop count per run
       task-max-loop-count: 2000                     # 任务触发 run 的更高轮次上限（长任务寻访/收藏） / Task run max loop count
       max-reasoning-chars: 500000                   # 单 run 推理落库长度上限（字符） / Max persisted reasoning chars
-      turn-timeout: 180s                           # 单轮 LLM 调用超时 / Single LLM turn timeout
+      turn-timeout: 660s                           # 单轮 LLM 调用超时；必须大于 llm.stream-timeout / Single LLM turn timeout
       llm-turn-max-retries: 3                      # 单轮 LLM 失败(非取消)重试次数(指数退避 1s→2s→4s) / Per-turn LLM retries (exp. backoff 1s→2s→4s)
       max-screenshots-per-run: 20                  # 单 run 浏览器截图观察注入上限（防烧 token） / Max screenshot observations per run
       live-tool-result-max-chars: 4000              # live 非浏览器工具结果单条压缩上限 / Live non-browser per-message cap

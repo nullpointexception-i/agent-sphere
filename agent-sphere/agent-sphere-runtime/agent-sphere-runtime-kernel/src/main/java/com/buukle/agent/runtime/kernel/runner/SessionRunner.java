@@ -998,6 +998,29 @@ public class SessionRunner {
         return parked;
     }
 
+    /** 从异常完成的 future 中提取可落库的失败原因（ExecutionException 需要拆 cause）。 */
+    private static String futureFailureMessage(CompletableFuture<?> future) {
+        try {
+            future.get();
+            return "LLM stream failed";
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause == null) {
+                return "LLM stream failed";
+            }
+            String message = cause.getMessage();
+            return message != null && !message.isBlank()
+                    ? message : cause.getClass().getSimpleName();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "LLM stream interrupted";
+        } catch (Exception e) {
+            String message = e.getMessage();
+            return message != null && !message.isBlank()
+                    ? message : e.getClass().getSimpleName();
+        }
+    }
+
     /** currentRunStart = 已加入 messages 的前缀长度 + history 内的相对下标；history 无当前 run 时取末尾。 */
     static int resolveCurrentRunStart(int base, HistoryLoader.HistoryResult history, int totalAfterHistory) {
         if (history == null || history.currentRunStart() < 0) {
@@ -1266,6 +1289,15 @@ public class SessionRunner {
                         cancelled.set(true);
                         throw new RuntimeException("Run cancelled");
                     }
+                    // 每个路由独立累积：主路由失败后由 fallback 重跑时，
+                    // 不能把上一条路由的部分正文/工具调用/错误带进来。
+                    errorRef.set(null);
+                    errorRetryableRef.set(true);
+                    finishReasonRef.set(null);
+                    contentRef.set("");
+                    toolCalls.clear();
+                    java.util.concurrent.atomic.AtomicBoolean acceptingEvents =
+                            new java.util.concurrent.atomic.AtomicBoolean(true);
 
                     // 只投影请求副本：canonical messages 保留完整工具结果，供压缩/快照使用。
                     Map<String, Boolean> compressByTool = new HashMap<>();
@@ -1315,6 +1347,8 @@ public class SessionRunner {
                             route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
                             request,
                             event -> {
+                                // 超时/异常后旧流可能还会吐事件；拒绝写入，避免污染 fallback 的结果。
+                                if (!acceptingEvents.get()) return;
                                 switch (event) {
                                     case LLMEvent.TextDelta t -> {
                                         contentRef.updateAndGet(c -> c + t.text());
@@ -1409,8 +1443,24 @@ public class SessionRunner {
                         throw new RuntimeException(e);
                     }
 
+                    // 超时/底层异常会以 future 异常完成；旧实现只等 latch，导致超时被当成正常结束。
+                    if (future.isCompletedExceptionally()) {
+                        acceptingEvents.set(false);
+                        String failure = futureFailureMessage(future);
+                        errorRef.compareAndSet(null, failure);
+                        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
+                                new RuntimeEventDataVO()
+                                        .setSessionId(sessionId).setRunId(runId)
+                                        .setResponse("⚠️ " + route.getModelName() + ": " + failure + "，尝试备用路由...")
+                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                        .setPublishId(UUID.randomUUID().toString())));
+                        throw new RuntimeException("Route failed: " + failure);
+                    }
+
                     String error = errorRef.get();
                     if (error != null) {
+                        acceptingEvents.set(false);
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
                                 new RuntimeEventDataVO()
                                         .setSessionId(sessionId).setRunId(runId)
@@ -1426,6 +1476,14 @@ public class SessionRunner {
             } catch (Exception e) {
                 if (!cancelled.get()) {
                     log.error("Turn execution failed for session {}", sessionId, e);
+                    // 所有路由都失败时 errorRef 可能仍为空（例如 All routes exhausted），
+                    // 必须把异常本身记成失败原因，否则会被当成空回复继续走。
+                    String current = errorRef.get();
+                    if (current == null || current.isBlank()) {
+                        String message = e.getMessage();
+                        errorRef.set(message != null && !message.isBlank()
+                                ? message : e.getClass().getSimpleName());
+                    }
                 }
             }
 
@@ -1484,6 +1542,13 @@ public class SessionRunner {
             if (!toolCalls.isEmpty()) {
                 // 工具轮：即使正文被截断，工具参数已完整或本就不可用，按正常工具轮继续
                 return TurnResult.toolCalls(getTurnContent(contentRef), toolCalls).withFinishReason(finishReason);
+            }
+            // 有正文却没有 LLMEvent.Finish：说明流被截断/连接提前关闭，
+            // 不能把半截正文当成完整回答。完全空的流沿用原语义，避免把无事件路径误判为错误。
+            if ((finishReason == null || finishReason.isBlank())
+                    && !getTurnContent(contentRef).isEmpty()) {
+                return TurnResult.error("LLM stream ended without finish_reason (missing LLMEvent.Finish); "
+                        + "refusing to treat partial output as completion");
             }
             // 没有工具调用却「非正常结束」→ 不能当完成（否则半截答案会被标 COMPLETED）
             if (FinishReason.LENGTH.equals(finishReason)) {

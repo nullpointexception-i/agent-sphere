@@ -10,6 +10,7 @@ import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
+import com.buukle.agent.model.dtvo.complete.FinishReason;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -48,6 +49,7 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -155,6 +157,21 @@ class FinishSilenceLoopTest {
                 new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
     }
 
+    /** 按轮次脚本化模型输出，且不补 Finish（用于模拟流被截断）。 */
+    private void scriptModelWithoutFinish(java.util.function.IntFunction<LLMEvent[]> script) {
+        AtomicInteger turns = new AtomicInteger();
+        doAnswer(inv -> {
+            @SuppressWarnings("unchecked")
+            Consumer<LLMEvent> onEvent = inv.getArgument(5);
+            for (LLMEvent e : script.apply(turns.getAndIncrement())) {
+                onEvent.accept(e);
+            }
+            CompletableFuture<Void> done = new CompletableFuture<>();
+            done.complete(null);
+            return done;
+        }).when(kernelLlmService).stream(anyString(), anyString(), any(), anyString(), any(), any(), any());
+    }
+
     /** 按轮次脚本化模型输出；turn 从 0 开始。 */
     private void scriptModel(java.util.function.IntFunction<LLMEvent[]> script) {
         AtomicInteger turns = new AtomicInteger();
@@ -164,6 +181,8 @@ class FinishSilenceLoopTest {
             for (LLMEvent e : script.apply(turns.getAndIncrement())) {
                 onEvent.accept(e);
             }
+            // 正常流式结束必须带 finish；缺 Finish 现在会被判为截断。
+            onEvent.accept(new LLMEvent.Finish(FinishReason.STOP, null));
             CompletableFuture<Void> done = new CompletableFuture<>();
             done.complete(null);
             return done;
@@ -195,6 +214,42 @@ class FinishSilenceLoopTest {
                 .anyMatch(msg -> msg != null && msg.contains("3"));
         org.junit.jupiter.api.Assertions.assertTrue(reportsRealCount,
                 "错误原因必须记录实际的第三次静默，而不是旧计数 2");
+    }
+
+    @Test
+    void streamTimeout_isReportedAsFailedRunInsteadOfSilentCompletion() {
+        SessionRunner runner = newRunner(25, "objective");
+        doAnswer(inv -> {
+            CompletableFuture<Void> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new RuntimeException("LLM stream timed out after 120s"));
+            return failed;
+        }).when(kernelLlmService).stream(anyString(), anyString(), any(), anyString(), any(), any(), any());
+
+        runner.run(SESSION_ID);
+
+        assertEquals("FAILED", run.getStatus(), "超时不能被当成正常完成");
+        assertTrue(failedMessageContains("timed out"), "run 失败原因必须透传真实超时错误");
+    }
+
+    @Test
+    void streamEndingWithoutFinish_isRejectedAsTruncated() {
+        SessionRunner runner = newRunner(25, "objective");
+        scriptModelWithoutFinish(turn -> new LLMEvent[]{text("半截答案")});
+
+        runner.run(SESSION_ID);
+
+        assertEquals("FAILED", run.getStatus(), "没有 Finish 的流必须判为异常");
+        assertTrue(failedMessageContains("without finish_reason"),
+                "run 失败原因必须说明缺失 Finish");
+    }
+
+    private boolean failedMessageContains(String needle) {
+        ArgumentCaptor<RuntimeEventVO> events = ArgumentCaptor.forClass(RuntimeEventVO.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(events.capture());
+        return events.getAllValues().stream()
+                .filter(e -> RunStatus.FAILED.equals(e.getEventType()))
+                .map(e -> e.getData().getErrorMessage())
+                .anyMatch(msg -> msg != null && msg.contains(needle));
     }
 
     @Test

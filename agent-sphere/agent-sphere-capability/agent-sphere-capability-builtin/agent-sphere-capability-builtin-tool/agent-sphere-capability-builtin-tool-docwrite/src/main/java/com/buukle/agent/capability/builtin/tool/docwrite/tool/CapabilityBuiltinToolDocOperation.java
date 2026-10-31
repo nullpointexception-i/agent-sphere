@@ -97,7 +97,7 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
                 return r;
             }
             Long documentId = dwCtx.getDocumentId();
-            return switch (action) {
+            DocWriteResultVO result = switch (action) {
             case ACTION_CREATE -> handleCreate(dwCtx);
             case ACTION_APPEND -> handleAppend(dwCtx, documentId);
             case ACTION_PATCH -> handlePatch(dwCtx, documentId);
@@ -109,12 +109,32 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
                 yield r;
             }
         };
+            fillVersion(result);
+            return result;
         } catch (Exception e) {
             log.warn("docwrite execute failed action={}", ctx instanceof DocWriteExecuteContext d ? d.getAction() : "unknown", e);
             DocWriteResultVO r = new DocWriteResultVO();
             r.setAction("error");
             r.setPreview("Internal error: " + e.getMessage());
             return r;
+        }
+    }
+
+    /** 结果里补文档版本/标题；失败结果没有 documentId 时跳过。 */
+    private void fillVersion(DocWriteResultVO result) {
+        if (result == null || result.getDocumentId() == null || result.getVersion() != null) {
+            return;
+        }
+        try {
+            DocumentVO doc = documentSpi.getById(result.getDocumentId());
+            if (doc != null) {
+                result.setVersion(doc.getVersion());
+                if (result.getTitle() == null || result.getTitle().isBlank()) {
+                    result.setTitle(doc.getTitle());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to load document version for documentId={}", result.getDocumentId(), e);
         }
     }
 

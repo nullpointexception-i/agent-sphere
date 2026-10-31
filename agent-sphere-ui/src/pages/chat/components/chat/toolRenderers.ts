@@ -30,6 +30,8 @@ export interface ToolContent {
   args?: string;
   /** 执行产物，JSON 字符串 */
   artifact?: string;
+  /** 后端 ToolMetaResolver 下发的标准化展示字段。 */
+  meta?: Record<string, any>;
 }
 
 export type ToolFamily = 'todo' | 'doc' | 'other';
@@ -127,11 +129,7 @@ export function genericSummary(content: ToolContent): string {
   const payload = parsePayload(content);
   if (!payload) return content?.displayName || '工具';
   const actionKey =
-    payload.action ||
-    payload.operation ||
-    payload.tool ||
-    payload.name ||
-    content?.toolName;
+    payload.action || payload.operation || payload.tool || payload.name;
   const subject =
     payload.query ||
     payload.keyword ||
@@ -147,6 +145,304 @@ export function genericSummary(content: ToolContent): string {
     return `查询 ${subject.trim()}`;
   }
   return content?.displayName || content?.toolName || '工具';
+}
+
+export interface TextContainsView {
+  /** true=命中，false=未命中，null=结果缺失/无法解析。 */
+  hit: boolean | null;
+  needle: string;
+  mode: string;
+  haystackChars: number | null;
+  /** 工具返回的错误（例如 needle 为空）；非空时 hit 不可信。 */
+  error: string | null;
+}
+
+/** 文本包含判断工具的可读摘要（builtin_11）。 */
+export function textContainsView(content: ToolContent): TextContainsView {
+  const args = safeParseJson(content?.args) || {};
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  const needle =
+    typeof meta.needle === 'string'
+      ? meta.needle
+      : typeof args.needle === 'string'
+        ? args.needle
+        : '';
+  const haystack = typeof args.haystack === 'string' ? args.haystack : null;
+  const rawMode =
+    typeof meta.mode === 'string'
+      ? meta.mode
+      : typeof args.mode === 'string'
+        ? args.mode.trim()
+        : '';
+  const hit =
+    typeof meta.hit === 'boolean'
+      ? meta.hit
+      : typeof artifact.contains === 'boolean'
+        ? artifact.contains
+        : null;
+  return {
+    hit,
+    needle,
+    mode: rawMode ? rawMode.toUpperCase() : 'EXACT',
+    haystackChars:
+      typeof meta.haystackChars === 'number'
+        ? meta.haystackChars
+        : haystack != null
+          ? haystack.length
+          : null,
+    error:
+      typeof meta.error === 'string' && meta.error.trim()
+        ? meta.error.trim()
+        : typeof artifact.error === 'string' && artifact.error.trim()
+          ? artifact.error.trim()
+          : null,
+  };
+}
+
+export interface WebPageView {
+  url: string;
+  title: string;
+  statusCode: number | null;
+  chars: number | null;
+  error: string | null;
+}
+
+/** 网页读取 / 网页获取的摘要；正文只给长度，避免把整篇 markdown 塞进卡片。 */
+export function webPageView(content: ToolContent): WebPageView {
+  const args = safeParseJson(content?.args) || {};
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  const body =
+    typeof artifact.markdown === 'string'
+      ? artifact.markdown
+      : typeof artifact.content === 'string'
+        ? artifact.content
+        : '';
+  return {
+    url:
+      typeof meta.url === 'string'
+        ? meta.url
+        : typeof args.url === 'string'
+          ? args.url
+          : '',
+    title:
+      typeof meta.title === 'string'
+        ? meta.title
+        : typeof artifact.title === 'string'
+          ? artifact.title
+          : '',
+    statusCode:
+      typeof meta.statusCode === 'number'
+        ? meta.statusCode
+        : typeof artifact.statusCode === 'number'
+          ? artifact.statusCode
+          : null,
+    chars:
+      typeof meta.chars === 'number' ? meta.chars : body ? body.length : null,
+    error:
+      typeof meta.error === 'string' && meta.error.trim()
+        ? meta.error.trim()
+        : typeof artifact.errorMessage === 'string' &&
+            artifact.errorMessage.trim()
+          ? artifact.errorMessage.trim()
+          : typeof artifact.error === 'string' && artifact.error.trim()
+            ? artifact.error.trim()
+            : null,
+  };
+}
+
+export interface SkillView {
+  action: string;
+  preview: string;
+  total: number | null;
+  names: string[];
+  error: string | null;
+}
+
+/** 技能库 / 技能管理的摘要（两者共用 SkillWriteResultVO）。 */
+export function skillView(content: ToolContent): SkillView {
+  const args = safeParseJson(content?.args) || {};
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  const skills = Array.isArray(artifact.skills)
+    ? artifact.skills
+    : Array.isArray(artifact.items)
+      ? artifact.items
+      : [];
+  return {
+    action:
+      typeof meta.action === 'string' && meta.action.trim()
+        ? meta.action.trim()
+        : typeof args.action === 'string' && args.action.trim()
+          ? args.action.trim()
+          : typeof artifact.action === 'string' && artifact.action.trim()
+            ? artifact.action.trim()
+            : 'get',
+    preview: typeof artifact.preview === 'string' ? artifact.preview : '',
+    total:
+      typeof meta.total === 'number'
+        ? meta.total
+        : typeof artifact.total === 'number'
+          ? artifact.total
+          : skills.length || null,
+    names: Array.isArray(meta.names)
+      ? meta.names.filter((n: any) => typeof n === 'string').slice(0, 3)
+      : skills
+          .map((s: any) => (typeof s?.name === 'string' ? s.name : ''))
+          .filter(Boolean)
+          .slice(0, 3),
+    error:
+      typeof meta.error === 'string' && meta.error.trim()
+        ? meta.error.trim()
+        : typeof artifact.error === 'string' && artifact.error.trim()
+          ? artifact.error.trim()
+          : null,
+  };
+}
+
+export interface ReadToolResultView {
+  callId: string;
+  toolName: string;
+  totalChars: number | null;
+  offset: number | null;
+  nextOffset: number | null;
+  truncated: boolean;
+  error: string | null;
+}
+
+/** read_tool_result：只展示回读范围，不展示正文。 */
+export function readToolResultView(content: ToolContent): ReadToolResultView {
+  const args = safeParseJson(content?.args) || {};
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  const num = (key: string, fallback = null) =>
+    typeof meta[key] === 'number' ? meta[key] : fallback;
+  return {
+    callId:
+      typeof meta.callId === 'string'
+        ? meta.callId
+        : typeof artifact.callId === 'string'
+          ? artifact.callId
+          : typeof args.callId === 'string'
+            ? args.callId
+            : '',
+    toolName:
+      typeof meta.toolName === 'string'
+        ? meta.toolName
+        : typeof artifact.toolName === 'string'
+          ? artifact.toolName
+          : '',
+    totalChars:
+      num('totalChars') ??
+      (typeof artifact.totalChars === 'number' ? artifact.totalChars : null),
+    offset:
+      num('offset') ??
+      (typeof artifact.offset === 'number' ? artifact.offset : null),
+    nextOffset:
+      num('nextOffset') ??
+      (typeof artifact.nextOffset === 'number' ? artifact.nextOffset : null),
+    truncated: meta.truncated === true || artifact.truncated === true,
+    error:
+      typeof meta.error === 'string' && meta.error.trim()
+        ? meta.error.trim()
+        : typeof artifact.error === 'string' && artifact.error.trim()
+          ? artifact.error.trim()
+          : null,
+  };
+}
+
+export interface ProgressView {
+  summary: string;
+  nextAction: string;
+  percent: number | null;
+}
+
+/** progress 工具：summary / nextAction / percent。 */
+export function progressView(content: ToolContent): ProgressView {
+  const args = safeParseJson(content?.args) || {};
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  const rawPercent =
+    typeof meta.percent === 'number'
+      ? meta.percent
+      : typeof args.percent === 'number'
+        ? args.percent
+        : undefined;
+  return {
+    summary:
+      typeof meta.summary === 'string' && meta.summary.trim()
+        ? meta.summary.trim()
+        : typeof args.summary === 'string' && args.summary.trim()
+          ? args.summary.trim()
+          : typeof artifact.summary === 'string'
+            ? artifact.summary
+            : '',
+    nextAction:
+      typeof meta.nextAction === 'string'
+        ? meta.nextAction.trim()
+        : typeof args.nextAction === 'string'
+          ? args.nextAction.trim()
+          : '',
+    percent:
+      rawPercent != null
+        ? Math.max(0, Math.min(100, Math.round(rawPercent)))
+        : null,
+  };
+}
+
+export interface CliView {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  firstLine: string;
+  error: string | null;
+}
+
+/** CLI 工具：显示退出码和输出首行，完整输出进原始数据。 */
+export function cliView(content: ToolContent): CliView {
+  const artifact = safeParseJson(content?.artifact) || {};
+  const meta = content?.meta || {};
+  return {
+    exitCode:
+      typeof meta.exitCode === 'number'
+        ? meta.exitCode
+        : typeof artifact.exitCode === 'number'
+          ? artifact.exitCode
+          : null,
+    stdout: typeof artifact.stdout === 'string' ? artifact.stdout : '',
+    stderr: typeof artifact.stderr === 'string' ? artifact.stderr : '',
+    firstLine: typeof meta.firstLine === 'string' ? meta.firstLine : '',
+    error:
+      typeof meta.error === 'string' && meta.error.trim()
+        ? meta.error.trim()
+        : typeof artifact.error === 'string' && artifact.error.trim()
+          ? artifact.error.trim()
+          : null,
+  };
+}
+
+/** 中文文档动作摘要；保留 docSummary 的英文行为给测试/英文界面。 */
+export function docSummaryZh(content: ToolContent): string {
+  const payload = parsePayload(content);
+  const action = typeof payload?.action === 'string' ? payload.action : '';
+  const title =
+    typeof payload?.title === 'string' && payload.title.trim()
+      ? payload.title.trim()
+      : typeof payload?.documentId === 'string' ||
+          typeof payload?.documentId === 'number'
+        ? `#${payload.documentId}`
+        : '';
+  const actionZh: Record<string, string> = {
+    create: '创建文档',
+    update: '更新文档',
+    read: '读取文档',
+    delete: '删除文档',
+    list: '文档列表',
+    search: '搜索文档',
+  };
+  const label = actionZh[action] || action || '文档操作';
+  return title ? `${label} ${title}` : label;
 }
 
 /** 已完成计数，例如 { done: 2, total: 3 }。 */
@@ -188,6 +484,9 @@ export interface BrowserResult {
   failed: boolean;
   errorCategory?: string;
   errorMessage?: string;
+  method?: string;
+  resultType?: string;
+  warning?: string;
 }
 
 /**
@@ -202,18 +501,140 @@ export function browserResult(
   if (!isBrowserTool(content, displayName)) return { failed: false };
   // 成败标记在 artifact（结果产物）里，不能走 args 优先的 parsePayload。
   const payload = safeParseJson(content?.artifact);
-  if (payload && payload.success === false) {
-    return {
-      failed: true,
-      errorCategory:
-        typeof payload.errorCategory === 'string'
-          ? payload.errorCategory
-          : undefined,
-      errorMessage:
-        typeof payload.errorMessage === 'string'
-          ? payload.errorMessage
-          : undefined,
-    };
+  const meta = content?.meta || {};
+  const text = (v: any) =>
+    typeof v === 'string' && v.trim() ? v.trim() : undefined;
+  return {
+    failed: meta.failed === true || payload?.success === false,
+    errorCategory: text(meta.errorCategory) || text(payload?.errorCategory),
+    errorMessage: text(meta.error) || text(payload?.errorMessage),
+    method: text(meta.method) || text(payload?.method),
+    resultType: text(meta.resultType) || text(payload?.resultType),
+    warning: text(meta.warning) || text(payload?.warning),
+  };
+}
+
+export interface SearchResultView {
+  title: string;
+  url: string;
+  host: string;
+  summary: string;
+}
+
+const SEARCH_ARRAY_KEYS = [
+  'results',
+  'items',
+  'data',
+  'searchResults',
+  'entries',
+  'content',
+];
+const SEARCH_TITLE_KEYS = ['title', 'name', 'headline'];
+const SEARCH_URL_KEYS = ['url', 'link', 'href'];
+const SEARCH_SUMMARY_KEYS = [
+  'snippet',
+  'description',
+  'summary',
+  'abstract',
+  'content',
+  'text',
+];
+
+function firstString(value: any, keys: string[]): string {
+  if (!value || typeof value !== 'object') return '';
+  for (const key of keys) {
+    if (typeof value[key] === 'string' && value[key].trim()) {
+      return value[key].trim();
+    }
   }
-  return { failed: false };
+  return '';
+}
+
+function parseJsonText(value: any): any {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function isTextPart(value: any): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof value.text === 'string' &&
+    value.url == null &&
+    value.link == null &&
+    value.href == null &&
+    value.title == null &&
+    value.name == null
+  );
+}
+
+/** 递归展开 MCP 的 content[].text（部分服务端把搜索结果再包一层 JSON 字符串）。 */
+function findResultArray(payload: any, depth = 0): any[] {
+  if (depth > 4 || payload == null) return [];
+  const value = parseJsonText(payload);
+  if (Array.isArray(value)) {
+    if (value.length > 0 && value.every(isTextPart)) {
+      for (const part of value) {
+        const found = findResultArray(part.text, depth + 1);
+        if (found.length) return found;
+      }
+      return [];
+    }
+    return value;
+  }
+  if (typeof value !== 'object') return [];
+  for (const key of SEARCH_ARRAY_KEYS) {
+    if (value[key] == null) continue;
+    const found = findResultArray(value[key], depth + 1);
+    if (found.length) return found;
+  }
+  return [];
+}
+
+/** MCP 结果正文：优先取 content[].text，避免预览弹窗里全是 RPC 包装 JSON。 */
+export function toolResultText(content: ToolContent): string {
+  const payload = safeParseJson(content?.artifact);
+  if (payload && typeof payload === 'object') {
+    const parts = Array.isArray(payload.content) ? payload.content : [];
+    const texts = parts
+      .filter(isTextPart)
+      .map((part: any) => part.text)
+      .filter(Boolean);
+    if (texts.length) return texts.join('\n\n');
+  }
+  return typeof content?.artifact === 'string' ? content.artifact : '';
+}
+
+/**
+ * MCP 搜索类工具的数组结果：提取标题 + 域名 + 摘要。
+ * 只在调用方（MCP 工具卡）使用，避免把技能/待办等数组误当成搜索结果。
+ */
+export function searchResultView(content: ToolContent): SearchResultView[] {
+  const payload = safeParseJson(content?.artifact);
+  const list = findResultArray(payload);
+  const results: SearchResultView[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const url = firstString(item, SEARCH_URL_KEYS);
+    const title = firstString(item, SEARCH_TITLE_KEYS);
+    if (!url && !title) continue;
+    let host = '';
+    try {
+      host = url ? new URL(url).host : '';
+    } catch {
+      host = '';
+    }
+    const summary = firstString(item, SEARCH_SUMMARY_KEYS)
+      .replace(/\s+/g, ' ')
+      .slice(0, 180);
+    results.push({ title: title || host || url, url, host, summary });
+    if (results.length >= 5) break;
+  }
+  return results;
 }

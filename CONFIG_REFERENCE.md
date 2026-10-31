@@ -49,7 +49,7 @@ Retention days and the kill switch for cleanup live in `agent_system_config` (`c
 | `connect-timeout` | `30s` | LLM API connect timeout |
 | `read-timeout` | `60s` | LLM API read timeout |
 | `stream-read-timeout` | `120s` | Streaming read timeout |
-| `stream-timeout` | `120s` | Total streaming timeout (including reasoning) |
+| `stream-timeout` | `600s` | Total streaming timeout (including reasoning) |
 | `stream-max-retries` | `2` | Retries on a transient stream failure (chunks received = 0) |
 | `stream-retry-delay` | `1s` | Fixed backoff for stream retries |
 
@@ -61,7 +61,7 @@ Retention days and the kill switch for cleanup live in `agent_system_config` (`c
 | `max-silent-turns` | `2` | Consecutive tool-free turns tolerated after tool use before strict runs fail |
 | `task-max-loop-count` | `2000` | Higher limit for task-triggered runs (the `TASK` source) |
 | `max-reasoning-chars` | `500000` | Max persisted reasoning characters per run |
-| `turn-timeout` | `180s` | Single LLM turn timeout |
+| `turn-timeout` | `660s` | Single LLM turn timeout (must exceed `stream-timeout`) |
 | `llm-turn-max-retries` | `3` | Per-turn retries on a transient failure, exponential backoff 1s→2s→4s (README §3.1b) |
 | `max-screenshots-per-run` | `20` | Max screenshot observations injected per run (token guard) |
 | `live-tool-result-max-chars` | `4000` | Per-message cap for live non-browser tool results |

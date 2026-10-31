@@ -11,6 +11,7 @@ public class DocumentVO implements Serializable {
     private String title;
     private String content;
     private String contentType;
+    private Integer version;
     private Long sessionId;
     private Long instanceId;
     private Long runId;
