@@ -263,7 +263,7 @@ function ToolRowBody({
     return <CliRow content={c} state={row.state} />;
   }
   if (c.toolName === 'builtin_5' || isBrowserTool(c, c.displayName)) {
-    return <BrowserRow content={c} state={row.state} />;
+    return <BrowserRow content={c} state={row.state} loadFile={loadFile} />;
   }
   const family = toolFamily(c, c.displayName);
   const name = c.displayName || row.title || 'tool';
@@ -912,9 +912,11 @@ function CliRow({ content, state }: { content: any; state?: string | null }) {
 function BrowserRow({
   content,
   state,
+  loadFile,
 }: {
   content: any;
   state?: string | null;
+  loadFile: (fileKey: string) => Promise<string>;
 }) {
   const brow = browserResult(content, content.displayName);
   let args: any = {};
@@ -956,6 +958,28 @@ function BrowserRow({
         : typeof args.text === 'string'
           ? args.text
           : '';
+  const screenshot = artifact?.data?.screenshot || null;
+  const screenshotSize =
+    screenshot?.width && screenshot?.height
+      ? `${screenshot.width}×${screenshot.height}`
+      : '';
+  const scopeLabel =
+    args?.scope === 'full'
+      ? '整页'
+      : args?.scope === 'viewport'
+        ? '视口'
+        : args?.scope;
+  const screenshotImages =
+    Array.isArray(content.images) && content.images.length > 0
+      ? content.images
+      : screenshot?.fileKey
+        ? [
+            {
+              fileKey: screenshot.fileKey,
+              contentType: screenshot.contentType,
+            },
+          ]
+        : [];
   return (
     <div
       style={{
@@ -1017,6 +1041,18 @@ function BrowserRow({
           }}
         >
           {target}
+        </div>
+      )}
+      {screenshotImages.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ marginBottom: 4, fontSize: 10.5, color: '#a0a0a0' }}>
+            {['截图', screenshotSize, scopeLabel].filter(Boolean).join(' · ')}
+          </div>
+          <UserImages
+            images={screenshotImages}
+            loadFile={loadFile}
+            variant="screenshot"
+          />
         </div>
       )}
       {(brow.method || brow.resultType) && (
@@ -1307,7 +1343,11 @@ function SubAgentToolItem({
         </div>
       )}
       {Array.isArray(s.images) && s.images.length > 0 && (
-        <UserImages images={s.images} loadFile={loadFile} />
+        <UserImages
+          images={s.images}
+          loadFile={loadFile}
+          variant={s.toolName === 'builtin_5' ? 'screenshot' : 'attachment'}
+        />
       )}
       <button className="aw-tl-detail-toggle" onClick={onDetailToggle}>
         {detailOpen ? '▾' : '▸'} 详情
@@ -1471,9 +1511,11 @@ function SubAgentCard({
 function UserImages({
   images,
   loadFile,
+  variant = 'attachment',
 }: {
   images?: { fileKey: string; contentType?: string }[];
   loadFile: (fileKey: string) => Promise<string>;
+  variant?: 'attachment' | 'screenshot';
 }) {
   const [urls, setUrls] = useState<Record<string, string>>({});
   // loadFile 经 ref 读取：不进入 effect 依赖，避免上层内联函数身份变化引发无限重取
@@ -1527,7 +1569,11 @@ function UserImages({
           key={im.fileKey || idx}
           src={urls[im.fileKey]}
           alt="attachment"
-          className="aw-tl-user-img"
+          className={
+            variant === 'screenshot'
+              ? 'aw-tl-user-img aw-tl-user-img-screenshot'
+              : 'aw-tl-user-img'
+          }
           style={{ cursor: 'pointer' }}
           onClick={() => setPreviewUrl(urls[im.fileKey])}
         />

@@ -558,6 +558,13 @@
   object-fit: cover;
 }
 
+.aw-tl-user-img-screenshot {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: #f5f5f5;
+}
+
 .aw-tl-image-preview {
   position: fixed;
   inset: 0;

@@ -1914,6 +1914,32 @@ function BrowserCard({ content, state }: any) {
           : '';
   const method = brow.method || '';
   const resultType = brow.resultType || '';
+  const screenshot = artifact?.data?.screenshot || null;
+  const screenshotSize =
+    screenshot?.width && screenshot?.height
+      ? `${screenshot.width}×${screenshot.height}`
+      : '';
+  const scopeLabel =
+    args?.scope === 'full'
+      ? isEn
+        ? 'full page'
+        : '整页'
+      : args?.scope === 'viewport'
+        ? isEn
+          ? 'viewport'
+          : '视口'
+        : args?.scope;
+  const screenshotImages =
+    Array.isArray(content.images) && content.images.length > 0
+      ? content.images
+      : screenshot?.fileKey
+        ? [
+            {
+              fileKey: screenshot.fileKey,
+              contentType: screenshot.contentType,
+            },
+          ]
+        : [];
   return (
     <div
       style={{
@@ -1986,6 +2012,16 @@ function BrowserCard({ content, state }: any) {
           }}
         >
           {target}
+        </div>
+      )}
+      {screenshotImages.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ marginBottom: 4, fontSize: 10.5, color: '#a0a0a0' }}>
+            {[isEn ? 'Screenshot' : '截图', screenshotSize, scopeLabel]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+          <UserImages images={screenshotImages} variant="screenshot" />
         </div>
       )}
       {(method || resultType) && (
@@ -2325,7 +2361,10 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
         </div>
       )}
       {Array.isArray(s.images) && s.images.length > 0 && (
-        <UserImages images={s.images} />
+        <UserImages
+          images={s.images}
+          variant={s.toolName === 'builtin_5' ? 'screenshot' : 'attachment'}
+        />
       )}
       {/* 受控：最新一条 Tool 详情默认展开，下一条到来时关闭之前的（单一展开） */}
       <Block
@@ -2557,9 +2596,16 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   );
 }
 
-function UserImages({ images }: any) {
+function UserImages({
+  images,
+  variant = 'attachment',
+}: {
+  images: any;
+  variant?: 'attachment' | 'screenshot';
+}) {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const currentUrlsRef = useRef<Record<string, string>>({});
+  const screenshot = variant === 'screenshot';
   const imagesKey = (images || [])
     .map((im: any) => im?.fileKey || '')
     .join(',');
@@ -2605,11 +2651,12 @@ function UserImages({ images }: any) {
             src={urls[im.fileKey]}
             alt="attachment"
             style={{
-              maxWidth: 240,
-              maxHeight: 240,
+              maxWidth: screenshot ? 480 : 240,
+              maxHeight: screenshot ? 360 : 240,
               borderRadius: 8,
               border: '1px solid #e5e5e5',
-              objectFit: 'cover',
+              objectFit: screenshot ? 'contain' : 'cover',
+              background: screenshot ? '#f5f5f5' : undefined,
               cursor: 'pointer',
             }}
             preview={{ mask: '查看大图' }}
