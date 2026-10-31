@@ -169,7 +169,17 @@ public class SessionRunner {
     }
 
     private KernelContext getContext(Long sessionId) {
-        return ctxCache().get(sessionId);
+        KernelContext ctx = ctxCache().get(sessionId);
+        if (ctx != null) {
+            // 长 run 可能持续数小时：每轮续期，避免 30 分钟 TTL 到期后 tools 变空，
+            // 模型无法调用任何工具（含 finish），最后被静默守卫误判为「连续静默」。
+            try {
+                ctxCache().put(sessionId, ctx, CONTEXT_TTL.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (Exception e) {
+                log.warn("Failed to refresh KernelContext TTL for session {}: {}", sessionId, e.getMessage());
+            }
+        }
+        return ctx;
     }
 
     private RMapCache<Long, KernelContext> ctxCache() {
@@ -411,6 +421,18 @@ public class SessionRunner {
                 dto.setUserMessage(input.text());
                 currentRun = runSpi.createRun(dto);
                 currentRunId = currentRun.getId();
+            }
+            if (ctx == null) {
+                // 正常情况下 coordinator 在启动/恢复前已注册 context；这里为空说明缓存已过期
+                // 或恢复链路没带上 context。继续跑会让 tools=[]，模型无法调用 finish。
+                if (currentRun != null) {
+                    log.error("KernelContext missing for session {} (run {}); failing run instead of running without tools",
+                            sessionId, currentRunId);
+                    failRun(sessionId, currentRun, RunnerConstants.RUN_CONTEXT_LOST_MSG);
+                } else {
+                    log.error("KernelContext missing for session {} and no run is active; skipping execution", sessionId);
+                }
+                break loop;
             }
 
             currentRun.setStatus(RunStatus.RUNNING.name());
@@ -996,6 +1018,22 @@ public class SessionRunner {
                             .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
         }
         return parked;
+    }
+
+    /** 统一写入 run 失败终态并发事件，避免重复拼装 data。 */
+    private void failRun(Long sessionId, RunVO run, String message) {
+        if (run == null) {
+            return;
+        }
+        run.setStatus(RunStatus.FAILED.name());
+        run.setErrorMessage(message);
+        runSpi.updateRun(run);
+        eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
+                new RuntimeEventDataVO()
+                        .setSessionId(sessionId)
+                        .setRunId(run.getId())
+                        .setErrorMessage(message)
+                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
     }
 
     /** 从异常完成的 future 中提取可落库的失败原因（ExecutionException 需要拆 cause）。 */

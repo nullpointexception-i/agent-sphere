@@ -149,6 +149,8 @@ public final class RunnerConstants {
     public static final String RUN_LOOP_NO_TERMINAL_MSG = "执行异常：run 循环已退出但未产生终态";
     /** 长时间停在 RUNNING 且执行副本已不在（无 owner）时的对账失败原因。 */
     public static final String RUN_STALE_MSG = "执行中断：run 长时间无进展且执行副本已失联";
+    /** 运行上下文丢失（工具列表为空）时的失败原因；不能继续跑静默轮。 */
+    public static final String RUN_CONTEXT_LOST_MSG = "运行上下文已丢失（工具列表为空），无法继续调用工具，请重试";
 
     private RunnerConstants() {
     }

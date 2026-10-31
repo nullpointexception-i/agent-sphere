@@ -44,6 +44,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -52,12 +53,15 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * L1/L2 端到端：agentic run 只能用 `finish` 收口，沉默是异常。
@@ -109,6 +113,8 @@ class FinishSilenceLoopTest {
     ChatAttachmentResolver attachmentResolver;
 
     private RunVO run;
+    private KernelContext context;
+    private RMapCache<Long, KernelContext> contextCache;
 
     /** 建好 RunVO + Redisson 上下文 + 路由，返回可执行的 SessionRunner。 */
     private SessionRunner newRunner(int maxLoopCount, String userMessage) {
@@ -135,8 +141,10 @@ class FinishSilenceLoopTest {
                 .agentInstance(new InstanceVO())
                 .tools(List.of())
                 .build();
+        context = ctx;
         @SuppressWarnings("unchecked")
         RMapCache<Long, KernelContext> cache = mock(RMapCache.class);
+        contextCache = cache;
         lenient().when(redis.<Long, KernelContext>getMapCache(DistributedRuntimeConstants.KEY_CTX)).thenReturn(cache);
         lenient().when(cache.get(SESSION_ID)).thenReturn(ctx);
         @SuppressWarnings("unchecked")
@@ -289,5 +297,22 @@ class FinishSilenceLoopTest {
 
         assertEquals("COMPLETED", run.getStatus());
         assertEquals("done", run.getAssistantReply());
+    }
+
+    @Test
+    void contextCacheExpiryAfterToolUse_failsWithContextLost_andRefreshesTtl() {
+        SessionRunner runner = newRunner(25, "objective");
+        // topCtx 读取 + 第一轮循环能取到 context；之后模拟 Redis TTL 到期返回 null。
+        when(contextCache.get(SESSION_ID)).thenReturn(context, context, (KernelContext) null);
+        scriptModel(turn -> turn == 0 ? new LLMEvent[]{tool("builtin_2")} : new LLMEvent[]{text("bye")});
+
+        runner.run(SESSION_ID);
+
+        assertEquals("FAILED", run.getStatus(),
+                "context 过期后不能继续跑空工具集，否则会被误判为连续静默");
+        assertTrue(failedMessageContains("上下文"),
+                "失败原因必须明确是运行上下文丢失，而不是模型未调用工具");
+        verify(contextCache, atLeastOnce()).put(
+                eq(SESSION_ID), eq(context), anyLong(), eq(TimeUnit.MILLISECONDS));
     }
 }
