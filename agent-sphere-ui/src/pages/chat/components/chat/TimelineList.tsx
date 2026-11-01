@@ -771,6 +771,8 @@ function DocCard({ content }: { content: any }) {
       : typeof argsObj?.content === 'string'
         ? argsObj.content
         : '';
+  const artifactPreview =
+    typeof artifactObj?.preview === 'string' ? artifactObj.preview : '';
   return (
     <div style={{ marginTop: 4 }}>
       <div
@@ -827,14 +829,14 @@ function DocCard({ content }: { content: any }) {
               .filter(Boolean)
               .join(' · ')}
           </Typography.Text>
-          {(artifactObj?.preview || documentTitle) && (
+          {(artifactPreview || documentTitle) && (
             <Typography.Text
               type="secondary"
               style={{ display: 'block', fontSize: 11, lineHeight: '16px' }}
             >
               {documentTitle || (isEn ? 'Document' : '文档')}
-              {artifactObj.preview
-                ? `：${String(artifactObj.preview).slice(0, 60)}…`
+              {artifactPreview
+                ? `：${artifactPreview.slice(0, 60)}…`
                 : ''}
             </Typography.Text>
           )}

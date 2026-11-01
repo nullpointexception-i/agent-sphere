@@ -1199,7 +1199,7 @@ export default function Chat() {
                   }
                   if (toolName === DOCWRITE_TOOL_NAME) {
                     try {
-                      const docInfo = JSON.parse(d?.artifact || '{}');
+                      const docInfo = JSON.parse(d?.artifact || '{}') || {};
                       if (docInfo.documentId) {
                         setMessages((prev) => {
                           const lastReasoning = prev.findLastIndex(
