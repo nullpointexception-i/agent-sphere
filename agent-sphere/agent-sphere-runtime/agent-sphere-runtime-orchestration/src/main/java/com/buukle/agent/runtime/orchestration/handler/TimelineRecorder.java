@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.orchestration.handler;
 
 import com.buukle.agent.instance.domain.AgentPendingClarification;
+import com.buukle.agent.instance.dtvo.dto.TimelineRefQuery;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
@@ -86,8 +87,22 @@ public class TimelineRecorder {
 
     /** run 终态：封口主助手容器（兜底；每轮 LLM 调用已由 closeAssistantTurn 封口，仅兜底极端路径）。 */
     public void closeAssistant(Long sessionId, Long runId, String state) {
+        if (runId == null) {
+            return;
+        }
         Long seq = assistantSeqByRun.remove(runId);
-        if (seq != null) {
+        if (seq == null) {
+            TimelineRefQuery query = TimelineRefQuery.builder()
+                    .runId(runId)
+                    .kind(TimelineKind.ASSISTANT.getCode())
+                    .build();
+            seq = findLatestSeq(query);
+            // 跨副本/重启后 Map 丢失：只封口仍处于 RUNNING 的最近一行，避免把上一轮已完成的正文改成 FAILED。
+            if (seq != null && seq > 0 && !TimelineState.RUNNING.getCode().equals(findLatestState(query))) {
+                return;
+            }
+        }
+        if (seq != null && seq > 0) {
             update(sessionId, seq, state, null, null);
         }
     }
@@ -99,13 +114,25 @@ public class TimelineRecorder {
         }
         Long seq = assistantSeqByRun.remove(runId);
         if (seq == null) {
+            TimelineRefQuery query = TimelineRefQuery.builder()
+                    .runId(runId)
+                    .kind(TimelineKind.ASSISTANT.getCode())
+                    .build();
+            seq = findLatestSeq(query);
+            if (seq != null && seq > 0 && !TimelineState.RUNNING.getCode().equals(findLatestState(query))) {
+                return;
+            }
+        }
+        if (seq == null) {
             return;
         }
         update(sessionId, seq, state, null, null);
-        try {
-            timelineSpi.updateRefInteractionId(sessionId, seq, interactionId);
-        } catch (Exception e) {
-            log.warn("Timeline ref interaction failed: {}", e.getMessage());
+        if (interactionId != null) {
+            try {
+                timelineSpi.updateRefInteractionId(sessionId, seq, interactionId);
+            } catch (Exception e) {
+                log.warn("Timeline ref interaction failed: {}", e.getMessage());
+            }
         }
     }
 
@@ -114,6 +141,16 @@ public class TimelineRecorder {
         try {
             String key = runId + ":" + stepKey;
             Long seq = toolSeqByRunStep.get(key);
+            if (seq == null && runId != null && refToolCallId != null) {
+                seq = findLatestSeq(TimelineRefQuery.builder()
+                        .runId(runId)
+                        .kind(TimelineKind.TOOL.getCode())
+                        .refToolCallId(refToolCallId)
+                        .build());
+                if (seq != null && seq > 0) {
+                    toolSeqByRunStep.put(key, seq);
+                }
+            }
             if (seq == null) {
                 seq = timelineSpi.record(sessionId, runId, TimelineKind.TOOL.getCode(), state, state, title,
                         null, null, refToolCallId, null, null);
@@ -135,12 +172,27 @@ public class TimelineRecorder {
         if (runId == null) {
             return;
         }
+        TimelineRefQuery query = TimelineRefQuery.builder()
+                .runId(runId)
+                .kind(TimelineKind.RUN_STATUS.getCode())
+                .build();
         Long seq = runStatusSeqByRun.get(runId);
+        if (seq == null) {
+            seq = findLatestSeq(query);
+            if (seq != null && seq > 0) {
+                runStatusSeqByRun.put(runId, seq);
+            }
+        }
         if (seq == null) {
             seq = timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
                     runId, null, null, null, null);
             runStatusSeqByRun.put(runId, seq);
         } else {
+            // 乱序到达的 RUNNING/AWAITING 不能把已经终态的行降级
+            String latestState = findLatestState(query);
+            if (isTerminalRunState(latestState) && !isTerminalRunState(state)) {
+                return;
+            }
             timelineSpi.update(sessionId, seq, state, state, title);
         }
     }
@@ -166,8 +218,18 @@ public class TimelineRecorder {
             case WAITING -> TITLE_RUN_WAITING;
             default -> throw new IllegalStateException("unexpected run status " + status);
         };
+        TimelineRefQuery query = TimelineRefQuery.builder()
+                .runId(runId)
+                .kind(TimelineKind.RUN_STATUS.getCode())
+                .build();
         Long seq = runStatusSeqByRun.get(runId);
-        if (seq != null) {
+        if (seq == null) {
+            seq = findLatestSeq(query);
+            if (seq != null && seq > 0) {
+                runStatusSeqByRun.put(runId, seq);
+            }
+        }
+        if (seq != null && seq > 0) {
             timelineSpi.update(sessionId, seq, state, state, title);
             // AWAITING_USER / WAITING 之后还会续跑同一行；仅真正终态释放 map 条目
             if (!"AWAITING_USER".equals(state) && !"WAITING".equals(state)) {
@@ -193,6 +255,16 @@ public class TimelineRecorder {
         String title = compactionTitle(state, detail);
         try {
             Long seq = compactionSeqByPublishId.get(key);
+            if (seq == null && runId != null && compactRecordId != null) {
+                seq = findLatestSeq(TimelineRefQuery.builder()
+                        .runId(runId)
+                        .kind(TimelineKind.COMPACTION.getCode())
+                        .refCompactId(compactRecordId)
+                        .build());
+                if (seq != null && seq > 0) {
+                    compactionSeqByPublishId.put(key, seq);
+                }
+            }
             if (seq == null) {
                 seq = timelineSpi.record(sessionId, runId, TimelineKind.COMPACTION.getCode(), state, state, title,
                         runId, null, null, null, null);
@@ -236,6 +308,42 @@ public class TimelineRecorder {
         return TimelineState.COMPLETED.getCode().equals(state) || TimelineState.FAILED.getCode().equals(state);
     }
 
+    private Long findLatestSeq(TimelineRefQuery query) {
+        try {
+            Long seq = timelineSpi.findLatestSeq(query);
+            // Mockito/异常兜底可能返回 0；seq 只认正数，避免把 0 当作已存在行去 update
+            return seq != null && seq > 0 ? seq : null;
+        } catch (Exception e) {
+            log.warn("Timeline findLatestSeq failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private String findLatestState(TimelineRefQuery query) {
+        try {
+            return timelineSpi.findLatestState(query);
+        } catch (Exception e) {
+            log.warn("Timeline findLatestState failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private static boolean isTerminalRunState(String state) {
+        return TimelineState.COMPLETED.getCode().equals(state)
+                || TimelineState.FAILED.getCode().equals(state)
+                || TimelineState.CANCELLED.getCode().equals(state);
+    }
+
+    private static boolean isTerminalClarificationState(String state) {
+        return TimelineState.ANSWERED.getCode().equals(state)
+                || TimelineState.CANCELLED.getCode().equals(state);
+    }
+
+    private static boolean isTerminalApprovalState(String state) {
+        return TimelineState.ANSWERED.getCode().equals(state)
+                || TimelineState.CANCELLED.getCode().equals(state);
+    }
+
     static String compactionTitle(String state, String detail) {
         String base = TITLE_COMPACT_RUNNING;
         if (TimelineState.COMPLETED.getCode().equals(state)) {
@@ -248,16 +356,34 @@ public class TimelineRecorder {
 
     /** 澄清行：pending→answered 复用同一行。 */
     public void recordClarification(Long sessionId, Long runId, String clarificationId, String state, String title) {
+        if (runId == null) {
+            return;
+        }
         try {
             String key = runId + ":" + clarificationId;
             Long seq = clarificationSeqByRun.get(key);
             Long refId = lookupClarificationRef(runId, clarificationId);
+            if (seq == null && refId != null) {
+                // 跨副本/重启后 Map 丢失：回 DB 找同一 ref 的旧行，而不是新建一条 PENDING 残留
+                seq = findLatestSeq(TimelineRefQuery.builder()
+                        .runId(runId)
+                        .kind(TimelineKind.CLARIFICATION.getCode())
+                        .refClarificationId(refId)
+                        .build());
+                if (seq != null && seq > 0) {
+                    clarificationSeqByRun.put(key, seq);
+                }
+            }
             if (seq == null) {
                 seq = timelineSpi.record(sessionId, runId, TimelineKind.CLARIFICATION.getCode(), state, state, title,
                         runId, null, null, null, refId);
                 clarificationSeqByRun.put(key, seq);
             } else {
-                timelineSpi.update(sessionId, seq, state, null, title);
+                // subtype 必须跟着 state 一起改：旧实现只传 state，PENDING 子类型会残留
+                timelineSpi.update(sessionId, seq, state, state, title);
+            }
+            if (isTerminalClarificationState(state)) {
+                clarificationSeqByRun.remove(key);
             }
         } catch (Exception e) {
             log.warn("Timeline clarification row failed: {}", e.getMessage());
@@ -272,12 +398,25 @@ public class TimelineRecorder {
         try {
             String key = runId + ":" + approvalId;
             Long seq = approvalSeqByRun.get(key);
+            if (seq == null && refApprovalId != null) {
+                seq = findLatestSeq(TimelineRefQuery.builder()
+                        .runId(runId)
+                        .kind(TimelineKind.TOOL_APPROVAL.getCode())
+                        .refApprovalId(refApprovalId)
+                        .build());
+                if (seq != null && seq > 0) {
+                    approvalSeqByRun.put(key, seq);
+                }
+            }
             if (seq == null) {
                 seq = timelineSpi.recordApproval(sessionId, runId, TimelineKind.TOOL_APPROVAL.getCode(),
                         state, state, title, runId, refApprovalId);
                 approvalSeqByRun.put(key, seq);
             } else {
-                timelineSpi.update(sessionId, seq, state, null, title);
+                timelineSpi.update(sessionId, seq, state, state, title);
+            }
+            if (isTerminalApprovalState(state)) {
+                approvalSeqByRun.remove(key);
             }
         } catch (Exception e) {
             log.warn("Timeline tool approval row failed: {}", e.getMessage());

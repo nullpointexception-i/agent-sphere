@@ -12,6 +12,7 @@ import com.buukle.agent.instance.domain.AgentSubAgentRun;
 import com.buukle.agent.instance.domain.AgentTimeline;
 import com.buukle.agent.instance.domain.AgentToolApproval;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
+import com.buukle.agent.instance.dtvo.dto.TimelineRefQuery;
 import com.buukle.agent.instance.dtvo.enums.TimelineContentKey;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
@@ -191,6 +192,44 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         patch.setState(state);
         patch.setSubtype(state);
         lambdaUpdate().eq(AgentTimeline::getRefSubAgentRunId, subAgentRunId).update(patch);
+    }
+
+    @Override
+    public Long findLatestSeq(TimelineRefQuery query) {
+        AgentTimeline row = findLatest(query);
+        return row == null ? null : row.getSeq();
+    }
+
+    @Override
+    public String findLatestState(TimelineRefQuery query) {
+        AgentTimeline row = findLatest(query);
+        return row == null ? null : row.getState();
+    }
+
+    /**
+     * 按 run + kind + ref 取最近一行。
+     *
+     * <p>ref 字段按调用方传入的非空值逐项 AND；run_status / assistant 没有 ref，只按 run + kind。
+     * MyBatis-Plus 的 @TableLogic 会自动追加 delete_flag = 0，历史逻辑删除行不会参与复用。
+     */
+    private AgentTimeline findLatest(TimelineRefQuery query) {
+        if (query == null || query.getRunId() == null || query.getKind() == null) {
+            return null;
+        }
+        LambdaQueryWrapper<AgentTimeline> wrapper = new LambdaQueryWrapper<AgentTimeline>()
+                .eq(AgentTimeline::getRunId, query.getRunId())
+                .eq(AgentTimeline::getKind, query.getKind())
+                .eq(query.getRefClarificationId() != null,
+                        AgentTimeline::getRefClarificationId, query.getRefClarificationId())
+                .eq(query.getRefToolCallId() != null,
+                        AgentTimeline::getRefToolCallId, query.getRefToolCallId())
+                .eq(query.getRefApprovalId() != null,
+                        AgentTimeline::getRefApprovalId, query.getRefApprovalId())
+                .eq(query.getRefCompactId() != null,
+                        AgentTimeline::getRefCompactId, query.getRefCompactId())
+                .orderByDesc(AgentTimeline::getSeq)
+                .last("LIMIT 1");
+        return getOne(wrapper, false);
     }
 
     @Override

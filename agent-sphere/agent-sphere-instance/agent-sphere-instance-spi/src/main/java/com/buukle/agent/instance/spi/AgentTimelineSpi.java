@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.spi;
 
+import com.buukle.agent.instance.dtvo.dto.TimelineRefQuery;
+
 /**
  * 统一 Timeline（打平展示索引）契约：
  * 会话级 seq 分配、行记录/封口、keyset 分页读取（正文解析）。
@@ -30,6 +32,17 @@ public interface AgentTimelineSpi {
 
     /** 回填 COMPACTION 行的压缩记录 id（正文从 agent_compact_record.summary_after 解析）。 */
     void updateRefCompactId(Long sessionId, Long seq, Long compactRecordId);
+
+    /**
+     * 按 run + kind + ref 查最近一行的 seq；不存在返回 null。
+     *
+     * <p>供 TimelineRecorder 在进程内 Map 未命中时做 DB 兜底：
+     * 跨副本/重启后仍能把 PENDING→ANSWERED、RUNNING→COMPLETED 收敛到同一行。
+     */
+    Long findLatestSeq(TimelineRefQuery query);
+
+    /** 按 run + kind + ref 查最近一行的 state；不存在返回 null。 */
+    String findLatestState(TimelineRefQuery query);
 
     /** 按子 Agent 运行 id 更新其头行状态（sub_agent_run 结束封口）。 */
     void updateBySubAgentRun(Long subAgentRunId, String state);

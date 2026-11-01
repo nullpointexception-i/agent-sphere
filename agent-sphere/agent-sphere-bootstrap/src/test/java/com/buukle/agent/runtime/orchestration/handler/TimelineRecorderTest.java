@@ -1,9 +1,11 @@
 package com.buukle.agent.runtime.orchestration.handler;
 
+import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
+import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -92,5 +94,46 @@ class TimelineRecorderTest {
 
         assertEquals(11L, token.getSeq());
         assertEquals(TimelineKind.COMPACTION.getCode(), token.getKind());
+    }
+
+    @Test
+    void clarificationResponseReusesDbRowWhenMapIsEmpty() {
+        AgentPendingClarification pending = new AgentPendingClarification();
+        pending.setId(236L);
+        pending.setClarificationId("c-1");
+        when(clarificationMapper.selectOne(any())).thenReturn(pending);
+        when(timelineSpi.findLatestSeq(any())).thenReturn(7L);
+
+        recorder.recordClarification(SESSION_ID, RUN_ID, "c-1",
+                TimelineState.ANSWERED.getCode(), "choose one");
+
+        verify(timelineSpi).update(SESSION_ID, 7L,
+                TimelineState.ANSWERED.getCode(), TimelineState.ANSWERED.getCode(), "choose one");
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void runTerminalReusesDbRowWhenMapIsEmpty() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(8L);
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
+
+        verify(timelineSpi).update(eq(SESSION_ID), eq(8L),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void lateRunningStatusDoesNotDowngradeTerminalRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(12L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.COMPLETED.getCode());
+
+        recorder.recordRunStatus(SESSION_ID, RUN_ID, TimelineState.RUNNING.getCode(), "running");
+
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
     }
 }
