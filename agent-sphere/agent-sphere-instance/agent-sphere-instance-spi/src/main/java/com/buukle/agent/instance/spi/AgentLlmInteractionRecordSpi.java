@@ -10,17 +10,18 @@ public interface AgentLlmInteractionRecordSpi {
     Long createRecord(AgentLlmInteractionRecordVO vo);
 
     /**
-     * 主 Agent 轮次开始：建或复用 {@code (runId, turnNo)} 的记录。
+     * 主 Agent 轮次开始：建或复用 {@code (runId, turnNo, attemptNo)} 的记录。
      *
-     * <p>已存在则重置为 RUNNING 并返回原 id（重启恢复复用同一轮），不存在则插入。
+     * <p>已存在则重置为 RUNNING 并返回原 id（同一 attempt 重启复用），不存在则插入。
      * 并发插入由 {@code uk_llm_interaction_run_turn} 兜底：冲突后回查赢家。
+     * attemptNo=0 为主路由，1..N 为 fallback，保证主路由错误不被覆盖。
      */
     Long createOrGetRunning(AgentLlmInteractionRecordVO vo);
 
     /** 主 Agent 轮次结束：仅更新仍为 RUNNING 的记录，避免旧 attempt 覆盖新 attempt。 */
     void complete(Long id, AgentLlmInteractionRecordVO vo);
 
-    /** 按 (runId, turnNo) 取主 Agent 问答轮记录 id。 */
+    /** 按 (runId, turnNo) 取当前应展示的 attempt id（优先 RUNNING，其次最新）。 */
     Long findByRunAndTurn(Long runId, Integer turnNo);
 
     /** 兜底：超过阈值仍 RUNNING 的记录置 FAILED（进程中断留下的僵死记录）。 */

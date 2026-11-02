@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
 import com.buukle.agent.instance.domain.vo.SessionUsageVO;
+import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
@@ -109,5 +110,32 @@ class AgentLlmInteractionRecordServiceImplTest {
         assertFalse(service.updateLatestBlankReply(null, "summary"));
         assertFalse(service.updateLatestBlankReply(1L, " "));
         verify(mapper, never()).update(any(), any());
+    }
+
+    @Test
+    void createOrGetRunning_keepsAttemptsSeparate() {
+        when(mapper.selectOne(any())).thenReturn(null);
+        when(mapper.insert(any(AgentLlmInteractionRecord.class))).thenAnswer(invocation -> {
+            AgentLlmInteractionRecord row = invocation.getArgument(0);
+            row.setId(100L + row.getAttemptNo());
+            return 1;
+        });
+
+        AgentLlmInteractionRecordVO primary = running(0);
+        AgentLlmInteractionRecordVO fallback = running(1);
+
+        assertEquals(100L, service.createOrGetRunning(primary));
+        assertEquals(101L, service.createOrGetRunning(fallback));
+        verify(mapper, org.mockito.Mockito.times(2)).insert(any(AgentLlmInteractionRecord.class));
+    }
+
+    private static AgentLlmInteractionRecordVO running(int attemptNo) {
+        AgentLlmInteractionRecordVO vo = new AgentLlmInteractionRecordVO();
+        vo.setRunId(1L);
+        vo.setSessionId(2L);
+        vo.setTurnNo(3);
+        vo.setAttemptNo(attemptNo);
+        vo.setInteractionType("CHAT_REPLY");
+        return vo;
     }
 }

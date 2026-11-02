@@ -11,12 +11,14 @@ import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
+import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
 import com.buukle.agent.util.json.JsonUtils;
 import com.buukle.agent.util.json.ToolCallReason;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -42,6 +44,7 @@ public class HistoryLoader {
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final AgentLlmInteractionRecordSpi interactionSpi;
     private final AgentRuntimeProperties agentRuntimeProperties;
+    private final com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver attachmentResolver;
 
     /** 消息 + 当前 run 的起点下标（-1 = 本次没有载入当前 run）。 */
     public record HistoryResult(List<ChatMessageDTO> messages, int currentRunStart) {
@@ -166,7 +169,8 @@ public class HistoryLoader {
                 .findFirst().orElse(null);
         if (includeCurrent && currentRun != null) {
             currentRunStart = messages.size();
-            appendRunWithAssistantText(messages, currentRun, callsByRun.get(currentRun.getId()), overBudget);
+            appendRunWithAssistantText(messages, currentRun, callsByRun.get(currentRun.getId()), overBudget,
+                    restoreCurrentRun);
         } else if (restoreCurrentRun && hasRunSummary) {
             if (runTail != null && !runTail.isEmpty()) {
                 currentRunStart = messages.size();
@@ -177,7 +181,7 @@ public class HistoryLoader {
                 if (currentRun != null) {
                     currentRunStart = messages.size();
                     appendRunWithAssistantText(messages, currentRun,
-                            callsByRun.get(currentRun.getId()), overBudget);
+                            callsByRun.get(currentRun.getId()), overBudget, restoreCurrentRun);
                 }
             }
         }
@@ -187,22 +191,29 @@ public class HistoryLoader {
 
     private void appendRun(List<ChatMessageDTO> messages, RunVO run,
                            List<AgentToolCallRecordVO> calls, Set<Long> overBudget) {
-        appendRunWithAssistantText(messages, run, calls, overBudget);
+        appendRunWithAssistantText(messages, run, calls, overBudget, false);
     }
 
     /**
      * run 的历史重建：tool 记录按时间配对到各轮 CHAT_REPLY，assistant 正文取 reply_content；
      * reasoning 只写入 assistant.reasoning_content，不写入正文。配对失败时回退为普通 tool 记录重建。
+     *
+     * @param replayScreenshots 仅当前 run 恢复时为 true：从 artifact 重新注入最近的截图观察消息
      */
     private void appendRunWithAssistantText(List<ChatMessageDTO> messages, RunVO run,
                                             List<AgentToolCallRecordVO> calls,
-                                            Set<Long> overBudget) {
+                                            Set<Long> overBudget, boolean replayScreenshots) {
         if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
             messages.add(new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_USER)
                     .setContent(run.getUserMessage()));
         }
         List<AgentToolCallRecordVO> allCalls = calls != null ? calls : List.of();
+        Set<Long> screenshotCallIds = replayScreenshots
+                ? pickReplayScreenshotCalls(allCalls) : Collections.emptySet();
+        ScreenshotReplayBudget screenshotBudget = replayScreenshots
+                ? new ScreenshotReplayBudget(agentRuntimeProperties.getRunner().getScreenshotReplayMaxBytes())
+                : null;
         List<AgentLlmInteractionRecordVO> interactions;
         try {
             interactions = interactionSpi.listByRunIdAsc(run.getId());
@@ -212,6 +223,7 @@ public class HistoryLoader {
         }
         if (interactions == null || interactions.isEmpty()) {
             appendToolCalls(messages, allCalls, overBudget);
+            replayScreenshotObservations(messages, allCalls, screenshotCallIds, screenshotBudget);
             addFinalAssistantReply(messages, run);
             return;
         }
@@ -240,6 +252,9 @@ public class HistoryLoader {
                 messages.add(assistant);
                 for (AgentToolCallRecordVO call : turnCalls) {
                     messages.add(toolMessage(call, overBudget));
+                    if (screenshotCallIds.contains(call.getId())) {
+                        appendScreenshotObservation(messages, call, screenshotBudget);
+                    }
                 }
             }
         }
@@ -251,9 +266,94 @@ public class HistoryLoader {
                     .setToolCalls(toToolCalls(remaining)));
             for (AgentToolCallRecordVO call : remaining) {
                 messages.add(toolMessage(call, overBudget));
+                if (screenshotCallIds.contains(call.getId())) {
+                    appendScreenshotObservation(messages, call, screenshotBudget);
+                }
             }
         }
         addFinalAssistantReply(messages, run);
+    }
+
+    private Set<Long> pickReplayScreenshotCalls(List<AgentToolCallRecordVO> calls) {
+        int max = agentRuntimeProperties.getRunner().getScreenshotReplayMax();
+        if (max <= 0 || calls.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<Long> ids = new HashSet<>();
+        // 只取最近 N 条：截图体积大，恢复时不需要把所有历史页面都塞回去
+        for (int i = calls.size() - 1; i >= 0 && ids.size() < max; i--) {
+            AgentToolCallRecordVO call = calls.get(i);
+            String artifact = call.getArtifact() != null ? call.getArtifact() : call.getCompressedArtifact();
+            if (ScreenshotObservationSupport.hasScreenshot(artifact)) {
+                ids.add(call.getId());
+            }
+        }
+        return ids;
+    }
+
+    private void replayScreenshotObservations(List<ChatMessageDTO> messages,
+                                              List<AgentToolCallRecordVO> calls,
+                                              Set<Long> screenshotCallIds,
+                                              ScreenshotReplayBudget budget) {
+        if (screenshotCallIds.isEmpty() || budget == null) {
+            return;
+        }
+        for (AgentToolCallRecordVO call : calls) {
+            if (screenshotCallIds.contains(call.getId())) {
+                appendScreenshotObservation(messages, call, budget);
+            }
+        }
+    }
+
+    private void appendScreenshotObservation(List<ChatMessageDTO> messages,
+                                             AgentToolCallRecordVO call,
+                                             ScreenshotReplayBudget budget) {
+        if (budget == null || budget.exhausted) {
+            return;
+        }
+        String artifact = call.getArtifact() != null ? call.getArtifact() : call.getCompressedArtifact();
+        ChatMessageDTO observation = ScreenshotObservationSupport.buildScreenshotObservation(
+                attachmentResolver, artifact);
+        if (observation == null) {
+            return;
+        }
+        int bytes = observationBytes(observation);
+        if (budget.usedBytes + bytes > budget.maxBytes) {
+            budget.exhausted = true;
+            log.warn("Screenshot replay budget exhausted: used={} max={}, remaining screenshots skipped",
+                    budget.usedBytes, budget.maxBytes);
+            return;
+        }
+        budget.usedBytes += bytes;
+        messages.add(observation);
+    }
+
+    private static int observationBytes(ChatMessageDTO message) {
+        int bytes = 0;
+        if (message.getContent() instanceof List<?> parts) {
+            for (Object part : parts) {
+                if (part instanceof ChatMessagePartDTO p) {
+                    if (p.getText() != null) {
+                        bytes += p.getText().length();
+                    }
+                    if (p.getImageUrl() != null && p.getImageUrl().getUrl() != null) {
+                        bytes += p.getImageUrl().getUrl().length();
+                    }
+                }
+            }
+        }
+        return bytes;
+    }
+
+    /** 恢复时截图回放的字节预算（单次 HistoryLoader 调用内有效）。 */
+    private static final class ScreenshotReplayBudget {
+        private final int maxBytes;
+        private int usedBytes;
+        private boolean exhausted;
+
+        private ScreenshotReplayBudget(int maxBytes) {
+            this.maxBytes = maxBytes;
+        }
     }
 
     private void addFinalAssistantReply(List<ChatMessageDTO> messages, RunVO run) {

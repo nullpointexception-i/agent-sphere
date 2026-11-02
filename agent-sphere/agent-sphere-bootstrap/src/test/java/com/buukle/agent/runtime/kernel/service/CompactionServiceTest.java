@@ -311,4 +311,17 @@ class CompactionServiceTest {
         // 默认 1M → 预算 700k，这几条消息远低于阈值；只验证不抛异常
         assertFalse(service.shouldCompact(failingMessages(), route, toolsWithJsonChars(100), null));
     }
+
+    @Test
+    void estimateMessagesTokensCountsReasoning() {
+        ChatMessageDTO msg = new ChatMessageDTO()
+                .setRole("assistant")
+                .setContent("answer");
+        long without = service.estimateMessagesTokens(List.of(msg));
+        msg.setReasoningContent("r".repeat(1800));
+        long with = service.estimateMessagesTokens(List.of(msg));
+
+        assertTrue(with - without >= 900,
+                "reasoning 必须计入上下文预算，否则恢复后会低估请求体");
+    }
 }

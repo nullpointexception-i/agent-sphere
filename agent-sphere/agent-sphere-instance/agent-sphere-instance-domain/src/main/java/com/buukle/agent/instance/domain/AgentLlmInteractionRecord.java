@@ -19,6 +19,8 @@ public class AgentLlmInteractionRecord {
     private Long sessionId;
     /** 主 Agent 问答轮次序号（= run.loop_count）；其余调用为 NULL。 */
     private Integer turnNo;
+    /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */
+    private Integer attemptNo;
     /** RUNNING / COMPLETED / FAILED。 */
     private String status;
     private String interactionType;

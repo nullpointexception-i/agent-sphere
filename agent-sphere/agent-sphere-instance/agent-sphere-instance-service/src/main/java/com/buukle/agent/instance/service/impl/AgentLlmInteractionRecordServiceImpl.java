@@ -42,10 +42,11 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         if (vo.getRunId() == null || vo.getTurnNo() == null) {
             throw new IllegalArgumentException("runId and turnNo are required for a running turn record");
         }
-        AgentLlmInteractionRecord existing = findChatTurn(vo.getRunId(), vo.getTurnNo());
+        int attemptNo = vo.getAttemptNo() == null ? 0 : vo.getAttemptNo();
+        vo.setAttemptNo(attemptNo);
+        AgentLlmInteractionRecord existing = findChatTurn(vo.getRunId(), vo.getTurnNo(), attemptNo);
         if (existing != null) {
-            // 重启/重试复用同一轮：重置为 RUNNING，并刷新 updated_at 作为心跳，
-            // 避免「多次重试累计年龄」被僵死清理误判。
+            // 同一 attempt 重试：重置为 RUNNING，并刷新 updated_at 作为心跳。
             mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
                     .eq(AgentLlmInteractionRecord::getId, existing.getId())
                     .set(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_RUNNING)
@@ -60,8 +61,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
             mapper.insert(record);
             return record.getId();
         } catch (DuplicateKeyException e) {
-            // 并发建同轮：唯一索引只放行一个，输家回查赢家，绝不返回幽灵 id
-            AgentLlmInteractionRecord winner = findChatTurn(vo.getRunId(), vo.getTurnNo());
+            // 并发建同 attempt：唯一索引只放行一个，输家回查赢家，绝不返回幽灵 id
+            AgentLlmInteractionRecord winner = findChatTurn(vo.getRunId(), vo.getTurnNo(), attemptNo);
             if (winner == null) {
                 throw e;
             }
@@ -106,7 +107,13 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         if (runId == null || turnNo == null) {
             return null;
         }
-        AgentLlmInteractionRecord record = findChatTurn(runId, turnNo);
+        // 多 attempt 时：优先当前 RUNNING 的 attempt，否则取最新 attempt
+        AgentLlmInteractionRecord record = mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
+                .eq(AgentLlmInteractionRecord::getRunId, runId)
+                .eq(AgentLlmInteractionRecord::getTurnNo, turnNo)
+                .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
+                .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
+                .last("ORDER BY (status = 'RUNNING') DESC, attempt_no DESC LIMIT 1"));
         return record == null ? null : record.getId();
     }
 
@@ -125,10 +132,11 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                 .set(AgentLlmInteractionRecord::getErrorMessage, "stale running interaction"));
     }
 
-    private AgentLlmInteractionRecord findChatTurn(Long runId, Integer turnNo) {
+    private AgentLlmInteractionRecord findChatTurn(Long runId, Integer turnNo, int attemptNo) {
         return mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                 .eq(AgentLlmInteractionRecord::getRunId, runId)
                 .eq(AgentLlmInteractionRecord::getTurnNo, turnNo)
+                .eq(AgentLlmInteractionRecord::getAttemptNo, attemptNo)
                 .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
                 .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
                 .last("LIMIT 1"));
@@ -139,6 +147,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         record.setRunId(vo.getRunId());
         record.setSessionId(vo.getSessionId());
         record.setTurnNo(vo.getTurnNo());
+        record.setAttemptNo(vo.getAttemptNo() == null ? 0 : vo.getAttemptNo());
         record.setInteractionType(vo.getInteractionType());
         record.setModelName(vo.getModelName());
         record.setRequestBody(vo.getRequestBody());
@@ -188,6 +197,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                                 AgentLlmInteractionRecord::getSessionId,
                                 AgentLlmInteractionRecord::getInteractionType,
                                 AgentLlmInteractionRecord::getReplyContent,
+                                // 恢复思考模型时必须回放原始 reasoning，否则 DeepSeek 会 400
+                                AgentLlmInteractionRecord::getReasoning,
                                 AgentLlmInteractionRecord::getCreatedAt)
                         .orderByAsc(AgentLlmInteractionRecord::getId))
                 .stream().map(this::toVO).toList();
@@ -262,6 +273,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         vo.setRunId(record.getRunId());
         vo.setSessionId(record.getSessionId());
         vo.setTurnNo(record.getTurnNo());
+        vo.setAttemptNo(record.getAttemptNo());
         vo.setStatus(record.getStatus());
         vo.setInteractionType(record.getInteractionType());
         vo.setModelName(record.getModelName());

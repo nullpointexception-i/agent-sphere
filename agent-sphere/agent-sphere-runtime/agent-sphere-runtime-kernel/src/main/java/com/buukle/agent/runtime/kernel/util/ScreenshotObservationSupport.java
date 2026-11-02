@@ -36,6 +36,57 @@ public final class ScreenshotObservationSupport {
         this.attachmentResolver = attachmentResolver;
     }
 
+    /** 工具结果是否包含浏览器截图引用（只解析，不加载图片）。 */
+    public static boolean hasScreenshot(String toolResult) {
+        if (toolResult == null || toolResult.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode shot = JSON.readTree(toolResult).path("data").path("screenshot");
+            String fileKey = shot.path("fileKey").asText(null);
+            return fileKey != null && !fileKey.isBlank();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 从工具结果 artifact 构造截图观察消息；无截图返回 null。
+     * 实时链路与恢复链路共用同一格式，避免模型看到两种形态的观察消息。
+     */
+    public static ChatMessageDTO buildScreenshotObservation(ChatAttachmentResolver resolver, String toolResult) {
+        if (toolResult == null || toolResult.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = JSON.readTree(toolResult);
+            JsonNode shot = root.path("data").path("screenshot");
+            String fileKey = shot.path("fileKey").asText(null);
+            if (fileKey == null || fileKey.isBlank()) {
+                return null;
+            }
+            int width = shot.path("width").asInt(0);
+            int height = shot.path("height").asInt(0);
+            ChatMessagePartDTO textPart = new ChatMessagePartDTO()
+                    .setType(ChatMessagePartDTO.TYPE_TEXT)
+                    .setText(OBSERVATION_TEXT_PREFIX + " " + width + "x" + height);
+            List<ChatMessagePartDTO> parts = new ArrayList<>();
+            parts.add(textPart);
+            String dataUrl = resolver == null ? null : resolver.toDataUrl(fileKey);
+            if (dataUrl != null) {
+                parts.add(new ChatMessagePartDTO()
+                        .setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
+                        .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl(dataUrl)));
+            }
+            return new ChatMessageDTO()
+                    .setRole(LlmApiConstant.ROLE_USER)
+                    .setContent(parts);
+        } catch (Exception e) {
+            log.warn("Screenshot observation build failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
     /**
      * 浏览器截图工具结果含 data.screenshot → 追加一条 USER 观察消息（text + image_url dataURL）。
      * - fileKey 缺失/文件被删除 → 跳过该 image part，仅保留文本说明（不阻断工具回合）。
@@ -58,23 +109,12 @@ public final class ScreenshotObservationSupport {
                 log.warn("Screenshot cap reached for run {}", runId);
                 return;
             }
-            counter.incrementAndGet();
-            int width = shot.path("width").asInt(0);
-            int height = shot.path("height").asInt(0);
-            ChatMessagePartDTO textPart = new ChatMessagePartDTO()
-                    .setType(ChatMessagePartDTO.TYPE_TEXT)
-                    .setText(OBSERVATION_TEXT_PREFIX + " " + width + "x" + height);
-            List<ChatMessagePartDTO> parts = new ArrayList<>();
-            parts.add(textPart);
-            String dataUrl = attachmentResolver.toDataUrl(fileKey);
-            if (dataUrl != null) {
-                parts.add(new ChatMessagePartDTO()
-                        .setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
-                        .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl(dataUrl)));
+            ChatMessageDTO observation = buildScreenshotObservation(attachmentResolver, toolResult);
+            if (observation == null) {
+                return;
             }
-            messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_USER)
-                    .setContent(parts));
+            counter.incrementAndGet();
+            messages.add(observation);
         } catch (Exception e) {
             log.warn("Screenshot observation inject failed (session={}, run={}): {}", sessionId, runId, e.getMessage());
         }

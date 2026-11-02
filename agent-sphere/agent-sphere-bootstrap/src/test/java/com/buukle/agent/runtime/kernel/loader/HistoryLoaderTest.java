@@ -10,6 +10,8 @@ import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
+import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.util.json.JsonUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,13 +47,15 @@ class HistoryLoaderTest {
     AgentToolCallRecordSpi toolCallRecordSpi;
     @Mock
     AgentLlmInteractionRecordSpi interactionSpi;
+    @Mock
+    ChatAttachmentResolver attachmentResolver;
 
     private HistoryLoader loader;
 
     @BeforeEach
     void setUp() {
         loader = new HistoryLoader(runSpi, compactRecordSpi, toolCallRecordSpi, interactionSpi,
-                new AgentRuntimeProperties());
+                new AgentRuntimeProperties(), attachmentResolver);
         RunVO run = new RunVO();
         run.setId(RUN_ID);
         run.setSessionId(SESSION_ID);
@@ -236,8 +240,38 @@ class HistoryLoaderTest {
     }
 
     @Test
-    void unreadableTailFallsBackToToolHistory() {
-        AgentCompactRecordVO compact = runCompact("RUN-SUM", List.of(user("tail user")));
+    void resumeReplaysRecentScreenshotObservation() {
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
+                interaction("assistant text", "2026-10-29 04:12:21")));
+        AgentToolCallRecordVO call = toolCall(1L, "call-shot", "04:12:22");
+        call.setArtifact("{\"data\":{\"screenshot\":{\"fileKey\":\"f1\",\"width\":100,\"height\":200}}}");
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(call));
+        when(attachmentResolver.toDataUrl("f1")).thenReturn("data:image/jpeg;base64,AAA");
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        ChatMessageDTO observation = messages.stream()
+                .filter(m -> "user".equals(m.getRole()) && m.getContent() instanceof List)
+                .findFirst().orElseThrow();
+        List<?> parts = (List<?>) observation.getContent();
+        assertTrue(parts.stream().anyMatch(p -> p instanceof ChatMessagePartDTO part
+                && ChatMessagePartDTO.TYPE_IMAGE_URL.equals(part.getType())));
+    }
+
+    @Test
+    void screenshotReplayIsSkippedWhenReplayDisabled() {
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+
+        // restoreCurrentRun=false：session 压缩重组不重放截图，也不重建当前 run
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, false);
+
+        assertTrue(messages.stream().noneMatch(m -> "user".equals(m.getRole())
+                && m.getContent() instanceof List));
+    }
+
+    @Test
+    void unreadableTailFallsBackToToolHistory() {        AgentCompactRecordVO compact = runCompact("RUN-SUM", List.of(user("tail user")));
         compact.setTailJson("not-json");
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(compact);
         when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(

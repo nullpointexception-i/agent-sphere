@@ -54,6 +54,10 @@ public class AgentRuntimeProperties {
         private Integer taskMaxLoopCount;
         /** 单个 run 内允许注入的浏览器截图观察次数上限（防模型无限截图烧 token）。 */
         private int maxScreenshotsPerRun = 20;
+        /** 恢复（wait/澄清/审批）时回放最近截图观察的条数上限；只回放当前 run。 */
+        private int screenshotReplayMax = 2;
+        /** 恢复时回放截图的 data URL 总字节上限，超出则跳过。 */
+        private int screenshotReplayMaxBytes = 2_000_000;
         /** 单 run 推理落库长度上限（数据完整兜底，默认 50 万字符）。 */
         private int maxReasoningChars = 500000;
         /** 必须大于 LLM 的 streamTimeout，否则单轮先被取消。 */

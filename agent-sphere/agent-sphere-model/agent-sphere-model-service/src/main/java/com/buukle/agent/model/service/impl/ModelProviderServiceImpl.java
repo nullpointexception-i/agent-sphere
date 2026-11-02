@@ -172,7 +172,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     String uiMsg = switch (status) {
                         case 429 -> "请求过于频繁，请稍后再试";
                         case 502 -> "模型服务暂时不可用";
-                        default -> "模型调用异常 (" + status + "): " + truncate(errorBody);
+                        default -> "模型调用异常 (" + status + "): " + truncateError(errorBody);
                     };
                     // 4xx（408/429 除外）是终态错误：重试不会成功，只会把一次失败放大成多次；
                     // 5xx/429/408 则是真瞬时故障，保留重试。
@@ -311,6 +311,13 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     private String truncate(String body) {
         if (body == null || body.isEmpty() || logBodyMaxLength <= 0 || body.length() <= logBodyMaxLength) return body;
         return body.substring(0, logBodyMaxLength) + "...<truncated>";
+    }
+
+    /** 错误体单独放宽：400 的完整原因必须能落库，否则无法定位线上问题。 */
+    private static String truncateError(String body) {
+        int max = 2000;
+        if (body == null || body.length() <= max) return body;
+        return body.substring(0, max) + "...<truncated>";
     }
 
 }

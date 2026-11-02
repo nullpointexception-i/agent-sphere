@@ -636,7 +636,7 @@ public class CompactionService {
     record CompactInput(String text, Long lastRunId, int includedRuns, boolean truncated) {
     }
 
-    private long estimateMessagesTokens(List<ChatMessageDTO> messages) {
+    long estimateMessagesTokens(List<ChatMessageDTO> messages) {
         int textChars = 0;
         long imageTokens = 0;
         for (ChatMessageDTO msg : messages) {
@@ -653,6 +653,10 @@ public class CompactionService {
                         imageTokens += IMAGE_PART_TOKENS;
                     }
                 }
+            }
+            // reasoning 也是真实请求的一部分：恢复/挂起后必须计入预算，否则会低估上下文
+            if (msg.getReasoningContent() != null) {
+                textChars += msg.getReasoningContent().length();
             }
             if (msg.getToolCalls() != null) {
                 for (ToolCallDTO tc : msg.getToolCalls()) {

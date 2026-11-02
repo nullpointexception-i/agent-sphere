@@ -19,6 +19,8 @@ public class LlmInteractionMeta {
     private Integer estimatedPromptTokens;
     /** 主 Agent 问答轮次序号（= run.loop_count）；非主 Agent 调用为 null。 */
     private Integer turnNo;
+    /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */
+    private Integer attemptNo;
     /** 调用前预建的 interaction 记录 id；为 null 时走「调用结束后插入」的旧路径。 */
     private Long recordId;
 

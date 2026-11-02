@@ -23,6 +23,7 @@ import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.async.FiberSet;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
+import com.buukle.agent.runtime.kernel.config.RouteAttemptException;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
@@ -1287,6 +1288,7 @@ public class SessionRunner {
             // 本次尝试的错误是否值得重试：4xx（408/429 除外）是终态错误，重试只会把一次失败放大成多次
             java.util.concurrent.atomic.AtomicBoolean errorRetryableRef =
                     new java.util.concurrent.atomic.AtomicBoolean(true);
+            AtomicReference<Integer> errorStatusRef = new AtomicReference<>();
             AtomicReference<String> reasoningRef = new AtomicReference<>("");
             // 本次尝试的真实 finish_reason（stop/length/content_filter/tool_calls），供调用方区分
             // 「模型主动停」与「被截断/被过滤」。
@@ -1332,6 +1334,7 @@ public class SessionRunner {
                     // 不能把上一条路由的部分正文/工具调用/错误带进来。
                     errorRef.set(null);
                     errorRetryableRef.set(true);
+                    errorStatusRef.set(null);
                     finishReasonRef.set(null);
                     contentRef.set("");
                     toolCalls.clear();
@@ -1450,6 +1453,7 @@ public class SessionRunner {
                                     case LLMEvent.Error e -> {
                                         errorRef.set(e.message());
                                         errorRetryableRef.set(e.retryable());
+                                        errorStatusRef.set(e.httpStatus());
                                     }
                                     default -> {
                                     }
@@ -1458,6 +1462,7 @@ public class SessionRunner {
                             new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
                                     .setInteractionType(LlmInteractionType.CHAT_REPLY)
                                     .setTurnNo(loopCount)
+                                    .setAttemptNo(i)
                                     .setModelRouteId(route.getId())
                                     .setEstimatedPromptTokens((int) compactionService.estimatePromptTokens(
                                             projectedMessages, toolDefs)));
@@ -1495,7 +1500,7 @@ public class SessionRunner {
                                         .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                         .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                         .setPublishId(UUID.randomUUID().toString())));
-                        throw new RuntimeException("Route failed: " + failure);
+                        throw new RouteAttemptException("Route failed: " + failure, null, true);
                     }
 
                     String error = errorRef.get();
@@ -1508,7 +1513,8 @@ public class SessionRunner {
                                         .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                         .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                         .setPublishId(UUID.randomUUID().toString())));
-                        throw new RuntimeException("Route failed: " + error);
+                        throw new RouteAttemptException("Route failed: " + error,
+                                errorStatusRef.get(), errorRetryableRef.get());
                     }
 
                     return null;
