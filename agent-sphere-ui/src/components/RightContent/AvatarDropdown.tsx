@@ -38,6 +38,7 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
     }
   };
   const { initialState, setInitialState } = useModel('@@initialState');
+  const intl = useIntl();
 
   const onMenuClick: MenuProps['onClick'] = (event) => {
     const { key } = event;
@@ -69,8 +70,6 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
 
   const { currentUser, permissions } = initialState;
   const canAdmin = permissions?.includes('admin:settings:read') ?? false;
-
-  const intl = useIntl();
 
   if (!currentUser) {
     return <Spin size="small" />;

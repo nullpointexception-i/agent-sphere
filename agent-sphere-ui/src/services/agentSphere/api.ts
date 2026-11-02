@@ -178,7 +178,7 @@ export const agentApi = {
       attachmentKeys?: string[],
       runMode?: string,
     ) =>
-      request<{ runId: number; status: string; assistantReply?: string }>(
+      request<{ runId: number; status: string; assistantReply?: string; queueId?: string }>(
         `${BASE}/runtime/${id}/chat`,
         {
           method: 'POST',

@@ -1575,16 +1575,19 @@ export default function Chat() {
     }
 
     // 发送新消息前取消仍在等待的澄清（只认来源表：待澄清批次）
-    const pendingItems = clarificationBatch?.items ?? [];
-    for (const c of pendingItems) {
-      agentApi.sessions
-        .clarify(
-          currentSession.id,
-          clarificationBatch!.runId,
-          '__cancel__',
-          c.clarificationId,
-        )
-        .catch(() => {});
+    const pendingBatch = clarificationBatch;
+    const pendingItems = pendingBatch?.items ?? [];
+    if (pendingBatch) {
+      for (const c of pendingItems) {
+        agentApi.sessions
+          .clarify(
+            currentSession.id,
+            pendingBatch.runId,
+            '__cancel__',
+            c.clarificationId,
+          )
+          .catch(() => {});
+      }
     }
     if (pendingItems.length > 0) cancelPendingClarificationsLocally();
 
@@ -1784,17 +1787,20 @@ export default function Chat() {
               onSendMessage={sendMessage}
               onCancelSend={() => {
                 // 先取消仍在等待的澄清（只认来源表：待澄清批次），并立即本地解锁
-                const pendingItems = clarificationBatch?.items ?? [];
-                for (const c of pendingItems) {
-                  if (currentSession?.id) {
-                    agentApi.sessions
-                      .clarify(
-                        currentSession.id,
-                        clarificationBatch!.runId,
-                        '__cancel__',
-                        c.clarificationId,
-                      )
-                      .catch(() => {});
+                const pendingBatch = clarificationBatch;
+                const pendingItems = pendingBatch?.items ?? [];
+                if (pendingBatch) {
+                  for (const c of pendingItems) {
+                    if (currentSession?.id) {
+                      agentApi.sessions
+                        .clarify(
+                          currentSession.id,
+                          pendingBatch.runId,
+                          '__cancel__',
+                          c.clarificationId,
+                        )
+                        .catch(() => {});
+                    }
                   }
                 }
                 cancelPendingClarificationsLocally();
