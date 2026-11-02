@@ -21,6 +21,8 @@ public class AgentToolCallRecordVO implements Serializable {
     private String status;
     private String errorMessage;
     private Long subAgentRunId;
+    /** 产生该调用的 LLM 轮次；NULL=迁移前的历史行（恢复时回退到时间窗口配对）。 */
+    private Integer turnNo;
     private String createdAt;
     /** createdAt 的 epoch 毫秒（精确到毫秒，仅供历史重建配对使用，不参与展示）。 */
     private Long createdAtMillis;

@@ -386,7 +386,8 @@ public class RuntimeEventListener {
                 AgentToolCallRecordVO vo = toolCallRecordSpi.createRecord(
                         stepId, callId, data.getRunId(), data.getSessionId(),
                         data.getToolName() != null ? data.getToolName() : "",
-                        data.getDisplayNameCn(), data.getDisplayNameEn(), rawArgs, data.getSubAgentRunId());
+                        data.getDisplayNameCn(), data.getDisplayNameEn(), rawArgs, data.getSubAgentRunId(),
+                        data.getSubAgentRunId() == null ? data.getTurnNo() : null);
                 if (compressedArgs != null) {
                     toolCallRecordSpi.updateCompressedArguments(vo.getId(), compressedArgs);
                 }

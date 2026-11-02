@@ -27,6 +27,8 @@ public class AgentToolCallRecord {
     private String errorMessage;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
+    /** 产生该调用的 LLM 轮次（= agent_llm_interaction_record.turn_no / run.loop_count）；NULL=迁移前的历史行。 */
+    private Integer turnNo;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

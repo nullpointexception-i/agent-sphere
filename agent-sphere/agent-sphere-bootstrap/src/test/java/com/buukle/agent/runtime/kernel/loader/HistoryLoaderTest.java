@@ -358,6 +358,51 @@ class HistoryLoaderTest {
                 List.of(assistant, toolA, toolB, observation)));
     }
 
+    @Test
+    void toolCallWithTurnNoIsPairedByTurnNotByTimestamp() {
+        // 有 turn_no 时不再看时间：这条调用时间落在 turn1 的窗口里，但 turn_no=0 必须归 turn0。
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        AgentLlmInteractionRecordVO turn0 = interactionAt("turn 0",
+                LocalDateTime.of(2026, 11, 3, 3, 54, 49, 0));
+        turn0.setTurnNo(0);
+        AgentLlmInteractionRecordVO turn1 = interactionAt("turn 1",
+                LocalDateTime.of(2026, 11, 3, 3, 54, 51, 0));
+        turn1.setTurnNo(1);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(turn0, turn1));
+        AgentToolCallRecordVO call = toolCallAt(1L, "call-a",
+                LocalDateTime.of(2026, 11, 3, 3, 54, 52, 0), null);
+        call.setTurnNo(0);
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(call));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        assertEquals("turn 0", messages.get(1).getContent());
+        assertEquals(List.of("call-a"),
+                messages.get(1).getToolCalls().stream().map(ToolCallDTO::getId).toList());
+        assertEquals("tool", messages.get(2).getRole());
+        assertEquals("call-a", messages.get(2).getToolCallId());
+        assertEquals("turn 1", messages.get(3).getContent());
+        assertNull(messages.get(3).getToolCalls());
+    }
+
+    @Test
+    void toolCallWithoutTurnNoFallsBackToTimeWindow() {
+        // 迁移前的历史行没有 turn_no：仍按毫秒窗口配对，不能因为缺字段就丢调用。
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        AgentLlmInteractionRecordVO turn0 = interactionAt("turn 0",
+                LocalDateTime.of(2026, 11, 3, 3, 54, 49, 0));
+        turn0.setTurnNo(0);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(turn0));
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(
+                toolCallAt(1L, "call-legacy", LocalDateTime.of(2026, 11, 3, 3, 54, 50, 0), null)));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        assertEquals(List.of("call-legacy"),
+                messages.get(1).getToolCalls().stream().map(ToolCallDTO::getId).toList());
+        assertEquals("call-legacy", messages.get(2).getToolCallId());
+    }
+
     private static ChatMessageDTO user(String text) {
         return new ChatMessageDTO().setRole("user").setContent(text);
     }

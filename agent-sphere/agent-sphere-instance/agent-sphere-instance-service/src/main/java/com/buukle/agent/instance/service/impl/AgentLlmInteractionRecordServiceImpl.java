@@ -200,6 +200,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                                 AgentLlmInteractionRecord::getReplyContent,
                                 // 恢复思考模型时必须回放原始 reasoning，否则 DeepSeek 会 400
                                 AgentLlmInteractionRecord::getReasoning,
+                                // 轮次号：与 tool 记录的 turn_no 精确配对（见 HistoryLoader）
+                                AgentLlmInteractionRecord::getTurnNo,
                                 AgentLlmInteractionRecord::getCreatedAt)
                         .orderByAsc(AgentLlmInteractionRecord::getId))
                 .stream().map(this::toVO).toList();

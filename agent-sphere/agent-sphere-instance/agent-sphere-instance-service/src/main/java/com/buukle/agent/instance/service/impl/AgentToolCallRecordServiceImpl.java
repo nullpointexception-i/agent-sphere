@@ -37,6 +37,7 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         vo.setStatus(r.getStatus());
         vo.setErrorMessage(r.getErrorMessage());
         vo.setSubAgentRunId(r.getSubAgentRunId());
+        vo.setTurnNo(r.getTurnNo());
         if (r.getCreatedAt() != null) {
             vo.setCreatedAt(r.getCreatedAt().format(DATE_FMT));
             // 秒级字符串不足以配对（同一秒内可能有下一轮开始），另存毫秒值
@@ -48,7 +49,8 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
 
     @Override
     public AgentToolCallRecordVO createRecord(Long stepId, String callId, Long runId, Long sessionId,
-                                              String toolName, String displayNameCn, String displayNameEn, String argumentsJson, Long subAgentRunId) {
+                                              String toolName, String displayNameCn, String displayNameEn, String argumentsJson,
+                                              Long subAgentRunId, Integer turnNo) {
         AgentToolCallRecord record = new AgentToolCallRecord();
         record.setStepId(stepId);
         record.setCallId(callId);
@@ -59,6 +61,7 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         record.setDisplayNameEn(displayNameEn);
         record.setArgumentsJson(argumentsJson);
         record.setSubAgentRunId(subAgentRunId);
+        record.setTurnNo(turnNo);
         record.setStatus(ToolCallRecordStatus.PENDING.name());
         mapper.insert(record);
         return toVO(record);

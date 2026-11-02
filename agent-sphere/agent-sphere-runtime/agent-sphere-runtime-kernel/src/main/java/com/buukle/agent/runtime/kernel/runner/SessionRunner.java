@@ -1453,6 +1453,7 @@ public class SessionRunner {
                                         eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
                                                 new RuntimeEventDataVO()
                                                         .setSessionId(sessionId).setRunId(runId)
+                                                        .setTurnNo(loopCount)
                                                         .setToolName(tc.name())
                                                         .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
                                                         .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))

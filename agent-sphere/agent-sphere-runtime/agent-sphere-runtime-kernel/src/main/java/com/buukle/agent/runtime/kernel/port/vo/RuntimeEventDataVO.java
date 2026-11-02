@@ -38,6 +38,8 @@ public class RuntimeEventDataVO {
     private Boolean multiple;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
+    /** 产生该工具调用的 LLM 轮次（= run.loop_count / interaction.turn_no），用于恢复时精确配对。 */
+    private Integer turnNo;
     /** 触发该子 Agent 的父工具调用 id（同批次并行子 Agent 共享，用于前端成组展示）。 */
     private String parentToolCallId;
     /** 统一 Timeline 行 seq（会话级单调）——SSE 打字机/打平渲染的目标键。 */

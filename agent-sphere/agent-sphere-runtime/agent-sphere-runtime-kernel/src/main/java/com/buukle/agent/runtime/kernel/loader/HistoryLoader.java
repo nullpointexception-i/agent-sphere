@@ -245,12 +245,26 @@ public class HistoryLoader {
         }
 
         int idx = 0;
+        // 有 turn_no 时按轮次精确分组，彻底摆脱时间窗口；老数据（迁移前）回退到毫秒窗口。
+        // 子 Agent 的 tool 记录 turn_no 为空，会落到回退分支，行为与改动前一致。
+        Map<Integer, List<AgentToolCallRecordVO>> callsByTurn = indexByTurn(allCalls);
+        boolean turnKeyed = callsByTurn != null
+                && interactions.stream().allMatch(x -> x.getTurnNo() != null)
+                // 同一 turn 出现多条记录（历史 attempt 残留）时无法一一对应，回退到时间窗口
+                && interactions.stream().map(AgentLlmInteractionRecordVO::getTurnNo).distinct().count()
+                        == interactions.size();
         for (int i = 0; i < interactions.size(); i++) {
             AgentLlmInteractionRecordVO cur = interactions.get(i);
             AgentLlmInteractionRecordVO next = i + 1 < interactions.size() ? interactions.get(i + 1) : null;
-            List<AgentToolCallRecordVO> turnCalls = new ArrayList<>();
-            while (idx < allCalls.size() && inWindow(allCalls.get(idx), cur, next)) {
-                turnCalls.add(allCalls.get(idx++));
+            List<AgentToolCallRecordVO> turnCalls;
+            if (turnKeyed) {
+                List<AgentToolCallRecordVO> hit = callsByTurn.remove(cur.getTurnNo());
+                turnCalls = hit != null ? hit : List.of();
+            } else {
+                turnCalls = new ArrayList<>();
+                while (idx < allCalls.size() && inWindow(allCalls.get(idx), cur, next)) {
+                    turnCalls.add(allCalls.get(idx++));
+                }
             }
             String content = cur.getReplyContent();
             boolean hasText = content != null && !content.isBlank();
@@ -279,8 +293,10 @@ public class HistoryLoader {
             }
         }
         // 最后一次交互之后产生的 tool 记录（如 wait 的落库）没有下一轮可配对，补一个 assistant(tool_calls)
-        if (idx < allCalls.size()) {
-            List<AgentToolCallRecordVO> remaining = allCalls.subList(idx, allCalls.size());
+        List<AgentToolCallRecordVO> remaining = turnKeyed
+                ? callsByTurn.values().stream().flatMap(List::stream).toList()
+                : (idx < allCalls.size() ? allCalls.subList(idx, allCalls.size()) : List.of());
+        if (!remaining.isEmpty()) {
             messages.add(new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_ASSISTANT)
                     .setToolCalls(toToolCalls(remaining)));
@@ -294,6 +310,24 @@ public class HistoryLoader {
             }
         }
         addFinalAssistantReply(messages, run);
+    }
+
+    /**
+     * 按 turn_no 给 tool 记录分组；任一记录缺少 turn_no（迁移前的历史行 / 子 Agent 的内部调用）
+     * 就返回 null，让调用方整体回退到时间窗口 —— 半新半旧地混用两套配对会错位得更隐蔽。
+     */
+    private static Map<Integer, List<AgentToolCallRecordVO>> indexByTurn(List<AgentToolCallRecordVO> calls) {
+        if (calls == null || calls.isEmpty()) {
+            return null;
+        }
+        Map<Integer, List<AgentToolCallRecordVO>> byTurn = new LinkedHashMap<>();
+        for (AgentToolCallRecordVO call : calls) {
+            if (call.getTurnNo() == null) {
+                return null;
+            }
+            byTurn.computeIfAbsent(call.getTurnNo(), k -> new ArrayList<>()).add(call);
+        }
+        return byTurn;
     }
 
     /**
