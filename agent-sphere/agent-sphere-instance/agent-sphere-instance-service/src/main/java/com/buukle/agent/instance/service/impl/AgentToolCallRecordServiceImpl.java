@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.buukle.agent.common.util.TimeUtils;
 import com.buukle.agent.instance.domain.AgentToolCallRecord;
 import com.buukle.agent.instance.dtvo.enums.ToolCallRecordStatus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
@@ -36,7 +37,11 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         vo.setStatus(r.getStatus());
         vo.setErrorMessage(r.getErrorMessage());
         vo.setSubAgentRunId(r.getSubAgentRunId());
-        if (r.getCreatedAt() != null) vo.setCreatedAt(r.getCreatedAt().format(DATE_FMT));
+        if (r.getCreatedAt() != null) {
+            vo.setCreatedAt(r.getCreatedAt().format(DATE_FMT));
+            // 秒级字符串不足以配对（同一秒内可能有下一轮开始），另存毫秒值
+            vo.setCreatedAtMillis(TimeUtils.toEpochMillis(r.getCreatedAt()));
+        }
         if (r.getUpdatedAt() != null) vo.setUpdatedAt(r.getUpdatedAt().format(DATE_FMT));
         return vo;
     }

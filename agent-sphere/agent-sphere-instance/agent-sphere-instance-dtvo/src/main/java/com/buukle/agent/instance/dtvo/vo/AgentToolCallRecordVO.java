@@ -22,5 +22,7 @@ public class AgentToolCallRecordVO implements Serializable {
     private String errorMessage;
     private Long subAgentRunId;
     private String createdAt;
+    /** createdAt 的 epoch 毫秒（精确到毫秒，仅供历史重建配对使用，不参与展示）。 */
+    private Long createdAtMillis;
     private String updatedAt;
 }

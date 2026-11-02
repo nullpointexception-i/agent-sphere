@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.loader;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.util.TimeUtils;
 import com.buukle.agent.instance.dtvo.vo.AgentCompactRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
@@ -11,6 +12,7 @@ import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.util.json.JsonUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,10 +21,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
@@ -285,6 +290,74 @@ class HistoryLoaderTest {
                 "tail 损坏时回退到持久化 tool 历史");
     }
 
+    @Test
+    void toolCallInSameSecondAsNextTurnKeepsPreviousTurn() {
+        // 线上 run 2810：tool 记于 03:54:51.000042，归属 turn16（03:54:49.986679）；
+        // 但秒级截断后与 turn17 的开始时间（03:54:51.842411）相同，旧实现会把它错配到 turn17，
+        // 让一条 assistant 携带两个 tool_calls 并被模型端 400 拒绝。
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        LocalDateTime turn16At = LocalDateTime.of(2026, 11, 3, 3, 54, 49, 986_679_000);
+        LocalDateTime toolAt = LocalDateTime.of(2026, 11, 3, 3, 54, 51, 0);
+        LocalDateTime turn17At = LocalDateTime.of(2026, 11, 3, 3, 54, 51, 842_411_000);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
+                interactionAt("turn 16", turn16At), interactionAt("turn 17", turn17At)));
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(
+                toolCallAt(1L, "call-fepcb", toolAt, null)));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        ChatMessageDTO assistant16 = messages.get(1);
+        assertEquals("turn 16", assistant16.getContent());
+        assertEquals(List.of("call-fepcb"),
+                assistant16.getToolCalls().stream().map(ToolCallDTO::getId).toList());
+        assertEquals("tool", messages.get(2).getRole());
+        assertEquals("call-fepcb", messages.get(2).getToolCallId());
+        assertEquals("turn 17", messages.get(3).getContent());
+        assertNull(messages.get(3).getToolCalls(), "turn 17 不应吞掉上一轮产生的 tool call");
+    }
+
+    @Test
+    void screenshotObservationIsAppendedAfterAllToolMessagesOfTurn() {
+        // 同一轮多个 tool 调用时，截图观察必须排在该轮全部 tool 消息之后，
+        // 否则 assistant(tool_calls) → tool → user(观察) → tool 会被判定为非法序列。
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        LocalDateTime turnAt = LocalDateTime.of(2026, 11, 3, 3, 54, 49, 0);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(interactionAt("turn", turnAt)));
+        AgentToolCallRecordVO first = toolCallAt(1L, "call-a",
+                LocalDateTime.of(2026, 11, 3, 3, 54, 50, 0), null);
+        AgentToolCallRecordVO second = toolCallAt(2L, "call-b",
+                LocalDateTime.of(2026, 11, 3, 3, 54, 50, 500_000_000),
+                "{\"data\":{\"screenshot\":{\"fileKey\":\"f1\",\"width\":100,\"height\":200}}}");
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(second, first));
+        when(attachmentResolver.toDataUrl("f1")).thenReturn("data:image/jpeg;base64,AAA");
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        assertEquals("user", messages.get(0).getRole());
+        assertEquals("assistant", messages.get(1).getRole());
+        assertEquals("tool", messages.get(2).getRole());
+        assertEquals("call-a", messages.get(2).getToolCallId());
+        assertEquals("tool", messages.get(3).getRole());
+        assertEquals("call-b", messages.get(3).getToolCallId());
+        assertEquals("user", messages.get(4).getRole(), "截图观察应排在全部 tool 消息之后");
+        assertTrue(messages.get(4).getContent() instanceof List);
+    }
+
+    @Test
+    void toolCallPairingCheckRejectsObservationInsertedBetweenToolMessages() {
+        ChatMessageDTO assistant = new ChatMessageDTO()
+                .setRole("assistant")
+                .setToolCalls(List.of(toolCallDto("a"), toolCallDto("b")));
+        ChatMessageDTO toolA = new ChatMessageDTO().setRole("tool").setToolCallId("a");
+        ChatMessageDTO observation = new ChatMessageDTO().setRole("user").setContent("shot");
+        ChatMessageDTO toolB = new ChatMessageDTO().setRole("tool").setToolCallId("b");
+
+        assertFalse(HistoryLoader.hasValidToolCallPairing(
+                List.of(assistant, toolA, observation, toolB)));
+        assertTrue(HistoryLoader.hasValidToolCallPairing(
+                List.of(assistant, toolA, toolB, observation)));
+    }
+
     private static ChatMessageDTO user(String text) {
         return new ChatMessageDTO().setRole("user").setContent(text);
     }
@@ -310,5 +383,34 @@ class HistoryLoaderTest {
         vo.setStatus("SUCCEEDED");
         vo.setCreatedAt("2026-10-29 " + time);
         return vo;
+    }
+
+    private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** 带毫秒精度的交互记录（真实 VO 由 mapper 同时填 createdAt 字符串与 createdAtMillis）。 */
+    private static AgentLlmInteractionRecordVO interactionAt(String reply, LocalDateTime at) {
+        AgentLlmInteractionRecordVO vo = interaction(reply, at.format(TS_FMT));
+        vo.setCreatedAtMillis(TimeUtils.toEpochMillis(at));
+        return vo;
+    }
+
+    private static AgentToolCallRecordVO toolCallAt(Long id, String callId, LocalDateTime at, String artifact) {
+        AgentToolCallRecordVO vo = new AgentToolCallRecordVO();
+        vo.setId(id);
+        vo.setCallId(callId);
+        vo.setRunId(RUN_ID);
+        vo.setSessionId(SESSION_ID);
+        vo.setToolName("builtin_5");
+        vo.setArgumentsJson("{}");
+        vo.setCompressedArtifact("result-" + id);
+        vo.setStatus("SUCCEEDED");
+        vo.setArtifact(artifact);
+        vo.setCreatedAt(at.format(TS_FMT));
+        vo.setCreatedAtMillis(TimeUtils.toEpochMillis(at));
+        return vo;
+    }
+
+    private static ToolCallDTO toolCallDto(String id) {
+        return ToolCallDTO.builder().id(id).type("function").build();
     }
 }

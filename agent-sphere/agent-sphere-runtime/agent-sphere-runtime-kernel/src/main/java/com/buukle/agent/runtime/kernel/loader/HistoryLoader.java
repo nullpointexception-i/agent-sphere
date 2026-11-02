@@ -203,6 +203,22 @@ public class HistoryLoader {
     private void appendRunWithAssistantText(List<ChatMessageDTO> messages, RunVO run,
                                             List<AgentToolCallRecordVO> calls,
                                             Set<Long> overBudget, boolean replayScreenshots) {
+        int start = messages.size();
+        appendRunWithAssistantTextAttempt(messages, run, calls, overBudget, replayScreenshots);
+        // 结构自检：assistant(tool_calls) 之后必须紧跟覆盖全部 tool_call_id 的 tool 消息。
+        // 不满足时模型端会直接 400（insufficient tool messages following tool_calls），
+        // 这里宁可退化成「一条 assistant + 一条 tool」的朴素重建，也不能把非法序列发出去。
+        if (!hasValidToolCallPairing(messages.subList(start, messages.size()))) {
+            log.warn("Rebuilt history for run {} violates tool_calls adjacency; falling back to per-call rebuild",
+                    run.getId());
+            messages.subList(start, messages.size()).clear();
+            appendToolCallFallback(messages, run, calls, overBudget, replayScreenshots);
+        }
+    }
+
+    private void appendRunWithAssistantTextAttempt(List<ChatMessageDTO> messages, RunVO run,
+                                                   List<AgentToolCallRecordVO> calls,
+                                                   Set<Long> overBudget, boolean replayScreenshots) {
         if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
             messages.add(new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_USER)
@@ -231,9 +247,9 @@ public class HistoryLoader {
         int idx = 0;
         for (int i = 0; i < interactions.size(); i++) {
             AgentLlmInteractionRecordVO cur = interactions.get(i);
-            String nextStart = i + 1 < interactions.size() ? interactions.get(i + 1).getCreatedAt() : null;
+            AgentLlmInteractionRecordVO next = i + 1 < interactions.size() ? interactions.get(i + 1) : null;
             List<AgentToolCallRecordVO> turnCalls = new ArrayList<>();
-            while (idx < allCalls.size() && inWindow(allCalls.get(idx).getCreatedAt(), cur.getCreatedAt(), nextStart)) {
+            while (idx < allCalls.size() && inWindow(allCalls.get(idx), cur, next)) {
                 turnCalls.add(allCalls.get(idx++));
             }
             String content = cur.getReplyContent();
@@ -250,8 +266,12 @@ public class HistoryLoader {
                     assistant.setReasoningContent(cur.getReasoning());
                 }
                 messages.add(assistant);
+                // 先追加该轮全部 tool 结果，再统一注入截图观察：保证
+                // assistant(tool_calls) → tool* 连续（多 tool 批次不被打断），与实时路径一致。
                 for (AgentToolCallRecordVO call : turnCalls) {
                     messages.add(toolMessage(call, overBudget));
+                }
+                for (AgentToolCallRecordVO call : turnCalls) {
                     if (screenshotCallIds.contains(call.getId())) {
                         appendScreenshotObservation(messages, call, screenshotBudget);
                     }
@@ -266,12 +286,65 @@ public class HistoryLoader {
                     .setToolCalls(toToolCalls(remaining)));
             for (AgentToolCallRecordVO call : remaining) {
                 messages.add(toolMessage(call, overBudget));
+            }
+            for (AgentToolCallRecordVO call : remaining) {
                 if (screenshotCallIds.contains(call.getId())) {
                     appendScreenshotObservation(messages, call, screenshotBudget);
                 }
             }
         }
         addFinalAssistantReply(messages, run);
+    }
+
+    /**
+     * 配对失败/结构非法时的兜底重建：一条 assistant + 一条 tool 的朴素序列，
+     * 截图观察统一放到最后，绝不插进 tool 消息中间。
+     */
+    private void appendToolCallFallback(List<ChatMessageDTO> messages, RunVO run,
+                                        List<AgentToolCallRecordVO> calls,
+                                        Set<Long> overBudget, boolean replayScreenshots) {
+        if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
+            messages.add(new ChatMessageDTO()
+                    .setRole(LlmApiConstant.ROLE_USER)
+                    .setContent(run.getUserMessage()));
+        }
+        List<AgentToolCallRecordVO> allCalls = calls != null ? calls : List.of();
+        Set<Long> screenshotCallIds = replayScreenshots
+                ? pickReplayScreenshotCalls(allCalls) : Collections.emptySet();
+        ScreenshotReplayBudget screenshotBudget = replayScreenshots
+                ? new ScreenshotReplayBudget(agentRuntimeProperties.getRunner().getScreenshotReplayMaxBytes())
+                : null;
+        appendToolCalls(messages, allCalls, overBudget);
+        replayScreenshotObservations(messages, allCalls, screenshotCallIds, screenshotBudget);
+        addFinalAssistantReply(messages, run);
+    }
+
+    /**
+     * 结构自检：每条带 tool_calls 的 assistant，其后必须紧跟连续的 tool 消息，
+     * 且能覆盖它声明的全部 tool_call_id（OpenAI/DeepSeek 的硬约束）。
+     */
+    static boolean hasValidToolCallPairing(List<ChatMessageDTO> segment) {
+        for (int i = 0; i < segment.size(); i++) {
+            ChatMessageDTO message = segment.get(i);
+            if (!LlmApiConstant.ROLE_ASSISTANT.equals(message.getRole())
+                    || message.getToolCalls() == null || message.getToolCalls().isEmpty()) {
+                continue;
+            }
+            Set<String> expected = new HashSet<>();
+            for (ToolCallDTO toolCall : message.getToolCalls()) {
+                expected.add(toolCall.getId());
+            }
+            int j = i + 1;
+            while (j < segment.size() && !expected.isEmpty()
+                    && LlmApiConstant.ROLE_TOOL.equals(segment.get(j).getRole())) {
+                expected.remove(segment.get(j).getToolCallId());
+                j++;
+            }
+            if (!expected.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Set<Long> pickReplayScreenshotCalls(List<AgentToolCallRecordVO> calls) {
@@ -371,7 +444,28 @@ public class HistoryLoader {
         }
     }
 
-    private static boolean inWindow(String createdAt, String start, String end) {
+    /**
+     * 判断一条 tool 记录是否落在某一轮 CHAT_REPLY 的时间窗口内。
+     *
+     * <p>必须用毫秒比较：VO 上的 createdAt 是秒级字符串，而「调用落在下一轮开始的同一秒」
+     * 是真实存在的情况（线上 run 2810：tool 03:54:51.000042 与下一轮 03:54:51.842411）。
+     * 按秒比较会把这次调用错配到下一轮，导致一条 assistant 带两个 tool_calls。
+     */
+    private static boolean inWindow(AgentToolCallRecordVO call,
+                                    AgentLlmInteractionRecordVO cur,
+                                    AgentLlmInteractionRecordVO next) {
+        Long callMillis = call.getCreatedAtMillis();
+        Long startMillis = cur.getCreatedAtMillis();
+        Long endMillis = next != null ? next.getCreatedAtMillis() : null;
+        if (callMillis != null && startMillis != null) {
+            return callMillis >= startMillis && (endMillis == null || callMillis < endMillis);
+        }
+        // 兜底：老数据/未填充毫秒值时退回秒级字符串比较（仍是原有行为）
+        return inWindowSecondPrecision(call.getCreatedAt(), cur.getCreatedAt(),
+                next != null ? next.getCreatedAt() : null);
+    }
+
+    private static boolean inWindowSecondPrecision(String createdAt, String start, String end) {
         if (createdAt == null || start == null) {
             return false;
         }

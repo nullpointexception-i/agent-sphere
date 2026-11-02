@@ -35,4 +35,6 @@ public class AgentLlmInteractionRecordVO implements Serializable {
     private Integer cacheMissTokens;
     private String createdBy;
     private String createdAt;
+    /** createdAt 的 epoch 毫秒（精确到毫秒，仅供历史重建配对使用，不参与展示）。 */
+    private Long createdAtMillis;
 }
