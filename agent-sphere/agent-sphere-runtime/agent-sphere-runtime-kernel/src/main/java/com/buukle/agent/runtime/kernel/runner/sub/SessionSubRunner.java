@@ -388,11 +388,13 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 if (!toolDefs.isEmpty()) {
                     request.setTools(toolDefs);
                 }
-                // 采样参数接线：全局兜底 + 实例 config 覆盖
+                // 采样参数接线：全局兜底 + 实例 config 覆盖；reasoning budget 按路由/实例输出上限动态计算
                 String instanceConfig = ctx.getKernelContext() != null
                         && ctx.getKernelContext().getAgentInstance() != null
                         ? ctx.getKernelContext().getAgentInstance().getConfig() : null;
-                llmRequestConfigurer.apply(request, instanceConfig);
+                Integer configuredOutput = llmRequestConfigurer.resolveMaxOutputTokens(instanceConfig);
+                Integer reasoningCap = minPositive(configuredOutput, route.getMaxOutputTokens());
+                llmRequestConfigurer.applyChat(request, instanceConfig, reasoningCap, route.getCompany());
                 CountDownLatch done = new CountDownLatch(1);
                 CompletableFuture<Void> future = kernelLlmService.stream(
                         route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(), request,
@@ -612,6 +614,18 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
             log.warn("Failed to resolve API key id={}", route.getApiKeyId(), e);
             return "";
         }
+    }
+
+    /** 两个输出上限都有效时取较小值；只有一个有效时用它；都无效返回 null。 */
+    private static Integer minPositive(Integer first, Long second) {
+        boolean firstValid = first != null && first > 0;
+        Integer secondInt = second != null && second > 0
+                ? (int) Math.min(second, Integer.MAX_VALUE) : null;
+        boolean secondValid = secondInt != null;
+        if (firstValid && secondValid) return Math.min(first, secondInt);
+        if (firstValid) return first;
+        if (secondValid) return secondInt;
+        return null;
     }
 
     private static String normalizeStructuredOutput(String value) {

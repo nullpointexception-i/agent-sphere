@@ -97,7 +97,7 @@ class SessionRunnerLoopBudgetTest {
                 eventPublisher, routeListBuilder, fallbackRouteExecutor, historyLoader,
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
                 toolCallRecordSpi, redissonClient, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class), new com.buukle.agent.common.config.AgentRuntimeProperties()), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
     }
 
     private void applyLoopBudget(List<ChatMessageDTO> messages, int loopCount, int maxLoopCount) throws Exception {

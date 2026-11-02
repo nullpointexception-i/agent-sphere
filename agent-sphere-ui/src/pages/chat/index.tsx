@@ -18,6 +18,7 @@ import {
 import { agentApi } from '@/services/agentSphere/api';
 import { getToken } from '@/utils/auth';
 import { connectSse } from '@/utils/sse';
+import type { ClarificationBatch } from './components/ClarificationDrawer';
 import ChatMain from './components/chat';
 import { stripSubAgentSentinel } from './components/chat/subAgentMarker';
 import type { SubAgentLiveMap } from './components/chat/subAgentTypes';
@@ -25,11 +26,11 @@ import ExpandModal from './components/ExpandModal';
 import InstanceDrawer from './components/InstanceDrawer';
 import Landing from './components/Landing';
 import SessionPanel from './components/SessionPanel';
-import type { ClarificationBatch } from './components/ClarificationDrawer';
+import Sidebar from './components/Sidebar';
 import type { ToolApprovalBatch } from './components/ToolApprovalDrawer';
 import { SESSION_USAGE_REFRESH_EVENT } from './components/Usage';
-import Sidebar from './components/Sidebar';
 import { useStyles } from './style';
+import { createCoalescedTask } from './utils/coalesce';
 
 const SESSION_PAGE_SIZE = 10;
 
@@ -39,8 +40,12 @@ const SESSION_PAGE_SIZE = 10;
  * clarificationId 缺失时返回 null —— 调用方据此【放弃保护】、采信服务端状态，
  * 因为错误拦截的代价（永久显示错误状态直到刷新）远大于放过一次竞态回退。
  */
-function clarificationKey(runId: unknown, clarificationId: unknown): string | null {
-  if (runId == null || clarificationId == null || clarificationId === '') return null;
+function clarificationKey(
+  runId: unknown,
+  clarificationId: unknown,
+): string | null {
+  if (runId == null || clarificationId == null || clarificationId === '')
+    return null;
   return `${runId}:${clarificationId}`;
 }
 
@@ -88,9 +93,11 @@ export default function Chat() {
   const [toolStats, setToolStats] = useState<any>(null);
   const [queuedMessages, setQueuedMessages] = useState<any[]>([]);
   const [runMode, setRunMode] = useState<'WRITE' | 'READ_ONLY'>('WRITE');
-  const [toolApprovalBatch, setToolApprovalBatch] = useState<ToolApprovalBatch | null>(null);
+  const [toolApprovalBatch, setToolApprovalBatch] =
+    useState<ToolApprovalBatch | null>(null);
   const [toolApprovalSubmitting, setToolApprovalSubmitting] = useState(false);
-  const [clarificationBatch, setClarificationBatch] = useState<ClarificationBatch | null>(null);
+  const [clarificationBatch, setClarificationBatch] =
+    useState<ClarificationBatch | null>(null);
   const [clarificationSubmitting, setClarificationSubmitting] = useState(false);
   const [instances, setInstances] = useState<any[]>([]);
   const [chosenInstance, setChosenInstance] = useState('');
@@ -122,6 +129,13 @@ export default function Chat() {
   // 追问多轮，各轮 clarificationId 不同却共用 runId。按 runId 加键会把后续澄清全部
   // 误判为「已答过」并改写成 ANSWERED，待选项和输入框不渲染（刷新后 Ref 重建才恢复）。
   const answeredClarificationsRef = useRef<Set<string>>(new Set());
+  // 切会话时递增：异步请求回来发现 epoch 变了就丢弃，避免旧会话数据污染新会话。
+  const requestEpochRef = useRef(0);
+  // token 流式缓冲：每帧合并一次 setTimeline，避免每个 token 全量重建数组。
+  const pendingDeltaRef = useRef(
+    new Map<number, { reply?: string; thinking?: string }>(),
+  );
+  const deltaRafRef = useRef<number | null>(null);
 
   const loadSessions = useCallback(async (offset: number) => {
     try {
@@ -267,8 +281,14 @@ export default function Chat() {
           const incoming = { ...(m.get(r.seq) || {}), ...r };
           // 已本地应答的澄清不被服务端旧 PENDING 回退。按 clarificationId 匹配，
           // 缺 id 时不拦截（见 clarificationKey 注释）。
-          if (incoming.kind === 'clarification' && incoming.state === 'PENDING') {
-            const key = clarificationKey(incoming.runId, incoming.content?.clarificationId);
+          if (
+            incoming.kind === 'clarification' &&
+            incoming.state === 'PENDING'
+          ) {
+            const key = clarificationKey(
+              incoming.runId,
+              incoming.content?.clarificationId,
+            );
             if (key && answeredClarificationsRef.current.has(key)) {
               incoming.state = 'ANSWERED';
             }
@@ -279,6 +299,73 @@ export default function Chat() {
       return [...m.values()].sort((a, b) => a.seq - b.seq);
     });
   };
+
+  // 流式 token 合并：一帧最多一次 setTimeline，只有当前流式行会换引用，
+  // 配合 RowCard memo 可避免整页/整列表重渲染。
+  const flushStreamingDeltas = useCallback(() => {
+    deltaRafRef.current = null;
+    const batch = pendingDeltaRef.current;
+    if (batch.size === 0) return;
+    pendingDeltaRef.current = new Map();
+
+    setTimeline((prev) => {
+      const next = [...prev];
+      const indexBySeq = new Map<number, number>();
+      for (let i = 0; i < next.length; i += 1) {
+        indexBySeq.set(Number(next[i].seq), i);
+      }
+
+      for (const [seq, delta] of batch) {
+        const idx = indexBySeq.get(seq);
+        if (idx == null) {
+          next.push({
+            seq,
+            kind: 'assistant',
+            status: 'RUNNING',
+            content: { ...delta },
+          });
+          indexBySeq.set(seq, next.length - 1);
+          continue;
+        }
+        const row = next[idx];
+        next[idx] = {
+          ...row,
+          content: {
+            ...(row.content ?? {}),
+            ...(delta.reply
+              ? { reply: (row.content?.reply ?? '') + delta.reply }
+              : {}),
+            ...(delta.thinking
+              ? { thinking: (row.content?.thinking ?? '') + delta.thinking }
+              : {}),
+          },
+        };
+      }
+      return next.sort((a, b) => Number(a.seq) - Number(b.seq));
+    });
+  }, []);
+
+  const enqueueStreamingDelta = useCallback(
+    (seq: number, field: 'reply' | 'thinking', delta: string) => {
+      if (!delta) return;
+      const current = pendingDeltaRef.current.get(seq) ?? {};
+      current[field] = (current[field] ?? '') + delta;
+      pendingDeltaRef.current.set(seq, current);
+      if (deltaRafRef.current == null) {
+        deltaRafRef.current = requestAnimationFrame(flushStreamingDeltas);
+      }
+    },
+    [flushStreamingDeltas],
+  );
+
+  useEffect(() => {
+    requestEpochRef.current += 1;
+    pendingDeltaRef.current.clear();
+    if (deltaRafRef.current != null) {
+      cancelAnimationFrame(deltaRafRef.current);
+      deltaRafRef.current = null;
+    }
+  }, [sessionId]);
 
   const bumpCursors = (rows: any[]) => {
     if (!Array.isArray(rows) || rows.length === 0) return;
@@ -320,6 +407,7 @@ export default function Chat() {
   };
 
   const refreshLatest = async (sid: number) => {
+    const epoch = requestEpochRef.current;
     // afterSeq 分页在后端是 `LIMIT size+1`（AgentTimelineServiceImpl#list）。若两次刷新
     // 之间新增超过 limit 行，单次只会补到第 limit 行，剩余行被 hasMore 标记但没有任何
     // 「继续向后拉」的路径（loadOlderTimeline 走 beforeSeq，方向相反）→ 中间行永久缺失
@@ -337,6 +425,7 @@ export default function Chat() {
             ? { afterSeq: newestSeqRef.current, limit: LIMIT }
             : { limit: LIMIT },
         );
+        if (epoch !== requestEpochRef.current) return;
         const rows = Array.isArray(page?.rows) ? page.rows : [];
         const before = newestSeqRef.current;
         if (rows.length) {
@@ -360,12 +449,19 @@ export default function Chat() {
   // （AWAITING_USER 由澄清卡接管，输入框应可用来作答）。
   // 发送锁唯一来源：/runtime/{sid}/state（来源表聚合）。timeline 只做展示，不参与判断。
   const refreshRuntimeState = async (sid: number) => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const epoch = requestEpochRef.current;
     try {
       const state = await agentApi.sessions.getRuntimeState(sid);
-      if (currentSessionIdRef.current !== sid) return;
+      if (
+        currentSessionIdRef.current !== sid ||
+        epoch !== requestEpochRef.current
+      )
+        return;
       setRuntimeState(state);
       setSending(
-        Array.isArray(state?.blockReasons) && state.blockReasons.includes('RUNNING'),
+        Array.isArray(state?.blockReasons) &&
+          state.blockReasons.includes('RUNNING'),
       );
     } catch {
       // 不兜底：错误交给全局请求提示；发送锁保持上一次权威值
@@ -375,8 +471,10 @@ export default function Chat() {
   // 工具事件后的整页覆盖刷新：按 seq 覆盖同 seq 行，补齐迟到落库的 content（如截图 images）。
   // afterSeq 增量会跳过 seq ≤ newest 的既有行（工具行），导致 live 阶段看不到截图；此处拉尾窗覆盖修正。
   const refreshTail = async (sid: number) => {
+    const epoch = requestEpochRef.current;
     try {
       const page = await agentApi.sessions.getTimeline(sid, { limit: 30 });
+      if (epoch !== requestEpochRef.current) return;
       const rows = Array.isArray(page?.rows) ? page.rows : [];
       if (rows.length) {
         mergeTimeline(rows);
@@ -387,6 +485,35 @@ export default function Chat() {
       // ignore
     }
   };
+
+  // 高频道请求合并：工具事件/运行态事件在 100~250ms 窗口内只打一次后端；
+  // 执行期间再来的触发会合并成「完成后再补一次」，避免并发风暴。
+  const refreshLatestRef = useRef(refreshLatest);
+  refreshLatestRef.current = refreshLatest;
+  const refreshStateRef = useRef(refreshRuntimeState);
+  refreshStateRef.current = refreshRuntimeState;
+  const refreshTailRef = useRef(refreshTail);
+  refreshTailRef.current = refreshTail;
+
+  const refreshLatestCoalesced = useRef(
+    createCoalescedTask((sid: number) => refreshLatestRef.current(sid), 100),
+  ).current;
+  const refreshStateCoalesced = useRef(
+    createCoalescedTask((sid: number) => refreshStateRef.current(sid), 250),
+  ).current;
+  const refreshTailCoalesced = useRef(
+    createCoalescedTask((sid: number) => refreshTailRef.current(sid), 150),
+  ).current;
+
+  // 标签页切回前台补一次权威运行态：后台不轮询，恢复时避免发送锁停在旧值。
+  useEffect(() => {
+    const onVisible = () => {
+      const sid = currentSessionIdRef.current;
+      if (!document.hidden && sid != null) refreshStateCoalesced(sid);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshStateCoalesced]);
 
   // 会话级用量：run 终态后拉取 SUM，驱动聊天区最下方吸底用量条
   const refreshSessionUsage = async (sid: number) => {
@@ -402,7 +529,10 @@ export default function Chat() {
   const refreshToolStats = async (sid: number) => {
     if (!sid) return;
     try {
-      const stats = await agentApi.sessions.toolStats(sid, currentRunIdRef.current);
+      const stats = await agentApi.sessions.toolStats(
+        sid,
+        currentRunIdRef.current,
+      );
       setToolStats(stats);
     } catch {
       // ignore
@@ -422,7 +552,10 @@ export default function Chat() {
   const withdrawQueued = async (queueId: string) => {
     if (!currentSession?.id || !queueId) return;
     try {
-      const res = await agentApi.sessions.withdrawQueue(currentSession.id, queueId);
+      const res = await agentApi.sessions.withdrawQueue(
+        currentSession.id,
+        queueId,
+      );
       if (res?.result === 'ALREADY_CONSUMED') {
         message.warning('消息已开始执行，无法撤回');
       } else if (res?.result === 'NOT_FOUND') {
@@ -476,7 +609,9 @@ export default function Chat() {
       );
       setSessions((prev) =>
         prev.map((s) =>
-          s.id === currentSession.id ? { ...s, runMode: updated?.runMode || mode } : s,
+          s.id === currentSession.id
+            ? { ...s, runMode: updated?.runMode || mode }
+            : s,
         ),
       );
     } catch {
@@ -494,7 +629,8 @@ export default function Chat() {
       }
     };
     window.addEventListener(SESSION_USAGE_REFRESH_EVENT, handler);
-    return () => window.removeEventListener(SESSION_USAGE_REFRESH_EVENT, handler);
+    return () =>
+      window.removeEventListener(SESSION_USAGE_REFRESH_EVENT, handler);
   }, []);
 
   const handleTimelineClarify = async (row: any, response: string) => {
@@ -683,20 +819,23 @@ export default function Chat() {
     }
   }, []);
 
-  const parseToolApproval = useCallback((payload: any): ToolApprovalBatch | null => {
-    if (!payload?.approvalId || !payload?.toolCallsJson) return null;
-    try {
-      const calls = JSON.parse(payload.toolCallsJson);
-      if (!Array.isArray(calls) || calls.length === 0) return null;
-      return {
-        approvalId: String(payload.approvalId),
-        runId: Number(payload.runId),
-        calls,
-      };
-    } catch {
-      return null;
-    }
-  }, []);
+  const parseToolApproval = useCallback(
+    (payload: any): ToolApprovalBatch | null => {
+      if (!payload?.approvalId || !payload?.toolCallsJson) return null;
+      try {
+        const calls = JSON.parse(payload.toolCallsJson);
+        if (!Array.isArray(calls) || calls.length === 0) return null;
+        return {
+          approvalId: String(payload.approvalId),
+          runId: Number(payload.runId),
+          calls,
+        };
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
 
   const refreshPendingToolApproval = useCallback(async (sid: number) => {
     try {
@@ -779,7 +918,11 @@ export default function Chat() {
   }, []);
 
   const resolveClarifications = async (
-    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+    answers: Array<{
+      clarificationId: string;
+      selected?: string[];
+      text?: string;
+    }>,
   ) => {
     if (!clarificationBatch || !currentSession?.id) return;
     setClarificationSubmitting(true);
@@ -860,12 +1003,12 @@ export default function Chat() {
           if (wasReconnect) {
             // 重连：补拉断连窗口内丢失的行，并按权威 run 状态校准发送锁，
             // 否则丢终态事件会让发送/停止永久锁死（只能刷新页面恢复）。
-            void refreshLatest(sid);
-            void refreshRuntimeState(sid);
+            refreshLatestCoalesced(sid);
+            refreshStateCoalesced(sid);
           }
           void refreshPendingToolApproval(sid);
           void refreshPendingClarifications(sid);
-          void refreshRuntimeState(sid);
+          refreshStateCoalesced(sid);
         },
         onMessage: (payload) => {
           try {
@@ -879,8 +1022,8 @@ export default function Chat() {
             if (evtType === 'TOOL_APPROVAL_PENDING') {
               const batch = parseToolApproval(d);
               if (batch) setToolApprovalBatch(batch);
-              void refreshRuntimeState(sid);
-              void refreshLatest(sid);
+              refreshStateCoalesced(sid);
+              refreshLatestCoalesced(sid);
               return;
             }
             if (
@@ -891,7 +1034,7 @@ export default function Chat() {
                 prev && prev.approvalId === String(d?.approvalId) ? null : prev,
               );
               void refreshPendingToolApproval(sid);
-              void refreshLatest(sid);
+              refreshLatestCoalesced(sid);
               return;
             }
 
@@ -944,10 +1087,7 @@ export default function Chat() {
               setPreparingTool({
                 publishId: d?.publishId ? String(d.publishId) : undefined,
                 name:
-                  d?.displayNameCn ||
-                  d?.displayNameEn ||
-                  d?.toolName ||
-                  '工具',
+                  d?.displayNameCn || d?.displayNameEn || d?.toolName || '工具',
               });
             } else if (
               tlSubType === 'tool_call_started' ||
@@ -972,7 +1112,7 @@ export default function Chat() {
               tlSubType === 'run_awaiting_user'
             ) {
               setSending(false);
-              void refreshRuntimeState(sid);
+              refreshStateCoalesced(sid);
               if (tlSubType === 'run_awaiting_user') {
                 void refreshPendingToolApproval(sid);
                 void refreshPendingClarifications(sid);
@@ -989,14 +1129,15 @@ export default function Chat() {
               tlSubType === 'run_waiting'
             ) {
               setSending(true);
-              void refreshRuntimeState(sid);
+              refreshStateCoalesced(sid);
             }
 
             // 上下文压缩：RUNNING 事件本地插行（后端已回填 seq/kind），输出 token 追加到正文。
             // 刻意不在 compaction_running 时 refreshLatest —— 浅合并会用「尚无正文」的权威行覆盖已流出的文字。
             if (d?.seq != null && d?.kind === 'compaction') {
               const seq = Number(d.seq);
-              const delta = evtType === 'content_token' ? String(d?.response || '') : '';
+              const delta =
+                evtType === 'content_token' ? String(d?.response || '') : '';
               const terminal =
                 tlSubType === 'compaction_completed' ||
                 tlSubType === 'compaction_failed';
@@ -1015,9 +1156,7 @@ export default function Chat() {
                       : 'COMPLETED'
                     : 'RUNNING',
                   title:
-                    d?.assistantReply ||
-                    existing?.title ||
-                    '正在压缩上下文…',
+                    d?.assistantReply || existing?.title || '正在压缩上下文…',
                   content,
                 });
                 return [...m.values()].sort((a, b) => a.seq - b.seq);
@@ -1030,34 +1169,12 @@ export default function Chat() {
               d?.response &&
               (evtType === 'content_token' || evtType === 'reasoning_token')
             ) {
-              const field = evtType === 'content_token' ? 'reply' : 'thinking';
-              const delta = String(d.response);
-              setTimeline((prev) => {
-                const m = new Map<number, any>(prev.map((r) => [r.seq, r]));
-                const seq = Number(d.seq);
-                const existing = m.get(seq);
-                if (existing) {
-                  m.set(seq, {
-                    ...existing,
-                    content: {
-                      ...(existing.content || {}),
-                      [field]:
-                        ((existing.content && existing.content[field]) || '') +
-                        delta,
-                    },
-                  });
-                } else {
-                  // 行尚不存在（新会话首条消息等，refreshLatest 此前空游标直接返回）
-                  // → 插入占位 assistant 行，后续按 afterSeq 拉取/终态时 mergeTimeline 补齐全文
-                  m.set(seq, {
-                    seq,
-                    kind: 'assistant',
-                    status: 'RUNNING',
-                    content: { [field]: delta },
-                  });
-                }
-                return [...m.values()].sort((a, b) => a.seq - b.seq);
-              });
+              // 合并到下一帧统一 flush：50 token/s 不再触发 50 次全量数组重建。
+              enqueueStreamingDelta(
+                Number(d.seq),
+                evtType === 'content_token' ? 'reply' : 'thinking',
+                String(d.response),
+              );
             } else if (
               [
                 'run_completed',
@@ -1077,9 +1194,9 @@ export default function Chat() {
                 tlSubType === 'tool_call_succeeded' ||
                 tlSubType === 'tool_call_failed'
               ) {
-                void refreshTail(sid);
+                refreshTailCoalesced(sid);
               } else {
-                void refreshLatest(sid);
+                refreshLatestCoalesced(sid);
               }
             }
             // run 终态：刷新会话级用量（聊天区吸底 SUM）
@@ -1116,7 +1233,8 @@ export default function Chat() {
                     : subType === 'tool_call_succeeded'
                       ? 'succeeded'
                       : 'failed';
-                if (currentSession?.id) void refreshToolStats(currentSession.id);
+                if (currentSession?.id)
+                  void refreshToolStats(currentSession.id);
                 setToolCalls((prev) =>
                   prev.map((tc) =>
                     tc._publishId === publishId
@@ -1232,7 +1350,8 @@ export default function Chat() {
                 const name =
                   d?.displayNameCn || d?.displayName || d?.toolName || '';
                 const nameEn = d?.displayNameEn || name;
-                if (currentSession?.id) void refreshToolStats(currentSession.id);
+                if (currentSession?.id)
+                  void refreshToolStats(currentSession.id);
                 setToolCalls((prev) => [
                   ...prev,
                   {
@@ -1257,8 +1376,9 @@ export default function Chat() {
                 subType === 'run_awaiting_user'
               ) {
                 setSending(false);
-                void refreshRuntimeState(sid);
-                if (currentSession?.id) void refreshToolStats(currentSession.id);
+                refreshStateCoalesced(sid);
+                if (currentSession?.id)
+                  void refreshToolStats(currentSession.id);
                 if (subType === 'run_awaiting_user') {
                   void refreshPendingToolApproval(sid);
                   void refreshPendingClarifications(sid);
@@ -1327,7 +1447,7 @@ export default function Chat() {
               return;
             }
             if (evtType.startsWith('clarification_')) {
-              void refreshRuntimeState(sid);
+              refreshStateCoalesced(sid);
               if (evtType === 'clarification_responded') {
                 // 记为已应答：防止随后 refreshLatest 用服务端旧 PENDING 覆盖乐观态
                 const key = clarificationKey(d?.runId, d?.clarificationId);
@@ -1819,7 +1939,9 @@ export default function Chat() {
                       // 不再静默吞错：会话归属校验失败(FORBIDDEN)等会让“停止”看起来毫无反应。
                       console.warn('session stop failed', e);
                       message.error(
-                        e?.message ? `停止失败：${e.message}` : '停止失败，请重试',
+                        e?.message
+                          ? `停止失败：${e.message}`
+                          : '停止失败，请重试',
                       );
                     });
                 }
@@ -1893,7 +2015,10 @@ export default function Chat() {
           todos={todos}
           toolStats={toolStats}
           sessionUsage={sessionUsage}
-          maxInputTokens={modelRoutes.find((r: any) => r.id === selectedModelRouteId)?.maxInputTokens}
+          maxInputTokens={
+            modelRoutes.find((r: any) => r.id === selectedModelRouteId)
+              ?.maxInputTokens
+          }
         />
       </div>
       <ExpandModal

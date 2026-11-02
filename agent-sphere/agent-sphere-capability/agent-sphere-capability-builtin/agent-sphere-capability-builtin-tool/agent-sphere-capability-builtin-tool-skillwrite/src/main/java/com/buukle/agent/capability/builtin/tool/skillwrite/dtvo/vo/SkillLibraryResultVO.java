@@ -8,10 +8,11 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/** 技能库（builtin_8）出参。 */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class SkillWriteResultVO extends ExecuteResult {
+public class SkillLibraryResultVO extends ExecuteResult {
     private String action;
     private Long skillId;
     private String name;

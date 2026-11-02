@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +69,25 @@ class ToolMetaResolverTest {
         assertEquals(0, meta.get("exitCode"));
         assertEquals("line1", meta.get("firstLine"));
         assertEquals(11, meta.get("stdoutChars"));
+    }
+
+    @Test
+    void buildsWaitMetaWithActualElapsedAndStartedAt() {
+        AgentToolCallRecord record = record("builtin_10", "{\"ms\":7000}",
+                "{\"status\":\"waiting\",\"elapsed_ms\":7000,"
+                        + "\"resumed_at\":\"2026-11-02T18:26:18.401955553\","
+                        + "\"resumed_at_ms\":1760000000000}");
+        record.setCreatedAt(LocalDateTime.of(2026, 11, 2, 18, 26, 11));
+        record.setUpdatedAt(record.getCreatedAt().plusNanos(2_000_000L));
+
+        Map<String, Object> meta = ToolMetaResolver.build(record, null);
+
+        assertEquals(7000L, meta.get("waitMs"));
+        assertEquals(7000L, meta.get("elapsedMs"));
+        assertEquals(7000L, meta.get("durationMs"));
+        assertEquals(1760000000000L, meta.get("resumedAtMs"));
+        assertEquals("2026-11-02T18:26:18.401955553", meta.get("resumedAt"));
+        assertTrue(meta.get("startedAtMs") instanceof Long);
     }
 
     private AgentToolCallRecord record(String toolName, String args, String artifact) {

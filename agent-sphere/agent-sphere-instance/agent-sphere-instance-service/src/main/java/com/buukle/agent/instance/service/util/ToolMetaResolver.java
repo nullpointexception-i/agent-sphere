@@ -59,6 +59,7 @@ public final class ToolMetaResolver {
             case "builtin_2", "builtin_4" -> webMeta(meta, args, artifact);
             case "builtin_11" -> textContainsMeta(meta, args, artifact);
             case "builtin_16" -> progressMeta(meta, args, artifact);
+            case "builtin_10" -> waitMeta(meta, args, artifact, record);
             case "builtin_8", "builtin_9" -> skillMeta(meta, args, artifact);
             case "builtin_14" -> readToolResultMeta(meta, artifact);
             case "builtin_5" -> browserMeta(meta, args, artifact);
@@ -108,6 +109,29 @@ public final class ToolMetaResolver {
         put(meta, "nextAction", text(args, "nextAction"));
         if (args != null && args.path("percent").isNumber()) {
             meta.put("percent", Math.max(0, Math.min(100, args.path("percent").asInt())));
+        }
+    }
+
+    /**
+     * wait 工具的真实耗时不在 created_at/updated_at（工具立即返回，差值是毫秒级），
+     * 而在 artifact.elapsed_ms。这里把请求时长、实际等待、开始/恢复时间统一提取，
+     * 并用实际等待覆盖 durationMs，避免前端展示 0s/2ms。
+     */
+    private static void waitMeta(Map<String, Object> meta, JsonNode args, JsonNode artifact,
+                                 AgentToolCallRecord record) {
+        number(meta, "waitMs", args, "ms");
+        number(meta, "elapsedMs", artifact, "elapsed_ms");
+        number(meta, "resumedAtMs", artifact, "resumed_at_ms");
+        put(meta, "resumedAt", text(artifact, "resumed_at"));
+        if (record.getCreatedAt() != null) {
+            meta.put("startedAtMs", record.getCreatedAt()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli());
+        }
+        Object elapsed = meta.get("elapsedMs");
+        if (elapsed instanceof Long value && value > 0) {
+            meta.put("durationMs", value);
         }
     }
 

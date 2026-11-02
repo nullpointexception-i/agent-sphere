@@ -50,6 +50,7 @@ public class TimelineRecorder {
     private static final String TITLE_RUN_CANCELLED = "⏹️ 已取消";
     private static final String TITLE_RUN_AWAITING = "⏸️ 等待澄清";
     private static final String TITLE_RUN_WAITING = "⏳ 等待中（到点自动继续）";
+    private static final String TITLE_RUN_RESUMED = "▶️ 已恢复（等待 %s）";
     private static final String TITLE_COMPACT_RUNNING = "正在压缩上下文…";
     private static final String TITLE_COMPACT_COMPLETED = "上下文已压缩";
     private static final String TITLE_COMPACT_FAILED = "上下文压缩失败";
@@ -215,8 +216,54 @@ public class TimelineRecorder {
             if (isTerminalRunState(latestState) && !isTerminalRunState(state)) {
                 return;
             }
+            if (TimelineState.RESUMED.getCode().equals(latestState) && !isTerminalRunState(state)) {
+                return;
+            }
             timelineSpi.update(sessionId, seq, state, state, title);
         }
+    }
+
+    /**
+     * wait 到点恢复：把暂停位置的 WAITING 行改成过去式（RESUMED），
+     * 避免恢复后仍显示「等待中」。终态仍会在 run 末尾另起一行。
+     */
+    public void markWaitResumed(Long sessionId, Long runId, long waitedMs) {
+        if (runId == null) {
+            return;
+        }
+        try {
+            TimelineRefQuery query = TimelineRefQuery.builder()
+                    .runId(runId)
+                    .kind(TimelineKind.RUN_STATUS.getCode())
+                    .build();
+            Long seq = runStatusSeqByRun.get(runId);
+            if (seq == null) {
+                seq = findLatestSeq(query);
+            }
+            if (seq == null || seq <= 0) {
+                return;
+            }
+            String latestState = findLatestState(query);
+            if (!TimelineState.WAITING.getCode().equals(latestState)) {
+                return;
+            }
+            runStatusSeqByRun.put(runId, seq);
+            String title = TITLE_RUN_RESUMED.formatted(formatWaitDuration(waitedMs));
+            timelineSpi.update(sessionId, seq,
+                    TimelineState.RESUMED.getCode(), TimelineState.RESUMED.getCode(), title);
+        } catch (Exception e) {
+            log.warn("Timeline wait resume row failed: {}", e.getMessage());
+        }
+    }
+
+    private static String formatWaitDuration(long ms) {
+        long seconds = Math.max(1, Math.round(ms / 1000.0));
+        if (seconds < 60) {
+            return seconds + "s";
+        }
+        long minutes = seconds / 60;
+        long rest = seconds % 60;
+        return rest == 0 ? minutes + "m" : minutes + "m" + rest + "s";
     }
 
     /** run 终态：状态/title 由 RunStatus 映射（避免魔法值散落）；更新同一行并释放该 run 的占位。 */
@@ -252,9 +299,43 @@ public class TimelineRecorder {
             }
         }
         if (seq != null && seq > 0) {
+            String latestState = findLatestState(query);
+            boolean latestTerminal = isTerminalRunState(latestState);
+            boolean latestResumed = TimelineState.RESUMED.getCode().equals(latestState);
+            boolean pauseStatus = status == RunStatus.AWAITING_USER || status == RunStatus.WAITING;
+            boolean terminalStatus = status == RunStatus.COMPLETED
+                    || status == RunStatus.FAILED
+                    || status == RunStatus.CANCELLED;
+
+            // 迟到的暂停事件不能把已终态的行降级。
+            if (latestTerminal && !terminalStatus) {
+                return;
+            }
+
+            // 已恢复后再次挂起：另起一条等待行，不能复用过期的 RESUMED 行。
+            if (latestResumed && pauseStatus) {
+                runStatusSeqByRun.remove(runId);
+                long newSeq = timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(),
+                        state, state, title, runId, null, null, null, null);
+                if (newSeq > 0) {
+                    runStatusSeqByRun.put(runId, newSeq);
+                }
+                return;
+            }
+
+            boolean pauseRow = TimelineState.AWAITING_USER.getCode().equals(latestState)
+                    || TimelineState.WAITING.getCode().equals(latestState)
+                    || latestResumed;
+            if (terminalStatus && pauseRow) {
+                // 等待行保留在暂停位置；终态另起一行，确保 run 结束分割线落在末尾。
+                runStatusSeqByRun.remove(runId);
+                timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
+                        runId, null, null, null, null);
+                return;
+            }
             timelineSpi.update(sessionId, seq, state, state, title);
             // AWAITING_USER / WAITING 之后还会续跑同一行；仅真正终态释放 map 条目
-            if (!TimelineState.AWAITING_USER.getCode().equals(state) && !TimelineState.WAITING.getCode().equals(state)) {
+            if (!pauseStatus) {
                 runStatusSeqByRun.remove(runId, seq);
             }
         } else {

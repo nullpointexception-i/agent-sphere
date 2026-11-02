@@ -132,6 +132,131 @@ class TimelineRecorderTest {
     }
 
     @Test
+    void runTerminalAfterPauseCreatesNewRowAtEnd() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.AWAITING_USER.getCode());
+        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any())).thenReturn(265L);
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
+
+        // 暂停行保留在 seq 17，终态另起一行落在 run 末尾
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any());
+    }
+
+    @Test
+    void runTerminalAfterWaitCreatesNewRowAtEnd() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(23L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.WAITING.getCode());
+        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.FAILED.getCode()), eq(TimelineState.FAILED.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any())).thenReturn(266L);
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.FAILED);
+
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.FAILED.getCode()), eq(TimelineState.FAILED.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any());
+    }
+
+    @Test
+    void runTerminalWithoutPauseStillUpdatesExistingRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(8L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.RUNNING.getCode());
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
+
+        verify(timelineSpi).update(eq(SESSION_ID), eq(8L),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void pauseStatusStillReusesPauseRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.AWAITING_USER.getCode());
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.AWAITING_USER);
+
+        verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
+                eq(TimelineState.AWAITING_USER.getCode()), eq(TimelineState.AWAITING_USER.getCode()), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void latePauseDoesNotDowngradeTerminalRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(265L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.COMPLETED.getCode());
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.AWAITING_USER);
+
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void markWaitResumedUpdatesWaitingRowToResumed() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.WAITING.getCode());
+
+        recorder.markWaitResumed(SESSION_ID, RUN_ID, 7000L);
+
+        verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
+                eq(TimelineState.RESUMED.getCode()), eq(TimelineState.RESUMED.getCode()),
+                eq("▶️ 已恢复（等待 7s）"));
+    }
+
+    @Test
+    void markWaitResumedIgnoresNonWaitingRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.COMPLETED.getCode());
+
+        recorder.markWaitResumed(SESSION_ID, RUN_ID, 7000L);
+
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void runTerminalAfterResumedCreatesNewRowAtEnd() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.RESUMED.getCode());
+        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any())).thenReturn(267L);
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
+
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any());
+    }
+
+    @Test
+    void pauseAfterResumedStartsNewWaitingRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.RESUMED.getCode());
+        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.WAITING.getCode()), eq(TimelineState.WAITING.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any())).thenReturn(25L);
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.WAITING);
+
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
+                eq(TimelineState.WAITING.getCode()), eq(TimelineState.WAITING.getCode()), any(),
+                eq(RUN_ID), any(), any(), any(), any());
+    }
+
+    @Test
     void lateRunningStatusDoesNotDowngradeTerminalRow() {
         when(timelineSpi.findLatestSeq(any())).thenReturn(12L);
         when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.COMPLETED.getCode());

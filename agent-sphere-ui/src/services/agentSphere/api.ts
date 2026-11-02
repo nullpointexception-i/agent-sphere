@@ -209,14 +209,16 @@ export const agentApi = {
       request<any[]>(`${BASE}/instance/sessions/${id}/sub-agent-runs`),
     getSubAgentTimeline: (id: number) =>
       request<any[]>(`${BASE}/instance/sub-agent-runs/${id}/timeline`),
-    getTimeline: (id: number, params: { beforeSeq?: number; afterSeq?: number; limit?: number } = {}) =>
-      request<any>(
-        `${BASE}/instance/sessions/${id}/timeline?${[
-          params.beforeSeq != null ? `beforeSeq=${params.beforeSeq}` : '',
-          params.afterSeq != null ? `afterSeq=${params.afterSeq}` : '',
-          params.limit != null ? `limit=${params.limit}` : 'limit=5',
-        ].join('&')}`,
-      ),
+    getTimeline: (id: number, params: { beforeSeq?: number; afterSeq?: number; limit?: number } = {}) => {
+      const query = [
+        params.beforeSeq != null ? `beforeSeq=${params.beforeSeq}` : '',
+        params.afterSeq != null ? `afterSeq=${params.afterSeq}` : '',
+        `limit=${params.limit ?? 5}`,
+      ]
+        .filter(Boolean)
+        .join('&');
+      return request<any>(`${BASE}/instance/sessions/${id}/timeline?${query}`);
+    },
     usage: (id: number) =>
       request<any>(`${BASE}/instance/sessions/${id}/usage`),
     getDocuments: (id: number, page = 1, size = 20) =>

@@ -45,7 +45,9 @@ import type { SubAgentLiveMap } from '../useTimelineStream';
  * timeline 的快照 state 只在 content 缺失时兜底，不参与任何控制判断。
  */
 const displayState = (row: any): string | undefined =>
-  row?.content?.state ?? row?.state;
+  row?.kind === 'run_status'
+    ? (row?.state ?? row?.content?.state)
+    : (row?.content?.state ?? row?.state);
 
 export interface WidgetTimelineProps {
   rows: TimelineRow[];
@@ -1082,29 +1084,163 @@ function BrowserRow({
   );
 }
 
-function WaitRow({ content, state }: { content: any; state?: string | null }) {
-  let seconds: number | null = null;
+function toFiniteNumber(value: any): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatWaitDuration(ms?: number | null): string | null {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${minutes}m` : `${minutes}m${rest}s`;
+}
+
+function formatWaitClock(value: string | null, epochMs: number | null): string | null {
+  const date =
+    epochMs != null ? new Date(epochMs) : value ? new Date(value.replace(' ', 'T')) : null;
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+function parseWaitView(content: any) {
+  const meta = content?.meta ?? {};
+  let args: any = null;
+  let artifact: any = null;
   try {
-    const args = content.args ? JSON.parse(content.args) : null;
-    if (args?.ms != null) {
-      seconds = Math.max(1, Math.round(Number(args.ms) / 1000));
-    }
+    args = content?.args ? JSON.parse(content.args) : null;
   } catch {
     // ignore malformed args
   }
+  try {
+    artifact = content?.artifact ? JSON.parse(content.artifact) : null;
+  } catch {
+    // ignore malformed artifact
+  }
+  return {
+    waitMs: toFiniteNumber(meta.waitMs) ?? toFiniteNumber(args?.ms),
+    elapsedMs:
+      toFiniteNumber(meta.elapsedMs) ??
+      toFiniteNumber(artifact?.elapsed_ms) ??
+      toFiniteNumber(meta.durationMs) ??
+      toFiniteNumber(args?.ms),
+    startedAtMs: toFiniteNumber(meta.startedAtMs),
+    resumedAtMs:
+      toFiniteNumber(meta.resumedAtMs) ?? toFiniteNumber(artifact?.resumed_at_ms),
+    resumedAtRaw:
+      typeof meta.resumedAt === 'string'
+        ? meta.resumedAt
+        : typeof artifact?.resumed_at === 'string'
+          ? artifact.resumed_at
+          : null,
+    error: typeof meta.error === 'string' ? meta.error : null,
+  };
+}
+
+function WaitRow({ content, state }: { content: any; state?: string | null }) {
   const normalized = String(state ?? '').toLowerCase();
   const failed = normalized === 'failed' || normalized === 'error';
+  const cancelled = normalized === 'cancelled';
   const completed =
-    !failed && ['succeeded', 'completed', 'success'].includes(normalized);
-  const color = failed ? '#cf1322' : completed ? '#389e0d' : '#8c8c8c';
+    !failed && !cancelled && ['succeeded', 'completed', 'success'].includes(normalized);
+  const waiting = !failed && !cancelled && !completed;
+
+  const view = parseWaitView(content);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [waiting]);
+
+  const deadline =
+    view.startedAtMs != null && view.waitMs != null
+      ? view.startedAtMs + view.waitMs
+      : null;
+  const remainingMs = waiting && deadline != null ? Math.max(0, deadline - now) : null;
+  const liveElapsedMs = waiting
+    ? view.startedAtMs != null
+      ? Math.max(0, now - view.startedAtMs)
+      : null
+    : view.elapsedMs;
+  const totalMs = view.waitMs ?? view.elapsedMs;
+  const progress =
+    waiting && totalMs != null && totalMs > 0 && liveElapsedMs != null
+      ? Math.min(1, Math.max(0, liveElapsedMs / totalMs))
+      : null;
+
+  const label = failed
+    ? '等待失败'
+    : cancelled
+      ? '等待已取消'
+      : completed
+        ? '等待完成'
+        : '等待中';
+  const color = failed
+    ? '#cf1322'
+    : cancelled
+      ? '#d46b08'
+      : completed
+        ? '#389e0d'
+        : '#1677ff';
+
+  const remainingText = formatWaitDuration(remainingMs);
+  const totalText = formatWaitDuration(totalMs);
+  const elapsedText = formatWaitDuration(liveElapsedMs);
+  const durationText = waiting
+    ? remainingText && totalText
+      ? `剩余 ${remainingText} / 共 ${totalText}`
+      : totalText
+        ? `共 ${totalText}`
+        : null
+    : elapsedText
+      ? `实际 ${elapsedText}`
+      : null;
+  const resumedClock = completed
+    ? formatWaitClock(view.resumedAtRaw, view.resumedAtMs)
+    : null;
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <ClockIcon />
-      <span style={{ fontSize: 12, fontWeight: 600, color }}>
-        {failed ? '等待失败' : completed ? '等待完成' : '等待中'}
-      </span>
-      {seconds != null && !failed ? (
-        <span style={{ color: '#9ca3af', fontSize: 11 }}>{seconds}s</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <ClockIcon />
+        <span style={{ fontSize: 12, fontWeight: 600, color }}>{label}</span>
+        {durationText ? (
+          <span style={{ color: '#9ca3af', fontSize: 11 }}>{durationText}</span>
+        ) : null}
+        {resumedClock ? (
+          <span style={{ color: '#9ca3af', fontSize: 11 }}>· {resumedClock} 恢复</span>
+        ) : null}
+      </div>
+      {waiting && progress != null ? (
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 260,
+            height: 3,
+            borderRadius: 2,
+            overflow: 'hidden',
+            background: '#f0f0f0',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(progress * 100)}%`,
+              height: '100%',
+              background: '#1677ff',
+              transition: 'width 1s linear',
+            }}
+          />
+        </div>
+      ) : null}
+      {failed && view.error ? (
+        <span style={{ color: '#cf1322', fontSize: 11 }}>{view.error}</span>
       ) : null}
     </div>
   );
@@ -1646,8 +1782,8 @@ function RowView({
   if (row.kind === 'run_status') {
     const duration = formatDuration(c.durationMs);
     const rawText = String(c.text || row.title || '');
-    // 剥离后端状态前缀（❌/⏹️/⏸️），失败用红叉表示
-    const text = rawText.replace(/^[❌⏹️⏸️]\s*/u, '');
+    // 剥离后端状态前缀（❌/⏹️/⏸️/⏳/▶️），失败用红叉表示
+    const text = rawText.replace(/^[❌⏹️⏸️⏳▶️]\s*/u, '');
     const parts = [text, duration, c.modelName].filter(
       (p): p is string => !!p,
     );
@@ -1657,6 +1793,10 @@ function RowView({
       <div className="aw-tl-divider">
         {displayState(row) === 'RUNNING' ? (
           <span className="aw-running-dot" />
+        ) : displayState(row) === 'WAITING' ? (
+          <ClockIcon />
+        ) : displayState(row) === 'RESUMED' ? (
+          <RefreshIcon size={12} />
         ) : failed ? (
           <CloseIcon size={12} className="aw-icon-failed" />
         ) : displayState(row) === 'AWAITING_USER' ? (

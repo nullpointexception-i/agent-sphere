@@ -1,8 +1,9 @@
 package com.buukle.agent.capability.builtin.tool.skillwrite.tool;
 
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
-import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillWriteExecuteContext;
-import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillWriteResultVO;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillLibraryExecuteContext;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.enums.SkillLibraryAction;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillLibraryResultVO;
 import com.buukle.agent.capability.builtin.tool.spi.CapabilityBuiltinToolSpi;
 import com.buukle.agent.capability.builtin.tool.spi.constant.BuiltinToolConstants;
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ExecuteContext;
@@ -33,17 +34,12 @@ import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.CAPABI
 @RequiredArgsConstructor
 public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolSpi {
 
-    static final String ACTION_LIST = "list";
-    static final String ACTION_COUNT = "count";
-    static final String ACTION_SEARCH_TITLE = "search_by_title";
-    static final String ACTION_SEARCH_ALIAS = "search";
-    static final String ACTION_GET = "get";
-
     static final int PREVIEW_LENGTH = 200;
     static final String MARKDOWN_FENCE = "```json";
 
     private static final String TOOL_DESCRIPTION = """
             发现与渐进式读取技能文档：list / count / search / search_by_title / get。
+            仅支持以上 5 个 action；创建/追加/更新技能请使用 builtin_9（技能管理），不要对本工具传 create/append/update。
             - list: 返回全部绑定技能；支持 keyword 过滤、page/pageSize 分页（默认 20）。
             - search（search_by_title 的别名）: 按技能名称关键字查找。
             - get: 用 skillId 或精确 name 读取；可用 structure 看大纲、sectionHeading 读某节、startLine/endLine 读行范围。
@@ -76,57 +72,60 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         info.setDescription(TOOL_DESCRIPTION);
         info.setDisplayNameCn("技能库");
         info.setDisplayNameEn("Skill Library");
-        info.setParamSchema(ToolSchemaUtil.generateParamSchema(SkillWriteExecuteContext.class));
-        info.setResponseSchema(ToolSchemaUtil.generateParamSchema(SkillWriteResultVO.class));
+        info.setParamSchema(ToolSchemaUtil.generateParamSchema(SkillLibraryExecuteContext.class));
+        info.setResponseSchema(ToolSchemaUtil.generateParamSchema(SkillLibraryResultVO.class));
         return info;
     }
 
     @Override
     public Class<? extends ExecuteContext> getContextType() {
-        return SkillWriteExecuteContext.class;
+        return SkillLibraryExecuteContext.class;
     }
 
     @Override
     public Class<? extends ExecuteResult> getResultType() {
-        return SkillWriteResultVO.class;
+        return SkillLibraryResultVO.class;
     }
 
     @Override
     public ExecuteResult execute(ExecuteContext ctx) {
         try {
-            SkillWriteExecuteContext swCtx = (SkillWriteExecuteContext) ctx;
+            SkillLibraryExecuteContext swCtx = (SkillLibraryExecuteContext) ctx;
             String action = swCtx.getAction();
-            if (action == null) {
-                SkillWriteResultVO r = new SkillWriteResultVO();
+            if (action == null || action.isBlank()) {
+                SkillLibraryResultVO r = new SkillLibraryResultVO();
                 r.setAction("unknown");
-                r.setPreview("action is required");
+                r.setPreview("action is required. Allowed: list/count/search/search_by_title/get. "
+                        + "To create/append/update skills, use builtin_9 (skill manage).");
                 return r;
             }
-            Long skillId = swCtx.getSkillId();
-            return switch (action) {
-            case ACTION_LIST -> handleList(swCtx);
-            case ACTION_COUNT -> handleCount(swCtx);
-            case ACTION_SEARCH_TITLE, ACTION_SEARCH_ALIAS -> handleSearchByTitle(swCtx);
-            case ACTION_GET -> handleGet(swCtx, skillId);
-            default -> {
+            SkillLibraryAction act = SkillLibraryAction.from(action);
+            if (act == null) {
                 log.warn("Unknown skill library action: {}", action);
-                yield error(action, "Unknown action: " + action
-                        + ". Allowed: list/count/search/search_by_title/get");
+                return error(action, "Unsupported action: " + action
+                        + ". Allowed: list/count/search/search_by_title/get. "
+                        + "To create/append/update skills, use builtin_9 (skill manage).");
             }
-        };
+            Long skillId = swCtx.getSkillId();
+            return switch (act) {
+                case LIST -> handleList(swCtx);
+                case COUNT -> handleCount(swCtx);
+                case SEARCH, SEARCH_BY_TITLE -> handleSearchByTitle(swCtx);
+                case GET -> handleGet(swCtx, skillId);
+            };
         } catch (Exception e) {
-            log.warn("skill library execute failed action={}", ctx instanceof SkillWriteExecuteContext s ? s.getAction() : "unknown", e);
-            SkillWriteResultVO r = new SkillWriteResultVO();
+            log.warn("skill library execute failed action={}", ctx instanceof SkillLibraryExecuteContext s ? s.getAction() : "unknown", e);
+            SkillLibraryResultVO r = new SkillLibraryResultVO();
             r.setAction("error");
             r.setPreview("Internal error: " + e.getMessage());
             return r;
         }
     }
 
-    private SkillWriteResultVO handleList(SkillWriteExecuteContext ctx) {
+    private SkillLibraryResultVO handleList(SkillLibraryExecuteContext ctx) {
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
-            return error(ACTION_LIST, "sessionId is required and must resolve to an agent instance");
+            return error(SkillLibraryAction.LIST.value(), "sessionId is required and must resolve to an agent instance");
         }
         List<SkillVO> skills = boundSkills(session.instanceId());
         String keyword = ctx.getKeyword();
@@ -139,36 +138,36 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         }
         int page = Math.max(1, ctx.getPage());
         int pageSize = Math.max(1, ctx.getPageSize());
-        List<SkillWriteResultVO.SkillSummaryVO> summaries = skillSummaries(paginate(skills, page, pageSize));
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_LIST);
+        List<SkillLibraryResultVO.SkillSummaryVO> summaries = skillSummaries(paginate(skills, page, pageSize));
+        SkillLibraryResultVO r = new SkillLibraryResultVO();
+        r.setAction(SkillLibraryAction.LIST.value());
         r.setSkills(summaries);
         r.setTotal(skills.size());
         r.setPreview("Found " + skills.size() + " skill(s) bound to the current agent instance");
         return r;
     }
 
-    private SkillWriteResultVO handleCount(SkillWriteExecuteContext ctx) {
+    private SkillLibraryResultVO handleCount(SkillLibraryExecuteContext ctx) {
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
-            return error(ACTION_COUNT, "sessionId is required and must resolve to an agent instance");
+            return error(SkillLibraryAction.COUNT.value(), "sessionId is required and must resolve to an agent instance");
         }
         int total = boundSkills(session.instanceId()).size();
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_COUNT);
+        SkillLibraryResultVO r = new SkillLibraryResultVO();
+        r.setAction(SkillLibraryAction.COUNT.value());
         r.setTotal(total);
         r.setPreview("Total skills bound to the current agent instance: " + total);
         return r;
     }
 
-    private SkillWriteResultVO handleSearchByTitle(SkillWriteExecuteContext ctx) {
+    private SkillLibraryResultVO handleSearchByTitle(SkillLibraryExecuteContext ctx) {
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
-            return error(ACTION_SEARCH_TITLE, "sessionId is required and must resolve to an agent instance");
+            return error(SkillLibraryAction.SEARCH_BY_TITLE.value(), "sessionId is required and must resolve to an agent instance");
         }
         String keyword = ctx.getKeyword();
         if (keyword == null || keyword.isBlank()) {
-            return error(ACTION_SEARCH_TITLE, "keyword is required");
+            return error(SkillLibraryAction.SEARCH_BY_TITLE.value(), "keyword is required");
         }
         String key = keyword.trim().toLowerCase(java.util.Locale.ROOT);
         List<SkillVO> matched = boundSkills(session.instanceId()).stream()
@@ -176,8 +175,8 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
                 .toList();
         int page = Math.max(1, ctx.getPage());
         int pageSize = Math.max(1, ctx.getPageSize());
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_SEARCH_TITLE);
+        SkillLibraryResultVO r = new SkillLibraryResultVO();
+        r.setAction(SkillLibraryAction.SEARCH_BY_TITLE.value());
         r.setSkills(skillSummaries(paginate(matched, page, pageSize)));
         r.setTotal(matched.size());
         r.setPreview("Found " + matched.size() + " skill(s) matching \"" + keyword.trim() + "\"");
@@ -194,10 +193,10 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         return skillSpi.listSkillsByIds(boundIds);
     }
 
-    private List<SkillWriteResultVO.SkillSummaryVO> skillSummaries(List<SkillVO> skills) {
+    private List<SkillLibraryResultVO.SkillSummaryVO> skillSummaries(List<SkillVO> skills) {
         return skills.stream()
                 .map(s -> {
-                    SkillWriteResultVO.SkillSummaryVO item = new SkillWriteResultVO.SkillSummaryVO();
+                    SkillLibraryResultVO.SkillSummaryVO item = new SkillLibraryResultVO.SkillSummaryVO();
                     item.setSkillId(s.getId());
                     item.setName(s.getName());
                     item.setDescription(s.getDescription());
@@ -215,10 +214,10 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         return items.subList(from, to);
     }
 
-    private SkillWriteResultVO handleGet(SkillWriteExecuteContext ctx, Long skillId) {
+    private SkillLibraryResultVO handleGet(SkillLibraryExecuteContext ctx, Long skillId) {
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
-            return error(ACTION_GET, "sessionId is required and must resolve to an agent instance");
+            return error(SkillLibraryAction.GET.value(), "sessionId is required and must resolve to an agent instance");
         }
         if (skillId == null && ctx.getName() != null && !ctx.getName().isBlank()) {
             String name = ctx.getName().trim();
@@ -228,23 +227,23 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
             if (matches.size() == 1) {
                 skillId = matches.get(0).getId();
             } else if (matches.isEmpty()) {
-                return error(ACTION_GET, "Skill name is not bound to the current agent instance: " + name);
+                return error(SkillLibraryAction.GET.value(), "Skill name is not bound to the current agent instance: " + name);
             } else {
-                return error(ACTION_GET, "Multiple skills match name \"" + name + "\": "
+                return error(SkillLibraryAction.GET.value(), "Multiple skills match name \"" + name + "\": "
                         + matches.stream().map(SkillVO::getId).toList());
             }
         }
         if (skillId == null) {
-            return error(ACTION_GET, "skillId or exact name is required");
+            return error(SkillLibraryAction.GET.value(), "skillId or exact name is required");
         }
         if (!isSkillBound(session.instanceId(), skillId)) {
-            return error(ACTION_GET, "Skill " + skillId + " is not bound to the current agent instance");
+            return error(SkillLibraryAction.GET.value(), "Skill " + skillId + " is not bound to the current agent instance");
         }
         SkillVO skill = skillSpi.getSkill(skillId);
         if (skill == null) {
-            return error(ACTION_GET, "Skill not found: " + skillId);
+            return error(SkillLibraryAction.GET.value(), "Skill not found: " + skillId);
         }
-        SkillWriteResultVO r = baseResult(skill);
+        SkillLibraryResultVO r = baseResult(skill);
         String definition = skill.getDefinition();
         if (definition == null || definition.isBlank()) {
             r.setPreview("Skill has no definition");
@@ -345,16 +344,16 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         return text.length() > PREVIEW_LENGTH ? text.substring(0, PREVIEW_LENGTH) + "..." : text;
     }
 
-    private SkillWriteResultVO baseResult(SkillVO skill) {
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_GET);
+    private SkillLibraryResultVO baseResult(SkillVO skill) {
+        SkillLibraryResultVO r = new SkillLibraryResultVO();
+        r.setAction(SkillLibraryAction.GET.value());
         r.setSkillId(skill.getId());
         r.setName(skill.getName());
         r.setDescription(skill.getDescription());
         return r;
     }
 
-    private static SkillWriteResultVO withPreview(SkillWriteResultVO r, String message) {
+    private static SkillLibraryResultVO withPreview(SkillLibraryResultVO r, String message) {
         r.setPreview(message);
         return r;
     }
@@ -372,8 +371,8 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         }
     }
 
-    private SkillWriteResultVO error(String action, String message) {
-        SkillWriteResultVO r = new SkillWriteResultVO();
+    private SkillLibraryResultVO error(String action, String message) {
+        SkillLibraryResultVO r = new SkillLibraryResultVO();
         r.setAction(action);
         r.setPreview(message);
         return r;

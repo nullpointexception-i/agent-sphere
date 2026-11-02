@@ -1,7 +1,9 @@
 package com.buukle.agent.bootstrap.controller;
 
-import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillWriteExecuteContext;
-import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillWriteResultVO;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillLibraryExecuteContext;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillManageExecuteContext;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillLibraryResultVO;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillManageResultVO;
 import com.buukle.agent.capability.builtin.tool.skillwrite.tool.CapabilityBuiltinToolSkillLibrary;
 import com.buukle.agent.capability.builtin.tool.skillwrite.tool.CapabilityBuiltinToolSkillManage;
 import com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO;
@@ -55,14 +57,14 @@ class CapabilityBuiltinToolSkillOperationTest {
         SkillVO created = skill(100L, "fetchCandidate", "简历抓取", VALID_DEFINITION);
         when(skillSpi.createSkill(any(CreateSkillDTO.class), eq("alice"))).thenReturn(created);
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("create");
         ctx.setName("fetchCandidate");
         ctx.setDescription("简历抓取");
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertEquals("create", r.getAction());
         assertEquals(100L, r.getSkillId());
@@ -79,13 +81,13 @@ class CapabilityBuiltinToolSkillOperationTest {
     void create_invalidDefinition_doesNotCreateNorBind() {
         when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("create");
         ctx.setName("bad");
         ctx.setDefinition("not-json");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("Invalid definition"));
         verify(skillSpi, never()).createSkill(any(CreateSkillDTO.class), any());
@@ -98,13 +100,13 @@ class CapabilityBuiltinToolSkillOperationTest {
         String bad = """
                 {"version":1,"parameters":{"type":"object","properties":{}},"promptTemplate":"## 任务\\nold body"}""";
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("create");
         ctx.setName("bad");
         ctx.setDefinition(bad);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("结构不符合技能规范"), r.getPreview());
         assertTrue(r.getPreview().contains("# <技能名称>"), "应回带标准模板: " + r.getPreview());
@@ -116,13 +118,13 @@ class CapabilityBuiltinToolSkillOperationTest {
     void create_missingResolvedInstance_returnsError() {
         when(sessionSpi.getSession(1L)).thenReturn(sessionOf(null, "alice"));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("create");
         ctx.setName("orphan");
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("agent instance"));
         verify(skillSpi, never()).createSkill(any(CreateSkillDTO.class), any());
@@ -135,11 +137,11 @@ class CapabilityBuiltinToolSkillOperationTest {
                 cap("skill", 100L), cap("builtin", 5L)));
         when(skillSpi.listSkillsByIds(List.of(100L))).thenReturn(List.of(skill(100L, "a", null, null)));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("list");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals("list", r.getAction());
         assertEquals(1, r.getSkills().size());
@@ -156,12 +158,12 @@ class CapabilityBuiltinToolSkillOperationTest {
                 skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION),
                 skill(101L, "resume-optimizer", null, VALID_DEFINITION)));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("list");
         ctx.setKeyword("boss");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals(1, r.getSkills().size());
         assertEquals(100L, r.getSkills().get(0).getSkillId());
@@ -174,12 +176,12 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(skillSpi.listSkillsByIds(List.of(100L))).thenReturn(List.of(
                 skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION)));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("search");
         ctx.setKeyword("greet");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals(1, r.getSkills().size());
         assertEquals(100L, r.getSkills().get(0).getSkillId());
@@ -193,12 +195,12 @@ class CapabilityBuiltinToolSkillOperationTest {
                 skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "boss-chat-audit-and-greet", null, VALID_DEFINITION));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setName("boss-chat-audit-and-greet");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals(100L, r.getSkillId());
         assertNotNull(r.getContent());
@@ -206,11 +208,11 @@ class CapabilityBuiltinToolSkillOperationTest {
 
     @Test
     void unknownActionReturnsAllowedActions() {
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("bogus");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("Allowed: list/count/search/search_by_title/get"));
     }
@@ -220,12 +222,12 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 200L)));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setSkillId(100L);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("not bound"));
         verify(skillSpi, never()).getSkill(100L);
@@ -237,12 +239,12 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, VALID_DEFINITION));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setSkillId(100L);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals(100L, r.getSkillId());
         assertNotNull(r.getPreview());
@@ -256,13 +258,13 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(skillSpi.updateSkill(eq(100L), any(CreateSkillDTO.class), eq("alice")))
                 .thenReturn(skill(100L, "a", null, VALID_DEFINITION));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("update");
         ctx.setSkillId(100L);
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertEquals("update", r.getAction());
         verify(skillSpi).updateSkill(eq(100L), any(CreateSkillDTO.class), eq("alice"));
@@ -273,13 +275,13 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(sessionSpi.getSession(1L)).thenReturn(sessionOf(1L, "alice"));
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 200L)));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("update");
         ctx.setSkillId(100L);
         ctx.setDefinition(VALID_DEFINITION);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("not bound"));
         verify(skillSpi, never()).updateSkill(any(), any(), any());
@@ -297,7 +299,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(skillSpi.updateSkill(eq(100L), any(CreateSkillDTO.class), eq("alice")))
                 .thenReturn(skill(100L, "a", null, definition));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("update");
         ctx.setSkillId(100L);
@@ -305,7 +307,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setHeadingSearch("任务");
         ctx.setContent("new body");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertEquals("update", r.getAction());
         org.mockito.ArgumentCaptor<CreateSkillDTO> captor = org.mockito.ArgumentCaptor.forClass(CreateSkillDTO.class);
@@ -324,7 +326,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("update");
         ctx.setSkillId(100L);
@@ -332,7 +334,7 @@ class CapabilityBuiltinToolSkillOperationTest {
         ctx.setHeadingSearch("不存在的标题");
         ctx.setContent("x");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("Section not found"));
         assertNotNull(r.getHeadings());
@@ -348,13 +350,13 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setSkillId(100L);
         ctx.setStructure(true);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertNotNull(r.getHeadings());
         assertEquals(2, r.getHeadings().size());
@@ -373,13 +375,13 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setSkillId(100L);
         ctx.setSectionHeading("任务");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertNotNull(r.getContent());
         assertTrue(r.getContent().contains("按 JD 分析候选人"));
@@ -394,13 +396,13 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setSkillId(100L);
         ctx.setSectionHeading("不存在的标题");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertTrue(r.getPreview().contains("Section not found"));
         assertNotNull(r.getHeadings());
@@ -416,14 +418,14 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, definition));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setSkillId(100L);
         ctx.setStartLine(2);
         ctx.setEndLine(2);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals("按 JD 分析候选人", r.getContent());
     }
@@ -434,12 +436,12 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(instanceCapabilitySpi.getCapabilitiesByInstance(1L)).thenReturn(List.of(cap("skill", 100L)));
         when(skillSpi.getSkill(100L)).thenReturn(skill(100L, "a", null, VALID_DEFINITION));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("get");
         ctx.setSkillId(100L);
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals(VALID_DEFINITION, r.getContent());
         assertNotNull(r.getPreview());
@@ -454,11 +456,11 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(skillSpi.listSkillsByIds(List.of(100L, 200L)))
                 .thenReturn(List.of(skill(100L, "a", null, null), skill(200L, "b", null, null)));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("count");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals("count", r.getAction());
         assertEquals(Integer.valueOf(2), r.getTotal());
@@ -473,12 +475,12 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(skillSpi.listSkillsByIds(List.of(100L, 200L)))
                 .thenReturn(List.of(skill(100L, "fetchCandidate", null, null), skill(200L, "resumeParser", null, null)));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("search_by_title");
         ctx.setKeyword("fetch");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) libraryTool.execute(ctx);
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
 
         assertEquals("search_by_title", r.getAction());
         assertEquals(1, r.getSkills().size());
@@ -498,13 +500,13 @@ class CapabilityBuiltinToolSkillOperationTest {
         when(skillSpi.updateSkill(eq(100L), any(CreateSkillDTO.class), eq("alice")))
                 .thenReturn(skill(100L, "a", null, definition));
 
-        SkillWriteExecuteContext ctx = new SkillWriteExecuteContext();
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
         ctx.setSessionId(1L);
         ctx.setAction("append");
         ctx.setSkillId(100L);
         ctx.setContent("## 补充\nextra notes");
 
-        SkillWriteResultVO r = (SkillWriteResultVO) manageTool.execute(ctx);
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
         assertEquals("append", r.getAction());
         org.mockito.ArgumentCaptor<CreateSkillDTO> captor = org.mockito.ArgumentCaptor.forClass(CreateSkillDTO.class);
@@ -513,6 +515,51 @@ class CapabilityBuiltinToolSkillOperationTest {
         assertTrue(appended.contains("## 补充"), "appended content should be present");
         assertTrue(appended.contains("\"keyword\""), "parameters should be preserved");
         assertTrue(appended.contains("old body"), "original promptTemplate should be preserved");
+    }
+
+    @Test
+    void manage_schemaOnlyContainsManageFields() {
+        String schema = manageTool.getInfo().getParamSchema();
+
+        assertTrue(schema.contains("\"definition\""), schema);
+        assertTrue(schema.contains("\"operation\""), schema);
+        assertTrue(schema.contains("\"create\""), schema);
+        assertFalse(schema.contains("\"pageSize\""), schema);
+        assertFalse(schema.contains("\"sectionHeading\""), schema);
+        assertFalse(schema.contains("\"keyword\""), schema);
+    }
+
+    @Test
+    void library_schemaOnlyContainsLibraryFields() {
+        String schema = libraryTool.getInfo().getParamSchema();
+
+        assertTrue(schema.contains("\"pageSize\""), schema);
+        assertTrue(schema.contains("\"sectionHeading\""), schema);
+        assertTrue(schema.contains("\"list\""), schema);
+        assertFalse(schema.contains("\"definition\""), schema);
+        assertFalse(schema.contains("\"operation\""), schema);
+        assertFalse(schema.contains("\"headingSearch\""), schema);
+    }
+
+    @Test
+    void manage_listReturnsActionableError() {
+        SkillManageExecuteContext ctx = new SkillManageExecuteContext();
+        ctx.setAction("list");
+
+        SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
+
+        assertTrue(r.getPreview().contains("builtin_8"), r.getPreview());
+        assertTrue(r.getPreview().contains("create/append/update"), r.getPreview());
+    }
+
+    @Test
+    void library_createReturnsActionableError() {
+        SkillLibraryExecuteContext ctx = new SkillLibraryExecuteContext();
+        ctx.setAction("create");
+
+        SkillLibraryResultVO r = (SkillLibraryResultVO) libraryTool.execute(ctx);
+
+        assertTrue(r.getPreview().contains("builtin_9"), r.getPreview());
     }
 
     private SessionVO sessionOf(Long instanceId, String createdBy) {

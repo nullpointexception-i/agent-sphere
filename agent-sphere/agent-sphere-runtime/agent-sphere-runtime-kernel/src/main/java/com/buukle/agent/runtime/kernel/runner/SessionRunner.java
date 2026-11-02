@@ -438,8 +438,8 @@ public class SessionRunner {
             }
 
             currentRun.setStatus(RunStatus.RUNNING.name());
-            // 随这次状态更新一并落库（不额外增加写）：loopCount 在本轮末尾自增，
-            // 挂起 break 发生在自增之前，所以这里记的正是「本轮即将执行的序号」，
+            // 随这次状态更新一并落库（不额外增加写）：loopCount 在正常工具轮末尾与
+            // 挂起工具（wait/ask_clarification）break 前都会自增，这里记的是本轮即将执行的序号，
             // 恢复后从该值续跑不会重复或漏计。
             currentRun.setLoopCount(loopCount);
             // 生效上限与 loopCount 同一位置落库（不额外增加写）：预算与计数器都是 per-run 的，
@@ -905,8 +905,12 @@ public class SessionRunner {
             }
             if (suspendStatus != null) {
                 parked = true;
-                // 挂起快照：更新 run-local tail，避免 resume 用「上次压缩时」的旧 tail 丢掉之后的回合。
+                // 挂起工具（wait / ask_clarification）也是一轮工具调用：自增并落库，
+                // 恢复后使用新的 turn_no，避免复用挂起前的 interaction 与 assistant 行，
+                // 否则挂起后的回复会落在澄清/等待卡片上方，造成时间线乱序。
+                loopCount++;
                 compactionService.snapshotRunTail(currentRunId, messages, currentRunStart);
+                currentRun.setLoopCount(loopCount);
                 currentRun.setStatus(suspendStatus.name());
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(suspendStatus,
@@ -1371,12 +1375,14 @@ public class SessionRunner {
                     if (!toolDefs.isEmpty()) {
                         request.setTools(toolDefs);
                     }
-                    // 采样参数接线：全局系统配置兜底 + 实例级 config 覆盖；并行工具行为保持默认开启（与现有多工具批一致）
-                    llmRequestConfigurer.apply(request, instanceConfig);
                     Integer chatMaxOutputTokens = compactionService.resolveChatMaxOutputTokens(
                             route.getMaxInputTokens() != null
                                     ? route.getMaxInputTokens() : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS,
                             effectiveMaxOutputTokens);
+                    // reasoning budget 的上限同时受 tier 与路由允许输出约束；不改变 max_tokens 本身。
+                    Integer reasoningCap = minPositive(chatMaxOutputTokens, route.getMaxOutputTokens());
+                    // 采样参数接线：全局系统配置兜底 + 实例级 config 覆盖；并行工具行为保持默认开启（与现有多工具批一致）
+                    llmRequestConfigurer.applyChat(request, instanceConfig, reasoningCap, route.getCompany());
                     if (chatMaxOutputTokens != null && chatMaxOutputTokens > 0) {
                         request.setMaxTokens(chatMaxOutputTokens);
                     }
@@ -1725,5 +1731,17 @@ public class SessionRunner {
             log.warn("Failed to resolve API key id={}", route.getApiKeyId(), e);
             return "";
         }
+    }
+
+    /** 两个输出上限都有效时取较小值；只有一个有效时用它；都无效返回 null。 */
+    private static Integer minPositive(Integer first, Long second) {
+        boolean firstValid = first != null && first > 0;
+        Integer secondInt = second != null && second > 0
+                ? (int) Math.min(second, Integer.MAX_VALUE) : null;
+        boolean secondValid = secondInt != null;
+        if (firstValid && secondValid) return Math.min(first, secondInt);
+        if (firstValid) return first;
+        if (secondValid) return secondInt;
+        return null;
     }
 }

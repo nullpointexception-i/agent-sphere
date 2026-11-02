@@ -44,7 +44,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from '../../style';
 import UsageChip, { formatTokens } from '../Usage';
@@ -74,11 +74,31 @@ import {
 } from './toolRenderers';
 
 /**
- * 展示状态：优先后端按来源表覆盖的 content.state。
+ * 展示状态：run_status 用行快照 state（同一 run 可能有多条等待/恢复/终态行），
+ * 其它 kind 优先后端按来源表覆盖的 content.state。
  * timeline 的快照 state 只在 content 缺失时兜底，不参与任何控制判断。
  */
 const displayState = (row: any): string | undefined =>
-  row?.content?.state ?? row?.state;
+  row?.kind === 'run_status'
+    ? (row?.state ?? row?.content?.state)
+    : (row?.content?.state ?? row?.state);
+
+/**
+ * 流式 Markdown 限频：内容每 token 都变，但整段重解析不需要 60fps。
+ * 非流式（ms=0）直接返回原值，不引入任何延迟。
+ */
+function useThrottledValue<T>(value: T, ms: number): T {
+  const [throttled, setThrottled] = useState(value);
+  useEffect(() => {
+    if (!ms) {
+      setThrottled(value);
+      return;
+    }
+    const timer = window.setTimeout(() => setThrottled(value), ms);
+    return () => window.clearTimeout(timer);
+  }, [value, ms]);
+  return ms ? throttled : value;
+}
 
 interface TimelineListProps {
   rows: any[];
@@ -103,6 +123,11 @@ const KIND_LABEL: Record<string, string> = {
   run_status: '状态',
   error: '错误',
 };
+
+// 长会话 DOM 上限：超过后只渲染最近 N 条，顶部提供「显示更早」按钮。
+// 避免 1000+ 行 Markdown/截图同时挂载导致滚动掉帧。
+const DEFAULT_RENDER_LIMIT = 300;
+const RENDER_LIMIT_STEP = 200;
 
 // 内部协议工具：finish 的答案已作为助手正文展示，ask_clarification 由澄清行展示。
 const FINISH_TOOL_NAME = 'builtin_12';
@@ -251,6 +276,8 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
   const hasThinking = thinking.length > 0 && thinking !== '{}';
   const hasReply = reply.length > 0 && reply !== '{}';
   const isRunning = !displayState(row) || displayState(row) === 'RUNNING';
+  const streaming = Boolean(isLatest && isRunning);
+  const renderedReply = useThrottledValue(reply, streaming ? 120 : 0);
   const [thinkingOpen, setThinkingOpen] = useState(
     Boolean(isLatest && !hasReply && isRunning),
   );
@@ -374,7 +401,7 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
       )}
       {hasReply && (
         <div style={{ fontSize: 13 }}>
-          <XMarkdown content={reply} />
+          <XMarkdown content={renderedReply} />
         </div>
       )}
       {(hasReply || hasThinking) && (
@@ -842,9 +869,7 @@ function DocCard({ content }: { content: any }) {
               style={{ display: 'block', fontSize: 11, lineHeight: '16px' }}
             >
               {documentTitle || (isEn ? 'Document' : '文档')}
-              {artifactPreview
-                ? `：${artifactPreview.slice(0, 60)}…`
-                : ''}
+              {artifactPreview ? `：${artifactPreview.slice(0, 60)}…` : ''}
             </Typography.Text>
           )}
           <div>
@@ -925,7 +950,7 @@ function ToolCardBody({ row }: any) {
     content.displayName === '等待' ||
     content.displayName === 'Wait'
   ) {
-    return <WaitCard content={content} state={displayState(row)} />;
+    return <WaitCard row={row} />;
   }
   if (
     content.toolName === 'builtin_13' ||
@@ -953,28 +978,36 @@ function ToolCardBody({ row }: any) {
     content.displayName === '网页读取' ||
     content.displayName === 'Web Read'
   ) {
-    return <WebPageCard content={content} state={displayState(row)} kind="read" />;
+    return (
+      <WebPageCard content={content} state={displayState(row)} kind="read" />
+    );
   }
   if (
     content.toolName === 'builtin_2' ||
     content.displayName === '网页获取' ||
     content.displayName === 'Web Fetch'
   ) {
-    return <WebPageCard content={content} state={displayState(row)} kind="fetch" />;
+    return (
+      <WebPageCard content={content} state={displayState(row)} kind="fetch" />
+    );
   }
   if (
     content.toolName === 'builtin_8' ||
     content.displayName === '技能库' ||
     content.displayName === 'Skill Library'
   ) {
-    return <SkillCard content={content} state={displayState(row)} kind="library" />;
+    return (
+      <SkillCard content={content} state={displayState(row)} kind="library" />
+    );
   }
   if (
     content.toolName === 'builtin_9' ||
     content.displayName === '技能管理' ||
     content.displayName === 'Skill Manage'
   ) {
-    return <SkillCard content={content} state={displayState(row)} kind="manage" />;
+    return (
+      <SkillCard content={content} state={displayState(row)} kind="manage" />
+    );
   }
   if (
     content.toolName === 'builtin_14' ||
@@ -1046,6 +1079,11 @@ function ToolCard({ row }: any) {
   const intl = useIntl();
   const duration = row?.content?.meta?.durationMs;
   const reason = toolCallReason(row?.content || {});
+  const content = row?.content || {};
+  const isWait =
+    content.toolName === 'builtin_10' ||
+    content.displayName === '等待' ||
+    content.displayName === 'Wait';
   return (
     <div>
       <ToolCardBody row={row} />
@@ -1067,57 +1105,241 @@ function ToolCard({ row }: any) {
           {reason.slice(0, 120)}
         </div>
       )}
-      <ToolDuration ms={typeof duration === 'number' ? duration : undefined} />
+      {!isWait && (
+        <ToolDuration
+          ms={typeof duration === 'number' ? duration : undefined}
+        />
+      )}
     </div>
   );
 }
 
-function WaitCard({ content, state }: any) {
-  const intl = useIntl();
-  let seconds: number | null = null;
+function toFiniteNumber(value: any): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatWaitDuration(ms?: number | null): string | null {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${minutes}m` : `${minutes}m${rest}s`;
+}
+
+function formatWaitClock(
+  value: string | null,
+  epochMs: number | null,
+): string | null {
+  const date =
+    epochMs != null
+      ? new Date(epochMs)
+      : value
+        ? new Date(value.replace(' ', 'T'))
+        : null;
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString('zh-CN', { hour12: false });
+}
+
+function parseWaitView(content: any) {
+  const meta = content?.meta ?? {};
+  let args: any = null;
+  let artifact: any = null;
   try {
-    const args = content.args ? JSON.parse(content.args) : null;
-    if (args?.ms != null) {
-      seconds = Math.max(1, Math.round(Number(args.ms) / 1000));
-    }
+    args = content?.args ? JSON.parse(content.args) : null;
   } catch {
     // ignore malformed args
   }
-  const normalizedState = String(state ?? '').toLowerCase();
-  const failed = normalizedState === 'failed' || normalizedState === 'error';
+  try {
+    artifact = content?.artifact ? JSON.parse(content.artifact) : null;
+  } catch {
+    // ignore malformed artifact
+  }
+  return {
+    waitMs: toFiniteNumber(meta.waitMs) ?? toFiniteNumber(args?.ms),
+    elapsedMs:
+      toFiniteNumber(meta.elapsedMs) ??
+      toFiniteNumber(artifact?.elapsed_ms) ??
+      toFiniteNumber(meta.durationMs) ??
+      toFiniteNumber(args?.ms),
+    startedAtMs: toFiniteNumber(meta.startedAtMs),
+    resumedAtMs:
+      toFiniteNumber(meta.resumedAtMs) ??
+      toFiniteNumber(artifact?.resumed_at_ms),
+    resumedAtRaw:
+      typeof meta.resumedAt === 'string'
+        ? meta.resumedAt
+        : typeof artifact?.resumed_at === 'string'
+          ? artifact.resumed_at
+          : null,
+    error: typeof meta.error === 'string' ? meta.error : null,
+  };
+}
+
+function WaitCard({ row }: any) {
+  const intl = useIntl();
+  const content = row?.content ?? {};
+  const state = String(displayState(row) ?? '').toLowerCase();
+  const failed = state === 'failed' || state === 'error';
+  const cancelled = state === 'cancelled';
   const completed =
-    !failed && ['succeeded', 'completed', 'success'].includes(normalizedState);
+    !failed &&
+    !cancelled &&
+    ['succeeded', 'completed', 'success'].includes(state);
+  const waiting = !failed && !cancelled && !completed;
+
+  const view = parseWaitView(content);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [waiting]);
+
+  const deadline =
+    view.startedAtMs != null && view.waitMs != null
+      ? view.startedAtMs + view.waitMs
+      : null;
+  const remainingMs =
+    waiting && deadline != null ? Math.max(0, deadline - now) : null;
+  const liveElapsedMs = waiting
+    ? view.startedAtMs != null
+      ? Math.max(0, now - view.startedAtMs)
+      : null
+    : view.elapsedMs;
+  const totalMs = view.waitMs ?? view.elapsedMs;
+  const progress =
+    waiting && totalMs != null && totalMs > 0 && liveElapsedMs != null
+      ? Math.min(1, Math.max(0, liveElapsedMs / totalMs))
+      : null;
+
   const labelId = failed
     ? 'pages.chat.tool.waitFailed'
-    : completed
-      ? 'pages.chat.tool.waitCompleted'
-      : 'pages.chat.tool.waitRunning';
+    : cancelled
+      ? 'pages.chat.tool.waitCancelled'
+      : completed
+        ? 'pages.chat.tool.waitCompleted'
+        : 'pages.chat.tool.waitRunning';
   const defaultLabel = failed
     ? 'Wait failed'
-    : completed
-      ? 'Wait completed'
-      : 'Waiting';
-  const color = failed ? '#cf1322' : completed ? '#389e0d' : '#8c8c8c';
+    : cancelled
+      ? 'Wait cancelled'
+      : completed
+        ? 'Wait completed'
+        : 'Waiting';
+  const color = failed
+    ? '#cf1322'
+    : cancelled
+      ? '#d46b08'
+      : completed
+        ? '#389e0d'
+        : '#1677ff';
+
+  const remainingText = formatWaitDuration(remainingMs);
+  const totalText = formatWaitDuration(totalMs);
+  const elapsedText = formatWaitDuration(liveElapsedMs);
+  const durationText = waiting
+    ? remainingText && totalText
+      ? intl.formatMessage(
+          {
+            id: 'pages.chat.tool.waitRemaining',
+            defaultMessage: '{remaining} left / {total} total',
+          },
+          { remaining: remainingText, total: totalText },
+        )
+      : totalText
+        ? intl.formatMessage(
+            {
+              id: 'pages.chat.tool.waitTotal',
+              defaultMessage: '{total} total',
+            },
+            { total: totalText },
+          )
+        : null
+    : elapsedText
+      ? intl.formatMessage(
+          {
+            id: 'pages.chat.tool.waitElapsed',
+            defaultMessage: '{elapsed} elapsed',
+          },
+          { elapsed: elapsedText },
+        )
+      : null;
+
+  const resumedClock = completed
+    ? formatWaitClock(view.resumedAtRaw, view.resumedAtMs)
+    : null;
+  const resumedText = resumedClock
+    ? intl.formatMessage(
+        {
+          id: 'pages.chat.tool.waitResumedAt',
+          defaultMessage: 'resumed at {time}',
+        },
+        { time: resumedClock },
+      )
+    : null;
+
   return (
     <div
-      style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}
+      style={{
+        marginTop: 4,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}
     >
-      <ClockCircleOutlined style={{ fontSize: 12, color }} />
-      <Typography.Text strong style={{ fontSize: 12, color }}>
-        {intl.formatMessage({
-          id: labelId,
-          defaultMessage: defaultLabel,
-        })}
-      </Typography.Text>
-      {seconds != null && !failed && (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {intl.formatMessage(
-            {
-              id: 'pages.chat.tool.waitForSeconds',
-              defaultMessage: '{seconds}s',
-            },
-            { seconds },
-          )}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          flexWrap: 'wrap',
+        }}
+      >
+        <ClockCircleOutlined style={{ fontSize: 12, color }} />
+        <Typography.Text strong style={{ fontSize: 12, color }}>
+          {intl.formatMessage({ id: labelId, defaultMessage: defaultLabel })}
+        </Typography.Text>
+        {durationText && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {durationText}
+          </Typography.Text>
+        )}
+        {resumedText && (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            · {resumedText}
+          </Typography.Text>
+        )}
+      </div>
+      {waiting && progress != null && (
+        <div
+          style={{
+            width: '100%',
+            maxWidth: 260,
+            height: 3,
+            borderRadius: 2,
+            overflow: 'hidden',
+            background: '#f0f0f0',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(progress * 100)}%`,
+              height: '100%',
+              background: '#1677ff',
+              transition: 'width 1s linear',
+            }}
+          />
+        </div>
+      )}
+      {failed && view.error && (
+        <Typography.Text type="danger" style={{ fontSize: 11 }}>
+          {view.error}
         </Typography.Text>
       )}
     </div>
@@ -2694,8 +2916,7 @@ function parallelGroupKey(row: any): string | null {
  * 面板复用 SubAgentCard（live 聚合/展开/步骤加载逻辑不变）。
  * inactive 面板默认保持挂载，切换 Tab 不丢各卡片状态。
  */
-function ParallelSubAgentTabs({
-  groupKey,
+function ParallelSubAgentTabsImpl({
   members,
   loadSubAgentSteps,
   subAgentLive,
@@ -2770,7 +2991,16 @@ function ParallelSubAgentTabs({
   );
 }
 
-function RowCard({
+const ParallelSubAgentTabs = memo(
+  ParallelSubAgentTabsImpl,
+  (prev: any, next: any) =>
+    prev.groupKey === next.groupKey &&
+    prev.members === next.members &&
+    prev.loadSubAgentSteps === next.loadSubAgentSteps &&
+    prev.subAgentLive === next.subAgentLive,
+);
+
+function RowCardImpl({
   row,
   sessionId,
   isLatestAssistant,
@@ -2789,7 +3019,8 @@ function RowCard({
   if (row.kind === 'compaction') {
     const text = row.content?.text || '';
     const running = displayState(row) === 'RUNNING';
-    const failed = displayState(row) === 'FAILED' || displayState(row) === 'failed';
+    const failed =
+      displayState(row) === 'FAILED' || displayState(row) === 'failed';
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
@@ -2828,12 +3059,15 @@ function RowCard({
   if (row.kind === 'run_status') {
     const duration = formatDuration(row.content?.durationMs);
     const usage = row.content?.usage;
-    const isRunFailed = displayState(row) === 'FAILED' || displayState(row) === 'failed';
+    const isRunFailed =
+      displayState(row) === 'FAILED' || displayState(row) === 'failed';
     // 后端失败文案「❌ 执行失败」的红叉太粗，前端剥掉改细线红叉（与行文字同字号）。
     const text = (row.content?.text || row.title || '')
       .replace(/^❌\s*/, '')
       .replace(/^⏹️\s*/, '')
-      .replace(/^⏸️\s*/, '');
+      .replace(/^⏸️\s*/, '')
+      .replace(/^⏳\s*/, '')
+      .replace(/^▶️\s*/, '');
     const parts = [
       text,
       duration,
@@ -2847,6 +3081,10 @@ function RowCard({
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
           {displayState(row) === 'RUNNING' ? (
             <LoadingOutlined spin style={{ fontSize: 12 }} />
+          ) : displayState(row) === 'WAITING' ? (
+            <ClockCircleOutlined style={{ fontSize: 12, color: '#1677ff' }} />
+          ) : displayState(row) === 'RESUMED' ? (
+            <SyncOutlined style={{ fontSize: 12, color: '#1677ff' }} />
           ) : isRunFailed ? (
             <CloseCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
           ) : displayState(row) === 'AWAITING_USER' ? (
@@ -2979,6 +3217,21 @@ function RowCard({
   );
 }
 
+const RowCard = memo(RowCardImpl, (prev: any, next: any) => {
+  if (prev.row !== next.row) return false;
+  if (prev.isLatestAssistant !== next.isLatestAssistant) return false;
+  if (prev.sessionId !== next.sessionId) return false;
+  if (prev.onRespondClarify !== next.onRespondClarify) return false;
+  if (prev.onCancelClarification !== next.onCancelClarification) return false;
+  if (prev.loadSubAgentSteps !== next.loadSubAgentSteps) return false;
+  // subAgentLive 是整个 session 的 map，只有子 Agent 行需要跟随它刷新；
+  // 其它行不受子 Agent token 影响，否则一次子 Agent 输出会让整列表重渲染。
+  if (prev.row?.kind === 'subagent') {
+    return prev.subAgentLive === next.subAgentLive;
+  }
+  return true;
+});
+
 export default function TimelineList({
   rows,
   hasMore,
@@ -3038,6 +3291,13 @@ export default function TimelineList({
     return out;
   }, [rows]);
 
+  const [renderLimit, setRenderLimit] = useState(DEFAULT_RENDER_LIMIT);
+  useEffect(() => {
+    setRenderLimit(DEFAULT_RENDER_LIMIT);
+  }, [sessionId]);
+  const hiddenCount = Math.max(0, items.length - renderLimit);
+  const visibleItems = hiddenCount > 0 ? items.slice(-renderLimit) : items;
+
   return (
     <>
       {hasMore && (
@@ -3047,7 +3307,18 @@ export default function TimelineList({
           </Button>
         </div>
       )}
-      {items.map((it) =>
+      {hiddenCount > 0 && (
+        <div style={{ textAlign: 'center' }}>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => setRenderLimit((n) => n + RENDER_LIMIT_STEP)}
+          >
+            显示更早的 {hiddenCount} 条
+          </Button>
+        </div>
+      )}
+      {visibleItems.map((it) =>
         it.type === 'row' ? (
           <RowCard
             key={`${it.row.seq}-${it.row.kind}`}

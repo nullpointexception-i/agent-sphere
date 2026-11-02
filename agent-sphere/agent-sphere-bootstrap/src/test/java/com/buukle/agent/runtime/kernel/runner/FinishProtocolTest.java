@@ -122,7 +122,7 @@ class FinishProtocolTest {
                 eventPublisher, routeListBuilder, new FallbackRouteExecutor(), historyLoader,
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
                 toolCallRecordSpi, redissonClient, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class), new com.buukle.agent.common.config.AgentRuntimeProperties()), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
     }
 
     /** 让本轮固定产出给定的流式事件序列。 */

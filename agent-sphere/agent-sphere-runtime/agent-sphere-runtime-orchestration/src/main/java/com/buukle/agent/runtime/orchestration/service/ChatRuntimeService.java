@@ -229,6 +229,8 @@ public class ChatRuntimeService {
             // 这只是展示层事件，**绝不能让它有能力让恢复失败** —— 一旦它抛异常而把状态退回
             // WAITING，异步循环其实已经在跑，等于凭空造出第二个循环（见 rollbackToWaiting）。
             recordWaitToolSucceeded(wait, sessionId, runId);
+            long waitedMs = wait.getWaitMs() == null ? 0L : wait.getWaitMs();
+            timelineRecorder.markWaitResumed(sessionId, runId, waitedMs);
             log.info("Wait resumed: waitId={} runId={} sessionId={} waitedMs={}",
                     wait.getId(), runId, sessionId, wait.getWaitMs());
             return ResumeOutcome.RESUMED;
@@ -251,8 +253,10 @@ public class ChatRuntimeService {
             return;
         }
         try {
+            long nowMs = System.currentTimeMillis();
             String artifact = "{\"status\":\"waiting\",\"elapsed_ms\":" + wait.getWaitMs()
-                    + ",\"resumed_at\":\"" + java.time.LocalDateTime.now() + "\"}";
+                    + ",\"resumed_at\":\"" + java.time.LocalDateTime.now() + "\""
+                    + ",\"resumed_at_ms\":" + nowMs + "}";
             eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
                     new RuntimeEventDataVO()
                             .setSessionId(sessionId)

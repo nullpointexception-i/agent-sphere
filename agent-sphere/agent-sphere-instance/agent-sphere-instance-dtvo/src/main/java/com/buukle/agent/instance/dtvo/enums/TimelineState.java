@@ -13,6 +13,8 @@ public enum TimelineState {
     PENDING("PENDING"),
     RUNNING("RUNNING"),
     WAITING("WAITING"),
+    /** wait 到点已恢复：用于把「等待中」行改成过去式，同时仍允许终态另起一行。 */
+    RESUMED("RESUMED"),
     AWAITING_USER("AWAITING_USER"),
     IN_PROGRESS("IN_PROGRESS"),
     SUCCEEDED("SUCCEEDED"),

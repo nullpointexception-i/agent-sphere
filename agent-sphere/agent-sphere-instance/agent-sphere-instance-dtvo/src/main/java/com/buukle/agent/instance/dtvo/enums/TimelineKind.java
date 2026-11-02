@@ -42,7 +42,7 @@ public enum TimelineKind {
             case COMPACTION -> Set.of(TimelineState.RUNNING, TimelineState.COMPLETED,
                     TimelineState.FAILED);
             case RUN_STATUS -> Set.of(TimelineState.RUNNING, TimelineState.WAITING,
-                    TimelineState.AWAITING_USER, TimelineState.COMPLETED,
+                    TimelineState.RESUMED, TimelineState.AWAITING_USER, TimelineState.COMPLETED,
                     TimelineState.FAILED, TimelineState.CANCELLED);
             case ERROR -> Set.of(TimelineState.FAILED);
         };

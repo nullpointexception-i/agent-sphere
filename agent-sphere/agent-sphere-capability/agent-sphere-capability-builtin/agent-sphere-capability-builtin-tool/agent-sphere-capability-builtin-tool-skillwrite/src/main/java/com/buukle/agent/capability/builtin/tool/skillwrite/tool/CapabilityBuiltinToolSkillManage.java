@@ -1,8 +1,9 @@
 package com.buukle.agent.capability.builtin.tool.skillwrite.tool;
 
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
-import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillWriteExecuteContext;
-import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillWriteResultVO;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.dto.SkillManageExecuteContext;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.enums.SkillManageAction;
+import com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.vo.SkillManageResultVO;
 import com.buukle.agent.capability.builtin.tool.spi.CapabilityBuiltinToolSpi;
 import com.buukle.agent.capability.builtin.tool.spi.constant.BuiltinToolConstants;
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ExecuteContext;
@@ -37,10 +38,6 @@ import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.STATUS
 @RequiredArgsConstructor
 public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSpi {
 
-    static final String ACTION_CREATE = "create";
-    static final String ACTION_APPEND = "append";
-    static final String ACTION_UPDATE = "update";
-
     static final String OP_REPLACE_SECTION = "replace_section";
     static final String OP_INSERT_AFTER = "insert_after";
     static final String OP_REPLACE_TEXT = "replace_text";
@@ -50,6 +47,8 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
 
     private static final String TOOL_DESCRIPTION = """
             创建/追加/更新绑定到当前实例的技能。
+            仅支持 action = create / append / update。
+            查询/列出/读取技能请使用 builtin_8（技能库），不要对本工具传 list。
 
             definition 为 JSON：{"version":1,"parameters":{JSON Schema},"promptTemplate":"<Markdown>"}。
             promptTemplate 必须遵循固定的标题结构；保存前会**前置校验**（UI 表单与 agent 工具共用同一校验），不合规直接报错并回带模板：
@@ -84,69 +83,71 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         info.setDescription(TOOL_DESCRIPTION);
         info.setDisplayNameCn("技能管理");
         info.setDisplayNameEn("Skill Manage");
-        info.setParamSchema(ToolSchemaUtil.generateParamSchema(SkillWriteExecuteContext.class));
-        info.setResponseSchema(ToolSchemaUtil.generateParamSchema(SkillWriteResultVO.class));
+        info.setParamSchema(ToolSchemaUtil.generateParamSchema(SkillManageExecuteContext.class));
+        info.setResponseSchema(ToolSchemaUtil.generateParamSchema(SkillManageResultVO.class));
         return info;
     }
 
     @Override
     public Class<? extends ExecuteContext> getContextType() {
-        return SkillWriteExecuteContext.class;
+        return SkillManageExecuteContext.class;
     }
 
     @Override
     public Class<? extends ExecuteResult> getResultType() {
-        return SkillWriteResultVO.class;
+        return SkillManageResultVO.class;
     }
 
     @Override
     public ExecuteResult execute(ExecuteContext ctx) {
         try {
-            SkillWriteExecuteContext swCtx = (SkillWriteExecuteContext) ctx;
+            SkillManageExecuteContext swCtx = (SkillManageExecuteContext) ctx;
             String action = swCtx.getAction();
-            if (action == null) {
-                SkillWriteResultVO r = new SkillWriteResultVO();
+            if (action == null || action.isBlank()) {
+                SkillManageResultVO r = new SkillManageResultVO();
                 r.setAction("unknown");
-                r.setPreview("action is required");
+                r.setPreview("action is required. Allowed: create/append/update. "
+                        + "To list/search/get skills, use builtin_8 (skill library).");
                 return r;
             }
-            Long skillId = swCtx.getSkillId();
-            return switch (action) {
-            case ACTION_CREATE -> handleCreate(swCtx);
-            case ACTION_APPEND -> handleAppend(swCtx, skillId);
-            case ACTION_UPDATE -> handleUpdate(swCtx, skillId);
-            default -> {
+            SkillManageAction act = SkillManageAction.from(action);
+            if (act == null) {
                 log.warn("Unknown skill manage action: {}", action);
-                SkillWriteResultVO r = new SkillWriteResultVO();
-                r.setAction(action);
-                yield r;
+                return error(action, "Unsupported action: " + action
+                        + ". Allowed: create/append/update. "
+                        + "To list/count/search/get skills, use builtin_8 (skill library).");
             }
-        };
+            Long skillId = swCtx.getSkillId();
+            return switch (act) {
+                case CREATE -> handleCreate(swCtx);
+                case APPEND -> handleAppend(swCtx, skillId);
+                case UPDATE -> handleUpdate(swCtx, skillId);
+            };
         } catch (Exception e) {
-            log.warn("skill manage execute failed action={}", ctx instanceof SkillWriteExecuteContext s ? s.getAction() : "unknown", e);
-            SkillWriteResultVO r = new SkillWriteResultVO();
+            log.warn("skill manage execute failed action={}", ctx instanceof SkillManageExecuteContext s ? s.getAction() : "unknown", e);
+            SkillManageResultVO r = new SkillManageResultVO();
             r.setAction("error");
             r.setPreview("Internal error: " + e.getMessage());
             return r;
         }
     }
 
-    private SkillWriteResultVO handleCreate(SkillWriteExecuteContext ctx) {
+    private SkillManageResultVO handleCreate(SkillManageExecuteContext ctx) {
         String name = ctx.getName();
         String definition = ctx.getDefinition();
         if (name == null || name.isBlank()) {
-            return error(ACTION_CREATE, "name is required");
+            return error(SkillManageAction.CREATE.value(), "name is required");
         }
         if (definition == null || definition.isBlank()) {
-            return error(ACTION_CREATE, "definition is required (JSON with parameters + promptTemplate)");
+            return error(SkillManageAction.CREATE.value(), "definition is required (JSON with parameters + promptTemplate)");
         }
         String validation = validateDefinition(definition);
         if (validation != null) {
-            return error(ACTION_CREATE, validation);
+            return error(SkillManageAction.CREATE.value(), validation);
         }
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
-            return error(ACTION_CREATE, "sessionId is required and must resolve to an agent instance");
+            return error(SkillManageAction.CREATE.value(), "sessionId is required and must resolve to an agent instance");
         }
 
         CreateSkillDTO dto = new CreateSkillDTO();
@@ -162,8 +163,8 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         cap.setStatus(STATUS_ENABLED);
         instanceCapabilitySpi.createCapability(cap);
 
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_CREATE);
+        SkillManageResultVO r = new SkillManageResultVO();
+        r.setAction(SkillManageAction.CREATE.value());
         r.setSkillId(created.getId());
         r.setName(created.getName());
         r.setDescription(created.getDescription());
@@ -171,37 +172,37 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         return r;
     }
 
-    private SkillWriteResultVO handleAppend(SkillWriteExecuteContext ctx, Long skillId) {
+    private SkillManageResultVO handleAppend(SkillManageExecuteContext ctx, Long skillId) {
         if (skillId == null) {
-            return error(ACTION_APPEND, "skillId is required for append");
+            return error(SkillManageAction.APPEND.value(), "skillId is required for append");
         }
         if (ctx.getContent() == null || ctx.getContent().isBlank()) {
-            return error(ACTION_APPEND, "content is required for append");
+            return error(SkillManageAction.APPEND.value(), "content is required for append");
         }
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
-            return error(ACTION_APPEND, "sessionId is required and must resolve to an agent instance");
+            return error(SkillManageAction.APPEND.value(), "sessionId is required and must resolve to an agent instance");
         }
         if (!isSkillBound(session.instanceId(), skillId)) {
-            return error(ACTION_APPEND, "Skill " + skillId + " is not bound to the current agent instance");
+            return error(SkillManageAction.APPEND.value(), "Skill " + skillId + " is not bound to the current agent instance");
         }
         SkillVO existing = skillSpi.getSkill(skillId);
         if (existing == null) {
-            return error(ACTION_APPEND, "Skill not found: " + skillId);
+            return error(SkillManageAction.APPEND.value(), "Skill not found: " + skillId);
         }
         String definition = existing.getDefinition();
         String prompt = extractPromptTemplate(definition);
         if (prompt == null) {
-            return error(ACTION_APPEND, "Skill has no textual 'promptTemplate' to append to");
+            return error(SkillManageAction.APPEND.value(), "Skill has no textual 'promptTemplate' to append to");
         }
         JsonNode root;
         try {
             root = readDefinitionJson(definition);
         } catch (Exception e) {
-            return error(ACTION_APPEND, "Invalid definition JSON: " + e.getMessage());
+            return error(SkillManageAction.APPEND.value(), "Invalid definition JSON: " + e.getMessage());
         }
         if (root == null || !root.isObject()) {
-            return error(ACTION_APPEND, "definition must be a JSON object");
+            return error(SkillManageAction.APPEND.value(), "definition must be a JSON object");
         }
         ObjectNode rebuilt = root.deepCopy();
         String appended = prompt.endsWith("\n") ? prompt + ctx.getContent().trim() : prompt + "\n\n" + ctx.getContent().trim();
@@ -209,15 +210,15 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         // 追加后同样要合规：否则 append 会成为绕过结构校验的后门。
         String appendValidation = validateDefinition(rebuilt.toString());
         if (appendValidation != null) {
-            return error(ACTION_APPEND, appendValidation);
+            return error(SkillManageAction.APPEND.value(), appendValidation);
         }
         CreateSkillDTO dto = new CreateSkillDTO();
         dto.setName(existing.getName());
         dto.setDescription(existing.getDescription());
         dto.setDefinition(rebuilt.toString());
         SkillVO updated = skillSpi.updateSkill(skillId, dto, session.createdBy());
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_APPEND);
+        SkillManageResultVO r = new SkillManageResultVO();
+        r.setAction(SkillManageAction.APPEND.value());
         r.setSkillId(updated.getId());
         r.setName(updated.getName());
         r.setDescription(updated.getDescription());
@@ -225,20 +226,20 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         return r;
     }
 
-    private SkillWriteResultVO handleUpdate(SkillWriteExecuteContext ctx, Long skillId) {
+    private SkillManageResultVO handleUpdate(SkillManageExecuteContext ctx, Long skillId) {
         if (skillId == null) {
-            return error(ACTION_UPDATE, "skillId is required");
+            return error(SkillManageAction.UPDATE.value(), "skillId is required");
         }
         SessionContext session = resolveSession(ctx.getSessionId());
         if (session == null || session.instanceId() == null || session.instanceId() <= 0) {
-            return error(ACTION_UPDATE, "sessionId is required and must resolve to an agent instance");
+            return error(SkillManageAction.UPDATE.value(), "sessionId is required and must resolve to an agent instance");
         }
         if (!isSkillBound(session.instanceId(), skillId)) {
-            return error(ACTION_UPDATE, "Skill " + skillId + " is not bound to the current agent instance");
+            return error(SkillManageAction.UPDATE.value(), "Skill " + skillId + " is not bound to the current agent instance");
         }
         SkillVO existing = skillSpi.getSkill(skillId);
         if (existing == null) {
-            return error(ACTION_UPDATE, "Skill not found: " + skillId);
+            return error(SkillManageAction.UPDATE.value(), "Skill not found: " + skillId);
         }
 
         CreateSkillDTO dto = new CreateSkillDTO();
@@ -251,13 +252,13 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
                 dto.setDefinition(ctx.getDefinition().trim());
                 String validation = validateDefinition(dto.getDefinition());
                 if (validation != null) {
-                    return error(ACTION_UPDATE, validation);
+                    return error(SkillManageAction.UPDATE.value(), validation);
                 }
             }
         } else {
             PatchedDefinition patched = applyMarkdownPatch(existing.getDefinition(), ctx);
             if (patched.error() != null) {
-                SkillWriteResultVO r = error(ACTION_UPDATE, patched.error());
+                SkillManageResultVO r = error(SkillManageAction.UPDATE.value(), patched.error());
                 r.setHeadings(patched.headings());
                 r.setTotalLines(patched.totalLines());
                 return r;
@@ -265,13 +266,13 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
             dto.setDefinition(patched.definition());
             String validation = validateDefinition(dto.getDefinition());
             if (validation != null) {
-                return error(ACTION_UPDATE, validation);
+                return error(SkillManageAction.UPDATE.value(), validation);
             }
         }
 
         SkillVO updated = skillSpi.updateSkill(skillId, dto, session.createdBy());
-        SkillWriteResultVO r = new SkillWriteResultVO();
-        r.setAction(ACTION_UPDATE);
+        SkillManageResultVO r = new SkillManageResultVO();
+        r.setAction(SkillManageAction.UPDATE.value());
         r.setSkillId(updated.getId());
         r.setName(updated.getName());
         r.setDescription(updated.getDescription());
@@ -280,7 +281,7 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
     }
 
     /** 复用 doc 模块的 Markdown 工具编辑 skill definition 内嵌的 promptTemplate，保留其它未知键。 */
-    private PatchedDefinition applyMarkdownPatch(String definition, SkillWriteExecuteContext ctx) {
+    private PatchedDefinition applyMarkdownPatch(String definition, SkillManageExecuteContext ctx) {
         if (definition == null || definition.isBlank()) {
             return PatchedDefinition.error("definition is empty; cannot patch");
         }
@@ -411,8 +412,8 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         }
     }
 
-    private SkillWriteResultVO error(String action, String message) {
-        SkillWriteResultVO r = new SkillWriteResultVO();
+    private SkillManageResultVO error(String action, String message) {
+        SkillManageResultVO r = new SkillManageResultVO();
         r.setAction(action);
         r.setPreview(message);
         return r;

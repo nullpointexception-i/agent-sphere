@@ -187,6 +187,24 @@ public class AgentRuntimeProperties {
         private int streamMaxRetries = 2;
         /** 流式重试固定退避时长。 */
         private Duration streamRetryDelay = Duration.ofSeconds(1);
+        /** reasoning budget 动态计算配置（未显式配置 budget_tokens 时生效）。 */
+        private ReasoningBudgetConfig reasoningBudget = new ReasoningBudgetConfig();
+
+        @Data
+        public static class ReasoningBudgetConfig {
+            /** 总开关。 */
+            private boolean enabled = true;
+            /** budget = 输出上限 × ratio。 */
+            private double ratio = 0.5;
+            /** 最小 reasoning 预算；低于该值不注入。 */
+            private int minTokens = 1024;
+            /** reasoning 预算绝对上限。 */
+            private int maxTokens = 8192;
+            /** 至少给正文/工具调用留出的比例。 */
+            private double minAnswerRatio = 0.25;
+            /** 仅对这些厂商注入 budget_tokens（DeepSeek 网关支持）。 */
+            private List<String> providers = new ArrayList<>(List.of("deepseek"));
+        }
     }
 
     /** 统一 delegate 子 Agent 执行配置。 */
