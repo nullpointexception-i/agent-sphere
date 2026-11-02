@@ -585,6 +585,8 @@ public class CompactionService {
         }
 
         List<AgentToolCallRecordVO> calls = new ArrayList<>(toolCallRecordSpi.listBySessionId(sessionId, r.getId()));
+        // 子 Agent 的内部调用不是父 Agent 的对话内容，摘要里不应出现（父侧只有一次 delegate 结果）。
+        calls.removeIf(c -> c.getSubAgentRunId() != null);
         Collections.reverse(calls);
         for (AgentToolCallRecordVO c : calls) {
             boolean succeeded = ToolCallRecordStatus.SUCCEEDED.name().equals(c.getStatus());

@@ -127,6 +127,9 @@ public class HistoryLoader {
                 continue;
             }
             List<AgentToolCallRecordVO> calls = new ArrayList<>(toolCallRecordSpi.listBySessionId(sessionId, run.getId()));
+            // 子 Agent 的内部工具调用不属于父 run 的对话历史：父 Agent 只看到一次 delegate 的结果，
+            // 回放它们会让模型看到自己从未发起过的 tool_calls（且 turn_no 含义不同）。
+            calls.removeIf(c -> c.getSubAgentRunId() != null);
             Collections.reverse(calls);
             if (!calls.isEmpty()) {
                 callsByRun.put(run.getId(), calls);

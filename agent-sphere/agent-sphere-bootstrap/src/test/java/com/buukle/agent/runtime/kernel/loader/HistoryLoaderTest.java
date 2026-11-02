@@ -403,6 +403,28 @@ class HistoryLoaderTest {
         assertEquals("call-legacy", messages.get(2).getToolCallId());
     }
 
+    @Test
+    void subAgentToolCallsAreNotReplayedIntoParentHistory() {
+        // 子 Agent 的 tool 记录与父 run 共用 run_id（靠 sub_agent_run_id 区分），
+        // 但它们不属于父 Agent 的对话：父侧只见过一次 delegate 的结果。
+        when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
+        when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
+                interaction("assistant text", "2026-10-29 04:12:21")));
+        AgentToolCallRecordVO parentCall = toolCall(1L, "call-parent", "04:12:22");
+        AgentToolCallRecordVO subCall = toolCall(2L, "call-sub", "04:12:23");
+        subCall.setSubAgentRunId(77L);
+        when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID))
+                .thenReturn(List.of(subCall, parentCall));
+
+        List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, true);
+
+        List<String> callIds = messages.stream()
+                .filter(m -> "tool".equals(m.getRole()))
+                .map(m -> m.getToolCallId())
+                .toList();
+        assertEquals(List.of("call-parent"), callIds);
+    }
+
     private static ChatMessageDTO user(String text) {
         return new ChatMessageDTO().setRole("user").setContent(text);
     }
