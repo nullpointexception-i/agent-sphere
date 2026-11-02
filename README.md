@@ -16,7 +16,7 @@
 
 This project is an AI  Agent orchestration platform. Driven by an LLM-based decision engine and combined with capabilities (built-in tools, MCP protocol, CLI execution, browser automation, etc.), it implements a primary closed loop of **Perception → Planning → Execution → Feedback**.
 
-It supports configuring different model providers: OpenAI, DeepSeek, QuickRouter (relay station), BigModel (Zhipu AI), LiteLLM, OrcaRouter.
+It supports configuring different model providers: OpenAI, DeepSeek, QuickRouter (relay station), BigModel (Zhipu AI), LiteLLM, OrcaRouter, Cheaper Inference.
 ---
 
 Screenshots
@@ -45,7 +45,7 @@ Embeddable chat widget (shadow DOM, OIDC SSO, REST + SSE timeline chat):
 
 - **LLM ReAct orchestration** — `SessionRunner` runs a `Plan → Act → Observe → Learn` loop with per-turn timeout, cancellation, and automatic context compaction.
 - **Multi-agent sub-runs** — a parent run can delegate sub-tasks to **sub-agents** via the unified **`delegate` tool** (`SessionSubRunner`); it also drives **DAG orchestration** (`tasks[]`): Kahn-layered parallel lanes, per-task `args`/`dependsOn` data injection through `ContactEnvelope`, a `delegate-lane/v1` output contract with per-key reconciliation, and bounded retries.
-- **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations / OrcaRouter, with primary + fallback route chains and graceful degradation.
+- **Multi-provider model routing** — OpenAI / DeepSeek / BigModel (Zhipu) / relay stations / OrcaRouter / Cheaper Inference, with primary + fallback route chains and graceful degradation.
 - **Unified capability layer** — MCP servers, built-in SPI tools, CLI execution, browser automation, and composite skills, dispatched through a single `ToolExecutor`.
 - **Real browser automation** — a Manifest V3 Chrome Extension bridge performs DOM operations (navigate / click / type / executeJS) with real-time execution feedback.
 - **Vision-based browser operation** — the extension captures page screenshots (viewport + full-page) and feeds them back into the model as a **visual observation** (main agent, sub-agents and embeddable widget all render them inline); `clickAt(x, y)` performs pixel-targeted trusted clicks at screenshot coordinates.

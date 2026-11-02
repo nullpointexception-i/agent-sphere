@@ -16,7 +16,7 @@
 
 本项目是一个面向 AI Agent 编排平台。它通过 LLM 驱动的决策引擎，结合能力（内置工具、MCP 协议、CLI 执行、浏览器操作等），实现从**感知→规划→执行→反馈**的初级闭环。
 
-支持配置不同模型供应商 : openai ,deepseek ,quickrouter(中转站),bigmodel(智谱AI) ,liteLLM ,orcarouter
+支持配置不同模型供应商 : openai ,deepseek ,quickrouter(中转站),bigmodel(智谱AI) ,liteLLM ,orcarouter ,cheaperinference
 ---
 
 截图效果
@@ -45,7 +45,7 @@
 
 - **LLM ReAct 编排** — `SessionRunner` 执行 `Plan → Act → Observe → Learn` 循环，支持单轮超时、取消、自动上下文压缩。
 - **多 Agent 子任务（sub-agent）** — 父 run 经统一 **`delegate` 工具**将子任务委托给**子 Agent**（`SessionSubRunner`）；同时支持 **DAG 编排**（`tasks[]`）：Kahn 分层并行泳道、per-task `args`/`dependsOn` 数据注入（`ContactEnvelope`）、`delegate-lane/v1` 输出契约 + 逐 key 对账、有界重试。
-- **多供应商模型路由** — 支持 OpenAI / DeepSeek / 智谱（BigModel）/ 中转站 / OrcaRouter，主路由 + fallback 路由链自动降级。
+- **多供应商模型路由** — 支持 OpenAI / DeepSeek / 智谱（BigModel）/ 中转站 / OrcaRouter / Cheaper Inference，主路由 + fallback 路由链自动降级。
 - **统一能力层** — MCP Server、内置 SPI 工具、CLI 执行、浏览器自动化、复合技能，通过 `ToolExecutor` 统一分发。
 - **真实浏览器自动化** — Manifest V3 Chrome 扩展桥接，执行 DOM 操作（导航 / 点击 / 输入 / executeJS）并实时执行反馈。
 - **基于视觉的浏览器操作** — 扩展可截取页面（viewport 视口与全页），以**视觉观察**注入模型上下文（主 Agent、子 Agent、可嵌入 Widget 均内联展示）；`clickAt(x, y)` 按截图设备像素坐标做像素级受信点击。

@@ -427,7 +427,7 @@ TTL（`submit` 签发 = 超时 + 15min），因此两者天然一致，不会出
 - `ProviderStrategy`：`getCompany()` / `adaptRequest()` / `adaptResponse()` / `extractToolCallsFromContent()`
 - `ProviderStrategyFactory`：**只按 `ModelProviderCompany.fromValue(company)` 选**，没有模型名兜底
 - 落地入口：`ChatRequestAdapter.adapt(request, company)` 与 `ChatResponseAdapter`
-- 现有实现：`Deepseek` / `Openai` / `Zhipu(GLM)` / `OrcaRouter` / `Qwen`
+- 现有实现：`Deepseek` / `Openai` / `Zhipu(GLM)` / `OrcaRouter` / `CheaperInference` / `Qwen`
 
 `company` 来自路由配置（`ModelRouteDrawer` 的下拉由 `GET /model/providers/companies` 动态生成，
 新增枚举值会自动出现）。**新增厂商只要加枚举 + `@Component` 策略即可，前端无需改动。**
