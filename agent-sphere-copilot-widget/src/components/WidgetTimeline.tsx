@@ -1780,32 +1780,37 @@ function RowView({
   }
 
   if (row.kind === 'run_status') {
+    const state = displayState(row);
+    const terminal =
+      state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED';
     const duration = formatDuration(c.durationMs);
     const rawText = String(c.text || row.title || '');
     // 剥离后端状态前缀（❌/⏹️/⏸️/⏳/▶️），失败用红叉表示
     const text = rawText.replace(/^[❌⏹️⏸️⏳▶️]\s*/u, '');
-    const parts = [text, duration, c.modelName].filter(
-      (p): p is string => !!p,
-    );
+    const parts = [
+      text,
+      terminal ? duration : '',
+      terminal ? c.modelName : '',
+    ].filter((p): p is string => !!p);
     const failed =
       /fail|失败|错误/i.test(text) || String(displayState(row)) === 'FAILED';
     return (
       <div className="aw-tl-divider">
-        {displayState(row) === 'RUNNING' ? (
+        {state === 'RUNNING' ? (
           <span className="aw-running-dot" />
-        ) : displayState(row) === 'WAITING' ? (
+        ) : state === 'WAITING' ? (
           <ClockIcon />
-        ) : displayState(row) === 'RESUMED' ? (
+        ) : state === 'RESUMED' ? (
           <RefreshIcon size={12} />
         ) : failed ? (
           <CloseIcon size={12} className="aw-icon-failed" />
-        ) : displayState(row) === 'AWAITING_USER' ? (
+        ) : state === 'AWAITING_USER' ? (
           <PauseIcon size={12} />
         ) : (
           <CheckIcon size={12} />
         )}
         <span>{parts.join(' · ') || text}</span>
-        <UsageChip usage={c.usage ?? undefined} />
+        {terminal ? <UsageChip usage={c.usage ?? undefined} /> : null}
       </div>
     );
   }
@@ -1943,6 +1948,13 @@ export function WidgetTimeline({
     const emitted = new Set<string>();
     const out: ReactNode[] = [];
     for (const row of rows) {
+      // wait 的等待/恢复状态由 WaitRow 独立展示，run_status 再画一条会重复且带 run 级耗时误导。
+      if (
+        row.kind === 'run_status' &&
+        ['WAITING', 'RESUMED'].includes(String(row.state ?? '').toUpperCase())
+      ) {
+        continue;
+      }
       const pid = row.kind === 'subagent' ? row.content?.parentToolCallId : null;
       const k = pid != null && pid !== '' ? String(pid) : '';
       if (k && multi.has(k)) {

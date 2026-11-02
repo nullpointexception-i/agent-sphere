@@ -3057,10 +3057,12 @@ function RowCardImpl({
 
   // 状态行：横线 + 状态 + 耗时 + LLM 模型名（不再渲染卡片）
   if (row.kind === 'run_status') {
+    const state = displayState(row);
+    const terminal =
+      state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED';
     const duration = formatDuration(row.content?.durationMs);
     const usage = row.content?.usage;
-    const isRunFailed =
-      displayState(row) === 'FAILED' || displayState(row) === 'failed';
+    const isRunFailed = state === 'FAILED' || state === 'failed';
     // 后端失败文案「❌ 执行失败」的红叉太粗，前端剥掉改细线红叉（与行文字同字号）。
     const text = (row.content?.text || row.title || '')
       .replace(/^❌\s*/, '')
@@ -3070,26 +3072,28 @@ function RowCardImpl({
       .replace(/^▶️\s*/, '');
     const parts = [
       text,
-      duration,
-      row.content?.modelName,
-      usage && usage.totalTokens
+      // 等待/恢复/运行中行不展示 run 级耗时、模型、Tokens：这些值描述的是整个 run，
+      // 放在暂停点上会被误读成「本次等待耗时」。等待详情由 WaitCard 自己展示。
+      terminal ? duration : null,
+      terminal ? row.content?.modelName : null,
+      terminal && usage && usage.totalTokens
         ? `Tokens ${formatTokens(usage.totalTokens)}`
         : null,
     ].filter((p): p is string => !!p);
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
-          {displayState(row) === 'RUNNING' ? (
+          {state === 'RUNNING' ? (
             <LoadingOutlined spin style={{ fontSize: 12 }} />
-          ) : displayState(row) === 'WAITING' ? (
+          ) : state === 'WAITING' ? (
             <ClockCircleOutlined style={{ fontSize: 12, color: '#1677ff' }} />
-          ) : displayState(row) === 'RESUMED' ? (
+          ) : state === 'RESUMED' ? (
             <SyncOutlined style={{ fontSize: 12, color: '#1677ff' }} />
           ) : isRunFailed ? (
             <CloseCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
-          ) : displayState(row) === 'AWAITING_USER' ? (
+          ) : state === 'AWAITING_USER' ? (
             <PauseCircleOutlined style={{ fontSize: 12 }} />
-          ) : displayState(row) === 'CANCELLED' ? (
+          ) : state === 'CANCELLED' ? (
             <StopOutlined style={{ fontSize: 12 }} />
           ) : (
             <CheckCircleOutlined style={{ fontSize: 12 }} />
@@ -3266,6 +3270,13 @@ export default function TimelineList({
     > = [];
     for (const r of rows) {
       if (isInternalToolRow(r)) {
+        continue;
+      }
+      // wait 的等待/恢复状态由 WaitCard 独立展示，run_status 再画一条会重复且带 run 级耗时误导。
+      if (
+        r.kind === 'run_status' &&
+        ['WAITING', 'RESUMED'].includes(String(r.state ?? '').toUpperCase())
+      ) {
         continue;
       }
       const k = parallelGroupKey(r);

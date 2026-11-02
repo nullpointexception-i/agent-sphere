@@ -785,7 +785,13 @@ public class SessionRunner {
                                     .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
                     return;
                 }
-                eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
+                // wait 的“结果”只是挂起信号，不代表等待已经完成：此时保持 RUNNING，
+                // 到点由 recordWaitToolSucceeded 发送 SUCCEEDED 并回填 elapsed_ms/resumed_at。
+                ToolCallStatus resultStatus = SuspenseStatusResolver.resolve(matching.name(), artifact)
+                        == RunStatus.WAITING
+                        ? ToolCallStatus.RUNNING
+                        : ToolCallStatus.SUCCEEDED;
+                eventPublisher.publishEvent(new RuntimeEventVO(resultStatus,
                         new RuntimeEventDataVO()
                                 .setSessionId(sid)
                                 .setRunId(rid)
