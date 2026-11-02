@@ -5,6 +5,10 @@
 import { loadSessionState, saveSessionState, clearSessionState } from './session-state.js';
 
 const CONTENT_FILES = ['content-locator.js', 'content.js'];
+// 独立插件窗口的默认尺寸；位置相对用户当前窗口左上角偏移，避免完全盖住用户窗口。
+const PLUGIN_WINDOW_SIZE = { width: 1280, height: 860 };
+const PLUGIN_WINDOW_OFFSET = 40;
+const PLUGIN_WINDOW_LAYOUT = 1;
 
 // content script sendMessage 可能在 tab 导航/重建时永不回包 → 加超时，避免命令悬挂。
 function withTimeout(promise, ms, error) {
@@ -26,16 +30,43 @@ export class TabManager {
     this.pluginWindowId = null;
     // 本 worker 内由 navigate/子 tab 明确收养的 tab；仅内存，用于窗口状态丢失时自愈。
     this.trustedTabId = null;
+    // 会话级 tab 归属：插件窗口是全局共享的，上一会话留下的 tab 绝不能被本会话复用/读取。
+    // 按 session 分别记账 —— 同一浏览器可能有多个会话并发运行，不能互相清空。
+    this.sessionId = null;
+    this.sessionTabIds = [];
+    this.sessionTabIdsBySession = new Map();
+    this.controlledBySession = new Map();
     // 已注入 content scripts 的 tab 缓存（避免每次命令都重注入 + 300ms 停顿）
     this.injectedTabs = new Set();
 
-    // Follow tabs opened by the controlled tab (target=_blank / window.open).
+    // Follow tabs opened by the controlled tab (target=_blank / window.open),
+    // but only when the opener is already in the isolated plugin window.
     chrome.tabs.onCreated.addListener((tab) => {
       void (async () => {
         await this.hydrate();
-        if (tab.openerTabId === this.controlledTabId) {
-          await this.followOpenedTab(tab);
+        const wid = await this.getPluginWindowId();
+        const opener = tab.openerTabId == null
+          ? null
+          : await chrome.tabs.get(tab.openerTabId).catch(() => null);
+        if (tab.openerTabId !== this.controlledTabId || !opener) return;
+        if (wid == null || Number(opener.windowId) !== Number(wid)) {
+          // 初次 windows.create 可能继承 extension caller 的 openerTabId。
+          // 只有 opener 本身在已验证的插件窗口内，才允许跟随；不能把新窗口移回旧用户窗。
+          console.info('[AgentSphere] ignoring tab opened outside the isolated window', {
+            tabId: tab.id,
+            openerTabId: tab.openerTabId,
+            openerWindowId: opener.windowId,
+            pluginWindowId: wid,
+          });
+          return;
         }
+        console.log('[AgentSphere] agent-opened tab detected', {
+          tabId: tab.id,
+          openerTabId: tab.openerTabId,
+          fromWindowId: tab.windowId,
+          pluginWindowId: wid,
+        });
+        await this.followOpenedTab(tab);
       })();
     });
 
@@ -48,6 +79,18 @@ export class TabManager {
 
     chrome.tabs.onRemoved.addListener((tabId) => {
       this.injectedTabs.delete(tabId);
+      if (this.isSessionTab(tabId)) {
+        this.sessionTabIds = this.sessionTabIds.filter((id) => Number(id) !== Number(tabId));
+        void saveSessionState({ tabSessionTabIds: this.sessionTabIds });
+      }
+      for (const [key, ids] of this.sessionTabIdsBySession) {
+        if (ids.some((id) => Number(id) === Number(tabId))) {
+          this.sessionTabIdsBySession.set(key, ids.filter((id) => Number(id) !== Number(tabId)));
+        }
+      }
+      for (const [key, id] of this.controlledBySession) {
+        if (id != null && Number(id) === Number(tabId)) this.controlledBySession.delete(key);
+      }
       if (tabId === this.controlledTabId) {
         this.controlledTabId = null;
         clearSessionState('controlledTabId');
@@ -69,6 +112,10 @@ export class TabManager {
 
   /** Service worker 重启后从 storage.session 恢复窗口/分组/受控 tab。 */
   async hydrate() {
+    // 迁移只执行一次且必须先完成：并发的 hydrate 不能在迁移中途读到旧状态，
+    // 否则会把刚写入的新窗口 id 清掉（表现为 pluginWindowId=null）。
+    if (!this.layoutReady) this.layoutReady = this.migrateLayout();
+    await this.layoutReady;
     const st = await loadSessionState();
     if (this.pluginWindowId == null && st.pluginWindowId != null) {
       this.pluginWindowId = st.pluginWindowId;
@@ -79,6 +126,95 @@ export class TabManager {
     if (this.controlledTabId == null && st.controlledTabId != null) {
       this.controlledTabId = st.controlledTabId;
     }
+    // 只在内存里还没有会话时恢复：beginSession 已经声明了本次会话，不能被旧值覆盖。
+    if (this.sessionId == null) {
+      if (st.tabSessionId != null) this.sessionId = st.tabSessionId;
+      if (Array.isArray(st.tabSessionTabIds)) {
+        this.sessionTabIds = st.tabSessionTabIds.filter((id) => id != null);
+      }
+    }
+  }
+
+  /**
+   * 声明“当前会话”。插件窗口是全局共享的，上一会话留下的 tab 绝不能被本会话
+   * 复用或读取（线上曾读到别的任务残留的站点页面）。
+   *
+   * <p>切换会话时只换归属登记，**不关闭任何 tab**：同一浏览器里可能还有别的
+   * 会话在并发运行，关掉会直接破坏对方。按 session 分别记账，切回来还能续用。
+   */
+  beginSession(sessionId) {
+    if (sessionId == null) return;
+    const key = String(sessionId);
+    if (this.sessionId != null && String(this.sessionId) === key) return;
+    if (this.sessionId != null) {
+      const prevKey = String(this.sessionId);
+      this.sessionTabIdsBySession.set(prevKey, this.sessionTabIds);
+      this.controlledBySession.set(prevKey, this.controlledTabId);
+    }
+    this.sessionId = sessionId;
+    this.sessionTabIds = this.sessionTabIdsBySession.get(key) || [];
+    this.controlledTabId = this.controlledBySession.get(key) ?? null;
+    this.trustedTabId = this.controlledTabId;
+    void saveSessionState({ tabSessionId: sessionId, tabSessionTabIds: this.sessionTabIds });
+    if (this.controlledTabId != null) {
+      void saveSessionState({ controlledTabId: this.controlledTabId });
+    } else {
+      void clearSessionState('controlledTabId');
+    }
+  }
+
+  /** 把 tab 登记为本会话的 tab；只有登记过的 tab 才允许被本会话复用。 */
+  registerSessionTab(tabId) {
+    if (tabId == null) return;
+    if (this.isSessionTab(tabId)) return;
+    this.sessionTabIds = [...this.sessionTabIds, tabId];
+    if (this.sessionId != null) {
+      this.sessionTabIdsBySession.set(String(this.sessionId), this.sessionTabIds);
+    }
+    void saveSessionState({ tabSessionTabIds: this.sessionTabIds });
+  }
+
+  isSessionTab(tabId) {
+    if (tabId == null) return false;
+    return this.sessionTabIds.some((id) => Number(id) === Number(tabId));
+  }
+
+  /**
+   * 读取 tab 的真实页面地址（`location.href`）。
+   *
+   * <p>`chrome.tabs.url` 在重定向/导航竞态下可能是旧值 —— 线上出现过 tabs.url 报
+   * 目标页、页面实际停在拦截页的情况。任何“已到达目标页”的判定都必须以页面
+   * 自己的 location 为准。读不到（未注入/导航中）时返回 null，由调用方决定是否重新导航。
+   */
+  async readPageUrl(tabId, timeoutMs = 3000) {
+    if (tabId == null) return null;
+    try {
+      const res = await withTimeout(
+        chrome.tabs.sendMessage(tabId, { type: 'agent_sphere_ping' }, { frameId: 0 }),
+        timeoutMs,
+        new Error('agent_sphere_ping timed out'),
+      );
+      return res?.url || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * 升级前旧版本把 controlledTabId/pluginGroupId 指向用户窗口里的受控 tab，
+   * 这些 legacy 值不能再用来识别插件窗口。只清浏览器操作状态，保留 targetOrigin 等站点安全状态。
+   */
+  async migrateLayout() {
+    const st = await loadSessionState();
+    if (st.pluginWindowLayout === PLUGIN_WINDOW_LAYOUT) return;
+    await chrome.storage.session.remove([
+      'pluginWindowId',
+      'pluginGroupId',
+      'controlledTabId',
+    ]).catch(() => {});
+    this.pluginGroupId = null;
+    this.controlledTabId = null;
+    await saveSessionState({ pluginWindowLayout: PLUGIN_WINDOW_LAYOUT });
   }
 
   async getPluginWindowId() {
@@ -91,9 +227,14 @@ export class TabManager {
     this.pluginGroupId = null;
     this.controlledTabId = null;
     this.trustedTabId = null;
+    // 窗口没了，会话登记的 tab 也都没了；保留内存里的 sessionId（会话可能仍在跑）。
+    this.sessionTabIds = [];
+    this.sessionTabIdsBySession.clear();
+    this.controlledBySession.clear();
     await clearSessionState('pluginWindowId');
     await clearSessionState('pluginGroupId');
     await clearSessionState('controlledTabId');
+    await clearSessionState('tabSessionTabIds');
   }
 
   /**
@@ -102,11 +243,13 @@ export class TabManager {
    */
   async windowLooksLikePlugin(windowId) {
     if (windowId == null) return false;
+    // Only accept evidence scoped to the current layout. Legacy controlledTabId
+    // used to point at an ordinary user tab and must not identify its window.
     if (this.pluginGroupId != null) {
       const g = await chrome.tabGroups.get(this.pluginGroupId).catch(() => null);
       if (g && Number(g.windowId) === Number(windowId)) return true;
     }
-    for (const tabId of [this.controlledTabId, this.trustedTabId]) {
+    for (const tabId of [this.trustedTabId]) {
       if (tabId == null) continue;
       const tab = await chrome.tabs.get(tabId).catch(() => null);
       if (tab && Number(tab.windowId) === Number(windowId)) return true;
@@ -122,15 +265,21 @@ export class TabManager {
     const prev = await chrome.windows
       .getLastFocused({ windowTypes: ['normal'] })
       .catch(() => null);
+    const bounds = {
+      ...PLUGIN_WINDOW_SIZE,
+      ...(prev?.left != null && prev?.top != null
+        ? { left: prev.left + PLUGIN_WINDOW_OFFSET, top: prev.top + PLUGIN_WINDOW_OFFSET }
+        : {}),
+    };
     let win = await chrome.windows
-      .create({ url, type: 'normal', focused: false })
+      .create({ url, type: 'normal', focused: false, ...bounds })
       .catch((e) => {
         console.warn('[AgentSphere] windows.create(focused:false) failed:', e?.message);
         return null;
       });
     if (!win) {
       // 个别环境/策略下 inactive window 创建失败；退化为普通创建，随后再把焦点还给用户。
-      win = await chrome.windows.create({ url, type: 'normal' }).catch((e) => {
+      win = await chrome.windows.create({ url, type: 'normal', ...bounds }).catch((e) => {
         console.warn('[AgentSphere] windows.create fallback failed:', e?.message);
         return null;
       });
@@ -203,12 +352,14 @@ export class TabManager {
       return undefined;
     }
     if (win.id != null && Number(tab.windowId) !== Number(win.id)) {
-      tab = await chrome.tabs.move(tab.id, {
-        windowId: win.id,
-        index: -1,
-      }).catch(() => tab);
+      console.warn('[AgentSphere] new tab landed outside its created window; not moving it', {
+        tabId: tab.id,
+        tabWindowId: tab.windowId,
+        createdWindowId: win.id,
+      });
     }
     this.pluginWindowId = tab.windowId ?? windowId;
+    this.trustedTabId = tab.id;
     await saveSessionState({ pluginWindowId: this.pluginWindowId });
     await this.groupTab(tab.id);
     console.log('[AgentSphere] isolated window ready', {
@@ -226,28 +377,47 @@ export class TabManager {
     if (!tab) return false;
     const wid = await this.getPluginWindowId();
     if (wid != null && Number(tab.windowId) === Number(wid)) return true;
-    // 窗口状态在个别 Chrome 版本上可能短暂丢失；本 worker 内 navigate 刚收养过这个 tab
-    // 时，以 tab.windowId 重新锚定，避免 getContent 立刻报 no_tab。
-    if (this.trustedTabId != null && Number(this.trustedTabId) === Number(tabId)) {
-      this.pluginWindowId = tab.windowId;
-      await saveSessionState({ pluginWindowId: tab.windowId });
-      return true;
-    }
-    return false;
+    // 本 worker 内 navigate 刚收养过的 tab：只判定，不改写 pluginWindowId，
+    // 否则一旦 trustedTabId 指向用户窗口，插件窗口锚点就会被写成用户窗口。
+    return this.trustedTabId != null && Number(this.trustedTabId) === Number(tabId);
   }
 
   async followOpenedTab(tab) {
     try {
       await this.hydrate();
+      const wid = await this.getPluginWindowId();
+      if (wid == null || !await this.windowLooksLikePlugin(wid)) {
+        console.warn('[AgentSphere] refusing to follow tab without a verified plugin window', {
+          tabId: tab.id,
+          pluginWindowId: wid,
+        });
+        return;
+      }
+      const opener = tab.openerTabId == null
+        ? null
+        : await chrome.tabs.get(tab.openerTabId).catch(() => null);
+      if (!opener || Number(opener.windowId) !== Number(wid)) {
+        console.warn('[AgentSphere] refusing cross-window tab adoption', {
+          tabId: tab.id,
+          openerTabId: tab.openerTabId,
+          openerWindowId: opener?.windowId,
+          pluginWindowId: wid,
+        });
+        return;
+      }
+      if (Number(tab.windowId) !== Number(wid)) {
+        // Chrome 把子 tab 开到了别的窗口（如 popup）：保持独立，不收养、不移动。
+        console.log('[AgentSphere] agent-opened tab stays in its own window', {
+          tabId: tab.id,
+          tabWindowId: tab.windowId,
+          pluginWindowId: wid,
+        });
+        return;
+      }
       this.controlledTabId = tab.id;
       this.trustedTabId = tab.id;
+      this.registerSessionTab(tab.id);
       await saveSessionState({ controlledTabId: tab.id });
-      if (this.pluginWindowId != null && Number(tab.windowId) !== Number(this.pluginWindowId)) {
-        await chrome.tabs.move(tab.id, {
-          windowId: this.pluginWindowId,
-          index: -1,
-        }).catch(() => {});
-      }
       await this.injectContentScript(tab.id);
       await this.groupTab(tab.id);
       this.tabFollowPending = {
@@ -267,6 +437,12 @@ export class TabManager {
   setControlled(tabId) {
     this.controlledTabId = tabId;
     this.trustedTabId = tabId;
+    if (tabId != null) {
+      this.registerSessionTab(tabId);
+      if (this.sessionId != null) {
+        this.controlledBySession.set(String(this.sessionId), tabId);
+      }
+    }
     saveSessionState({ controlledTabId: tabId });
   }
 
@@ -328,20 +504,25 @@ export class TabManager {
    * Find an already-open tab showing `url` **inside the plugin window only**.
    * Never reuses a user tab: the whole point of the isolated window is that the
    * agent's navigation cannot steal or overwrite the user's current tab.
+   *
+   * <p>也绝不跨会话复用：插件窗口是全局共享的，只认本会话登记过的 tab。
+   * 旧实现会回落到“窗口内任意 tab”，线上因此把上一任务残留的页面当成了本会话的受控页。
    */
   async findReusableTab(url) {
     const want = this.normalizeUrl(url);
     if (!want) return null;
+    if (!this.sessionTabIds.length) return null;
     const wid = await this.getPluginWindowId();
     if (wid == null) return null;
     if (!await this.windowLooksLikePlugin(wid)) return null;
-    const gid = this.pluginGroupId;
+    const allowed = new Set(this.sessionTabIds.map((id) => Number(id)));
     const tabs = await chrome.tabs.query({ windowId: wid }).catch(() => []);
-    const usable = tabs.filter((t) => t.id != null && /^https?:/.test(t.url || t.pendingUrl || ''));
+    const usable = tabs.filter(
+      (t) => t.id != null && allowed.has(Number(t.id)) && /^https?:/.test(t.url || t.pendingUrl || ''),
+    );
     const ranked = [
       ...usable.filter((t) => t.id === this.controlledTabId),
-      ...usable.filter((t) => gid != null && t.groupId === gid),
-      ...usable,
+      ...usable.filter((t) => t.id !== this.controlledTabId),
     ];
     for (const t of ranked) {
       if (this.normalizeUrl(t.url || t.pendingUrl) === want) return t;
@@ -457,13 +638,14 @@ export class TabManager {
       const tab = await chrome.tabs.get(tabId).catch(() => null);
       if (!tab) return false;
 
-      // 被子 tab 开到别的窗口时，先移回插件窗口；用户窗口里的 tab 不移动。
+      // 不在插件窗口里的 tab 只记录、不移动：移动会把用户窗口/新窗口的 tab 互相拽走。
       if (Number(tab.windowId) !== Number(this.pluginWindowId)) {
-        const moved = await chrome.tabs.move(tabId, {
-          windowId: this.pluginWindowId,
-          index: -1,
-        }).catch(() => null);
-        if (!moved) return false;
+        console.warn('[AgentSphere] tab is outside the plugin window; not grouping', {
+          tabId,
+          tabWindowId: tab.windowId,
+          pluginWindowId: this.pluginWindowId,
+        });
+        return false;
       }
 
       let gid = this.pluginGroupId;
@@ -481,7 +663,12 @@ export class TabManager {
         await chrome.tabs.group({ tabIds: [tabId], groupId: gid });
         return true;
       }
-      const newId = await chrome.tabs.group({ tabIds: [tabId] });
+      // 不指定 windowId 时 Chrome 把新 group 建在“当前窗口”（用户聚焦的窗口），
+      // 会把 tab 从插件窗口拽进用户窗口。必须显式指定插件窗口。
+      const newId = await chrome.tabs.group({
+        tabIds: [tabId],
+        createProperties: { windowId: this.pluginWindowId },
+      });
       this.pluginGroupId = newId;
       await saveSessionState({ pluginGroupId: newId });
       try {

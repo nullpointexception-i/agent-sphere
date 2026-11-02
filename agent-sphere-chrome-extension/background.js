@@ -300,12 +300,16 @@ function fetchSsoDisplayName() {
 }
 
 // --- Helpers ---
+/**
+ * 兜底的目标 tab：只认“受控且确实在插件窗口内”的 tab。
+ * 旧实现会回落到窗口内任意 active tab —— 插件窗口是全局共享的，那会把上一会话
+ * 残留的页面（甚至别的站点）当成本会话的目标页。宁可返回 null 报 NO_TAB，
+ * 也不读不属于本会话的页面。
+ */
 async function getActiveTabId() {
-  const wid = await tabManager.getPluginWindowId();
-  if (wid == null) return null;
-  if (!await tabManager.windowLooksLikePlugin(wid)) return null;
-  const [tab] = await chrome.tabs.query({ windowId: wid, active: true });
-  return tab?.id;
+  const controlled = tabManager.getControlled();
+  if (controlled != null && await tabManager.isPluginTab(controlled)) return controlled;
+  return null;
 }
 
 /** 解析本次动作的目标 tab：显式 tabId 必须属于插件窗口，否则不碰用户 tab。 */
@@ -344,6 +348,9 @@ function mapErrorCategory(e) {
 
 // --- Command execution ---
 async function executeInPage(commandId, action, params, sessionId) {
+  // 先声明会话归属：插件窗口全局共享，上一会话的 tab 不能被本会话读取/复用。
+  // 必须早于风控检查 —— 否则会拿别的会话的 tab 标题/URL 做判定。
+  tabManager.beginSession(sessionId);
   // 风控命中：按 session 锁定，之后一切命令直接拒绝（命中即停，不等待/不重试/不绕行）
   const checkTabId = params.tabId || tabManager.getControlled();
   if (sessionId && riskLockedSessions.has(sessionId)) {
@@ -1087,80 +1094,95 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
   }
 }
 
+/** 把 URL 归一化成可比较形式；ignoreHash 用于“是否被重定向”的展示判断。 */
+function comparableUrl(raw, ignoreHash) {
+  try {
+    const u = new URL(raw);
+    if (ignoreHash) u.hash = '';
+    return u.toString();
+  } catch (e) {
+    return String(raw || '');
+  }
+}
+
+/** 两个 URL 是否指向同一地址。默认包含 hash —— hash 路由（如 #preview）也是真实导航目标。 */
+function sameUrl(a, b, ignoreHash = false) {
+  if (!a || !b) return false;
+  return comparableUrl(a, ignoreHash) === comparableUrl(b, ignoreHash);
+}
+
+/**
+ * 读取页面真实地址。`chrome.tabs.url` 在重定向/导航竞态下可能是旧值，不能作为
+ * “已到达目标页”的依据；读不到时回退到 tabs.url。
+ */
+async function resolveActualUrl(tabId, fallback) {
+  const live = await tabManager.readPageUrl(tabId);
+  return live || fallback || null;
+}
+
+/** 导航收尾：统一用页面真实地址回传，并更新站点守卫/前台/分组。 */
+async function completeNavigate(commandId, sessionId, tabId, navT0, requestedUrl, extra = {}) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  const actualUrl = await resolveActualUrl(tabId, tab?.url || requestedUrl);
+  const redirected = !sameUrl(actualUrl, requestedUrl, true);
+  targetOrigin = originOf(actualUrl) || targetOrigin;
+  await saveSessionState({ targetOrigin });
+  tabManager.setControlled(tabId);
+  await tabManager.ensureForeground(tabId);
+  await tabManager.groupTab(tabId);
+  const data = { tabId, url: actualUrl, redirected, ...extra };
+  recordNavigate(commandId, sessionId, navT0, { ...data, ok: true });
+  sendCallbackSafe(commandId, okResult(data, 'navigate'), tabId, sessionId);
+}
+
+/**
+ * 在已存在的插件 tab 上完成一次**真实**导航。
+ *
+ * <p>复用分支必须先读页面真实 location 再决定是否导航。旧实现只比对
+ * `chrome.tabs.url`，命中就直接返回成功 —— 线上因此出现“navigate 秒回成功、
+ * 实际页面仍停在拦截页”，模型却把这次假成功当成一次恢复尝试。
+ */
+async function navigateExistingTab(commandId, sessionId, tabId, params, navT0, extra = {}) {
+  let liveUrl = await tabManager.readPageUrl(tabId);
+  if (liveUrl == null && await tabManager.ensureContentScript(tabId)) {
+    liveUrl = await tabManager.readPageUrl(tabId);
+  }
+  if (liveUrl == null || !sameUrl(liveUrl, params.url)) {
+    await chrome.tabs.update(tabId, { url: params.url });
+    await tabManager.waitForTabComplete(tabId, 10000);
+    await waitIdle(tabId);
+  }
+  if (!await tabManager.ensureContentScript(tabId)) {
+    sendCallbackSafe(commandId, failResult('Content script unavailable after navigation', ErrorCategory.INJECT_FAILED), tabId, sessionId);
+    return;
+  }
+  await completeNavigate(commandId, sessionId, tabId, navT0, params.url, extra);
+}
+
 async function handleNavigate(commandId, params, sessionId) {
   const navT0 = Date.now();
+  tabManager.beginSession(sessionId);
   // If tabId specified, update that tab instead of creating a new one.
   // Only a tab already inside the AgentSphere window is eligible; a tabId that
   // points at the user's tab is ignored (we never navigate the user's tab).
   if (params.tabId && await tabManager.isPluginTab(params.tabId)) {
     try {
-      const tab = await chrome.tabs.update(params.tabId, { url: params.url });
-      await tabManager.waitForTabComplete(tab.id, 10000);
-      await waitIdle(tab.id);
-      if (!await tabManager.ensureContentScript(tab.id)) {
-        sendCallbackSafe(commandId, failResult('Content script unavailable after navigation', ErrorCategory.INJECT_FAILED), tab.id, sessionId);
-        return;
-      }
-      const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
-      const finalUrl = finalTab.url || params.url;
-      targetOrigin = originOf(finalUrl) || targetOrigin;
-      await saveSessionState({ targetOrigin });
-      tabManager.setControlled(tab.id);
-      await tabManager.ensureForeground(tab.id);
-      tabManager.groupTab(tab.id);
-      recordNavigate(commandId, sessionId, navT0, { url: finalUrl, redirected: finalUrl !== params.url, ok: true });
-      sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
+      await navigateExistingTab(commandId, sessionId, params.tabId, params, navT0);
       return;
     } catch (e) {
       console.log('[AgentSphere] Failed to update tab, falling back to create:', e.message);
     }
   }
 
-  // Reuse an already-open tab showing this URL **inside the plugin window**.
-  // User tabs are never reused: the agent's navigation must not touch the
-  // user's current tab or window.
+  // Reuse an already-open tab showing this URL **inside the plugin window and this session**.
+  // User tabs are never reused, and neither are tabs left behind by another session.
   const reusable = await tabManager.findReusableTab(params.url);
   if (reusable) {
     try {
-      if (await tabManager.ensureContentScript(reusable.id)) {
-        const existingUrl = reusable.url || params.url;
-        targetOrigin = originOf(existingUrl) || targetOrigin;
-        await saveSessionState({ targetOrigin });
-        tabManager.setControlled(reusable.id);
-        await tabManager.ensureForeground(reusable.id);
-        await tabManager.groupTab(reusable.id);
-        recordNavigate(commandId, sessionId, navT0, { url: existingUrl, redirected: existingUrl !== params.url, reused: true, ok: true });
-        sendCallbackSafe(commandId, okResult({ tabId: reusable.id, url: existingUrl, redirected: existingUrl !== params.url, reused: true }, 'navigate'), reusable.id, sessionId);
-        return;
-      }
+      await navigateExistingTab(commandId, sessionId, reusable.id, params, navT0, { reused: true });
+      return;
     } catch (e) {
       console.log('[AgentSphere] Reusable tab unusable, creating new one:', e.message);
-    }
-  }
-
-  // Reuse existing tab if same URL is already open in the plugin window.
-  if (tabManager.getControlled()) {
-    try {
-      const existingTab = await chrome.tabs.get(tabManager.getControlled());
-      if (await tabManager.isPluginTab(existingTab.id)
-          && (existingTab?.url === params.url || existingTab?.pendingUrl === params.url)) {
-        if (!await tabManager.ensureContentScript(existingTab.id)) {
-          sendCallbackSafe(commandId, failResult('Content script unavailable in existing tab', ErrorCategory.INJECT_FAILED), existingTab.id, sessionId);
-          return;
-        }
-        const existingUrl = existingTab.url || params.url;
-        targetOrigin = originOf(existingUrl) || targetOrigin;
-        await saveSessionState({ targetOrigin });
-        tabManager.setControlled(existingTab.id);
-        await tabManager.ensureForeground(existingTab.id);
-        await tabManager.groupTab(existingTab.id);
-        recordNavigate(commandId, sessionId, navT0, { url: existingUrl, redirected: existingUrl !== params.url, reused: true, ok: true });
-        sendCallbackSafe(commandId, okResult({ tabId: existingTab.id, url: existingUrl, redirected: existingUrl !== params.url, reused: true }, 'navigate'), existingTab.id, sessionId);
-        return;
-      }
-    } catch (e) {
-      // Tab no longer exists, create a new one
-      console.log('[AgentSphere] Controlled tab gone, creating new one');
     }
   }
 
@@ -1183,14 +1205,7 @@ async function handleNavigate(commandId, params, sessionId) {
     sendCallbackSafe(commandId, failResult('Content script unavailable after navigation', ErrorCategory.INJECT_FAILED), tab.id, sessionId);
     return;
   }
-  const finalTab = await chrome.tabs.get(tab.id).catch(() => tab);
-  const finalUrl = finalTab.url || params.url;
-  targetOrigin = originOf(finalUrl) || targetOrigin;
-  await saveSessionState({ targetOrigin });
-  await tabManager.ensureForeground(tab.id);
-  await tabManager.groupTab(tab.id);
-  recordNavigate(commandId, sessionId, navT0, { url: finalUrl, redirected: finalUrl !== params.url, ok: true });
-  sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
+  await completeNavigate(commandId, sessionId, tab.id, navT0, params.url);
 }
 
 function originOf(url) {

@@ -15,7 +15,15 @@
  *
  * NEVER call this from offscreen.js — offscreen documents have no chrome.storage.
  */
-const KEYS = ['pluginGroupId', 'pluginWindowId', 'targetOrigin', 'controlledTabId'];
+const KEYS = [
+  'pluginGroupId',
+  'pluginWindowId',
+  'pluginWindowLayout',
+  'targetOrigin',
+  'controlledTabId',
+  'tabSessionId',
+  'tabSessionTabIds',
+];
 
 export async function loadSessionState() {
   try {
