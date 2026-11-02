@@ -1,6 +1,9 @@
 package com.buukle.agent.runtime.kernel.model.invoke;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
+import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
+import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
 import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
@@ -24,18 +27,48 @@ public class KernelLlmService {
     private final ModelProviderSpi modelProviderSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final AgentRuntimeProperties properties;
+    private final AgentLlmInteractionRecordSpi interactionRecordSpi;
 
     public KernelLlmService(ModelProviderSpi modelProviderSpi,
                             ApplicationEventPublisher eventPublisher,
-                            AgentRuntimeProperties properties) {
+                            AgentRuntimeProperties properties,
+                            AgentLlmInteractionRecordSpi interactionRecordSpi) {
         this.modelProviderSpi = modelProviderSpi;
         this.eventPublisher = eventPublisher;
         this.properties = properties;
+        this.interactionRecordSpi = interactionRecordSpi;
+    }
+
+    /**
+     * 主 Agent 问答轮开始前建 RUNNING 记录。
+     *
+     * <p>非主 Agent 调用（标题生成 / 压缩 / 子 Agent）不预建，仍在调用结束后由监听器插入。
+     * 预建失败必须让本次调用失败：否则会出现「已经流式输出但没有轮次记录」的不可恢复状态。
+     */
+    private void preCreateTurnRecord(LlmInteractionMeta meta, String modelName) {
+        if (meta == null
+                || meta.getInteractionType() != LlmInteractionType.CHAT_REPLY
+                || meta.getTurnNo() == null) {
+            return;
+        }
+        AgentLlmInteractionRecordVO vo = new AgentLlmInteractionRecordVO();
+        vo.setRunId(meta.getRunId());
+        vo.setSessionId(meta.getSessionId());
+        vo.setTurnNo(meta.getTurnNo());
+        vo.setInteractionType(meta.getInteractionType().name());
+        vo.setModelName(modelName);
+        vo.setSubAgentRunId(meta.getSubAgentRunId());
+        vo.setStatus(AgentLlmInteractionRecord.STATUS_RUNNING);
+        meta.setRecordId(interactionRecordSpi.createOrGetRunning(vo));
     }
 
     public CompletableFuture<Void> stream(String company, String baseUrl, String apiKey, String modelName,
                                           ChatCompletionRequestDTO request,
                                           Consumer<LLMEvent> onEvent, LlmInteractionMeta meta) {
+        // 主 Agent 轮次：调用前先建 RUNNING 记录，Timeline 从第一个 token 起就有稳定引用。
+        // 失败在这里直接抛出（不启动流），避免"没有轮次记录却已经开始输出"。
+        preCreateTurnRecord(meta, modelName);
+
         CompletableFuture<Void> future = new CompletableFuture<>();
 
         Thread.ofVirtual().start(() -> {

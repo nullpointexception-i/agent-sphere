@@ -17,6 +17,10 @@ public class LlmInteractionMeta {
     private Long modelRouteId;
     /** 请求发送前的字符估算 prompt token（用于 actual/estimated 校准）。 */
     private Integer estimatedPromptTokens;
+    /** 主 Agent 问答轮次序号（= run.loop_count）；非主 Agent 调用为 null。 */
+    private Integer turnNo;
+    /** 调用前预建的 interaction 记录 id；为 null 时走「调用结束后插入」的旧路径。 */
+    private Long recordId;
 
     public LlmInteractionMeta(Long runId, Long sessionId, LlmInteractionType interactionType, Long subAgentRunId) {
         this.runId = runId;

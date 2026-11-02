@@ -32,7 +32,8 @@ class KernelLlmServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new KernelLlmService(modelProviderSpi, eventPublisher, properties);
+        service = new KernelLlmService(modelProviderSpi, eventPublisher, properties,
+                org.mockito.Mockito.mock(com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi.class));
     }
 
     @Test

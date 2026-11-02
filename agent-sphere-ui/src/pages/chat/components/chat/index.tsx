@@ -35,6 +35,8 @@ interface ChatMainProps {
   inputValue: string;
   onInputValueChange: (v: string) => void;
   sending: boolean;
+  /** 运行态权威值（来源表聚合）：发送锁 / pending 判定唯一来源。 */
+  runtimeState?: any;
   onSendMessage: () => void;
   onCancelSend: () => void;
   onCancelClarification?: (clarification: any) => void;
@@ -82,6 +84,7 @@ export default function ChatMain({
   inputValue,
   onInputValueChange,
   sending,
+  runtimeState,
   onSendMessage,
   onCancelSend,
   onExpandOpen,
@@ -185,13 +188,9 @@ export default function ChatMain({
     return () => cancelAnimationFrame(raf);
   }, [lastTimelineKey]);
 
-  // 单一事实来源：澄清卡只渲染 timeline；messages 不再参与运行态锁定，
-  // 避免 messages 里残留的 pending 澄清把 Footer 永久锁在「执行中/停止」。
+  // 输入锁只认运行态接口（来源表聚合）：timeline 只负责渲染，不参与判断
   const hasPendingClarifications =
-    Boolean(clarificationBatch?.items?.length) ||
-    timeline.some(
-      (r: any) => r.kind === 'clarification' && r.state === 'PENDING',
-    );
+    Number(runtimeState?.pendingClarifications || 0) > 0;
 
   // 实例未开放主站会话时禁用输入（服务端同样会拦，这里只为体验一致）
   const consoleBlocked =
@@ -216,7 +215,7 @@ export default function ChatMain({
     onInputValueChange,
     sending,
     hasPendingClarifications,
-    hasPendingToolApproval: Boolean(toolApprovalBatch),
+    hasPendingToolApproval: Number(runtimeState?.pendingToolApprovals || 0) > 0,
     onSendMessage,
     onCancel: onCancelSend,
     onExpandOpen,

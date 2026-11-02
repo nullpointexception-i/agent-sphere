@@ -17,6 +17,7 @@ import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.dtvo.vo.ClarificationVO;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.SessionRuntimeStateVO;
 import com.buukle.agent.instance.dtvo.vo.ToolApprovalVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
@@ -556,6 +557,43 @@ public class ChatRuntimeService {
     public com.buukle.agent.instance.dtvo.vo.ToolApprovalVO pendingToolApproval(Long sessionId) {
         assertSessionOwnership(sessionId);
         return toolApprovalService.getPending(sessionId);
+    }
+
+    /**
+     * 会话运行态：发送锁与 pending 判定的唯一权威来源。
+     *
+     * <p>全部字段来自来源表；不读 {@code agent_timeline}。
+     */
+    public SessionRuntimeStateVO getState(Long sessionId) {
+        assertSessionOwnership(sessionId);
+        RunVO active = runSpi.findActiveRun(sessionId);
+        List<ClarificationVO> clarifications = pendingClarifications(sessionId);
+        ToolApprovalVO approval = pendingToolApproval(sessionId);
+        int queueSize = pendingQueue(sessionId).size();
+        SessionVO session = sessionSpi.getSession(sessionId);
+
+        // 只有活动 run 名下的待办才可以被用户响应；没有活动 run 时，历史残留不应继续锁输入
+        int pendingClarificationCount = active == null ? 0 : clarifications.size();
+        int pendingApprovalCount = active != null && approval != null
+                && active.getId().equals(approval.getRunId()) ? 1 : 0;
+
+        SessionRuntimeStateVO vo = new SessionRuntimeStateVO();
+        vo.setSessionId(sessionId);
+        vo.setRunId(active == null ? null : active.getId());
+        vo.setRunStatus(active == null ? null : active.getStatus());
+        vo.setLoopCount(active == null ? null : active.getLoopCount());
+        vo.setLoopLimit(active == null ? null : active.getLoopLimit());
+        vo.setRunMode(session == null ? null : session.getRunMode());
+        vo.setPendingClarifications(pendingClarificationCount);
+        vo.setPendingToolApprovals(pendingApprovalCount);
+        vo.setPendingQueue(queueSize);
+
+        SessionActionPolicy.Decision decision = SessionActionPolicy.decide(
+                vo.getRunStatus(), vo.getPendingClarifications(), vo.getPendingToolApprovals());
+        vo.setCanSend(decision.canSend());
+        vo.setBlockReasons(decision.blockReasons());
+        vo.setServerTime(java.time.LocalDateTime.now());
+        return vo;
     }
 
     public void resolveToolApproval(Long sessionId, Long runId, String approvalId, String decisionsJson) {

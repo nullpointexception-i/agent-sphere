@@ -4,7 +4,9 @@ import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
+import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,12 +37,16 @@ class TimelineRecorderTest {
     AgentTimelineSpi timelineSpi;
     @Mock
     AgentPendingClarificationMapper clarificationMapper;
+    @Mock
+    RunSpi runSpi;
+    @Mock
+    AgentLlmInteractionRecordSpi interactionRecordSpi;
 
     private TimelineRecorder recorder;
 
     @BeforeEach
     void setUp() {
-        recorder = new TimelineRecorder(timelineSpi, clarificationMapper);
+        recorder = new TimelineRecorder(timelineSpi, clarificationMapper, runSpi, interactionRecordSpi);
     }
 
     @Test

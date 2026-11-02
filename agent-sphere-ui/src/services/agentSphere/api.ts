@@ -193,6 +193,8 @@ export const agentApi = {
       request<any>(`${BASE}/instance/sessions/${id}/tool-stats${runId != null ? `?runId=${runId}` : ''}`),
     pendingQueue: (id: number) =>
       request<any[]>(`${BASE}/runtime/${id}/queue`),
+    getRuntimeState: (id: number) =>
+      request<any>(`${BASE}/runtime/${id}/state`),
     withdrawQueue: (id: number, queueId: string) =>
       request<{ result: string }>(`${BASE}/runtime/${id}/queue/${queueId}`, { method: 'DELETE' }),
     feedback: (sessionId: number, interactionId: number, runId: number | null | undefined, value: string) =>

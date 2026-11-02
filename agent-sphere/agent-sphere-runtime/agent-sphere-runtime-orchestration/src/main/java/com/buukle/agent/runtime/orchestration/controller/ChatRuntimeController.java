@@ -80,6 +80,12 @@ public class ChatRuntimeController {
         return ResponseEntity.ok(chatRuntimeService.pendingClarifications(sessionId));
     }
 
+    /** 运行态权威来源：发送锁 / pending 判定只读这里。 */
+    @GetMapping("/{sessionId}/state")
+    public ResponseEntity<?> state(@PathVariable Long sessionId) {
+        return ResponseEntity.ok(chatRuntimeService.getState(sessionId));
+    }
+
     @PostMapping("/{sessionId}/run/{runId}/clarifications/resolve")
     public ResponseEntity<?> resolveClarifications(@PathVariable Long sessionId,
                                                     @PathVariable Long runId,

@@ -81,6 +81,7 @@ export default function Chat() {
   const newestSeqRef = useRef<number | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [sending, setSending] = useState(false);
+  const [runtimeState, setRuntimeState] = useState<any>(null);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
   const [sseConnected, setSseConnected] = useState(false);
   const [sessionUsage, setSessionUsage] = useState<any>(null);
@@ -357,22 +358,17 @@ export default function Chat() {
   // true（此前只能刷新页面恢复）；重连后拉一次权威状态即可解锁。
   // 停车态判定：RUNNING/PENDING/WAITING 仍锁定；终态与 AWAITING_USER 解锁
   // （AWAITING_USER 由澄清卡接管，输入框应可用来作答）。
-  const reconcileSendLock = async (sid: number) => {
+  // 发送锁唯一来源：/runtime/{sid}/state（来源表聚合）。timeline 只做展示，不参与判断。
+  const refreshRuntimeState = async (sid: number) => {
     try {
-      const page = await agentApi.sessions.getTimeline(sid, { limit: 30 });
+      const state = await agentApi.sessions.getRuntimeState(sid);
       if (currentSessionIdRef.current !== sid) return;
-      const rows = Array.isArray(page?.rows) ? page.rows : [];
-      const runRows = rows.filter((r: any) => r.kind === 'run_status');
-      const last = runRows[runRows.length - 1];
-      if (!last) return;
-      const st = String(last.state || '');
-      setSending(st === 'RUNNING' || st === 'PENDING' || st === 'WAITING');
-      if (st === 'AWAITING_USER') {
-        void refreshPendingToolApproval(sid);
-        void refreshPendingClarifications(sid);
-      }
+      setRuntimeState(state);
+      setSending(
+        Array.isArray(state?.blockReasons) && state.blockReasons.includes('RUNNING'),
+      );
     } catch {
-      /* ignore */
+      // 不兜底：错误交给全局请求提示；发送锁保持上一次权威值
     }
   };
 
@@ -865,10 +861,11 @@ export default function Chat() {
             // 重连：补拉断连窗口内丢失的行，并按权威 run 状态校准发送锁，
             // 否则丢终态事件会让发送/停止永久锁死（只能刷新页面恢复）。
             void refreshLatest(sid);
-            void reconcileSendLock(sid);
+            void refreshRuntimeState(sid);
           }
           void refreshPendingToolApproval(sid);
           void refreshPendingClarifications(sid);
+          void refreshRuntimeState(sid);
         },
         onMessage: (payload) => {
           try {
@@ -882,6 +879,7 @@ export default function Chat() {
             if (evtType === 'TOOL_APPROVAL_PENDING') {
               const batch = parseToolApproval(d);
               if (batch) setToolApprovalBatch(batch);
+              void refreshRuntimeState(sid);
               void refreshLatest(sid);
               return;
             }
@@ -974,6 +972,7 @@ export default function Chat() {
               tlSubType === 'run_awaiting_user'
             ) {
               setSending(false);
+              void refreshRuntimeState(sid);
               if (tlSubType === 'run_awaiting_user') {
                 void refreshPendingToolApproval(sid);
                 void refreshPendingClarifications(sid);
@@ -990,6 +989,7 @@ export default function Chat() {
               tlSubType === 'run_waiting'
             ) {
               setSending(true);
+              void refreshRuntimeState(sid);
             }
 
             // 上下文压缩：RUNNING 事件本地插行（后端已回填 seq/kind），输出 token 追加到正文。
@@ -1257,6 +1257,7 @@ export default function Chat() {
                 subType === 'run_awaiting_user'
               ) {
                 setSending(false);
+                void refreshRuntimeState(sid);
                 if (currentSession?.id) void refreshToolStats(currentSession.id);
                 if (subType === 'run_awaiting_user') {
                   void refreshPendingToolApproval(sid);
@@ -1326,6 +1327,7 @@ export default function Chat() {
               return;
             }
             if (evtType.startsWith('clarification_')) {
+              void refreshRuntimeState(sid);
               if (evtType === 'clarification_responded') {
                 // 记为已应答：防止随后 refreshLatest 用服务端旧 PENDING 覆盖乐观态
                 const key = clarificationKey(d?.runId, d?.clarificationId);
@@ -1567,28 +1569,24 @@ export default function Chat() {
     if (
       (!inputValue.trim() && !hasAttachment) ||
       !currentSession ||
-      sending ||
-      toolApprovalBatch ||
-      clarificationBatch
+      !runtimeState?.canSend
     ) {
       return;
     }
 
-    // 发送新消息前先取消 timeline 上仍 PENDING 的澄清（card 的唯一渲染源）
-    const pendingRows = timeline.filter(
-      (r: any) => r.kind === 'clarification' && r.state === 'PENDING',
-    );
-    for (const r of pendingRows) {
+    // 发送新消息前取消仍在等待的澄清（只认来源表：待澄清批次）
+    const pendingItems = clarificationBatch?.items ?? [];
+    for (const c of pendingItems) {
       agentApi.sessions
         .clarify(
           currentSession.id,
-          r.runId,
+          clarificationBatch!.runId,
           '__cancel__',
-          r.content?.clarificationId,
+          c.clarificationId,
         )
         .catch(() => {});
     }
-    if (pendingRows.length > 0) cancelPendingClarificationsLocally();
+    if (pendingItems.length > 0) cancelPendingClarificationsLocally();
 
     setMessages((prev) => [
       ...prev,
@@ -1785,20 +1783,16 @@ export default function Chat() {
               sending={sending}
               onSendMessage={sendMessage}
               onCancelSend={() => {
-                // 先取消 timeline 上仍 PENDING 的澄清（澄清卡的唯一渲染源），
-                // 并立即本地解锁——避免 messages 残留 pending 导致「停止无反应」。
-                const pendingRows = timeline.filter(
-                  (r: any) =>
-                    r.kind === 'clarification' && r.state === 'PENDING',
-                );
-                for (const r of pendingRows) {
+                // 先取消仍在等待的澄清（只认来源表：待澄清批次），并立即本地解锁
+                const pendingItems = clarificationBatch?.items ?? [];
+                for (const c of pendingItems) {
                   if (currentSession?.id) {
                     agentApi.sessions
                       .clarify(
                         currentSession.id,
-                        r.runId,
+                        clarificationBatch!.runId,
                         '__cancel__',
-                        r.content?.clarificationId,
+                        c.clarificationId,
                       )
                       .catch(() => {});
                   }
@@ -1832,6 +1826,7 @@ export default function Chat() {
               sessionPanelOpen={sessionPanelOpen}
               onTogglePanel={() => setSessionPanelOpen(!sessionPanelOpen)}
               timeline={timeline}
+              runtimeState={runtimeState}
               timelineHasMore={timelineHasMore}
               onLoadOlderTimeline={loadOlderTimeline}
               onRespondClarify={handleTimelineClarify}

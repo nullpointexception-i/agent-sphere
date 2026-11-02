@@ -40,6 +40,13 @@ import UsageChip from './Usage';
 import type { SubAgentTimelineItemVO, TimelineRow } from '../types';
 import type { SubAgentLiveMap } from '../useTimelineStream';
 
+/**
+ * 展示状态：优先后端按来源表覆盖的 content.state。
+ * timeline 的快照 state 只在 content 缺失时兜底，不参与任何控制判断。
+ */
+const displayState = (row: any): string | undefined =>
+  row?.content?.state ?? row?.state;
+
 export interface WidgetTimelineProps {
   rows: TimelineRow[];
   hasMore: boolean;
@@ -163,19 +170,19 @@ function AssistantRow({ row }: { row: TimelineRow }) {
   const thinking = c.thinking || '';
   const reply = c.reply || '';
   const [thinkingOpen, setThinkingOpen] = useState(
-    !row.state || row.state === 'RUNNING',
+    !displayState(row) || displayState(row) === 'RUNNING',
   );
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const thinkBoxRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const shouldCollapse =
       reply.trim().length > 0 ||
-      (!!row.state && row.state !== 'RUNNING');
+      (!!displayState(row) && displayState(row) !== 'RUNNING');
     if (!autoCollapsed && shouldCollapse) {
       setAutoCollapsed(true);
       setThinkingOpen(false);
     }
-  }, [reply, row.state, autoCollapsed]);
+  }, [reply, displayState(row), autoCollapsed]);
   // 思考流式增长时贴底滚动
   useEffect(() => {
     const el = thinkBoxRef.current;
@@ -221,49 +228,49 @@ function ToolRowBody({
 }) {
   const c = row.content || {};
   if (/^mcp_\d+_\d+$/.test(String(c.toolName || ''))) {
-    return <McpToolRow content={c} state={row.state} />;
+    return <McpToolRow content={c} state={displayState(row)} />;
   }
   if (c.toolName === 'builtin_10' || c.displayName === '等待'
       || c.displayName === 'Wait') {
-    return <WaitRow content={c} state={row.state} />;
+    return <WaitRow content={c} state={displayState(row)} />;
   }
   if (c.toolName === 'builtin_13' || c.displayName === '当前时间'
       || c.displayName === 'Current Time') {
-    return <CurrentTimeRow content={c} state={row.state} />;
+    return <CurrentTimeRow content={c} state={displayState(row)} />;
   }
   if (c.toolName === 'builtin_11' || c.displayName === '文本包含判断'
       || c.displayName === 'Text Contains') {
-    return <TextContainsRow content={c} state={row.state} />;
+    return <TextContainsRow content={c} state={displayState(row)} />;
   }
   if (c.toolName === 'builtin_16' || c.displayName === '报告进度'
       || c.displayName === 'Progress') {
-    return <ProgressRow content={c} state={row.state} />;
+    return <ProgressRow content={c} state={displayState(row)} />;
   }
   if (c.toolName === 'builtin_4' || c.displayName === '网页读取'
       || c.displayName === 'Web Read') {
-    return <WebPageRow content={c} state={row.state} kind="read" />;
+    return <WebPageRow content={c} state={displayState(row)} kind="read" />;
   }
   if (c.toolName === 'builtin_2' || c.displayName === '网页获取'
       || c.displayName === 'Web Fetch') {
-    return <WebPageRow content={c} state={row.state} kind="fetch" />;
+    return <WebPageRow content={c} state={displayState(row)} kind="fetch" />;
   }
   if (c.toolName === 'builtin_8' || c.displayName === '技能库'
       || c.displayName === 'Skill Library') {
-    return <SkillRow content={c} state={row.state} kind="library" />;
+    return <SkillRow content={c} state={displayState(row)} kind="library" />;
   }
   if (c.toolName === 'builtin_9' || c.displayName === '技能管理'
       || c.displayName === 'Skill Manage') {
-    return <SkillRow content={c} state={row.state} kind="manage" />;
+    return <SkillRow content={c} state={displayState(row)} kind="manage" />;
   }
   if (c.toolName === 'builtin_14'
       || /回读工具结果|read tool result/i.test(c.displayName || '')) {
-    return <ReadToolResultRow content={c} state={row.state} />;
+    return <ReadToolResultRow content={c} state={displayState(row)} />;
   }
   if (/^cli_\d+$/.test(String(c.toolName || ''))) {
-    return <CliRow content={c} state={row.state} />;
+    return <CliRow content={c} state={displayState(row)} />;
   }
   if (c.toolName === 'builtin_5' || isBrowserTool(c, c.displayName)) {
-    return <BrowserRow content={c} state={row.state} loadFile={loadFile} />;
+    return <BrowserRow content={c} state={displayState(row)} loadFile={loadFile} />;
   }
   const family = toolFamily(c, c.displayName);
   const name = c.displayName || row.title || 'tool';
@@ -286,7 +293,7 @@ function ToolRowBody({
             (stateLabel ? (
               <span className="aw-tool-failed"><CloseIcon size={11} /> {stateLabel}</span>
             ) : (
-              <StateTag state={row.state} />
+              <StateTag state={displayState(row)} />
             ))}
         </div>
       )}
@@ -1147,7 +1154,7 @@ function ToolApprovalRow({ row }: { row: TimelineRow }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <ApprovalIcon />
         <TypographyStrong>{c.text || row.title || '工具授权'}</TypographyStrong>
-        <StateTag state={row.state} />
+        <StateTag state={displayState(row)} />
       </div>
       <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
         {calls.map((call: any, index: number) => {
@@ -1208,19 +1215,19 @@ function ClarifyRow({
       text = String(c.response);
     }
   }
-  const cancelled = c.response === '__dismissed__' || row.state === 'CANCELLED';
+  const cancelled = c.response === '__dismissed__' || displayState(row) === 'CANCELLED';
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <MessageIcon />
         <strong>{String(c.title || row.title || '澄清')}</strong>
-        <StateTag state={row.state} />
+        <StateTag state={displayState(row)} />
       </div>
       <div style={{ marginTop: 6, color: '#8c8c8c', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {description ? (
           <div style={{ whiteSpace: 'pre-wrap', color: '#4b5563', fontSize: 12 }}>{description}</div>
         ) : null}
-        {row.state === 'PENDING' ? (
+        {displayState(row) === 'PENDING' ? (
           '请在底部浮层中作答'
         ) : (
           <>
@@ -1384,7 +1391,7 @@ function SubAgentCard({
   const [activeToolKey, setActiveToolKey] = useState<string | null>(null);
   const stepsBoxRef = useRef<HTMLDivElement | null>(null);
   const subId = row.refSubAgentRunId;
-  const isRunning = row.state === 'RUNNING';
+  const isRunning = displayState(row) === 'RUNNING';
   const live = subId != null && isRunning ? (subAgentLiveMap[subId] ?? []) : [];
 
   const stepKey = (s: any, i: number) =>
@@ -1441,15 +1448,15 @@ function SubAgentCard({
     if (steps === null && !isRunning) sync();
   };
 
-  const prevStateRef = useRef(row.state);
+  const prevStateRef = useRef(displayState(row));
   useEffect(() => {
     const prev = prevStateRef.current;
-    prevStateRef.current = row.state;
-    if (prev === 'RUNNING' && row.state !== 'RUNNING' && open) {
+    prevStateRef.current = displayState(row);
+    if (prev === 'RUNNING' && displayState(row) !== 'RUNNING' && open) {
       sync();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [row.state]);
+  }, [displayState(row)]);
 
   return (
     <div className="aw-subagent">
@@ -1459,7 +1466,7 @@ function SubAgentCard({
           {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
             '子 Agent'}
         </strong>
-        <StateTag state={row.state} />
+        <StateTag state={displayState(row)} />
         {open && isRunning ? (
           <span style={{ color: '#9ca3af', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}><RefreshIcon size={11} /> 实时更新中</span>
         ) : null}
@@ -1611,8 +1618,8 @@ function RowView({
 
   if (row.kind === 'compaction') {
     const text = c.text || '';
-    const running = row.state === 'RUNNING';
-    const failed = row.state === 'FAILED' || row.state === 'failed';
+    const running = displayState(row) === 'RUNNING';
+    const failed = displayState(row) === 'FAILED' || displayState(row) === 'failed';
     return (
       <div className="aw-tl-compaction">
         <div className="aw-tl-divider">
@@ -1645,14 +1652,14 @@ function RowView({
       (p): p is string => !!p,
     );
     const failed =
-      /fail|失败|错误/i.test(text) || String(row.state) === 'FAILED';
+      /fail|失败|错误/i.test(text) || String(displayState(row)) === 'FAILED';
     return (
       <div className="aw-tl-divider">
-        {row.state === 'RUNNING' ? (
+        {displayState(row) === 'RUNNING' ? (
           <span className="aw-running-dot" />
         ) : failed ? (
           <CloseIcon size={12} className="aw-icon-failed" />
-        ) : row.state === 'AWAITING_USER' ? (
+        ) : displayState(row) === 'AWAITING_USER' ? (
           <PauseIcon size={12} />
         ) : (
           <CheckIcon size={12} />

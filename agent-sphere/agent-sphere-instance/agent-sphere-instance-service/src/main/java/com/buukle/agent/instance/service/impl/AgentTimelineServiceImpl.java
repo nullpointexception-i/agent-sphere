@@ -35,12 +35,14 @@ import com.buukle.agent.instance.spi.AgentTimelineSpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -98,6 +100,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         row.setKind(kind);
         row.setSubtype(subtype);
         row.setState(state != null && !state.isBlank() ? state : TimelineState.RUNNING.getCode());
+        warnIfInvalidState(kind, row.getState());
         row.setTitle(cap(title, TITLE_CAP));
         row.setRefRunId(refRunId);
         row.setRefInteractionId(refInteractionId);
@@ -124,6 +127,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         row.setKind(kind);
         row.setSubtype(subtype);
         row.setState(state != null && !state.isBlank() ? state : TimelineState.RUNNING.getCode());
+        warnIfInvalidState(kind, row.getState());
         row.setTitle(cap(title, TITLE_CAP));
         row.setRefRunId(refRunId);
         row.setRefApprovalId(refApprovalId);
@@ -192,6 +196,74 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         patch.setState(state);
         patch.setSubtype(state);
         lambdaUpdate().eq(AgentTimeline::getRefSubAgentRunId, subAgentRunId).update(patch);
+    }
+
+    @Override
+    public long recordAssistantByInteraction(Long sessionId, Long runId, Long interactionId) {
+        if (sessionId == null || runId == null || interactionId == null) {
+            return -1L;
+        }
+        AgentTimeline existing = findAssistantByInteraction(runId, interactionId);
+        if (existing != null) {
+            return existing.getSeq();
+        }
+        // 同一 run 同时只允许一条 RUNNING assistant 行：重启遗留的旧行先关闭
+        closeRunningAssistant(sessionId, runId, TimelineState.CANCELLED.getCode());
+
+        long seq = nextSeq(sessionId);
+        AgentTimeline row = new AgentTimeline();
+        row.setSessionId(sessionId);
+        row.setRunId(runId);
+        row.setSeq(seq);
+        row.setKind(TimelineKind.ASSISTANT.getCode());
+        row.setState(TimelineState.RUNNING.getCode());
+        row.setRefRunId(runId);
+        row.setRefInteractionId(interactionId);
+        row.setStatus(STATUS_ACTIVE);
+        try {
+            save(row);
+            return seq;
+        } catch (DuplicateKeyException e) {
+            // 跨副本并发建同一轮：唯一索引只放行一个，回查赢家
+            AgentTimeline winner = findAssistantByInteraction(runId, interactionId);
+            if (winner != null) {
+                return winner.getSeq();
+            }
+            log.warn("Assistant row insert conflicted without winner: run={} interaction={}", runId, interactionId);
+            return -1L;
+        }
+    }
+
+    @Override
+    public int closeRunningAssistant(Long sessionId, Long runId, String state) {
+        if (runId == null || state == null || state.isBlank()) {
+            return 0;
+        }
+        AgentTimeline patch = new AgentTimeline();
+        patch.setState(state);
+        patch.setSubtype(state);
+        return getBaseMapper().update(patch, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<AgentTimeline>()
+                .eq(AgentTimeline::getRunId, runId)
+                .eq(AgentTimeline::getKind, TimelineKind.ASSISTANT.getCode())
+                .eq(AgentTimeline::getState, TimelineState.RUNNING.getCode()));
+    }
+
+    @Override
+    public Long findSeqByInteraction(Long runId, Long interactionId) {
+        AgentTimeline row = findAssistantByInteraction(runId, interactionId);
+        return row == null ? null : row.getSeq();
+    }
+
+    private AgentTimeline findAssistantByInteraction(Long runId, Long interactionId) {
+        if (runId == null || interactionId == null) {
+            return null;
+        }
+        return getOne(new LambdaQueryWrapper<AgentTimeline>()
+                .eq(AgentTimeline::getRunId, runId)
+                .eq(AgentTimeline::getKind, TimelineKind.ASSISTANT.getCode())
+                .eq(AgentTimeline::getRefInteractionId, interactionId)
+                .orderByDesc(AgentTimeline::getSeq)
+                .last("LIMIT 1"), false);
     }
 
     @Override
@@ -339,6 +411,8 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     if (row.getRefInteractionId() != null) {
                         AgentLlmInteractionRecord rec = interactionMapper.selectById(row.getRefInteractionId());
                         if (rec != null) {
+                            // 展示状态以执行记录为准（timeline 快照只做兜底）
+                            content.put(TimelineContentKey.STATE.getCode(), rec.getStatus());
                             if (rec.getReasoning() != null && !rec.getReasoning().isBlank()) {
                                 content.put(TimelineContentKey.THINKING.getCode(), cap(rec.getReasoning(), CONTENT_CAP));
                             }
@@ -380,6 +454,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     if (row.getRefToolCallId() != null) {
                         AgentToolCallRecord rec = toolCallMapper.selectById(row.getRefToolCallId());
                         if (rec != null) {
+                            content.put(TimelineContentKey.STATE.getCode(), mapToolState(rec.getStatus()));
                             content.put(TimelineContentKey.DISPLAY_NAME.getCode(), rec.getDisplayNameCn() != null ? rec.getDisplayNameCn() : rec.getToolName());
                             content.put(TimelineContentKey.DISPLAY_NAME_EN.getCode(), rec.getDisplayNameEn() != null ? rec.getDisplayNameEn() : rec.getToolName());
                             content.put(TimelineContentKey.TOOL_NAME.getCode(), rec.getToolName());
@@ -402,6 +477,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     if (row.getRefApprovalId() != null) {
                         AgentToolApproval approval = toolApprovalMapper.selectById(row.getRefApprovalId());
                         if (approval != null) {
+                            content.put(TimelineContentKey.STATE.getCode(), mapApprovalState(approval.getStatus()));
                             content.put(TimelineContentKey.APPROVAL_ID.getCode(), approval.getApprovalId());
                             content.put(TimelineContentKey.STATUS.getCode(), approval.getStatus());
                             content.put(TimelineContentKey.DECISIONS.getCode(), approval.getDecisionsJson());
@@ -414,6 +490,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     if (row.getRefClarificationId() != null) {
                         AgentPendingClarification c = clarificationMapper.selectById(row.getRefClarificationId());
                         if (c != null) {
+                            content.put(TimelineContentKey.STATE.getCode(), mapClarificationState(c.getUserResponse()));
                             content.put(TimelineContentKey.CLARIFICATION_ID.getCode(), c.getClarificationId());
                             content.put(TimelineContentKey.TITLE.getCode(), c.getTitle());
                             content.put(TimelineContentKey.TYPE.getCode(), c.getType());
@@ -446,6 +523,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     if (row.getRefCompactId() != null) {
                         AgentCompactRecord rec = compactRecordMapper.selectById(row.getRefCompactId());
                         if (rec != null) {
+                            content.put(TimelineContentKey.STATE.getCode(), mapCompactionState(rec.getStatus()));
                             String text = rec.getSummaryAfter() != null && !rec.getSummaryAfter().isBlank()
                                     ? rec.getSummaryAfter()
                                     : rec.getErrorMessage();
@@ -459,6 +537,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     AgentRun r = runs.get(row.getRefRunId() != null ? row.getRefRunId() : row.getRunId());
                     content.put(TimelineContentKey.TEXT.getCode(), row.getTitle());
                     if (r != null) {
+                        content.put(TimelineContentKey.STATE.getCode(), r.getStatus());
                         if (r.getCreatedAt() != null && r.getUpdatedAt() != null) {
                             content.put(TimelineContentKey.DURATION_MS.getCode(),
                                     java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMillis());
@@ -526,6 +605,63 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         m.put("cacheHitTokens", cacheHit != null ? cacheHit.longValue() : 0L);
         m.put("cacheMissTokens", cacheMiss != null ? cacheMiss.longValue() : 0L);
         return m;
+    }
+
+    /** 词表校验：只告警不阻断（timeline 只做展示，写入失败不应影响主流程）。 */
+    private static void warnIfInvalidState(String kind, String state) {
+        TimelineKind k = TimelineKind.from(kind);
+        TimelineState s = TimelineState.from(state);
+        if (k != null && s != null && !s.isValidFor(k)) {
+            log.warn("Timeline state {} not allowed for kind {}", state, kind);
+        }
+    }
+
+    /** 工具执行状态 → 展示词表。 */
+    private static String mapToolState(String status) {        if (status == null) {
+            return null;
+        }
+        return switch (status.toUpperCase(Locale.ROOT)) {
+            case "PENDING", "RUNNING" -> TimelineState.IN_PROGRESS.getCode();
+            case "SUCCEEDED" -> TimelineState.SUCCEEDED.getCode();
+            case "FAILED" -> TimelineState.FAILED.getCode();
+            default -> null;
+        };
+    }
+
+    /** 审批状态 → 展示词表。 */
+    private static String mapApprovalState(String status) {
+        if (status == null) {
+            return null;
+        }
+        return switch (status.toUpperCase(Locale.ROOT)) {
+            case "PENDING" -> TimelineState.PENDING.getCode();
+            case "DISMISSED" -> TimelineState.CANCELLED.getCode();
+            default -> TimelineState.ANSWERED.getCode();
+        };
+    }
+
+    /** 澄清状态：有回答即 ANSWERED，dismissed 为 CANCELLED。 */
+    private static String mapClarificationState(String userResponse) {
+        if (userResponse == null) {
+            return TimelineState.PENDING.getCode();
+        }
+        if (userResponse.contains("__dismissed__")) {
+            return TimelineState.CANCELLED.getCode();
+        }
+        return TimelineState.ANSWERED.getCode();
+    }
+
+    /** 压缩记录状态 → 展示词表。 */
+    private static String mapCompactionState(String status) {
+        if (status == null) {
+            return null;
+        }
+        return switch (status.toUpperCase(Locale.ROOT)) {
+            case "PENDING", "RUNNING" -> TimelineState.RUNNING.getCode();
+            case "COMPLETED" -> TimelineState.COMPLETED.getCode();
+            case "FAILED" -> TimelineState.FAILED.getCode();
+            default -> null;
+        };
     }
 
     /** 解析 USER 行附件引用 JSON；失败返回空列表（不阻断正文渲染）。 */

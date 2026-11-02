@@ -48,6 +48,20 @@ public interface AgentTimelineSpi {
     void updateBySubAgentRun(Long subAgentRunId, String state);
 
     /**
+     * 按 LLM 交互记录建/复用 assistant 行。
+     *
+     * <p>(ref_run_id, ref_interaction_id) 唯一：重启/跨副本后命中同一轮直接复用，
+     * 不再新建第二条空气泡。
+     */
+    long recordAssistantByInteraction(Long sessionId, Long runId, Long interactionId);
+
+    /** 关闭该 run 所有仍 RUNNING 的 assistant 行（终态兜底）。 */
+    int closeRunningAssistant(Long sessionId, Long runId, String state);
+
+    /** 按 ref_interaction_id 找 assistant 行 seq；不存在返回 null。 */
+    Long findSeqByInteraction(Long runId, Long interactionId);
+
+    /**
      * keyset 分页读取：beforeSeq=向上翻（更早）、afterSeq=断线补档（更新）、均空=最近一页；
      * 返回页（含从 ref 解析好的正文）。
      */

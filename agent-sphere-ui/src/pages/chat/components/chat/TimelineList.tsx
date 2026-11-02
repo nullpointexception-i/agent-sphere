@@ -73,6 +73,13 @@ import {
   webPageView,
 } from './toolRenderers';
 
+/**
+ * 展示状态：优先后端按来源表覆盖的 content.state。
+ * timeline 的快照 state 只在 content 缺失时兜底，不参与任何控制判断。
+ */
+const displayState = (row: any): string | undefined =>
+  row?.content?.state ?? row?.state;
+
 interface TimelineListProps {
   rows: any[];
   hasMore: boolean;
@@ -243,7 +250,7 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
   const reply = typeof content.reply === 'string' ? content.reply.trim() : '';
   const hasThinking = thinking.length > 0 && thinking !== '{}';
   const hasReply = reply.length > 0 && reply !== '{}';
-  const isRunning = !row.state || row.state === 'RUNNING';
+  const isRunning = !displayState(row) || displayState(row) === 'RUNNING';
   const [thinkingOpen, setThinkingOpen] = useState(
     Boolean(isLatest && !hasReply && isRunning),
   );
@@ -911,78 +918,78 @@ function ToolCardBody({ row }: any) {
   const intl = useIntl();
   const content = row.content || {};
   if (/^mcp_\d+_\d+$/.test(content.toolName || '')) {
-    return <McpToolCard content={content} state={row.state} />;
+    return <McpToolCard content={content} state={displayState(row)} />;
   }
   if (
     content.toolName === 'builtin_10' ||
     content.displayName === '等待' ||
     content.displayName === 'Wait'
   ) {
-    return <WaitCard content={content} state={row.state} />;
+    return <WaitCard content={content} state={displayState(row)} />;
   }
   if (
     content.toolName === 'builtin_13' ||
     content.displayName === '当前时间' ||
     content.displayName === 'Current Time'
   ) {
-    return <CurrentTimeCard content={content} state={row.state} />;
+    return <CurrentTimeCard content={content} state={displayState(row)} />;
   }
   if (
     content.toolName === 'builtin_11' ||
     content.displayName === '文本包含判断' ||
     content.displayName === 'Text Contains'
   ) {
-    return <TextContainsCard content={content} state={row.state} />;
+    return <TextContainsCard content={content} state={displayState(row)} />;
   }
   if (
     content.toolName === 'builtin_16' ||
     content.displayName === '报告进度' ||
     content.displayName === 'Progress'
   ) {
-    return <ProgressCard content={content} state={row.state} />;
+    return <ProgressCard content={content} state={displayState(row)} />;
   }
   if (
     content.toolName === 'builtin_4' ||
     content.displayName === '网页读取' ||
     content.displayName === 'Web Read'
   ) {
-    return <WebPageCard content={content} state={row.state} kind="read" />;
+    return <WebPageCard content={content} state={displayState(row)} kind="read" />;
   }
   if (
     content.toolName === 'builtin_2' ||
     content.displayName === '网页获取' ||
     content.displayName === 'Web Fetch'
   ) {
-    return <WebPageCard content={content} state={row.state} kind="fetch" />;
+    return <WebPageCard content={content} state={displayState(row)} kind="fetch" />;
   }
   if (
     content.toolName === 'builtin_8' ||
     content.displayName === '技能库' ||
     content.displayName === 'Skill Library'
   ) {
-    return <SkillCard content={content} state={row.state} kind="library" />;
+    return <SkillCard content={content} state={displayState(row)} kind="library" />;
   }
   if (
     content.toolName === 'builtin_9' ||
     content.displayName === '技能管理' ||
     content.displayName === 'Skill Manage'
   ) {
-    return <SkillCard content={content} state={row.state} kind="manage" />;
+    return <SkillCard content={content} state={displayState(row)} kind="manage" />;
   }
   if (
     content.toolName === 'builtin_14' ||
     /回读工具结果|read tool result/i.test(content.displayName || '')
   ) {
-    return <ReadToolResultCard content={content} state={row.state} />;
+    return <ReadToolResultCard content={content} state={displayState(row)} />;
   }
   if (/^cli_\d+$/.test(content.toolName || '')) {
-    return <CliCard content={content} state={row.state} />;
+    return <CliCard content={content} state={displayState(row)} />;
   }
   if (
     content.toolName === 'builtin_5' ||
     isBrowserTool(content, content.displayName)
   ) {
-    return <BrowserCard content={content} state={row.state} />;
+    return <BrowserCard content={content} state={displayState(row)} />;
   }
   const family = toolFamily(content, content.displayName);
   const name =
@@ -993,7 +1000,7 @@ function ToolCardBody({ row }: any) {
     intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
   // 「委派子 Agent」工具调用在下方已由 SubAgentCard 完整展示，顶部标题行冗余，隐藏。
   const isDelegate = /委派|子 ?agent/i.test(name);
-  // 浏览器工具：后端把超时/失败编码进 artifact（row.state 恒为 SUCCEEDED），此处按 artifact 解析真实状态。
+  // 浏览器工具：后端把超时/失败编码进 artifact（快照 state 恒为 SUCCEEDED），此处按 artifact 解析真实状态。
   const isBrowser = isBrowserTool(content, content.displayName);
   const isSkillLibrary =
     content.toolName === 'builtin_8' || /技能库|skill library/i.test(name);
@@ -1013,7 +1020,7 @@ function ToolCardBody({ row }: any) {
           <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
             {name}
           </Typography.Text>
-          {family !== 'todo' && <StateTag state={row.state} small />}
+          {family !== 'todo' && <StateTag state={displayState(row)} small />}
         </div>
       )}
       {Array.isArray(content.images) && content.images.length > 0 && (
@@ -2070,12 +2077,12 @@ function ToolApprovalCard({ row }: any) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <SafetyCertificateOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-          {row.state === 'PENDING'
+          {displayState(row) === 'PENDING'
             ? intl.formatMessage({
                 id: 'pages.chat.tool.approvalWaiting',
                 defaultMessage: 'Waiting for tool approval',
               })
-            : row.state === 'CANCELLED'
+            : displayState(row) === 'CANCELLED'
               ? intl.formatMessage({
                   id: 'pages.chat.tool.approvalCancelled',
                   defaultMessage: 'Tool approval cancelled',
@@ -2085,7 +2092,7 @@ function ToolApprovalCard({ row }: any) {
                   defaultMessage: 'Tool approval handled',
                 })}
         </Typography.Text>
-        <StateTag state={row.state} />
+        <StateTag state={displayState(row)} />
       </div>
       <div
         style={{
@@ -2171,7 +2178,7 @@ function ClarificationCard({ row }: any) {
     }
   }
   const cancelled =
-    content.response === '__dismissed__' || row.state === 'CANCELLED';
+    content.response === '__dismissed__' || displayState(row) === 'CANCELLED';
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2179,7 +2186,7 @@ function ClarificationCard({ row }: any) {
         <Typography.Text strong>
           {content.title || row.title || '澄清'}
         </Typography.Text>
-        <StateTag state={row.state} />
+        <StateTag state={displayState(row)} />
       </div>
       <div
         style={{
@@ -2201,7 +2208,7 @@ function ClarificationCard({ row }: any) {
             {description}
           </Typography.Paragraph>
         ) : null}
-        {row.state === 'PENDING' ? (
+        {displayState(row) === 'PENDING' ? (
           <Typography.Text type="secondary">
             {intl.formatMessage({
               id: 'pages.chat.tool.waitingInDrawer',
@@ -2419,7 +2426,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   const [activeToolKey, setActiveToolKey] = useState<string | null>(null);
   const stepsBoxRef = useRef<HTMLDivElement | null>(null);
   const subId = row.refSubAgentRunId;
-  const isRunning = row.state === 'RUNNING';
+  const isRunning = displayState(row) === 'RUNNING';
   const live = subId != null && isRunning ? (subAgentLive?.[subId] ?? []) : [];
 
   // 与 list.map 的 key 一致：历史步走主键，SSE 实时步走 publishId/序号
@@ -2484,15 +2491,15 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   };
 
   // 终态（COMPLETED/FAILED/…）一次性校正：权威数据整体替换 live
-  const prevStateRef = useRef(row.state);
+  const prevStateRef = useRef(displayState(row));
   useEffect(() => {
     const prev = prevStateRef.current;
-    prevStateRef.current = row.state;
-    if (prev === 'RUNNING' && row.state !== 'RUNNING' && open) {
+    prevStateRef.current = displayState(row);
+    if (prev === 'RUNNING' && displayState(row) !== 'RUNNING' && open) {
       sync();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [row.state]);
+  }, [displayState(row)]);
 
   return (
     <div
@@ -2512,7 +2519,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
               defaultMessage: 'Sub-agent',
             })}
         </Typography.Text>
-        <StateTag state={row.state} />
+        <StateTag state={displayState(row)} />
         {open && isRunning && (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             <LoadingOutlined spin style={{ fontSize: 11, marginRight: 4 }} />
@@ -2781,8 +2788,8 @@ function RowCard({
   // 压缩行：分割线 + 压缩模型的实时输出（生成中逐 token 追加，刷新后取 summary_after）
   if (row.kind === 'compaction') {
     const text = row.content?.text || '';
-    const running = row.state === 'RUNNING';
-    const failed = row.state === 'FAILED' || row.state === 'failed';
+    const running = displayState(row) === 'RUNNING';
+    const failed = displayState(row) === 'FAILED' || displayState(row) === 'failed';
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
@@ -2821,7 +2828,7 @@ function RowCard({
   if (row.kind === 'run_status') {
     const duration = formatDuration(row.content?.durationMs);
     const usage = row.content?.usage;
-    const isRunFailed = row.state === 'FAILED' || row.state === 'failed';
+    const isRunFailed = displayState(row) === 'FAILED' || displayState(row) === 'failed';
     // 后端失败文案「❌ 执行失败」的红叉太粗，前端剥掉改细线红叉（与行文字同字号）。
     const text = (row.content?.text || row.title || '')
       .replace(/^❌\s*/, '')
@@ -2838,13 +2845,13 @@ function RowCard({
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
-          {row.state === 'RUNNING' ? (
+          {displayState(row) === 'RUNNING' ? (
             <LoadingOutlined spin style={{ fontSize: 12 }} />
           ) : isRunFailed ? (
             <CloseCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
-          ) : row.state === 'AWAITING_USER' ? (
+          ) : displayState(row) === 'AWAITING_USER' ? (
             <PauseCircleOutlined style={{ fontSize: 12 }} />
-          ) : row.state === 'CANCELLED' ? (
+          ) : displayState(row) === 'CANCELLED' ? (
             <StopOutlined style={{ fontSize: 12 }} />
           ) : (
             <CheckCircleOutlined style={{ fontSize: 12 }} />
@@ -2945,9 +2952,9 @@ function RowCard({
               <Tag style={{ margin: 0 }}>
                 {KIND_LABEL[row.kind] || row.kind}
               </Tag>
-              <StateTag state={row.state} />
+              <StateTag state={displayState(row)} />
             </div>
-          ) : row.kind === 'assistant' && row.state === 'RUNNING' ? (
+          ) : row.kind === 'assistant' && displayState(row) === 'RUNNING' ? (
             <div style={{ marginBottom: 2 }}>
               <RunningDot />
             </div>

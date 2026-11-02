@@ -1457,6 +1457,7 @@ public class SessionRunner {
                             },
                             new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
                                     .setInteractionType(LlmInteractionType.CHAT_REPLY)
+                                    .setTurnNo(loopCount)
                                     .setModelRouteId(route.getId())
                                     .setEstimatedPromptTokens((int) compactionService.estimatePromptTokens(
                                             projectedMessages, toolDefs)));

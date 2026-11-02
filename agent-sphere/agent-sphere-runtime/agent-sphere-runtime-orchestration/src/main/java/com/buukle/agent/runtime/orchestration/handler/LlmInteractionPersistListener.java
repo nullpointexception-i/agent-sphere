@@ -71,7 +71,14 @@ public class LlmInteractionPersistListener {
         } catch (Exception ignored) {
         }
 
-        Long recordId = interactionRecordSpi.createRecord(vo);
+        Long recordId;
+        if (meta.getRecordId() != null) {
+            // 主 Agent 轮次：记录在调用前已预建为 RUNNING，这里补结果
+            interactionRecordSpi.complete(meta.getRecordId(), vo);
+            recordId = meta.getRecordId();
+        } else {
+            recordId = interactionRecordSpi.createRecord(vo);
+        }
         afterPersist(meta, recordId, event.isSuccess());
         log.debug("LLM interaction recorded: runId={}, type={}, duration={}ms, success={}, "
                         + "promptTokens={}, completionTokens={}, totalTokens={}",

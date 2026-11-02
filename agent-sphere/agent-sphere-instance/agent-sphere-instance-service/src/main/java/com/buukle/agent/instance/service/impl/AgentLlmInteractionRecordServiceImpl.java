@@ -8,12 +8,15 @@ import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteractionRecordSpi {
@@ -26,9 +29,116 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
 
     @Override
     public Long createRecord(AgentLlmInteractionRecordVO vo) {
+        AgentLlmInteractionRecord record = newRecord(vo);
+        record.setStatus(Boolean.TRUE.equals(vo.getSuccess())
+                ? AgentLlmInteractionRecord.STATUS_COMPLETED
+                : AgentLlmInteractionRecord.STATUS_FAILED);
+        mapper.insert(record);
+        return record.getId();
+    }
+
+    @Override
+    public Long createOrGetRunning(AgentLlmInteractionRecordVO vo) {
+        if (vo.getRunId() == null || vo.getTurnNo() == null) {
+            throw new IllegalArgumentException("runId and turnNo are required for a running turn record");
+        }
+        AgentLlmInteractionRecord existing = findChatTurn(vo.getRunId(), vo.getTurnNo());
+        if (existing != null) {
+            // 重启/重试复用同一轮：重置为 RUNNING，并刷新 updated_at 作为心跳，
+            // 避免「多次重试累计年龄」被僵死清理误判。
+            mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
+                    .eq(AgentLlmInteractionRecord::getId, existing.getId())
+                    .set(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_RUNNING)
+                    .set(AgentLlmInteractionRecord::getErrorMessage, null)
+                    .set(AgentLlmInteractionRecord::getModelName, vo.getModelName())
+                    .set(AgentLlmInteractionRecord::getUpdatedAt, java.time.LocalDateTime.now()));
+            return existing.getId();
+        }
+        AgentLlmInteractionRecord record = newRecord(vo);
+        record.setStatus(AgentLlmInteractionRecord.STATUS_RUNNING);
+        try {
+            mapper.insert(record);
+            return record.getId();
+        } catch (DuplicateKeyException e) {
+            // 并发建同轮：唯一索引只放行一个，输家回查赢家，绝不返回幽灵 id
+            AgentLlmInteractionRecord winner = findChatTurn(vo.getRunId(), vo.getTurnNo());
+            if (winner == null) {
+                throw e;
+            }
+            return winner.getId();
+        }
+    }
+
+    @Override
+    public void complete(Long id, AgentLlmInteractionRecordVO vo) {
+        if (id == null) {
+            return;
+        }
+        // 同一轮只有一条记录：最终完成必须能落库。
+        // 即使清理任务曾把 RUNNING 误判为 FAILED，这里也要用真实结果覆盖，避免答案丢失。
+        int updated = mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
+                .eq(AgentLlmInteractionRecord::getId, id)
+                .set(AgentLlmInteractionRecord::getRequestBody, vo.getRequestBody())
+                .set(AgentLlmInteractionRecord::getResponseBody, vo.getResponseBody())
+                .set(AgentLlmInteractionRecord::getHttpStatus, vo.getHttpStatus())
+                .set(AgentLlmInteractionRecord::getDurationMs, vo.getDurationMs())
+                .set(AgentLlmInteractionRecord::getErrorMessage, vo.getErrorMessage())
+                .set(AgentLlmInteractionRecord::getSuccess, vo.getSuccess())
+                .set(AgentLlmInteractionRecord::getReasoning, vo.getReasoning())
+                .set(AgentLlmInteractionRecord::getReplyContent, vo.getReplyContent())
+                .set(AgentLlmInteractionRecord::getUsage, vo.getUsage())
+                .set(AgentLlmInteractionRecord::getPromptTokens, vo.getPromptTokens())
+                .set(AgentLlmInteractionRecord::getCompletionTokens, vo.getCompletionTokens())
+                .set(AgentLlmInteractionRecord::getTotalTokens, vo.getTotalTokens())
+                .set(AgentLlmInteractionRecord::getCacheHitTokens, vo.getCacheHitTokens())
+                .set(AgentLlmInteractionRecord::getCacheMissTokens, vo.getCacheMissTokens())
+                .set(AgentLlmInteractionRecord::getStatus, Boolean.TRUE.equals(vo.getSuccess())
+                        ? AgentLlmInteractionRecord.STATUS_COMPLETED
+                        : AgentLlmInteractionRecord.STATUS_FAILED)
+                .set(AgentLlmInteractionRecord::getModelName, vo.getModelName()));
+        if (updated == 0) {
+            log.warn("LLM interaction complete skipped: id={} no longer exists", id);
+        }
+    }
+
+    @Override
+    public Long findByRunAndTurn(Long runId, Integer turnNo) {
+        if (runId == null || turnNo == null) {
+            return null;
+        }
+        AgentLlmInteractionRecord record = findChatTurn(runId, turnNo);
+        return record == null ? null : record.getId();
+    }
+
+    @Override
+    public int failStaleRunning(int staleMinutes) {
+        if (staleMinutes <= 0) {
+            return 0;
+        }
+        // 只处理主 Agent 问答轮；心跳基准用 updated_at（每次重试都会刷新）
+        return mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
+                .eq(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_RUNNING)
+                .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
+                .lt(AgentLlmInteractionRecord::getUpdatedAt,
+                        java.time.LocalDateTime.now().minusMinutes(staleMinutes))
+                .set(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_FAILED)
+                .set(AgentLlmInteractionRecord::getErrorMessage, "stale running interaction"));
+    }
+
+    private AgentLlmInteractionRecord findChatTurn(Long runId, Integer turnNo) {
+        return mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
+                .eq(AgentLlmInteractionRecord::getRunId, runId)
+                .eq(AgentLlmInteractionRecord::getTurnNo, turnNo)
+                .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
+                .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
+                .last("LIMIT 1"));
+    }
+
+    private static AgentLlmInteractionRecord newRecord(AgentLlmInteractionRecordVO vo) {
         AgentLlmInteractionRecord record = new AgentLlmInteractionRecord();
         record.setRunId(vo.getRunId());
         record.setSessionId(vo.getSessionId());
+        record.setTurnNo(vo.getTurnNo());
         record.setInteractionType(vo.getInteractionType());
         record.setModelName(vo.getModelName());
         record.setRequestBody(vo.getRequestBody());
@@ -49,8 +159,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         if (vo.getCreatedBy() != null) {
             record.setCreatedBy(vo.getCreatedBy());
         }
-        mapper.insert(record);
-        return record.getId();
+        return record;
     }
 
     @Override
@@ -70,6 +179,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         return mapper.selectList(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                         .eq(AgentLlmInteractionRecord::getRunId, runId)
                         .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
+                        // 未完成的轮次不进入历史：预建 RUNNING 行不能当已完成的 assistant 正文
+                        .eq(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_COMPLETED)
                         .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
                         // 只取恢复所需的轻量列；request_body/response_body 可能非常大
                         .select(AgentLlmInteractionRecord::getId,
@@ -102,6 +213,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         AgentLlmInteractionRecord latest = mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                 .eq(AgentLlmInteractionRecord::getRunId, runId)
                 .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
+                .eq(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_COMPLETED)
                 .orderByDesc(AgentLlmInteractionRecord::getId)
                 .last("LIMIT 1"));
         if (latest == null) {
@@ -149,6 +261,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         vo.setId(record.getId());
         vo.setRunId(record.getRunId());
         vo.setSessionId(record.getSessionId());
+        vo.setTurnNo(record.getTurnNo());
+        vo.setStatus(record.getStatus());
         vo.setInteractionType(record.getInteractionType());
         vo.setModelName(record.getModelName());
         vo.setRequestBody(record.getRequestBody());

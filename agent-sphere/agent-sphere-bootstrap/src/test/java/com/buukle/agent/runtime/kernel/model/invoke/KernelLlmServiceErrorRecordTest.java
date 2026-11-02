@@ -46,7 +46,8 @@ class KernelLlmServiceErrorRecordTest {
     void setUp() {
         AgentRuntimeProperties props = new AgentRuntimeProperties();
         props.getLlm().setStreamTimeout(Duration.ofSeconds(5));
-        service = new KernelLlmService(modelProviderSpi, eventPublisher, props);
+        service = new KernelLlmService(modelProviderSpi, eventPublisher, props,
+                org.mockito.Mockito.mock(com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi.class));
     }
 
     /** 让供应商在 stream 过程中发一个事件序列（不抛异常）。 */

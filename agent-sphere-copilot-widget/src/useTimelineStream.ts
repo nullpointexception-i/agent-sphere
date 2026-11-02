@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ApiClient, TimelineQuery } from './api';
+import type { ApiClient, RuntimeStateVO, TimelineQuery } from './api';
 import { connectSse } from './sse';
 import { stripSubAgentSentinel } from './subAgentMarker';
 import {
@@ -89,6 +89,8 @@ interface TimelineStream {
   pendingUserRows: TimelineRow[];
   /** 事件驱动的“当前会话是否有 run 在跑”（run_running/打字机=true；终态=false）。 */
   runActive: boolean;
+  /** 运行态权威值（来源表聚合）：发送锁 / pending 判定的唯一来源。 */
+  runtimeState: RuntimeStateVO | null;
   /** 工具参数仍在流式生成时的即时提示。 */
   preparingTool: { publishId?: string; name?: string } | null;
   loadInitial: (sessionId: number) => Promise<void>;
@@ -148,6 +150,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
   const [subAgentLiveMap, setSubAgentLiveMap] = useState<SubAgentLiveMap>({});
   const [pendingUserRows, setPendingUserRows] = useState<TimelineRow[]>([]);
   const [runActive, setRunActiveState] = useState(false);
+  const [runtimeState, setRuntimeState] = useState<RuntimeStateVO | null>(null);
   const [preparingTool, setPreparingTool] = useState<{
     publishId?: string;
     name?: string;
@@ -219,6 +222,23 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     setRunActiveState(false);
   }, []);
 
+  /** 运行态权威刷新：只读 /runtime/{sid}/state，不扫描 timeline。 */
+  const refreshRuntimeState = useCallback(
+    async (sessionId: number) => {
+      try {
+        const state = await api.getRuntimeState(sessionId);
+        if (sessionIdRef.current !== null && sessionIdRef.current !== sessionId) {
+          return;
+        }
+        setRuntimeState(state);
+        setRunActiveState(state.blockReasons?.includes('RUNNING') ?? false);
+      } catch {
+        // 不兜底：错误交给全局请求处理；保持上一次权威值
+      }
+    },
+    [api],
+  );
+
   const loadInitial = useCallback(
     async (sessionId: number) => {
       try {
@@ -229,16 +249,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         setRows(pageRows);
         setHasMore(m);
         reconcilePendingUserRows(pageRows);
-        // 兜底：刷新会话时若“最新”一条 run_status 仍是 RUNNING → 视为有 run 在跑（事件会随后校正）
-        for (let i = pageRows.length - 1; i >= 0; i--) {
-          const r = pageRows[i];
-          if (r.kind === 'run_status') {
-            if (r.state === 'RUNNING') {
-              setRunActiveState(true);
-            }
-            break;
-          }
-        }
+        // 发送锁唯一来源：运行态接口（不读 timeline 的 run_status）
+        void refreshRuntimeState(sessionId);
       } catch {
         // 加载失败保持空态，SSE 终态事件仍会触发 refreshLatest 尝试补
       }
@@ -636,9 +648,20 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         // 澄清续跑等场景可能不重发 run_running，用主助手打字机兜底
         setRunActiveState(true);
       }
+      // 权威校正：run / 澄清 / 审批事件后刷新运行态
+      if (
+        sid != null &&
+        (String(tlSubType).startsWith('run_') ||
+          String(evtType).startsWith('clarification_') ||
+          String(evtType).startsWith('tool_approval') ||
+          String(evtType) === 'TOOL_APPROVAL_PENDING')
+      ) {
+        void refreshRuntimeState(sid);
+      }
 
       // 澄清：本地就地更新 + 记录已应答（防 refreshLatest 回退）
       if (String(evtType).startsWith('clarification_')) {
+        if (sid != null) void refreshRuntimeState(sid);
         void loadPendingClarifications(sid);
         if (evtType === 'clarification_responded') {
           const respondedKey = clarificationKey(d?.runId, d?.clarificationId);
@@ -831,6 +854,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     subAgentLiveMap,
     pendingUserRows,
     runActive,
+    runtimeState,
     preparingTool,
     loadInitial,
     loadOlder,

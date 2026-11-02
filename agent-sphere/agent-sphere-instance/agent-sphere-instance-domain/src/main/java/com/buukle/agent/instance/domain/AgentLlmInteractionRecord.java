@@ -8,10 +8,19 @@ import java.time.LocalDateTime;
 @Data
 @TableName("agent_llm_interaction_record")
 public class AgentLlmInteractionRecord {
+
+    public static final String STATUS_RUNNING = "RUNNING";
+    public static final String STATUS_COMPLETED = "COMPLETED";
+    public static final String STATUS_FAILED = "FAILED";
+
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long runId;
     private Long sessionId;
+    /** 主 Agent 问答轮次序号（= run.loop_count）；其余调用为 NULL。 */
+    private Integer turnNo;
+    /** RUNNING / COMPLETED / FAILED。 */
+    private String status;
     private String interactionType;
     private String modelName;
     private String requestBody;

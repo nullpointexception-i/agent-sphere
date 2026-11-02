@@ -85,7 +85,9 @@ class SessionSubRunnerTest {
     @BeforeEach
     void setUp() {
         RouteListBuilder routeListBuilder = new RouteListBuilder(routeSpi, instanceSpi, modelProviderSpi);
-        KernelLlmService llmService = new KernelLlmService(modelProviderSpi, eventPublisher, new AgentRuntimeProperties());
+        KernelLlmService llmService = new KernelLlmService(modelProviderSpi, eventPublisher,
+                new AgentRuntimeProperties(),
+                mock(com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi.class));
         FallbackRouteExecutor fallbackRouteExecutor = new FallbackRouteExecutor();
         RSet<Object> set = mock(RSet.class);
         lenient().when(set.contains(Boolean.TRUE)).thenReturn(false);

@@ -4,8 +4,11 @@ import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.dtvo.dto.TimelineRefQuery;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
+import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
+import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,8 @@ public class TimelineRecorder {
 
     private final AgentTimelineSpi timelineSpi;
     private final AgentPendingClarificationMapper clarificationMapper;
+    private final RunSpi runSpi;
+    private final AgentLlmInteractionRecordSpi interactionRecordSpi;
 
     private final ConcurrentHashMap<Long, Long> assistantSeqByRun = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> toolSeqByRunStep = new ConcurrentHashMap<>();
@@ -77,33 +82,57 @@ public class TimelineRecorder {
         }
         Long seq = assistantSeqByRun.get(runId);
         if (seq == null) {
-            seq = timelineSpi.record(sessionId, runId, TimelineKind.ASSISTANT.getCode(), null,
-                    TimelineState.RUNNING.getCode(), null, runId, null, null, null, null);
+            seq = openAssistantTurn(sessionId, runId);
+            if (seq == null || seq <= 0) {
+                return;
+            }
             assistantSeqByRun.put(runId, seq);
         }
         data.setSeq(seq);
         data.setKind(TimelineKind.ASSISTANT.getCode());
     }
 
-    /** run 终态：封口主助手容器（兜底；每轮 LLM 调用已由 closeAssistantTurn 封口，仅兜底极端路径）。 */
+    /**
+     * 打开本轮助手行：轮次身份来自执行侧 (run, loop_count) 的 interaction 记录。
+     *
+     * <p>记录缺失属于执行链路的硬错误（Kernel 在调用前已预建），不做“新建兜底”，
+     * 只记录 ERROR 便于告警。
+     */
+    private Long openAssistantTurn(Long sessionId, Long runId) {
+        try {
+            RunVO run = runSpi.getRun(runId);
+            Integer turnNo = run == null ? null : run.getLoopCount();
+            if (turnNo == null) {
+                log.error("Assistant turn cannot resolve loop_count: run={}", runId);
+                return null;
+            }
+            Long interactionId = interactionRecordSpi.findByRunAndTurn(runId, turnNo);
+            if (interactionId == null) {
+                log.error("Assistant turn has no interaction record: run={}, turn={}", runId, turnNo);
+                return null;
+            }
+            return timelineSpi.recordAssistantByInteraction(sessionId, runId, interactionId);
+        } catch (Exception e) {
+            log.warn("Assistant turn open failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** run 终态：封口主助手容器（兜底；每轮 LLM 调用已由 closeAssistantTurn 封口）。 */
     public void closeAssistant(Long sessionId, Long runId, String state) {
         if (runId == null) {
             return;
         }
         Long seq = assistantSeqByRun.remove(runId);
-        if (seq == null) {
-            TimelineRefQuery query = TimelineRefQuery.builder()
-                    .runId(runId)
-                    .kind(TimelineKind.ASSISTANT.getCode())
-                    .build();
-            seq = findLatestSeq(query);
-            // 跨副本/重启后 Map 丢失：只封口仍处于 RUNNING 的最近一行，避免把上一轮已完成的正文改成 FAILED。
-            if (seq != null && seq > 0 && !TimelineState.RUNNING.getCode().equals(findLatestState(query))) {
-                return;
-            }
-        }
         if (seq != null && seq > 0) {
             update(sessionId, seq, state, null, null);
+            return;
+        }
+        // 重启/跨副本：按 run 关闭所有仍 RUNNING 的 assistant 行
+        try {
+            timelineSpi.closeRunningAssistant(sessionId, runId, state);
+        } catch (Exception e) {
+            log.warn("Timeline close assistant failed: {}", e.getMessage());
         }
     }
 
@@ -113,17 +142,10 @@ public class TimelineRecorder {
             return;
         }
         Long seq = assistantSeqByRun.remove(runId);
-        if (seq == null) {
-            TimelineRefQuery query = TimelineRefQuery.builder()
-                    .runId(runId)
-                    .kind(TimelineKind.ASSISTANT.getCode())
-                    .build();
-            seq = findLatestSeq(query);
-            if (seq != null && seq > 0 && !TimelineState.RUNNING.getCode().equals(findLatestState(query))) {
-                return;
-            }
+        if ((seq == null || seq <= 0) && interactionId != null) {
+            seq = timelineSpi.findSeqByInteraction(runId, interactionId);
         }
-        if (seq == null) {
+        if (seq == null || seq <= 0) {
             return;
         }
         update(sessionId, seq, state, null, null);
@@ -206,8 +228,8 @@ public class TimelineRecorder {
             case COMPLETED -> TimelineState.COMPLETED.getCode();
             case FAILED -> TimelineState.FAILED.getCode();
             case CANCELLED -> TimelineState.CANCELLED.getCode();
-            case AWAITING_USER -> "AWAITING_USER";
-            case WAITING -> "WAITING";
+            case AWAITING_USER -> TimelineState.AWAITING_USER.getCode();
+            case WAITING -> TimelineState.WAITING.getCode();
             default -> status.name();
         };
         String title = switch (status) {
@@ -232,7 +254,7 @@ public class TimelineRecorder {
         if (seq != null && seq > 0) {
             timelineSpi.update(sessionId, seq, state, state, title);
             // AWAITING_USER / WAITING 之后还会续跑同一行；仅真正终态释放 map 条目
-            if (!"AWAITING_USER".equals(state) && !"WAITING".equals(state)) {
+            if (!TimelineState.AWAITING_USER.getCode().equals(state) && !TimelineState.WAITING.getCode().equals(state)) {
                 runStatusSeqByRun.remove(runId, seq);
             }
         } else {

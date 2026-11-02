@@ -310,7 +310,9 @@ class ParallelSearchAgentLoopTest {
             }).when(model).stream(anyString(), anyString(), anyString(), anyString(), any(), any(), any());
             ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
             SessionRunner runner = new SessionRunner(properties, runs, mock(SessionSpi.class),
-                    new KernelLlmService(model, publisher, properties), mock(ApiKeySpi.class), publisher,
+                    new KernelLlmService(model, publisher, properties,
+                            mock(com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi.class)),
+                    mock(ApiKeySpi.class), publisher,
                     new RouteListBuilder(mock(RouteSpi.class), mock(InstanceSpi.class), model),
                     new FallbackRouteExecutor(), mock(HistoryLoader.class), mock(CompactionService.class), input,
                     new RunPromptBuilder(), executor, mock(TitleService.class), mock(AgentToolCallRecordSpi.class),

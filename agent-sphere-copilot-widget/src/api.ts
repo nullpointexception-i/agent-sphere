@@ -263,6 +263,14 @@ export function getTimeline(
   return request(base, `/instance/sessions/${sessionId}/timeline`, { params });
 }
 
+/** 会话运行态（来源表聚合）：发送锁 / pending 判定的唯一权威来源。 */
+export function getRuntimeState(
+  base: string,
+  sessionId: number,
+): Promise<RuntimeStateVO> {
+  return request(base, `/runtime/${sessionId}/state`);
+}
+
 /** 发送消息（REST 方式，SSE 通道负责后续打字机/补行）。 */
 export function sendMessage(
   base: string,
@@ -346,6 +354,20 @@ export function clarify(
   });
 }
 
+export interface RuntimeStateVO {
+  sessionId: number;
+  runId?: number | null;
+  runStatus?: string | null;
+  loopCount?: number | null;
+  loopLimit?: number | null;
+  runMode?: string | null;
+  pendingClarifications: number;
+  pendingToolApprovals: number;
+  pendingQueue: number;
+  canSend: boolean;
+  blockReasons: string[];
+}
+
 export interface ApiClient {
   ssoAuthorize: (provider: string, redirectUri: string, prompt?: string) => Promise<string>;
   ssoExchange: (otc: string) => Promise<UserVO>;
@@ -360,6 +382,7 @@ export interface ApiClient {
   listInstancesPage: (page?: number, size?: number) => Promise<InstancePageVO>;
   subAgentTimeline: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
   getTimeline: (sessionId: number, query?: TimelineQuery) => Promise<SessionTimelinePageVO>;
+  getRuntimeState: (sessionId: number) => Promise<RuntimeStateVO>;
   loadFile: (fileKey: string) => Promise<string>;
   uploadFile: (file: File) => Promise<{ fileKey: string; contentType: string; sizeBytes: number }>;
   sendMessage: (
@@ -405,6 +428,7 @@ export function createApi(config: WidgetConfig): ApiClient {
     listInstancesPage: (page, size) => listInstancesPage(base, page, size),
     subAgentTimeline: (subAgentRunId) => subAgentTimeline(base, subAgentRunId),
     getTimeline: (sessionId, query) => getTimeline(base, sessionId, query),
+    getRuntimeState: (sessionId) => getRuntimeState(base, sessionId),
     loadFile: (fileKey) => loadFileObjectUrl(base, fileKey),
     uploadFile: (file) => uploadFile(base, file),
     sendMessage: (sessionId, message, attachmentKeys) =>

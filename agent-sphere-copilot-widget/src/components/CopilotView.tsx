@@ -611,16 +611,13 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const visibleSessions = selectedAgentId
     ? sessions.filter((s) => s.agentInstanceId === selectedAgentId)
     : [];
-  // 输入锁定：发送中 / run 进行中（事件驱动）/ 用户消息刚上墙未替换。
-  // runActive 由 useTimelineStream 事件驱动：点击发送（addUserMessage）即 true，
-  // 终态 SSE（完成/失败/取消/等待澄清）为 false —— 不再扫描 rows，避免历史残留行干扰。
+  // 输入锁定：发送中 / 用户消息刚上墙未替换 / 运行态接口（来源表聚合）。
+  // timeline 只负责渲染，不参与锁定判断。
   const runActive = timeline.runActive;
   const inputLocked =
     sending ||
-    runActive ||
     timeline.pendingUserRows.length > 0 ||
-    timeline.toolApproval != null ||
-    timeline.clarification != null;
+    (timeline.runtimeState ? !timeline.runtimeState.canSend : runActive);
 
   // 解锁后把焦点还给输入框，方便连发
   useEffect(() => {
