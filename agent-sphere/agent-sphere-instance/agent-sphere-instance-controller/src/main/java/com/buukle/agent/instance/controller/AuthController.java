@@ -2,6 +2,9 @@ package com.buukle.agent.instance.controller;
 
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
+import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.SessionSurfaceHolder;
+import com.buukle.agent.common.context.SessionSurfaceResolver;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.BaseController;
@@ -33,17 +36,31 @@ public class AuthController extends BaseController {
     @AuditLog(action = "LOGIN", resourceType = "User", resourceId = "#result?.body?.id")
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginDTO dto, HttpServletRequest request) {
-        dto.setLoginIp(RequestUtils.resolveClientIp(request));
-        dto.setUserAgent(RequestUtils.resolveUserAgent(request));
-        return ok(userService.login(dto));
+        // 登录接口在 SKIP_PATHS 内，拦截器不会解析来源端，这里显式设置供签发会话使用
+        SessionSurfaceHolder.set(
+                SessionSurfaceResolver.fromHeader(request.getHeader(SessionSurfaceHolder.HEADER)));
+        try {
+            dto.setLoginIp(RequestUtils.resolveClientIp(request));
+            dto.setUserAgent(RequestUtils.resolveUserAgent(request));
+            return ok(userService.login(dto));
+        } finally {
+            // standalone 测试不经过拦截器，必须自己清理，避免来源端串到后续用例/请求
+            SessionSurfaceHolder.clear();
+        }
     }
 
     @AuditLog(action = "REGISTER", resourceType = "User", resourceId = "#result?.body?.id")
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterDTO dto, HttpServletRequest request) {
-        dto.setLoginIp(RequestUtils.resolveClientIp(request));
-        dto.setUserAgent(RequestUtils.resolveUserAgent(request));
-        return ok(userService.register(dto));
+        SessionSurfaceHolder.set(
+                SessionSurfaceResolver.fromHeader(request.getHeader(SessionSurfaceHolder.HEADER)));
+        try {
+            dto.setLoginIp(RequestUtils.resolveClientIp(request));
+            dto.setUserAgent(RequestUtils.resolveUserAgent(request));
+            return ok(userService.register(dto));
+        } finally {
+            SessionSurfaceHolder.clear();
+        }
     }
 
     @GetMapping("/check-username")
@@ -54,6 +71,10 @@ public class AuthController extends BaseController {
     @GetMapping("/me")
     public ResponseEntity<?> me() {
         UserVO user = userService.getCurrentUser();
+        if (user != null) {
+            // token 不再存于 agent_user；返回当前请求正在使用的 token，保证前端刷新后仍可用
+            user.setToken(AuthContext.getToken());
+        }
         return ok(user);
     }
 
@@ -61,6 +82,25 @@ public class AuthController extends BaseController {
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
         userService.logout();
+        return ok();
+    }
+
+    @AuditLog(action = "LOGOUT_ALL", resourceType = "User")
+    @PostMapping("/logout-all")
+    public ResponseEntity<?> logoutAll() {
+        userService.logoutAll();
+        return ok();
+    }
+
+    @GetMapping("/sessions")
+    public ResponseEntity<?> sessions() {
+        return ok(userService.listSessions());
+    }
+
+    @AuditLog(action = "REVOKE_SESSION", resourceType = "User", resourceId = "#sessionId")
+    @DeleteMapping("/sessions/{sessionId}")
+    public ResponseEntity<?> revokeSession(@PathVariable Long sessionId) {
+        userService.revokeSession(sessionId);
         return ok();
     }
 

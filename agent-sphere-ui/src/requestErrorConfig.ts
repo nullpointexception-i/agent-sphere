@@ -1,6 +1,6 @@
 ﻿import type { RequestConfig } from '@umijs/max';
 import { getIntl } from '@umijs/max';
-import { getToken } from '@/utils/auth';
+import { clearStoredUser, getToken } from '@/utils/auth';
 import { showError } from '@/utils/globalMessage';
 
 export const errorConfig: RequestConfig = {
@@ -15,8 +15,14 @@ export const errorConfig: RequestConfig = {
           data?.errorMessage ||
           data?.message ||
           `Request failed (${status})`;
-        if (status === 401 || status === 403) {
+        if (status === 401) {
+          clearStoredUser();
           window.location.href = '/user/login';
+          return;
+        }
+        if (status === 403) {
+          // 权限不足不是登录态失效：跳登录页会让用户陷入「登录成功但仍然 403」的循环
+          showError(msg);
           return;
         }
         showError(msg);

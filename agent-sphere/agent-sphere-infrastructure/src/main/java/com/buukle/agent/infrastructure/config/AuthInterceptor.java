@@ -2,16 +2,18 @@ package com.buukle.agent.infrastructure.config;
 
 import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.common.context.AuthContext;
-import com.buukle.agent.common.context.SessionSurface;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
+import com.buukle.agent.common.context.SessionSurfaceResolver;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.ErrorResponse;
+import com.buukle.agent.common.util.TokenHasher;
 import com.buukle.agent.infrastructure.persistence.CacheService;
 import com.buukle.agent.instance.domain.AgentUser;
 import com.buukle.agent.instance.dtvo.enums.UserEnum;
 import com.buukle.agent.instance.repository.UserMapper;
+import com.buukle.agent.instance.spi.UserTokenSpi;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -31,10 +33,10 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/check-username", "/api/v1/auth/sso", "/api/v1/chrome", "/api/v1/artifacts/documents/shared", "/api/v1/public/shares", "/api/v1/system/config/public", "/api/v1/system/config/plugin/download");
     private static final String EXTERNAL_API_PREFIX = "/api/v1/api";
-    private static final String TOKEN_CACHE_PREFIX = "token:user:";
     private final UserMapper userMapper;
     private final CacheService cacheService;
     private final PermissionSpi permissionSpi;
+    private final UserTokenSpi userTokenSpi;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
@@ -56,17 +58,20 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         String token = authHeader.substring(7);
-        String cacheKey = TOKEN_CACHE_PREFIX + token;
+        String cacheKey = TokenCacheKeys.USER_TOKEN_PREFIX + TokenHasher.sha256(token);
         AgentUser user = cacheService.get(cacheKey);
         if (user == null) {
-            user = userMapper.selectOne(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentUser>()
-                            .eq(AgentUser::getToken, token));
+            // 缓存未命中才回源：token 校验 + 用户查询。会话表支持一个用户多端并存，
+            // 因此这里不再有「后登录覆盖先登录」的问题。
+            Long userId = userTokenSpi.validate(token);
+            if (userId != null) {
+                user = userMapper.selectById(userId);
+            }
             if (user != null) {
-                cacheService.set(cacheKey, user, 5);
+                cacheService.set(cacheKey, user, TokenCacheKeys.USER_TOKEN_CACHE_MINUTES);
             }
         }
-        if (user == null) {
+        if (user == null || !UserEnum.STATUS_ACTIVE.equals(user.getStatus())) {
             writeUnauthorized(response);
             return false;
         }
@@ -88,16 +93,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
         // 来源端（主站 / widget）必须在**鉴权通过之后**才设置：preHandle 提前 return false（401）时
         // Spring 不会调用 afterCompletion，在此之前的赋值会残留在池化线程上串给下一个请求。
-        SessionSurfaceHolder.set(resolveSurface(request));
+        SessionSurfaceHolder.set(
+                SessionSurfaceResolver.fromHeader(request.getHeader(SessionSurfaceHolder.HEADER)));
         return true;
-    }
-
-    /** 缺省（未带头）按主站；widget 显式声明 `X-Client-Surface: widget`。 */
-    private static SessionSurface resolveSurface(HttpServletRequest request) {
-        String raw = request.getHeader(SessionSurfaceHolder.HEADER);
-        return SessionSurface.WIDGET.name().equalsIgnoreCase(raw == null ? null : raw.trim())
-                ? SessionSurface.WIDGET
-                : SessionSurface.CONSOLE;
     }
 
     private void writeUnauthorized(HttpServletResponse response) throws IOException {

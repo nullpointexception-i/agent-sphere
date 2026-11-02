@@ -1,4 +1,5 @@
 import {
+  DisconnectOutlined,
   KeyOutlined,
   LogoutOutlined,
   SettingOutlined,
@@ -18,9 +19,9 @@ type GlobalHeaderRightProps = {
 export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
   children,
 }) => {
-  const loginOut = async () => {
+  const loginOut = async (endpoint = '/api/v1/auth/logout') => {
     try {
-      await umiRequest('/api/v1/auth/logout', { method: 'POST' });
+      await umiRequest(endpoint, { method: 'POST' });
     } catch {}
     clearStoredUser();
     const { search, pathname } = window.location;
@@ -45,6 +46,14 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
         setInitialState((s) => ({ ...s, currentUser: undefined }));
       });
       loginOut();
+      return;
+    }
+    if (key === 'logout-all') {
+      startTransition(() => {
+        setInitialState((s) => ({ ...s, currentUser: undefined }));
+      });
+      // 吊销该用户全部会话：其它设备 / widget 也必须重新登录
+      loginOut('/api/v1/auth/logout-all');
       return;
     }
     if (key === 'admin') {
@@ -101,6 +110,14 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       : []),
     {
       type: 'divider' as const,
+    },
+    {
+      key: 'logout-all',
+      icon: <DisconnectOutlined />,
+      label: intl.formatMessage({
+        id: 'pages.logoutAll',
+        defaultMessage: 'Logout All Devices',
+      }),
     },
     {
       key: 'logout',

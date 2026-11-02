@@ -107,10 +107,12 @@ const api: AgentSphereWidget = {
   init: mountWidget,
   mount: mountWidget,
   relogin: () => {
-    // 清除当前用户会话（内存缓存 + sessionStorage），重置 auto-login 标记，
+    // 清除当前用户会话（内存缓存 + sessionStorage），重置 auto-login 标记与退避计数，
     // 重新挂载触发新的 Root autoLogin 静默 SSO（为切换后的新用户重新登录）
     clearUser();
     sessionStorage.removeItem('agent-sphere-widget:auto-login-tried');
+    sessionStorage.removeItem('agent-sphere:as:auto-login-last-at');
+    sessionStorage.removeItem('agent-sphere:as:auto-login-failures');
     if (lastConfig) {
       mountWidget(lastConfig);
     }

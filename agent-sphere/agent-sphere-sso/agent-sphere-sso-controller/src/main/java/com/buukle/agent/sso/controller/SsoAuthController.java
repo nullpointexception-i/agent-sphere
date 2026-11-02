@@ -1,11 +1,14 @@
 package com.buukle.agent.sso.controller;
 
+import com.buukle.agent.common.context.SessionSurfaceHolder;
+import com.buukle.agent.common.context.SessionSurfaceResolver;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.sso.dtvo.SsoAuthorizeVO;
 import com.buukle.agent.sso.dtvo.SsoExchangeDTO;
 import com.buukle.agent.sso.dtvo.vo.SsoProviderOptionVO;
 import com.buukle.agent.sso.service.SsoService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -49,7 +52,14 @@ public class SsoAuthController extends BaseController {
     }
 
     @PostMapping("/exchange")
-    public ResponseEntity<UserVO> exchange(@Valid @RequestBody SsoExchangeDTO dto) {
-        return ok(ssoService.exchange(dto.getOtc()));
+    public ResponseEntity<UserVO> exchange(@Valid @RequestBody SsoExchangeDTO dto, HttpServletRequest request) {
+        // exchange 在 SKIP_PATHS 内，拦截器不解析来源端；这里显式识别 widget，签发对应 source 的会话
+        SessionSurfaceHolder.set(
+                SessionSurfaceResolver.fromHeader(request.getHeader(SessionSurfaceHolder.HEADER)));
+        try {
+            return ok(ssoService.exchange(dto.getOtc()));
+        } finally {
+            SessionSurfaceHolder.clear();
+        }
     }
 }

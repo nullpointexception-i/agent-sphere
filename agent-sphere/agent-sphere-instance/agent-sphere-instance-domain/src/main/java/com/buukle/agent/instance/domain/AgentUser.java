@@ -19,7 +19,6 @@ public class AgentUser {
     private String englishName;
     private String email;
     private String avatar;
-    private String token;
     private String status;
     private String superAdmin;
     @TableLogic

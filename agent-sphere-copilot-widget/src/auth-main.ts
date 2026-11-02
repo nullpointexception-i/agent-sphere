@@ -24,11 +24,19 @@ import type { UserVO } from './types';
 
 const STORAGE_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
 const STORAGE_PENDING_KEY = 'agent-sphere:as:auto-sso-pending';
+const STORAGE_LAST_ATTEMPT_KEY = 'agent-sphere:as:auto-login-last-at';
+const STORAGE_FAILURES_KEY = 'agent-sphere:as:auto-login-failures';
 /** 静默 iframe 守卫：iframe 内（同源 SPA）运行的 auth-main 据此跳过自身的 OIDC 处理，防止 OTC 被二次消费。 */
 const STORAGE_IFRAME_GUARD_KEY = 'agent-sphere:as:sso-iframe-guard';
 const AUTH_RESULT_EVENT = 'agent-sphere:auth-result';
 const IFRAME_POLL_INTERVAL_MS = 200;
 const IFRAME_POLL_TIMEOUT_MS = 15000;
+/**
+ * 自动登录退避：SSO 配置异常时，401 → 静默 SSO → 再 401 会形成高频循环。
+ * 60 秒内不重复发起，连续失败 2 次后停止自动尝试，改由宿主展示登录入口。
+ */
+const AUTO_LOGIN_MIN_INTERVAL_MS = 60_000;
+const AUTO_LOGIN_MAX_FAILURES = 2;
 
 /** 每次 init/reset 都使旧的异步 SSO 流程失效，避免旧用户结果覆盖新用户。 */
 let authGeneration = 0;
@@ -89,6 +97,30 @@ function isTopWindow(): boolean {
     return window.self === window.top;
   } catch {
     return false;
+  }
+}
+
+function readNumber(key: string): number {
+  try {
+    return Number(sessionStorage.getItem(key) ?? '0') || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setNumber(key: string, value: number): void {
+  try {
+    sessionStorage.setItem(key, String(value));
+  } catch {
+    // storage unavailable
+  }
+}
+
+function clearNumber(key: string): void {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // storage unavailable
   }
 }
 
@@ -243,6 +275,7 @@ async function exchangeAndPersist(
     }
     if (user?.token) {
       setUser(user);
+      clearNumber(STORAGE_FAILURES_KEY);
       const merged = await syncSsoIdentity(base, user);
       if (generation !== authGeneration) {
         return;
@@ -255,6 +288,9 @@ async function exchangeAndPersist(
   } catch (err) {
     if (generation !== authGeneration) {
       return;
+    }
+    if (pending) {
+      setNumber(STORAGE_FAILURES_KEY, readNumber(STORAGE_FAILURES_KEY) + 1);
     }
     console.warn('[AgentSphereAuth] exchange failed', err);
     dispatchResult({ via: 'error', pending });
@@ -306,6 +342,20 @@ async function run(base: string, provider: string, autoLogin: boolean, generatio
     return;
   }
 
+  // 退避：避免 SSO 异常时 401 → 自动登录 → 401 的高频循环
+  if (readNumber(STORAGE_FAILURES_KEY) >= AUTO_LOGIN_MAX_FAILURES) {
+    console.warn('[AgentSphereAuth] auto login disabled after repeated failures');
+    dispatchResult({ via: 'skip' });
+    return;
+  }
+  const lastAttemptAt = readNumber(STORAGE_LAST_ATTEMPT_KEY);
+  if (lastAttemptAt > 0 && Date.now() - lastAttemptAt < AUTO_LOGIN_MIN_INTERVAL_MS) {
+    console.warn('[AgentSphereAuth] auto login throttled');
+    dispatchResult({ via: 'skip' });
+    return;
+  }
+  setNumber(STORAGE_LAST_ATTEMPT_KEY, Date.now());
+
   setFlag(STORAGE_TRIED_KEY, true);
   setFlag(STORAGE_PENDING_KEY, true);
   const pending = true;
@@ -326,6 +376,7 @@ async function run(base: string, provider: string, autoLogin: boolean, generatio
   }
   setFlag(STORAGE_PENDING_KEY, false);
   console.warn('[AgentSphereAuth] silent probe returned error:', result.error);
+  setNumber(STORAGE_FAILURES_KEY, readNumber(STORAGE_FAILURES_KEY) + 1);
   dispatchResult({ via: 'error', pending });
 }
 
@@ -353,6 +404,8 @@ const api: AgentSphereAuthApi = {
     clearUser();
     setFlag(STORAGE_TRIED_KEY, false);
     setFlag(STORAGE_PENDING_KEY, false);
+    clearNumber(STORAGE_LAST_ATTEMPT_KEY);
+    clearNumber(STORAGE_FAILURES_KEY);
   },
 };
 

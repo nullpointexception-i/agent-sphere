@@ -4,26 +4,29 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.admin.spi.RoleSpi;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.event.UserRegisteredEvent;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.AvatarGenerator;
+import com.buukle.agent.common.util.TokenHasher;
 import com.buukle.agent.instance.domain.AgentUser;
 import com.buukle.agent.instance.dtvo.dto.LoginDTO;
 import com.buukle.agent.instance.dtvo.dto.RegisterDTO;
 import com.buukle.agent.instance.dtvo.enums.UserEnum;
+import com.buukle.agent.instance.dtvo.vo.IssuedTokenVO;
+import com.buukle.agent.instance.dtvo.vo.UserSessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.UserMapper;
 import com.buukle.agent.instance.service.UserService;
+import com.buukle.agent.instance.spi.UserTokenSpi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 
@@ -35,6 +38,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     private final PermissionSpi permissionSpi;
     private final RoleSpi roleSpi;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserTokenSpi userTokenSpi;
 
     public static String sha256(String input) {
         try {
@@ -46,10 +50,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         }
     }
 
-    private static String generateToken() {
-        byte[] bytes = new byte[32];
-        new SecureRandom().nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    /** 当前请求来源端（CONSOLE / WIDGET / INTERNAL），写入会话行用于设备管理。 */
+    private static String currentTokenSource() {
+        return SessionSurfaceHolder.current().name();
     }
 
     private static final String DEFAULT_USER_ROLE_CODE = "USER";
@@ -74,7 +77,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         vo.setEnglishName(user.getEnglishName());
         vo.setEmail(user.getEmail());
         vo.setAvatar(user.getAvatar());
-        vo.setToken(user.getToken());
         vo.setStatus(user.getStatus());
         vo.setLastLoginAt(user.getLastLoginAt());
         vo.setSuperAdmin(user.getSuperAdmin());
@@ -100,29 +102,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             throw new BizException(InstanceErrorCode.INVALID_CREDENTIALS);
         }
 
-        String token = generateToken();
-        user.setToken(token);
-        updateById(user);
+        IssuedTokenVO issued = userTokenSpi.issue(
+                user.getId(), currentTokenSource(), dto.getLoginIp(), dto.getUserAgent());
 
         user.setLastLoginAt(java.time.LocalDateTime.now());
         user.setLastLoginIp(dto.getLoginIp());
         user.setLastLoginUa(dto.getUserAgent());
         updateById(user);
 
-        AuthContext.setToken(token);
+        AuthContext.setToken(issued.getToken());
         AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
         AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
 
-        return toVO(user);
+        UserVO vo = toVO(user);
+        vo.setToken(issued.getToken());
+        return vo;
     }
 
     @Override
     public UserVO getCurrentUser() {
-        String token = AuthContext.getToken();
-        if (token == null) return null;
-        AgentUser user = lambdaQuery().eq(AgentUser::getToken, token).one();
+        Long userId = AuthContext.getUserId();
+        if (userId == null) return null;
+        AgentUser user = getById(userId);
         return user != null ? toVO(user) : null;
     }
 
@@ -130,9 +133,33 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     public void logout() {
         String token = AuthContext.getToken();
         if (token != null) {
-            lambdaUpdate().eq(AgentUser::getToken, token).set(AgentUser::getToken, null).update();
+            userTokenSpi.revoke(token);
         }
         AuthContext.clear();
+    }
+
+    @Override
+    public void logoutAll() {
+        Long userId = AuthContext.getUserId();
+        if (userId != null) {
+            userTokenSpi.revokeAll(userId);
+        }
+        AuthContext.clear();
+    }
+
+    @Override
+    public List<UserSessionVO> listSessions() {
+        Long userId = AuthContext.getUserId();
+        if (userId == null) return List.of();
+        String token = AuthContext.getToken();
+        return userTokenSpi.listActive(userId, token == null ? null : TokenHasher.sha256(token));
+    }
+
+    @Override
+    public void revokeSession(Long sessionId) {
+        Long userId = AuthContext.getUserId();
+        if (userId == null) throw new BizException(CommonErrorCode.UNAUTHORIZED);
+        userTokenSpi.revokeById(userId, sessionId);
     }
 
     @Override
@@ -161,6 +188,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             throw new BizException(InstanceErrorCode.OLD_PASSWORD_MISMATCH);
         user.setPassword(passwordEncoder.encode(newPassword));
         updateById(user);
+        // 改密后其它设备必须重新登录；当前设备保留，避免用户改完密码自己被踢出去
+        userTokenSpi.revokeAllExcept(userId, AuthContext.getToken());
     }
 
     @Override
@@ -178,16 +207,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     public UserVO loginByUserId(Long userId) {
         AgentUser user = getById(userId);
         if (user == null) throw new BizException(InstanceErrorCode.USER_NOT_FOUND);
-        String token = generateToken();
-        user.setToken(token);
+        IssuedTokenVO issued = userTokenSpi.issue(userId, currentTokenSource(), null, null);
         user.setLastLoginAt(java.time.LocalDateTime.now());
         updateById(user);
-        AuthContext.setToken(token);
+        AuthContext.setToken(issued.getToken());
         AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
         AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
-        return toVO(user);
+        UserVO vo = toVO(user);
+        vo.setToken(issued.getToken());
+        return vo;
     }
 
     @Override
@@ -231,18 +261,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             eventPublisher.publishEvent(event);
         }
         // Auto-login
-        String token = generateToken();
-        user.setToken(token);
+        IssuedTokenVO issued = userTokenSpi.issue(
+                user.getId(), currentTokenSource(), dto.getLoginIp(), dto.getUserAgent());
         user.setLastLoginAt(java.time.LocalDateTime.now());
         user.setLastLoginIp(dto.getLoginIp());
         user.setLastLoginUa(dto.getUserAgent());
         updateById(user);
-        AuthContext.setToken(token);
+        AuthContext.setToken(issued.getToken());
         AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
         AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
-        return toVO(user);
+        UserVO vo = toVO(user);
+        vo.setToken(issued.getToken());
+        return vo;
     }
 
     @Override
