@@ -301,8 +301,9 @@ function fetchSsoDisplayName() {
 
 // --- Helpers ---
 async function getActiveTabId() {
-  const wid = await tabManager.getLivePluginWindowId();
+  const wid = await tabManager.getPluginWindowId();
   if (wid == null) return null;
+  if (!await tabManager.windowLooksLikePlugin(wid)) return null;
   const [tab] = await chrome.tabs.query({ windowId: wid, active: true });
   return tab?.id;
 }
@@ -310,7 +311,13 @@ async function getActiveTabId() {
 /** 解析本次动作的目标 tab：显式 tabId 必须属于插件窗口，否则不碰用户 tab。 */
 async function resolveTargetTabId(params) {
   if (params?.tabId != null) {
-    return (await tabManager.isPluginTab(params.tabId)) ? params.tabId : null;
+    if (await tabManager.isPluginTab(params.tabId)) return params.tabId;
+    // 显式 tabId 可能来自已关闭的旧插件窗口；不碰用户 tab，回退到当前受控插件 tab。
+    const controlled = tabManager.getControlled();
+    if (controlled != null && await tabManager.isPluginTab(controlled)) {
+      return controlled;
+    }
+    return null;
   }
   const controlled = tabManager.getControlled();
   if (controlled != null && await tabManager.isPluginTab(controlled)) {
@@ -878,6 +885,12 @@ async function executeInPageInner(commandId, action, params, sessionId) {
     // 目标 tab 只能来自独立插件窗口；显式 tabId 指向用户 tab 时直接 NO_TAB。
     const resolvedTabId = await resolveTargetTabId(params);
     if (!resolvedTabId) {
+      console.warn('[AgentSphere] no target tab in plugin window', {
+        tabId: params.tabId,
+        controlled: tabManager.getControlled(),
+        pluginWindowId: tabManager.pluginWindowId,
+        pluginGroupId: tabManager.pluginGroupId,
+      });
       sendCallbackSafe(commandId, failResult('No target tab in the AgentSphere window', ErrorCategory.NO_TAB), null, sessionId);
       return;
     }
@@ -1158,6 +1171,12 @@ async function handleNavigate(commandId, params, sessionId) {
     sendCallbackSafe(commandId, failResult('Failed to open tab in the AgentSphere window', ErrorCategory.NO_TAB), null, sessionId);
     return;
   }
+  // 先收养再自检：isPluginTab 在窗口状态短暂缺失时可用 trustedTabId 自愈。
+  tabManager.setControlled(tab.id);
+  if (!await tabManager.isPluginTab(tab.id)) {
+    sendCallbackSafe(commandId, failResult('AgentSphere window state is not initialized; reload the extension', ErrorCategory.NO_TAB), tab.id, sessionId);
+    return;
+  }
   await tabManager.waitForTabComplete(tab.id, 10000);
   await waitIdle(tab.id);
   if (!await tabManager.ensureContentScript(tab.id)) {
@@ -1168,7 +1187,6 @@ async function handleNavigate(commandId, params, sessionId) {
   const finalUrl = finalTab.url || params.url;
   targetOrigin = originOf(finalUrl) || targetOrigin;
   await saveSessionState({ targetOrigin });
-  tabManager.setControlled(tab.id);
   await tabManager.ensureForeground(tab.id);
   await tabManager.groupTab(tab.id);
   recordNavigate(commandId, sessionId, navT0, { url: finalUrl, redirected: finalUrl !== params.url, ok: true });
