@@ -32,14 +32,17 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
         request.setTopLogprobs(null);
         request.setLogitBias(null);
         // DeepSeek thinking + tools: assistant.reasoning_content of previous turns must be passed
-        // back. Ensure the key exists on tool-call turns even when no reasoning was recorded.
+        // back. The key must exist on EVERY assistant turn, not only tool-call turns: DeepSeek
+        // validates the assistant messages after the last user message, and a rebuilt history
+        // (restart recovery / resume) can move a content-only assistant into that window — an
+        // omitted key then fails the whole request with 400. ChatMessageDTO is @JsonInclude(NON_NULL),
+        // so the key only appears when the value is a non-null string: fill "" wherever it is missing.
         if (request.getMessages() != null) {
             for (ChatMessageDTO m : request.getMessages()) {
                 if (m == null || !ROLE_ASSISTANT.equals(m.getRole())) {
                     continue;
                 }
-                boolean hasToolCalls = m.getToolCalls() != null && !m.getToolCalls().isEmpty();
-                if (hasToolCalls && m.getReasoningContent() == null) {
+                if (m.getReasoningContent() == null) {
                     m.setReasoningContent("");
                 }
             }

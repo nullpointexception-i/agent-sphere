@@ -151,6 +151,18 @@ public final class RunnerConstants {
     public static final String RUN_STALE_MSG = "执行中断：run 长时间无进展且执行副本已失联";
     /** 运行上下文丢失（工具列表为空）时的失败原因；不能继续跑静默轮。 */
     public static final String RUN_CONTEXT_LOST_MSG = "运行上下文已丢失（工具列表为空），无法继续调用工具，请重试";
+    /**
+     * 服务重启后恢复 run 时补在历史末尾的合成 user 消息。
+     *
+     * <p>重建历史只回放 {@code run.getUserMessage()}，wait 恢复提示等合成 user 消息没有落库 ——
+     * 少了尾部 user 锚点，最后一条 user 之后会是一大段 assistant/tool：既丢失「醒来先复核」的语义，
+     * 也会把重建出来的 content-only assistant 推进 DeepSeek 的 reasoning_content 校验窗口
+     * （线上 run 2794 的 400）。补这一条让恢复路径与 wait 恢复路径「尾部恒有一条 user」的结构一致。
+     */
+    public static final String RUN_RECOVERY_RESUME_PROMPT =
+            "[The run was interrupted by a server restart and has been resumed. "
+                    + "Continue from the existing history: re-read the current state before acting, "
+                    + "do NOT repeat tool calls whose results are already in the history, and finish the task.]";
     /** 工具调用理由规则（仅在 call-reason-enabled 时追加到 system prompt）。 */
     public static final String PROMPT_CALL_REASON_RULES = """
 

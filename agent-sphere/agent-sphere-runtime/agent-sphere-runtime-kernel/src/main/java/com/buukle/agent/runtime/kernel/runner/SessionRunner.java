@@ -393,6 +393,16 @@ public class SessionRunner {
                 messages.addAll(history.messages());
             }
             currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
+            // 重建历史只回放 run.getUserMessage()，wait 恢复提示等合成 user 消息没有落库。
+            // 少了尾部 user 锚点：① 模型不知道「刚被重启打断」，醒来后容易重复已完成的工具调用；
+            // ② 最后一条 user 之后变成一大段 assistant/tool，重建出来的 content-only assistant
+            // 会被推进 DeepSeek 的 reasoning_content 校验窗口（线上 run 2794 的 400）。
+            // 补一条恢复提示，与 wait 恢复路径「尾部恒有一条 user」的结构对齐。
+            messages.add(new ChatMessageDTO()
+                    .setRole(LlmApiConstant.ROLE_USER)
+                    .setContent(RunnerConstants.RUN_RECOVERY_RESUME_PROMPT));
+            // 恢复路径不走首轮分支（hasToolCalls=true），待办槽必须在这里补回来，否则重建后计划丢失。
+            refreshTodolistSlot(sessionId, messages);
             hasToolCalls = true;
             toolsEverExecuted = true;
             topCtx.setRecoveryResume(false);

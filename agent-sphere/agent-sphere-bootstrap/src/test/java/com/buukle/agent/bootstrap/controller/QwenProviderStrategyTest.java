@@ -141,7 +141,7 @@ class QwenProviderStrategyTest {
     }
 
     @Test
-    void deepseekStrategy_keepsReasoningAndFillsMissingKeyOnToolTurns() {
+    void deepseekStrategy_keepsReasoningAndFillsMissingKeyOnAllAssistantTurns() {
         ChatMessageDTO withReasoning = assistantToolCall().setReasoningContent("real reasoning");
         ChatMessageDTO withoutReasoning = assistantToolCall();
         ChatMessageDTO plain = new ChatMessageDTO().setRole("assistant").setContent("done");
@@ -151,7 +151,27 @@ class QwenProviderStrategyTest {
 
         assertEquals("real reasoning", withReasoning.getReasoningContent());
         assertEquals("", withoutReasoning.getReasoningContent(), "工具轮必须带 reasoning_content 键");
-        assertNull(plain.getReasoningContent(), "非工具轮不需要补 reasoning_content");
+        assertEquals("", plain.getReasoningContent(),
+                "纯文本 assistant 同样必须带 reasoning_content 键（恢复重建后可能落进校验窗口）");
+        assertTrue(JsonUtils.toJson(req).contains("\"reasoning_content\":\"\""),
+                "序列化后 assistant 必须显式带 reasoning_content 键");
+    }
+
+    @Test
+    void deepseekStrategy_contentOnlyAssistantSerializesReasoningContentKey() {
+        // 线上 run 2794：重启恢复后消息列表被从 DB 重建，wait 恢复提示（合成 user）没有落库，
+        // 纯文本 assistant 落进「最后一条 user 之后」的校验窗口 → 400
+        // The `reasoning_content` in the thinking mode must be passed back to the API.
+        ChatMessageDTO plain = new ChatMessageDTO().setRole("assistant").setContent("先读取技能");
+        ChatCompletionRequestDTO req = request(
+                new ChatMessageDTO().setRole("user").setContent("task"),
+                plain);
+
+        new DeepseekProviderStrategy().adaptRequest(req);
+
+        String json = JsonUtils.toJson(req);
+        assertTrue(json.contains("\"reasoning_content\":\"\""),
+                "content-only assistant 必须显式带空 reasoning_content 键，实际: " + json);
     }
 
     @Test
