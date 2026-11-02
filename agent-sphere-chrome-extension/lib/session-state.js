@@ -6,6 +6,7 @@
  * used to live only in memory and silently vanished on every restart:
  *
  *   pluginGroupId    → the AgentSphere group id   → a new group on every restart (tabs split)
+ *   pluginWindowId   → the isolated plugin window → tabs fall back into the user's window
  *   targetOrigin     → the controlled-site guard  → assertControlledHost() goes inert
  *   controlledTabId  → the controlled tab         → navigate() stops reusing tabs
  *
@@ -14,7 +15,7 @@
  *
  * NEVER call this from offscreen.js — offscreen documents have no chrome.storage.
  */
-const KEYS = ['pluginGroupId', 'targetOrigin', 'controlledTabId'];
+const KEYS = ['pluginGroupId', 'pluginWindowId', 'targetOrigin', 'controlledTabId'];
 
 export async function loadSessionState() {
   try {

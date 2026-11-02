@@ -23,7 +23,7 @@ page-script.js (MAIN world) — auth/session bridge (sessionStorage → content 
 Files:
 - `background.js` — router; imports `lib/cdp-client.js`, `lib/tab-manager.js`, `lib/result.js`, `lib/offscreen-bridge.js`. **Keep it ESM**; the SW is `"type": "module"`.
 - `lib/cdp-client.js` — single `chrome.debugger` wrapper: per-tab sessions, `onDetach` clears the tab's session (self-heal), `sendCommand` throws `Debugger is not attached…` when stale, all ops serialized through a promise queue, `evaluate` retries once on detach races. **Do not call `chrome.debugger` outside this file.**
-- `lib/tab-manager.js` — controlled tab, content-script injection (3 files, ordered), `askContent` auto-re-injects on "Receiving end does not exist", and the **`AgentSphere` tab group** (aggregates every plugin tab; recreated if the group is closed).
+- `lib/tab-manager.js` — controlled tab, **isolated AgentSphere window**, content-script injection (3 files, ordered), `askContent` auto-re-injects on "Receiving end does not exist", and the **`AgentSphere` tab group** (all plugin tabs live in the dedicated window; recreated if the window/group is closed).
 - `lib/offscreen-bridge.js` — creates/pings the offscreen doc (alarm recreates it if the browser closes it).
 - `offscreen.js` — holds `/api/v1/runtime/user/task/stream` SSE, zombie detection, reconnect, forwards `browser_operation` to background. **Offscreen documents support ONLY `chrome.runtime`** — no `chrome.storage`/`chrome.tabs` there. Token/baseUrl are fetched from background via `task:creds`, and connection status is reported via `task:status` (background writes `storage.local.taskConnected`). Do not call `chrome.storage` inside `offscreen.js`.
 - `content-locator.js` / `content.js` — injected together (in that order) into the isolated world; share the `window.__asContent` namespace. Write actions (click/type/key/hover) run via CDP trusted input in `background.js`; content script only reads/wait/scroll/uploads.
@@ -49,7 +49,7 @@ Files:
 - **Debugger disconnects**: an external detach (opening DevTools on the controlled tab, cross-site navigation) drops the session. The `onDetach` listener + retry-once in `cdp-client.js` make the next command self-heal. It is still best to avoid opening DevTools on the controlled tab and to avoid cross-site navigation mid-task.
 - **CDP queue deadlines**: every operation queued through `cdp-client._serialized` carries its own deadline (`CDP_OP_TIMEOUT_MS`, 15s). Without it a single hung page command (e.g. `executeJS('while(true){}')`) would leave `_queue` pending forever and **every later CDP operation would stop executing until the service worker restarted**. A timeout cannot cancel the in-flight CDP command (CDP has no cancel semantics) — its only job is to keep the queue flowing.
 - **Timeout layering**: the extension's `EXECJS_TIMEOUT_MS` (27s) is deliberately below the backend's `EXECUTEJS_TIMEOUT_SECONDS` (30s), and `COMMAND_LEASE_MS` (60s) is above it. Equal executeJS timeouts race: the backend gives up first, releases the pending future and the lease is still held, so the late callback is dropped and the next command is rejected by the concurrency guard.
-- **Tab grouping**: every tab the plugin navigates/opens is added to the `AgentSphere` group (`tabGroups` permission). Requires the `tabGroups` + `offscreen` permissions — keep them in `manifest.json`.
+- **Tab grouping / isolated window**: every tab the plugin navigates/opens is created in a dedicated **normal, unfocused window** and added to the `AgentSphere` group (`tabGroups` permission). The window is created with `focused:false`; `tabs.update({active:true})` only activates inside that window, so the user's window/tab is never taken over. User tabs are never reused or navigated. Requires the `tabGroups` + `offscreen` permissions — keep them in `manifest.json`.
 - **Results** carry `errorCategory` (`not_found`/`csp_blocked`/`detached`/`inject_failed`/`timeout`/`no_tab`) and `method` so the backend agent can pick a retry strategy instead of blind retries.
 - Auth flow unchanged: content script reports `token` → background stores in `storage.local` → offscreen reads it (storage change triggers reconnect).
 
@@ -83,7 +83,8 @@ idempotency guard must live *inside* the IIFE, like the existing ones in `conten
 
 Reload the unpacked extension before pushing:
 - log in on a widget/main site → Task badge on
-- `navigate` several tabs → all land in the `AgentSphere` group
+- run `navigate`: a separate normal window opens (unfocused), all agent tabs land in its `AgentSphere` group, and the user's current window/tab stays active
+- `navigate` twice with the same URL: the tab is reused only inside the agent window; a same-URL user tab is never reused
 - executeJS on a normal site (MAIN-world scripting) and on a strict-CSP site (debugger fallback)
 - cross-site navigation mid-task → next executeJS recovers
 - `devtools` on the controlled tab → session self-heals on next command

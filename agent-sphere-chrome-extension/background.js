@@ -301,8 +301,22 @@ function fetchSsoDisplayName() {
 
 // --- Helpers ---
 async function getActiveTabId() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const wid = await tabManager.getLivePluginWindowId();
+  if (wid == null) return null;
+  const [tab] = await chrome.tabs.query({ windowId: wid, active: true });
   return tab?.id;
+}
+
+/** 解析本次动作的目标 tab：显式 tabId 必须属于插件窗口，否则不碰用户 tab。 */
+async function resolveTargetTabId(params) {
+  if (params?.tabId != null) {
+    return (await tabManager.isPluginTab(params.tabId)) ? params.tabId : null;
+  }
+  const controlled = tabManager.getControlled();
+  if (controlled != null && await tabManager.isPluginTab(controlled)) {
+    return controlled;
+  }
+  return getActiveTabId();
 }
 
 async function waitIdle(tabId) {
@@ -861,10 +875,16 @@ async function executeInPageInner(commandId, action, params, sessionId) {
     // （rAF 暂停、setTimeout 钳到 ≥1s，隐藏满 5 分钟到 ~1 次/分钟），而 clickAt /
     // executeJS / screenshot / getContent 及写动作的稳定性等待全都依赖渲染帧 ——
     // 后台下每条动作成倍变慢并撞上后端动作超时。放在所有分支之前才能全覆盖。
-    await tabManager.ensureForeground(params.tabId || tabManager.getControlled());
+    // 目标 tab 只能来自独立插件窗口；显式 tabId 指向用户 tab 时直接 NO_TAB。
+    const resolvedTabId = await resolveTargetTabId(params);
+    if (!resolvedTabId) {
+      sendCallbackSafe(commandId, failResult('No target tab in the AgentSphere window', ErrorCategory.NO_TAB), null, sessionId);
+      return;
+    }
+    await tabManager.ensureForeground(resolvedTabId);
 
     if (action === 'executeJS') {
-      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+      const targetTabId = resolvedTabId;
       if (!targetTabId) {
         sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
         return;
@@ -886,7 +906,7 @@ async function executeInPageInner(commandId, action, params, sessionId) {
 
     // getContent(mode:'axtree') — CDP 可访问性树（仅显式请求时使用，需 debugger 附着）
     if (action === 'getContent' && params.mode === 'axtree') {
-      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+      const targetTabId = resolvedTabId;
       if (!targetTabId) {
         sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
         return;
@@ -957,7 +977,7 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
 
     // writeAction 入口：clickAt 走坐标裸点（CDP），与其他写动作并列
     if (action === 'clickAt') {
-      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+      const targetTabId = resolvedTabId;
       if (!targetTabId) {
         sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
         return;
@@ -973,7 +993,7 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
 
     // screenshot：CDP 截图 → 上报后端 → 回调带 fileKey（不发字节过大回调）
     if (action === 'screenshot') {
-      const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+      const targetTabId = resolvedTabId;
       if (!targetTabId) {
         sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
         return;
@@ -1010,7 +1030,7 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
     }
 
     // Other actions → content script
-    const targetTabId = params.tabId || tabManager.getControlled() || (await getActiveTabId());
+    const targetTabId = resolvedTabId;
     if (!targetTabId) {
       sendCallbackSafe(commandId, failResult('No target tab', ErrorCategory.NO_TAB), null, sessionId);
       return;
@@ -1056,8 +1076,10 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
 
 async function handleNavigate(commandId, params, sessionId) {
   const navT0 = Date.now();
-  // If tabId specified, update that tab instead of creating a new one
-  if (params.tabId) {
+  // If tabId specified, update that tab instead of creating a new one.
+  // Only a tab already inside the AgentSphere window is eligible; a tabId that
+  // points at the user's tab is ignored (we never navigate the user's tab).
+  if (params.tabId && await tabManager.isPluginTab(params.tabId)) {
     try {
       const tab = await chrome.tabs.update(params.tabId, { url: params.url });
       await tabManager.waitForTabComplete(tab.id, 10000);
@@ -1081,11 +1103,9 @@ async function handleNavigate(commandId, params, sessionId) {
     }
   }
 
-  // Reuse any already-open tab showing this URL, wherever it came from (the
-  // controlled tab, a leftover from a previous worker, or one the user opened).
-  // Only the controlled tab used to be consulted, and only on an exact string
-  // match — so a tab left open across a restart, or differing only by hash/www,
-  // always spawned a duplicate.
+  // Reuse an already-open tab showing this URL **inside the plugin window**.
+  // User tabs are never reused: the agent's navigation must not touch the
+  // user's current tab or window.
   const reusable = await tabManager.findReusableTab(params.url);
   if (reusable) {
     try {
@@ -1105,11 +1125,12 @@ async function handleNavigate(commandId, params, sessionId) {
     }
   }
 
-  // Reuse existing tab if same URL is already open
+  // Reuse existing tab if same URL is already open in the plugin window.
   if (tabManager.getControlled()) {
     try {
       const existingTab = await chrome.tabs.get(tabManager.getControlled());
-      if (existingTab?.url === params.url || existingTab?.pendingUrl === params.url) {
+      if (await tabManager.isPluginTab(existingTab.id)
+          && (existingTab?.url === params.url || existingTab?.pendingUrl === params.url)) {
         if (!await tabManager.ensureContentScript(existingTab.id)) {
           sendCallbackSafe(commandId, failResult('Content script unavailable in existing tab', ErrorCategory.INJECT_FAILED), existingTab.id, sessionId);
           return;
@@ -1130,9 +1151,13 @@ async function handleNavigate(commandId, params, sessionId) {
     }
   }
 
-  // active:true —— 受控 tab 必须在前台。后台 tab 会被 Chrome 节流（rAF 暂停、
-  // 定时器钳到 ≥1s），而插件的稳定性等待全部依赖它们，会导致动作成倍变慢并超时。
-  const tab = await chrome.tabs.create({ url: params.url, active: true });
+  // 独立插件窗口：active:true 只在该窗口内生效；窗口本身用 focused:false 创建，
+  // 不抢用户当前窗口焦点。后台 tab 会被 Chrome 节流，所以窗口内仍必须保持 active。
+  const tab = await tabManager.openInPluginWindow(params.url);
+  if (!tab?.id) {
+    sendCallbackSafe(commandId, failResult('Failed to open tab in the AgentSphere window', ErrorCategory.NO_TAB), null, sessionId);
+    return;
+  }
   await tabManager.waitForTabComplete(tab.id, 10000);
   await waitIdle(tab.id);
   if (!await tabManager.ensureContentScript(tab.id)) {
@@ -1145,7 +1170,7 @@ async function handleNavigate(commandId, params, sessionId) {
   await saveSessionState({ targetOrigin });
   tabManager.setControlled(tab.id);
   await tabManager.ensureForeground(tab.id);
-  tabManager.groupTab(tab.id);
+  await tabManager.groupTab(tab.id);
   recordNavigate(commandId, sessionId, navT0, { url: finalUrl, redirected: finalUrl !== params.url, ok: true });
   sendCallbackSafe(commandId, okResult({ tabId: tab.id, url: finalUrl, redirected: finalUrl !== params.url }, 'navigate'), tab.id, sessionId);
 }
