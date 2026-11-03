@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AgentSphere",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Bridges AgentSphere AI with your browser for automated operations",
   "homepage_url": "https://github.com/nullpointexception-i/agent-sphere",
   "permissions": ["tabs", "scripting", "storage", "activeTab", "alarms", "debugger", "webNavigation", "tabGroups", "offscreen", "clipboardWrite"],

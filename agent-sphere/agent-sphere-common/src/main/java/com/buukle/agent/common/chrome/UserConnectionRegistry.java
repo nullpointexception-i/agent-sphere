@@ -11,7 +11,9 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 用户级浏览器连接登记表（在线状态）。
@@ -73,6 +75,11 @@ public class UserConnectionRegistry {
         }
         write(username, new ConnectionView(connectionId, deviceId, deviceName, source,
                 connectedAt, System.currentTimeMillis()));
+        // 同一设备只保留一条连接：扩展重连会换 connectionId，旧连接可能还没被服务端判定断开
+        // （客户端 abort 后 TCP 半开，send 未必立刻抛错），不清理就会出现「一台设备多行」。
+        if (deviceId != null && !deviceId.isBlank()) {
+            pruneOtherConnectionsOfDevice(username, deviceId, connectionId);
+        }
     }
 
     /** 心跳续期 + **重写整条记录**（Redis 重启/被淘汰后借此自愈）。 */
@@ -100,20 +107,32 @@ public class UserConnectionRegistry {
         }
     }
 
-    /** 存活连接列表，按建连时间倒序（最新在前）。 */
+    /** 存活连接列表，按建连时间倒序（最新在前）；同一设备只保留最新一条。 */
     public List<ConnectionView> list(String username) {
         if (username == null) {
             return List.of();
         }
         try {
             long cutoff = System.currentTimeMillis() - STALE_MILLIS;
-            List<ConnectionView> live = new ArrayList<>();
+            Map<String, ConnectionView> newestPerDevice = new HashMap<>();
+            List<ConnectionView> unidentified = new ArrayList<>();
             for (String json : connections(username).readAllValues()) {
                 ConnectionView view = parse(json);
-                if (view != null && view.lastSeen() >= cutoff) {
-                    live.add(view);
+                if (view == null || view.lastSeen() < cutoff) {
+                    continue;
+                }
+                if (view.deviceId() == null || view.deviceId().isBlank()) {
+                    // 老版本扩展没有 deviceId：无法去重，按连接保留（选择时也走回退逻辑）
+                    unidentified.add(view);
+                    continue;
+                }
+                ConnectionView current = newestPerDevice.get(view.deviceId());
+                if (current == null || view.connectedAt() > current.connectedAt()) {
+                    newestPerDevice.put(view.deviceId(), view);
                 }
             }
+            List<ConnectionView> live = new ArrayList<>(newestPerDevice.values());
+            live.addAll(unidentified);
             live.sort(Comparator.comparingLong(ConnectionView::connectedAt).reversed());
             return live;
         } catch (Exception e) {
@@ -183,13 +202,30 @@ public class UserConnectionRegistry {
         return new Selection(SelectionState.NEEDS_SELECTION, null, live, null);
     }
 
-    private void write(String username, ConnectionView view) {
-        try {
+    private void write(String username, ConnectionView view) {        try {
             RMap<String, String> map = connections(username);
             map.put(view.connectionId(), MAPPER.writeValueAsString(view));
             map.expire(KEY_TTL);
         } catch (Exception e) {
             log.warn("Write browser connection failed: username={}, device={}", username, view.deviceId(), e);
+        }
+    }
+
+    /** 同一设备只保留 keepConnectionId 这一条，清掉扩展重连留下的旧连接。 */
+    private void pruneOtherConnectionsOfDevice(String username, String deviceId, String keepConnectionId) {
+        try {
+            RMap<String, String> map = connections(username);
+            for (Map.Entry<String, String> entry : map.entrySet()) {
+                if (entry.getKey().equals(keepConnectionId)) {
+                    continue;
+                }
+                ConnectionView view = parse(entry.getValue());
+                if (view != null && deviceId.equals(view.deviceId())) {
+                    map.remove(entry.getKey());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Prune duplicate browser connections failed: username={}, device={}", username, deviceId, e);
         }
     }
 

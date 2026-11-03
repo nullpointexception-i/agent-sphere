@@ -35,7 +35,7 @@
     }
     .tabs { display: flex; gap: 0; margin-bottom: 12px; border-bottom: 1px solid #e8e8ed; }
     @media (prefers-color-scheme: dark) { .tabs { border-bottom-color: #38383a; } }
-    .tab { flex: 1; padding: 8px 0; text-align: center; font-size: 13px; font-weight: 500; color: #8e8e93; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; user-select: none; }
+    .tab { flex: 1; padding: 8px 0; text-align: center; font-size: 12px; font-weight: 500; color: #8e8e93; cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; user-select: none; }
     .tab:hover { color: #0a84ff; }
     .tab.active { color: #0a84ff; border-bottom-color: #0a84ff; }
     .panel { display: none; }
@@ -46,6 +46,26 @@
     @media (prefers-color-scheme: dark) { .info-row + .info-row { border-top-color: #38383a; } }
     .info-row .label { color: #8e8e93; }
     .info-row .value { font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Devices tab：多台浏览器在线时手动切换执行设备 */
+    .device-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+    .device-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e8e8ed; border-radius: 10px; background: #ffffff; }
+    .device-item.preferred { border-color: #0a84ff; background: #eef5ff; }
+    @media (prefers-color-scheme: dark) {
+      .device-item { background: #2c2c2e; border-color: #38383a; }
+      .device-item.preferred { background: #10243b; border-color: #0a84ff; }
+    }
+    .device-meta { flex: 1; min-width: 0; }
+    .device-name { font-size: 13px; font-weight: 600; color: #1f2328; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (prefers-color-scheme: dark) { .device-name { color: #f2f2f7; } }
+    .device-sub { font-size: 11px; color: #8e8e93; margin-top: 2px; }
+    .device-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: #eef2ff; color: #3730a3; margin-left: 6px; vertical-align: 1px; }
+    .device-badge.current { background: #dcfce7; color: #166534; }
+    .device-badge.preferred { background: #dbeafe; color: #1d4ed8; }
+    .device-use { flex-shrink: 0; font-size: 12px; padding: 5px 10px; border-radius: 7px; border: 1px solid #d1d1d6; background: #ffffff; color: #1f2328; cursor: pointer; }
+    .device-use:hover { border-color: #0a84ff; color: #0a84ff; }
+    .device-use:disabled { opacity: .45; cursor: default; border-color: #d1d1d6; color: #8e8e93; }
+    .hint { font-size: 12px; color: #8e8e93; line-height: 1.6; margin-top: 8px; }
     .field { margin-bottom: 10px; }
     .field > label { display: block; font-size: 11px; font-weight: 600; color: #8e8e93; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
     .field input:not([type="checkbox"]) { width: 100%; padding: 8px 10px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 13px; outline: none; transition: border-color .2s; background: #ffffff; color: #1f2328; }
@@ -176,6 +196,7 @@
 
     <div class="tabs">
       <div class="tab active" data-tab="info">Info</div>
+      <div class="tab" data-tab="devices">Devices</div>
       <div class="tab" data-tab="metrics">Metrics</div>
       <div class="tab" data-tab="settings">Settings</div>
       <div class="tab" data-tab="logs">Logs</div>
@@ -192,6 +213,17 @@
         <div class="info-row"><span class="label">Backend</span><span class="value" id="infoBackend">-</span></div>
         <div class="info-row"><span class="label">Version</span><span class="value" id="infoVersion">-</span></div>
       </div>
+    </div>
+
+    <!-- Devices Panel：同一账号多台浏览器在线时，手动指定用哪台执行 -->
+    <div id="panelDevices" class="panel">
+      <div class="card">
+        <div class="info-row"><span class="label">Current</span><span class="value" id="devCurrent">-</span></div>
+        <div class="info-row"><span class="label">Online</span><span class="value" id="devCount">-</span></div>
+      </div>
+      <div id="deviceList" class="device-list"></div>
+      <button id="btnRefreshDevices" class="btn btn-ghost">Refresh</button>
+      <div id="devicesHint" class="hint"></div>
     </div>
 
     <!-- Settings Panel -->

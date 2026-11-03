@@ -221,6 +221,8 @@
       document.getElementById('agent-sphere-device-chooser')?.remove();
       const devices = Array.isArray(payload?.devices) ? payload.devices : [];
       if (!devices.length) return;
+      const preferredDeviceId = payload?.preferredDeviceId || '';
+      const preferredDevice = devices.find((d) => d.deviceId && d.deviceId === preferredDeviceId) || null;
 
       const mask = document.createElement('div');
       mask.id = 'agent-sphere-device-chooser';
@@ -228,7 +230,7 @@
         + 'display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
 
       const card = document.createElement('div');
-      card.style.cssText = 'background:#fff;border-radius:12px;padding:20px 20px 12px;width:min(92vw,420px);'
+      card.style.cssText = 'background:#fff;border-radius:12px;padding:20px 20px 12px;width:min(92vw,440px);'
         + 'box-shadow:0 20px 50px rgba(0,0,0,.25);';
 
       const title = document.createElement('div');
@@ -237,28 +239,37 @@
       card.appendChild(title);
 
       const desc = document.createElement('div');
-      desc.textContent = '检测到同一账号有多台浏览器在线，请选择本次任务要操作的那台。';
-      desc.style.cssText = 'font-size:12px;color:#6b7280;line-height:1.5;margin-bottom:12px;';
+      desc.textContent = preferredDevice
+        ? `当前执行设备是「${preferredDevice.deviceName || '未知设备'}」。有新设备登录，可切换为下面任意一台。`
+        : '检测到同一账号有多台浏览器在线，请选择本次任务要操作的那台。';
+      desc.style.cssText = 'font-size:12px;color:#6b7280;line-height:1.6;margin-bottom:12px;white-space:pre-line;';
       card.appendChild(desc);
 
       for (const device of devices) {
+        const selected = !!(device.deviceId && device.deviceId === preferredDeviceId);
         const row = document.createElement('button');
         row.type = 'button';
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;'
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;'
           + 'padding:10px 12px;margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;'
           + 'cursor:pointer;font-size:13px;color:#111827;text-align:left;';
-        if (device.current) {
+        if (selected) {
           row.style.borderColor = '#2563eb';
           row.style.background = '#eff6ff';
         }
+
         const name = document.createElement('span');
-        const label = device.deviceName || '未知设备';
-        name.textContent = device.current ? `${label}（本机）` : label;
+        name.textContent = device.deviceName || '未知设备';
+        name.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         row.appendChild(name);
+
+        if (selected) row.appendChild(chooserBadge('执行中', '#dbeafe', '#1d4ed8'));
+        if (device.current) row.appendChild(chooserBadge('本机', '#dcfce7', '#166534'));
+
         const meta = document.createElement('span');
         meta.textContent = device.source === 'CONSOLE' ? '主站' : device.source === 'WIDGET' ? '助手' : '';
-        meta.style.cssText = 'font-size:11px;color:#6b7280;';
+        meta.style.cssText = 'font-size:11px;color:#6b7280;flex-shrink:0;';
         row.appendChild(meta);
+
         row.addEventListener('click', () => {
           chrome.runtime.sendMessage(chrome.runtime.id, {
             type: 'chooseDevice',
@@ -268,6 +279,11 @@
         });
         card.appendChild(row);
       }
+
+      const tip = document.createElement('div');
+      tip.textContent = '切换后如需修改，可在浏览器扩展的「Devices」标签页里重新选择。';
+      tip.style.cssText = 'font-size:11px;color:#6b7280;line-height:1.6;margin:2px 0 10px;';
+      card.appendChild(tip);
 
       const later = document.createElement('button');
       later.type = 'button';
@@ -282,6 +298,14 @@
     } catch (e) {
       console.warn('[AgentSphere] showDeviceChooser failed:', e);
     }
+  }
+
+  function chooserBadge(text, background, color) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    span.style.cssText = `font-size:10px;line-height:16px;padding:0 6px;border-radius:999px;`
+      + `background:${background};color:${color};flex-shrink:0;`;
+    return span;
   }
 
   // --- Listen for browser operation commands from background ---

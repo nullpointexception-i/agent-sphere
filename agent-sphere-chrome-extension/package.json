@@ -1,6 +1,6 @@
 {
   "name": "agent-sphere-chrome-extension",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "private": true,
   "scripts": {
     "build": "node build.js",

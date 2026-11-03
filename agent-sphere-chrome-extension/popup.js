@@ -102,6 +102,8 @@
       document.getElementById('panel' + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)).classList.add('active');
       activeTab = tab.dataset.tab;
       if (activeTab === 'metrics') scheduleMetricsRefresh();
+      if (activeTab === 'devices') loadDevices();
+      else clearTimeout(devicesTimer);
     });
   });
 
@@ -401,6 +403,135 @@
     else if (metricsFilter === 'unaudited') out = out.filter(r => r.needsAudit && !r.verdict);
     return out.slice(0, FILTER_CAP);
   }
+
+  // --- Devices tab：列出该账号所有在线的扩展，并允许手动切换执行设备 ---
+  let devicesTimer = null;
+
+  function loadDevices() {
+    clearTimeout(devicesTimer);
+    chrome.storage.local.get(['token', 'baseUrl', 'deviceId', 'deviceName'], (data) => {
+      const list = document.getElementById('deviceList');
+      const hint = document.getElementById('devicesHint');
+      document.getElementById('devCurrent').textContent = data.deviceName || '-';
+
+      if (!data.token || !data.baseUrl) {
+        list.replaceChildren();
+        document.getElementById('devCount').textContent = '0';
+        hint.textContent = '未登录：请先在 widget 或主站登录，扩展会自动连接。';
+        return;
+      }
+
+      fetch(`${data.baseUrl}/api/v1/runtime/user/connections`, {
+        headers: {
+          'Authorization': `Bearer ${data.token}`,
+          ...(data.deviceId ? { 'X-Device-Id': data.deviceId } : {}),
+        },
+      })
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+        .then((body) => renderDevices(body, data))
+        .catch((e) => {
+          document.getElementById('devCount').textContent = '?';
+          hint.textContent = `读取设备列表失败：${e.message}`;
+        })
+        .finally(() => {
+          if (activeTab === 'devices') devicesTimer = setTimeout(loadDevices, 5000);
+        });
+    });
+  }
+
+  function renderDevices(body, data) {
+    const devices = Array.isArray(body && body.devices) ? body.devices : [];
+    const preferred = (body && body.preferredDeviceId) || '';
+    const list = document.getElementById('deviceList');
+    const hint = document.getElementById('devicesHint');
+    list.replaceChildren();
+    document.getElementById('devCount').textContent = String(devices.length);
+
+    if (!devices.length) {
+      hint.textContent = '当前没有在线的扩展连接。打开要用的那个浏览器并确认扩展已登录。';
+      return;
+    }
+
+    for (const device of devices) {
+      const item = document.createElement('div');
+      item.className = 'device-item' + (device.deviceId && device.deviceId === preferred ? ' preferred' : '');
+
+      const meta = document.createElement('div');
+      meta.className = 'device-meta';
+
+      const name = document.createElement('div');
+      name.className = 'device-name';
+      name.textContent = device.deviceName || '未知设备';
+      if (device.deviceId && device.deviceId === preferred) name.appendChild(badge('执行中', 'preferred'));
+      if (device.current) name.appendChild(badge('本机', 'current'));
+      name.title = device.deviceId ? `${device.deviceName || '未知设备'}\n${device.deviceId}` : (device.deviceName || '');
+      meta.appendChild(name);
+
+      const sub = document.createElement('div');
+      sub.className = 'device-sub';
+      const sourceLabel = device.source === 'CONSOLE' ? '主站' : device.source === 'WIDGET' ? '助手' : '未知来源';
+      const since = device.connectedAt ? new Date(device.connectedAt).toLocaleTimeString() : '';
+      sub.textContent = since ? `${sourceLabel} · 连接于 ${since}` : sourceLabel;
+      meta.appendChild(sub);
+
+      item.appendChild(meta);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'device-use';
+      btn.dataset.deviceId = device.deviceId || '';
+      const alreadyPreferred = !!device.deviceId && device.deviceId === preferred;
+      btn.textContent = alreadyPreferred ? '当前使用' : '用这台执行';
+      btn.disabled = alreadyPreferred || !device.deviceId;
+      if (!device.deviceId) btn.title = '该扩展版本未上报设备标识，请更新扩展';
+      item.appendChild(btn);
+
+      list.appendChild(item);
+    }
+
+    hint.textContent = preferred
+      ? '任务只会投递给标记为「执行中」的那台设备；切换后立即生效。'
+      : '多台在线时请先选择一台；未选择前浏览器操作会提示「请先选择执行设备」。';
+  }
+
+  function badge(text, cls) {
+    const span = document.createElement('span');
+    span.className = `device-badge ${cls}`;
+    span.textContent = text;
+    return span;
+  }
+
+  document.getElementById('btnRefreshDevices').addEventListener('click', () => loadDevices());
+
+  document.getElementById('deviceList').addEventListener('click', (e) => {
+    const btn = e.target.closest('.device-use');
+    if (!btn || btn.disabled) return;
+    const deviceId = btn.dataset.deviceId;
+    if (!deviceId) return;
+    chrome.storage.local.get(['token', 'baseUrl'], (data) => {
+      if (!data.token || !data.baseUrl) return;
+      btn.disabled = true;
+      btn.textContent = '切换中…';
+      fetch(`${data.baseUrl}/api/v1/runtime/user/connections/preferred`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${data.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ deviceId }),
+      })
+        .then((res) => (res.ok ? null : Promise.reject(new Error(`HTTP ${res.status}`))))
+        .then(() => {
+          chrome.storage.local.set({ preferredDeviceId: deviceId }).catch(() => {});
+          loadDevices();
+        })
+        .catch((err) => {
+          btn.disabled = false;
+          btn.textContent = '用这台执行';
+          document.getElementById('devicesHint').textContent = `切换失败：${err.message}`;
+        });
+    });
+  });
 
   function scheduleMetricsRefresh() {
     if (activeTab !== 'metrics') return;

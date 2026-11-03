@@ -171,6 +171,21 @@ public class SseManager {
      * 由 {@link UserConnectionRegistry} 统一登记，投递时按设备定向。
      */
     public SseEmitter registerUser(String username, String deviceId, String deviceName, String source) {
+        // 同一设备重连：先关掉本副本上它的旧连接，避免旧连接的“幽灵心跳”把登记表又写回来
+        Map<String, UserConnection> existing = userConnections.get(username);
+        if (existing != null && deviceId != null && !deviceId.isBlank()) {
+            for (UserConnection old : new ArrayList<>(existing.values())) {
+                if (deviceId.equals(old.deviceId())) {
+                    try {
+                        old.emitter().complete();
+                    } catch (Exception ignored) {
+                        // 已经断了就忽略
+                    }
+                    removeUserConnection(username, old.connectionId());
+                }
+            }
+        }
+
         String connectionId = UUID.randomUUID().toString();
         SseEmitter emitter = new SseEmitter(0L);
         UserConnection connection = new UserConnection(connectionId, username, deviceId, deviceName, source,

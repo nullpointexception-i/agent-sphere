@@ -47,6 +47,7 @@ class UserConnectionRegistryTest {
         lenient().when(redissonClient.<String, String>getMap(anyString())).thenReturn(connections);
         lenient().when(redissonClient.<String>getBucket(anyString())).thenReturn(preferredBucket);
         lenient().when(connections.readAllValues()).thenAnswer(inv -> (Collection<String>) List.copyOf(stored.values()));
+        lenient().when(connections.entrySet()).thenAnswer(inv -> Map.copyOf(stored).entrySet());
         lenient().when(connections.put(anyString(), anyString())).thenAnswer(inv -> {
             stored.put(inv.getArgument(0), inv.getArgument(1));
             return null;
@@ -127,6 +128,26 @@ class UserConnectionRegistryTest {
 
         assertEquals(UserConnectionRegistry.SelectionState.OK, selection.state());
         assertEquals("c2", selection.target().connectionId());
+    }
+
+    @Test
+    void duplicateConnectionsOfSameDeviceKeepOnlyNewest() {
+        addConnection("c-old", "d1", 1000L);
+        addConnection("c-new", "d1", 2000L);
+
+        List<UserConnectionRegistry.ConnectionView> live = registry.list(USERNAME);
+
+        assertEquals(1, live.size(), "同一设备只应展示一行");
+        assertEquals("c-new", live.get(0).connectionId());
+    }
+
+    @Test
+    void registerWithSameDevicePrunesOlderConnection() {
+        registry.register(USERNAME, "c-old", "d1", "Chrome", "WIDGET", 1000L);
+        registry.register(USERNAME, "c-new", "d1", "Chrome", "WIDGET", 2000L);
+
+        assertEquals(1, stored.size());
+        assertEquals("c-new", registry.list(USERNAME).get(0).connectionId());
     }
 
     @Test

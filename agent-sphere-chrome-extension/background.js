@@ -24,6 +24,8 @@ let deviceName = '';
 let tokenSource = '';
 /** commandId → {runId, callId}：回调要带回，用于把执行设备落到工具记录上。 */
 const commandMeta = new Map();
+/** 最近一次触发 task:init 的 token：多个标签页重复上报同一个 token 时不再反复重连。 */
+let lastInitToken = '';
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 // 最近一次 navigate 的目标 origin：受控 tab 若离开该站点则拒绝继续操作（防跑偏）。
 // 持久化到 storage.session —— 只放内存的话 SW 重启后 assertControlledHost 会静默失效。
@@ -309,11 +311,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }).catch(() => {});
     console.log('[AgentSphere] auth: task connection established (user-level)');
     fetchSsoDisplayName();
-    // 先确保 offscreen 文档存在再下发连接指令，避免 MV3 空闲关闭导致 task:init 丢失、
-    // 只能等 30s/1min 恢复
-    ensureOffscreenDocument().then(() => {
-      askOffscreen({ action: 'task:init' });
-    });
+    // 多个标签页会各自上报同一个 token：只在 token 变化时重建连接，
+    // 否则每次上报都会新建一条 SSE，服务端堆积大量已失效的连接。
+    if (token !== lastInitToken) {
+      lastInitToken = token;
+      ensureOffscreenDocument().then(() => {
+        askOffscreen({ action: 'task:init' });
+      });
+    }
   }
 
   // content → background: 用户在浮层里选定了执行设备
