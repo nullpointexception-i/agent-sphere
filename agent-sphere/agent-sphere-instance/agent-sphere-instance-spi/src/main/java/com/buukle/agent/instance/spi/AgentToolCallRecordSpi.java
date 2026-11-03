@@ -15,6 +15,13 @@ public interface AgentToolCallRecordSpi {
 
     void updateCompressedArtifact(Long id, String compressedArtifact);
 
+    /**
+     * 记录本次工具调用由哪台浏览器设备执行（扩展回调带回的设备信息）。
+     *
+     * @return 命中并更新的行数
+     */
+    int updateExecutionDevice(Long runId, String callId, String deviceId, String deviceName, String source);
+
     AgentToolCallRecordVO getLatestByStepId(Long stepId);
 
     /**

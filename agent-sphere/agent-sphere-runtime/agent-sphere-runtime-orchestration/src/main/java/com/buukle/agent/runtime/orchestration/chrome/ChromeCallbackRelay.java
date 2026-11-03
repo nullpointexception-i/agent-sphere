@@ -4,6 +4,7 @@ import com.buukle.agent.common.chrome.ChromeCallbackDTO;
 import com.buukle.agent.common.chrome.ChromePendingStore;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
+import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
 public class ChromeCallbackRelay {
 
     private final RedisEventBus eventBus;
+    private final AgentToolCallRecordSpi toolCallRecordSpi;
 
     @PostConstruct
     public void init() {
@@ -31,5 +33,20 @@ public class ChromeCallbackRelay {
             return;
         }
         ChromePendingStore.complete(body.getCommandId(), body);
+        recordExecutionDevice(body);
+    }
+
+    /** 记录「这条工具调用由哪台浏览器执行」；扩展未回传设备信息（老版本）时跳过。 */
+    private void recordExecutionDevice(ChromeCallbackDTO body) {
+        if (body.getRunId() == null || body.getCallId() == null || body.getDeviceId() == null) {
+            return;
+        }
+        try {
+            toolCallRecordSpi.updateExecutionDevice(body.getRunId(), body.getCallId(),
+                    body.getDeviceId(), body.getDeviceName(), body.getSource());
+        } catch (Exception e) {
+            log.warn("Record execution device failed: runId={}, callId={}, device={}",
+                    body.getRunId(), body.getCallId(), body.getDeviceId(), e);
+        }
     }
 }

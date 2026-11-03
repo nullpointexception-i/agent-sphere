@@ -17,6 +17,14 @@ console.log('[AgentSphere] Service Worker started', new Date().toISOString());
 
 let token = '';
 let baseUrl = '';
+/** 本机设备标识（storage.local 持久化，跨重启稳定）+ 可读名。 */
+let deviceId = '';
+let deviceName = '';
+/** 当前 token 的来源端（WIDGET/CONSOLE），随回调上报。 */
+let tokenSource = '';
+/** commandId → {runId, callId}：回调要带回，用于把执行设备落到工具记录上。 */
+const commandMeta = new Map();
+const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 // 最近一次 navigate 的目标 origin：受控 tab 若离开该站点则拒绝继续操作（防跑偏）。
 // 持久化到 storage.session —— 只放内存的话 SW 重启后 assertControlledHost 会静默失效。
 let targetOrigin = null;
@@ -55,6 +63,41 @@ async function detectRiskChallenge(tabId) {
   return hit ? { url, title } : null;
 }
 
+function defaultDeviceName() {
+  const ua = navigator.userAgent || '';
+  const browser = /Edg\//.test(ua) ? 'Edge'
+    : /Chrome\//.test(ua) ? 'Chrome'
+    : /Firefox\//.test(ua) ? 'Firefox' : 'Browser';
+  const os = /Windows/.test(ua) ? 'Windows'
+    : /Mac OS X/.test(ua) ? 'macOS'
+    : /Linux/.test(ua) ? 'Linux' : 'Unknown';
+  return `${browser} · ${os}`;
+}
+
+/** 首次启动生成设备 ID；之后跨重启复用（同一浏览器 = 同一设备）。 */
+function ensureDeviceIdentity() {
+  chrome.storage.local.get(['deviceId', 'deviceName'], (data) => {
+    let changed = false;
+    if (data.deviceId) {
+      deviceId = data.deviceId;
+    } else {
+      deviceId = (crypto.randomUUID && crypto.randomUUID())
+        || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      changed = true;
+    }
+    if (data.deviceName) {
+      deviceName = data.deviceName;
+    } else {
+      deviceName = defaultDeviceName();
+      changed = true;
+    }
+    if (changed) {
+      chrome.storage.local.set({ deviceId, deviceName }).catch(() => {});
+    }
+  });
+}
+ensureDeviceIdentity();
+
 // --- Keep the offscreen document (SSE host) alive / recreate if the browser closed it ---
 function startOffscreenKeepalive() {
   chrome.alarms.create('offscreen-keepalive', { periodInMinutes: 1 });
@@ -69,10 +112,11 @@ function startOffscreenKeepalive() {
 startOffscreenKeepalive();
 
 function startSseHost() {
-  chrome.storage.local.get(['token', 'baseUrl'], (data) => {
+  chrome.storage.local.get(['token', 'baseUrl', 'tokenSource'], (data) => {
     if (data.token && data.baseUrl) {
       token = data.token;
       baseUrl = data.baseUrl;
+      tokenSource = data.tokenSource || '';
     }
     ensureOffscreenDocument();
     // Self-heal after SW restart: re-inject into already-open matching tabs
@@ -220,7 +264,8 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // offscreen → background: a browser_operation command arrived on the SSE stream
   if (msg && msg.target === 'background' && msg.action === 'task:command') {
-    const { commandId, action, params, sessionId } = msg.cmd;
+    const { commandId, action, params, sessionId, runId, callId } = msg.cmd;
+    if (commandId) commandMeta.set(commandId, { runId, callId });
     executeInPage(commandId, action, params, sessionId).catch(() => {});
     return false; // fire-and-forget; the result is reported via HTTP callback
   }
@@ -239,7 +284,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           baseUrl = b;
         }
       }
-      sendResponse({ token: t, baseUrl: b });
+      sendResponse({ token: t, baseUrl: b, deviceId, deviceName });
     })();
     return true; // async response
   }
@@ -247,6 +292,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // offscreen → background: report task connection status (popup badge)
   if (msg && msg.target === 'background' && msg.action === 'task:status') {
     chrome.storage.local.set({ taskConnected: !!msg.connected }).catch(() => {});
+    if (msg.connected) syncConnections().catch(() => {});
     return false;
   }
 
@@ -254,9 +300,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if ((msg.type === 'auth' || msg.type === 'auth_token') && msg.token) {
     token = msg.token;
     baseUrl = msg.baseUrl || baseUrl;
+    tokenSource = msg.source || tokenSource;
     chrome.storage.local.set({
       token,
       baseUrl,
+      tokenSource,
       displayName: msg.displayName || '',
     }).catch(() => {});
     console.log('[AgentSphere] auth: task connection established (user-level)');
@@ -266,6 +314,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     ensureOffscreenDocument().then(() => {
       askOffscreen({ action: 'task:init' });
     });
+  }
+
+  // content → background: 用户在浮层里选定了执行设备
+  if (msg.type === 'chooseDevice' && msg.deviceId) {
+    (async () => {
+      try {
+        await fetch(`${baseUrl}/api/v1/runtime/user/connections/preferred`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ deviceId: msg.deviceId }),
+        });
+      } catch (e) {
+        console.warn('[AgentSphere] save preferred device failed:', e.message);
+      }
+      if (msg.deviceId === deviceId) {
+        ensureOffscreenDocument().then(() => askOffscreen({ action: 'task:init' }));
+      }
+      sendResponse({ ok: true });
+    })();
+    return true;
   }
 
   if (msg.type === 'log') {
@@ -1319,6 +1390,48 @@ async function executeJsOnTab(tabId, code, timeoutMs) {
   }
 }
 
+// --- 多设备：连上后向服务端确认是否有多台在线，需要时在页面里弹选择浮层 ---
+let connectionsCheckedAt = 0;
+
+async function syncConnections() {
+  if (!token || !baseUrl) return;
+  if (Date.now() - connectionsCheckedAt < 10000) return;
+  connectionsCheckedAt = Date.now();
+  try {
+    const res = await fetch(`${baseUrl}/api/v1/runtime/user/connections`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
+      },
+    });
+    if (!res.ok) return;
+    const body = await res.json();
+    const devices = Array.isArray(body?.devices) ? body.devices : [];
+    if (devices.length <= 1) return;
+    const preferred = body.preferredDeviceId || '';
+    if (preferred && preferred === deviceId) return;
+    chrome.storage.local.set({ deviceChoices: devices, preferredDeviceId: preferred }).catch(() => {});
+    broadcastToHostTabs({
+      type: 'showDeviceChooser',
+      devices,
+      preferredDeviceId: preferred,
+      currentDeviceId: deviceId,
+    });
+  } catch (e) {
+    // 网络抖动忽略；下次连接状态变化会重试
+  }
+}
+
+function broadcastToHostTabs(message) {
+  chrome.tabs.query({}, (tabs) => {
+    for (const tab of tabs) {
+      if (tab.id == null) continue;
+      if (!shouldInject(tab.url || '')) continue;
+      chrome.tabs.sendMessage(tab.id, message).catch(() => {});
+    }
+  });
+}
+
 // --- Report result back to backend ---
 function sendCallbackSafe(commandId, result, captureTabId, sessionId) {
   sendCallback(commandId, result, sessionId).catch((e) => {
@@ -1328,13 +1441,24 @@ function sendCallbackSafe(commandId, result, captureTabId, sessionId) {
 
 async function sendCallback(commandId, result, sessionId) {
   try {
+    const meta = commandMeta.get(commandId) || {};
+    commandMeta.delete(commandId);
     await fetch(`${baseUrl}/api/v1/chrome/callback?sessionId=${sessionId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ commandId, ...result }),
+      body: JSON.stringify({
+        commandId,
+        ...result,
+        deviceId: deviceId || null,
+        deviceName: deviceName || null,
+        source: tokenSource || null,
+        extensionVersion: EXTENSION_VERSION,
+        runId: meta.runId ?? null,
+        callId: meta.callId ?? null,
+      }),
     });
     chrome.storage.local.get(['logs'], (data) => {
       const logs = data.logs || [];

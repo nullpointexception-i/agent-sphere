@@ -1,7 +1,7 @@
 /**
  * Dev-only playground helper (imported only from index.html — never part of the
  * IIFE lib build). Lets you skip the OIDC SSO round-trip by pasting a token or
- * a full `agent-sphere-widget:agent-user` JSON into sessionStorage.
+ * a full `agent-sphere-widget:agent-user` JSON into localStorage.
  *
  * Before saving it validates the token against the local backend (GET /sso/me,
  * proxied by Vite to localhost:8080) so a bad/foreign token is reported
@@ -82,7 +82,7 @@ function buildPanel(): void {
   };
 
   const refreshStatus = () => {
-    const raw = sessionStorage.getItem(USER_KEY);
+    const raw = localStorage.getItem(USER_KEY);
     if (!raw) {
       setStatus('当前：未注入。填入 token 后点「验证并写入」。写入成功刷新后会自动打开抽屉。\n注意：token 必须由本地后端 localhost:8080 签发（本页 /api 走代理到 8080）。');
       return;
@@ -94,7 +94,7 @@ function buildPanel(): void {
         `\ntoken: ${String(u.token || '').slice(0, 24)}…`,
       );
     } catch {
-      setStatus('当前 sessionStorage 内容不是合法 JSON，读取失败。');
+      setStatus('当前 localStorage 内容不是合法 JSON，读取失败。');
     }
   };
   refreshStatus();
@@ -151,9 +151,9 @@ function buildPanel(): void {
         status: 'ACTIVE',
       };
     try {
-      sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
       sessionStorage.removeItem(AUTO_LOGIN_TRIED_KEY);
-      setStatus('√ token 有效，已写入 sessionStorage，正在刷新并自动打开…', '#16a34a');
+      setStatus('√ token 有效，已写入 localStorage，正在刷新并自动打开…', '#16a34a');
       window.location.reload();
     } catch (err) {
       setStatus(`写入失败：${String(err)}`, '#b91c1c');
@@ -161,7 +161,7 @@ function buildPanel(): void {
   });
 
   panel.querySelector('#aw-dev-token-clear')!.addEventListener('click', () => {
-    sessionStorage.removeItem(USER_KEY);
+    localStorage.removeItem(USER_KEY);
     sessionStorage.removeItem(AUTO_LOGIN_TRIED_KEY);
     input.value = '';
     setStatus('已清空。刷新后若 autoLogin 开启将走正常 SSO。');

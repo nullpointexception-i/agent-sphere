@@ -29,6 +29,11 @@ public class AgentToolCallRecord {
     private Long subAgentRunId;
     /** 产生该调用的 LLM 轮次（= agent_llm_interaction_record.turn_no / run.loop_count）；NULL=迁移前的历史行。 */
     private Integer turnNo;
+    /** 执行该调用的浏览器设备（扩展回调回传）。 */
+    private String deviceId;
+    private String deviceName;
+    /** 执行来源端：CONSOLE / WIDGET。 */
+    private String execSource;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

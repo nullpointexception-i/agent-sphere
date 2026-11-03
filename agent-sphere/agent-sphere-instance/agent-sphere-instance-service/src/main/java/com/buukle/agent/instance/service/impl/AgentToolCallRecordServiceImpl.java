@@ -38,6 +38,9 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         vo.setErrorMessage(r.getErrorMessage());
         vo.setSubAgentRunId(r.getSubAgentRunId());
         vo.setTurnNo(r.getTurnNo());
+        vo.setDeviceId(r.getDeviceId());
+        vo.setDeviceName(r.getDeviceName());
+        vo.setExecSource(r.getExecSource());
         if (r.getCreatedAt() != null) {
             vo.setCreatedAt(r.getCreatedAt().format(DATE_FMT));
             // 秒级字符串不足以配对（同一秒内可能有下一轮开始），另存毫秒值
@@ -91,6 +94,23 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         r.setId(id);
         r.setCompressedArtifact(compressedArtifact);
         mapper.updateById(r);
+    }
+
+    @Override
+    public int updateExecutionDevice(Long runId, String callId, String deviceId,
+                                     String deviceName, String source) {
+        if (runId == null || callId == null || callId.isBlank()) {
+            return 0;
+        }
+        if (deviceId == null && deviceName == null) {
+            return 0;
+        }
+        return mapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<AgentToolCallRecord>()
+                .eq(AgentToolCallRecord::getRunId, runId)
+                .eq(AgentToolCallRecord::getCallId, callId)
+                .set(AgentToolCallRecord::getDeviceId, deviceId)
+                .set(AgentToolCallRecord::getDeviceName, deviceName)
+                .set(AgentToolCallRecord::getExecSource, source));
     }
 
     @Override

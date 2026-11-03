@@ -154,6 +154,18 @@ public class UserTokenServiceImpl
         return tokens.stream().map(t -> toSessionVO(t, currentTokenHash)).toList();
     }
 
+    @Override
+    public String findSourceByHash(String tokenHash) {
+        if (tokenHash == null || tokenHash.isBlank()) {
+            return null;
+        }
+        AgentUserToken token = lambdaQuery()
+                .eq(AgentUserToken::getTokenHash, tokenHash)
+                .last("LIMIT 1")
+                .one();
+        return token != null ? token.getSource() : null;
+    }
+
     private int revokeWhere(Long userId, String keepHash) {
         var query = lambdaQuery()
                 .eq(AgentUserToken::getUserId, userId)

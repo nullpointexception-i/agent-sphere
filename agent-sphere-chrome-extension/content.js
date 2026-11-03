@@ -30,7 +30,7 @@
   let lastReportedToken = null;
 
   // --- 用户维度 token 上报（去重），建立用户级 task 连接 ---
-  function reportAuthToken(token, displayName) {
+  function reportAuthToken(token, displayName, source) {
     if (!token || token === lastReportedToken) return;
     lastReportedToken = token;
     getSettings().then((settings) => {
@@ -38,6 +38,7 @@
         type: 'auth_token',
         token,
         displayName: displayName || '',
+        source: source || '',
         baseUrl: settings.backendUrl || 'http://localhost:8080',
       }).catch(() => {});
     });
@@ -57,7 +58,7 @@
     if (parsedUser && parsedUser.token) {
       widgetUserToken = parsedUser.token;
       widgetDisplayName = parsedUser.displayName || '';
-      reportAuthToken(widgetUserToken, widgetDisplayName);
+      reportAuthToken(widgetUserToken, widgetDisplayName, 'WIDGET');
     } else {
       widgetUserToken = null;
     }
@@ -82,21 +83,24 @@
     }).catch(() => {});
   }
 
-  // Resolve the current page's user token (widget sessionStorage bridge, or main-site localStorage); 不依赖会话
+  // Resolve the current page's user token (widget localStorage / main-site localStorage); 不依赖会话
   async function resolveUser() {
     try {
       const settings = await getSettings();
       const baseUrl = settings.backendUrl || 'http://localhost:8080';
 
-      // 优先直读页面 sessionStorage（content script 与页面同源，可访问同源存储）。
-      // 认证后 ~1s 内即可拿到 token，摆脱 page-script 桥的注入时序，避免连接延迟数秒~十几秒。
+      // 优先直读页面存储（content script 与页面同源，可访问同源存储）。
+      // widget token 已改为 localStorage（同一浏览器所有标签页共用一份）；
+      // sessionStorage 仅在旧版本迁移期兜底。
       try {
-        const widgetRaw = sessionStorage.getItem('agent-sphere-widget:agent-user');
+        const widgetRaw = localStorage.getItem('agent-sphere-widget:agent-user')
+          || sessionStorage.getItem('agent-sphere-widget:agent-user');
         if (widgetRaw) {
           const widgetUser = JSON.parse(widgetRaw);
           if (widgetUser && widgetUser.token) {
             return {
               token: widgetUser.token,
+              source: 'WIDGET',
               displayName:
                 widgetUser.ssoProviderCode && widgetUser.ssoSubject
                   ? `${widgetUser.ssoProviderCode}@${widgetUser.ssoSubject}`
@@ -112,6 +116,7 @@
       if (widgetUserToken) {
         return {
           token: widgetUserToken,
+          source: 'WIDGET',
           displayName: widgetDisplayName || '',
           baseUrl,
         };
@@ -123,6 +128,7 @@
         if (user && user.token) {
           return {
             token: user.token,
+            source: 'CONSOLE',
             displayName:
               user.ssoProviderCode && user.ssoSubject
                 ? `${user.ssoProviderCode}@${user.ssoSubject}`
@@ -152,7 +158,7 @@
         }
         return;
       }
-      reportAuthToken(info.token, info.displayName);
+      reportAuthToken(info.token, info.displayName, info.source);
     } catch (e) {
       if (e.message?.includes('Extension context invalidated')) return;
       console.warn('[AgentSphere] Failed to read auth:', e);
@@ -209,8 +215,82 @@
     }
   }
 
+  // --- 多设备选择浮层：后端发现同一用户有多条插件连接时由 background 下发 ---
+  function showDeviceChooser(payload) {
+    try {
+      document.getElementById('agent-sphere-device-chooser')?.remove();
+      const devices = Array.isArray(payload?.devices) ? payload.devices : [];
+      if (!devices.length) return;
+
+      const mask = document.createElement('div');
+      mask.id = 'agent-sphere-device-chooser';
+      mask.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.45);'
+        + 'display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+
+      const card = document.createElement('div');
+      card.style.cssText = 'background:#fff;border-radius:12px;padding:20px 20px 12px;width:min(92vw,420px);'
+        + 'box-shadow:0 20px 50px rgba(0,0,0,.25);';
+
+      const title = document.createElement('div');
+      title.textContent = '选择用哪台浏览器执行';
+      title.style.cssText = 'font-size:16px;font-weight:600;color:#111827;margin-bottom:6px;';
+      card.appendChild(title);
+
+      const desc = document.createElement('div');
+      desc.textContent = '检测到同一账号有多台浏览器在线，请选择本次任务要操作的那台。';
+      desc.style.cssText = 'font-size:12px;color:#6b7280;line-height:1.5;margin-bottom:12px;';
+      card.appendChild(desc);
+
+      for (const device of devices) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;width:100%;'
+          + 'padding:10px 12px;margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;'
+          + 'cursor:pointer;font-size:13px;color:#111827;text-align:left;';
+        if (device.current) {
+          row.style.borderColor = '#2563eb';
+          row.style.background = '#eff6ff';
+        }
+        const name = document.createElement('span');
+        const label = device.deviceName || '未知设备';
+        name.textContent = device.current ? `${label}（本机）` : label;
+        row.appendChild(name);
+        const meta = document.createElement('span');
+        meta.textContent = device.source === 'CONSOLE' ? '主站' : device.source === 'WIDGET' ? '助手' : '';
+        meta.style.cssText = 'font-size:11px;color:#6b7280;';
+        row.appendChild(meta);
+        row.addEventListener('click', () => {
+          chrome.runtime.sendMessage(chrome.runtime.id, {
+            type: 'chooseDevice',
+            deviceId: device.deviceId,
+          }).catch(() => {});
+          mask.remove();
+        });
+        card.appendChild(row);
+      }
+
+      const later = document.createElement('button');
+      later.type = 'button';
+      later.textContent = '稍后再说';
+      later.style.cssText = 'width:100%;padding:8px;border:none;background:transparent;color:#6b7280;'
+        + 'font-size:12px;cursor:pointer;';
+      later.addEventListener('click', () => mask.remove());
+      card.appendChild(later);
+
+      mask.appendChild(card);
+      document.documentElement.appendChild(mask);
+    } catch (e) {
+      console.warn('[AgentSphere] showDeviceChooser failed:', e);
+    }
+  }
+
   // --- Listen for browser operation commands from background ---
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'showDeviceChooser') {
+      showDeviceChooser(msg);
+      sendResponse({ ok: true });
+      return false;
+    }
     if (msg.type === 'agent_sphere_ping') {
       sendResponse({ success: true, ready: true, url: location.href });
       return false;

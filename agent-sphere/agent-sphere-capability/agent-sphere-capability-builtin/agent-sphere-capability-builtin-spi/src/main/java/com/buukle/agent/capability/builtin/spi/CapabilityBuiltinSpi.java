@@ -10,7 +10,7 @@ public interface CapabilityBuiltinSpi {
 
     List<BuiltinToolVO> listAutoIncludeBuiltinTools();
 
-    String executeBuiltinTool(String toolName, String argumentsJson, Long sessionId, Long runId);
+    String executeBuiltinTool(String toolName, String argumentsJson, Long sessionId, Long runId, String callId);
 
     ParameterVerifyResultVO parameterVerify(String toolName, String argumentsJson);
 }

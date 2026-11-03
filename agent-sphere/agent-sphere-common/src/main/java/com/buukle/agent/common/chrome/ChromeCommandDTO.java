@@ -7,6 +7,11 @@ public class ChromeCommandDTO {
     private String eventType = "browser_operation";
     private Long sessionId;
     private String commandId;
+    /** 产生该命令的 run / 模型工具调用 id —— 回调时原样带回，用于把执行设备落到工具记录上。 */
+    private Long runId;
+    private String callId;
+    /** 定向投递目标连接（由服务端选路填入；null=未定向）。 */
+    private String targetConnectionId;
     private String action;
     private String url;
     private String selector;

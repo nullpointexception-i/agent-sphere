@@ -10,6 +10,8 @@
  */
 let token = '';
 let baseUrl = '';
+let deviceId = '';
+let deviceName = '';
 let taskAbortController = null;
 let taskReconnectTimer = null;
 let lastDataAt = 0;
@@ -31,6 +33,8 @@ async function requestCreds() {
     if (res && res.token && res.baseUrl) {
       token = res.token;
       baseUrl = res.baseUrl;
+      deviceId = res.deviceId || '';
+      deviceName = res.deviceName || '';
       return true;
     }
   } catch (e) {
@@ -88,7 +92,11 @@ function connectTaskSse() {
   (async () => {
     try {
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
+          ...(deviceName ? { 'X-Device-Name': encodeURIComponent(deviceName) } : {}),
+        },
         signal: taskAbortController.signal,
       });
       if (!response.ok) {
@@ -183,6 +191,8 @@ function handleSseData(dataLine) {
         action: cmd.action,
         params,
         sessionId: cmd.sessionId,
+        runId: cmd.runId,
+        callId: cmd.callId,
       },
     }).catch(() => {});
   } catch (e) {

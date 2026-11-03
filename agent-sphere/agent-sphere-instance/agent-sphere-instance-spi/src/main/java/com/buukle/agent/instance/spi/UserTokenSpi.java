@@ -32,4 +32,7 @@ public interface UserTokenSpi {
 
     /** 列出某用户的有效会话；currentTokenHash 用于标记当前会话，可为 null。 */
     List<UserSessionVO> listActive(Long userId, String currentTokenHash);
+
+    /** 按 token hash 反查来源端（CONSOLE/WIDGET）；用于浏览器连接登记，查不到返回 null。 */
+    String findSourceByHash(String tokenHash);
 }

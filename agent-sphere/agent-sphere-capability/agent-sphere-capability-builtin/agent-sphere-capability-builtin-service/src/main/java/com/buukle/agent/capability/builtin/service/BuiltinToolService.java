@@ -70,7 +70,8 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
     }
 
     @Override
-    public String executeBuiltinTool(String toolName, String argumentsJson, Long sessionId, Long runId) {
+    public String executeBuiltinTool(String toolName, String argumentsJson, Long sessionId, Long runId,
+                                     String callId) {
         try {
             ObjectMapper mapper = new ObjectMapper();
             for (CapabilityBuiltinToolSpi tool : tools) {
@@ -79,6 +80,7 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
                 ExecuteContext ctx = mapper.readValue(argumentsJson, tool.getContextType());
                 ctx.setSessionId(sessionId);
                 ctx.setRunId(runId);
+                ctx.setCallId(callId);
                 ExecuteResult result = tool.execute(ctx);
                 return mapper.writeValueAsString(result);
             }

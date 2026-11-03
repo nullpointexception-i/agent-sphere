@@ -205,7 +205,7 @@ public class ToolExecutor {
 
             if (CAPABILITY_TYPE_BUILTIN.equals(type)) {
                 String result = builtinSpi.executeBuiltinTool(
-                        (String) binding.get(ExecBindingKeys.BUILTIN_INTERNAL_NAME), args, sessionId, runId);
+                        (String) binding.get(ExecBindingKeys.BUILTIN_INTERNAL_NAME), args, sessionId, runId, tc.id());
                 String todowriteName = LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId();
                 if (tc.name().equals(todowriteName)) {
                     persistTodosFromResult(sessionId, runId, result);

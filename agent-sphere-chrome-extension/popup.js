@@ -487,7 +487,9 @@
     document.getElementById('taskStatusText').textContent = taskConnected ? 'Task On' : 'Task Off';
 
     // Info panel
-    document.getElementById('infoUser').textContent = data.displayName || (data.token ? 'Logged in' : '-');
+    const deviceLabel = data.deviceName ? ` · ${data.deviceName}` : '';
+    document.getElementById('infoUser').textContent =
+      (data.displayName || (data.token ? 'Logged in' : '-')) + deviceLabel;
     document.getElementById('infoTaskConn').textContent = taskConnected ? 'On' : 'Off';
     document.getElementById('infoBackend').textContent = settings.backendUrl || data.baseUrl || '-';
     document.getElementById('infoVersion').textContent = CURRENT_VERSION;
@@ -552,14 +554,14 @@
   });
 
   // Initial load
-  chrome.storage.local.get(['token', 'displayName', 'baseUrl', 'taskConnected', 'settings', 'logs'], render);
+  chrome.storage.local.get(['token', 'displayName', 'baseUrl', 'taskConnected', 'settings', 'logs', 'deviceName', 'deviceId'], render);
 
   // Listen for changes. browserMetrics/browserMetricsRecent are deliberately NOT
   // in the key list below — they change on every single action, and reading them
   // here would re-render the whole popup continuously. The Metrics tab pulls them
   // itself, and only while it is the visible tab.
   chrome.storage.onChanged.addListener(() => {
-    chrome.storage.local.get(['token', 'displayName', 'baseUrl', 'taskConnected', 'settings', 'logs'], render);
+    chrome.storage.local.get(['token', 'displayName', 'baseUrl', 'taskConnected', 'settings', 'logs', 'deviceName', 'deviceId'], render);
     scheduleMetricsRefresh();
   });
 })();

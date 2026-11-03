@@ -3,8 +3,10 @@ package com.buukle.agent.runtime.orchestration.service;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.util.TokenHasher;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.UserTokenSpi;
 import com.buukle.agent.runtime.orchestration.sse.SseManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,7 @@ public class SseRuntimeService {
 
     private final SseManager sseManager;
     private final SessionSpi sessionSpi;
+    private final UserTokenSpi userTokenSpi;
 
     public SseEmitter stream(Long sessionId) {
         assertSessionOwnership(sessionId);
@@ -23,12 +26,24 @@ public class SseRuntimeService {
     }
 
     /** 用户级 task 指令流（浏览器插件永久连接，不依赖 session）。 */
-    public SseEmitter streamUser() {
+    public SseEmitter streamUser(String deviceId, String deviceName) {
         String username = AuthContext.getUsername();
         if (username == null || username.isBlank()) {
             throw new BizException(CommonErrorCode.UNAUTHORIZED);
         }
-        return sseManager.registerUser(username);
+        return sseManager.registerUser(username, deviceId, deviceName, resolveSource(AuthContext.getToken()));
+    }
+
+    /** 连接的来源端（CONSOLE/WIDGET）：用于设备列表展示，按 token hash 反查。 */
+    private String resolveSource(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return null;
+        }
+        try {
+            return userTokenSpi.findSourceByHash(TokenHasher.sha256(rawToken));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void assertSessionOwnership(Long sessionId) {

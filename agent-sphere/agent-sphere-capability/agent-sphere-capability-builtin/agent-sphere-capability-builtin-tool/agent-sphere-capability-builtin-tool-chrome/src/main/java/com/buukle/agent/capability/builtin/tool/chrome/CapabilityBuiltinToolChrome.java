@@ -284,7 +284,11 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
     }
 
     private ChromeCommandDTO buildCommand(ChromeExecuteContext cec, String commandId) {
-        return new ChromeCommandDTO(cec.getSessionId(), commandId, cec.getAction())
+        ChromeCommandDTO command = new ChromeCommandDTO(cec.getSessionId(), commandId, cec.getAction());
+        // 回调要带回 run/工具调用 id，才能把「哪台设备执行」落到工具记录上
+        command.setRunId(cec.getRunId());
+        command.setCallId(cec.getCallId());
+        return command
                 .withUrl(cec.getUrl())
                 .withSelector(cec.getSelector())
                 .withText(cec.getText())

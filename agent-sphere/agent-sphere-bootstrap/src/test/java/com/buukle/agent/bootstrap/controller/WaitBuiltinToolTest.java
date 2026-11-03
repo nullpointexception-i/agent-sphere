@@ -104,7 +104,7 @@ class WaitBuiltinToolTest {
                 SESSION_ID, RUN_ID, List.of(waitTool()));
 
         // wait 没有 SPI bean；若拦截失效就会落到这里报「Unknown tool」
-        verify(builtinSpi, never()).executeBuiltinTool(any(), any(), any(), any());
+        verify(builtinSpi, never()).executeBuiltinTool(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -140,7 +140,7 @@ class WaitBuiltinToolTest {
                 .toolRef(ToolRefs.builtin("docwrite"))
                 .execBinding(Map.of(ExecBindingKeys.BUILTIN_INTERNAL_NAME, "docwrite"))
                 .build();
-        given(builtinSpi.executeBuiltinTool(any(), any(), any(), any())).willReturn("{\"ok\":true}");
+        given(builtinSpi.executeBuiltinTool(any(), any(), any(), any(), any())).willReturn("{\"ok\":true}");
 
         String result = toolExecutor.execute(
                 new TurnToolCall("c2", "builtin_6", "{}"), SESSION_ID, RUN_ID, List.of(other));
