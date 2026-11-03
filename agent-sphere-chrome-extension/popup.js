@@ -487,9 +487,16 @@
     document.getElementById('taskStatusText').textContent = taskConnected ? 'Task On' : 'Task Off';
 
     // Info panel
-    const deviceLabel = data.deviceName ? ` · ${data.deviceName}` : '';
-    document.getElementById('infoUser').textContent =
-      (data.displayName || (data.token ? 'Logged in' : '-')) + deviceLabel;
+    const userEl = document.getElementById('infoUser');
+    userEl.textContent = data.displayName || (data.token ? 'Logged in' : '-');
+    userEl.title = userEl.textContent;
+    const deviceEl = document.getElementById('infoDevice');
+    const deviceLabel = data.deviceName || '';
+    deviceEl.textContent = deviceLabel || '-';
+    // 设备名可能很长（浏览器 · 系统），悬停显示完整值 + deviceId 短码
+    deviceEl.title = data.deviceId
+      ? `${deviceLabel}\n${String(data.deviceId).slice(0, 8)}`
+      : deviceLabel;
     document.getElementById('infoTaskConn').textContent = taskConnected ? 'On' : 'Off';
     document.getElementById('infoBackend').textContent = settings.backendUrl || data.baseUrl || '-';
     document.getElementById('infoVersion').textContent = CURRENT_VERSION;
