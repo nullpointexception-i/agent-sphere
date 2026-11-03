@@ -164,6 +164,13 @@ public class UserConnectionRegistry {
         if (live.size() == 1) {
             return new Selection(SelectionState.OK, live.get(0), live, preferredDeviceId);
         }
+        // 老版本扩展不上报 deviceId：用户无法在浮层里区分（也无法记住选择），
+        // 退回「最新连接」—— 与改动前行为一致，避免把这类客户端卡死在 device_selection_required。
+        boolean allIdentified = live.stream()
+                .allMatch(v -> v.deviceId() != null && !v.deviceId().isBlank());
+        if (!allIdentified) {
+            return new Selection(SelectionState.OK, live.get(0), live, preferredDeviceId);
+        }
         if (preferredDeviceId != null) {
             for (ConnectionView view : live) {
                 if (preferredDeviceId.equals(view.deviceId())) {

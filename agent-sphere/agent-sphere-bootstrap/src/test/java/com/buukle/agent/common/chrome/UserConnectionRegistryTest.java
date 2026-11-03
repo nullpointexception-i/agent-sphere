@@ -62,9 +62,11 @@ class UserConnectionRegistryTest {
     }
 
     private static String toJson(UserConnectionRegistry.ConnectionView view) {
-        return String.format("{\"connectionId\":\"%s\",\"deviceId\":\"%s\",\"deviceName\":\"%s\","
+        return String.format("{\"connectionId\":\"%s\",\"deviceId\":%s,\"deviceName\":\"%s\","
                         + "\"source\":\"%s\",\"connectedAt\":%d,\"lastSeen\":%d}",
-                view.connectionId(), view.deviceId(), view.deviceName(), view.source(),
+                view.connectionId(),
+                view.deviceId() == null ? "null" : "\"" + view.deviceId() + "\"",
+                view.deviceName(), view.source(),
                 view.connectedAt(), view.lastSeen());
     }
 
@@ -113,6 +115,18 @@ class UserConnectionRegistryTest {
 
         assertEquals(UserConnectionRegistry.SelectionState.DEGRADED, selection.state());
         assertEquals("c2", selection.target().connectionId(), "应回退到最新连接");
+    }
+
+    @Test
+    void connectionsWithoutDeviceIdFallBackToLatest() {
+        // 老版本扩展不上报 deviceId：无法让用户选择，按最新连接投递（与改动前一致）
+        addConnection("c1", null, 1000L);
+        addConnection("c2", null, 2000L);
+
+        UserConnectionRegistry.Selection selection = registry.pick(USERNAME);
+
+        assertEquals(UserConnectionRegistry.SelectionState.OK, selection.state());
+        assertEquals("c2", selection.target().connectionId());
     }
 
     @Test
