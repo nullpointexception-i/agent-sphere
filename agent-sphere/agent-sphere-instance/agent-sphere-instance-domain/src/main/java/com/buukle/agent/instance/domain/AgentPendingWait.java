@@ -29,6 +29,10 @@ public class AgentPendingWait {
     private Integer attempts;
     /** 最近一次恢复失败原因（V86）。 */
     private String lastError;
+    /** 挂起类型（V115）：WAIT=wait 工具；LLM_RETRY=上游瞬时失败后的重试。 */
+    private String kind;
+    /** 触发 LLM_RETRY 的上游 HTTP 状态码（无 HTTP 交互时为空，如连接超时）。 */
+    private Integer errorStatus;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;
     @TableField(fill = FieldFill.INSERT_UPDATE)

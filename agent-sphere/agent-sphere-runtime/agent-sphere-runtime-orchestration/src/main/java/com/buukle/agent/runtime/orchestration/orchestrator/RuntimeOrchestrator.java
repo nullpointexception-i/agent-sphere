@@ -42,6 +42,27 @@ public class RuntimeOrchestrator {
     }
 
     @Async("runtimeAsyncExecutor")
+    public void asyncResumeForRetry(RunVO run, Long sessionId) {
+        log.info("Async LLM-retry resume: runId={}, sessionId={}", run.getId(), sessionId);
+        try {
+            ValidationResult validated = validator.validate(sessionId, null);
+            snapshotCompletionProtocol(run, validated);
+            KernelContext ctx = preparer.prepare(run, validated, "");
+            ctx.setRetryResume(true);
+            coordinator.wake(sessionId, ctx, run.getId());
+        } catch (Exception e) {
+            log.error("LLM-retry resume failed: sessionId={}, runId={}", sessionId, run.getId(), e);
+            eventPublisher.publishEvent(new RuntimeEventVO(
+                    RunStatus.FAILED,
+                    new RuntimeEventDataVO()
+                            .setSessionId(sessionId)
+                            .setRunId(run.getId())
+                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
+                            .setErrorMessage(e.getMessage())));
+        }
+    }
+
+    @Async("runtimeAsyncExecutor")
     public void asyncResumeInterruptedRun(RunVO run, Long sessionId) {
         log.info("Async interrupted run recovery: runId={}, sessionId={}", run.getId(), sessionId);
         try {

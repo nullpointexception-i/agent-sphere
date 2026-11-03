@@ -208,6 +208,7 @@ public class ChatRuntimeService {
                 return ResumeOutcome.SKIPPED;
             }
             run.setStatus(RunStatus.RUNNING.name());
+            run.setWaitKind(null);
             runSpi.updateRun(run);
 
             // 恢复线程（定时器/cron）无租户上下文：补 username 供审计/归属。
@@ -215,24 +216,35 @@ public class ChatRuntimeService {
             // 设了反而可能把系统表（模型/实例）行滤掉。
             String createdBy = run.getCreatedBy();
             boolean ctx = createdBy != null && !createdBy.isBlank();
+            boolean llmRetry = WaitConstants.KIND_LLM_RETRY.equals(wait.getKind());
             if (ctx) AuthContext.setUsername(createdBy);
             try {
                 sessionSpi.touchSession(sessionId);
-                orchestrator.asyncHandleUserMessage(run, sessionId,
-                        WaitConstants.WAIT_RESUME_PREFIX + wait.getWaitMs() + "ms elapsed.", null, true, List.of());
+                if (llmRetry) {
+                    // 上游瞬时失败的重试：不追加合成 user、不补 wait 工具结果，直接重入循环
+                    orchestrator.asyncResumeForRetry(run, sessionId);
+                } else {
+                    orchestrator.asyncHandleUserMessage(run, sessionId,
+                            WaitConstants.WAIT_RESUME_PREFIX + wait.getWaitMs() + "ms elapsed.", null, true, List.of());
+                }
                 submitted = true;
             } finally {
                 if (ctx) AuthContext.clear();
             }
 
-            // 恢复已提交后才补 wait 那条 tool call 的结果（避免"工具已记成功但 run 没恢复"）。
-            // 这只是展示层事件，**绝不能让它有能力让恢复失败** —— 一旦它抛异常而把状态退回
-            // WAITING，异步循环其实已经在跑，等于凭空造出第二个循环（见 rollbackToWaiting）。
-            recordWaitToolSucceeded(wait, sessionId, runId);
-            long waitedMs = wait.getWaitMs() == null ? 0L : wait.getWaitMs();
-            timelineRecorder.markWaitResumed(sessionId, runId, waitedMs);
-            log.info("Wait resumed: waitId={} runId={} sessionId={} waitedMs={}",
-                    wait.getId(), runId, sessionId, wait.getWaitMs());
+            if (!llmRetry) {
+                // 恢复已提交后才补 wait 那条 tool call 的结果（避免"工具已记成功但 run 没恢复"）。
+                // 这只是展示层事件，**绝不能让它有能力让恢复失败** —— 一旦它抛异常而把状态退回
+                // WAITING，异步循环其实已经在跑，等于凭空造出第二个循环（见 rollbackToWaiting）。
+                recordWaitToolSucceeded(wait, sessionId, runId);
+                long waitedMs = wait.getWaitMs() == null ? 0L : wait.getWaitMs();
+                timelineRecorder.markWaitResumed(sessionId, runId, waitedMs);
+                log.info("Wait resumed: waitId={} runId={} sessionId={} waitedMs={}",
+                        wait.getId(), runId, sessionId, wait.getWaitMs());
+            } else {
+                log.info("LLM retry resumed: waitId={} runId={} sessionId={} attempt={} hint={}",
+                        wait.getId(), runId, sessionId, wait.getAttempts(), wait.getReason());
+            }
             return ResumeOutcome.RESUMED;
         } catch (Exception e) {
             log.warn("Wait resume failed: waitId={} runId={} submitted={}", wait.getId(), runId, submitted, e);

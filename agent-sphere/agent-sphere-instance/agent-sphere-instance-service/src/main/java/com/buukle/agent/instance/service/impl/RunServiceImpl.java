@@ -3,13 +3,17 @@ package com.buukle.agent.instance.service.impl;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.PendingWaitKind;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentRun;
 import com.buukle.agent.instance.domain.vo.RunUsageVO;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.MessageHistoryVO;
+import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.spi.PendingWaitSpi;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.repository.RunMapper;
@@ -22,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import java.util.Collection;
 import java.util.List;
@@ -34,6 +39,8 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     private final RunConverter runConverter;
     private final ClarificationService clarificationService;
     private final AgentLlmInteractionRecordMapper interactionMapper;
+    private final PendingWaitSpi pendingWaitSpi;
+    private final AgentRuntimeProperties agentRuntimeProperties;
 
     /** 列表/增量查询排除的大字段属性名（按需经 findReasoningBatch 定点补拉，避免行宽撑爆） */
     private static final String REASONING_PROPERTY = "reasoning";
@@ -51,7 +58,9 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     public RunVO getRun(Long id) {
         AgentRun run = getById(id);
         if (run == null) throw new BizException(InstanceErrorCode.RUN_NOT_FOUND);
-        return runConverter.toVO(run);
+        RunVO vo = runConverter.toVO(run);
+        fillRetryState(vo);
+        return vo;
     }
 
     @Override
@@ -61,7 +70,12 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .eq(AgentRun::getId, id)
                 .select(AgentRun.class, i -> !REASONING_PROPERTY.equals(i.getProperty()))
                 .one();
-        return run != null ? runConverter.toVO(run) : null;
+        if (run == null) {
+            return null;
+        }
+        RunVO vo = runConverter.toVO(run);
+        fillRetryState(vo);
+        return vo;
     }
 
     @Override
@@ -78,7 +92,9 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .orderByDesc(AgentRun::getId)
                 .last("LIMIT 1")
                 .one();
-        return run == null ? null : runConverter.toVO(run);
+        RunVO vo = run == null ? null : runConverter.toVO(run);
+        fillRetryState(vo);
+        return vo;
     }
 
     @Override
@@ -118,9 +134,34 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .count() > 0;
     }
 
+    /**
+     * WAITING 且 kind=LLM_RETRY 时，把「第 k/N 次 + 下次时间 + 错误分类」补到 VO。
+     *
+     * <p>详情字段留在 agent_pending_wait（唯一真相），run 行只冗余 waitKind/retryAttempt；
+     * 只有 WAITING 的 run 才查一次，正常路径零开销。
+     */
+    private void fillRetryState(RunVO vo) {
+        if (vo == null || !RunEnum.STATUS_WAITING.equals(vo.getStatus())
+                || !PendingWaitKind.LLM_RETRY.equals(vo.getWaitKind())) {
+            return;
+        }
+        List<PendingWaitVO> pending = pendingWaitSpi.listPendingByRunId(vo.getId());
+        if (pending == null || pending.isEmpty()) {
+            return;
+        }
+        PendingWaitVO wait = pending.get(0);
+        vo.setRetryAttempt(wait.getAttempts());
+        vo.setRetryMax(agentRuntimeProperties.getRunner().getLlmRetryLadder().size());
+        if (wait.getWakeAt() != null) {
+            vo.setNextRetryAt(wait.getWakeAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
+        }
+        vo.setRetryHint(wait.getReason());
+        vo.setRetryHttpStatus(wait.getErrorStatus());
+        vo.setRetryDetail(wait.getLastError());
+    }
+
     @Override
-    public void updateRun(RunVO run) {
-        AgentRun entity = runConverter.toDO(run);
+    public void updateRun(RunVO run) {        AgentRun entity = runConverter.toDO(run);
         updateById(entity);
     }
 
@@ -132,7 +173,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .select(AgentRun.class, i -> !REASONING_PROPERTY.equals(i.getProperty()))
                 .orderByAsc(AgentRun::getId)
                 .list();
-        return runs.stream().map(runConverter::toVO).toList();
+        return runs.stream().map(runConverter::toVO).peek(this::fillRetryState).toList();
     }
 
     @Override
@@ -158,6 +199,9 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                     .stream().collect(Collectors.toMap(RunUsageVO::getRunId, u -> u));
             for (RunVO runVO : voPage.getRecords()) {
                 runVO.setUsageSummary(usageMap.get(runVO.getId()));
+            }
+            for (RunVO runVO : voPage.getRecords()) {
+                fillRetryState(runVO);
             }
         }
         return voPage;

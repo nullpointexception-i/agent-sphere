@@ -42,6 +42,20 @@ public class RunVO implements Serializable {
      * 失败原因（V87 起）。此前 run 失败不留任何原因，只能靠间接特征反推。
      */
     private String errorMessage;
+    /** 挂起类型（V115）：WAIT / LLM_RETRY。 */
+    private String waitKind;
+    /** 当前已发生的 LLM 瞬时失败次数（V115）。 */
+    private Integer retryAttempt;
+    /** 梯度重试上限（由配置推导；WAITING 且有值时前端显示「k/N」）。 */
+    private Integer retryMax;
+    /** 下次重试时间（epoch ms，前端倒计时）。 */
+    private Long nextRetryAt;
+    /** 错误分类 code，前端按它选文案。 */
+    private String retryHint;
+    /** 触发重试的上游 HTTP 状态码。 */
+    private Integer retryHttpStatus;
+    /** 错误原文（tooltip 展示）。 */
+    private String retryDetail;
     private String delivery;
     private String createdBy;
     private String createdAt;

@@ -245,9 +245,39 @@ public class RuntimeEventListener {
                 // 之后同一个 run 到点续跑，行会原位更新。
                 run.setStatus(status.value());
                 runSpi.updateRun(run);
-                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
+                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status,
+                        retryTitle(data));
             }
         }
+    }
+
+    /** LLM 重试的等待行文案；非重试挂起返回 null（沿用默认「等待中」）。 */
+    private static String retryTitle(RuntimeEventDataVO data) {
+        if (!com.buukle.agent.common.constant.PendingWaitKind.LLM_RETRY.equals(data.getWaitKind())) {
+            return null;
+        }
+        String hint = switch (String.valueOf(data.getRetryHint())) {
+            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_PROVIDER_BUSY -> "上游模型服务繁忙";
+            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_CONNECT_TIMEOUT -> "连接模型服务超时";
+            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_RATE_LIMITED -> "请求过于频繁";
+            default -> "模型调用异常";
+        };
+        StringBuilder sb = new StringBuilder("⚠ ").append(hint).append("，正在自动重试");
+        if (data.getRetryAttempt() != null && data.getRetryMax() != null) {
+            sb.append("（").append(data.getRetryAttempt()).append("/").append(data.getRetryMax()).append("）");
+        }
+        if (data.getNextRetryAt() != null) {
+            sb.append(" · ")
+                    .append(java.time.LocalDateTime.ofInstant(
+                                    java.time.Instant.ofEpochMilli(data.getNextRetryAt()),
+                                    java.time.ZoneId.of("Asia/Shanghai"))
+                            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")))
+                    .append(" 重试");
+        }
+        if (data.getRetryHttpStatus() != null) {
+            sb.append(" · HTTP ").append(data.getRetryHttpStatus());
+        }
+        return sb.toString();
     }
 
     /** 累积该 run 的模型推理（thinking）文本：仅 llm 类型，排除系统状态行；终态一次性写入 run。

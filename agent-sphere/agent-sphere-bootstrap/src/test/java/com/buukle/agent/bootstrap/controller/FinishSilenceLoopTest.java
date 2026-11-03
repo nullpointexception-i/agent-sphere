@@ -55,7 +55,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
@@ -111,6 +113,8 @@ class FinishSilenceLoopTest {
     RedissonClient redis;
     @Mock
     ChatAttachmentResolver attachmentResolver;
+    @Mock
+    com.buukle.agent.instance.spi.PendingWaitSpi pendingWaitSpi;
 
     private RunVO run;
     private KernelContext context;
@@ -120,6 +124,9 @@ class FinishSilenceLoopTest {
     private SessionRunner newRunner(int maxLoopCount, String userMessage) {
         AgentRuntimeProperties.RunnerConfig runnerConfig = new AgentRuntimeProperties.RunnerConfig();
         runnerConfig.setMaxLoopCount(maxLoopCount);
+        // 测试里不做就地 sleep：第一个瞬时错误直接挂起，断言才稳定
+        runnerConfig.setLlmRetryInlineRungs(0);
+        runnerConfig.setLlmRetryLadder(List.of(java.time.Duration.ofMillis(10)));
         lenient().when(properties.getRunner()).thenReturn(runnerConfig);
         lenient().when(properties.getTool()).thenReturn(new AgentRuntimeProperties.ToolConfig());
 
@@ -158,13 +165,20 @@ class FinishSilenceLoopTest {
         lenient().when(inputManager.promoteInput(SESSION_ID)).thenReturn(
                 new SessionInputManager.InputMessage(userMessage, null, 0L, false, List.of()), null);
 
-        return new SessionRunner(properties, runSpi, sessionSpi, kernelLlmService, apiKeySpi,
+        SessionRunner runner = new SessionRunner(properties, runSpi, sessionSpi, kernelLlmService, apiKeySpi,
                 eventPublisher, routeListBuilder, new FallbackRouteExecutor(), historyLoader,
                 compactionService, inputManager, new RunPromptBuilder(), toolExecutor, titleService,
                 toolCallRecordSpi, redis, attachmentResolver,
                 new LlmRequestConfigurer(mock(SystemConfigSpi.class), new com.buukle.agent.common.config.AgentRuntimeProperties()), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+        try {
+            java.lang.reflect.Field field = SessionRunner.class.getDeclaredField("pendingWaitSpi");
+            field.setAccessible(true);
+            field.set(runner, pendingWaitSpi);
+        } catch (Exception e) {
+            throw new IllegalStateException("inject pendingWaitSpi failed", e);
+        }
+        return runner;
     }
-
     /** 按轮次脚本化模型输出，且不补 Finish（用于模拟流被截断）。 */
     private void scriptModelWithoutFinish(java.util.function.IntFunction<LLMEvent[]> script) {
         AtomicInteger turns = new AtomicInteger();
@@ -225,7 +239,7 @@ class FinishSilenceLoopTest {
     }
 
     @Test
-    void streamTimeout_isReportedAsFailedRunInsteadOfSilentCompletion() {
+    void streamTimeout_suspendsRunForRetryInsteadOfFailing() {
         SessionRunner runner = newRunner(25, "objective");
         doAnswer(inv -> {
             CompletableFuture<Void> failed = new CompletableFuture<>();
@@ -235,8 +249,20 @@ class FinishSilenceLoopTest {
 
         runner.run(SESSION_ID);
 
-        assertEquals("FAILED", run.getStatus(), "超时不能被当成正常完成");
-        assertTrue(failedMessageContains("timed out"), "run 失败原因必须透传真实超时错误");
+        assertEquals("WAITING", run.getStatus(), "瞬时错误应挂起重试，而不是直接失败");
+        verify(pendingWaitSpi).createRetry(eq(SESSION_ID), eq(RUN_ID), eq(1), any(),
+                eq("connect_timeout"), isNull(), contains("timed out"));
+        assertTrue(publishedWaitingRetry(), "挂起事件必须带重试进度，前端才能显示倒计时");
+    }
+
+    private boolean publishedWaitingRetry() {
+        ArgumentCaptor<RuntimeEventVO> events = ArgumentCaptor.forClass(RuntimeEventVO.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(events.capture());
+        return events.getAllValues().stream()
+                .filter(e -> RunStatus.WAITING.equals(e.getEventType()))
+                .map(RuntimeEventVO::getData)
+                .anyMatch(d -> d != null && "LLM_RETRY".equals(d.getWaitKind())
+                        && d.getRetryAttempt() != null && d.getNextRetryAt() != null);
     }
 
     @Test

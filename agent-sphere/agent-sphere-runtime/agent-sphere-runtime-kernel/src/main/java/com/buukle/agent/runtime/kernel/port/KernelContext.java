@@ -27,4 +27,6 @@ public class KernelContext implements Serializable {
     private String approvalResumeId;
     /** True when resuming an interrupted run after server restart. */
     private boolean recoveryResume;
+    /** True when re-entering the loop after an LLM transient failure (WAITING + kind=LLM_RETRY). */
+    private boolean retryResume;
 }

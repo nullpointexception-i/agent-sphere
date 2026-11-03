@@ -1949,9 +1949,11 @@ export function WidgetTimeline({
     const out: ReactNode[] = [];
     for (const row of rows) {
       // wait 的等待/恢复状态由 WaitRow 独立展示，run_status 再画一条会重复且带 run 级耗时误导。
+      // LLM 重试（subtype=LLM_RETRY）保留：这是用户唯一能看到失败原因 + 重试进度的行。
       if (
         row.kind === 'run_status' &&
-        ['WAITING', 'RESUMED'].includes(String(row.state ?? '').toUpperCase())
+        ['WAITING', 'RESUMED'].includes(String(row.state ?? '').toUpperCase()) &&
+        String(row.subtype ?? '').toUpperCase() !== 'LLM_RETRY'
       ) {
         continue;
       }

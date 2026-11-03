@@ -268,6 +268,13 @@ public class TimelineRecorder {
 
     /** run 终态：状态/title 由 RunStatus 映射（避免魔法值散落）；更新同一行并释放该 run 的占位。 */
     public void recordRunTerminal(Long sessionId, Long runId, RunStatus status) {
+        recordRunTerminal(sessionId, runId, status, null);
+    }
+
+    /**
+     * @param titleOverride 非空时替换默认状态文案（如 LLM 重试：「繁忙，正在自动重试（2/6）· 16:54 重试」）
+     */
+    public void recordRunTerminal(Long sessionId, Long runId, RunStatus status, String titleOverride) {
         if (runId == null) {
             return;
         }
@@ -287,6 +294,13 @@ public class TimelineRecorder {
             case WAITING -> TITLE_RUN_WAITING;
             default -> throw new IllegalStateException("unexpected run status " + status);
         };
+        if (titleOverride != null && !titleOverride.isBlank()) {
+            title = titleOverride;
+        }
+        // 重试行用 subtype 标记，前端据此保留 WAITING 行（wait 的等待行仍被过滤，由 WaitCard 展示）
+        String subtype = titleOverride != null && !titleOverride.isBlank()
+                ? com.buukle.agent.common.constant.PendingWaitKind.LLM_RETRY
+                : state;
         TimelineRefQuery query = TimelineRefQuery.builder()
                 .runId(runId)
                 .kind(TimelineKind.RUN_STATUS.getCode())
@@ -316,7 +330,7 @@ public class TimelineRecorder {
             if (latestResumed && pauseStatus) {
                 runStatusSeqByRun.remove(runId);
                 long newSeq = timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(),
-                        state, state, title, runId, null, null, null, null);
+                        state, subtype, title, runId, null, null, null, null);
                 if (newSeq > 0) {
                     runStatusSeqByRun.put(runId, newSeq);
                 }
@@ -329,18 +343,18 @@ public class TimelineRecorder {
             if (terminalStatus && pauseRow) {
                 // 等待行保留在暂停位置；终态另起一行，确保 run 结束分割线落在末尾。
                 runStatusSeqByRun.remove(runId);
-                timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
+                timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, subtype, title,
                         runId, null, null, null, null);
                 return;
             }
-            timelineSpi.update(sessionId, seq, state, state, title);
+            timelineSpi.update(sessionId, seq, state, subtype, title);
             // AWAITING_USER / WAITING 之后还会续跑同一行；仅真正终态释放 map 条目
             if (!pauseStatus) {
                 runStatusSeqByRun.remove(runId, seq);
             }
         } else {
             // 兜底：没有 RUNNING 行则新建终态行（极端路径）
-            timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, state, title,
+            timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, subtype, title,
                     runId, null, null, null, null);
         }
     }

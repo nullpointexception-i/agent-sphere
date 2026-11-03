@@ -41,6 +41,10 @@ public class AgentRun {
      * 表上又没有对应列，导致「为什么失败」事后完全无法回答。
      */
     private String errorMessage;
+    /** 挂起类型（V115）：WAIT=wait 工具；LLM_RETRY=上游瞬时失败重试。 */
+    private String waitKind;
+    /** 当前已发生的 LLM 瞬时失败次数（V115），用于梯度退避；成功一轮后归零。 */
+    private Integer retryAttempt;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

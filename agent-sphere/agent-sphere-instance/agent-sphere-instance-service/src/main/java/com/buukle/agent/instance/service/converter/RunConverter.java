@@ -31,6 +31,8 @@ public class RunConverter {
         vo.setLoopCount(run.getLoopCount());
         vo.setLoopLimit(run.getLoopLimit());
         vo.setErrorMessage(run.getErrorMessage());
+        vo.setWaitKind(run.getWaitKind());
+        vo.setRetryAttempt(run.getRetryAttempt());
         vo.setCreatedBy(run.getCreatedBy());
         vo.setCreatedAt(run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
         return vo;
@@ -66,6 +68,8 @@ public class RunConverter {
         run.setLoopCount(vo.getLoopCount());
         run.setLoopLimit(vo.getLoopLimit());
         run.setErrorMessage(vo.getErrorMessage());
+        run.setWaitKind(vo.getWaitKind());
+        run.setRetryAttempt(vo.getRetryAttempt());
         return run;
     }
 

@@ -71,6 +71,26 @@ public class AgentRuntimeProperties {
          * 大多数抖动窗口。
          */
         private int llmTurnMaxRetries = 3;
+        /**
+         * LLM 瞬时失败（超时 / 5xx / 429）的梯度退避（V115）。
+         *
+         * <p>前 {@link #llmRetryInlineRungs} 档在同轮内 sleep 重试（快速抖动），
+         * 其余档**挂起**（run 置 WAITING，kind=LLM_RETRY），到点由 wait 调度器唤醒重跑同一轮。
+         * 上游 busy 往往持续几十秒到几分钟，纯 sleep 会长期占着 run。
+         */
+        private java.util.List<java.time.Duration> llmRetryLadder = java.util.List.of(
+                java.time.Duration.ofSeconds(1),
+                java.time.Duration.ofSeconds(2),
+                java.time.Duration.ofSeconds(15),
+                java.time.Duration.ofSeconds(45),
+                java.time.Duration.ofMinutes(2),
+                java.time.Duration.ofMinutes(5));
+        /** 前几档就地 sleep 重试；超过则挂起。 */
+        private int llmRetryInlineRungs = 2;
+        /** 挂起档的抖动比例（±），避免多 run 同时唤醒打满上游。 */
+        private double llmRetryJitter = 0.2;
+        /** 从第一次失败起的总重试窗口；超过即 FAILED。 */
+        private java.time.Duration llmRetryMaxTotal = java.time.Duration.ofMinutes(10);
         /** live 非浏览器工具结果单条压缩上限。 */
         private int liveToolResultMaxChars = 4000;
         /** live 非浏览器工具结果总预算；超出后更旧的结果用省略标记。 */

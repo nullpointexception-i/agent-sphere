@@ -52,4 +52,15 @@ public class RuntimeEventDataVO {
     private String approvalId;
     /** L2 tool approval calls JSON (toolCallId/toolName/displayName/action/arguments/scope). */
     private String toolCallsJson;
+    /** 挂起类型（V115）：WAIT / LLM_RETRY。 */
+    private String waitKind;
+    /** 重试进度：第 k 次 / 共 N 次（V115）。 */
+    private Integer retryAttempt;
+    private Integer retryMax;
+    /** 下次重试时间（epoch ms）。 */
+    private Long nextRetryAt;
+    /** 错误分类 code（provider_busy / connect_timeout / rate_limited / unknown_transient）。 */
+    private String retryHint;
+    /** 触发重试的上游 HTTP 状态码。 */
+    private Integer retryHttpStatus;
 }

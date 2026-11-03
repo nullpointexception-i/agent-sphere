@@ -156,11 +156,11 @@ class FinishProtocolTest {
         Method m = SessionRunner.class.getDeclaredMethod(
                 "runTurn", Long.class, Long.class, List.class, List.class, List.class,
                 KernelContext.class, AtomicReference.class, boolean.class,
-                int.class, int.class, int.class, int.class, int.class);
+                int.class, int.class, int.class, int.class, int.class, int.class);
         m.setAccessible(true);
         return (TurnResult) m.invoke(runner, 1L, 2L, messages, List.of(), List.of(),
                 KernelContext.builder().modelRoute(route).build(), new AtomicReference<>(), skipCompaction,
-                0, 0, 0, -1000, 0);
+                0, 0, 0, -1000, 0, 0);
     }
 
     // ---------- L0：截断 / 内容过滤不能当完成 ----------

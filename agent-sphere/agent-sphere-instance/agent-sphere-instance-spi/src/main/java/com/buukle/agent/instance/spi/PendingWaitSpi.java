@@ -19,6 +19,21 @@ public interface PendingWaitSpi {
     Long createPending(Long sessionId, Long runId, String callId, int waitMs);
 
     /**
+     * 写入一条 LLM 瞬时失败的挂起重试记录（kind=LLM_RETRY）。
+     *
+     * <p>与 {@link #createPending} 共用调度器（内存定时器 + cron 补偿），但唤醒语义不同：
+     * 重试不需要补记 wait 工具结果，也不追加「你等完了」的合成 user 消息。
+     *
+     * @param attempt     这是第几次失败（1 起）
+     * @param reason      错误分类 code（provider_busy / connect_timeout / rate_limited / unknown_transient）
+     * @param errorStatus 上游 HTTP 状态码，可为 null
+     * @param lastError   错误原文（截断后落库）
+     * @return 新建记录 id
+     */
+    Long createRetry(Long sessionId, Long runId, int attempt, java.time.LocalDateTime wakeAt,
+                     String reason, Integer errorStatus, String lastError);
+
+    /**
      * CAS 抢占：仅当记录仍为 PENDING 时把它置为 RESUMED 并返回 {@code true}。
      *
      * <p>内存定时器与 cron 补偿都会调它 —— 两者可能同时命中同一条记录，

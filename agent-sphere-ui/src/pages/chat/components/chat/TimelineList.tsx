@@ -3273,9 +3273,11 @@ export default function TimelineList({
         continue;
       }
       // wait 的等待/恢复状态由 WaitCard 独立展示，run_status 再画一条会重复且带 run 级耗时误导。
+      // LLM 重试（subtype=LLM_RETRY）要保留：它是用户唯一能看到「失败原因 + 重试进度」的行。
       if (
         r.kind === 'run_status' &&
-        ['WAITING', 'RESUMED'].includes(String(r.state ?? '').toUpperCase())
+        ['WAITING', 'RESUMED'].includes(String(r.state ?? '').toUpperCase()) &&
+        String(r.subtype ?? '').toUpperCase() !== 'LLM_RETRY'
       ) {
         continue;
       }

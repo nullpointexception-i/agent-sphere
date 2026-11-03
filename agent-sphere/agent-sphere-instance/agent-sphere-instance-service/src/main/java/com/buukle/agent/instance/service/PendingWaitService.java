@@ -42,12 +42,38 @@ public class PendingWaitService implements PendingWaitSpi {
         entity.setWakeAt(LocalDateTime.ofInstant(wakeAt, ZoneId.systemDefault()));
         entity.setStatus(WaitConstants.PENDING_STATUS);
         entity.setAttempts(0);
+        entity.setKind(WaitConstants.KIND_WAIT);
         waitMapper.insert(entity);
 
         log.info("Pending wait created: id={} runId={} callId={} waitMs={} wakeAt={}",
                 entity.getId(), runId, callId, bounded, wakeAt);
         eventPublisher.publishEvent(
                 new PendingWaitCreatedEvent(entity.getId(), sessionId, runId, wakeAt));
+        return entity.getId();
+    }
+
+    @Override
+    public Long createRetry(Long sessionId, Long runId, int attempt, LocalDateTime wakeAt,
+                            String reason, Integer errorStatus, String lastError) {
+        AgentPendingWait entity = new AgentPendingWait();
+        entity.setSessionId(sessionId);
+        entity.setRunId(runId);
+        // 重试没有工具调用：callId/waitMs 留空，唤醒方按 kind 走不同分支
+        entity.setWaitMs(0);
+        entity.setWakeAt(wakeAt);
+        entity.setStatus(WaitConstants.PENDING_STATUS);
+        entity.setAttempts(attempt);
+        entity.setKind(WaitConstants.KIND_LLM_RETRY);
+        entity.setReason(reason);
+        entity.setErrorStatus(errorStatus);
+        entity.setLastError(truncate(lastError));
+        waitMapper.insert(entity);
+
+        Instant wakeInstant = wakeAt.atZone(ZoneId.systemDefault()).toInstant();
+        log.info("LLM retry scheduled: id={} runId={} attempt={} reason={} status={} wakeAt={}",
+                entity.getId(), runId, attempt, reason, errorStatus, wakeAt);
+        eventPublisher.publishEvent(
+                new PendingWaitCreatedEvent(entity.getId(), sessionId, runId, wakeInstant));
         return entity.getId();
     }
 
@@ -161,9 +187,23 @@ public class PendingWaitService implements PendingWaitSpi {
     }
 
     private PendingWaitVO toVO(AgentPendingWait p) {
-        return p == null ? null : new PendingWaitVO(
-                p.getId(), p.getSessionId(), p.getRunId(), p.getCallId(),
-                p.getWaitMs(), p.getWakeAt(), p.getStatus(), p.getAttempts());
+        if (p == null) {
+            return null;
+        }
+        PendingWaitVO vo = new PendingWaitVO();
+        vo.setId(p.getId());
+        vo.setSessionId(p.getSessionId());
+        vo.setRunId(p.getRunId());
+        vo.setCallId(p.getCallId());
+        vo.setWaitMs(p.getWaitMs());
+        vo.setWakeAt(p.getWakeAt());
+        vo.setStatus(p.getStatus());
+        vo.setAttempts(p.getAttempts());
+        vo.setKind(p.getKind());
+        vo.setErrorStatus(p.getErrorStatus());
+        vo.setReason(p.getReason());
+        vo.setLastError(p.getLastError());
+        return vo;
     }
 
     private static String truncate(String s) {

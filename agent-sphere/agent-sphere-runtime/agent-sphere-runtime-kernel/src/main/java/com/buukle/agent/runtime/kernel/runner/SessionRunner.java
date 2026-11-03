@@ -65,6 +65,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -105,6 +106,13 @@ public class SessionRunner {
     private final LlmRequestConfigurer llmRequestConfigurer;
     private final ToolApprovalGrantSpi toolApprovalGrantSpi;
     private final ToolApprovalService toolApprovalService;
+
+    /**
+     * 挂起重试用。刻意用字段注入而不是构造参数：SessionRunner 的构造器已被多个测试直接 new，
+     * 加参数会把测试全改一遍，而这个依赖与既有构造参数没有装配顺序关系。
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.buukle.agent.instance.spi.PendingWaitSpi pendingWaitSpi;
 
     /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
     private volatile ScreenshotObservationSupport screenshotObservationSupport;
@@ -381,6 +389,27 @@ public class SessionRunner {
             loopCount++;
         }
 
+        if (topCtx != null && topCtx.isRetryResume() && currentRun != null) {
+            // LLM 瞬时失败后的重试重入：只重建历史，**不加**恢复提示、
+            // **不** failRunningByRunId（上一次失败没有产生工具记录）。
+            String systemPrompt = runPromptBuilder.buildSystemPrompt(topCtx);
+            if (systemPrompt != null && !systemPrompt.isBlank()) {
+                messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
+            }
+            int historyBase = messages.size();
+            HistoryLoader.HistoryResult history = historyLoader.loadResult(sessionId, currentRunId, true);
+            if (history != null) {
+                messages.addAll(history.messages());
+            }
+            currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
+            refreshTodolistSlot(sessionId, messages);
+            hasToolCalls = true;
+            toolsEverExecuted = true;
+            topCtx.setRetryResume(false);
+            log.info("Resumed run {} after transient LLM failure with {} history message(s)",
+                    currentRunId, messages.size());
+        }
+
         if (topCtx != null && topCtx.isRecoveryResume() && currentRun != null) {
             toolCallRecordSpi.failRunningByRunId(currentRunId, "interrupted by server restart");
             String systemPrompt = runPromptBuilder.buildSystemPrompt(topCtx);
@@ -508,13 +537,22 @@ public class SessionRunner {
             AtomicReference<String> turnReasoningRef = new AtomicReference<>("");
             TurnResult turn = runTurn(sessionId, currentRunId, messages, toolDefs, tools, ctx, turnReasoningRef,
                     skipCompaction, currentRunStart, runCompactionAttempts,
-                    runCompactionCount, lastRunCompactionLoop, loopCount);
+                    runCompactionCount, lastRunCompactionLoop, loopCount,
+                    currentRun.getRetryAttempt() == null ? 0 : currentRun.getRetryAttempt());
 
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
 
             // 统一收口：根据 TurnOutcome 判定 run 状态
             if (turn.content() != null && !turn.content().isBlank()) {
                 allContent.append(turn.content());
+            }
+
+            // 成功轮（非错误/非挂起/非取消）重置重试计数，避免下一次抖动从高档位开始
+            if (turn.outcome() != TurnOutcome.ERROR
+                    && turn.outcome() != TurnOutcome.RETRY_LATER
+                    && turn.outcome() != TurnOutcome.CANCELLED) {
+                currentRun.setRetryAttempt(0);
+                currentRun.setWaitKind(null);
             }
 
             switch (turn.outcome()) {
@@ -579,6 +617,54 @@ public class SessionRunner {
                     refreshTodolistSlot(sessionId, messages);
                     hasToolCalls = true;
                     continue;
+                }
+                case RETRY_LATER -> {
+                    if (pendingWaitSpi == null) {
+                        // 兜底：测试/异常装配下没有挂起 SPI 时退回 FAILED，至少不会静默丢 run
+                        log.error("PendingWaitSpi unavailable; failing run {} instead of suspending for retry",
+                                currentRunId);
+                        currentRun.setStatus(RunStatus.FAILED.name());
+                        currentRun.setErrorMessage(turn.errorMessage());
+                        runSpi.updateRun(currentRun);
+                        eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
+                                new RuntimeEventDataVO()
+                                        .setSessionId(sessionId)
+                                        .setRunId(currentRunId)
+                                        .setErrorMessage(turn.errorMessage())
+                                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                        break loop;
+                    }
+                    // LLM 瞬时失败：梯度退避 + 挂起（不占执行资源），到点由 wait 调度器唤醒重跑同一轮。
+                    // 关键：本轮不消耗 loopCount（失败轮没有自增），恢复后从原轮次继续。
+                    int attempt = turn.retryAttempt();
+                    AgentRuntimeProperties.RunnerConfig retryCfg = properties.getRunner();
+                    int maxAttempts = LlmRetryPolicy.maxAttempts(retryCfg);
+                    long delayMs = LlmRetryPolicy.delayMs(retryCfg, attempt);
+                    LocalDateTime wakeAt = LocalDateTime.now().plusNanos(delayMs * 1_000_000L);
+                    pendingWaitSpi.createRetry(sessionId, currentRunId, attempt, wakeAt,
+                            turn.retryHint(), turn.httpStatus(), turn.errorMessage());
+
+                    currentRun.setRetryAttempt(attempt);
+                    currentRun.setWaitKind(WaitConstants.KIND_LLM_RETRY);
+                    currentRun.setStatus(RunStatus.WAITING.name());
+                    runSpi.updateRun(currentRun);
+
+                    eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.WAITING,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(currentRunId)
+                                    .setWaitKind(WaitConstants.KIND_LLM_RETRY)
+                                    .setRetryAttempt(attempt)
+                                    .setRetryMax(maxAttempts)
+                                    .setNextRetryAt(wakeAt.atZone(java.time.ZoneId.systemDefault())
+                                            .toInstant().toEpochMilli())
+                                    .setRetryHint(turn.retryHint())
+                                    .setRetryHttpStatus(turn.httpStatus())
+                                    .setErrorMessage(turn.errorMessage())
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    log.warn("LLM transient failure, run {} suspended for retry {}/{} in {}ms (hint={}, status={})",
+                            currentRunId, attempt, maxAttempts, delayMs, turn.retryHint(), turn.httpStatus());
+                    break loop;
                 }
                 case ERROR -> {
                     currentRun.setStatus(RunStatus.FAILED.name());
@@ -1286,14 +1372,18 @@ public class SessionRunner {
                                List<ToolDefinitionDTO> toolDefs, List<RuntimeTool> tools,
                                KernelContext ctx, AtomicReference<String> turnReasoning,
                                boolean skipCompaction, int currentRunStart, int runCompactionAttempts,
-                               int runCompactionCount, int lastRunCompactionLoop, int loopCount) {
-        int turnRetries = properties.getRunner().getLlmTurnMaxRetries();
+                               int runCompactionCount, int lastRunCompactionLoop, int loopCount,
+                               int retryAttempt) {
+        AgentRuntimeProperties.RunnerConfig retryCfg = properties.getRunner();
+        int maxAttempts = LlmRetryPolicy.maxAttempts(retryCfg);
         AtomicReference<String> turnReasoningOut = turnReasoning;
-        for (int attempt = 0; attempt <= turnRetries; attempt++) {
+        for (int attempt = 0; ; attempt++) {
+            // 1-based：跨挂起累计的失败次数（前几档就地重试，后续档挂起）
+            int failureNo = retryAttempt + attempt + 1;
             if (attempt > 0) {
-                long backoffMs = llmTurnRetryBackoffMs(attempt);
+                long backoffMs = LlmRetryPolicy.delayMs(retryCfg, failureNo - 1);
                 log.warn("LLM turn failed transiently, retrying {}/{} in {}ms: session={}",
-                        attempt, turnRetries, backoffMs, sessionId);
+                        failureNo, maxAttempts, backoffMs, sessionId);
                 try {
                     Thread.sleep(backoffMs);
                 } catch (InterruptedException ie) {
@@ -1597,11 +1687,17 @@ public class SessionRunner {
             }
 
             String error = errorRef.get();
-            // 瞬时失败且尚无任何输出（未下发分片）→ 同轮限界重试；
-            // 带部分输出、或上游明确给出终态错误（4xx）则不重试。
-            if (error != null && errorRetryableRef.get() && attempt < turnRetries
-                    && getTurnContent(contentRef).isEmpty() && toolCalls.isEmpty()) {
-                continue;
+            // 瞬时失败且尚无任何输出 → 按梯度重试：前几档就地 sleep，后续档挂起（WAITING + kind=LLM_RETRY）
+            if (error != null && LlmRetryPolicy.isTransient(errorStatusRef.get(), errorRetryableRef.get())
+                    && getTurnContent(contentRef).isEmpty() && toolCalls.isEmpty()
+                    && failureNo <= maxAttempts
+                    && !LlmRetryPolicy.overTotalWindow(retryCfg, failureNo)) {
+                if (LlmRetryPolicy.inline(retryCfg, failureNo)) {
+                    continue;
+                }
+                turnReasoningOut.set(reasoningRef.get());
+                return TurnResult.retryLater(error, errorStatusRef.get(),
+                        LlmRetryPolicy.hintOf(errorStatusRef.get()), failureNo);
             }
             turnReasoningOut.set(reasoningRef.get());
             String finishReason = finishReasonRef.get();
@@ -1631,8 +1727,6 @@ public class SessionRunner {
             }
             return TurnResult.complete(getTurnContent(contentRef)).withFinishReason(finishReason);
         }
-        turnReasoningOut.set("");
-        return TurnResult.error("LLM turn retries exhausted");
     }
 
     /** 读取工具入参里的字符串字段；缺失/非法一律返回 null（收口逻辑要能容忍脏入参）。 */

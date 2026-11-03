@@ -66,6 +66,11 @@ public final class WaitConstants {
     /** 恢复重试超限：置此状态并发 run 终态事件，避免永久卡 WAITING。 */
     public static final String FAILED_STATUS = "FAILED";
 
+    /** 挂起类型：wait 内置工具（唤醒时补工具结果 + 追加合成 user）。 */
+    public static final String KIND_WAIT = com.buukle.agent.common.constant.PendingWaitKind.WAIT;
+    /** 挂起类型：LLM 瞬时失败后的梯度重试（唤醒时不补工具结果、不追加合成 user）。 */
+    public static final String KIND_LLM_RETRY = com.buukle.agent.common.constant.PendingWaitKind.LLM_RETRY;
+
     /** 单条等待记录的恢复重试上限（cron 每 10s 一轮，约 50s 内重试 5 次）。 */
     public static final int MAX_RESUME_ATTEMPTS = 5;
 

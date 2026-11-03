@@ -96,8 +96,13 @@ public class WaitingRunReconciler {
 
     /** 记录已被消费但 run 没恢复 → 直接再推进一次（不依赖 PENDING 记录）；失败则置终态。 */
     private void rescue(RunVO run) {
-        PendingWaitVO synthetic = new PendingWaitVO(
-                null, run.getSessionId(), run.getId(), null, 0, null, RunStatus.WAITING.name(), null);
+        PendingWaitVO synthetic = new PendingWaitVO();
+        synthetic.setSessionId(run.getSessionId());
+        synthetic.setRunId(run.getId());
+        synthetic.setWaitMs(0);
+        synthetic.setStatus(RunStatus.WAITING.name());
+        // 保留原挂起类型：LLM_RETRY 不能走 wait 的合成消息恢复路径
+        synthetic.setKind(run.getWaitKind());
         ChatRuntimeService.ResumeOutcome outcome = chatRuntimeService.resumeFromWait(synthetic);
         if (outcome != ChatRuntimeService.ResumeOutcome.RESUMED) {
             chatRuntimeService.failStuckWait(run.getSessionId(), run.getId(), "reconcile rescue: " + outcome);
