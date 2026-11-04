@@ -21,6 +21,8 @@ public class LlmInteractionMeta {
     private Integer turnNo;
     /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */
     private Integer attemptNo;
+    /** 本次调用在 LLM 退避梯度上的档位（1..N）；非重试轮为 null。 */
+    private Integer retryAttempt;
     /** 调用前预建的 interaction 记录 id；为 null 时走「调用结束后插入」的旧路径。 */
     private Long recordId;
 

@@ -90,12 +90,12 @@ class ChatRuntimeServiceStopTest {
     void stopRun_whileWaiting_cancelsRunPendingWaitAndEmitsCancelled() {
         RunVO waiting = run(RunStatus.WAITING.name());
         when(runSpi.getRun(7L)).thenReturn(waiting);
+        when(runSpi.cancelIfActive(7L)).thenReturn(true);
         when(pendingWaitSpi.cancelPendingByRunId(7L)).thenReturn(1);
 
         service.stopRun(1L, 7L);
 
-        assertEquals(RunStatus.CANCELLED.name(), waiting.getStatus(), "WAITING run 必须被置为 CANCELLED");
-        verify(runSpi).updateRun(waiting);
+        verify(runSpi).cancelIfActive(7L);
         verify(pendingWaitSpi).cancelPendingByRunId(7L);
         ArgumentCaptor<RuntimeEventVO> cap = ArgumentCaptor.forClass(RuntimeEventVO.class);
         verify(eventPublisher).publishEvent(cap.capture());
@@ -108,24 +108,26 @@ class ChatRuntimeServiceStopTest {
     void stopRun_whileAwaitingUser_stillWorks() {
         RunVO awaiting = run(RunStatus.AWAITING_USER.name());
         when(runSpi.getRun(7L)).thenReturn(awaiting);
+        when(runSpi.cancelIfActive(7L)).thenReturn(true);
 
         service.stopRun(1L, 7L);
 
-        assertEquals(RunStatus.CANCELLED.name(), awaiting.getStatus());
+        verify(runSpi).cancelIfActive(7L);
         verify(sessionRunner, never()).cancelRun(any());
     }
 
     @Test
-    void stopRun_whileRunning_setsCancelFlagAndDoesNotTouchPendingWait() {
+    void stopRun_whileRunning_setsCancelFlagAndConditionallyCancels() {
         RunVO running = run(RunStatus.RUNNING.name());
         when(runSpi.getRun(7L)).thenReturn(running);
+        when(runSpi.cancelIfActive(7L)).thenReturn(false);
 
         service.stopRun(1L, 7L);
 
-        // 运行中：交给 loop 消费取消标志，不在此直接改状态/发终态
+        // 运行中：先交给 loop 消费取消标志；同时条件置终态覆盖「loop 已退出」的竞争窗口
         verify(sessionRunner).cancelRun(7L);
-        verify(pendingWaitSpi, never()).cancelPendingByRunId(any());
-        assertEquals(RunStatus.RUNNING.name(), running.getStatus());
+        verify(runSpi).cancelIfActive(7L);
+        verify(pendingWaitSpi).cancelPendingByRunId(7L);
     }
 
     @Test
@@ -133,13 +135,14 @@ class ChatRuntimeServiceStopTest {
         RunVO waiting = run(RunStatus.WAITING.name());
         when(runSpi.findActiveRun(1L)).thenReturn(waiting);
         when(runSpi.getRun(7L)).thenReturn(waiting);
+        when(runSpi.cancelIfActive(7L)).thenReturn(true);
         when(pendingWaitSpi.cancelPendingByRunId(7L)).thenReturn(1);
 
         service.stopSession(1L);
 
         // findActiveRun 必须能查到 WAITING（否则会走“无活动 run”分支：清标志、什么也不取消）
         verify(runSpi).findActiveRun(1L);
-        assertEquals(RunStatus.CANCELLED.name(), waiting.getStatus());
+        verify(runSpi).cancelIfActive(7L);
         verify(pendingWaitSpi).cancelPendingByRunId(7L);
         verify(sessionRunner).clearSessionCancelled(1L);
         verify(sessionRunner, never()).cancelRun(any());
@@ -149,11 +152,13 @@ class ChatRuntimeServiceStopTest {
     void stopSession_whileRunning_setsRunAndSessionCancelFlags() {
         RunVO running = run(RunStatus.RUNNING.name());
         when(runSpi.findActiveRun(1L)).thenReturn(running);
+        when(runSpi.getRun(7L)).thenReturn(running);
+        when(runSpi.cancelIfActive(7L)).thenReturn(false);
 
         service.stopSession(1L);
 
         verify(sessionRunner).cancelSession(1L);
         verify(sessionRunner).cancelRun(7L);
-        verify(sessionRunner, never()).clearSessionCancelled(any());
+        verify(sessionRunner).clearSessionCancelled(1L);
     }
 }

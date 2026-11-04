@@ -197,19 +197,23 @@ public class ChatRuntimeService {
         Long runId = wait.getRunId();
         boolean submitted = false;
         try {
-            RunVO run = runSpi.getRun(runId);
+            // 取消可能刚好落在唤醒前：先看取消标志，再 CAS 抢占 WAITING -> RUNNING。
+            if (sessionRunner.isRunCancelled(runId) || sessionRunner.isSessionCancelled(sessionId)) {
+                log.info("Wait resume skipped: runId={} cancelled", runId);
+                return ResumeOutcome.SKIPPED;
+            }
+            RunVO run = runSpi.claimForResume(runId);
             if (run == null) {
-                log.warn("Wait resume skipped: run {} no longer exists", runId);
-                return ResumeOutcome.SKIPPED;
-            }
-            if (!RunStatus.WAITING.name().equals(run.getStatus())) {
                 // 已被取消/收口，或已被另一条路径唤醒：无从恢复，交给调用方终态化
-                log.info("Wait resume skipped: runId={} status={} (expected {})", runId, run.getStatus(), RunStatus.WAITING);
+                log.info("Wait resume skipped: runId={} not WAITING", runId);
                 return ResumeOutcome.SKIPPED;
             }
-            run.setStatus(RunStatus.RUNNING.name());
-            run.setWaitKind(null);
-            runSpi.updateRun(run);
+            // CAS 之后再确认一次：取消与 claim 竞争时，以取消为准（claim 已把 run 置 RUNNING，需要收回）
+            if (sessionRunner.isRunCancelled(runId) || sessionRunner.isSessionCancelled(sessionId)) {
+                runSpi.cancelIfActive(runId);
+                log.info("Wait resume aborted after claim: runId={} cancelled", runId);
+                return ResumeOutcome.SKIPPED;
+            }
 
             // 恢复线程（定时器/cron）无租户上下文：补 username 供审计/归属。
             // 刻意不设 TenantUtil —— DataPermissionInterceptor 用租户当 created_by 过滤，
@@ -308,12 +312,8 @@ public class ChatRuntimeService {
      */
     private void rollbackToWaiting(Long runId) {
         try {
-            RunVO run = runSpi.getRun(runId);
-            if (run == null || !RunStatus.RUNNING.name().equals(run.getStatus())) {
-                return;
-            }
-            run.setStatus(RunStatus.WAITING.name());
-            runSpi.updateRun(run);
+            // 条件回滚：只有仍为 RUNNING 的 run 才退回 WAITING，避免覆盖已取消/已终态
+            runSpi.markWaiting(runId);
         } catch (Exception e) {
             log.warn("Wait resume rollback failed: runId={}", runId, e);
         }
@@ -680,10 +680,10 @@ public class ChatRuntimeService {
             stopRun(sessionId, active.getId());
             sessionRunner.clearSessionCancelled(sessionId);
         } else {
-            // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止；同时写 run 级取消键兜底，
-            // 避免“session 键被收口清空早于被中断的子 Agent 回收”造成子 Agent 空窗续跑。
-            sessionRunner.cancelRun(active.getId());
-            toolApprovalService.cancelByRunId(active.getId());
+            // RUNNING/PENDING → 先用 stopRun 写 run 级取消标志并条件置终态，
+            // 覆盖「loop 恰好在取消前退出并挂起」的窗口；再清 session 标志。
+            stopRun(sessionId, active.getId());
+            sessionRunner.clearSessionCancelled(sessionId);
         }
         // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止，收口处消费标志并发布终态
     }
@@ -696,11 +696,12 @@ public class ChatRuntimeService {
         if (RunStatus.AWAITING_USER.name().equals(run.getStatus())
                 || RunStatus.WAITING.name().equals(run.getStatus())) {
             // 停车态（等人 / 等时间）：loop 已退出，取消标志无消费者 → 直接置终态。
-            // 1) 置 CANCELLED；
-            // 2) dismiss 未应答澄清（等人态）；取消未唤醒的挂起记录（等时间态）—— 两者都清，幂等；
-            // 3) 发 run_cancelled 终态事件，前端据此解锁并显示“已取消”。
-            run.setStatus(RunStatus.CANCELLED.name());
-            runSpi.updateRun(run);
+            // 条件更新：已被其它路径终态化时不重复收口。
+            if (!runSpi.cancelIfActive(runId)) {
+                pendingWaitSpi.cancelPendingByRunId(runId);
+                toolApprovalService.cancelByRunId(runId);
+                return;
+            }
 
             List<AgentPendingClarification> pendingList = clarificationMapper.selectList(
                     new LambdaQueryWrapper<AgentPendingClarification>()
@@ -722,18 +723,28 @@ public class ChatRuntimeService {
                 log.info("Stop run {}: cancelled {} pending wait record(s)", runId, cancelledWaits);
             }
             toolApprovalService.cancelByRunId(runId);
-
-            eventPublisher.publishEvent(new RuntimeEventVO(
-                    RunStatus.CANCELLED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(runId)
-                            .setAssistantReply(RunnerConstants.CANCEL_MSG)
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
+            publishCancelled(sessionId, runId);
         } else {
+            // RUNNING/PENDING：先写 run 级取消标志（活着的 loop 会在下一个检查点退出），
+            // 再条件置 CANCELLED，覆盖「loop 已退出但还停在 WAITING/RUNNING」的窗口。
             sessionRunner.cancelRun(runId);
+            boolean cancelled = runSpi.cancelIfActive(runId);
+            pendingWaitSpi.cancelPendingByRunId(runId);
             toolApprovalService.cancelByRunId(runId);
+            if (cancelled) {
+                publishCancelled(sessionId, runId);
+            }
         }
+    }
+
+    private void publishCancelled(Long sessionId, Long runId) {
+        eventPublisher.publishEvent(new RuntimeEventVO(
+                RunStatus.CANCELLED,
+                new RuntimeEventDataVO()
+                        .setSessionId(sessionId)
+                        .setRunId(runId)
+                        .setAssistantReply(RunnerConstants.CANCEL_MSG)
+                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
     }
 
     /**

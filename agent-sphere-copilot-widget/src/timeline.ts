@@ -68,6 +68,27 @@ export function mergeTimeline(
         incoming = { ...r, state: 'ANSWERED' };
       }
     }
+    // assistant 行原地刷新时，权威行可能还没有正文（流式 token 只存在于本地）。
+    // 运行中的空行不得覆盖已经流出的正文/推理，否则用户看到的回复会突然消失。
+    const existing = map.get(incoming.seq);
+    if (
+      existing &&
+      incoming.kind === 'assistant' &&
+      (!incoming.state || incoming.state === 'RUNNING') &&
+      !(incoming.content?.text ?? '').trim() &&
+      !(incoming.content?.thinking ?? '').trim() &&
+      ((existing.content?.text ?? '').trim() ||
+        (existing.content?.thinking ?? '').trim())
+    ) {
+      incoming = {
+        ...incoming,
+        content: {
+          ...incoming.content,
+          text: incoming.content?.text || existing.content?.text,
+          thinking: incoming.content?.thinking || existing.content?.thinking,
+        },
+      };
+    }
     map.set(incoming.seq, incoming);
   }
   return [...map.values()].sort((a, b) => a.seq - b.seq);

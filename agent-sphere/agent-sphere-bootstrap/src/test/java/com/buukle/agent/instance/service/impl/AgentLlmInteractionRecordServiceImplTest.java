@@ -11,6 +11,7 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -127,6 +128,41 @@ class AgentLlmInteractionRecordServiceImplTest {
         assertEquals(100L, service.createOrGetRunning(primary));
         assertEquals(101L, service.createOrGetRunning(fallback));
         verify(mapper, org.mockito.Mockito.times(2)).insert(any(AgentLlmInteractionRecord.class));
+    }
+
+    @Test
+    void createOrGetRunning_allocatesNewRowAfterCompleted() {
+        AgentLlmInteractionRecord completed = new AgentLlmInteractionRecord();
+        completed.setId(7L);
+        completed.setStatus(AgentLlmInteractionRecord.STATUS_COMPLETED);
+        completed.setRetryNo(0);
+        when(mapper.selectOne(any())).thenReturn(completed);
+        when(mapper.insert(any(AgentLlmInteractionRecord.class))).thenReturn(1);
+
+        AgentLlmInteractionRecordVO vo = running(0);
+        vo.setRetryAttempt(2);
+        service.createOrGetRunning(vo);
+
+        ArgumentCaptor<AgentLlmInteractionRecord> captor =
+                ArgumentCaptor.forClass(AgentLlmInteractionRecord.class);
+        verify(mapper).insert(captor.capture());
+        assertEquals(1, captor.getValue().getRetryNo(), "成功记录不能被复用，必须分配新 retry_no");
+        assertEquals(2, captor.getValue().getRetryAttempt());
+        assertEquals(AgentLlmInteractionRecord.STATUS_RUNNING, captor.getValue().getStatus());
+    }
+
+    @Test
+    void complete_doesNotDowngradeCompletedRow() {
+        AgentLlmInteractionRecord completed = new AgentLlmInteractionRecord();
+        completed.setId(7L);
+        completed.setStatus(AgentLlmInteractionRecord.STATUS_COMPLETED);
+        when(mapper.selectById(7L)).thenReturn(completed);
+
+        AgentLlmInteractionRecordVO failure = new AgentLlmInteractionRecordVO();
+        failure.setSuccess(false);
+        service.complete(7L, failure);
+
+        verify(mapper, never()).update(any(), any());
     }
 
     private static AgentLlmInteractionRecordVO running(int attemptNo) {

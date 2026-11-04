@@ -211,9 +211,8 @@ public class RuntimeEventListener {
         if (run == null) return;
         switch (status) {
             case PENDING, RUNNING -> {
-                run.setStatus(status.value());
-                if (data.getType() != null) run.setType(data.getType());
-                runSpi.updateRun(run);
+                // 条件更新：终态 run 不能被迟到的 PENDING/RUNNING 事件拉回执行中
+                runSpi.updateStatusIfActive(run.getId(), status.value());
             }
             case COMPLETED -> {
                 run.setStatus(status.value());
@@ -249,16 +248,15 @@ public class RuntimeEventListener {
                         data.getSessionId(), run.getId(), status), status);
             }
             case AWAITING_USER -> {
-                run.setStatus(status.value());
-                runSpi.updateRun(run);
+                // 条件更新：已取消/已终态的 run 不能被迟到的暂停事件降级
+                runSpi.updateStatusIfActive(run.getId(), status.value());
                 stampRunStatus(data, timelineRecorder.recordRunTerminal(
                         data.getSessionId(), run.getId(), status), status);
             }
             case WAITING -> {
                 // wait 挂起：与 AWAITING_USER 同属停车态 —— 更新 run 状态 + 记 timeline“等待中”行；
                 // 之后同一个 run 到点续跑，行会原位更新。
-                run.setStatus(status.value());
-                runSpi.updateRun(run);
+                runSpi.updateStatusIfActive(run.getId(), status.value());
                 stampRunStatus(data, timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status,
                         retryTitle(data)), status);
             }

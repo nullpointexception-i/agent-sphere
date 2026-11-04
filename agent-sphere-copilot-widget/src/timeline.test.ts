@@ -34,6 +34,47 @@ describe('clarificationKey', () => {
   });
 });
 
+describe('mergeTimeline assistant 流式正文保护', () => {
+  const assistant = (
+    seq: number,
+    state: string,
+    text: string,
+    thinking?: string,
+  ): TimelineRow => ({
+    seq,
+    runId: 42,
+    kind: 'assistant',
+    state,
+    content: { text, thinking },
+  });
+
+  it('RUNNING 的空权威行不覆盖本地已流出的正文/推理', () => {
+    const merged = mergeTimeline(
+      [assistant(20, 'RUNNING', '完整回复', '思考过程')],
+      [assistant(20, 'RUNNING', '')],
+    );
+    expect(merged[0].content.text).toBe('完整回复');
+    expect(merged[0].content.thinking).toBe('思考过程');
+  });
+
+  it('终态行允许覆盖（完成/失败以服务端为准）', () => {
+    const merged = mergeTimeline(
+      [assistant(20, 'RUNNING', '半截回复')],
+      [assistant(20, 'FAILED', '')],
+    );
+    expect(merged[0].state).toBe('FAILED');
+    expect(merged[0].content.text).toBe('');
+  });
+
+  it('权威行有正文时正常覆盖', () => {
+    const merged = mergeTimeline(
+      [assistant(20, 'RUNNING', '旧正文')],
+      [assistant(20, 'RUNNING', '新正文')],
+    );
+    expect(merged[0].content.text).toBe('新正文');
+  });
+});
+
 describe('mergeTimeline 澄清乐观态保护', () => {
   it('★回归：同 run 续跑的第二轮澄清不被改写成 ANSWERED', () => {
     const answered = new Set([clarificationKey(42, 'c1') as string]);

@@ -44,6 +44,9 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
 
     /** 列表/增量查询排除的大字段属性名（按需经 findReasoningBatch 定点补拉，避免行宽撑爆） */
     private static final String REASONING_PROPERTY = "reasoning";
+    /** 终态集合：任何非终态事件都不能把 run 从这些状态改回去。 */
+    private static final List<String> TERMINAL_STATUSES = List.of(
+            RunEnum.STATUS_COMPLETED, RunEnum.STATUS_FAILED, RunEnum.STATUS_CANCELLED);
 
     @Override
     public RunVO createRun(CreateRunDTO dto) {
@@ -167,6 +170,105 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     @Override
     public void updateRun(RunVO run) {        AgentRun entity = runConverter.toDO(run);
         updateById(entity);
+    }
+
+    @Override
+    public boolean resetRetryState(Long runId) {
+        if (runId == null) {
+            return false;
+        }
+        return lambdaUpdate()
+                .eq(AgentRun::getId, runId)
+                .set(AgentRun::getRetryAttempt, 0)
+                .set(AgentRun::getWaitKind, null)
+                .set(AgentRun::getUpdatedAt, LocalDateTime.now())
+                .update();
+    }
+
+    @Override
+    public boolean markRunning(Long runId, int loopCount, int loopLimit) {
+        if (runId == null) {
+            return false;
+        }
+        return lambdaUpdate()
+                .eq(AgentRun::getId, runId)
+                .notIn(AgentRun::getStatus, TERMINAL_STATUSES)
+                .set(AgentRun::getStatus, RunEnum.STATUS_RUNNING)
+                .set(AgentRun::getLoopCount, loopCount)
+                .set(AgentRun::getLoopLimit, loopLimit)
+                .set(AgentRun::getUpdatedAt, LocalDateTime.now())
+                .update();
+    }
+
+    @Override
+    public boolean markWaitingForRetry(Long runId, int attempt) {
+        if (runId == null) {
+            return false;
+        }
+        return lambdaUpdate()
+                .eq(AgentRun::getId, runId)
+                .in(AgentRun::getStatus, List.of(RunEnum.STATUS_RUNNING, RunEnum.STATUS_WAITING))
+                .set(AgentRun::getStatus, RunEnum.STATUS_WAITING)
+                .set(AgentRun::getRetryAttempt, attempt)
+                .set(AgentRun::getWaitKind, PendingWaitKind.LLM_RETRY)
+                .set(AgentRun::getUpdatedAt, LocalDateTime.now())
+                .update();
+    }
+
+    @Override
+    public boolean markWaiting(Long runId) {
+        if (runId == null) {
+            return false;
+        }
+        return lambdaUpdate()
+                .eq(AgentRun::getId, runId)
+                .eq(AgentRun::getStatus, RunEnum.STATUS_RUNNING)
+                .set(AgentRun::getStatus, RunEnum.STATUS_WAITING)
+                .set(AgentRun::getWaitKind, null)
+                .set(AgentRun::getUpdatedAt, LocalDateTime.now())
+                .update();
+    }
+
+    @Override
+    public RunVO claimForResume(Long runId) {
+        if (runId == null) {
+            return null;
+        }
+        boolean claimed = lambdaUpdate()
+                .eq(AgentRun::getId, runId)
+                .eq(AgentRun::getStatus, RunEnum.STATUS_WAITING)
+                .set(AgentRun::getStatus, RunEnum.STATUS_RUNNING)
+                .set(AgentRun::getWaitKind, null)
+                .set(AgentRun::getUpdatedAt, LocalDateTime.now())
+                .update();
+        return claimed ? getRun(runId) : null;
+    }
+
+    @Override
+    public boolean updateStatusIfActive(Long runId, String status) {
+        if (runId == null || status == null) {
+            return false;
+        }
+        return lambdaUpdate()
+                .eq(AgentRun::getId, runId)
+                .notIn(AgentRun::getStatus, TERMINAL_STATUSES)
+                .set(AgentRun::getStatus, status)
+                .set(AgentRun::getUpdatedAt, LocalDateTime.now())
+                .update();
+    }
+
+    @Override
+    public boolean cancelIfActive(Long runId) {
+        if (runId == null) {
+            return false;
+        }
+        return lambdaUpdate()
+                .eq(AgentRun::getId, runId)
+                .notIn(AgentRun::getStatus, TERMINAL_STATUSES)
+                .set(AgentRun::getStatus, RunEnum.STATUS_CANCELLED)
+                .set(AgentRun::getWaitKind, null)
+                .set(AgentRun::getUpdatedAt, LocalDateTime.now())
+                .update();
     }
 
     @Override

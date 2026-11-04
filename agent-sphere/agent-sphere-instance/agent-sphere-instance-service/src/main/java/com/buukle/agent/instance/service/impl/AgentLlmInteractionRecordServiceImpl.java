@@ -25,6 +25,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     /** 主 Agent 问答轮次（与 kernel LlmInteractionType.CHAT_REPLY 的落库字符串一致；instance 不能依赖 kernel）。 */
     private static final String INTERACTION_TYPE_CHAT_REPLY = "CHAT_REPLY";
+    /** retry_no 分配的并发重试次数（唯一索引冲突时重新取号）。 */
+    private static final int MAX_RETRY_NO_ALLOCATIONS = 5;
 
     private final AgentLlmInteractionRecordMapper mapper;
 
@@ -45,35 +47,44 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         }
         int attemptNo = vo.getAttemptNo() == null ? 0 : vo.getAttemptNo();
         vo.setAttemptNo(attemptNo);
-        AgentLlmInteractionRecord existing = findChatTurn(vo.getRunId(), vo.getTurnNo(), attemptNo);
-        if (existing != null) {
-            // 同一 attempt 重试：重置为 RUNNING，并刷新 updated_at 作为心跳。
-            mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
-                    .eq(AgentLlmInteractionRecord::getId, existing.getId())
-                    .set(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_RUNNING)
-                    .set(AgentLlmInteractionRecord::getErrorMessage, null)
-                    .set(AgentLlmInteractionRecord::getModelName, vo.getModelName())
-                    .set(AgentLlmInteractionRecord::getUpdatedAt, java.time.LocalDateTime.now()));
-            return existing.getId();
+        // 0 表示非重试轮；1..N 为退避梯度档位，仅用于展示/排查
+        if (vo.getRetryAttempt() != null && vo.getRetryAttempt() <= 0) {
+            vo.setRetryAttempt(null);
         }
-        AgentLlmInteractionRecord record = newRecord(vo);
-        record.setStatus(AgentLlmInteractionRecord.STATUS_RUNNING);
-        try {
-            mapper.insert(record);
-            return record.getId();
-        } catch (DuplicateKeyException e) {
-            // 并发建同 attempt：唯一索引只放行一个，输家回查赢家，绝不返回幽灵 id
-            AgentLlmInteractionRecord winner = findChatTurn(vo.getRunId(), vo.getTurnNo(), attemptNo);
-            if (winner == null) {
-                throw e;
+
+        // 每次新调用独立一行（V117）：已完成的成功结果不能被后续重试覆盖。
+        // 不复用 RUNNING 行：上一轮持久化与下一轮建行可能并发，复用会让两次调用互相覆盖；
+        // 进程崩溃遗留的 RUNNING 行由 failStaleRunning 兜底（Timeline 取 retry_no 最大的 RUNNING）。
+        for (int i = 0; i < MAX_RETRY_NO_ALLOCATIONS; i++) {
+            vo.setRetryNo(nextRetryNo(vo.getRunId(), vo.getTurnNo(), attemptNo));
+            AgentLlmInteractionRecord record = newRecord(vo);
+            record.setStatus(AgentLlmInteractionRecord.STATUS_RUNNING);
+            try {
+                mapper.insert(record);
+                return record.getId();
+            } catch (DuplicateKeyException e) {
+                log.debug("Retry record allocation raced: run={}, turn={}, attempt={}, retryNo={}",
+                        vo.getRunId(), vo.getTurnNo(), attemptNo, vo.getRetryNo());
             }
-            return winner.getId();
         }
+        throw new IllegalStateException("cannot allocate LLM interaction record for run="
+                + vo.getRunId() + ", turn=" + vo.getTurnNo() + ", attempt=" + attemptNo);
     }
 
     @Override
     public void complete(Long id, AgentLlmInteractionRecordVO vo) {
         if (id == null) {
+            return;
+        }
+        AgentLlmInteractionRecord existing = mapper.selectById(id);
+        if (existing == null) {
+            log.warn("LLM interaction complete skipped: id={} no longer exists", id);
+            return;
+        }
+        // 已完成的行是不可回退的历史事实：后到的失败重试不能把它降级、更不能清空已成功正文。
+        if (AgentLlmInteractionRecord.STATUS_COMPLETED.equals(existing.getStatus())
+                && !Boolean.TRUE.equals(vo.getSuccess())) {
+            log.warn("LLM interaction {} already completed; ignoring late failure", id);
             return;
         }
         // 同一轮只有一条记录：最终完成必须能落库。
@@ -114,7 +125,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                 .eq(AgentLlmInteractionRecord::getTurnNo, turnNo)
                 .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
                 .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
-                .last("ORDER BY (status = 'RUNNING') DESC, attempt_no DESC LIMIT 1"));
+                .last("ORDER BY (status = 'RUNNING') DESC, retry_no DESC, attempt_no DESC LIMIT 1"));
         return record == null ? null : record.getId();
     }
 
@@ -133,14 +144,21 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                 .set(AgentLlmInteractionRecord::getErrorMessage, "stale running interaction"));
     }
 
-    private AgentLlmInteractionRecord findChatTurn(Long runId, Integer turnNo, int attemptNo) {
-        return mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
+    /** 该 (run, turn, attempt) 下已有最大 retry_no + 1；无记录时从 0 开始。 */
+    private int nextRetryNo(Long runId, Integer turnNo, int attemptNo) {
+        AgentLlmInteractionRecord latest = mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
+                .select(AgentLlmInteractionRecord::getRetryNo)
                 .eq(AgentLlmInteractionRecord::getRunId, runId)
                 .eq(AgentLlmInteractionRecord::getTurnNo, turnNo)
                 .eq(AgentLlmInteractionRecord::getAttemptNo, attemptNo)
                 .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
                 .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
+                .orderByDesc(AgentLlmInteractionRecord::getRetryNo)
                 .last("LIMIT 1"));
+        if (latest == null || latest.getRetryNo() == null) {
+            return 0;
+        }
+        return latest.getRetryNo() + 1;
     }
 
     private static AgentLlmInteractionRecord newRecord(AgentLlmInteractionRecordVO vo) {
@@ -149,6 +167,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         record.setSessionId(vo.getSessionId());
         record.setTurnNo(vo.getTurnNo());
         record.setAttemptNo(vo.getAttemptNo() == null ? 0 : vo.getAttemptNo());
+        record.setRetryNo(vo.getRetryNo() == null ? 0 : vo.getRetryNo());
+        record.setRetryAttempt(vo.getRetryAttempt());
         record.setInteractionType(vo.getInteractionType());
         record.setModelName(vo.getModelName());
         record.setRequestBody(vo.getRequestBody());
@@ -277,6 +297,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         vo.setSessionId(record.getSessionId());
         vo.setTurnNo(record.getTurnNo());
         vo.setAttemptNo(record.getAttemptNo());
+        vo.setRetryNo(record.getRetryNo());
+        vo.setRetryAttempt(record.getRetryAttempt());
         vo.setStatus(record.getStatus());
         vo.setInteractionType(record.getInteractionType());
         vo.setModelName(record.getModelName());

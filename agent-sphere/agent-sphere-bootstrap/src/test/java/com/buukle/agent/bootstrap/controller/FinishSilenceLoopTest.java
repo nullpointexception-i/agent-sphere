@@ -135,6 +135,13 @@ class FinishSilenceLoopTest {
         run.setSessionId(SESSION_ID);
         run.setStatus("RUNNING");
         lenient().when(runSpi.getRun(RUN_ID)).thenReturn(run);
+        // 条件状态更新是真实 DB 行为：mock 默认 false 会被误判为“run 已终态”而直接退出
+        lenient().when(runSpi.markRunning(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(true);
+        lenient().when(runSpi.markWaitingForRetry(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyInt())).thenReturn(true);
+        lenient().when(runSpi.resetRetryState(org.mockito.ArgumentMatchers.anyLong())).thenReturn(true);
 
         ModelRouteFullVO route = new ModelRouteFullVO();
         route.setId(1L);
@@ -250,6 +257,7 @@ class FinishSilenceLoopTest {
         runner.run(SESSION_ID);
 
         assertEquals("WAITING", run.getStatus(), "瞬时错误应挂起重试，而不是直接失败");
+        verify(runSpi).markWaitingForRetry(RUN_ID, 1);
         verify(pendingWaitSpi).createRetry(eq(SESSION_ID), eq(RUN_ID), eq(1), any(),
                 eq("connect_timeout"), isNull(), contains("timed out"));
         assertTrue(publishedWaitingRetry(), "挂起事件必须带重试进度，前端才能显示倒计时");
@@ -310,6 +318,7 @@ class FinishSilenceLoopTest {
 
         assertEquals("COMPLETED", run.getStatus(), "从未用过工具的纯聊天，回文本就该算完成");
         assertEquals("4", run.getAssistantReply());
+        verify(runSpi).resetRetryState(RUN_ID);
         verify(inputManager).clear(SESSION_ID);
     }
 

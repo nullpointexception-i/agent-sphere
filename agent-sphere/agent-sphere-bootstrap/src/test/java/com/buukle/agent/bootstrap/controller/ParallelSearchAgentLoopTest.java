@@ -248,6 +248,9 @@ class ParallelSearchAgentLoopTest {
             when(redis.<String>getBucket("runtime:mcp:task-cred:" + SESSION_ID)).thenReturn(credential);
             RunSpi runs = mock(RunSpi.class);
             when(runs.getRun(RUN_ID)).thenReturn(run);
+            when(runs.markRunning(anyLong(), anyInt(), anyInt())).thenReturn(true);
+            when(runs.markWaitingForRetry(anyLong(), anyInt())).thenReturn(true);
+            when(runs.resetRetryState(anyLong())).thenReturn(true);
             SessionInputManager input = mock(SessionInputManager.class);
             when(input.promoteInput(SESSION_ID)).thenReturn(
                     new SessionInputManager.InputMessage(OBJECTIVE, null, 0L, false, List.of()), null);

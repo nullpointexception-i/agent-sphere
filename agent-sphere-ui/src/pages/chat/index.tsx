@@ -279,6 +279,25 @@ export default function Chat() {
             }
           }
           const incoming = { ...(m.get(r.seq) || {}), ...r };
+          // 运行中的 assistant 权威行为空时，不能用空内容覆盖本地已流出的正文/推理，
+          // 否则重试/尾窗刷新会让用户已经看到的回复突然消失。
+          const existingRow = m.get(r.seq);
+          if (
+            existingRow &&
+            incoming.kind === 'assistant' &&
+            (!incoming.state || incoming.state === 'RUNNING') &&
+            !(incoming.content?.text ?? '').trim() &&
+            !(incoming.content?.thinking ?? '').trim() &&
+            ((existingRow.content?.text ?? '').trim() ||
+              (existingRow.content?.thinking ?? '').trim())
+          ) {
+            incoming.content = {
+              ...incoming.content,
+              text: incoming.content?.text || existingRow.content?.text,
+              thinking:
+                incoming.content?.thinking || existingRow.content?.thinking,
+            };
+          }
           // 已本地应答的澄清不被服务端旧 PENDING 回退。按 clarificationId 匹配，
           // 缺 id 时不拦截（见 clarificationKey 注释）。
           if (

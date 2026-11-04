@@ -21,6 +21,10 @@ public class AgentLlmInteractionRecord {
     private Integer turnNo;
     /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */
     private Integer attemptNo;
+    /** 同一 (run, turn, attempt) 下的调用序号：每次重试/新一轮各自一行，避免成功结果被覆盖。 */
+    private Integer retryNo;
+    /** 该次调用在 LLM 退避梯度上的档位（1..N，V117）；非重试轮为 NULL。 */
+    private Integer retryAttempt;
     /** RUNNING / COMPLETED / FAILED。 */
     private String status;
     private String interactionType;

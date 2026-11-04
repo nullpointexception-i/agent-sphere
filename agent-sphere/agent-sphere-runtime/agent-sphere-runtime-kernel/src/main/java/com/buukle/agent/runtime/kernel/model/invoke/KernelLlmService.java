@@ -56,6 +56,7 @@ public class KernelLlmService {
         vo.setSessionId(meta.getSessionId());
         vo.setTurnNo(meta.getTurnNo());
         vo.setAttemptNo(meta.getAttemptNo() == null ? 0 : meta.getAttemptNo());
+        vo.setRetryAttempt(meta.getRetryAttempt());
         vo.setInteractionType(meta.getInteractionType().name());
         vo.setModelName(modelName);
         vo.setSubAgentRunId(meta.getSubAgentRunId());

@@ -112,7 +112,7 @@ class WaitResumeOutcomeTest {
 
     @Test
     void resumeFromWait_returnsErrorWhenResumeThrows_soCallerCanRequeue() {
-        when(runSpi.getRun(7L)).thenReturn(runWithStatus(RunStatus.WAITING.name()));
+        when(runSpi.claimForResume(7L)).thenReturn(runWithStatus(RunStatus.RUNNING.name()));
         doThrow(new IllegalStateException("boom")).when(sessionSpi).touchSession(1L);
 
         assertEquals(ChatRuntimeService.ResumeOutcome.ERROR, service.resumeFromWait(pendingWait()));
@@ -122,12 +122,12 @@ class WaitResumeOutcomeTest {
     @Test
     void resumeFromWait_clearsInheritedTenantBeforeReadingRun() {
         // 对账任务也会直接调 resumeFromWait；无论从哪条后台路径进来都必须无租户，
-        // 否则 getRun 会被 DataPermission 追加 created_by 过滤成 null（→ 误判 SKIPPED）。
+        // 否则数据权限会把 run 读成 null（→ 误判 SKIPPED）。
         TenantUtil.start("leaked-user");
         AtomicReference<String> tenantSeenByRead = new AtomicReference<>("not-called");
-        when(runSpi.getRun(7L)).thenAnswer(inv -> {
+        when(runSpi.claimForResume(7L)).thenAnswer(inv -> {
             tenantSeenByRead.set(TenantUtil.get());
-            return runWithStatus(RunStatus.CANCELLED.name());
+            return null;
         });
 
         service.resumeFromWait(pendingWait());
@@ -137,7 +137,7 @@ class WaitResumeOutcomeTest {
 
     @Test
     void resumeFromWait_skippedWhenRunAlreadyAdvanced() {
-        when(runSpi.getRun(7L)).thenReturn(runWithStatus(RunStatus.CANCELLED.name()));
+        when(runSpi.claimForResume(7L)).thenReturn(null);
 
         assertEquals(ChatRuntimeService.ResumeOutcome.SKIPPED, service.resumeFromWait(pendingWait()));
     }
@@ -206,6 +206,7 @@ class WaitResumeOutcomeTest {
                 .thenReturn(List.of(withPending, stuck));
         when(pendingWaitSpi.listPendingByRunId(7L)).thenReturn(List.of(pendingWait()));
         when(pendingWaitSpi.listPendingByRunId(8L)).thenReturn(List.of());
+        when(runSpi.claimForResume(8L)).thenReturn(runWithStatus(RunStatus.RUNNING.name()));
         when(runSpi.getRun(8L)).thenReturn(stuck);
         // 抢救走 resumeFromWait：先置 RUNNING 再异步续跑，这里让续跑抛异常 → ERROR → failStuckWait
         doThrow(new IllegalStateException("boom")).when(sessionSpi).touchSession(1L);
@@ -241,33 +242,26 @@ class WaitResumeOutcomeTest {
         // 1) 补记 tool 成功只是展示事件，抛异常不得把已成功的恢复降级成 ERROR；
         // 2) 任何情况下都不能把 run 退回 WAITING —— 一旦退回，wait 记录会回置 PENDING，
         //    被 cron 再次 claim 并再提交一次异步执行，两个循环并发写同一个 run。
-        when(runSpi.getRun(7L)).thenReturn(runWithStatus(RunStatus.WAITING.name()));
+        when(runSpi.claimForResume(7L)).thenReturn(runWithStatus(RunStatus.RUNNING.name()));
         doThrow(new IllegalStateException("timeline blew up"))
                 .when(eventPublisher).publishEvent(any(RuntimeEventVO.class));
 
         assertEquals(ChatRuntimeService.ResumeOutcome.RESUMED, service.resumeFromWait(pendingWait()),
                 "补记事件失败不应让恢复失败");
 
-        ArgumentCaptor<RunVO> cap = ArgumentCaptor.forClass(RunVO.class);
-        verify(runSpi, atLeastOnce()).updateRun(cap.capture());
-        assertEquals(RunStatus.RUNNING.name(), cap.getAllValues()
-                        .get(cap.getAllValues().size() - 1).getStatus(),
-                "异步续跑已提交后 run 必须停在 RUNNING，不能回退到 WAITING");
+        verify(runSpi).claimForResume(7L);
+        verify(runSpi, never()).markWaiting(7L);
     }
 
     @Test
     void resumeFromWait_beforeSubmit_rollsBackToWaitingSoRetryCanWork() {
         // 反向护栏：提交前失败必须回退，否则 run 卡在 RUNNING 却没有任何循环在跑
-        when(runSpi.getRun(7L)).thenReturn(runWithStatus(RunStatus.WAITING.name()));
+        when(runSpi.claimForResume(7L)).thenReturn(runWithStatus(RunStatus.RUNNING.name()));
         doThrow(new IllegalStateException("session touch failed"))
                 .when(sessionSpi).touchSession(1L);
 
         assertEquals(ChatRuntimeService.ResumeOutcome.ERROR, service.resumeFromWait(pendingWait()));
 
-        ArgumentCaptor<RunVO> cap = ArgumentCaptor.forClass(RunVO.class);
-        verify(runSpi, atLeastOnce()).updateRun(cap.capture());
-        assertEquals(RunStatus.WAITING.name(), cap.getAllValues()
-                        .get(cap.getAllValues().size() - 1).getStatus(),
-                "提交前失败必须退回 WAITING，重试才能再次匹配");
+        verify(runSpi).markWaiting(7L);
     }
 }

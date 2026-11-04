@@ -152,7 +152,8 @@ public class SessionRunner {
         return redissonClient.getSet(DistributedRuntimeConstants.sessionCancelKey(sessionId));
     }
 
-    private boolean isRunCancelled(Long runId) {
+    /** run 是否处于取消态（供唤醒/恢复路径在恢复前二次确认）。 */
+    public boolean isRunCancelled(Long runId) {
         return runId != null && runCancelSet(runId).contains(CANCEL_MARKER);
     }
 
@@ -476,6 +477,13 @@ public class SessionRunner {
                 break loop;
             }
 
+            // 条件状态更新：已取消/终态的 run 不能再被迟到的唤醒拉回 RUNNING。
+            // 旧实现直接 updateRun 整行，取消与挂起竞争时会互相覆盖（线上 run 2995）。
+            boolean running = runSpi.markRunning(currentRunId, loopCount, maxLoopCount);
+            if (!running) {
+                log.info("Run {} is no longer active; stopping resumed loop", currentRunId);
+                break loop;
+            }
             currentRun.setStatus(RunStatus.RUNNING.name());
             // 随这次状态更新一并落库（不额外增加写）：loopCount 在正常工具轮末尾与
             // 挂起工具（wait/ask_clarification）break 前都会自增，这里记的是本轮即将执行的序号，
@@ -484,7 +492,6 @@ public class SessionRunner {
             // 生效上限与 loopCount 同一位置落库（不额外增加写）：预算与计数器都是 per-run 的，
             // 分母若不固化，续跑时会在调度线程上重新解析而缩水。
             currentRun.setLoopLimit(maxLoopCount);
-            runSpi.updateRun(currentRun);
 
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.RUNNING,
                     new RuntimeEventDataVO()
@@ -547,12 +554,14 @@ public class SessionRunner {
                 allContent.append(turn.content());
             }
 
-            // 成功轮（非错误/非挂起/非取消）重置重试计数，避免下一次抖动从高档位开始
-            if (turn.outcome() != TurnOutcome.ERROR
-                    && turn.outcome() != TurnOutcome.RETRY_LATER
-                    && turn.outcome() != TurnOutcome.CANCELLED) {
+            // 只有真正的模型成功轮（COMPLETE / TOOL_CALLS）才重置退避计数：
+            // 口径 B —— 成功一次后下一段失败从第 1 档重新开始。
+            // COMPACTED / RUN_COMPACTED 只是压缩动作，不是模型调用成功，不能清零（否则会掩盖真实失败）。
+            if (turn.outcome() == TurnOutcome.COMPLETE || turn.outcome() == TurnOutcome.TOOL_CALLS) {
                 currentRun.setRetryAttempt(0);
                 currentRun.setWaitKind(null);
+                // 立即定向落库：并发写者用旧快照整行覆盖时，不会把刚清零的计数又写回旧值。
+                runSpi.resetRetryState(currentRunId);
             }
 
             switch (turn.outcome()) {
@@ -619,6 +628,11 @@ public class SessionRunner {
                     continue;
                 }
                 case RETRY_LATER -> {
+                    // 取消与挂起在同一窗口竞争时，已取消的 run 不得再创建等待记录
+                    if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
+                        log.info("Run {} cancelled before retry suspension; not creating wait", currentRunId);
+                        break loop;
+                    }
                     if (pendingWaitSpi == null) {
                         // 兜底：测试/异常装配下没有挂起 SPI 时退回 FAILED，至少不会静默丢 run
                         log.error("PendingWaitSpi unavailable; failing run {} instead of suspending for retry",
@@ -644,10 +658,22 @@ public class SessionRunner {
                     pendingWaitSpi.createRetry(sessionId, currentRunId, attempt, wakeAt,
                             turn.retryHint(), turn.httpStatus(), turn.errorMessage());
 
+                    // 建 wait 与取消仍可能交错：再确认一次，已取消就把刚建的那条收掉
+                    if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
+                        pendingWaitSpi.cancelPendingByRunId(currentRunId);
+                        log.info("Run {} cancelled during retry suspension; wait cancelled", currentRunId);
+                        break loop;
+                    }
+
                     currentRun.setRetryAttempt(attempt);
                     currentRun.setWaitKind(WaitConstants.KIND_LLM_RETRY);
                     currentRun.setStatus(RunStatus.WAITING.name());
-                    runSpi.updateRun(currentRun);
+                    // 条件更新：run 已被取消/终态时不能再写回 WAITING
+                    if (!runSpi.markWaitingForRetry(currentRunId, attempt)) {
+                        pendingWaitSpi.cancelPendingByRunId(currentRunId);
+                        log.info("Run {} is no longer active; retry suspension aborted", currentRunId);
+                        break loop;
+                    }
 
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.WAITING,
                             new RuntimeEventDataVO()
@@ -667,6 +693,10 @@ public class SessionRunner {
                     break loop;
                 }
                 case ERROR -> {
+                    // 取消在 LLM 调用期间到达时，取消优先于失败
+                    if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
+                        break loop;
+                    }
                     currentRun.setStatus(RunStatus.FAILED.name());
                     runSpi.updateRun(currentRun);
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
@@ -678,6 +708,10 @@ public class SessionRunner {
                     break loop;
                 }
                 case COMPLETE -> {
+                    // 取消在 LLM 调用期间到达时，取消优先于完成
+                    if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
+                        break loop;
+                    }
                     if (inputManager.hasPending(sessionId)) {
                         hasToolCalls = false;
                         continue;
@@ -1100,6 +1134,10 @@ public class SessionRunner {
             support.clear(currentRunId);
         }
         if ((runCancelled || sessionCancelled) && currentRun != null) {
+            // 取消时把该 run 名下未唤醒的等待全部收掉：挂起与取消竞争时刚插入的那条也要覆盖。
+            if (pendingWaitSpi != null) {
+                pendingWaitSpi.cancelPendingByRunId(currentRunId);
+            }
             currentRun.setStatus(RunStatus.CANCELLED.name());
             runSpi.updateRun(currentRun);
             // 发 CANCELLED（而非 FAILED）：与 DB 状态一致，前端走 run_cancelled 分支显示“已取消”。
@@ -1380,6 +1418,8 @@ public class SessionRunner {
         for (int attempt = 0; ; attempt++) {
             // 1-based：跨挂起累计的失败次数（前几档就地重试，后续档挂起）
             int failureNo = retryAttempt + attempt + 1;
+            // 首次调用不算重试：retry_attempt 只在真正重试（内联/挂起）时标记档位
+            Integer retryMark = (attempt > 0 || retryAttempt > 0) ? failureNo : null;
             if (attempt > 0) {
                 long backoffMs = LlmRetryPolicy.delayMs(retryCfg, failureNo - 1);
                 log.warn("LLM turn failed transiently, retrying {}/{} in {}ms: session={}",
@@ -1576,6 +1616,7 @@ public class SessionRunner {
                                     .setInteractionType(LlmInteractionType.CHAT_REPLY)
                                     .setTurnNo(loopCount)
                                     .setAttemptNo(i)
+                                    .setRetryAttempt(retryMark)
                                     .setModelRouteId(route.getId())
                                     .setEstimatedPromptTokens((int) compactionService.estimatePromptTokens(
                                             projectedMessages, toolDefs)));
