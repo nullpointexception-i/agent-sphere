@@ -17,8 +17,20 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        ref: main
+        # 必须构建「tag 指向的 commit」，不能 checkout main：
+        # 镜像 tag 用的是 GITHUB_SHA，如果这时 main 还没推进到该 commit（例如 main 推送失败后
+        # 先推了 tag），就会构建出「名字是 vN、内容还是旧版本」的镜像 —— 线上 run 2962 即因此
+        # 拿到了 169 的代码（V115 未执行）。
+        ref: ${{ github.sha }}
         fetch-depth: 0
+
+    - name: Verify build commit is reachable from main
+      run: |
+        git fetch origin main
+        if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+          echo "::error::$GITHUB_SHA is not on origin/main; refusing to build a release image from it"
+          exit 1
+        fi
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
