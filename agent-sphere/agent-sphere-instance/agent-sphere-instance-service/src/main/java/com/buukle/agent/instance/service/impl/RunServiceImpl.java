@@ -150,6 +150,10 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
             return;
         }
         PendingWaitVO wait = pending.get(0);
+        if (!PendingWaitKind.LLM_RETRY.equals(wait.getKind())) {
+            // 防御：run.wait_kind 可能因历史写入残留，真正的类型以挂起记录为准
+            return;
+        }
         vo.setRetryAttempt(wait.getAttempts());
         vo.setRetryMax(agentRuntimeProperties.getRunner().getLlmRetryLadder().size());
         if (wait.getWakeAt() != null) {

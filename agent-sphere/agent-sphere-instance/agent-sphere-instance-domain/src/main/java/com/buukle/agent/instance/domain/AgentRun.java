@@ -42,6 +42,7 @@ public class AgentRun {
      */
     private String errorMessage;
     /** 挂起类型（V115）：WAIT=wait 工具；LLM_RETRY=上游瞬时失败重试。 */
+    @TableField(updateStrategy = com.baomidou.mybatisplus.annotation.FieldStrategy.ALWAYS)
     private String waitKind;
     /** 当前已发生的 LLM 瞬时失败次数（V115），用于梯度退避；成功一轮后归零。 */
     private Integer retryAttempt;
