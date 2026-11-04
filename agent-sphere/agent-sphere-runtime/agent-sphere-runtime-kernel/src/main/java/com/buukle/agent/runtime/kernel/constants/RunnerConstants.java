@@ -5,6 +5,12 @@ public final class RunnerConstants {
     public static final String EMPTY_JSON_ARGS = "{}";
     public static final long DEFAULT_MAX_INPUT_TOKENS = 1_000_000L;
     public static final long DEFAULT_MAX_OUTPUT_TOKENS = 128_000L;
+    /** 路由未配置 max_input_tokens 时的兜底（与前端新建路由默认值一致）。 */
+    public static final long DEFAULT_ROUTE_MAX_INPUT_TOKENS = 128_000L;
+    /** 路由未配置 max_output_tokens 时的兜底（与前端新建路由默认值一致）。 */
+    public static final long DEFAULT_ROUTE_MAX_OUTPUT_TOKENS = 16_000L;
+    /** 单轮聊天至少保留的输出 token；低于此值不再发送请求，必须压缩或失败。 */
+    public static final int MIN_CHAT_OUTPUT_TOKENS = 1024;
     /**
      * 字符数 → token 的估算除数。中文实际约 1.5–1.8 字/token（JSON 里的中文值同样偏密），
      * 旧的 3 会显著低估、导致压缩总是晚于真实溢出（线上 32k 路由实测请求 32,852 token 时估算才 ~20k）。
@@ -151,6 +157,9 @@ public final class RunnerConstants {
     public static final String RUN_STALE_MSG = "执行中断：run 长时间无进展且执行副本已失联";
     /** 运行上下文丢失（工具列表为空）时的失败原因；不能继续跑静默轮。 */
     public static final String RUN_CONTEXT_LOST_MSG = "运行上下文已丢失（工具列表为空），无法继续调用工具，请重试";
+    /** 压缩后仍无可用输出空间时的失败原因；不能发出注定 400 的请求。 */
+    public static final String RUN_CONTEXT_OVERFLOW_MSG =
+            "上下文已满且压缩无法腾出输出空间，请缩短对话或换用更大上下文的模型";
     /**
      * 服务重启后恢复 run 时补在历史末尾的合成 user 消息。
      *

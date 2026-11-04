@@ -290,6 +290,10 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
               setEditingRoute(null);
               routeForm.resetFields();
               routeForm.setFieldValue('providerId', String(providerId));
+              routeForm.setFieldsValue({
+                maxInputTokens: '128',
+                maxOutputTokens: '16',
+              });
               setRouteFormOpen(true);
             }}
           >
@@ -454,6 +458,8 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
           <Form.Item
             name="maxInputTokens"
             label={intl.formatMessage({ id: 'pages.models.maxInputTokens' })}
+            rules={[{ required: true }]}
+            initialValue="128"
           >
             <Input
               maxLength={255}
@@ -465,6 +471,8 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
           <Form.Item
             name="maxOutputTokens"
             label={intl.formatMessage({ id: 'pages.models.maxOutputTokens' })}
+            rules={[{ required: true }]}
+            initialValue="16"
           >
             <Input
               maxLength={255}

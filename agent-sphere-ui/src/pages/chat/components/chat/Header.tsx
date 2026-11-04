@@ -239,7 +239,16 @@ export default function Header({
                   id: 'pages.chat.reasoning.locked',
                   defaultMessage: 'Reasoning cannot be changed while running',
                 })
-              : intl.formatMessage(
+              : `${intl.formatMessage(
+                  {
+                    id: 'pages.chat.reasoning.outputLimit',
+                    defaultMessage: 'Output limit {tokens} tokens',
+                  },
+                  {
+                    tokens:
+                      reasoningCapability?.effectiveMaxOutputTokens ?? '-',
+                  },
+                )} · ${intl.formatMessage(
                   {
                     id: 'pages.chat.reasoning.reserve',
                     defaultMessage:
@@ -248,7 +257,7 @@ export default function Header({
                   {
                     tokens: reasoningCapability?.answerReserveTokens ?? 0,
                   },
-                )
+                )}`
           }
         >
           <Dropdown

@@ -50,6 +50,7 @@ import com.buukle.agent.runtime.kernel.port.SubRunExecutionContext;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
+import com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver;
 import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.service.CompactionService.RunCompactionResult;
 import com.buukle.agent.runtime.kernel.service.TitleService;
@@ -106,6 +107,7 @@ public class SessionRunner {
     private final LlmRequestConfigurer llmRequestConfigurer;
     private final ToolApprovalGrantSpi toolApprovalGrantSpi;
     private final ToolApprovalService toolApprovalService;
+    private final ReasoningEffortResolver reasoningEffortResolver;
 
     /**
      * 挂起重试用。刻意用字段注入而不是构造参数：SessionRunner 的构造器已被多个测试直接 new，
@@ -1448,13 +1450,14 @@ public class SessionRunner {
             // 「模型主动停」与「被截断/被过滤」。
             AtomicReference<String> finishReasonRef = new AtomicReference<>();
             java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicBoolean outputExhaustedRef = new java.util.concurrent.atomic.AtomicBoolean(false);
             java.util.concurrent.atomic.AtomicReference<CompactionService.CompactionDecision> compactionDecisionRef =
                     new java.util.concurrent.atomic.AtomicReference<>();
             java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
             String instanceConfig = ctx != null && ctx.getAgentInstance() != null
                     ? ctx.getAgentInstance().getConfig() : null;
-            Integer effectiveMaxOutputTokens = llmRequestConfigurer.resolveMaxOutputTokens(instanceConfig);
+            Integer instanceMaxOutput = llmRequestConfigurer.resolveMaxOutputTokens(instanceConfig);
             try {
                 List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
 
@@ -1479,7 +1482,8 @@ public class SessionRunner {
                     }
                 }
 
-                fallbackRouteExecutor.execute(routes, (i, route) -> {
+                List<ModelRouteFullVO> activeRoutes = routes;
+                fallbackRouteExecutor.execute(activeRoutes, (i, route) -> {
                     if (isRunCancelled(runId) || isSessionCancelled(sessionId)) {
                         cancelled.set(true);
                         throw new RuntimeException("Run cancelled");
@@ -1508,12 +1512,34 @@ public class SessionRunner {
                             compressByTool);
 
                     // ★ 压缩检查：必须用实际会发给模型的投影消息，避免 canonical 工具结果把估算放大。
-                    // skipCompaction 仅在「重试耗尽、压缩已被证明救不回来」的下一轮为 true。
+                    // 触发只看输入；skipCompaction 仅在「重试耗尽、压缩已被证明救不回来」的下一轮为 true。
                     CompactionService.CompactionDecision decision = compactionService.evaluate(
-                            projectedMessages, route, toolDefs, effectiveMaxOutputTokens);
-                    if (!skipCompaction && decision != null && decision.shouldCompact()) {
+                            projectedMessages, route, toolDefs);
+                    long maxInputTokens = route.getMaxInputTokens() != null
+                            ? route.getMaxInputTokens() : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
+                    int nominalChatMax = compactionService.resolveNominalChatMaxOutput(
+                            instanceMaxOutput, route.getMaxOutputTokens());
+                    int requestMax = compactionService.resolveRequestMaxOutput(
+                            maxInputTokens, decision == null ? 0 : decision.estimated(), nominalChatMax);
+
+                    // 输出空间已不足：先压缩；压缩救不回来时直接失败，绝不发注定 400 的请求。
+                    boolean outputExhausted = requestMax < RunnerConstants.MIN_CHAT_OUTPUT_TOKENS;
+                    outputExhaustedRef.set(outputExhausted);
+                    if (!skipCompaction && (outputExhausted
+                            || (decision != null && decision.shouldCompact()))) {
                         compactionTriggered.set(true);
                         compactionDecisionRef.set(decision);
+                        return null;
+                    }
+                    if (outputExhausted) {
+                        // 压缩已被判定救不回来（skipCompaction）：优先尝试更大上下文的 fallback 路由；
+                        // 最后一条路由仍放不下则直接失败，且标记为不可重试（换路由/重试都不会变好）。
+                        if (i < activeRoutes.size() - 1) {
+                            throw new RouteAttemptException(
+                                    RunnerConstants.RUN_CONTEXT_OVERFLOW_MSG, null, true);
+                        }
+                        errorRef.set(RunnerConstants.RUN_CONTEXT_OVERFLOW_MSG);
+                        errorRetryableRef.set(false);
                         return null;
                     }
 
@@ -1525,21 +1551,20 @@ public class SessionRunner {
                     if (!toolDefs.isEmpty()) {
                         request.setTools(toolDefs);
                     }
-                    Integer chatMaxOutputTokens = compactionService.resolveChatMaxOutputTokens(
-                            route.getMaxInputTokens() != null
-                                    ? route.getMaxInputTokens() : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS,
-                            effectiveMaxOutputTokens);
                     // 采样参数接线：全局默认 + 实例 config 覆盖。
                     llmRequestConfigurer.applyChat(request, instanceConfig);
-                    // 思考强度：run 固化档位 + Qwen 思考预算（V118）。
-                    if (ctx.getReasoningEffort() != null) {
-                        request.setReasoningEffort(ctx.getReasoningEffort());
+                    // 思考强度：run 固化档位 + 本轮 requestMax 驱动的有效档位/Qwen 预算（V118）。
+                    // 手选档位在输出空间不足时只降不升，避免全部预算耗在 reasoning 上。
+                    ReasoningEffortResolver.Resolved reasoning = reasoningEffortResolver.resolve(
+                            route, route.getConfig(), requestMax, ctx.getReasoningEffort());
+                    if (reasoning.supported() && reasoning.effectiveLevel() != null) {
+                        request.setReasoningEffort(reasoning.effectiveLevel());
                     }
-                    if (ctx.getReasoningBudgetTokens() != null) {
-                        request.setThinkingBudget(ctx.getReasoningBudgetTokens());
+                    if (reasoning.thinkingBudgetTokens() != null) {
+                        request.setThinkingBudget(reasoning.thinkingBudgetTokens());
                     }
-                    if (chatMaxOutputTokens != null && chatMaxOutputTokens > 0) {
-                        request.setMaxTokens(chatMaxOutputTokens);
+                    if (requestMax > 0) {
+                        request.setMaxTokens(requestMax);
                     }
                     if (request.getParallelToolCalls() == null) {
                         request.setParallelToolCalls(true);
@@ -1710,11 +1735,20 @@ public class SessionRunner {
                 boolean coolingDown = decision != null && !hardCeiling
                         && loopCount - lastRunCompactionLoop < cooldownTurns;
                 if (runCompactionAttempts >= 2) {
+                    if (outputExhaustedRef.get()) {
+                        return TurnResult.error(RunnerConstants.RUN_CONTEXT_OVERFLOW_MSG);
+                    }
                     log.warn("Run compaction attempts exhausted for run {}; sending oversized context", runId);
                 } else if (runCompactionCount >= maxPerRun) {
+                    if (outputExhaustedRef.get()) {
+                        return TurnResult.error(RunnerConstants.RUN_CONTEXT_OVERFLOW_MSG);
+                    }
                     log.warn("Run compaction count reached max-per-run ({}) for run {}; sending oversized context",
                             maxPerRun, runId);
                 } else if (coolingDown) {
+                    if (outputExhaustedRef.get()) {
+                        return TurnResult.error(RunnerConstants.RUN_CONTEXT_OVERFLOW_MSG);
+                    }
                     log.info("Run compaction cooling down for run {} (lastLoop={}, loop={}, cooldown={}); "
                             + "sending current context", runId, lastRunCompactionLoop, loopCount, cooldownTurns);
                 } else {
@@ -1722,9 +1756,12 @@ public class SessionRunner {
                             + "for run {} (attempt {}, runCount {})", sessionOutcome, runId,
                             runCompactionAttempts + 1, runCompactionCount);
                     RunCompactionResult runResult = compactionService.compactRun(sessionId, runId, ctx,
-                            new ArrayList<>(messages), currentRunStart, toolDefs, effectiveMaxOutputTokens);
+                            new ArrayList<>(messages), currentRunStart, toolDefs);
                     if (runResult != null && runResult.outcome() == CompactionOutcome.COMPLETED) {
                         return TurnResult.runCompacted(runResult.messages(), runResult.currentRunStart());
+                    }
+                    if (outputExhaustedRef.get()) {
+                        return TurnResult.error(RunnerConstants.RUN_CONTEXT_OVERFLOW_MSG);
                     }
                 }
                 return TurnResult.compacted(sessionOutcome != null

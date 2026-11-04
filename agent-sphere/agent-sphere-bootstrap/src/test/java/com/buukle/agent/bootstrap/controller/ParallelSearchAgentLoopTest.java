@@ -312,14 +312,21 @@ class ParallelSearchAgentLoopTest {
                 return null;
             }).when(model).stream(anyString(), anyString(), anyString(), anyString(), any(), any(), any());
             ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
+            CompactionService compaction = mock(CompactionService.class);
+            org.mockito.Mockito.lenient().when(compaction.resolveNominalChatMaxOutput(
+                    org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(16_000);
+            org.mockito.Mockito.lenient().when(compaction.resolveRequestMaxOutput(
+                    org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(),
+                    org.mockito.ArgumentMatchers.anyInt())).thenReturn(16_000);
             SessionRunner runner = new SessionRunner(properties, runs, mock(SessionSpi.class),
                     new KernelLlmService(model, publisher, properties,
                             mock(com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi.class)),
                     mock(ApiKeySpi.class), publisher,
                     new RouteListBuilder(mock(RouteSpi.class), mock(InstanceSpi.class), model),
-                    new FallbackRouteExecutor(), mock(HistoryLoader.class), mock(CompactionService.class), input,
+                    new FallbackRouteExecutor(), mock(HistoryLoader.class), compaction, input,
                     new RunPromptBuilder(), executor, mock(TitleService.class), mock(AgentToolCallRecordSpi.class),
-                    redis, mock(ChatAttachmentResolver.class), new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+                    redis, mock(ChatAttachmentResolver.class), new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class),
+                new com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver(new com.buukle.agent.common.config.AgentRuntimeProperties()));
             runner.run(SESSION_ID);
             if (modelFailure.get() != null) throw new AssertionError("Controlled model validation failed", modelFailure.get());
             assertEquals("COMPLETED", run.getStatus(), "Runner must finish all result-dependent turns");

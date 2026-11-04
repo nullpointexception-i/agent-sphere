@@ -171,12 +171,18 @@ class FinishSilenceLoopTest {
         lenient().when(pending.getAndDelete()).thenReturn(RUN_ID);
         lenient().when(inputManager.promoteInput(SESSION_ID)).thenReturn(
                 new SessionInputManager.InputMessage(userMessage, null, 0L, false, List.of()), null);
+        org.mockito.Mockito.lenient().when(compactionService.resolveNominalChatMaxOutput(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(16_000);
+        org.mockito.Mockito.lenient().when(compactionService.resolveRequestMaxOutput(
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyInt())).thenReturn(16_000);
 
         SessionRunner runner = new SessionRunner(properties, runSpi, sessionSpi, kernelLlmService, apiKeySpi,
                 eventPublisher, routeListBuilder, new FallbackRouteExecutor(), historyLoader,
                 compactionService, inputManager, new RunPromptBuilder(), toolExecutor, titleService,
                 toolCallRecordSpi, redis, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class),
+                new com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver(new com.buukle.agent.common.config.AgentRuntimeProperties()));
         try {
             java.lang.reflect.Field field = SessionRunner.class.getDeclaredField("pendingWaitSpi");
             field.setAccessible(true);

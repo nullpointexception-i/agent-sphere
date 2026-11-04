@@ -130,7 +130,7 @@ class RunCompactionServiceTest {
     @Test
     void compactRunKeepsUserAndLastThreeMessagesAsTail() {
         CompactionService.RunCompactionResult result = service.compactRun(
-                SESSION_ID, RUN_ID, null, messages(), 1, null, null);
+                SESSION_ID, RUN_ID, null, messages(), 1, null);
 
         assertEquals(CompactionOutcome.COMPLETED, result.outcome());
         // tail 预算只够最近一组：user + a6 + t7；更旧的 a2/t3/a4/t5 进入摘要
@@ -156,7 +156,7 @@ class RunCompactionServiceTest {
                         .setImageUrl(new com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO.ImageUrl()
                                 .setUrl("data:image/png;base64,AAAA")))));
 
-        service.compactRun(SESSION_ID, RUN_ID, null, messages, 1, null, null);
+        service.compactRun(SESSION_ID, RUN_ID, null, messages, 1, null);
 
         org.mockito.ArgumentCaptor<String> tail = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(compactRecordSpi).completeRunCompact(any(), any(), any(), any(), tail.capture());
@@ -168,7 +168,7 @@ class RunCompactionServiceTest {
 
     @Test
     void compactionDisablesThinking() {
-        service.compactRun(SESSION_ID, RUN_ID, null, messages(), 1, null, null);
+        service.compactRun(SESSION_ID, RUN_ID, null, messages(), 1, null);
 
         org.junit.jupiter.api.Assertions.assertNotNull(lastRequest.get());
         org.junit.jupiter.api.Assertions.assertEquals("disabled",
@@ -183,7 +183,7 @@ class RunCompactionServiceTest {
         messages.add(msg("system", "\n\nCurrent server time: legacy"));
 
         CompactionService.RunCompactionResult result = service.compactRun(
-                SESSION_ID, RUN_ID, null, messages, 1, null, null);
+                SESSION_ID, RUN_ID, null, messages, 1, null);
 
         assertEquals(CompactionOutcome.COMPLETED, result.outcome());
         assertEquals("original task", result.messages().get(result.currentRunStart()).getContent());
@@ -219,7 +219,7 @@ class RunCompactionServiceTest {
         });
 
         CompactionService.RunCompactionResult result = service.compactRun(
-                SESSION_ID, RUN_ID, null, messages(), 1, null, null);
+                SESSION_ID, RUN_ID, null, messages(), 1, null);
 
         assertEquals(CompactionOutcome.COMPLETED, result.outcome());
         assertEquals(2, calls.get(), "首轮超 10k 后必须把返回值再压缩一次");
@@ -246,7 +246,7 @@ class RunCompactionServiceTest {
         });
 
         CompactionService.RunCompactionResult result = service.compactRun(
-                SESSION_ID, RUN_ID, null, messages(), 1, null, null);
+                SESSION_ID, RUN_ID, null, messages(), 1, null);
 
         assertEquals(CompactionOutcome.COMPLETED, result.outcome());
         assertEquals(3, calls.get(), "最多 3 轮压缩");
@@ -290,7 +290,7 @@ class RunCompactionServiceTest {
                 msg("assistant", "a4"));
 
         CompactionService.RunCompactionResult result = service.compactRun(
-                SESSION_ID, RUN_ID, null, messages, 1, null, null);
+                SESSION_ID, RUN_ID, null, messages, 1, null);
 
         assertEquals(CompactionOutcome.NO_PROGRESS, result.outcome());
     }

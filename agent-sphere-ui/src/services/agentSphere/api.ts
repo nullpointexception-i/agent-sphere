@@ -204,6 +204,7 @@ export const agentApi = {
         answerReserveTokens?: number;
         defaultLevel?: string;
         selectedLevel?: string;
+        effectiveLevel?: string;
         running: boolean;
         runId?: number;
         levels: { value: string; minOutputTokens: number; feasible: boolean }[];

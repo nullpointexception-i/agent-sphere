@@ -17,8 +17,6 @@ class LlmContextValidatorTest {
         CompactionTier tier = new CompactionTier();
         tier.setMaxInputTokens(64_000L);
         tier.setTriggerTokens(50_000L);
-        tier.setTargetTokens(20_000L);
-        tier.setChatMaxOutputTokens(8_192L);
         properties.getRunner().getCompaction().setTiers(List.of(tier));
 
         LlmContextValidator validator = new LlmContextValidator(properties);

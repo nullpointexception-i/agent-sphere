@@ -70,7 +70,7 @@ class ChatRuntimeServiceStopTest {
         service = new ChatRuntimeService(orchestrator, runSpi, sessionSpi, eventPublisher,
                 clarificationMapper, sessionRunner, timelineRecorder, chatAttachmentService, pendingWaitSpi, mock(ToolApprovalService.class), mock(SessionInputManager.class),
                 mock(com.buukle.agent.runtime.orchestration.pipeline.RuntimeValidator.class),
-                mock(com.buukle.agent.runtime.orchestration.service.ReasoningEffortResolver.class),
+                mock(com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver.class),
                 mock(com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer.class),
                 mock(com.buukle.agent.runtime.kernel.service.CompactionService.class));
         AuthContext.setSuperAdmin(true); // 跳过会话归属校验（本测试只关心停止逻辑）

@@ -92,11 +92,11 @@ class CompactionServiceTest {
                 new ChatMessageDTO().setRole("user").setContent("u".repeat(18_000)));
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(40_000);
 
-        assertFalse(service.shouldCompact(messages, route, List.of(), null),
+        assertFalse(service.shouldCompact(messages, route, List.of()),
                 "只算 messages 时估算低于预算");
 
         // tools 40,000 chars → ≈11,429 tokens（JSON 用 3.5 除数）；合计 ≈23,571 > 22,400
-        assertTrue(service.shouldCompact(messages, route, tools, null),
+        assertTrue(service.shouldCompact(messages, route, tools),
                 "工具 schema 必须计入阈值，否则实际 prompt 超 32k 才报错");
     }
 
@@ -107,7 +107,7 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("u".repeat(38_000)));
 
-        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+        assertTrue(service.shouldCompact(messages, route, List.of()),
                 "10% 安全系数应覆盖字符密度的偏低估算");
     }
 
@@ -118,7 +118,7 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("中".repeat(40_000)));
 
-        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+        assertTrue(service.shouldCompact(messages, route, List.of()),
                 "1.8 字/token 才能让中文对话在溢出前触发压缩");
     }
 
@@ -131,9 +131,9 @@ class CompactionServiceTest {
         messages.add(new ChatMessageDTO().setRole("user").setContent("hi"));
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(35_000);
 
-        assertFalse(service.shouldCompact(messages, route, tools, null),
+        assertFalse(service.shouldCompact(messages, route, tools),
                 "固定开销已超 max_input，压缩不可能成功，必须跳过");
-        assertFalse(service.shouldCompact(messages, route, tools, null),
+        assertFalse(service.shouldCompact(messages, route, tools),
                 "重复判断仍应跳过（每路由只 WARN 一次）");
     }
 
@@ -146,7 +146,7 @@ class CompactionServiceTest {
         // 固定部分 ≈ 3,334+3,334=6,668 < max_input 20,000；历史仍可压 → 必须触发。
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(6_000);
 
-        assertTrue(service.shouldCompact(messages, route, tools, null),
+        assertTrue(service.shouldCompact(messages, route, tools),
                 "固定部分没超硬上限时，历史压缩仍然有效");
     }
 
@@ -164,21 +164,35 @@ class CompactionServiceTest {
                 .setContent(parts));
 
         // 15 张图按每张 1,000 token 估；预算 14,000，×1.1 后 16,500 → 必须触发
-        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+        assertTrue(service.shouldCompact(messages, route, List.of()),
                 "图片不能漏算，否则多模态请求会晚于真实溢出才压缩");
     }
 
     @Test
-    void outputTokenCapShrinksBudget() {
+    void triggerIsIndependentFromOutputCap() {
         ModelRouteFullVO route = route(101L, 32_000L);
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("u".repeat(21_000)));
 
-        // 无输出额度：预算 0.7×32000=22,400；21,000/1.8×1.1≈12,834 → 不触发
-        assertFalse(service.shouldCompact(messages, route, List.of(), null));
-        // 输出额度 25,000：预算上限被压到 floor=8,000（25%），12,834 → 触发
-        assertTrue(service.shouldCompact(messages, route, List.of(), 25_000),
-                "预算必须给实际输出额度让位，而不是固定 0.7");
+        // 预算 0.7×32000=22,400；21,000/1.8×1.1≈12,834 → 不触发（与输出上限无关）
+        assertFalse(service.shouldCompact(messages, route, List.of()));
+    }
+
+    @Test
+    void requestMaxOutputShrinksToRemainingContext() {
+        // route 4：1M 上下文、384k 名义输出；margin = 5%
+        assertEquals(384_000, service.resolveRequestMaxOutput(1_000_000L, 200_000L, 384_000));
+        assertEquals(384_000, service.resolveRequestMaxOutput(1_000_000L, 500_000L, 384_000));
+        assertEquals(300_000, service.resolveRequestMaxOutput(1_000_000L, 650_000L, 384_000));
+        assertEquals(200_000, service.resolveRequestMaxOutput(1_000_000L, 750_000L, 384_000));
+        assertEquals(0, service.resolveRequestMaxOutput(1_000_000L, 990_000L, 384_000));
+    }
+
+    @Test
+    void nominalChatOutputPrefersInstanceThenRoute() {
+        assertEquals(20_000, service.resolveNominalChatMaxOutput(20_000, 384_000L));
+        assertEquals(384_000, service.resolveNominalChatMaxOutput(null, 384_000L));
+        assertEquals(16_000, service.resolveNominalChatMaxOutput(null, null));
     }
 
     @Test
@@ -227,81 +241,51 @@ class CompactionServiceTest {
     }
 
     @Test
-    void tierSelectionInterpolatesAndUsesTierOutputCap() {
+    void tierSelectionInterpolatesTriggerOnly() {
         props.getRunner().getCompaction().setTiers(List.of(
-                tier(64_000L, 50_000L, 20_000L, 8_192L),
-                tier(128_000L, 100_000L, 40_000L, 16_000L)));
+                tier(64_000L, 50_000L),
+                tier(128_000L, 100_000L)));
 
         CompactionTier at64 = service.resolveTier(64_000L);
         assertEquals(50_000L, at64.getTriggerTokens());
-        assertEquals(20_000L, at64.getTargetTokens());
-        assertEquals(8_192L, at64.getChatMaxOutputTokens());
 
         CompactionTier at96 = service.resolveTier(96_000L);
         assertEquals(75_000L, at96.getTriggerTokens());
-        assertEquals(30_000L, at96.getTargetTokens());
-        assertEquals(16_000L, at96.getChatMaxOutputTokens());
-    }
-
-    @Test
-    void tierTargetReservesSummaryAndTailInsideAbsoluteTarget() {
-        props.getRunner().getCompaction().setTiers(List.of(
-                tier(64_000L, 50_000L, 20_000L, 8_192L)));
-        CompactionService.CompactionTarget target = service.resolveTierTarget(
-                64_000L, 50_000L, 14_000L, 1_000L, 7_680L,
-                props.getRunner().getCompaction(), service.resolveTier(64_000L));
-
-        assertTrue(target.feasible());
-        assertEquals(20_000L, target.target());
-        assertEquals(18_000L, target.fixedTokens(), "14k prefix + 1k tools + 3k summary");
-        assertEquals(2_000L, target.tailFloor());
-    }
-
-    @Test
-    void chatOutputCapUsesTierAndRespectsLowerInstanceCap() {
-        props.getRunner().getCompaction().setTiers(List.of(
-                tier(64_000L, 50_000L, 20_000L, 8_192L)));
-
-        assertEquals(8_192, service.resolveChatMaxOutputTokens(64_000L, null));
-        assertEquals(8_192, service.resolveChatMaxOutputTokens(64_000L, 16_000));
-        assertEquals(2_000, service.resolveChatMaxOutputTokens(64_000L, 2_000));
     }
 
     @Test
     void calibrationCanPreventFalsePositiveCompaction() {
         props.getRunner().getCompaction().setTiers(List.of(
-                tier(64_000L, 50_000L, 20_000L, 8_192L)));
+                tier(64_000L, 50_000L)));
         ModelRouteFullVO route = route(201L, 64_000L);
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("x".repeat(100_000)));
 
-        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+        assertTrue(service.shouldCompact(messages, route, List.of()),
                 "无校准：100k 字符估算约 55.5k，超过 50k 触发线");
 
         service.recordCalibration(201L, 10_000, 8_000); // ratio 0.8
-        assertFalse(service.shouldCompact(messages, route, List.of(), null),
+        assertFalse(service.shouldCompact(messages, route, List.of()),
                 "校准后估算约 46.7k，不应误触发");
     }
 
     @Test
     void calibrationIgnoresAbnormalRatio() {
         props.getRunner().getCompaction().setTiers(List.of(
-                tier(64_000L, 50_000L, 20_000L, 8_192L)));
+                tier(64_000L, 50_000L)));
         ModelRouteFullVO route = route(202L, 64_000L);
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("x".repeat(100_000)));
 
         service.recordCalibration(202L, 10_000, 30_000); // ratio 3.0，异常
-        assertTrue(service.shouldCompact(messages, route, List.of(), null),
+        assertTrue(service.shouldCompact(messages, route, List.of()),
                 "异常比例必须丢弃，不能把估算放大到离谱");
     }
 
-    private static CompactionTier tier(long maxInput, long trigger, long target, long output) {
+    private static CompactionTier tier(long maxInput, long trigger) {
         CompactionTier tier = new CompactionTier();
         tier.setMaxInputTokens(maxInput);
         tier.setTriggerTokens(trigger);
-        tier.setTargetTokens(target);
-        tier.setChatMaxOutputTokens(output);
         return tier;
     }
 
@@ -309,7 +293,7 @@ class CompactionServiceTest {
     void missingMaxInputFallsBackWithoutThrowing() {
         ModelRouteFullVO route = route(999L, null);
         // 默认 1M → 预算 700k，这几条消息远低于阈值；只验证不抛异常
-        assertFalse(service.shouldCompact(failingMessages(), route, toolsWithJsonChars(100), null));
+        assertFalse(service.shouldCompact(failingMessages(), route, toolsWithJsonChars(100)));
     }
 
     @Test

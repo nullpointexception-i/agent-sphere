@@ -147,10 +147,6 @@ public class AgentRuntimeProperties {
             private long maxInputTokens;
             /** 触发压缩的输入 token 上限。 */
             private long triggerTokens;
-            /** 压缩后的目标输入 token 上限。 */
-            private long targetTokens;
-            /** 该档位聊天请求的 max_tokens 上限；0/null 表示不额外限制。 */
-            private Long chatMaxOutputTokens;
         }
     }
 
@@ -237,6 +233,8 @@ public class AgentRuntimeProperties {
             private Map<String, ProviderReasoningConfig> providers = new LinkedHashMap<>();
             /** 厂商未配置 levels 时的兜底档位。 */
             private List<String> defaultLevels = new ArrayList<>(ReasoningEffort.DEFAULT_LEVELS);
+            /** 自动默认档的上限：无用户选择时不会超过该档（用户仍可手选更高档）。 */
+            private String defaultMaxLevel = ReasoningEffort.HIGH;
 
             private static Map<String, LevelConfig> defaultLevels() {
                 Map<String, LevelConfig> map = new LinkedHashMap<>();

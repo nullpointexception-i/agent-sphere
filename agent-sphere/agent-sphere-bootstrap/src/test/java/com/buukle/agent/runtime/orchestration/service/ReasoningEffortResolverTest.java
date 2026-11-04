@@ -3,6 +3,7 @@ package com.buukle.agent.runtime.orchestration.service;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
+import com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -62,8 +63,9 @@ class ReasoningEffortResolverTest {
                 resolver.resolve(route("deepseek"), null, null, null);
 
         assertTrue(resolved.supported());
-        assertEquals("max", resolved.defaultLevel());
-        assertEquals("max", resolved.selectedLevel());
+        assertEquals("high", resolved.defaultLevel(), "自动默认封顶 high");
+        assertEquals("high", resolved.selectedLevel());
+        assertEquals("high", resolved.effectiveLevel());
         assertNull(resolved.answerReserveTokens());
     }
 
@@ -96,8 +98,29 @@ class ReasoningEffortResolverTest {
         ReasoningEffortResolver.Resolved resolved =
                 resolver.resolve(route("deepseek"), null, 16000, "max");
 
-        assertEquals("max", resolved.selectedLevel());
+        assertEquals("max", resolved.selectedLevel(), "手选档位保留，前端只警告");
         assertFalse(level(resolved, "max").feasible());
+        assertEquals("low", resolved.effectiveLevel(), "本轮实际使用最高可行档");
+    }
+
+    @Test
+    void defaultIsCappedAtHighEvenWhenMaxIsFeasible() {
+        // route 4：384k 名义输出，max 也可行；自动默认仍封顶 high。
+        ReasoningEffortResolver.Resolved resolved =
+                resolver.resolve(route("deepseek"), null, 384_000, null);
+
+        assertEquals("high", resolved.defaultLevel());
+        assertTrue(level(resolved, "max").feasible(), "用户仍可手选 max");
+        assertEquals("high", resolved.effectiveLevel());
+    }
+
+    @Test
+    void explicitMax_isHonoredWhenFeasible() {
+        ReasoningEffortResolver.Resolved resolved =
+                resolver.resolve(route("deepseek"), null, 384_000, "max");
+
+        assertEquals("max", resolved.selectedLevel());
+        assertEquals("max", resolved.effectiveLevel());
     }
 
     @Test
@@ -165,12 +188,24 @@ class ReasoningEffortResolverTest {
 
     @Test
     void qwenLevel_mapsToThinkingBudgetWithinOutputLimit() {
+        // 24000 输出上限：high 可行（16384 + 6000 ≤ 24000），预算 = 档位阈值 16384。
         ReasoningEffortResolver.Resolved resolved =
-                resolver.resolve(route("qwen"), null, 16000, "high");
+                resolver.resolve(route("qwen"), null, 24_000, "high");
 
         assertEquals("high", resolved.selectedLevel());
-        // min(档位阈值 16384, 16000-4000=12000) = 12000
-        assertEquals(12000, resolved.thinkingBudgetTokens());
+        assertEquals("high", resolved.effectiveLevel());
+        assertEquals(16384, resolved.thinkingBudgetTokens());
+    }
+
+    @Test
+    void infeasibleHigh_downgradesPerTurnAndShrinksQwenBudget() {
+        // 16000 输出上限：high 不可行 → 本轮降到 medium，预算取 medium 阈值 8192。
+        ReasoningEffortResolver.Resolved resolved =
+                resolver.resolve(route("qwen"), null, 16_000, "high");
+
+        assertEquals("high", resolved.selectedLevel());
+        assertEquals("medium", resolved.effectiveLevel());
+        assertEquals(8192, resolved.thinkingBudgetTokens());
     }
 
     @Test

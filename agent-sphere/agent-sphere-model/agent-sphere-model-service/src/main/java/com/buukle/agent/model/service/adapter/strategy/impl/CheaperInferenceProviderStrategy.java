@@ -22,6 +22,7 @@ public class CheaperInferenceProviderStrategy implements ProviderStrategy {
         // Cheaper Inference：OpenAI 兼容网关，thinking / tool_stream 是本系统给智谱/DeepSeek 的内部字段，剔除避免非预期行为
         request.setThinking(null);
         request.setToolStream(null);
+        request.setEnableThinking(null);
     }
 
     @Override

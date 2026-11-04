@@ -100,6 +100,8 @@ class SessionRunnerAttachmentTest {
     void setUp() {
         org.mockito.Mockito.lenient()
                 .when(properties.getRunner()).thenReturn(new AgentRuntimeProperties.RunnerConfig());
+        org.mockito.Mockito.lenient().when(compactionService.resolveNominalChatMaxOutput(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(16_000);
+        org.mockito.Mockito.lenient().when(compactionService.resolveRequestMaxOutput(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(16_000);
         runner = new SessionRunner(properties, runSpi, sessionSpi, kernelLlmService, apiKeySpi,
                 eventPublisher, routeListBuilder, fallbackRouteExecutor, historyLoader,
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
@@ -107,7 +109,8 @@ class SessionRunnerAttachmentTest {
                 new com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer(
                         org.mockito.Mockito.mock(com.buukle.agent.common.config.SystemConfigSpi.class)),
                 org.mockito.Mockito.mock(com.buukle.agent.instance.spi.ToolApprovalGrantSpi.class),
-                org.mockito.Mockito.mock(com.buukle.agent.runtime.kernel.service.ToolApprovalService.class));
+                org.mockito.Mockito.mock(com.buukle.agent.runtime.kernel.service.ToolApprovalService.class),
+                new com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver(new com.buukle.agent.common.config.AgentRuntimeProperties()));
     }
 
     // ---------- hasAttachmentImage ----------

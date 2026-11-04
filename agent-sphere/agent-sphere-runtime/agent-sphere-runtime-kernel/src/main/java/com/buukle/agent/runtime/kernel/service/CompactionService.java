@@ -175,18 +175,18 @@ public class CompactionService {
     }
 
     public boolean shouldCompact(List<ChatMessageDTO> messages, ModelRouteFullVO route,
-                                 List<ToolDefinitionDTO> tools, Integer effectiveMaxOutputTokens) {
-        return evaluate(messages, route, tools, effectiveMaxOutputTokens).shouldCompact();
+                                 List<ToolDefinitionDTO> tools) {
+        return evaluate(messages, route, tools).shouldCompact();
     }
 
     public CompactionDecision evaluate(List<ChatMessageDTO> messages, ModelRouteFullVO route,
-                                       List<ToolDefinitionDTO> tools, Integer effectiveMaxOutputTokens) {
+                                       List<ToolDefinitionDTO> tools) {
         if (route == null) {
             return new CompactionDecision(false, 0, 0, 0, 0, 0, 0);
         }
         Long routeId = route.getId();
         long maxInputTokens = resolveMaxInputTokens(route);
-        long budget = resolveInputBudget(maxInputTokens, effectiveMaxOutputTokens);
+        long budget = resolveInputBudget(maxInputTokens);
         long toolTokens = estimateToolTokens(tools);
         long fixedRawTokens = estimateFixedTokens(messages, toolTokens);
         Double calibration = calibrationFor(routeId);
@@ -200,9 +200,8 @@ public class CompactionService {
             return new CompactionDecision(false, messageTokens, toolTokens, fixedTokens, fixedTokens, budget, maxInputTokens);
         }
         long estimated = applyCalibration(messageTokens + toolTokens, calibration);
-        log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, fixed={}, estimated={}, budget={}, maxInput={}, outputCap={}, calibration={}",
-                routeId, messageTokens, toolTokens, fixedTokens, estimated, budget, maxInputTokens,
-                effectiveMaxOutputTokens, calibration);
+        log.debug("Compaction check: routeId={}, messageTokens={}, toolTokens={}, fixed={}, estimated={}, budget={}, maxInput={}",
+                routeId, messageTokens, toolTokens, fixedTokens, estimated, budget, maxInputTokens);
         return new CompactionDecision(estimated > budget, messageTokens, toolTokens, fixedTokens,
                 estimated, budget, maxInputTokens);
     }
@@ -272,16 +271,12 @@ public class CompactionService {
         CompactionTier first = sorted.get(0);
         if (maxInputTokens <= first.getMaxInputTokens()) {
             return tier(maxInputTokens,
-                    scale(first.getTriggerTokens(), maxInputTokens, first.getMaxInputTokens()),
-                    scale(first.getTargetTokens(), maxInputTokens, first.getMaxInputTokens()),
-                    first.getChatMaxOutputTokens());
+                    scale(first.getTriggerTokens(), maxInputTokens, first.getMaxInputTokens()));
         }
         CompactionTier last = sorted.get(sorted.size() - 1);
         if (maxInputTokens > last.getMaxInputTokens()) {
             return tier(maxInputTokens,
-                    scale(last.getTriggerTokens(), maxInputTokens, last.getMaxInputTokens()),
-                    scale(last.getTargetTokens(), maxInputTokens, last.getMaxInputTokens()),
-                    last.getChatMaxOutputTokens());
+                    scale(last.getTriggerTokens(), maxInputTokens, last.getMaxInputTokens()));
         }
         for (int i = 0; i < sorted.size() - 1; i++) {
             CompactionTier lower = sorted.get(i);
@@ -290,39 +285,47 @@ public class CompactionService {
                 double fraction = (maxInputTokens - lower.getMaxInputTokens())
                         / (double) (upper.getMaxInputTokens() - lower.getMaxInputTokens());
                 return tier(maxInputTokens,
-                        interpolate(lower.getTriggerTokens(), upper.getTriggerTokens(), fraction),
-                        interpolate(lower.getTargetTokens(), upper.getTargetTokens(), fraction),
-                        upper.getChatMaxOutputTokens());
+                        interpolate(lower.getTriggerTokens(), upper.getTriggerTokens(), fraction));
             }
         }
         return last;
     }
 
-    /** 聊天请求应使用的输出上限（档位上限与实例配置取较小值）。 */
-    public Integer resolveChatMaxOutputTokens(long maxInputTokens, Integer effectiveMaxOutputTokens) {
-        Long cap = resolveOutputCap(effectiveMaxOutputTokens, resolveTier(maxInputTokens));
-        return cap == null ? null : cap.intValue();
-    }
-
-    private Long resolveOutputCap(Integer effectiveMaxOutputTokens, CompactionTier tier) {
-        Long tierCap = tier != null ? tier.getChatMaxOutputTokens() : null;
-        if (tierCap != null && tierCap > 0) {
-            if (effectiveMaxOutputTokens != null && effectiveMaxOutputTokens > 0) {
-                return Math.min(effectiveMaxOutputTokens.longValue(), tierCap);
-            }
-            return tierCap;
+    /**
+     * 聊天请求的名义输出上限：实例 config.max_tokens 优先，其次路由 max_output_tokens。
+     *
+     * <p>与 tier 无关；存量路由未配置时按 16k 兜底。
+     */
+    public int resolveNominalChatMaxOutput(Integer instanceMaxOutput, Long routeMaxOutput) {
+        if (instanceMaxOutput != null && instanceMaxOutput > 0) {
+            return instanceMaxOutput;
         }
-        return effectiveMaxOutputTokens != null && effectiveMaxOutputTokens > 0
-                ? effectiveMaxOutputTokens.longValue() : null;
+        if (routeMaxOutput != null && routeMaxOutput > 0) {
+            return (int) Math.min(Integer.MAX_VALUE, routeMaxOutput.longValue());
+        }
+        return (int) RunnerConstants.DEFAULT_ROUTE_MAX_OUTPUT_TOKENS;
     }
 
-    private static CompactionTier tier(long maxInputTokens, long triggerTokens,
-                                       long targetTokens, Long chatMaxOutputTokens) {
+    /**
+     * 单轮实际输出上限：给输入和 5% 余量留出空间后，取名义上限与剩余空间的较小值。
+     *
+     * <p>输出不足 {@link RunnerConstants#MIN_CHAT_OUTPUT_TOKENS} 时调用方必须压缩或失败，
+     * 不能把注定超过上下文的请求发出去。
+     */
+    public int resolveRequestMaxOutput(long maxInputTokens, long estimatedInputTokens, int nominalChatMaxOutput) {
+        long margin = Math.max(MIN_OUTPUT_MARGIN_TOKENS,
+                (long) Math.ceil(maxInputTokens * OUTPUT_MARGIN_RATIO));
+        long remaining = maxInputTokens - estimatedInputTokens - margin;
+        if (remaining <= 0) {
+            return 0;
+        }
+        return (int) Math.min(nominalChatMaxOutput, remaining);
+    }
+
+    private static CompactionTier tier(long maxInputTokens, long triggerTokens) {
         CompactionTier tier = new CompactionTier();
         tier.setMaxInputTokens(maxInputTokens);
         tier.setTriggerTokens(triggerTokens);
-        tier.setTargetTokens(targetTokens);
-        tier.setChatMaxOutputTokens(chatMaxOutputTokens);
         return tier;
     }
 
@@ -355,28 +358,19 @@ public class CompactionService {
     }
 
     /**
-     * 输入预算：按最终请求实际可用的输入空间计算。
+     * 压缩触发阈值：只看输入预算，与输出上限解耦。
      *
-     * <p>输出额度来自合并后的 sampling config（实例优先）。有额度时预算 =
-     * {@code max_input - output_cap - margin}，而不是固定的 0.7 比例 —— 后者在输出额度很小或
-     * 很大时都会误判。没有输出额度时才回落到 {@code budget-ratio}。预算下限为
-     * {@code max_input × 0.25}，避免异常配置把预算压到不可用。
+     * <p>tier 的 trigger-tokens 已按「触发点仍能留出 8k 输出」配置；输出放不下时由
+     * {@link #resolveRequestMaxOutput(long, long, int)} 在本轮收缩 max_tokens，而不是提前压缩。
      */
-    private long resolveInputBudget(long maxInputTokens, Integer effectiveMaxOutputTokens) {
+    private long resolveInputBudget(long maxInputTokens) {
         CompactionTier tier = resolveTier(maxInputTokens);
         long ratioBudget = tier != null && tier.getTriggerTokens() > 0
                 ? tier.getTriggerTokens()
                 : (long) (maxInputTokens
                 * agentRuntimeProperties.getRunner().getCompaction().getBudgetRatio());
         long floor = Math.max(1L, (long) (maxInputTokens * MIN_INPUT_BUDGET_RATIO));
-        Long outputCap = resolveOutputCap(effectiveMaxOutputTokens, tier);
-        if (outputCap == null || outputCap <= 0) {
-            return Math.max(floor, ratioBudget);
-        }
-        long margin = Math.max(MIN_OUTPUT_MARGIN_TOKENS,
-                (long) Math.ceil(maxInputTokens * OUTPUT_MARGIN_RATIO));
-        long capacity = maxInputTokens - outputCap - margin;
-        return Math.max(floor, Math.min(ratioBudget, capacity));
+        return Math.max(floor, ratioBudget);
     }
 
     /**
@@ -682,8 +676,7 @@ public class CompactionService {
      */
     public RunCompactionResult compactRun(Long sessionId, Long runId, KernelContext ctx,
                                           List<ChatMessageDTO> messages, int currentRunStart,
-                                          List<ToolDefinitionDTO> toolDefs,
-                                          Integer effectiveMaxOutputTokens) {
+                                          List<ToolDefinitionDTO> toolDefs) {
         if (sessionId == null || runId == null || messages == null || messages.isEmpty()
                 || currentRunStart < 0 || currentRunStart >= messages.size()) {
             return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
@@ -695,8 +688,7 @@ public class CompactionService {
             }
             List<ModelRouteFullVO> routes = routeListBuilder.fromInstance(session.getAgentInstanceId());
             return fallbackRouteExecutor.execute(routes, (i, route) -> doCompactRun(
-                    sessionId, runId, session, route, messages, currentRunStart, toolDefs,
-                    effectiveMaxOutputTokens));
+                    sessionId, runId, session, route, messages, currentRunStart, toolDefs));
         } catch (Exception e) {
             log.warn("Run compaction failed for run {}", runId, e);
             return new RunCompactionResult(CompactionOutcome.FAILED, messages, currentRunStart, null, 0, 0);
@@ -730,28 +722,6 @@ public class CompactionService {
         }
     }
 
-    /** 有档位时：target 是绝对 token，summary/tail 在 target 内动态分配。 */
-    CompactionTarget resolveTierTarget(long maxInputTokens, long budget, long prefixTokens,
-                                       long toolTokens, long summaryCap,
-                                       AgentRuntimeProperties.RunnerConfig.CompactionConfig compaction,
-                                       CompactionTier tier) {
-        long headroom = Math.max(TARGET_HEADROOM_TOKENS,
-                (long) (maxInputTokens * TARGET_HEADROOM_RATIO));
-        long ceiling = Math.max(0, budget - headroom);
-        long configured = Math.min(tier.getTargetTokens(), ceiling);
-        long fixedWithoutSummary = prefixTokens + toolTokens;
-        long minTail = Math.max(MIN_ADAPTIVE_TAIL_TOKENS, compaction.getMinTailTokens());
-        if (configured <= fixedWithoutSummary + minTail) {
-            return new CompactionTarget(tier.getTargetTokens(), fixedWithoutSummary, minTail,
-                    budget, ceiling, configured, false);
-        }
-        long summaryReserve = Math.min(summaryCap, configured - fixedWithoutSummary - minTail);
-        long fixed = fixedWithoutSummary + summaryReserve;
-        long tail = configured - fixed;
-        return new CompactionTarget(tier.getTargetTokens(), fixed, tail,
-                budget, ceiling, configured, true);
-    }
-
     CompactionTarget resolveCompactionTarget(long maxInputTokens, long budget, long prefixTokens,
                                              long toolTokens, long summaryReserve,
                                              AgentRuntimeProperties.RunnerConfig.CompactionConfig compaction) {
@@ -774,8 +744,7 @@ public class CompactionService {
 
     private RunCompactionResult doCompactRun(Long sessionId, Long runId, SessionVO session,
                                              ModelRouteFullVO route, List<ChatMessageDTO> messages,
-                                             int currentRunStart, List<ToolDefinitionDTO> toolDefs,
-                                             Integer effectiveMaxOutputTokens) {
+                                             int currentRunStart, List<ToolDefinitionDTO> toolDefs) {
         int userIndex = currentRunStart;
         long maxInputTokens = resolveMaxInputTokens(route);
         long maxOutputTokens = route.getMaxOutputTokens() != null ? route.getMaxOutputTokens()
@@ -787,13 +756,9 @@ public class CompactionService {
                 messages.subList(0, userIndex + 1)), calibration);
         long summaryCap = resolveSummaryCap(maxInputTokens);
         long summaryReserve = summaryCap;
-        long budget = resolveInputBudget(maxInputTokens, effectiveMaxOutputTokens);
-        CompactionTier tier = resolveTier(maxInputTokens);
-        CompactionTarget targetInfo = tier != null
-                ? resolveTierTarget(maxInputTokens, budget, prefixTokens, toolTokens,
-                        summaryCap, compaction, tier)
-                : resolveCompactionTarget(
-                        maxInputTokens, budget, prefixTokens, toolTokens, summaryReserve, compaction);
+        long budget = resolveInputBudget(maxInputTokens);
+        CompactionTarget targetInfo = resolveCompactionTarget(
+                maxInputTokens, budget, prefixTokens, toolTokens, summaryReserve, compaction);
         long target = targetInfo.target();
         if (!targetInfo.feasible()) {
             log.warn("Run compaction target infeasible: run={}, configured={}, fixed={}, tailFloor={}, "
@@ -808,9 +773,8 @@ public class CompactionService {
                 targetInfo.fixedTokens(), targetInfo.tailFloor(), targetInfo.budget(),
                 targetInfo.targetCeiling(), target);
         long availableForTail = target - targetInfo.fixedTokens();
-        long tailBudgetTokens = tier != null
-                ? Math.max(0, availableForTail)
-                : Math.min((long) (maxInputTokens * compaction.getTailRatio()), availableForTail);
+        long tailBudgetTokens = Math.min(
+                (long) (maxInputTokens * compaction.getTailRatio()), availableForTail);
         TailSelection selection = selectRunTail(messages, userIndex, tailBudgetTokens);
         int tailStart = selection.tailStart();
         if (tailStart <= userIndex + 1 || tailStart > messages.size()) {
@@ -834,16 +798,9 @@ public class CompactionService {
         }
         String compactPrompt = "User request:\n" + userText + "\n\nMessages:\n" + rendered;
 
-        long summaryMaxLen;
-        if (tier != null) {
-            long tierSummaryBudget = targetInfo.fixedTokens() - prefixTokens - toolTokens;
-            summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS,
-                    Math.min(summaryCap, Math.min(maxOutputTokens, tierSummaryBudget)));
-        } else {
-            summaryMaxLen = Math.min(summaryCap,
-                    Math.min(maxOutputTokens, charsToTokens(compactPrompt.length()) * 2 / 3));
-            summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
-        }
+        long summaryMaxLen = Math.min(summaryCap,
+                Math.min(maxOutputTokens, charsToTokens(compactPrompt.length()) * 2 / 3));
+        summaryMaxLen = Math.max(SUMMARY_MIN_TOKENS, summaryMaxLen);
 
         String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
         AgentCompactRecordVO record = compactRecordSpi.createRunRecord(sessionId, runId);
@@ -1134,9 +1091,12 @@ public class CompactionService {
                                     .setContent(CompactionPromptConstant.getSystemPrompt()),
                             new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(messagesText)));
             llmRequestConfigurer.applyGlobal(request);
-            // 摘要不需要思考：全局 config 的 thinking=true 会把 4k 输出预算耗在 reasoning 上，
-            // 实测出现 completion=4000、reasoning 5-11k、content 为空（压缩直接失败）。
+            // 摘要不需要思考：全局 config 的 thinking=true 会把输出预算耗在 reasoning 上，
+            // 实测出现 completion=4000、reasoning 5–11k、content 为空（压缩直接失败）。
+            // 三种字段一起关，覆盖 DeepSeek/Qwen/OpenAI 兼容网关的不同开关。
             request.setThinking(new ThinkingDTO().setType("disabled"));
+            request.setEnableThinking(false);
+            request.setReasoningEffort(null);
             // 摘要长度必须由请求硬上限兜底：prompt 里的「MUST NOT exceed」只是自然语言要求。
             // 放在 applyGlobal 之后，避免被全局 sampling 配置覆盖。
             request.setMaxTokens(hardMaxTokens);

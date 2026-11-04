@@ -118,11 +118,14 @@ class FinishProtocolTest {
         RSet<Object> cancelSet = mock(RSet.class);
         lenient().when(cancelSet.contains(any())).thenReturn(false);
         lenient().when(redissonClient.getSet(anyString())).thenReturn(cancelSet);
+        org.mockito.Mockito.lenient().when(compactionService.resolveNominalChatMaxOutput(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(16_000);
+        org.mockito.Mockito.lenient().when(compactionService.resolveRequestMaxOutput(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(16_000);
         runner = new SessionRunner(properties, runSpi, sessionSpi, kernelLlmService, apiKeySpi,
                 eventPublisher, routeListBuilder, new FallbackRouteExecutor(), historyLoader,
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
                 toolCallRecordSpi, redissonClient, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class),
+                new com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver(new com.buukle.agent.common.config.AgentRuntimeProperties()));
     }
 
     /** 让本轮固定产出给定的流式事件序列。 */
@@ -215,7 +218,7 @@ class FinishProtocolTest {
     @Test
     void skipCompactionFlagBypassesCompactionGate() throws Exception {
         emit(new LLMEvent.TextDelta("done"), new LLMEvent.Finish(FinishReason.STOP, null));
-        when(compactionService.evaluate(any(), any(), any(), any())).thenReturn(
+        when(compactionService.evaluate(any(), any(), any())).thenReturn(
                 new CompactionService.CompactionDecision(true, 0, 0, 0, 95_000, 100_000, 100_000));
         when(compactionService.compact(any(), any(), any())).thenReturn(CompactionOutcome.NO_PROGRESS);
 
@@ -231,12 +234,12 @@ class FinishProtocolTest {
     @Test
     void runLocalCompactionResultIsReturnedToCaller() throws Exception {
         emit(new LLMEvent.TextDelta("done"), new LLMEvent.Finish(FinishReason.STOP, null));
-        when(compactionService.evaluate(any(), any(), any(), any())).thenReturn(
+        when(compactionService.evaluate(any(), any(), any())).thenReturn(
                 new CompactionService.CompactionDecision(true, 0, 0, 0, 95_000, 100_000, 100_000));
         when(compactionService.compact(any(), any(), any())).thenReturn(CompactionOutcome.NO_HISTORY);
         List<ChatMessageDTO> rebuilt = List.of(
                 new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("tail"));
-        when(compactionService.compactRun(any(), any(), any(), any(), anyInt(), any(), any()))
+        when(compactionService.compactRun(any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, 1, 9L, 0, 0));
 
         TurnResult result = runTurn(false);

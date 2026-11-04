@@ -1,5 +1,6 @@
 package com.buukle.agent.model.dtvo.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -17,7 +18,11 @@ public class CreateRouteDTO implements Serializable {
     private Integer weight;
     @Size(max = 255)
     private String fallbackIds;
+    @NotNull(message = "maxInputTokens can't be null")
+    @Min(value = 1, message = "maxInputTokens must be positive")
     private Long maxInputTokens;
+    @NotNull(message = "maxOutputTokens can't be null")
+    @Min(value = 1, message = "maxOutputTokens must be positive")
     private Long maxOutputTokens;
     private String company;
     private Boolean supportsAttachment;

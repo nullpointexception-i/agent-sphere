@@ -87,10 +87,12 @@ public class LlmContextValidator {
             for (CompactionTier tier : runner.getCompaction().getTiers()) {
                 require(tier.getMaxInputTokens() > 0,
                         "runner.compaction.tiers[].max-input-tokens must be > 0");
-                require(tier.getTriggerTokens() > tier.getTargetTokens(),
-                        "runner.compaction.tiers[].trigger-tokens must be > target-tokens");
-                require(tier.getTargetTokens() > 0,
-                        "runner.compaction.tiers[].target-tokens must be > 0");
+                require(tier.getTriggerTokens() > 0,
+                        "runner.compaction.tiers[].trigger-tokens must be > 0");
+                require(tier.getTriggerTokens() < tier.getMaxInputTokens(),
+                        "runner.compaction.tiers[].trigger-tokens must be < max-input-tokens");
+                require(tier.getMaxInputTokens() - tier.getTriggerTokens() >= 8_000,
+                        "runner.compaction.tiers[] must leave at least 8k output room after trigger");
             }
         }
         require(runner.getLiveToolResultMaxChars() >= 1,

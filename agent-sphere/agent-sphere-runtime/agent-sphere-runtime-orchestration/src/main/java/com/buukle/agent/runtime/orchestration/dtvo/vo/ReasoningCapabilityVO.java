@@ -25,6 +25,8 @@ public class ReasoningCapabilityVO implements Serializable {
     private String defaultLevel;
     /** 当前选中档位；无活动 run 时为 null（发送时按默认）。 */
     private String selectedLevel;
+    /** 本轮实际会使用的档位（手选不可行时降级）；运行中为当前轮解析值。 */
+    private String effectiveLevel;
     /** 可选档位（含不可行项，带 feasible 标记）。 */
     private List<Level> levels;
     /** 会话是否有活动 run；运行中不可修改。 */

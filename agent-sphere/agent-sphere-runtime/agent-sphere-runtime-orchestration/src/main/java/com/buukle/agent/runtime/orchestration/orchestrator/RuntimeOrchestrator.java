@@ -4,7 +4,6 @@ import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.SessionRunCoordinator;
-import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
@@ -16,7 +15,7 @@ import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
 import com.buukle.agent.runtime.orchestration.pipeline.ContextPreparer;
 import com.buukle.agent.runtime.orchestration.pipeline.RuntimeValidator;
 import com.buukle.agent.runtime.orchestration.pipeline.ValidationResult;
-import com.buukle.agent.runtime.orchestration.service.ReasoningEffortResolver;
+import com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -173,18 +172,16 @@ public class RuntimeOrchestrator {
             run.setModelRouteId(validated.getModelRoute().getId());
             changed = true;
         }
-        // 思考强度 pin（V118）：按实际输出预算动态解析默认档；用户手选档位优先。
+        // 思考强度 pin（V118）：按名义输出上限动态解析默认档；用户手选档位优先。
         if (validated.getModelRoute() != null) {
             Integer instanceMaxOutput = llmRequestConfigurer.resolveMaxOutputTokens(
                     validated.getAgentInstance() != null
                             ? validated.getAgentInstance().getConfig() : null);
-            long maxInput = validated.getModelRoute().getMaxInputTokens() != null
-                    ? validated.getModelRoute().getMaxInputTokens()
-                    : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
-            Integer effective = compactionService.resolveChatMaxOutputTokens(maxInput, instanceMaxOutput);
+            int nominal = compactionService.resolveNominalChatMaxOutput(
+                    instanceMaxOutput, validated.getModelRoute().getMaxOutputTokens());
             ReasoningEffortResolver.Resolved resolved = reasoningEffortResolver.resolve(
                     validated.getModelRoute(), validated.getModelRoute().getConfig(),
-                    effective, run.getReasoningEffort());
+                    nominal, run.getReasoningEffort());
             String effort = resolved.supported() ? resolved.selectedLevel() : null;
             Integer budget = resolved.supported() ? resolved.thinkingBudgetTokens() : null;
             if (!java.util.Objects.equals(effort, run.getReasoningEffort())

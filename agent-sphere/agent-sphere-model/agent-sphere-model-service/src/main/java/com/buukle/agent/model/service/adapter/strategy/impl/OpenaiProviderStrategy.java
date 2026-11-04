@@ -23,6 +23,8 @@ public class OpenaiProviderStrategy implements ProviderStrategy {
         // OpenAI：无 thinking / tool_stream 参数（推理强度用 reasoning_effort），剔除避免非预期行为
         request.setThinking(null);
         request.setToolStream(null);
+        // enable_thinking 是 Qwen 专用字段，其它厂商收到会 400。
+        request.setEnableThinking(null);
         // OpenAI Chat Completions does not accept assistant.reasoning_content.
         if (request.getMessages() != null) {
             for (ChatMessageDTO m : request.getMessages()) {

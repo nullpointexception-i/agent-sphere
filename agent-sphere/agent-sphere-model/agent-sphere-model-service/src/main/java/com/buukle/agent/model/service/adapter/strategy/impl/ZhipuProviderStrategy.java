@@ -31,6 +31,7 @@ public class ZhipuProviderStrategy implements ProviderStrategy {
         request.setN(null);
         // GLM 的思考开关走 thinking，不认 reasoning_effort；档位仅用于前端展示/审计。
         request.setReasoningEffort(null);
+        request.setEnableThinking(null);
         request.setLogprobs(null);
         request.setTopLogprobs(null);
         request.setLogitBias(null);

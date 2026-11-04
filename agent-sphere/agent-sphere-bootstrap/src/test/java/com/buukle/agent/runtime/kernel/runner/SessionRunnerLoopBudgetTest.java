@@ -93,11 +93,14 @@ class SessionRunnerLoopBudgetTest {
     @BeforeEach
     void setUp() {
         lenient().when(properties.getRunner()).thenReturn(new AgentRuntimeProperties.RunnerConfig());
+        org.mockito.Mockito.lenient().when(compactionService.resolveNominalChatMaxOutput(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(16_000);
+        org.mockito.Mockito.lenient().when(compactionService.resolveRequestMaxOutput(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyInt())).thenReturn(16_000);
         runner = new SessionRunner(properties, runSpi, sessionSpi, kernelLlmService, apiKeySpi,
                 eventPublisher, routeListBuilder, fallbackRouteExecutor, historyLoader,
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
                 toolCallRecordSpi, redissonClient, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class),
+                new com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver(new com.buukle.agent.common.config.AgentRuntimeProperties()));
     }
 
     private void applyLoopBudget(List<ChatMessageDTO> messages, int loopCount, int maxLoopCount) throws Exception {

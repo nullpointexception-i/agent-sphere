@@ -30,6 +30,7 @@ import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
+import com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
@@ -677,14 +678,13 @@ public class ChatRuntimeService {
 
         Integer instanceMaxOutput = llmRequestConfigurer.resolveMaxOutputTokens(
                 validated.getAgentInstance().getConfig());
-        long maxInput = validated.getModelRoute().getMaxInputTokens() != null
-                ? validated.getModelRoute().getMaxInputTokens()
-                : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
-        // 与 SessionRunner 的 request.max_tokens 同源：tier 上限与实例输出上限取小。
-        Integer effective = compactionService.resolveChatMaxOutputTokens(maxInput, instanceMaxOutput);
+        // 与 SessionRunner 同源：实例 config.max_tokens 优先，其次路由 max_output_tokens。
+        // 单轮实际 max_tokens 还会按上下文余量收缩，这里展示的是名义上限。
+        int nominal = compactionService.resolveNominalChatMaxOutput(
+                instanceMaxOutput, validated.getModelRoute().getMaxOutputTokens());
         ReasoningEffortResolver.Resolved resolved = reasoningEffortResolver.resolve(
                 validated.getModelRoute(), validated.getModelRoute().getConfig(),
-                effective, active == null ? null : active.getReasoningEffort());
+                nominal, active == null ? null : active.getReasoningEffort());
 
         vo.setSupported(resolved.supported());
         vo.setMode(resolved.mode());
@@ -692,6 +692,7 @@ public class ChatRuntimeService {
         vo.setAnswerReserveTokens(resolved.answerReserveTokens());
         vo.setDefaultLevel(resolved.defaultLevel());
         vo.setSelectedLevel(resolved.selectedLevel());
+        vo.setEffectiveLevel(resolved.effectiveLevel());
         List<ReasoningCapabilityVO.Level> levels = new ArrayList<>();
         for (ReasoningEffortResolver.LevelView view : resolved.levels()) {
             ReasoningCapabilityVO.Level level = new ReasoningCapabilityVO.Level();

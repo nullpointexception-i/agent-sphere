@@ -341,6 +341,7 @@ export default {
     'This level suggests at least {tokens} output tokens, current limit is {max}',
   'pages.chat.reasoning.locked': 'Reasoning cannot be changed while running',
   'pages.chat.reasoning.reserve': 'About {tokens} tokens reserved for the answer',
+  'pages.chat.reasoning.outputLimit': 'Output limit {tokens} tokens',
   'pages.chat.typeMessage': 'Type a message...',
   'pages.chat.typeMessageHint': 'Type a message... (Shift+Enter for new line)',
   'pages.chat.consoleSessionDisabled':

@@ -34,6 +34,8 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
         request.setLogprobs(null);
         request.setTopLogprobs(null);
         request.setLogitBias(null);
+        // enable_thinking 是 Qwen 专用字段；DeepSeek 用 thinking.type + reasoning_effort。
+        request.setEnableThinking(null);
         // 统一档位 → DeepSeek thinking 开关：none 关闭，其余开启；具体强度由 reasoning_effort 表达。
         if (request.getReasoningEffort() != null) {
             boolean off = ReasoningEffort.NONE.equalsIgnoreCase(request.getReasoningEffort());

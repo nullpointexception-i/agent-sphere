@@ -124,6 +124,8 @@ class AgentConversationWorkflowTest {
         dto.setProviderId(1L);
         dto.setModelName("gpt-4.1-mini");
         dto.setWeight(100);
+        dto.setMaxInputTokens(128_000L);
+        dto.setMaxOutputTokens(16_000L);
         return dto;
     }
 

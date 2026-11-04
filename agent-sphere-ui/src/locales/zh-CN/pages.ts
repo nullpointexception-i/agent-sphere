@@ -328,6 +328,7 @@ export default {
     '该档位建议至少 {tokens} tokens 输出上限，当前为 {max}',
   'pages.chat.reasoning.locked': '运行中不可修改思考强度',
   'pages.chat.reasoning.reserve': '正文保留约 {tokens} tokens',
+  'pages.chat.reasoning.outputLimit': '输出上限 {tokens} tokens',
   'pages.chat.typeMessage': '输入消息...',
   'pages.chat.typeMessageHint': '输入消息... (Shift+Enter 换行)',
   'pages.chat.consoleSessionDisabled':

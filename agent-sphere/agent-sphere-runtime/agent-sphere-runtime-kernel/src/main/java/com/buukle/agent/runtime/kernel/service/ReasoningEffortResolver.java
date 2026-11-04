@@ -1,4 +1,4 @@
-package com.buukle.agent.runtime.orchestration.service;
+package com.buukle.agent.runtime.kernel.service;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.constant.ReasoningEffort;
@@ -21,7 +21,13 @@ import java.util.Map;
  * 统一思考强度解析。
  *
  * <p>配置优先级：路由覆盖 &gt; 厂商数据库配置 &gt; yaml 厂商默认 &gt; yaml 全局默认。
- * 默认档位不写死：根据本次实际输出的 max_tokens 和档位阈值动态计算。
+ *
+ * <p>档位分三层：
+ * <ul>
+ *   <li>{@code defaultLevel}：无用户选择时的动态默认，受 {@code default-max-level} 封顶；</li>
+ *   <li>{@code selectedLevel}：用户手选（即使不可行也保留，前端只警告）；</li>
+ *   <li>{@code effectiveLevel}：本轮真正使用的档位——手选不可行时降到最高可行档（只降不升）。</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -48,20 +54,22 @@ public class ReasoningEffortResolver {
             List<LevelView> levels,
             String defaultLevel,
             String selectedLevel,
+            String effectiveLevel,
             Long effectiveMaxOutputTokens,
             Long answerReserveTokens,
             Integer thinkingBudgetTokens) {
 
         public static Resolved unsupported() {
-            return new Resolved(false, ReasoningMode.LEVELS, List.of(), null, null, null, null, null);
+            return new Resolved(false, ReasoningMode.LEVELS, List.of(),
+                    null, null, null, null, null, null);
         }
     }
 
     /**
      * @param route                   模型路由（含 company / 路由覆盖字段）
      * @param providerConfigJson       agent_model_provider.config
-     * @param effectiveMaxOutputTokens 本次请求实际生效的 max_tokens；null 表示未配置输出上限
-     * @param requestedLevel           用户选择；为空则使用动态默认
+     * @param effectiveMaxOutputTokens 本轮请求实际会发出的 max_tokens；null 表示未配置输出上限
+     * @param requestedLevel           用户选择/run 固化档位；为空则使用动态默认
      */
     public Resolved resolve(ModelRouteFullVO route, String providerConfigJson,
                             Integer effectiveMaxOutputTokens, String requestedLevel) {
@@ -133,65 +141,118 @@ public class ReasoningEffortResolver {
             views.add(new LevelView(level, min, feasible));
         }
 
-        String defaultLevel;
-        if (effectiveMaxOutputTokens == null || effectiveMaxOutputTokens <= 0) {
-            defaultLevel = ordered.get(ordered.size() - 1);
-        } else {
-            String highestFeasible = null;
-            for (LevelView v : views) {
-                if (v.feasible()) {
-                    highestFeasible = v.value();
-                }
-            }
-            defaultLevel = highestFeasible != null ? highestFeasible : ordered.get(0);
-        }
-
-        String selected = requestedLevel;
-        if (selected == null || selected.isBlank()
-                || ordered.stream().noneMatch(l -> l.equalsIgnoreCase(requestedLevel))) {
-            selected = defaultLevel;
-        } else {
-            // 统一使用全局 levelOrder 中的大小写
-            selected = ordered.stream()
-                    .filter(l -> l.equalsIgnoreCase(requestedLevel))
-                    .findFirst().orElse(defaultLevel);
-        }
+        String defaultLevel = pickDefault(ordered, views, levelOrder,
+                global.getDefaultMaxLevel(), effectiveMaxOutputTokens);
+        String selected = normalize(requestedLevel, ordered, defaultLevel);
+        String effectiveLevel = pickEffective(ordered, views, selected);
 
         Integer thinkingBudget = null;
-        if (ModelProviderCompany.QWEN.getValue().equals(company)) {
+        if (ModelProviderCompany.QWEN.getValue().equalsIgnoreCase(company)) {
             thinkingBudget = qwenThinkingBudget(global, yamlProvider, db,
-                    selected, effectiveMaxOutputTokens, reserve);
+                    effectiveLevel, effectiveMaxOutputTokens, reserve);
         }
 
-        return new Resolved(true, mode, views, defaultLevel, selected,
+        return new Resolved(true, mode, views, defaultLevel, selected, effectiveLevel,
                 effectiveMaxOutputTokens == null ? null : effectiveMaxOutputTokens.longValue(),
                 effectiveMaxOutputTokens == null ? null : reserve, thinkingBudget);
+    }
+
+    /** 无用户选择时的动态默认：最高可行档，但不超过 default-max-level。 */
+    private static String pickDefault(List<String> ordered, List<LevelView> views,
+                                      List<String> levelOrder, String defaultMaxLevel,
+                                      Integer effectiveMaxOutputTokens) {
+        int capIndex = indexOfIgnoreCase(levelOrder, defaultMaxLevel);
+        int visibleCap = capIndex < 0 ? ordered.size() - 1 : visibleIndexAtOrBelow(ordered, levelOrder, capIndex);
+        if (visibleCap < 0) {
+            visibleCap = ordered.size() - 1;
+        }
+        if (effectiveMaxOutputTokens == null || effectiveMaxOutputTokens <= 0) {
+            return ordered.get(visibleCap);
+        }
+        String highestFeasible = null;
+        for (int i = 0; i <= visibleCap; i++) {
+            if (views.get(i).feasible()) {
+                highestFeasible = views.get(i).value();
+            }
+        }
+        return highestFeasible != null ? highestFeasible : ordered.get(0);
+    }
+
+    /** 手选档位不可行时降到最高可行档；不会升级。 */
+    private static String pickEffective(List<String> ordered, List<LevelView> views, String selected) {
+        int selectedIndex = indexOfIgnoreCase(ordered, selected);
+        if (selectedIndex < 0) {
+            selectedIndex = ordered.size() - 1;
+        }
+        if (views.get(selectedIndex).feasible()) {
+            return views.get(selectedIndex).value();
+        }
+        for (int i = selectedIndex - 1; i >= 0; i--) {
+            if (views.get(i).feasible()) {
+                return views.get(i).value();
+            }
+        }
+        return ordered.get(0);
+    }
+
+    private static String normalize(String requested, List<String> ordered, String defaultLevel) {
+        if (requested == null || requested.isBlank()) {
+            return defaultLevel;
+        }
+        int index = indexOfIgnoreCase(ordered, requested);
+        return index < 0 ? defaultLevel : ordered.get(index);
+    }
+
+    private static int visibleIndexAtOrBelow(List<String> ordered, List<String> levelOrder, int capOrderIndex) {
+        int result = -1;
+        for (int i = 0; i < ordered.size(); i++) {
+            int orderIndex = indexOfIgnoreCase(levelOrder, ordered.get(i));
+            if (orderIndex >= 0 && orderIndex <= capOrderIndex) {
+                result = i;
+            }
+        }
+        return result;
+    }
+
+    private static int indexOfIgnoreCase(List<String> values, String target) {
+        if (values == null || target == null) {
+            return -1;
+        }
+        for (int i = 0; i < values.size(); i++) {
+            if (target.equalsIgnoreCase(values.get(i))) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private Integer qwenThinkingBudget(AgentRuntimeProperties.LlmConfig.ReasoningConfig global,
                                        AgentRuntimeProperties.LlmConfig.ProviderReasoningConfig yamlProvider,
                                        JsonNode db,
-                                       String selected,
+                                       String effectiveLevel,
                                        Integer effectiveMaxOutputTokens,
                                        long reserve) {
-        if (selected == null || ReasoningEffort.NONE.equalsIgnoreCase(selected)) {
+        if (effectiveLevel == null || ReasoningEffort.NONE.equalsIgnoreCase(effectiveLevel)) {
             return null;
         }
-        boolean supported = true;
+        boolean budgetSupported = true;
         if (db != null && db.has(PROP_THINKING_BUDGET_SUPPORTED)) {
-            supported = db.path(PROP_THINKING_BUDGET_SUPPORTED).asBoolean(true);
+            budgetSupported = db.path(PROP_THINKING_BUDGET_SUPPORTED).asBoolean(true);
         } else if (yamlProvider != null) {
-            supported = yamlProvider.isThinkingBudgetSupported();
+            budgetSupported = yamlProvider.isThinkingBudgetSupported();
         }
-        if (!supported) {
+        if (!budgetSupported) {
             return null;
         }
         Map<String, Long> thresholds = thresholds(global, yamlProvider, db);
-        long raw = thresholds.getOrDefault(selected, 0L);
+        long raw = thresholds.getOrDefault(effectiveLevel, 0L);
         long upper = effectiveMaxOutputTokens == null || effectiveMaxOutputTokens <= 0
                 ? raw : Math.max(0L, effectiveMaxOutputTokens - reserve);
         long budget = Math.min(raw, upper);
         budget = Math.max(global.getMinThinkingBudget(), budget);
+        if (effectiveMaxOutputTokens != null && effectiveMaxOutputTokens > 0) {
+            budget = Math.min(budget, effectiveMaxOutputTokens);
+        }
         return budget > 0 ? (int) Math.min(Integer.MAX_VALUE, budget) : null;
     }
 
