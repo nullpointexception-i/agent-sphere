@@ -25,6 +25,15 @@ public class SessionRuntimeStateVO implements Serializable {
     private Integer pendingToolApprovals;
     private Integer pendingQueue;
     private Boolean canSend;
+    /** 挂起类型：WAIT / LLM_RETRY（runStatus=WAITING 时有值）。 */
+    private String waitKind;
+    /** LLM 重试档位（1..N）与总档位，前端展示“k/N”。 */
+    private Integer retryAttempt;
+    private Integer retryMax;
+    /** 下次重试的时间点（epoch ms），用于前端读秒。 */
+    private Long nextRetryAt;
+    /** 距下次重试的毫秒数，由服务端计算，避免浏览器时钟偏差。 */
+    private Long retryRemainingMs;
     /** RUNNING / CLARIFICATION / TOOL_APPROVAL；为空表示可发送。 */
     private List<String> blockReasons;
     private LocalDateTime serverTime;

@@ -405,7 +405,10 @@ public class SessionRunner {
             currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
             refreshTodolistSlot(sessionId, messages);
             hasToolCalls = true;
-            toolsEverExecuted = true;
+            // 注意：这里不能置 toolsEverExecuted=true。它应由已持久化的 loopCount 决定：
+            // 纯聊天 run（loopCount=0）重试恢复后若被强行标记“用过工具”，一次正常文本回答会被
+            // L2 静默守卫当成“工具后沉默”，continue 后再发一轮请求（线上 run 2999/2995：
+            // 成功回复后 300ms 又发起新请求并继续重试）。
             topCtx.setRetryResume(false);
             log.info("Resumed run {} after transient LLM failure with {} history message(s)",
                     currentRunId, messages.size());

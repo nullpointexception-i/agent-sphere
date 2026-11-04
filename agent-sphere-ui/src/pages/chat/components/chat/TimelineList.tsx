@@ -110,6 +110,13 @@ interface TimelineListProps {
   loadSubAgentSteps?: (subId: number) => Promise<any[]>;
   subAgentLive?: SubAgentLiveMap;
   preparingTool?: { publishId?: string; name?: string } | null;
+  /** LLM 重试读秒：来自 /runtime/{sid}/state，按 run 匹配 run_status 行。 */
+  retryState?: {
+    runId: number;
+    attempt?: number | null;
+    max?: number | null;
+    remainingMs: number;
+  } | null;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -3000,6 +3007,17 @@ const ParallelSubAgentTabs = memo(
     prev.subAgentLive === next.subAgentLive,
 );
 
+/** LLM 重试读秒：targetAt 为绝对时间戳；归零显示“正在重试…”。 */
+function RetryCountdown({ targetAt }: { targetAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.ceil((targetAt - now) / 1000));
+  return <span>{seconds > 0 ? `${seconds}s 后重试` : '正在重试…'}</span>;
+}
+
 function RowCardImpl({
   row,
   sessionId,
@@ -3008,6 +3026,7 @@ function RowCardImpl({
   onCancelClarification,
   loadSubAgentSteps,
   subAgentLive,
+  retryState,
 }: any) {
   const { styles } = useStyles();
   const isUser = row.kind === 'user';
@@ -3080,6 +3099,15 @@ function RowCardImpl({
         ? `Tokens ${formatTokens(usage.totalTokens)}`
         : null,
     ].filter((p): p is string => !!p);
+    // LLM 重试：只对当前活动 run 的 run_status 行显示读秒，普通 wait 仍由 WaitCard 展示。
+    const retryActive =
+      retryState != null &&
+      Number(row.runId) === Number(retryState.runId) &&
+      state === 'WAITING' &&
+      String(row.subtype ?? '').toUpperCase() === 'LLM_RETRY';
+    const retryTarget = retryActive
+      ? Date.now() + Math.max(0, Number(retryState.remainingMs) || 0)
+      : null;
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
@@ -3099,6 +3127,12 @@ function RowCardImpl({
             <CheckCircleOutlined style={{ fontSize: 12 }} />
           )}{' '}
           {parts.join(' · ')}
+          {retryTarget != null && (
+            <>
+              {' · '}
+              <RetryCountdown targetAt={retryTarget} />
+            </>
+          )}
         </Divider>
       </div>
     );
@@ -3141,6 +3175,7 @@ function RowCardImpl({
             row={row}
             loadSubAgentSteps={loadSubAgentSteps}
             subAgentLive={subAgentLive}
+            retryState={retryState}
           />
         );
       case 'run_status':
@@ -3228,6 +3263,10 @@ const RowCard = memo(RowCardImpl, (prev: any, next: any) => {
   if (prev.onRespondClarify !== next.onRespondClarify) return false;
   if (prev.onCancelClarification !== next.onCancelClarification) return false;
   if (prev.loadSubAgentSteps !== next.loadSubAgentSteps) return false;
+  if (prev.retryState?.runId !== next.retryState?.runId) return false;
+  if (prev.retryState?.attempt !== next.retryState?.attempt) return false;
+  if (prev.retryState?.remainingMs !== next.retryState?.remainingMs)
+    return false;
   // subAgentLive 是整个 session 的 map，只有子 Agent 行需要跟随它刷新；
   // 其它行不受子 Agent token 影响，否则一次子 Agent 输出会让整列表重渲染。
   if (prev.row?.kind === 'subagent') {
@@ -3246,6 +3285,7 @@ export default function TimelineList({
   loadSubAgentSteps,
   subAgentLive,
   preparingTool,
+  retryState,
 }: TimelineListProps) {
   const intl = useIntl();
   // 同批次并行子 Agent（共享 parentToolCallId 且 ≥2 个）合并为横向 Tab；
@@ -3344,6 +3384,7 @@ export default function TimelineList({
             onCancelClarification={onCancelClarification}
             loadSubAgentSteps={loadSubAgentSteps}
             subAgentLive={subAgentLive}
+            retryState={retryState}
           />
         ) : (
           <ParallelSubAgentTabs
@@ -3352,6 +3393,7 @@ export default function TimelineList({
             members={it.members}
             loadSubAgentSteps={loadSubAgentSteps}
             subAgentLive={subAgentLive}
+            retryState={retryState}
           />
         ),
       )}

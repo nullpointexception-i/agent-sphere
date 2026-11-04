@@ -100,8 +100,8 @@ class ChatRuntimeServiceStopTest {
         ArgumentCaptor<RuntimeEventVO> cap = ArgumentCaptor.forClass(RuntimeEventVO.class);
         verify(eventPublisher).publishEvent(cap.capture());
         assertEquals(RunStatus.CANCELLED, cap.getValue().getEventType(), "必须发 run_cancelled 终态");
-        // 停车态不该走「设取消标志等 loop 消费」那条路（loop 已退出，标志没人消费）
-        verify(sessionRunner, never()).cancelRun(any());
+        // 停车态也要写取消标志：唤醒/恢复路径必须看到取消，避免取消后新 wait 又被唤醒
+        verify(sessionRunner).cancelRun(7L);
     }
 
     @Test
@@ -113,7 +113,7 @@ class ChatRuntimeServiceStopTest {
         service.stopRun(1L, 7L);
 
         verify(runSpi).cancelIfActive(7L);
-        verify(sessionRunner, never()).cancelRun(any());
+        verify(sessionRunner).cancelRun(7L);
     }
 
     @Test
@@ -145,7 +145,7 @@ class ChatRuntimeServiceStopTest {
         verify(runSpi).cancelIfActive(7L);
         verify(pendingWaitSpi).cancelPendingByRunId(7L);
         verify(sessionRunner).clearSessionCancelled(1L);
-        verify(sessionRunner, never()).cancelRun(any());
+        verify(sessionRunner).cancelRun(7L);
     }
 
     @Test

@@ -903,6 +903,20 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     void handleStop();
                   }}
                   preparingTool={timeline.preparingTool}
+                  retryState={
+                    timeline.runtimeState?.runStatus === 'WAITING' &&
+                    timeline.runtimeState?.waitKind === 'LLM_RETRY' &&
+                    timeline.runtimeState?.runId != null
+                      ? {
+                          runId: Number(timeline.runtimeState.runId),
+                          attempt: timeline.runtimeState.retryAttempt,
+                          max: timeline.runtimeState.retryMax,
+                          remainingMs: Number(
+                            timeline.runtimeState.retryRemainingMs || 0,
+                          ),
+                        }
+                      : null
+                  }
                 />
                 {sessionUsage && Number(sessionUsage.totalTokens) > 0 ? (
                   <div className="aw-session-usage">

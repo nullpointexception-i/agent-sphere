@@ -64,6 +64,13 @@ export interface WidgetTimelineProps {
   /** 取消当前会话待处理澄清（停止 run）。 */
   onCancelClarify?: () => void;
   preparingTool?: { publishId?: string; name?: string } | null;
+  /** LLM 重试读秒（来自 runtimeState，按 run 匹配 run_status 行）。 */
+  retryState?: {
+    runId: number;
+    attempt?: number | null;
+    max?: number | null;
+    remainingMs: number;
+  } | null;
 }
 
 // ---------------------------------------------------------------- utils
@@ -1733,6 +1740,17 @@ function UserImages({
   );
 }
 
+/** LLM 重试读秒：targetAt 为绝对时间戳；归零显示“正在重试…”。 */
+function RetryCountdown({ targetAt }: { targetAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.ceil((targetAt - now) / 1000));
+  return <span>{seconds > 0 ? `${seconds}s 后重试` : '正在重试…'}</span>;
+}
+
 function RowView({
   row,
   subAgentLiveMap,
@@ -1740,6 +1758,7 @@ function RowView({
   loadFile,
   onRespondClarify,
   onCancelClarify,
+  retryState,
 }: {
   row: TimelineRow;
   subAgentLiveMap: SubAgentLiveMap;
@@ -1747,6 +1766,12 @@ function RowView({
   loadFile: (fileKey: string) => Promise<string>;
   onRespondClarify: (runId: number, clarificationId: string, response: string) => void;
   onCancelClarify?: () => void;
+  retryState?: {
+    runId: number;
+    attempt?: number | null;
+    max?: number | null;
+    remainingMs: number;
+  } | null;
 }) {
   const c = row.content || {};
   const isUser = row.kind === 'user';
@@ -1794,6 +1819,14 @@ function RowView({
     ].filter((p): p is string => !!p);
     const failed =
       /fail|失败|错误/i.test(text) || String(displayState(row)) === 'FAILED';
+    const retryActive =
+      retryState != null &&
+      Number(row.runId) === Number(retryState.runId) &&
+      state === 'WAITING' &&
+      String(row.subtype ?? '').toUpperCase() === 'LLM_RETRY';
+    const retryTarget = retryActive
+      ? Date.now() + Math.max(0, Number(retryState.remainingMs) || 0)
+      : null;
     return (
       <div className="aw-tl-divider">
         {state === 'RUNNING' ? (
@@ -1810,6 +1843,12 @@ function RowView({
           <CheckIcon size={12} />
         )}
         <span>{parts.join(' · ') || text}</span>
+        {retryTarget != null ? (
+          <>
+            <span>·</span>
+            <RetryCountdown targetAt={retryTarget} />
+          </>
+        ) : null}
         {terminal ? <UsageChip usage={c.usage ?? undefined} /> : null}
       </div>
     );
@@ -1925,6 +1964,7 @@ export function WidgetTimeline({
   onRespondClarify,
   onCancelClarify,
   preparingTool,
+  retryState,
 }: WidgetTimelineProps) {
   // 同一 parentToolCallId 的多个 subagent 行（≥2）合并为并行 Tab
   const items = useMemo(() => {
@@ -1985,12 +2025,13 @@ export function WidgetTimeline({
             loadFile={loadFile}
             onRespondClarify={onRespondClarify}
             onCancelClarify={onCancelClarify}
+            retryState={retryState}
           />
         </div>,
       );
     }
     return out;
-  }, [rows, subAgentLiveMap, loadSubAgentSteps, loadFile, onRespondClarify, onCancelClarify]);
+  }, [rows, subAgentLiveMap, loadSubAgentSteps, loadFile, onRespondClarify, onCancelClarify, retryState]);
 
   return (
     <div className="aw-tl">

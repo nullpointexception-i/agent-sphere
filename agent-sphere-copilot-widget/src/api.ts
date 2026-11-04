@@ -365,6 +365,15 @@ export interface RuntimeStateVO {
   pendingToolApprovals: number;
   pendingQueue: number;
   canSend: boolean;
+  /** 挂起类型：WAIT / LLM_RETRY。 */
+  waitKind?: string | null;
+  /** LLM 重试档位与总档位（k/N）。 */
+  retryAttempt?: number | null;
+  retryMax?: number | null;
+  /** 下次重试的绝对时间（epoch ms）。 */
+  nextRetryAt?: number | null;
+  /** 距下次重试的毫秒数（服务端计算，前端读秒用）。 */
+  retryRemainingMs?: number | null;
   blockReasons: string[];
 }
 

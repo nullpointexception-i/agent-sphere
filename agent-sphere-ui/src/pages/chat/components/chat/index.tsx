@@ -260,6 +260,18 @@ export default function ChatMain({
                 loadSubAgentSteps={loadSubAgentSteps}
                 subAgentLive={subAgentLive}
                 preparingTool={preparingTool}
+                retryState={
+                  runtimeState?.runStatus === 'WAITING' &&
+                  runtimeState?.waitKind === 'LLM_RETRY' &&
+                  runtimeState?.runId != null
+                    ? {
+                        runId: Number(runtimeState.runId),
+                        attempt: runtimeState.retryAttempt,
+                        max: runtimeState.retryMax,
+                        remainingMs: Number(runtimeState.retryRemainingMs || 0),
+                      }
+                    : null
+                }
               />
             </div>
           </div>

@@ -618,6 +618,17 @@ public class ChatRuntimeService {
         vo.setPendingClarifications(pendingClarificationCount);
         vo.setPendingToolApprovals(pendingApprovalCount);
         vo.setPendingQueue(queueSize);
+        // LLM 重试读秒：RunVO 已由 fillRetryState 补全（WAITING + LLM_RETRY 时）
+        if (active != null) {
+            vo.setWaitKind(active.getWaitKind());
+            vo.setRetryAttempt(active.getRetryAttempt());
+            vo.setRetryMax(active.getRetryMax());
+            vo.setNextRetryAt(active.getNextRetryAt());
+            if (active.getNextRetryAt() != null) {
+                vo.setRetryRemainingMs(Math.max(0L,
+                        active.getNextRetryAt() - System.currentTimeMillis()));
+            }
+        }
 
         SessionActionPolicy.Decision decision = SessionActionPolicy.decide(
                 vo.getRunStatus(), vo.getPendingClarifications(), vo.getPendingToolApprovals());
@@ -696,6 +707,9 @@ public class ChatRuntimeService {
         if (RunStatus.AWAITING_USER.name().equals(run.getStatus())
                 || RunStatus.WAITING.name().equals(run.getStatus())) {
             // 停车态（等人 / 等时间）：loop 已退出，取消标志无消费者 → 直接置终态。
+            // 仍要写 run 级取消标志：若 loop 恰好在收尾，唤醒/恢复路径必须看到取消；
+            // 否则取消后新插入的 wait 仍可能被唤醒（线上 run 2999 14:58:39 第一次取消未生效）。
+            sessionRunner.cancelRun(runId);
             // 条件更新：已被其它路径终态化时不重复收口。
             if (!runSpi.cancelIfActive(runId)) {
                 pendingWaitSpi.cancelPendingByRunId(runId);
