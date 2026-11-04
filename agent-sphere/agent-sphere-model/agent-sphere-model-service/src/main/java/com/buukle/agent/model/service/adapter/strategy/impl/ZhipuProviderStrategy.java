@@ -27,9 +27,10 @@ public class ZhipuProviderStrategy implements ProviderStrategy {
         // GLM/智谱：仅保留 OpenAI 兼容核心字段，剔除不支持的扩展字段避免 400。
         // 保留 stream_options（usage 采集）、user、parallel_tool_calls（GLM 支持，与 OpenAI 默认对齐）。
         request.setSeed(null);
-        request.setReasoningEffort(null);
         request.setMaxCompletionTokens(null);
         request.setN(null);
+        // GLM 的思考开关走 thinking，不认 reasoning_effort；档位仅用于前端展示/审计。
+        request.setReasoningEffort(null);
         request.setLogprobs(null);
         request.setTopLogprobs(null);
         request.setLogitBias(null);

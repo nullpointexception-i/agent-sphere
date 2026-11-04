@@ -98,6 +98,8 @@ public class ContextPreparer {
                 .modelRoute(validated.getModelRoute())
                 .fallbackRoutes(validated.getFallbackRoutes())
                 .userMessage(message)
+                .reasoningEffort(run.getReasoningEffort())
+                .reasoningBudgetTokens(run.getReasoningBudgetTokens())
                 .build();
     }
 

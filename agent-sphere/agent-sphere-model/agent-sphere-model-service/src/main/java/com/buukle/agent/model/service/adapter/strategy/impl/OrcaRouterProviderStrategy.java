@@ -19,6 +19,9 @@ public class OrcaRouterProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
+        // OpenAI 兼容网关：OpenAI surface 用 reasoning_effort；不透传内部 thinking 字段。
+        request.setThinking(null);
+        request.setToolStream(null);
     }
 
     @Override

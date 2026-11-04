@@ -58,6 +58,10 @@ public class RunVO implements Serializable {
     private String retryDetail;
     /** 本 run 实际使用的主模型路由（V116）。 */
     private Long modelRouteId;
+    /** 本 run 固化的思考强度（V118）。 */
+    private String reasoningEffort;
+    /** 本 run 固化的思考预算（Qwen，V118）。 */
+    private Integer reasoningBudgetTokens;
     private String delivery;
     private String createdBy;
     private String createdAt;

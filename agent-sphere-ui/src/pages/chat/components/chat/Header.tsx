@@ -1,4 +1,9 @@
-import { CheckOutlined, DownOutlined, ToolOutlined } from '@ant-design/icons';
+import {
+  CheckOutlined,
+  DownOutlined,
+  ToolOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { App, Button, Dropdown, Tooltip } from 'antd';
 import { useMemo } from 'react';
@@ -10,6 +15,10 @@ interface HeaderProps {
   selectedModelRouteId?: number;
   onModelRouteChange: (id: number | undefined) => void;
   modelRoutes: any[];
+  /** /runtime/{sid}/reasoning 的能力视图；null 表示未加载或不支持。 */
+  reasoningCapability?: any;
+  reasoningEffort?: string;
+  onReasoningChange: (level: string) => void;
   sseConnected: boolean;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
@@ -21,6 +30,9 @@ export default function Header({
   selectedModelRouteId,
   onModelRouteChange,
   modelRoutes,
+  reasoningCapability,
+  reasoningEffort,
+  onReasoningChange,
   sseConnected,
   sessionPanelOpen,
   onTogglePanel,
@@ -102,6 +114,64 @@ export default function Header({
     return items;
   }, [modelRoutes, selectedModelRouteId, onModelRouteChange, intl, message]);
 
+  const reasoningSupported = Boolean(reasoningCapability?.supported);
+  const reasoningLocked = Boolean(reasoningCapability?.running);
+
+  const levelLabel = (value: string) =>
+    intl.formatMessage({
+      id: `pages.chat.reasoning.${value}`,
+      defaultMessage: value,
+    });
+
+  const reasoningMenuItems = useMemo(() => {
+    if (!reasoningSupported) return [];
+    const effectiveMax = reasoningCapability?.effectiveMaxOutputTokens;
+    const infeasibleMsg = intl.formatMessage({
+      id: 'pages.chat.reasoning.infeasible',
+      defaultMessage: 'Output limit is too low; the answer may be truncated',
+    });
+    return (reasoningCapability?.levels || []).map((level: any) => {
+      const infeasible = level.feasible === false;
+      return {
+        key: level.value,
+        icon: reasoningEffort === level.value ? <CheckOutlined /> : undefined,
+        label: (
+          <span style={infeasible ? { color: '#d46b08' } : undefined}>
+            {levelLabel(level.value)}
+            {infeasible && (
+              <WarningOutlined style={{ marginLeft: 6, color: '#faad14' }} />
+            )}
+          </span>
+        ),
+        onClick: () => {
+          if (infeasible) {
+            message.warning(
+              intl.formatMessage(
+                {
+                  id: 'pages.chat.reasoning.infeasibleHint',
+                  defaultMessage:
+                    'This level suggests at least {tokens} output tokens, current limit is {max}',
+                },
+                {
+                  tokens: level.minOutputTokens,
+                  max: effectiveMax ?? '-',
+                },
+              ),
+            );
+          }
+          onReasoningChange(level.value);
+        },
+      };
+    });
+  }, [
+    reasoningSupported,
+    reasoningCapability,
+    reasoningEffort,
+    onReasoningChange,
+    intl,
+    message,
+  ]);
+
   return (
     <div className={styles.header}>
       <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
@@ -161,6 +231,63 @@ export default function Header({
           </Button>
         </Tooltip>
       </Dropdown>
+      {reasoningSupported && (
+        <Tooltip
+          title={
+            reasoningLocked
+              ? intl.formatMessage({
+                  id: 'pages.chat.reasoning.locked',
+                  defaultMessage: 'Reasoning cannot be changed while running',
+                })
+              : intl.formatMessage(
+                  {
+                    id: 'pages.chat.reasoning.reserve',
+                    defaultMessage:
+                      'About {tokens} tokens reserved for the answer',
+                  },
+                  {
+                    tokens: reasoningCapability?.answerReserveTokens ?? 0,
+                  },
+                )
+          }
+        >
+          <Dropdown
+            menu={{
+              items: reasoningMenuItems,
+              selectedKeys: reasoningEffort ? [reasoningEffort] : [],
+            }}
+            trigger={['click']}
+            disabled={reasoningLocked}
+          >
+            <Button
+              size="small"
+              type="text"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#8c8c8c' }}>
+                {intl.formatMessage({
+                  id: 'pages.chat.reasoning',
+                  defaultMessage: 'Reasoning',
+                })}
+              </span>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>
+                {reasoningEffort
+                  ? levelLabel(reasoningEffort)
+                  : intl.formatMessage({
+                      id: 'pages.chat.reasoning.default',
+                      defaultMessage: 'Default',
+                    })}
+              </span>
+              <DownOutlined style={{ fontSize: 10 }} />
+            </Button>
+          </Dropdown>
+        </Tooltip>
+      )}
       {sseConnected && <span className={styles.statusDot} />}
       <div
         style={{

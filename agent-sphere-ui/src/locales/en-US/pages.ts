@@ -280,6 +280,19 @@ export default {
   'pages.models.supportsAttachment': 'Attachment',
   'pages.models.supportsAttachmentHint':
     'Allow this route to accept image attachments in chat',
+  'pages.models.reasoning': 'Reasoning',
+  'pages.models.reasoningSupported': 'Supports reasoning',
+  'pages.models.reasoningSupportedHint':
+    'Leave empty to inherit the provider config (application.yml / provider config)',
+  'pages.models.reasoning.inherit': 'Inherit',
+  'pages.models.reasoning.supported': 'Supported',
+  'pages.models.reasoning.unsupported': 'Not supported',
+  'pages.models.reasoningLevels': 'Levels',
+  'pages.models.reasoningLevelsHint':
+    'Leave empty to inherit the provider default levels',
+  'pages.models.reasoningReserveRatio': 'Answer reserve ratio',
+  'pages.models.reasoningReserveRatioHint':
+    '0-1; leave empty to inherit provider/global (default 0.25)',
   'pages.models.keyInUse': 'In Use',
   'pages.models.keySetSuccess': 'Set as active key',
   'pages.models.keyUnset': 'Deactivated',
@@ -313,6 +326,21 @@ export default {
   'pages.chat.failedCreateSession': 'Failed to create session',
   'pages.chat.renamed': 'Renamed',
   'pages.chat.modelPlaceholder': 'Model',
+  'pages.chat.reasoning': 'Reasoning',
+  'pages.chat.reasoning.default': 'Default',
+  'pages.chat.reasoning.none': 'Off',
+  'pages.chat.reasoning.minimal': 'Minimal',
+  'pages.chat.reasoning.low': 'Low',
+  'pages.chat.reasoning.medium': 'Medium',
+  'pages.chat.reasoning.high': 'High',
+  'pages.chat.reasoning.xhigh': 'Very high',
+  'pages.chat.reasoning.max': 'Max',
+  'pages.chat.reasoning.infeasible':
+    'Output limit is too low; the answer may be truncated',
+  'pages.chat.reasoning.infeasibleHint':
+    'This level suggests at least {tokens} output tokens, current limit is {max}',
+  'pages.chat.reasoning.locked': 'Reasoning cannot be changed while running',
+  'pages.chat.reasoning.reserve': 'About {tokens} tokens reserved for the answer',
   'pages.chat.typeMessage': 'Type a message...',
   'pages.chat.typeMessageHint': 'Type a message... (Shift+Enter for new line)',
   'pages.chat.consoleSessionDisabled':

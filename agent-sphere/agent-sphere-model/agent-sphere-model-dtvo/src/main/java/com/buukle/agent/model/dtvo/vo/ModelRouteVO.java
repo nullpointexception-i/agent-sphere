@@ -19,6 +19,12 @@ public class ModelRouteVO implements Serializable {
     private String providerName;
     private Boolean supportsAttachment;
     private String completionProtocol;
+    /** 思考强度覆盖：NULL=继承厂商。 */
+    private Boolean reasoningSupported;
+    private String reasoningMode;
+    /** JSON 数组字符串，如 ["low","high","max"]。 */
+    private String reasoningLevels;
+    private java.math.BigDecimal reasoningAnswerReserveRatio;
     private Boolean apiKeyConfigured;
     private String createdAt;
     private String createdBy;

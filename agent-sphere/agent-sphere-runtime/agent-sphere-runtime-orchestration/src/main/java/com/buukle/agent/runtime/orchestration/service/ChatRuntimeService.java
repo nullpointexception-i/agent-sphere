@@ -28,6 +28,8 @@ import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
+import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
+import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
@@ -38,7 +40,10 @@ import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
+import com.buukle.agent.runtime.orchestration.dtvo.vo.ReasoningCapabilityVO;
 import com.buukle.agent.runtime.orchestration.orchestrator.RuntimeOrchestrator;
+import com.buukle.agent.runtime.orchestration.pipeline.RuntimeValidator;
+import com.buukle.agent.runtime.orchestration.pipeline.ValidationResult;
 import com.buukle.agent.runtime.orchestration.handler.TimelineRecorder;
 import com.buukle.agent.util.TextSanitizer;
 import com.buukle.agent.util.json.JsonUtils;
@@ -69,6 +74,10 @@ public class ChatRuntimeService {
     private final PendingWaitSpi pendingWaitSpi;
     private final ToolApprovalService toolApprovalService;
     private final SessionInputManager inputManager;
+    private final RuntimeValidator runtimeValidator;
+    private final ReasoningEffortResolver reasoningEffortResolver;
+    private final LlmRequestConfigurer llmRequestConfigurer;
+    private final CompactionService compactionService;
 
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
@@ -80,7 +89,8 @@ public class ChatRuntimeService {
         if (active != null) {
             String queueId = inputManager.queue(sessionId, dto.getMessage(),
                     dto.getModelRouteId(), false,
-                    chatAttachmentService.resolve(dto.getAttachmentKeys()));
+                    chatAttachmentService.resolve(dto.getAttachmentKeys()),
+                    dto.getReasoningEffort());
             ChatMessageResponseVO queued = new ChatMessageResponseVO();
             queued.setRunId(active.getId());
             queued.setStatus("QUEUED");
@@ -124,6 +134,7 @@ public class ChatRuntimeService {
         createRunDTO.setType(RunEnum.TYPE_AUTO);
         createRunDTO.setNoClarification(dto.getNoClarification());
         createRunDTO.setAttachments(resolveRunAttachments(dto));
+        createRunDTO.setReasoningEffort(dto.getReasoningEffort());
         RunVO run = runSpi.createRun(createRunDTO);
         if (dto.getDelivery() != null) {
             run.setDelivery(dto.getDelivery());
@@ -635,6 +646,61 @@ public class ChatRuntimeService {
         vo.setCanSend(decision.canSend());
         vo.setBlockReasons(decision.blockReasons());
         vo.setServerTime(java.time.LocalDateTime.now());
+        return vo;
+    }
+
+    /**
+     * 会话的思考强度能力：动态默认档位 + 各档可行性。
+     *
+     * <p>不可行档位照常返回（前端展示并警告），只有“是否支持”会决定整块是否展示。
+     * 路由/密钥未就绪时不报错，返回 supported=false，避免对话页因能力接口失败。
+     */
+    public ReasoningCapabilityVO reasoningCapability(Long sessionId, Long modelRouteId) {
+        assertSessionOwnership(sessionId);
+        RunVO active = runSpi.findActiveRun(sessionId);
+        ReasoningCapabilityVO vo = new ReasoningCapabilityVO();
+        vo.setRunning(active != null);
+        vo.setRunId(active == null ? null : active.getId());
+
+        // 运行中只认 run 固化的路由；空闲时按用户当前选中的路由（尚未发送的覆盖）。
+        Long routeId = active != null && active.getModelRouteId() != null
+                ? active.getModelRouteId() : modelRouteId;
+        ValidationResult validated;
+        try {
+            validated = runtimeValidator.validate(sessionId, routeId);
+        } catch (BizException e) {
+            log.warn("Reasoning capability unavailable: sessionId={}, reason={}", sessionId, e.getMessage());
+            vo.setSupported(false);
+            vo.setLevels(List.of());
+            return vo;
+        }
+
+        Integer instanceMaxOutput = llmRequestConfigurer.resolveMaxOutputTokens(
+                validated.getAgentInstance().getConfig());
+        long maxInput = validated.getModelRoute().getMaxInputTokens() != null
+                ? validated.getModelRoute().getMaxInputTokens()
+                : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS;
+        // 与 SessionRunner 的 request.max_tokens 同源：tier 上限与实例输出上限取小。
+        Integer effective = compactionService.resolveChatMaxOutputTokens(maxInput, instanceMaxOutput);
+        ReasoningEffortResolver.Resolved resolved = reasoningEffortResolver.resolve(
+                validated.getModelRoute(), validated.getModelRoute().getConfig(),
+                effective, active == null ? null : active.getReasoningEffort());
+
+        vo.setSupported(resolved.supported());
+        vo.setMode(resolved.mode());
+        vo.setEffectiveMaxOutputTokens(resolved.effectiveMaxOutputTokens());
+        vo.setAnswerReserveTokens(resolved.answerReserveTokens());
+        vo.setDefaultLevel(resolved.defaultLevel());
+        vo.setSelectedLevel(resolved.selectedLevel());
+        List<ReasoningCapabilityVO.Level> levels = new ArrayList<>();
+        for (ReasoningEffortResolver.LevelView view : resolved.levels()) {
+            ReasoningCapabilityVO.Level level = new ReasoningCapabilityVO.Level();
+            level.setValue(view.value());
+            level.setMinOutputTokens(view.minOutputTokens());
+            level.setFeasible(view.feasible());
+            levels.add(level);
+        }
+        vo.setLevels(levels);
         return vo;
     }
 

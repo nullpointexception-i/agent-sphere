@@ -106,6 +106,13 @@ export default function Chat() {
   const [selectedModelRouteId, setSelectedModelRouteId] = useState<
     number | undefined
   >(undefined);
+  /** 思考强度能力（动态默认 + 各档可行性）。 */
+  const [reasoningCapability, setReasoningCapability] = useState<any>(null);
+  const [reasoningEffort, setReasoningEffort] = useState<string | undefined>(
+    undefined,
+  );
+  /** 用户是否手动改过档位：空闲刷新时不要覆盖手选值。 */
+  const reasoningTouchedRef = useRef(false);
   const [expandOpen, setExpandOpen] = useState(false);
   const [expandText, setExpandText] = useState('');
   const [instanceDrawerOpen, setInstanceDrawerOpen] = useState(false);
@@ -486,6 +493,35 @@ export default function Chat() {
       // 不兜底：错误交给全局请求提示；发送锁保持上一次权威值
     }
   };
+
+  // 思考强度能力：动态默认由后端按实际输出上限计算；不可行档位照常返回，前端只做警告。
+  const refreshReasoningCapability = async (sid: number, routeId?: number) => {
+    const epoch = requestEpochRef.current;
+    try {
+      const cap = await agentApi.sessions.getReasoningCapability(sid, routeId);
+      if (
+        currentSessionIdRef.current !== sid ||
+        epoch !== requestEpochRef.current
+      )
+        return;
+      setReasoningCapability(cap);
+      if (!cap?.supported) {
+        setReasoningEffort(undefined);
+        return;
+      }
+      // 运行中 run 已固化档位；空闲时只有用户没手选过才跟随动态默认。
+      if (cap.running) {
+        setReasoningEffort(cap.selectedLevel ?? undefined);
+      } else if (!reasoningTouchedRef.current) {
+        setReasoningEffort(cap.defaultLevel ?? undefined);
+      }
+    } catch {
+      if (currentSessionIdRef.current !== sid) return;
+      setReasoningCapability(null);
+    }
+  };
+  const refreshReasoningRef = useRef(refreshReasoningCapability);
+  refreshReasoningRef.current = refreshReasoningCapability;
 
   // 工具事件后的整页覆盖刷新：按 seq 覆盖同 seq 行，补齐迟到落库的 content（如截图 images）。
   // afterSeq 增量会跳过 seq ≤ newest 的既有行（工具行），导致 live 阶段看不到截图；此处拉尾窗覆盖修正。
@@ -1426,6 +1462,7 @@ export default function Chat() {
               ) {
                 setSending(false);
                 refreshStateCoalesced(sid);
+                void refreshReasoningRef.current(sid);
                 if (currentSession?.id)
                   void refreshToolStats(currentSession.id);
                 if (subType === 'run_awaiting_user') {
@@ -1625,6 +1662,10 @@ export default function Chat() {
             .catch(() => navigate('/chat', { replace: true }));
         }
         setSelectedModelRouteId(undefined);
+        reasoningTouchedRef.current = false;
+        setReasoningCapability(null);
+        setReasoningEffort(undefined);
+        void refreshReasoningCapability(sid);
         setHasMoreHistory(true);
         historyPageRef.current = 1;
         setMessages([]);
@@ -1774,6 +1815,7 @@ export default function Chat() {
         selectedModelRouteId,
         attachmentKeys,
         runMode,
+        reasoningEffort,
       );
       if (res?.status === 'QUEUED') {
         setQueuedMessages((prev) => [
@@ -1944,8 +1986,19 @@ export default function Chat() {
               currentSession={currentSession}
               instances={instances}
               selectedModelRouteId={selectedModelRouteId}
-              onModelRouteChange={setSelectedModelRouteId}
+              onModelRouteChange={(id) => {
+                setSelectedModelRouteId(id);
+                if (currentSession?.id) {
+                  void refreshReasoningCapability(currentSession.id, id);
+                }
+              }}
               modelRoutes={modelRoutes}
+              reasoningCapability={reasoningCapability}
+              reasoningEffort={reasoningEffort}
+              onReasoningChange={(level) => {
+                reasoningTouchedRef.current = true;
+                setReasoningEffort(level);
+              }}
               sseConnected={sseConnected}
               messages={messages}
               hasMoreHistory={hasMoreHistory}

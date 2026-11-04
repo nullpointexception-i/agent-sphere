@@ -48,6 +48,10 @@ public class AgentRun {
     private Integer retryAttempt;
     /** 本 run 实际使用的主模型路由（V116）；挂起恢复时用它，避免从实例重新解析导致换模型。 */
     private Long modelRouteId;
+    /** 本 run 固化的思考强度（V118）。 */
+    private String reasoningEffort;
+    /** 本 run 固化的思考预算（Qwen thinking_budget，V118）。 */
+    private Integer reasoningBudgetTokens;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

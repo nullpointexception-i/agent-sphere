@@ -1,5 +1,6 @@
 package com.buukle.agent.model.dtvo.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
@@ -14,6 +15,7 @@ import java.util.Map;
  * 未设置的字段保持 null，序列化时由请求 DTO 的 NON_NULL 策略剔除。
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class LlmSamplingConfigDTO implements Serializable {
     private Double temperature;
     @JsonProperty("max_tokens")
@@ -29,9 +31,6 @@ public class LlmSamplingConfigDTO implements Serializable {
     private String thinking;
     /** reasoning 为 thinking 的兼容别名。 */
     private String reasoning;
-    /** DeepSeek 思考 token 配额，映射 ThinkingDTO.budget_tokens。 */
-    @JsonProperty("budget_tokens")
-    private Integer budgetTokens;
     private Long seed;
     @JsonProperty("reasoning_effort")
     private String reasoningEffort;

@@ -18,6 +18,9 @@ interface ChatMainProps {
   selectedModelRouteId?: number;
   onModelRouteChange: (id: number | undefined) => void;
   modelRoutes: any[];
+  reasoningCapability?: any;
+  reasoningEffort?: string;
+  onReasoningChange: (level: string) => void;
   sseConnected: boolean;
   messages: any[];
   /** 统一 Timeline 打平行（替代旧多源拼装渲染）。 */
@@ -71,6 +74,9 @@ export default function ChatMain({
   selectedModelRouteId,
   onModelRouteChange,
   modelRoutes,
+  reasoningCapability,
+  reasoningEffort,
+  onReasoningChange,
   sseConnected,
   messages,
   timeline,
@@ -234,6 +240,9 @@ export default function ChatMain({
         selectedModelRouteId={selectedModelRouteId}
         onModelRouteChange={onModelRouteChange}
         modelRoutes={modelRoutes}
+        reasoningCapability={reasoningCapability}
+        reasoningEffort={reasoningEffort}
+        onReasoningChange={onReasoningChange}
         sseConnected={sseConnected}
         sessionPanelOpen={sessionPanelOpen}
         onTogglePanel={onTogglePanel}

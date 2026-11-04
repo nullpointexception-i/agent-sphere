@@ -105,8 +105,7 @@ class SessionRunnerAttachmentTest {
                 compactionService, inputManager, runPromptBuilder, toolExecutor, titleService,
                 toolCallRecordSpi, redissonClient, attachmentResolver,
                 new com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer(
-                        org.mockito.Mockito.mock(com.buukle.agent.common.config.SystemConfigSpi.class),
-                        new com.buukle.agent.common.config.AgentRuntimeProperties()),
+                        org.mockito.Mockito.mock(com.buukle.agent.common.config.SystemConfigSpi.class)),
                 org.mockito.Mockito.mock(com.buukle.agent.instance.spi.ToolApprovalGrantSpi.class),
                 org.mockito.Mockito.mock(com.buukle.agent.runtime.kernel.service.ToolApprovalService.class));
     }

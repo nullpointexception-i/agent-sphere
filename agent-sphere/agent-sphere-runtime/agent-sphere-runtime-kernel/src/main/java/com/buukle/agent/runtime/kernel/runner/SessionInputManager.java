@@ -32,20 +32,22 @@ public class SessionInputManager {
     private final RedissonClient redissonClient;
 
     public void steer(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume,
-                      List<PreparedAttachment> attachments) {
+                      List<PreparedAttachment> attachments, String reasoningEffort) {
         InputMessage msg = new InputMessage(UUID.randomUUID().toString(), text, modelRouteId,
                 System.currentTimeMillis(), isClarificationResume,
-                attachments != null ? attachments : Collections.emptyList());
+                attachments != null ? attachments : Collections.emptyList(),
+                reasoningEffort);
         steerBucket(sessionId).set(msg);
         log.debug("Steer input set for session {}", sessionId);
     }
 
     /** @return queueId, used by the caller to expose withdraw. */
     public String queue(Long sessionId, String text, Long modelRouteId, boolean isClarificationResume,
-                        List<PreparedAttachment> attachments) {
+                        List<PreparedAttachment> attachments, String reasoningEffort) {
         InputMessage msg = new InputMessage(UUID.randomUUID().toString(), text, modelRouteId,
                 System.currentTimeMillis(), isClarificationResume,
-                attachments != null ? attachments : Collections.emptyList());
+                attachments != null ? attachments : Collections.emptyList(),
+                reasoningEffort);
         queueList(sessionId).add(msg);
         log.debug("Queued input for session {} queueId={}", sessionId, msg.queueId());
         return msg.queueId();
@@ -128,7 +130,9 @@ public class SessionInputManager {
 
     public record InputMessage(String queueId, String text, Long modelRouteId, long timestamp,
                                boolean isClarificationResume,
-                               List<PreparedAttachment> attachments) {
+                               List<PreparedAttachment> attachments,
+                               /** 用户为该条消息选择的思考强度；空则按输出预算动态默认。 */
+                               String reasoningEffort) {
         public InputMessage {
             attachments = attachments != null ? attachments : Collections.emptyList();
         }
@@ -137,7 +141,7 @@ public class SessionInputManager {
                             boolean isClarificationResume,
                             List<PreparedAttachment> attachments) {
             this(UUID.randomUUID().toString(), text, modelRouteId, timestamp,
-                    isClarificationResume, attachments);
+                    isClarificationResume, attachments, null);
         }
     }
 }

@@ -94,6 +94,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                 .set(AgentLlmInteractionRecord::getRequestBody, vo.getRequestBody())
                 .set(AgentLlmInteractionRecord::getResponseBody, vo.getResponseBody())
                 .set(AgentLlmInteractionRecord::getHttpStatus, vo.getHttpStatus())
+                .set(AgentLlmInteractionRecord::getFinishReason, vo.getFinishReason())
                 .set(AgentLlmInteractionRecord::getDurationMs, vo.getDurationMs())
                 .set(AgentLlmInteractionRecord::getErrorMessage, vo.getErrorMessage())
                 .set(AgentLlmInteractionRecord::getSuccess, vo.getSuccess())
@@ -174,6 +175,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         record.setRequestBody(vo.getRequestBody());
         record.setResponseBody(vo.getResponseBody());
         record.setHttpStatus(vo.getHttpStatus());
+        record.setFinishReason(vo.getFinishReason());
         record.setDurationMs(vo.getDurationMs());
         record.setErrorMessage(vo.getErrorMessage());
         record.setSuccess(vo.getSuccess());
@@ -305,6 +307,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         vo.setRequestBody(record.getRequestBody());
         vo.setResponseBody(record.getResponseBody());
         vo.setHttpStatus(record.getHttpStatus());
+        vo.setFinishReason(record.getFinishReason());
         vo.setDurationMs(record.getDurationMs());
         vo.setErrorMessage(record.getErrorMessage());
         vo.setSuccess(record.getSuccess());

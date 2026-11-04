@@ -44,7 +44,6 @@ public final class LlmSamplingConfigMapper {
         if (instance.getStop() != null) merged.setStop(instance.getStop());
         if (instance.getThinking() != null) merged.setThinking(instance.getThinking());
         if (instance.getReasoning() != null) merged.setReasoning(instance.getReasoning());
-        if (instance.getBudgetTokens() != null) merged.setBudgetTokens(instance.getBudgetTokens());
         if (instance.getSeed() != null) merged.setSeed(instance.getSeed());
         if (instance.getReasoningEffort() != null) merged.setReasoningEffort(instance.getReasoningEffort());
         if (instance.getMaxCompletionTokens() != null) merged.setMaxCompletionTokens(instance.getMaxCompletionTokens());
@@ -72,7 +71,6 @@ public final class LlmSamplingConfigMapper {
         String thinkingType = resolveThinkingType(thinkingValue);
         if (thinkingType != null && !thinkingType.isBlank()) {
             ThinkingDTO thinking = new ThinkingDTO().setType(thinkingType);
-            if (cfg.getBudgetTokens() != null) thinking.setBudgetTokens(cfg.getBudgetTokens());
             request.setThinking(thinking);
         }
         if (cfg.getSeed() != null) request.setSeed(cfg.getSeed());

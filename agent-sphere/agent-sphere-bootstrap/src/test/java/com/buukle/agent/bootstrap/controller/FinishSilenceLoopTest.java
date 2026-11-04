@@ -176,7 +176,7 @@ class FinishSilenceLoopTest {
                 eventPublisher, routeListBuilder, new FallbackRouteExecutor(), historyLoader,
                 compactionService, inputManager, new RunPromptBuilder(), toolExecutor, titleService,
                 toolCallRecordSpi, redis, attachmentResolver,
-                new LlmRequestConfigurer(mock(SystemConfigSpi.class), new com.buukle.agent.common.config.AgentRuntimeProperties()), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
+                new LlmRequestConfigurer(mock(SystemConfigSpi.class)), mock(ToolApprovalGrantSpi.class), mock(ToolApprovalService.class));
         try {
             java.lang.reflect.Field field = SessionRunner.class.getDeclaredField("pendingWaitSpi");
             field.setAccessible(true);

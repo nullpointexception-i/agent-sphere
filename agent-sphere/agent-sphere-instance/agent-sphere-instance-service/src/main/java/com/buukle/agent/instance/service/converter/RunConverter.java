@@ -34,6 +34,8 @@ public class RunConverter {
         vo.setWaitKind(run.getWaitKind());
         vo.setRetryAttempt(run.getRetryAttempt());
         vo.setModelRouteId(run.getModelRouteId());
+        vo.setReasoningEffort(run.getReasoningEffort());
+        vo.setReasoningBudgetTokens(run.getReasoningBudgetTokens());
         vo.setCreatedBy(run.getCreatedBy());
         vo.setCreatedAt(run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
         return vo;
@@ -48,6 +50,7 @@ public class RunConverter {
                 ? JsonUtils.toJson(dto.getAttachments()) : null);
         run.setStatus(RunEnum.STATUS_PENDING);
         run.setRunMode(dto.getRunMode() != null ? dto.getRunMode() : RunMode.WRITE.name());
+        run.setReasoningEffort(dto.getReasoningEffort());
         return run;
     }
 
@@ -72,6 +75,8 @@ public class RunConverter {
         run.setWaitKind(vo.getWaitKind());
         run.setRetryAttempt(vo.getRetryAttempt());
         run.setModelRouteId(vo.getModelRouteId());
+        run.setReasoningEffort(vo.getReasoningEffort());
+        run.setReasoningBudgetTokens(vo.getReasoningBudgetTokens());
         return run;
     }
 

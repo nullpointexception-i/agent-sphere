@@ -105,15 +105,62 @@ buukle:
       stream-timeout: 600s                         # 流式总超时（含思考）；长文/大输出需要更长预算 / Stream total timeout
       stream-max-retries: 2                        # 流式瞬时失败(chunks=0)重试次数 / Stream transient retries
       stream-retry-delay: 1s                       # 流式重试固定退避 / Stream retry fixed backoff
-      # reasoning budget 动态计算：未显式配置 budget_tokens 时按本次输出上限计算
-      reasoning-budget:
-        enabled: true                              # 总开关 / Master switch
-        ratio: 0.5                                 # budget = 输出上限 × ratio
-        min-tokens: 1024                           # 最小 reasoning 预算 / Min reasoning budget
-        max-tokens: 8192                           # reasoning 预算绝对上限 / Max reasoning budget
-        min-answer-ratio: 0.25                     # 至少留给正文的比例 / Min answer ratio
-        providers:                                 # 仅对这些厂商注入 budget_tokens
-          - deepseek
+      # 统一思考强度：全局阈值 + 各厂商默认支持范围。
+      # 厂商/路由配置只做覆盖；默认档位按实际 max_tokens 动态计算。
+      reasoning:
+        answer-reserve-ratio: 0.25                 # 正文保留比例 / Answer reserve ratio
+        min-answer-tokens: 1024                    # 正文至少保留 token / Min answer tokens
+        min-thinking-budget: 1024                  # Qwen thinking_budget 下限 / Min Qwen thinking budget
+        level-order:                               # 强度从低到高 / Level order
+          - none
+          - minimal
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
+        levels:                                    # 全局档位阈值（最低输出预算）
+          none:
+            min-output-tokens: 0
+          minimal:
+            min-output-tokens: 2048
+          low:
+            min-output-tokens: 4096
+          medium:
+            min-output-tokens: 8192
+          high:
+            min-output-tokens: 16384
+          xhigh:
+            min-output-tokens: 32768
+          max:
+            min-output-tokens: 65536
+        default-levels: [low, medium, high, max]
+        providers:                                 # 厂商默认支持范围 / Provider defaults
+          deepseek:
+            supported: true
+            mode: levels
+            levels: [none, low, high, max]
+          openai:
+            supported: true
+            mode: levels
+            levels: [low, medium, high, xhigh, max]
+          glm:
+            supported: true
+            mode: levels
+            levels: [low, high, max]
+          qwen:
+            supported: true
+            mode: levels
+            levels: [none, low, medium, high, max]
+            thinking-budget-supported: true
+          orcarouter:
+            supported: true
+            mode: levels
+            levels: [low, medium, high]
+          cheaperinference:
+            supported: true
+            mode: levels
+            levels: [low, medium, high]
 
     # ============================================================
     # Runner 执行引擎配置 / Runner Config

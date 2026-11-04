@@ -49,6 +49,10 @@ public class RouteConverter {
         vo.setCompany(route.getCompany());
         vo.setSupportsAttachment(route.getSupportsAttachment());
         vo.setCompletionProtocol(route.getCompletionProtocol());
+        vo.setReasoningSupported(route.getReasoningSupported());
+        vo.setReasoningMode(route.getReasoningMode());
+        vo.setReasoningLevels(route.getReasoningLevels());
+        vo.setReasoningAnswerReserveRatio(route.getReasoningAnswerReserveRatio());
         vo.setCreatedAt(route.getCreatedAt() != null ? route.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(route.getCreatedBy());
         vo.setUpdatedBy(route.getUpdatedBy());
@@ -73,6 +77,10 @@ public class RouteConverter {
             route.setCompletionProtocol(com.buukle.agent.common.constant.CompletionProtocol
                     .from(dto.getCompletionProtocol()).name());
         }
+        route.setReasoningSupported(dto.getReasoningSupported());
+        route.setReasoningMode(dto.getReasoningMode());
+        route.setReasoningLevels(dto.getReasoningLevels());
+        route.setReasoningAnswerReserveRatio(dto.getReasoningAnswerReserveRatio());
         return route;
     }
 }

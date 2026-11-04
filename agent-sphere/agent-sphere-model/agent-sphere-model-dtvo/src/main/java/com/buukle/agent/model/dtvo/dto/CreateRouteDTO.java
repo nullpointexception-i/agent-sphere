@@ -23,4 +23,10 @@ public class CreateRouteDTO implements Serializable {
     private Boolean supportsAttachment;
     /** STRICT_FINISH by default; IMPLICIT_TEXT only for compatible conversational models. */
     private String completionProtocol;
+    /** 思考强度覆盖：NULL=继承厂商。 */
+    private Boolean reasoningSupported;
+    private String reasoningMode;
+    /** JSON 数组字符串，如 ["low","high","max"]。 */
+    private String reasoningLevels;
+    private java.math.BigDecimal reasoningAnswerReserveRatio;
 }

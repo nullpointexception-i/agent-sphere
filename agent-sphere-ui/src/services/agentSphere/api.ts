@@ -177,12 +177,13 @@ export const agentApi = {
       modelRouteId?: number,
       attachmentKeys?: string[],
       runMode?: string,
+      reasoningEffort?: string,
     ) =>
       request<{ runId: number; status: string; assistantReply?: string; queueId?: string }>(
         `${BASE}/runtime/${id}/chat`,
         {
           method: 'POST',
-          data: { message, modelRouteId, attachmentKeys, runMode },
+          data: { message, modelRouteId, attachmentKeys, runMode, reasoningEffort },
         },
       ),
     getTodos: (id: number) =>
@@ -195,6 +196,20 @@ export const agentApi = {
       request<any[]>(`${BASE}/runtime/${id}/queue`),
     getRuntimeState: (id: number) =>
       request<any>(`${BASE}/runtime/${id}/state`),
+    getReasoningCapability: (id: number, modelRouteId?: number) =>
+      request<{
+        supported: boolean;
+        mode: string;
+        effectiveMaxOutputTokens?: number;
+        answerReserveTokens?: number;
+        defaultLevel?: string;
+        selectedLevel?: string;
+        running: boolean;
+        runId?: number;
+        levels: { value: string; minOutputTokens: number; feasible: boolean }[];
+      }>(
+        `${BASE}/runtime/${id}/reasoning${modelRouteId != null ? `?modelRouteId=${modelRouteId}` : ''}`,
+      ),
     withdrawQueue: (id: number, queueId: string) =>
       request<{ result: string }>(`${BASE}/runtime/${id}/queue/${queueId}`, { method: 'DELETE' }),
     feedback: (sessionId: number, interactionId: number, runId: number | null | undefined, value: string) =>

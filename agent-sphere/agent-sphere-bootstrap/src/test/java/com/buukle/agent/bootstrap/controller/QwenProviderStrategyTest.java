@@ -279,4 +279,51 @@ class QwenProviderStrategyTest {
         assertEquals("user", m.get(3).getRole(), "尾部 system 仍要降级为 user");
         assertEquals("trailing system fixture: t", m.get(3).getContent());
     }
+
+    // ---- 统一思考强度：档位 → enable_thinking / thinking_budget ----
+
+    @Test
+    void adaptRequest_mapsNoneToDisabledThinking() {
+        ChatCompletionRequestDTO req = request(
+                new ChatMessageDTO().setRole("user").setContent("hi"));
+        req.setReasoningEffort("none");
+        req.setThinkingBudget(4096);
+
+        qwen.adaptRequest(req);
+
+        assertEquals(Boolean.FALSE, req.getEnableThinking(), "none 必须关掉思考");
+        assertNull(req.getThinkingBudget(), "关闭思考时不应再发 budget");
+        assertNull(req.getReasoningEffort(), "Qwen 不认 reasoning_effort，必须剔除");
+    }
+
+    @Test
+    void adaptRequest_mapsLevelToEnabledThinkingAndBudget() {
+        ChatCompletionRequestDTO req = request(
+                new ChatMessageDTO().setRole("user").setContent("hi"));
+        req.setReasoningEffort("high");
+        req.setThinkingBudget(12000);
+
+        qwen.adaptRequest(req);
+
+        assertEquals(Boolean.TRUE, req.getEnableThinking());
+        assertEquals(12000, req.getThinkingBudget());
+
+        String json = JsonUtils.toJson(req);
+        assertTrue(json.contains("\"enable_thinking\":true"), json);
+        assertTrue(json.contains("\"thinking_budget\":12000"), json);
+        assertFalse(json.contains("reasoning_effort"), json);
+        assertFalse(json.contains("\"thinking\""), "内部 thinking 字段不得透传");
+    }
+
+    @Test
+    void adaptRequest_withoutReasoningEffort_keepsBudgetAsConfigured() {
+        ChatCompletionRequestDTO req = request(
+                new ChatMessageDTO().setRole("user").setContent("hi"));
+        req.setThinkingBudget(8000);
+
+        qwen.adaptRequest(req);
+
+        assertNull(req.getEnableThinking(), "未指定档位时由实例配置决定");
+        assertEquals(8000, req.getThinkingBudget());
+    }
 }

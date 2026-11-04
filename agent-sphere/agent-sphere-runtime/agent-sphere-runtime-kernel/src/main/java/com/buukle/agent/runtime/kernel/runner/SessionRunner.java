@@ -464,6 +464,7 @@ public class SessionRunner {
                 dto.setSessionId(sessionId);
                 dto.setType(RunEnum.TYPE_AUTO);
                 dto.setUserMessage(input.text());
+                dto.setReasoningEffort(input.reasoningEffort());
                 currentRun = runSpi.createRun(dto);
                 currentRunId = currentRun.getId();
             }
@@ -1528,10 +1529,15 @@ public class SessionRunner {
                             route.getMaxInputTokens() != null
                                     ? route.getMaxInputTokens() : RunnerConstants.DEFAULT_MAX_INPUT_TOKENS,
                             effectiveMaxOutputTokens);
-                    // reasoning budget 的上限同时受 tier 与路由允许输出约束；不改变 max_tokens 本身。
-                    Integer reasoningCap = minPositive(chatMaxOutputTokens, route.getMaxOutputTokens());
-                    // 采样参数接线：全局系统配置兜底 + 实例级 config 覆盖；并行工具行为保持默认开启（与现有多工具批一致）
-                    llmRequestConfigurer.applyChat(request, instanceConfig, reasoningCap, route.getCompany());
+                    // 采样参数接线：全局默认 + 实例 config 覆盖。
+                    llmRequestConfigurer.applyChat(request, instanceConfig);
+                    // 思考强度：run 固化档位 + Qwen 思考预算（V118）。
+                    if (ctx.getReasoningEffort() != null) {
+                        request.setReasoningEffort(ctx.getReasoningEffort());
+                    }
+                    if (ctx.getReasoningBudgetTokens() != null) {
+                        request.setThinkingBudget(ctx.getReasoningBudgetTokens());
+                    }
                     if (chatMaxOutputTokens != null && chatMaxOutputTokens > 0) {
                         request.setMaxTokens(chatMaxOutputTokens);
                     }

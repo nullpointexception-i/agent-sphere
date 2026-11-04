@@ -26,6 +26,10 @@ public class ChatCompletionRequestDTO implements Serializable {
     private ResponseFormatDTO responseFormat;
     @JsonProperty("thinking")
     private ThinkingDTO thinking;
+    @JsonProperty("enable_thinking")
+    private Boolean enableThinking;
+    @JsonProperty("thinking_budget")
+    private Integer thinkingBudget;
     @JsonProperty("tool_stream")
     private Boolean toolStream;
     private Double temperature;

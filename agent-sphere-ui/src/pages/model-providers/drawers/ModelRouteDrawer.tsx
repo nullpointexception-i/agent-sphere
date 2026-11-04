@@ -11,6 +11,7 @@ import {
   Drawer,
   Form,
   Input,
+  InputNumber,
   Modal,
   Select,
   Switch,
@@ -26,6 +27,29 @@ interface Props {
   open: boolean;
   providerId: number | null;
   onClose: () => void;
+}
+
+/** 统一思考强度档位：与后端 ReasoningEffort 保持一致。 */
+const REASONING_LEVELS = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+];
+
+/** 路由上的档位覆盖存 JSON 数组；解析失败视为「无覆盖」。 */
+function parseReasoningLevels(raw: any): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
@@ -69,6 +93,12 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
     setSubmitting(true);
     try {
       const values = await routeForm.validateFields();
+      // 思考强度覆盖是「三态」：inherit=null 表示继承厂商/全局。
+      const reasoningSupported =
+        values.reasoningSupported === 'inherit' ||
+        values.reasoningSupported == null
+          ? null
+          : values.reasoningSupported === 'true';
       const payload = {
         ...values,
         providerId: Number(values.providerId),
@@ -81,6 +111,17 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
           ? Number(values.maxOutputTokens) * 1000
           : null,
         supportsAttachment: !!values.supportsAttachment,
+        reasoningSupported,
+        reasoningMode: reasoningSupported == null ? null : 'levels',
+        reasoningLevels:
+          Array.isArray(values.reasoningLevels) &&
+          values.reasoningLevels.length > 0
+            ? JSON.stringify(values.reasoningLevels)
+            : null,
+        reasoningAnswerReserveRatio:
+          values.reasoningAnswerReserveRatio == null
+            ? null
+            : Number(values.reasoningAnswerReserveRatio),
       };
       if (editingRoute) {
         await agentApi.routes.update(editingRoute.id, payload);
@@ -178,6 +219,15 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
                   maxOutputTokens: record.maxOutputTokens
                     ? String(record.maxOutputTokens / 1000)
                     : '',
+                  reasoningSupported:
+                    record.reasoningSupported == null
+                      ? 'inherit'
+                      : String(record.reasoningSupported),
+                  reasoningLevels: parseReasoningLevels(
+                    record.reasoningLevels,
+                  ),
+                  reasoningAnswerReserveRatio:
+                    record.reasoningAnswerReserveRatio ?? undefined,
                 });
                 setRouteFormOpen(true);
               }}
@@ -423,6 +473,88 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
               })}
             />
           </Form.Item>
+          <Form.Item
+            name="reasoningSupported"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.models.reasoningSupported',
+                defaultMessage: 'Supports reasoning',
+              }),
+              intl.formatMessage({
+                id: 'pages.models.reasoningSupportedHint',
+                defaultMessage:
+                  'Leave empty to inherit the provider config',
+              }),
+            )}
+            initialValue="inherit"
+          >
+            <Select
+              options={[
+                {
+                  value: 'inherit',
+                  label: intl.formatMessage({
+                    id: 'pages.models.reasoning.inherit',
+                    defaultMessage: 'Inherit',
+                  }),
+                },
+                {
+                  value: 'true',
+                  label: intl.formatMessage({
+                    id: 'pages.models.reasoning.supported',
+                    defaultMessage: 'Supported',
+                  }),
+                },
+                {
+                  value: 'false',
+                  label: intl.formatMessage({
+                    id: 'pages.models.reasoning.unsupported',
+                    defaultMessage: 'Not supported',
+                  }),
+                },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="reasoningLevels"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.models.reasoningLevels',
+                defaultMessage: 'Levels',
+              }),
+              intl.formatMessage({
+                id: 'pages.models.reasoningLevelsHint',
+                defaultMessage:
+                  'Leave empty to inherit the provider default levels',
+              }),
+            )}
+          >
+            <Select
+              mode="multiple"
+              allowClear
+              options={REASONING_LEVELS.map((v) => ({ value: v, label: v }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="reasoningAnswerReserveRatio"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.models.reasoningReserveRatio',
+                defaultMessage: 'Answer reserve ratio',
+              }),
+              intl.formatMessage({
+                id: 'pages.models.reasoningReserveRatioHint',
+                defaultMessage:
+                  '0-1; leave empty to inherit provider/global (default 0.25)',
+              }),
+            )}
+          >
+            <InputNumber
+              min={0}
+              max={1}
+              step={0.05}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
         </Form>
       </Modal>
       <Modal
@@ -469,6 +601,36 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
                   defaultMessage: 'Completion Protocol',
                 }),
                 value: viewRoute?.completionProtocol || 'STRICT_FINISH',
+              },
+              {
+                label: intl.formatMessage({
+                  id: 'pages.models.reasoning',
+                  defaultMessage: 'Reasoning',
+                }),
+                value:
+                  viewRoute?.reasoningSupported == null
+                    ? intl.formatMessage({
+                        id: 'pages.models.reasoning.inherit',
+                        defaultMessage: 'Inherit',
+                      })
+                    : viewRoute.reasoningSupported
+                      ? intl.formatMessage({
+                          id: 'pages.models.reasoning.supported',
+                          defaultMessage: 'Supported',
+                        })
+                      : intl.formatMessage({
+                          id: 'pages.models.reasoning.unsupported',
+                          defaultMessage: 'Not supported',
+                        }),
+              },
+              {
+                label: intl.formatMessage({
+                  id: 'pages.models.reasoningLevels',
+                  defaultMessage: 'Levels',
+                }),
+                value:
+                  parseReasoningLevels(viewRoute?.reasoningLevels).join(', ') ||
+                  '-',
               },
               {
                 label: intl.formatMessage({

@@ -1,12 +1,16 @@
 package com.buukle.agent.common.config;
 
+import com.buukle.agent.common.constant.ReasoningEffort;
+import com.buukle.agent.common.constant.ReasoningMode;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Component
@@ -214,23 +218,65 @@ public class AgentRuntimeProperties {
         private int streamMaxRetries = 2;
         /** 流式重试固定退避时长。 */
         private Duration streamRetryDelay = Duration.ofSeconds(1);
-        /** reasoning budget 动态计算配置（未显式配置 budget_tokens 时生效）。 */
-        private ReasoningBudgetConfig reasoningBudget = new ReasoningBudgetConfig();
+        /** 统一思考强度配置：全局阈值 + 各厂商默认支持范围。 */
+        private ReasoningConfig reasoning = new ReasoningConfig();
 
         @Data
-        public static class ReasoningBudgetConfig {
-            /** 总开关。 */
-            private boolean enabled = true;
-            /** budget = 输出上限 × ratio。 */
-            private double ratio = 0.5;
-            /** 最小 reasoning 预算；低于该值不注入。 */
-            private int minTokens = 1024;
-            /** reasoning 预算绝对上限。 */
-            private int maxTokens = 8192;
-            /** 至少给正文/工具调用留出的比例。 */
-            private double minAnswerRatio = 0.25;
-            /** 仅对这些厂商注入 budget_tokens（DeepSeek 网关支持）。 */
-            private List<String> providers = new ArrayList<>(List.of("deepseek"));
+        public static class ReasoningConfig {
+            /** 正文保留比例：answerReserve = max(minAnswerTokens, maxOutput * ratio)。 */
+            private double answerReserveRatio = 0.25;
+            /** 正文至少保留的 token 数。 */
+            private int minAnswerTokens = 1024;
+            /** Qwen 思考预算下限。 */
+            private int minThinkingBudget = 1024;
+            /** 强度从低到高，用于“最高可行档”排序。 */
+            private List<String> levelOrder = new ArrayList<>(ReasoningEffort.ORDER);
+            /** 档位默认阈值（厂商/路由未覆盖时使用）。 */
+            private Map<String, LevelConfig> levels = defaultLevels();
+            /** 厂商默认支持范围；key = ModelProviderCompany.value（由 application.yml 提供）。 */
+            private Map<String, ProviderReasoningConfig> providers = new LinkedHashMap<>();
+            /** 厂商未配置 levels 时的兜底档位。 */
+            private List<String> defaultLevels = new ArrayList<>(ReasoningEffort.DEFAULT_LEVELS);
+
+            private static Map<String, LevelConfig> defaultLevels() {
+                Map<String, LevelConfig> map = new LinkedHashMap<>();
+                map.put(ReasoningEffort.NONE, level(0));
+                map.put(ReasoningEffort.MINIMAL, level(2048));
+                map.put(ReasoningEffort.LOW, level(4096));
+                map.put(ReasoningEffort.MEDIUM, level(8192));
+                map.put(ReasoningEffort.HIGH, level(16384));
+                map.put(ReasoningEffort.XHIGH, level(32768));
+                map.put(ReasoningEffort.MAX, level(65536));
+                return map;
+            }
+
+            private static LevelConfig level(long minOutputTokens) {
+                LevelConfig cfg = new LevelConfig();
+                cfg.setMinOutputTokens(minOutputTokens);
+                return cfg;
+            }
+        }
+
+        @Data
+        public static class LevelConfig {
+            /** 该档位建议的最低输出预算（token）。 */
+            private long minOutputTokens;
+        }
+
+        @Data
+        public static class ProviderReasoningConfig {
+            /** 是否支持思考强度。 */
+            private boolean supported = false;
+            /** 统一使用 levels；保留字段便于以后扩展。 */
+            private String mode = ReasoningMode.LEVELS;
+            /** 支持档位；空则使用全局 default-levels。 */
+            private List<String> levels = new ArrayList<>();
+            /** 厂商级正文保留比例；空则继承全局。 */
+            private Double answerReserveRatio;
+            /** 厂商级档位阈值覆盖。 */
+            private Map<String, Long> levelOverrides = new LinkedHashMap<>();
+            /** Qwen 网关是否支持 thinking_budget；false 时只发 enable_thinking。 */
+            private boolean thinkingBudgetSupported = true;
         }
     }
 

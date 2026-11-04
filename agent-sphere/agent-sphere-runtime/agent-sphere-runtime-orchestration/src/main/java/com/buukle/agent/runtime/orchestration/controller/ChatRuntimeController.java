@@ -86,6 +86,13 @@ public class ChatRuntimeController {
         return ResponseEntity.ok(chatRuntimeService.getState(sessionId));
     }
 
+    /** 思考强度能力：可选档位、动态默认、不可行警告。 */
+    @GetMapping("/{sessionId}/reasoning")
+    public ResponseEntity<?> reasoning(@PathVariable Long sessionId,
+                                       @RequestParam(required = false) Long modelRouteId) {
+        return ResponseEntity.ok(chatRuntimeService.reasoningCapability(sessionId, modelRouteId));
+    }
+
     @PostMapping("/{sessionId}/run/{runId}/clarifications/resolve")
     public ResponseEntity<?> resolveClarifications(@PathVariable Long sessionId,
                                                     @PathVariable Long runId,

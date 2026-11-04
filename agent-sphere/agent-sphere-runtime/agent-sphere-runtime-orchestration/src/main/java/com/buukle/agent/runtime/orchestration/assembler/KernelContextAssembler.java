@@ -14,6 +14,8 @@ public class KernelContextAssembler {
                 .session(session)
                 .run(run)
                 .userMessage(userMessage)
+                .reasoningEffort(run == null ? null : run.getReasoningEffort())
+                .reasoningBudgetTokens(run == null ? null : run.getReasoningBudgetTokens())
                 .build();
     }
 }

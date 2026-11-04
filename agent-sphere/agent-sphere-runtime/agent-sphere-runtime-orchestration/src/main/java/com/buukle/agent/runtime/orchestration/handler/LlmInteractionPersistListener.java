@@ -45,6 +45,7 @@ public class LlmInteractionPersistListener {
         vo.setSuccess(event.isSuccess());
         vo.setErrorMessage(event.getErrorMessage());
         vo.setHttpStatus(meta.getHttpStatus());
+        vo.setFinishReason(event.getFinishReason());
         TokenUsage usage = event.getUsage();
         if (usage != null) {
             vo.setUsage(JsonUtils.toJson(usage));

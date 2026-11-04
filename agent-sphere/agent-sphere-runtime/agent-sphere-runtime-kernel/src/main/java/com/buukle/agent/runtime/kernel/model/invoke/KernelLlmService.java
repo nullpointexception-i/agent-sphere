@@ -81,6 +81,8 @@ public class KernelLlmService {
             StringBuilder textCollector = new StringBuilder();
             StringBuilder reasoningCollector = new StringBuilder();
             AtomicReference<Map<String, Object>> usageRef = new AtomicReference<>();
+            // 真实终止原因：finish_reason=length/content_filter 必须可审计（截断不能当成功）。
+            AtomicReference<String> finishReasonRef = new AtomicReference<>();
             /**
              * 供应商以 <b>事件</b>（而非异常）回报的错误。
              *
@@ -119,8 +121,11 @@ public class KernelLlmService {
                                             httpStatusRef.set(error.httpStatus());
                                         }
                                         onEvent.accept(event);
-                                    } else if (event instanceof LLMEvent.Finish(String reason, Map<String, Object> usage) && usage != null) {
-                                        usageRef.set(usage);
+                                    } else if (event instanceof LLMEvent.Finish(String reason, Map<String, Object> usage)) {
+                                        finishReasonRef.set(reason);
+                                        if (usage != null) {
+                                            usageRef.set(usage);
+                                        }
                                         onEvent.accept(event);
                                     } else {
                                         onEvent.accept(event);
@@ -168,7 +173,8 @@ public class KernelLlmService {
                         textCollector.length() > 0 ? textCollector.toString() : null,
                         reasoningCollector.length() > 0 ? reasoningCollector.toString() : null,
                         TokenUsage.from(usageRef.get()),
-                        System.currentTimeMillis() - start, !failed, finalError));
+                        System.currentTimeMillis() - start, !failed, finalError)
+                        .withFinishReason(finishReasonRef.get()));
             }
         });
 
@@ -193,6 +199,7 @@ public class KernelLlmService {
         StringBuilder reasoning = new StringBuilder();
         StringBuilder merged = new StringBuilder();
         AtomicReference<Map<String, Object>> usageRef = new AtomicReference<>();
+        AtomicReference<String> finishReasonRef = new AtomicReference<>();
         AtomicReference<Exception> failRef = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
 
@@ -207,6 +214,7 @@ public class KernelLlmService {
                         reasoning.append(r);
                         merged.append(r);
                     } else if (event instanceof LLMEvent.Finish(String reason, Map<String, Object> usage)) {
+                        finishReasonRef.set(reason);
                         if (usage != null) {
                             usageRef.set(usage);
                         }
@@ -234,7 +242,8 @@ public class KernelLlmService {
         eventPublisher.publishEvent(new LlmInteractionEvent(
                 this, meta, modelName, JsonUtils.toJson(request), merged.toString(),
                 null, null, TokenUsage.from(usageRef.get()),
-                System.currentTimeMillis() - start, success, errorMessage));
+                System.currentTimeMillis() - start, success, errorMessage)
+                .withFinishReason(finishReasonRef.get()));
 
         InvokeResult result = new InvokeResult();
         result.setSuccess(success);

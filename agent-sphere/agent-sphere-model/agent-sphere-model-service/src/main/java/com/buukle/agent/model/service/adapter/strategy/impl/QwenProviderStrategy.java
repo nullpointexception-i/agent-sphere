@@ -1,5 +1,6 @@
 package com.buukle.agent.model.service.adapter.strategy.impl;
 
+import com.buukle.agent.common.constant.ReasoningEffort;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
@@ -43,8 +44,17 @@ public class QwenProviderStrategy implements ProviderStrategy {
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
         // Qwen3 是 OpenAI 兼容接口；thinking / tool_stream 是本系统给智谱/DeepSeek 用的内部字段
+        // Qwen 的思考开关用 enable_thinking，思考预算用 thinking_budget；统一档位在 reasoning_effort。
         request.setThinking(null);
         request.setToolStream(null);
+        if (request.getReasoningEffort() != null) {
+            boolean off = ReasoningEffort.NONE.equalsIgnoreCase(request.getReasoningEffort());
+            request.setEnableThinking(!off);
+            if (off) {
+                request.setThinkingBudget(null);
+            }
+        }
+        request.setReasoningEffort(null);
 
         List<ChatMessageDTO> messages = request.getMessages();
         if (messages == null) {

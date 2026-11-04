@@ -33,6 +33,8 @@ public class AgentLlmInteractionRecord {
     private String responseBody;
     private Integer httpStatus;
     private Integer durationMs;
+    /** 供应商真实 finish_reason（stop/length/content_filter/tool_calls），截断可审计。 */
+    private String finishReason;
     private String errorMessage;
     private Boolean success;
     /** 该次 LLM 调用独立的 thinking(reasoning_content) 全文；与 response_body(reply+合并) 拆分。 */

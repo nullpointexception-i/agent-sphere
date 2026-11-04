@@ -24,6 +24,7 @@ public class AgentLlmInteractionRecordVO implements Serializable {
     private String requestBody;
     private String responseBody;
     private Integer httpStatus;
+    private String finishReason;
     private Integer durationMs;
     private String errorMessage;
     private Boolean success;

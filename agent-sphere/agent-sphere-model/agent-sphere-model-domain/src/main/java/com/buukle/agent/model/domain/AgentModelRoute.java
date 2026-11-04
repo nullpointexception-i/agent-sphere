@@ -21,6 +21,14 @@ public class AgentModelRoute {
     private Boolean supportsAttachment;
     /** Completion contract for this model route: STRICT_FINISH / IMPLICIT_TEXT. */
     private String completionProtocol;
+    /** 思考强度：NULL=继承厂商；true/false=覆盖。 */
+    private Boolean reasoningSupported;
+    /** 思考强度模式：levels。 */
+    private String reasoningMode;
+    /** 覆盖档位（JSON 数组，如 ["low","high","max"]）。 */
+    private String reasoningLevels;
+    /** 覆盖正文保留比例；NULL=继承厂商/全局。 */
+    private java.math.BigDecimal reasoningAnswerReserveRatio;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

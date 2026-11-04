@@ -1,7 +1,6 @@
 package com.buukle.agent.model.dtvo.dto.complete;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
@@ -12,7 +11,4 @@ import java.io.Serializable;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ThinkingDTO implements Serializable {
     private String type;
-    /** DeepSeek 思考 token 配额（reasoning 阶段的预算上限）。 */
-    @JsonProperty("budget_tokens")
-    private Integer budgetTokens;
 }

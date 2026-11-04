@@ -15,6 +15,8 @@ public class LlmInteractionEvent extends ApplicationEvent {
     private final long durationMs;
     private final boolean success;
     private final String errorMessage;
+    /** 真实终止原因（stop/length/content_filter/tool_calls）；null = 流未给出。 */
+    private String finishReason;
 
     public LlmInteractionEvent(Object source, LlmInteractionMeta meta, String modelName,
                                String requestBody, String responseBody, long durationMs,
@@ -92,5 +94,15 @@ public class LlmInteractionEvent extends ApplicationEvent {
 
     public String getErrorMessage() {
         return errorMessage;
+    }
+
+    public String getFinishReason() {
+        return finishReason;
+    }
+
+    /** 链式补充终止原因，避免为审计字段再加重载构造器。 */
+    public LlmInteractionEvent withFinishReason(String finishReason) {
+        this.finishReason = finishReason;
+        return this;
     }
 }

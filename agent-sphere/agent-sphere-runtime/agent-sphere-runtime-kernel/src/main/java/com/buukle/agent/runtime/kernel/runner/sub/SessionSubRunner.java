@@ -388,13 +388,19 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 if (!toolDefs.isEmpty()) {
                     request.setTools(toolDefs);
                 }
-                // 采样参数接线：全局兜底 + 实例 config 覆盖；reasoning budget 按路由/实例输出上限动态计算
+                // 采样参数接线：全局兜底 + 实例 config 覆盖；思考强度沿用主 run 的 pin。
                 String instanceConfig = ctx.getKernelContext() != null
                         && ctx.getKernelContext().getAgentInstance() != null
                         ? ctx.getKernelContext().getAgentInstance().getConfig() : null;
-                Integer configuredOutput = llmRequestConfigurer.resolveMaxOutputTokens(instanceConfig);
-                Integer reasoningCap = minPositive(configuredOutput, route.getMaxOutputTokens());
-                llmRequestConfigurer.applyChat(request, instanceConfig, reasoningCap, route.getCompany());
+                llmRequestConfigurer.applyChat(request, instanceConfig);
+                if (ctx.getKernelContext() != null) {
+                    if (ctx.getKernelContext().getReasoningEffort() != null) {
+                        request.setReasoningEffort(ctx.getKernelContext().getReasoningEffort());
+                    }
+                    if (ctx.getKernelContext().getReasoningBudgetTokens() != null) {
+                        request.setThinkingBudget(ctx.getKernelContext().getReasoningBudgetTokens());
+                    }
+                }
                 CountDownLatch done = new CountDownLatch(1);
                 CompletableFuture<Void> future = kernelLlmService.stream(
                         route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(), request,

@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** LlmSamplingConfigDTO 共享映射层：merge（实例覆盖全局）与 apply 到请求。 */
+/** LlmSamplingConfigDTO 的共享映射层：merge（实例覆盖全局）与 apply 到请求。 */
 class LlmSamplingConfigMapperTest {
 
     @Test
@@ -22,7 +22,7 @@ class LlmSamplingConfigMapperTest {
 
         assertNotNull(merged);
         assertEquals(0.2, merged.getTemperature(), 0.001, "实例应覆盖全局温度");
-        assertEquals(1024, merged.getMaxTokens(), "全局未覆盖字段应保留");
+        assertEquals(1024, merged.getMaxTokens(), "全局未被覆盖字段应保留");
         assertEquals(42L, merged.getSeed(), "全局独有字段应保留");
     }
 
@@ -35,6 +35,7 @@ class LlmSamplingConfigMapperTest {
     @Test
     void apply_mapsAllFields() {
         ChatCompletionRequestDTO request = new ChatCompletionRequestDTO();
+        // 存量配置里的 budget_tokens 已废弃，必须被忽略而不是让整份配置解析失败。
         LlmSamplingConfigDTO cfg = LlmSamplingConfigMapper.fromJson(
                 "{\"temperature\":0.1,\"max_tokens\":2048,\"top_p\":0.9," +
                         "\"presence_penalty\":0.3,\"frequency_penalty\":0.2,\"stop\":[\"END\"]," +
@@ -57,7 +58,6 @@ class LlmSamplingConfigMapperTest {
         ThinkingDTO thinking = request.getThinking();
         assertNotNull(thinking);
         assertEquals("enabled", thinking.getType());
-        assertEquals(8192, thinking.getBudgetTokens());
     }
 
     @Test

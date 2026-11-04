@@ -25,4 +25,6 @@ public class CreateRunDTO implements Serializable {
 
     /** 聊天附件引用（图片）：发送侧校验通过后随创建落库，Timeline 读取侧据此回显。 */
     private List<RunAttachment> attachments;
+    /** 思考强度：low/medium/high/max；为空由后端动态计算。 */
+    private String reasoningEffort;
 }
