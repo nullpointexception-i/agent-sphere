@@ -115,7 +115,15 @@ public class RuntimeEventListener {
                 .setType(src.getType())
                 .setClarificationId(src.getClarificationId())
                 .setMultiple(src.getMultiple())
-                .setPrompt(src.getPrompt());
+                .setPrompt(src.getPrompt())
+                // 重试/状态行元数据：前端据此就地更新 run_status 行，不必再轮询
+                .setWaitKind(src.getWaitKind())
+                .setRetryAttempt(src.getRetryAttempt())
+                .setRetryMax(src.getRetryMax())
+                .setNextRetryAt(src.getNextRetryAt())
+                .setRetryHint(src.getRetryHint())
+                .setRetryHttpStatus(src.getRetryHttpStatus())
+                .setStatus(src.getStatus());
 
         String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
                 : (src.getToolName() != null ? src.getToolName() : "");
@@ -138,6 +146,8 @@ public class RuntimeEventListener {
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_FAILED -> "❌ Run failed";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_CANCELLED -> "⏹️ Run cancelled";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_AWAITING_USER -> "⏸️ Awaiting user confirmation";
+            case RuntimeEventTypeConstant.REASONING_SUB_TYPE_RUN_WAITING ->
+                    src.getAssistantReply() != null ? src.getAssistantReply() : "⏳ Waiting";
             default -> "";
         };
         dst.setResponse(text);
@@ -212,7 +222,8 @@ public class RuntimeEventListener {
                 flushReasoning(run);
                 runSpi.updateRun(run);
                 timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.COMPLETED.getCode());
-                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
+                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                        data.getSessionId(), run.getId(), status), status);
             }
             case FAILED -> {
                 run.setStatus(status.value());
@@ -226,27 +237,30 @@ public class RuntimeEventListener {
                 flushReasoning(run);
                 runSpi.updateRun(run);
                 timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.FAILED.getCode());
-                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
+                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                        data.getSessionId(), run.getId(), status), status);
             }
             case CANCELLED -> {
                 run.setStatus(status.value());
                 flushReasoning(run);
                 runSpi.updateRun(run);
                 timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.CANCELLED.getCode());
-                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
+                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                        data.getSessionId(), run.getId(), status), status);
             }
             case AWAITING_USER -> {
                 run.setStatus(status.value());
                 runSpi.updateRun(run);
-                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status);
+                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                        data.getSessionId(), run.getId(), status), status);
             }
             case WAITING -> {
                 // wait 挂起：与 AWAITING_USER 同属停车态 —— 更新 run 状态 + 记 timeline“等待中”行；
                 // 之后同一个 run 到点续跑，行会原位更新。
                 run.setStatus(status.value());
                 runSpi.updateRun(run);
-                timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status,
-                        retryTitle(data));
+                stampRunStatus(data, timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status,
+                        retryTitle(data)), status);
             }
         }
     }
@@ -278,6 +292,16 @@ public class RuntimeEventListener {
             sb.append(" · HTTP ").append(data.getRetryHttpStatus());
         }
         return sb.toString();
+    }
+
+    /** 把 run_status 行的 seq/title/state 带回 SSE 事件：前端无需再盲等一次 afterSeq 刷新。 */
+    private static void stampRunStatus(RuntimeEventDataVO data, TimelineRecorder.RunStatusRow row, RunStatus status) {
+        data.setStatus(status.value());
+        if (row != null && row.seq() > 0) {
+            data.setSeq(row.seq());
+            data.setKind(com.buukle.agent.instance.dtvo.enums.TimelineKind.RUN_STATUS.getCode());
+            data.setAssistantReply(row.title());
+        }
     }
 
     /** 累积该 run 的模型推理（thinking）文本：仅 llm 类型，排除系统状态行；终态一次性写入 run。

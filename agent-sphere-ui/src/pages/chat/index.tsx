@@ -1132,6 +1132,27 @@ export default function Chat() {
               refreshStateCoalesced(sid);
             }
 
+            // run_status 是「一个 run 一行、原地更新」：事件已带 seq/status/title，
+            // 直接就地合并；afterSeq 增量拿不到同 seq 的更新（重试次数不会刷新）。
+            if (d?.seq != null && d?.kind === 'run_status') {
+              const rsSeq = Number(d.seq);
+              const rsState =
+                d?.status ||
+                (tlSubType === 'run_waiting' ? 'WAITING' : undefined);
+              const rsText = d?.assistantReply || d?.response || '';
+              mergeTimeline([
+                {
+                  seq: rsSeq,
+                  runId: d?.runId != null ? Number(d.runId) : undefined,
+                  kind: 'run_status',
+                  state: rsState,
+                  subtype: d?.waitKind === 'LLM_RETRY' ? 'LLM_RETRY' : rsState,
+                  title: rsText,
+                  content: { text: rsText, state: rsState },
+                },
+              ]);
+            }
+
             // 上下文压缩：RUNNING 事件本地插行（后端已回填 seq/kind），输出 token 追加到正文。
             // 刻意不在 compaction_running 时 refreshLatest —— 浅合并会用「尚无正文」的权威行覆盖已流出的文字。
             if (d?.seq != null && d?.kind === 'compaction') {
@@ -1189,10 +1210,19 @@ export default function Chat() {
               ].includes(tlSubType) ||
               String(evtType).startsWith('clarification_')
             ) {
-              // 工具事件：整页覆盖刷新（补迟到落库的截图 images 等），避免 afterSeq 增量跳过既有工具行
+              // 工具事件：整页覆盖刷新（补迟到落库的截图 images 等），避免 afterSeq 增量跳过既有工具行。
+              // run_status 同理：行是原地更新的，afterSeq 拉不到同 seq 的新状态/重试次数。
+              const isRunStatusSub = [
+                'run_completed',
+                'run_failed',
+                'run_cancelled',
+                'run_awaiting_user',
+                'run_waiting',
+              ].includes(tlSubType);
               if (
                 tlSubType === 'tool_call_succeeded' ||
-                tlSubType === 'tool_call_failed'
+                tlSubType === 'tool_call_failed' ||
+                isRunStatusSub
               ) {
                 refreshTailCoalesced(sid);
               } else {

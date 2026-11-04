@@ -12,6 +12,7 @@ import com.buukle.agent.model.spi.ModelProviderSpi;
 import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.runtime.orchestration.exception.OrchestrationErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class RuntimeValidator {
 
     private final SessionSpi sessionSpi;
@@ -97,6 +99,8 @@ public class RuntimeValidator {
         if (overrideRouteId != null) {
             ModelRouteVO route = routeSpi.getRoute(overrideRouteId);
             if (route != null) return route;
+            // run 上 pin 的路由已被删除/停用：回落到实例当前配置，不让 run 因此卡死
+            log.warn("Pinned model route {} no longer exists; falling back to instance route", overrideRouteId);
         }
         // If instance has a specific modelRouteId, use it directly
         if (agentInstance.getModelRouteId() != null) {

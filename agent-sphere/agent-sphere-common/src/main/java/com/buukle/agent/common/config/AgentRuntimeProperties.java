@@ -74,23 +74,30 @@ public class AgentRuntimeProperties {
         /**
          * LLM 瞬时失败（超时 / 5xx / 429）的梯度退避（V115）。
          *
-         * <p>前 {@link #llmRetryInlineRungs} 档在同轮内 sleep 重试（快速抖动），
-         * 其余档**挂起**（run 置 WAITING，kind=LLM_RETRY），到点由 wait 调度器唤醒重跑同一轮。
-         * 上游 busy 往往持续几十秒到几分钟，纯 sleep 会长期占着 run。
+         * <p>采用「短步多次、锯齿」：前几档就地重试，之后每隔几档回到 1s/3s，
+         * 让一次几十秒的上游抖动能被多次快速重试接住，而不是一路指数退避到几分钟。
+         * 前 {@link #llmRetryInlineRungs} 档在同轮内 sleep，其余档挂起（WAITING，kind=LLM_RETRY）。
          */
         private java.util.List<java.time.Duration> llmRetryLadder = java.util.List.of(
-                java.time.Duration.ofSeconds(1),
-                java.time.Duration.ofSeconds(2),
-                java.time.Duration.ofSeconds(15),
-                java.time.Duration.ofSeconds(45),
-                java.time.Duration.ofMinutes(2),
-                java.time.Duration.ofMinutes(5));
+                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
+                java.time.Duration.ofSeconds(10), java.time.Duration.ofSeconds(15),
+                java.time.Duration.ofSeconds(20),
+                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
+                java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(20),
+                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
+                java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(20),
+                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
+                java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(20),
+                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
+                java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(20),
+                java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
+                java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(20));
         /** 前几档就地 sleep 重试；超过则挂起。 */
         private int llmRetryInlineRungs = 2;
         /** 挂起档的抖动比例（±），避免多 run 同时唤醒打满上游。 */
         private double llmRetryJitter = 0.2;
         /** 从第一次失败起的总重试窗口；超过即 FAILED。 */
-        private java.time.Duration llmRetryMaxTotal = java.time.Duration.ofMinutes(10);
+        private java.time.Duration llmRetryMaxTotal = java.time.Duration.ofMinutes(5);
         /** live 非浏览器工具结果单条压缩上限。 */
         private int liveToolResultMaxChars = 4000;
         /** live 非浏览器工具结果总预算；超出后更旧的结果用省略标记。 */

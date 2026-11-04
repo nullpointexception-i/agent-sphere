@@ -46,6 +46,8 @@ public class AgentRun {
     private String waitKind;
     /** 当前已发生的 LLM 瞬时失败次数（V115），用于梯度退避；成功一轮后归零。 */
     private Integer retryAttempt;
+    /** 本 run 实际使用的主模型路由（V116）；挂起恢复时用它，避免从实例重新解析导致换模型。 */
+    private Long modelRouteId;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

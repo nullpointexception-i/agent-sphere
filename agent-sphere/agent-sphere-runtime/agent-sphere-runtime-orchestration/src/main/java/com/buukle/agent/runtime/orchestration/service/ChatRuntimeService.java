@@ -225,7 +225,8 @@ public class ChatRuntimeService {
                     orchestrator.asyncResumeForRetry(run, sessionId);
                 } else {
                     orchestrator.asyncHandleUserMessage(run, sessionId,
-                            WaitConstants.WAIT_RESUME_PREFIX + wait.getWaitMs() + "ms elapsed.", null, true, List.of());
+                            WaitConstants.WAIT_RESUME_PREFIX + wait.getWaitMs() + "ms elapsed.",
+                            run.getModelRouteId(), true, List.of());
                 }
                 submitted = true;
             } finally {
@@ -242,6 +243,20 @@ public class ChatRuntimeService {
                 log.info("Wait resumed: waitId={} runId={} sessionId={} waitedMs={}",
                         wait.getId(), runId, sessionId, wait.getWaitMs());
             } else {
+                // 重试已提交：把「重试中（k/N）」行改回「执行中」，避免整段重试窗口都停在旧文案。
+                // 事件回填同一行的 seq/title，前端就地更新，不必等下一次挂起或终态。
+                TimelineRecorder.RunStatusRow row = timelineRecorder.markRetryResumed(sessionId, runId);
+                if (row != null) {
+                    eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.RUNNING,
+                            new RuntimeEventDataVO()
+                                    .setSessionId(sessionId)
+                                    .setRunId(runId)
+                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)
+                                    .setSeq(row.seq())
+                                    .setKind(TimelineKind.RUN_STATUS.getCode())
+                                    .setAssistantReply(row.title())
+                                    .setStatus(RunStatus.RUNNING.value())));
+                }
                 log.info("LLM retry resumed: waitId={} runId={} sessionId={} attempt={} hint={}",
                         wait.getId(), runId, sessionId, wait.getAttempts(), wait.getReason());
             }
@@ -395,7 +410,7 @@ public class ChatRuntimeService {
             originalRun.setStatus(RunStatus.RUNNING.name());
             runSpi.updateRun(originalRun);
             log.info("Clarification resume: reusing runId={} for session={}", runId, sessionId);
-            orchestrator.asyncHandleUserMessage(originalRun, sessionId, resumeText, null, true);
+            orchestrator.asyncHandleUserMessage(originalRun, sessionId, resumeText, originalRun.getModelRouteId(), true);
 
             ChatMessageResponseVO result = new ChatMessageResponseVO();
             result.setRunId(runId);
@@ -513,7 +528,7 @@ public class ChatRuntimeService {
         if (originalRun != null && RunStatus.AWAITING_USER.name().equals(originalRun.getStatus())) {
             originalRun.setStatus(RunStatus.RUNNING.name());
             runSpi.updateRun(originalRun);
-            orchestrator.asyncHandleUserMessage(originalRun, sessionId, resumeText, null, true);
+            orchestrator.asyncHandleUserMessage(originalRun, sessionId, resumeText, originalRun.getModelRouteId(), true);
             return processingResponse(runId);
         }
 

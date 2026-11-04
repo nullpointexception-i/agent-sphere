@@ -43,10 +43,11 @@ public class RuntimeOrchestrator {
 
     @Async("runtimeAsyncExecutor")
     public void asyncResumeForRetry(RunVO run, Long sessionId) {
-        log.info("Async LLM-retry resume: runId={}, sessionId={}", run.getId(), sessionId);
+        log.info("Async LLM-retry resume: runId={}, sessionId={}, pinnedRoute={}",
+                run.getId(), sessionId, run.getModelRouteId());
         try {
-            ValidationResult validated = validator.validate(sessionId, null);
-            snapshotCompletionProtocol(run, validated);
+            ValidationResult validated = validator.validate(sessionId, run.getModelRouteId());
+            snapshotRunRouting(run, validated);
             KernelContext ctx = preparer.prepare(run, validated, "");
             ctx.setRetryResume(true);
             coordinator.wake(sessionId, ctx, run.getId());
@@ -64,10 +65,11 @@ public class RuntimeOrchestrator {
 
     @Async("runtimeAsyncExecutor")
     public void asyncResumeInterruptedRun(RunVO run, Long sessionId) {
-        log.info("Async interrupted run recovery: runId={}, sessionId={}", run.getId(), sessionId);
+        log.info("Async interrupted run recovery: runId={}, sessionId={}, pinnedRoute={}",
+                run.getId(), sessionId, run.getModelRouteId());
         try {
-            ValidationResult validated = validator.validate(sessionId, null);
-            snapshotCompletionProtocol(run, validated);
+            ValidationResult validated = validator.validate(sessionId, run.getModelRouteId());
+            snapshotRunRouting(run, validated);
             KernelContext ctx = preparer.prepare(run, validated, "");
             ctx.setRecoveryResume(true);
             coordinator.wake(sessionId, ctx, run.getId());
@@ -88,8 +90,8 @@ public class RuntimeOrchestrator {
         log.info("Async tool approval resume: runId={}, sessionId={}, approvalId={}",
                 run.getId(), sessionId, approvalId);
         try {
-            ValidationResult validated = validator.validate(sessionId, null);
-            snapshotCompletionProtocol(run, validated);
+            ValidationResult validated = validator.validate(sessionId, run.getModelRouteId());
+            snapshotRunRouting(run, validated);
             KernelContext ctx = preparer.prepare(run, validated, "");
             ctx.setApprovalResumeId(approvalId);
             coordinator.wake(sessionId, ctx, run.getId());
@@ -111,7 +113,7 @@ public class RuntimeOrchestrator {
         log.info("Async execution start: runId={}, sessionId={}", run.getId(), sessionId);
         try {
             ValidationResult validated = validator.validate(sessionId, overrideRouteId);
-            snapshotCompletionProtocol(run, validated);
+            snapshotRunRouting(run, validated);
             log.info("Validation passed: sessionId={}, instanceId={}, routeId={}",
                     sessionId, validated.getAgentInstance().getId(), validated.getModelRoute().getId());
 
@@ -144,17 +146,27 @@ public class RuntimeOrchestrator {
      * Once written, resume/fallback paths must keep the snapshot so a mid-run model
      * switch cannot silently relax the completion guardrail.
      */
-    private void snapshotCompletionProtocol(RunVO run, ValidationResult validated) {
-        if (run == null || validated == null || validated.getAgentInstance() == null) {
+    private void snapshotRunRouting(RunVO run, ValidationResult validated) {
+        if (run == null || validated == null) {
             return;
         }
-        if (run.getCompletionProtocol() != null && !run.getCompletionProtocol().isBlank()) {
-            return;
+        boolean changed = false;
+        if ((run.getCompletionProtocol() == null || run.getCompletionProtocol().isBlank())
+                && validated.getAgentInstance() != null) {
+            String instanceOverride = validated.getAgentInstance().getCompletionProtocol();
+            String routeDefault = validated.getModelRoute() != null
+                    ? validated.getModelRoute().getCompletionProtocol() : null;
+            run.setCompletionProtocol(CompletionProtocol.resolve(instanceOverride, routeDefault).name());
+            changed = true;
         }
-        String instanceOverride = validated.getAgentInstance().getCompletionProtocol();
-        String routeDefault = validated.getModelRoute() != null
-                ? validated.getModelRoute().getCompletionProtocol() : null;
-        run.setCompletionProtocol(CompletionProtocol.resolve(instanceOverride, routeDefault).name());
-        runSpi.updateRun(run);
+        // 路由 pin（V116）：只在首次进入时写一次。之后所有恢复入口都用这条，
+        // 避免实例按 weight 重新挑选 / 管理员中途改配置导致同一个 run 换模型。
+        if (run.getModelRouteId() == null && validated.getModelRoute() != null) {
+            run.setModelRouteId(validated.getModelRoute().getId());
+            changed = true;
+        }
+        if (changed) {
+            runSpi.updateRun(run);
+        }
     }
 }

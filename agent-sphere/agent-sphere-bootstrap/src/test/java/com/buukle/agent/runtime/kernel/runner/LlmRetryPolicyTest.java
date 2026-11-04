@@ -20,11 +20,16 @@ class LlmRetryPolicyTest {
     private static AgentRuntimeProperties.RunnerConfig config() {
         AgentRuntimeProperties.RunnerConfig cfg = new AgentRuntimeProperties.RunnerConfig();
         cfg.setLlmRetryLadder(List.of(
-                Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(15),
-                Duration.ofSeconds(45), Duration.ofMinutes(2), Duration.ofMinutes(5)));
+                Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(10),
+                Duration.ofSeconds(15), Duration.ofSeconds(20),
+                Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(15), Duration.ofSeconds(20),
+                Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(15), Duration.ofSeconds(20),
+                Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(15), Duration.ofSeconds(20),
+                Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(15), Duration.ofSeconds(20),
+                Duration.ofSeconds(1), Duration.ofSeconds(3), Duration.ofSeconds(15), Duration.ofSeconds(20)));
         cfg.setLlmRetryInlineRungs(2);
         cfg.setLlmRetryJitter(0d);
-        cfg.setLlmRetryMaxTotal(Duration.ofMinutes(10));
+        cfg.setLlmRetryMaxTotal(Duration.ofMinutes(5));
         return cfg;
     }
 
@@ -63,21 +68,25 @@ class LlmRetryPolicyTest {
         AgentRuntimeProperties.RunnerConfig cfg = config();
 
         assertEquals(1_000L, LlmRetryPolicy.delayMs(cfg, 1));
-        assertEquals(15_000L, LlmRetryPolicy.delayMs(cfg, 3));
-        assertEquals(300_000L, LlmRetryPolicy.delayMs(cfg, 6));
+        assertEquals(10_000L, LlmRetryPolicy.delayMs(cfg, 3));
+        assertEquals(20_000L, LlmRetryPolicy.delayMs(cfg, 5));
+        // 锯齿：第 6 档回到 1s
+        assertEquals(1_000L, LlmRetryPolicy.delayMs(cfg, 6));
+        assertEquals(20_000L, LlmRetryPolicy.delayMs(cfg, 25));
         // 超过梯度长度时沿用最后一档
-        assertEquals(300_000L, LlmRetryPolicy.delayMs(cfg, 10));
+        assertEquals(20_000L, LlmRetryPolicy.delayMs(cfg, 40));
     }
 
     @Test
     void totalWindowExhaustsLadder() {
         AgentRuntimeProperties.RunnerConfig cfg = config();
-        assertEquals(6, LlmRetryPolicy.maxAttempts(cfg));
+        assertEquals(25, LlmRetryPolicy.maxAttempts(cfg));
 
-        // 1+2+15+45+120+300 = 483s < 10min
-        assertFalse(LlmRetryPolicy.overTotalWindow(cfg, 6));
+        // 1+3+10+15+20 + 5*(1+3+15+20) = 244s < 5min
+        assertEquals(244_000L, LlmRetryPolicy.cumulativeMs(cfg, 25));
+        assertFalse(LlmRetryPolicy.overTotalWindow(cfg, 25));
 
         cfg.setLlmRetryMaxTotal(Duration.ofMinutes(3));
-        assertTrue(LlmRetryPolicy.overTotalWindow(cfg, 6), "累计退避超过总窗口后不再挂起");
+        assertTrue(LlmRetryPolicy.overTotalWindow(cfg, 25), "累计退避超过总窗口后不再挂起");
     }
 }

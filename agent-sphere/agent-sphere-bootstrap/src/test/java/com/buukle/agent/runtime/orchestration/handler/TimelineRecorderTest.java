@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -132,36 +133,30 @@ class TimelineRecorderTest {
     }
 
     @Test
-    void runTerminalAfterPauseCreatesNewRowAtEnd() {
+    void runTerminalAfterPauseUpdatesSameRow() {
         when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
         when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.AWAITING_USER.getCode());
-        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any())).thenReturn(265L);
 
         recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
 
-        // 暂停行保留在 seq 17，终态另起一行落在 run 末尾
-        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
-        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any());
+        // uk_timeline_run_status 只允许一行：终态必须原地更新
+        verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
     }
 
     @Test
-    void runTerminalAfterWaitCreatesNewRowAtEnd() {
+    void runTerminalAfterWaitUpdatesSameRow() {
         when(timelineSpi.findLatestSeq(any())).thenReturn(23L);
         when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.WAITING.getCode());
-        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.FAILED.getCode()), eq(TimelineState.FAILED.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any())).thenReturn(266L);
 
         recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.FAILED);
 
-        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
-        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.FAILED.getCode()), eq(TimelineState.FAILED.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any());
+        verify(timelineSpi).update(eq(SESSION_ID), eq(23L),
+                eq(TimelineState.FAILED.getCode()), eq(TimelineState.FAILED.getCode()), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
     }
 
     @Test
@@ -225,35 +220,67 @@ class TimelineRecorderTest {
     }
 
     @Test
-    void runTerminalAfterResumedCreatesNewRowAtEnd() {
-        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
-        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.RESUMED.getCode());
-        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any())).thenReturn(267L);
+    void markRetryResumedUpdatesRetryRowToRunning() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(31L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.WAITING.getCode());
 
-        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
+        TimelineRecorder.RunStatusRow row = recorder.markRetryResumed(SESSION_ID, RUN_ID);
 
-        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
-        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any());
+        assertEquals(31L, row.seq());
+        verify(timelineSpi).update(eq(SESSION_ID), eq(31L),
+                eq(TimelineState.RUNNING.getCode()), eq(TimelineState.RUNNING.getCode()),
+                eq("▶️ 已恢复，继续执行"));
     }
 
     @Test
-    void pauseAfterResumedStartsNewWaitingRow() {
+    void markRetryResumedIgnoresTerminalRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(31L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.FAILED.getCode());
+
+        assertEquals(null, recorder.markRetryResumed(SESSION_ID, RUN_ID));
+        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void runTerminalAfterResumedUpdatesSameRow() {
         when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
         when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.RESUMED.getCode());
-        when(timelineSpi.record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.WAITING.getCode()), eq(TimelineState.WAITING.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any())).thenReturn(25L);
+
+        recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
+
+        // 一个 run 只有一行 run_status（uk_timeline_run_status）：终态必须原地更新。
+        verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
+                eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void pauseAfterResumedUpdatesSameRow() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(17L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.RESUMED.getCode());
 
         recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.WAITING);
 
-        verify(timelineSpi, times(0)).update(anyLong(), anyLong(), any(), any(), any());
-        verify(timelineSpi).record(eq(SESSION_ID), eq(RUN_ID), eq(TimelineKind.RUN_STATUS.getCode()),
-                eq(TimelineState.WAITING.getCode()), eq(TimelineState.WAITING.getCode()), any(),
-                eq(RUN_ID), any(), any(), any(), any());
+        verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
+                eq(TimelineState.WAITING.getCode()), eq(TimelineState.WAITING.getCode()), any());
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void waitingThenFailedUpdatesSameRowAndReturnsSeq() {
+        when(timelineSpi.findLatestSeq(any())).thenReturn(19L);
+        when(timelineSpi.findLatestState(any())).thenReturn(TimelineState.WAITING.getCode());
+
+        TimelineRecorder.RunStatusRow row = recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.FAILED);
+
+        assertEquals(19L, row.seq(), "SSE 事件要带上这一行的 seq，前端才能就地更新");
+        assertTrue(row.title() != null && !row.title().isBlank());
+        verify(timelineSpi).update(eq(SESSION_ID), eq(19L),
+                eq(TimelineState.FAILED.getCode()), eq(TimelineState.FAILED.getCode()), eq(row.title()));
+        verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
     }
 
     @Test

@@ -51,6 +51,7 @@ public class TimelineRecorder {
     private static final String TITLE_RUN_AWAITING = "⏸️ 等待澄清";
     private static final String TITLE_RUN_WAITING = "⏳ 等待中（到点自动继续）";
     private static final String TITLE_RUN_RESUMED = "▶️ 已恢复（等待 %s）";
+    private static final String TITLE_RUN_RETRY_RESUMED = "▶️ 已恢复，继续执行";
     private static final String TITLE_COMPACT_RUNNING = "正在压缩上下文…";
     private static final String TITLE_COMPACT_COMPLETED = "上下文已压缩";
     private static final String TITLE_COMPACT_FAILED = "上下文压缩失败";
@@ -256,6 +257,42 @@ public class TimelineRecorder {
         }
     }
 
+    /**
+     * LLM 重试到点恢复：把原地复用的「重试中（k/N）」行改回「执行中」。
+     * 否则该行会一直停在上一档的文案，直到下一次挂起或 run 终态。
+     *
+     * @return 更新后的行；没有等待行可改时返回 null
+     */
+    public RunStatusRow markRetryResumed(Long sessionId, Long runId) {
+        if (runId == null) {
+            return null;
+        }
+        try {
+            TimelineRefQuery query = TimelineRefQuery.builder()
+                    .runId(runId)
+                    .kind(TimelineKind.RUN_STATUS.getCode())
+                    .build();
+            Long seq = runStatusSeqByRun.get(runId);
+            if (seq == null) {
+                seq = findLatestSeq(query);
+            }
+            if (seq == null || seq <= 0) {
+                return null;
+            }
+            // 只改「等待中」的行；已被其它路径更新（终态/取消）就不动
+            if (!TimelineState.WAITING.getCode().equals(findLatestState(query))) {
+                return null;
+            }
+            runStatusSeqByRun.put(runId, seq);
+            timelineSpi.update(sessionId, seq, TimelineState.RUNNING.getCode(),
+                    TimelineState.RUNNING.getCode(), TITLE_RUN_RETRY_RESUMED);
+            return new RunStatusRow(seq, TITLE_RUN_RETRY_RESUMED);
+        } catch (Exception e) {
+            log.warn("Timeline retry resume row failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
     private static String formatWaitDuration(long ms) {
         long seconds = Math.max(1, Math.round(ms / 1000.0));
         if (seconds < 60) {
@@ -266,17 +303,21 @@ public class TimelineRecorder {
         return rest == 0 ? minutes + "m" : minutes + "m" + rest + "s";
     }
 
+    /** run_status 行的 (seq, title)：调用方据此把「哪一行、什么文案」带进 SSE 事件。 */
+    public record RunStatusRow(long seq, String title) {
+    }
+
     /** run 终态：状态/title 由 RunStatus 映射（避免魔法值散落）；更新同一行并释放该 run 的占位。 */
-    public void recordRunTerminal(Long sessionId, Long runId, RunStatus status) {
-        recordRunTerminal(sessionId, runId, status, null);
+    public RunStatusRow recordRunTerminal(Long sessionId, Long runId, RunStatus status) {
+        return recordRunTerminal(sessionId, runId, status, null);
     }
 
     /**
      * @param titleOverride 非空时替换默认状态文案（如 LLM 重试：「繁忙，正在自动重试（2/6）· 16:54 重试」）
      */
-    public void recordRunTerminal(Long sessionId, Long runId, RunStatus status, String titleOverride) {
+    public RunStatusRow recordRunTerminal(Long sessionId, Long runId, RunStatus status, String titleOverride) {
         if (runId == null) {
-            return;
+            return null;
         }
         String state = switch (status) {
             case COMPLETED -> TimelineState.COMPLETED.getCode();
@@ -312,51 +353,30 @@ public class TimelineRecorder {
                 runStatusSeqByRun.put(runId, seq);
             }
         }
+        boolean terminalStatus = status == RunStatus.COMPLETED
+                || status == RunStatus.FAILED
+                || status == RunStatus.CANCELLED;
         if (seq != null && seq > 0) {
-            String latestState = findLatestState(query);
-            boolean latestTerminal = isTerminalRunState(latestState);
-            boolean latestResumed = TimelineState.RESUMED.getCode().equals(latestState);
-            boolean pauseStatus = status == RunStatus.AWAITING_USER || status == RunStatus.WAITING;
-            boolean terminalStatus = status == RunStatus.COMPLETED
-                    || status == RunStatus.FAILED
-                    || status == RunStatus.CANCELLED;
-
             // 迟到的暂停事件不能把已终态的行降级。
-            if (latestTerminal && !terminalStatus) {
-                return;
+            if (isTerminalRunState(findLatestState(query)) && !terminalStatus) {
+                return null;
             }
-
-            // 已恢复后再次挂起：另起一条等待行，不能复用过期的 RESUMED 行。
-            if (latestResumed && pauseStatus) {
-                runStatusSeqByRun.remove(runId);
-                long newSeq = timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(),
-                        state, subtype, title, runId, null, null, null, null);
-                if (newSeq > 0) {
-                    runStatusSeqByRun.put(runId, newSeq);
-                }
-                return;
-            }
-
-            boolean pauseRow = TimelineState.AWAITING_USER.getCode().equals(latestState)
-                    || TimelineState.WAITING.getCode().equals(latestState)
-                    || latestResumed;
-            if (terminalStatus && pauseRow) {
-                // 等待行保留在暂停位置；终态另起一行，确保 run 结束分割线落在末尾。
-                runStatusSeqByRun.remove(runId);
-                timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, subtype, title,
-                        runId, null, null, null, null);
-                return;
-            }
+            // uk_timeline_run_status 只允许一个 run 一行 run_status：所有状态切换都原地更新。
+            // 旧实现「终态另起一行 / 恢复后另起一行」会撞唯一索引，insert 失败被吞掉，
+            // 于是重试耗尽后时间线永远停在「重试中」（线上 run 2972）。
             timelineSpi.update(sessionId, seq, state, subtype, title);
-            // AWAITING_USER / WAITING 之后还会续跑同一行；仅真正终态释放 map 条目
-            if (!pauseStatus) {
+            if (terminalStatus) {
                 runStatusSeqByRun.remove(runId, seq);
             }
-        } else {
-            // 兜底：没有 RUNNING 行则新建终态行（极端路径）
-            timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(), state, subtype, title,
-                    runId, null, null, null, null);
+            return new RunStatusRow(seq, title);
         }
+        // 兜底：还没有状态行（极端路径）
+        long created = timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(),
+                state, subtype, title, runId, null, null, null, null);
+        if (created > 0) {
+            runStatusSeqByRun.put(runId, created);
+        }
+        return created > 0 ? new RunStatusRow(created, title) : null;
     }
 
     /**

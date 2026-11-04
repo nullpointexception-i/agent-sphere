@@ -33,6 +33,7 @@ public class RunConverter {
         vo.setErrorMessage(run.getErrorMessage());
         vo.setWaitKind(run.getWaitKind());
         vo.setRetryAttempt(run.getRetryAttempt());
+        vo.setModelRouteId(run.getModelRouteId());
         vo.setCreatedBy(run.getCreatedBy());
         vo.setCreatedAt(run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
         return vo;
@@ -70,6 +71,7 @@ public class RunConverter {
         run.setErrorMessage(vo.getErrorMessage());
         run.setWaitKind(vo.getWaitKind());
         run.setRetryAttempt(vo.getRetryAttempt());
+        run.setModelRouteId(vo.getModelRouteId());
         return run;
     }
 

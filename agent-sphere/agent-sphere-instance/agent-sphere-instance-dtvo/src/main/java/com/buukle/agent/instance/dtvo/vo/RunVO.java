@@ -56,6 +56,8 @@ public class RunVO implements Serializable {
     private Integer retryHttpStatus;
     /** 错误原文（tooltip 展示）。 */
     private String retryDetail;
+    /** 本 run 实际使用的主模型路由（V116）。 */
+    private Long modelRouteId;
     private String delivery;
     private String createdBy;
     private String createdAt;

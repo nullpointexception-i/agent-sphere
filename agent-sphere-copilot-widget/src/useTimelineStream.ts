@@ -80,6 +80,15 @@ const RUN_TERMINAL_SUB_TYPES = [
   'run_awaiting_user',
 ] as const;
 
+/** run 状态类事件：run_status 行原地更新，刷新必须走尾窗（afterSeq 会跳过同 seq）。 */
+const RUN_STATUS_SUB_TYPES = [
+  'run_completed',
+  'run_failed',
+  'run_cancelled',
+  'run_awaiting_user',
+  'run_waiting',
+] as const;
+
 interface TimelineStream {
   rows: TimelineRow[];
   hasMore: boolean;
@@ -627,6 +636,24 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         });
       }
 
+      // run_status 行是「一个 run 一行、原地更新」：事件已带 seq/status/title，
+      // 直接就地合并，避免 afterSeq 增量拉不到同 seq 的更新（重试次数不刷新）。
+      if (d?.seq != null && d?.kind === 'run_status') {
+        const rsSeq = Number(d.seq);
+        const rsState = d?.status || (tlSubType === 'run_waiting' ? 'WAITING' : null);
+        const rsText = d?.assistantReply || d?.response || '';
+        const row: TimelineRow = {
+          seq: rsSeq,
+          runId: d?.runId != null ? Number(d.runId) : null,
+          kind: 'run_status',
+          state: rsState,
+          subtype: d?.waitKind === 'LLM_RETRY' ? 'LLM_RETRY' : (rsState ?? undefined),
+          title: rsText,
+          content: { text: rsText, state: rsState ?? undefined },
+        };
+        setRows((prev) => mergeTimeline(prev, [row], answeredClarificationKeysRef.current));
+      }
+
       // 终态/工具结束/澄清 → 按 afterSeq 补行（权威合并）
 
       // 事件驱动 runActive：run_running/主助手打字机=在跑；终态=结束
@@ -709,7 +736,9 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
 
       if (
         tlSubType === 'tool_call_succeeded' ||
-        tlSubType === 'tool_call_failed'
+        tlSubType === 'tool_call_failed' ||
+        // run_status 是原地更新同一行：afterSeq 拉不到，必须走尾窗覆盖
+        (RUN_STATUS_SUB_TYPES as readonly string[]).includes(tlSubType)
       ) {
         // 工具事件：整页覆盖刷新（补迟到落库的截图 images 等），避免 afterSeq 增量跳过既有工具行
         void refreshTail(sid);
