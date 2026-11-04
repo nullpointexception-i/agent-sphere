@@ -110,7 +110,9 @@ jobs:
         else
           git commit -m "chore: update image tags [skip ci]"
           git pull --rebase origin main
-          git push
+          # checkout 用的是 tag 的 commit（detached HEAD），不能裸 git push ——
+          # 必须显式推到 main，否则报 "You are not currently on a branch"（v1.0.171 即因此失败）。
+          git push origin HEAD:main
         fi
 
     - name: Package Chrome Extension
