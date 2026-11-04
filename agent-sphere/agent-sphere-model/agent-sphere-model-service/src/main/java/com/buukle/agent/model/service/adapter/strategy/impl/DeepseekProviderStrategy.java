@@ -1,7 +1,9 @@
 package com.buukle.agent.model.service.adapter.strategy.impl;
 
+import com.buukle.agent.common.constant.ReasoningEffort;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
+import com.buukle.agent.model.dtvo.dto.complete.ThinkingDTO;
 import com.buukle.agent.model.dtvo.enums.ModelProviderCompany;
 import com.buukle.agent.model.service.adapter.record.ContentToolCallResult;
 import com.buukle.agent.model.service.adapter.strategy.ProviderStrategy;
@@ -14,6 +16,8 @@ import org.springframework.stereotype.Component;
 public class DeepseekProviderStrategy implements ProviderStrategy {
 
     private static final String ROLE_ASSISTANT = "assistant";
+    private static final String THINKING_ENABLED = "enabled";
+    private static final String THINKING_DISABLED = "disabled";
 
     @Override
     public ModelProviderCompany getCompany() {
@@ -30,6 +34,11 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
         request.setLogprobs(null);
         request.setTopLogprobs(null);
         request.setLogitBias(null);
+        // 统一档位 → DeepSeek thinking 开关：none 关闭，其余开启；具体强度由 reasoning_effort 表达。
+        if (request.getReasoningEffort() != null) {
+            boolean off = ReasoningEffort.NONE.equalsIgnoreCase(request.getReasoningEffort());
+            request.setThinking(new ThinkingDTO().setType(off ? THINKING_DISABLED : THINKING_ENABLED));
+        }
         // DeepSeek thinking + tools: assistant.reasoning_content of previous turns must be passed
         // back. The key must exist on EVERY assistant turn, not only tool-call turns: DeepSeek
         // validates the assistant messages after the last user message, and a rebuilt history

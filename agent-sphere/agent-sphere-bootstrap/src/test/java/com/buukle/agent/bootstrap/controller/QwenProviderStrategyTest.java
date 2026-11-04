@@ -326,4 +326,32 @@ class QwenProviderStrategyTest {
         assertNull(req.getEnableThinking(), "未指定档位时由实例配置决定");
         assertEquals(8000, req.getThinkingBudget());
     }
+
+    // ---- DeepSeek：档位 → thinking 开关，强度仍走 reasoning_effort ----
+
+    @Test
+    void deepseekStrategy_mapsLevelToThinkingSwitch() {
+        ChatCompletionRequestDTO req = request(
+                new ChatMessageDTO().setRole("user").setContent("hi"));
+        req.setReasoningEffort("low");
+
+        new DeepseekProviderStrategy().adaptRequest(req);
+
+        assertNotNull(req.getThinking());
+        assertEquals("enabled", req.getThinking().getType());
+        assertEquals("low", req.getReasoningEffort(), "DeepSeek 直接认 reasoning_effort");
+    }
+
+    @Test
+    void deepseekStrategy_noneDisablesThinking() {
+        ChatCompletionRequestDTO req = request(
+                new ChatMessageDTO().setRole("user").setContent("hi"));
+        req.setReasoningEffort("none");
+
+        new DeepseekProviderStrategy().adaptRequest(req);
+
+        assertNotNull(req.getThinking());
+        assertEquals("disabled", req.getThinking().getType());
+        assertEquals("none", req.getReasoningEffort());
+    }
 }

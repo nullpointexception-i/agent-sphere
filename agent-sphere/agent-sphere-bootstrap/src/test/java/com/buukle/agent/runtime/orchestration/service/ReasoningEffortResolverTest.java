@@ -32,7 +32,7 @@ class ReasoningEffortResolverTest {
         providers.put(ModelProviderCompany.DEEPSEEK.getValue(),
                 provider("none", "low", "high", "max"));
         providers.put(ModelProviderCompany.OPENAI.getValue(),
-                provider("low", "medium", "high", "xhigh", "max"));
+                provider("minimal", "low", "medium", "high"));
         providers.put(ModelProviderCompany.GLM.getValue(),
                 provider("low", "high", "max"));
         providers.put(ModelProviderCompany.QWEN.getValue(),
