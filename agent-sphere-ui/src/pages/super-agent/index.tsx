@@ -655,13 +655,6 @@ export default function SuperAgentPage() {
                       ? `#${selectedInstances.workerInstance.id} ${selectedInstances.workerInstance.name} (${selectedInstances.workerInstance.instanceRole ?? '-'})`
                       : '-',
                   },
-                  {
-                    key: 'guardian',
-                    label: t('pages.superAgent.guardianSession', '守护会话'),
-                    children: selectedInstances?.guardianSession
-                      ? `#${selectedInstances.guardianSession.id} ${selectedInstances.guardianSession.title ?? ''} (${selectedInstances.guardianSession.sessionType ?? '-'})`
-                      : '-',
-                  },
                 ]}
               />
             </Spin>

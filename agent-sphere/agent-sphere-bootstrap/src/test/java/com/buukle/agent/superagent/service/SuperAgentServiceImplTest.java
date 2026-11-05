@@ -7,11 +7,8 @@ import com.buukle.agent.common.dict.SystemDicSpi;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
-import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
-import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
-import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
@@ -33,7 +30,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.times;
@@ -48,8 +44,6 @@ class SuperAgentServiceImplTest {
     @Mock
     InstanceSpi instanceSpi;
     @Mock
-    SessionSpi sessionSpi;
-    @Mock
     AgentRouterPromptService agentRouterPromptService;
     @Mock
     RouteSpi routeSpi;
@@ -60,7 +54,7 @@ class SuperAgentServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new SuperAgentServiceImpl(superAgentMapper, instanceSpi, sessionSpi,
+        service = new SuperAgentServiceImpl(superAgentMapper, instanceSpi,
                 agentRouterPromptService, routeSpi, systemDicSpi);
         ReflectionTestUtils.setField(service, "routerMaxLoopCount", 64);
         ReflectionTestUtils.setField(service, "workerDefaultLoopLimit", 128);
@@ -74,7 +68,7 @@ class SuperAgentServiceImplTest {
     }
 
     @Test
-    void create_provisionsRouterWorkerAndGuardianSession() {
+    void create_provisionsRouterAndWorker() {
         when(superAgentMapper.insert(any(AgentSuperAgent.class))).thenAnswer(invocation -> {
             AgentSuperAgent agent = invocation.getArgument(0);
             agent.setId(7L);
@@ -89,9 +83,6 @@ class SuperAgentServiceImplTest {
         InstanceVO router = instance(11L);
         InstanceVO worker = instance(12L);
         when(instanceSpi.createInstance(any())).thenReturn(router, worker);
-        SessionVO session = new SessionVO();
-        session.setId(21L);
-        when(sessionSpi.createSession(any())).thenReturn(session);
 
         CreateSuperAgentDTO dto = new CreateSuperAgentDTO();
         dto.setName("Support");
@@ -125,23 +116,12 @@ class SuperAgentServiceImplTest {
         assertFalse(workerDTO.getAllowConsoleSession());
         assertFalse(workerDTO.getAllowWidgetSession());
 
-        ArgumentCaptor<CreateSessionDTO> sessions = ArgumentCaptor.forClass(CreateSessionDTO.class);
-        verify(sessionSpi).createSession(sessions.capture());
-        CreateSessionDTO sessionDTO = sessions.getValue();
-        assertEquals(11L, sessionDTO.getAgentInstanceId());
-        assertEquals("ROUTER", sessionDTO.getSessionType());
-        assertEquals(7L, sessionDTO.getSuperAgentId());
-        assertEquals("alice", sessionDTO.getCreatedBy());
-        assertTrue(sessionDTO.getTitle().contains("守护会话"));
-
         ArgumentCaptor<AgentSuperAgent> updated = ArgumentCaptor.forClass(AgentSuperAgent.class);
         verify(superAgentMapper).updateById(updated.capture());
         assertEquals(11L, updated.getValue().getRouterInstanceId());
-        assertEquals(21L, updated.getValue().getRouterSessionId());
         assertEquals(12L, updated.getValue().getWorkerInstanceId());
 
         assertEquals(11L, result.getRouterInstanceId());
-        assertEquals(21L, result.getRouterSessionId());
         assertEquals(12L, result.getWorkerInstanceId());
     }
 
@@ -207,27 +187,23 @@ class SuperAgentServiceImplTest {
     }
 
     @Test
-    void getInstances_returnsRouterWorkerAndGuardianSession() {        AgentSuperAgent agent = new AgentSuperAgent();
+    void getInstances_returnsRouterAndWorker() {
+        AgentSuperAgent agent = new AgentSuperAgent();
         agent.setId(7L);
         agent.setOwnerUserId(1L);
         agent.setRouterInstanceId(11L);
         agent.setWorkerInstanceId(12L);
-        agent.setRouterSessionId(21L);
         when(superAgentMapper.selectById(7L)).thenReturn(agent);
         InstanceVO router = instance(11L);
         InstanceVO worker = instance(12L);
         when(instanceSpi.getInstance(11L)).thenReturn(router);
         when(instanceSpi.getInstance(12L)).thenReturn(worker);
-        SessionVO session = new SessionVO();
-        session.setId(21L);
-        when(sessionSpi.getSession(21L)).thenReturn(session);
 
         var result = service.getInstances(7L);
 
         assertEquals(7L, result.getSuperAgentId());
         assertEquals(11L, result.getRouterInstance().getId());
         assertEquals(12L, result.getWorkerInstance().getId());
-        assertEquals(21L, result.getGuardianSession().getId());
     }
 
     private static InstanceVO instance(Long id) {

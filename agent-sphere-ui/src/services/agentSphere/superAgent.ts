@@ -9,7 +9,6 @@ export interface SuperAgent {
   name: string;
   description?: string;
   routerInstanceId?: number;
-  routerSessionId?: number;
   workerInstanceId?: number;
   positionCode?: string;
   positionNameCn?: string;
@@ -36,13 +35,6 @@ export interface SuperAgentInstances {
     status?: string;
     modelRouteId?: number;
     createdBy?: string;
-  };
-  guardianSession?: {
-    id: number;
-    title?: string;
-    sessionType?: string;
-    status?: string;
-    createdAt?: string;
   };
 }
 

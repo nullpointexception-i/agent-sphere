@@ -3,19 +3,14 @@ package com.buukle.agent.superagent.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.context.AuthContext;
-import com.buukle.agent.common.context.SessionSurface;
-import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.dict.SystemDicConstants;
 import com.buukle.agent.common.dict.SystemDicEntry;
 import com.buukle.agent.common.dict.SystemDicSpi;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
-import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
-import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
-import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
@@ -49,7 +44,6 @@ public class SuperAgentServiceImpl implements SuperAgentService {
 
     private final AgentSuperAgentMapper superAgentMapper;
     private final InstanceSpi instanceSpi;
-    private final SessionSpi sessionSpi;
     private final AgentRouterPromptService agentRouterPromptService;
     private final RouteSpi routeSpi;
     private final SystemDicSpi systemDicSpi;
@@ -98,14 +92,6 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         routerDTO.setAllowWidgetSession(false);
         InstanceVO routerInstance = instanceSpi.createInstance(routerDTO);
 
-        CreateSessionDTO sessionDTO = new CreateSessionDTO();
-        sessionDTO.setAgentInstanceId(routerInstance.getId());
-        sessionDTO.setTitle(dto.getName() + " 守护会话");
-        sessionDTO.setSessionType(ROLE_ROUTER);
-        sessionDTO.setSuperAgentId(agent.getId());
-        sessionDTO.setCreatedBy(AuthContext.getUsername());
-        SessionVO session = createInternalSession(sessionDTO);
-
         CreateInstanceDTO workerDTO = new CreateInstanceDTO();
         workerDTO.setName(dto.getName() + " Worker");
         workerDTO.setDescription("Super-Agent worker: " + dto.getName());
@@ -122,7 +108,6 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         InstanceVO workerInstance = instanceSpi.createInstance(workerDTO);
 
         agent.setRouterInstanceId(routerInstance.getId());
-        agent.setRouterSessionId(session.getId());
         agent.setWorkerInstanceId(workerInstance.getId());
         superAgentMapper.updateById(agent);
         return toVO(agent);
@@ -160,7 +145,6 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         vo.setSuperAgentId(agent.getId());
         vo.setRouterInstance(findInstance(agent.getRouterInstanceId()));
         vo.setWorkerInstance(findInstance(agent.getWorkerInstanceId()));
-        vo.setGuardianSession(findSession(agent.getRouterSessionId()));
         return vo;
     }
 
@@ -170,17 +154,6 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         }
         try {
             return instanceSpi.getInstance(instanceId);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private SessionVO findSession(Long sessionId) {
-        if (sessionId == null) {
-            return null;
-        }
-        try {
-            return sessionSpi.getSession(sessionId);
         } catch (Exception e) {
             return null;
         }
@@ -238,24 +211,6 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         agent.setStatus(SuperAgentStatus.ACTIVE);
         superAgentMapper.updateById(agent);
         return toVO(agent);
-    }
-
-    /**
-     * Guardian sessions are created by the console request but are internal resources.
-     * The target instance disables console/widget sessions, so the surface check must be bypassed.
-     */
-    private SessionVO createInternalSession(CreateSessionDTO dto) {
-        SessionSurface previous = SessionSurfaceHolder.get();
-        SessionSurfaceHolder.set(SessionSurface.INTERNAL);
-        try {
-            return sessionSpi.createSession(dto);
-        } finally {
-            if (previous == null) {
-                SessionSurfaceHolder.clear();
-            } else {
-                SessionSurfaceHolder.set(previous);
-            }
-        }
     }
 
     private SystemDicEntry requirePosition(String positionCode) {
@@ -322,7 +277,6 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         vo.setName(agent.getName());
         vo.setDescription(agent.getDescription());
         vo.setRouterInstanceId(agent.getRouterInstanceId());
-        vo.setRouterSessionId(agent.getRouterSessionId());
         vo.setWorkerInstanceId(agent.getWorkerInstanceId());
         vo.setPositionCode(agent.getPositionCode());
         vo.setPositionNameCn(agent.getPositionNameCn());

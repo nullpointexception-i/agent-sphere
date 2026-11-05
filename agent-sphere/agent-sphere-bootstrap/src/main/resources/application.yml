@@ -83,10 +83,8 @@ buukle:
           base-backoff-ms: 3000
       agent-router:
         enabled: true
-        mode: session                              # session | json
         interval-ms: 3000                          # 投递消费间隔
         batch-size: 20                             # 单批投递数
-        max-tokens: 1000                           # JSON 模式输出上限
         max-loop-count: 64                         # Agent Router 单 run 循环上限
       router:
         default-model-route-id: 0
@@ -114,8 +112,6 @@ buukle:
         max-attempts: 8                            # 最大重试次数
         retry-base-ms: 2000                        # 退避基数
         lease-seconds: 900                         # 发送租约，必须大于渠道最大发送耗时
-      trigger:
-        speculation-enabled: true
       watchdog:
         enabled: true
         interval-ms: 60000

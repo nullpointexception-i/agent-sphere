@@ -22,7 +22,6 @@ public class AgentSuperAgent {
     private String name;
     private String description;
     private Long routerInstanceId;
-    private Long routerSessionId;
     private Long workerInstanceId;
     private String positionCode;
     private String positionNameCn;
