@@ -15,4 +15,9 @@ public class CreateSessionDTO implements Serializable {
     @Size(min = 1, max = 255)
     private String title;
     private Long overrideModelRouteId;
+    /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG；留空默认 CONSOLE。 */
+    private String sessionType;
+    private Long superAgentId;
+    private Long threadId;
+    private String createdBy;
 }

@@ -26,6 +26,8 @@ public interface SessionSpi {
 
     void touchSession(Long sessionId);
 
+    void bindWorkItem(Long sessionId, Long workItemId);
+
     /**
      * 校验**当前来源端**（主站 / widget，见 {@code SessionSurfaceHolder}）是否允许对该会话继续对话。
      *

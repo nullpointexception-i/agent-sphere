@@ -18,6 +18,8 @@ public class RunConverter {
         RunVO vo = new RunVO();
         vo.setId(run.getId());
         vo.setSessionId(run.getSessionId());
+        vo.setThreadId(run.getThreadId());
+        vo.setFinishStatus(run.getFinishStatus());
         vo.setType(run.getType());
         vo.setUserMessage(run.getUserMessage());
         vo.setAssistantReply(run.getAssistantReply());
@@ -44,6 +46,7 @@ public class RunConverter {
     public AgentRun toDO(CreateRunDTO dto) {
         AgentRun run = new AgentRun();
         run.setSessionId(dto.getSessionId());
+        run.setThreadId(dto.getThreadId());
         run.setType(dto.getType());
         run.setUserMessage(dto.getUserMessage());
         run.setAttachments(dto.getAttachments() != null && !dto.getAttachments().isEmpty()
@@ -58,6 +61,8 @@ public class RunConverter {
         AgentRun run = new AgentRun();
         run.setId(vo.getId());
         run.setSessionId(vo.getSessionId());
+        run.setThreadId(vo.getThreadId());
+        run.setFinishStatus(vo.getFinishStatus());
         run.setType(vo.getType());
         run.setUserMessage(vo.getUserMessage());
         run.setAssistantReply(vo.getAssistantReply());

@@ -13,6 +13,7 @@ import java.util.List;
 public class CreateRunDTO implements Serializable {
     @NotNull(message = "sessionId can't be null")
     private Long sessionId;
+    private Long threadId;
     @NotBlank(message = "type can't be blank")
     @Size(min = 1, max = 64)
     private String type;

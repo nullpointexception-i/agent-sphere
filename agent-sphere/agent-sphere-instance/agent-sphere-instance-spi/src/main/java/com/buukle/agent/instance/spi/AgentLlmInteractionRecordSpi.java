@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.spi;
 
 import com.buukle.agent.instance.domain.vo.SessionUsageVO;
+import com.buukle.agent.instance.domain.vo.SuperAgentUsageVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 
 import java.util.List;
@@ -38,6 +39,9 @@ public interface AgentLlmInteractionRecordSpi {
 
     /** 会话级用量聚合（聊天区最下方吸底展示用）。 */
     SessionUsageVO usageSummary(Long sessionId);
+
+    /** Aggregate one Super-Agent usage by day and session type. */
+    List<SuperAgentUsageVO> usageBySuperAgent(Long superAgentId, int days);
 
     /**
      * 回填该 run 最新一条 {@code reply_content} 为空的 CHAT_REPLY 记录（finish 的 summary 作为该轮回复）。

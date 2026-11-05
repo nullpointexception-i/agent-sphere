@@ -31,10 +31,12 @@ public class DataPermissionInterceptor implements InnerInterceptor {
      * <ul>
      *   <li>{@code agent_user}：登录/鉴权发生在租户上下文建立之前；</li>
      *   <li>{@code agent_user_token}：会话按 token hash / user_id 定位，跨入口读写，
-     *       行上的 created_by 是签发时的系统身份，用租户过滤会导致「有时查不到会话」。</li>
+     *       行上的 created_by 是签发时的系统身份，用租户过滤会导致「有时查不到会话」；</li>
+     *   <li>{@code system_dic}：全局字典，由 admin 维护、所有登录用户读取，
+     *       不能按 created_by 过滤，否则普通用户看不到管理员新增的选项。</li>
      * </ul>
      */
-    private static final Set<String> SKIP_TABLES = Set.of("agent_user", "agent_user_token");
+    private static final Set<String> SKIP_TABLES = Set.of("agent_user", "agent_user_token", "system_dic");
 
     @Override
     public void beforeQuery(Executor executor, MappedStatement ms, Object parameter,

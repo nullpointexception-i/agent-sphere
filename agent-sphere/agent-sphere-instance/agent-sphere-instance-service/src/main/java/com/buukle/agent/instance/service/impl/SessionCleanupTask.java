@@ -364,6 +364,15 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
             }
         }, dryRun, sizeLimit, budget);
 
+        drain(limit -> sessionCleanupMapper.selectExpiredFileIdsByPrefix(
+                        fileCutoff, FileStoreBizKeys.IM_ATTACHMENT + ":", limit), ids -> {
+            if (dryRun) {
+                addStat(report, "agent_file_store", ids.size());
+            } else {
+                addStat(report, "agent_file_store", sessionCleanupMapper.deleteFilesByIds(ids));
+            }
+        }, dryRun, sizeLimit, budget);
+
         drain(limit -> sessionCleanupMapper.selectExpiredCompletionsCallIds(cutoff, limit), ids -> {
             if (dryRun) {
                 addStat(report, "agent_completions_call", ids.size());

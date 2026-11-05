@@ -34,6 +34,9 @@ public class LlmInteractionPersistListener {
         AgentLlmInteractionRecordVO vo = new AgentLlmInteractionRecordVO();
         vo.setRunId(meta.getRunId());
         vo.setSessionId(meta.getSessionId());
+        vo.setSuperAgentId(meta.getSuperAgentId());
+        vo.setSessionType(meta.getSessionType());
+        vo.setThreadId(meta.getThreadId());
         vo.setInteractionType(meta.getInteractionType().name());
         vo.setModelName(event.getModelName());
         vo.setRequestBody(event.getRequestBody());

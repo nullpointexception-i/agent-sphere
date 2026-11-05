@@ -54,10 +54,85 @@ logging:
     com.buukle.agent.completions.repository: WARN   # completions SQL 日志级别 / Completions SQL log level
     com.buukle.agent.sso.repository: WARN           # SSO SQL 日志级别 / SSO SQL log level
     com.buukle.agent.admin.repository: WARN         # Admin SQL 日志级别 / Admin SQL log level
+    com.buukle.agent.superagent.repository.AgentEventDeliveryMapper: INFO
+    com.buukle.agent.superagent.repository.AgentOutboundMessageMapper: INFO
+    com.buukle.agent.superagent.repository.AgentWorkItemMapper: INFO
     org.springframework: INFO                       # Spring 框架日志 / Spring framework log
 
 buukle:
   agent:
+    # ============================================================
+    # Super-Agent / 群级分派
+    # 默认关闭；配置 group-router.instance-id 后才会消费 agent_event。
+    # ============================================================
+    super-agent:
+      enabled: true
+      group-router:
+        enabled: true
+        auto-create: true                          # 启动时自动创建共享 GROUP_ROUTER 实例
+        instance-id: 0                             # 共享 GROUP_ROUTER instance id；0=按角色查找
+        model-route-id: 0                          # 自动创建时使用的模型路由；0=回落 router 默认
+        batch:
+          interval-ms: 3000                        # 调度间隔
+          max-events: 20                           # 单批最大事件数
+          max-wait-ms: 3000                        # 攒批等待窗口
+          max-chars: 12000                         # 单批最大字符
+          max-tokens: 2000                         # Group Router 输出上限
+        retry:
+          max-attempts: 5
+          base-backoff-ms: 3000
+      agent-router:
+        enabled: true
+        mode: session                              # session | json
+        interval-ms: 3000                          # 投递消费间隔
+        batch-size: 20                             # 单批投递数
+        max-tokens: 1000                           # JSON 模式输出上限
+        max-loop-count: 64                         # Agent Router 单 run 循环上限
+      router:
+        default-model-route-id: 0
+      worker:
+        enabled: true
+        interval-ms: 3000                          # 调度间隔
+        max-concurrent: 5                          # 同时在途 Worker 数
+        max-concurrent-scope: REPLICA              # REPLICA | GLOBAL（集群总配额）
+        max-active-per-agent: 8                    # 单员工在途上限
+        queue-capacity: 200                        # 队列容量
+        default-loop-limit: 128                    # Worker 默认循环上限
+        batch-size: 5                              # 单批领取数
+        dispatch-timeout-minutes: 10               # DISPATCHING 卡死回收阈值
+      event:
+        retention-days: 30
+        retention-cron: "0 30 3 * * ?"
+      retention:
+        batch-size: 500
+        max-batches: 40
+        batch-sleep-ms: 200
+      outbound:
+        enabled: true
+        interval-ms: 3000                          # Outbox 发送间隔
+        batch-size: 20                             # 单批发送数
+        max-attempts: 8                            # 最大重试次数
+        retry-base-ms: 2000                        # 退避基数
+        lease-seconds: 900                         # 发送租约，必须大于渠道最大发送耗时
+      trigger:
+        speculation-enabled: true
+      watchdog:
+        enabled: true
+        interval-ms: 60000
+        stale-minutes: 15
+        batch-size: 500
+        max-batches: 20
+        batch-sleep-ms: 100
+    # ============================================================
+    # 内置 IM
+    # ============================================================
+    im:
+      enabled: true
+      retention-days: 180
+      retention-cron: "0 0 4 * * ?"
+      max-message-chars: 8000
+      max-attachment-mb: 20
+      rate-limit-per-minute: 30
     # ============================================================
     # 会话配置 / Session Config
     # cleanup-* 是历史会话清理（SessionCleanupTask）的技术参数。

@@ -2,8 +2,8 @@ import { ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Drawer, Select, Space, Table, Tag } from 'antd';
 import { useRef, useState } from 'react';
-import { agentApi } from '@/services/agentSphere/api';
 import type { SkillSyncRun } from '@/services/agentSphere/api';
+import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 
 interface Props {
@@ -37,17 +37,23 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
 
   return (
     <Drawer
-      title={t('pages.admin.settings.skillSyncRuns.title', 'Skill 同步执行记录')}
-      width={1000}
+      title={t(
+        'pages.admin.settings.skillSyncRuns.title',
+        'Skill 同步执行记录',
+      )}
+      size={1000}
       open={open}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
     >
       <Space style={{ marginBottom: 12 }}>
         <Select
           allowClear
           style={{ width: 130 }}
-          placeholder={t('pages.admin.settings.skillSyncRuns.filterTrigger', '触发方式')}
+          placeholder={t(
+            'pages.admin.settings.skillSyncRuns.filterTrigger',
+            '触发方式',
+          )}
           value={triggerType}
           onChange={(v) => {
             setTriggerType(v);
@@ -67,17 +73,32 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
         <Select
           allowClear
           style={{ width: 130 }}
-          placeholder={t('pages.admin.settings.skillSyncRuns.filterStatus', '状态')}
+          placeholder={t(
+            'pages.admin.settings.skillSyncRuns.filterStatus',
+            '状态',
+          )}
           value={status}
           onChange={(v) => {
             setStatus(v);
             reload();
           }}
           options={[
-            { value: 'RUNNING', label: t('pages.admin.settings.skillSyncRuns.running', '运行中') },
-            { value: 'SUCCESS', label: t('pages.admin.settings.skillSyncRuns.success', '完成') },
-            { value: 'FAILED', label: t('pages.admin.settings.skillSyncRuns.failed', '失败') },
-            { value: 'SKIPPED', label: t('pages.admin.settings.skillSyncRuns.skipped', '已跳过') },
+            {
+              value: 'RUNNING',
+              label: t('pages.admin.settings.skillSyncRuns.running', '运行中'),
+            },
+            {
+              value: 'SUCCESS',
+              label: t('pages.admin.settings.skillSyncRuns.success', '完成'),
+            },
+            {
+              value: 'FAILED',
+              label: t('pages.admin.settings.skillSyncRuns.failed', '失败'),
+            },
+            {
+              value: 'SKIPPED',
+              label: t('pages.admin.settings.skillSyncRuns.skipped', '已跳过'),
+            },
           ]}
         />
       </Space>
@@ -90,7 +111,10 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
         columns={[
           { title: t('pages.table.id'), dataIndex: 'id', width: 70 },
           {
-            title: t('pages.admin.settings.skillSyncRuns.col.trigger', '触发方式'),
+            title: t(
+              'pages.admin.settings.skillSyncRuns.col.trigger',
+              '触发方式',
+            ),
             dataIndex: 'triggerType',
             width: 90,
             render: (_: any, row: SkillSyncRun) =>
@@ -99,7 +123,9 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
                   {t('pages.admin.settings.skillSyncRuns.manual', '手动')}
                 </Tag>
               ) : (
-                <Tag>{t('pages.admin.settings.skillSyncRuns.scheduled', '定时')}</Tag>
+                <Tag>
+                  {t('pages.admin.settings.skillSyncRuns.scheduled', '定时')}
+                </Tag>
               ),
           },
           {
@@ -136,7 +162,10 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
             ),
           },
           {
-            title: t('pages.admin.settings.skillSyncRuns.col.skipped', '未更新'),
+            title: t(
+              'pages.admin.settings.skillSyncRuns.col.skipped',
+              '未更新',
+            ),
             dataIndex: 'skipped',
             width: 90,
             align: 'right' as const,
@@ -150,7 +179,10 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
               row.elapsedMs == null ? '-' : `${row.elapsedMs} ms`,
           },
           {
-            title: t('pages.admin.settings.skillSyncRuns.col.startedAt', '开始时间'),
+            title: t(
+              'pages.admin.settings.skillSyncRuns.col.startedAt',
+              '开始时间',
+            ),
             dataIndex: 'startedAt',
             width: 170,
             render: (_: any, row: SkillSyncRun) => formatTime(row.startedAt),
@@ -161,33 +193,49 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
             <Space direction="vertical" style={{ width: '100%' }}>
               {row.skipReason && (
                 <span>
-                  {t('pages.admin.settings.skillSyncRuns.skipReason', '跳过原因')}：{row.skipReason}
+                  {t(
+                    'pages.admin.settings.skillSyncRuns.skipReason',
+                    '跳过原因',
+                  )}
+                  ：{row.skipReason}
                 </span>
               )}
               {row.errorMessage && (
                 <span>
-                  {t('pages.admin.settings.skillSyncRuns.errorMessage', '错误')}：{row.errorMessage}
+                  {t('pages.admin.settings.skillSyncRuns.errorMessage', '错误')}
+                  ：{row.errorMessage}
                 </span>
               )}
               {(row.detail || []).length > 0 && (
                 <Table
                   size="small"
                   pagination={false}
-                  rowKey={(r: { copyId: number; reason: string }) => `${r.copyId}-${r.reason}`}
+                  rowKey={(r: { copyId: number; reason: string }) =>
+                    `${r.copyId}-${r.reason}`
+                  }
                   dataSource={row.detail}
                   columns={[
                     {
-                      title: t('pages.admin.settings.skillSync.copyId', '副本 ID'),
+                      title: t(
+                        'pages.admin.settings.skillSync.copyId',
+                        '副本 ID',
+                      ),
                       dataIndex: 'copyId',
                       width: 90,
                     },
                     {
-                      title: t('pages.admin.settings.skillSync.originId', '源技能 ID'),
+                      title: t(
+                        'pages.admin.settings.skillSync.originId',
+                        '源技能 ID',
+                      ),
                       dataIndex: 'originId',
                       width: 90,
                     },
                     {
-                      title: t('pages.admin.settings.skillSync.reason', '未更新原因'),
+                      title: t(
+                        'pages.admin.settings.skillSync.reason',
+                        '未更新原因',
+                      ),
                       dataIndex: 'reason',
                       render: (v: string) => <Tag>{v}</Tag>,
                     },

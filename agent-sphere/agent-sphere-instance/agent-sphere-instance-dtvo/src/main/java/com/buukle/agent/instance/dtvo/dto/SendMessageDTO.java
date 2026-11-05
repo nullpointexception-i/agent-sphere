@@ -12,6 +12,7 @@ public class SendMessageDTO implements Serializable {
     @Size(max = 5000)
     private String message;
     private Long modelRouteId;
+    private Long threadId;
     /** 思考强度：low/medium/high/max；为空由后端按输出预算动态计算。 */
     private String reasoningEffort;
     private String delivery;

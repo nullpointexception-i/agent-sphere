@@ -2,6 +2,7 @@ package com.buukle.agent.infrastructure.handler;
 
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
 import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,10 @@ public class AuditMetaObjectHandler implements MetaObjectHandler {
         this.fillStrategy(metaObject, "updatedBy", username);
         this.fillStrategy(metaObject, "createdAt", now);
         this.fillStrategy(metaObject, "updatedAt", now);
+        Long tenantId = TenantContext.get();
+        if (tenantId != null) {
+            this.fillStrategy(metaObject, "tenantId", tenantId);
+        }
     }
 
     @Override

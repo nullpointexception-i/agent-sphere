@@ -29,6 +29,8 @@ public class InstanceConverter {
         vo.setAllowWidgetSession(instance.getAllowWidgetSession());
         vo.setMaxLoopCount(instance.getMaxLoopCount());
         vo.setCompletionProtocol(instance.getCompletionProtocol());
+        vo.setInstanceRole(instance.getInstanceRole());
+        vo.setSystemManaged(instance.getSystemManaged());
         vo.setConfig(instance.getConfig());
         vo.setCreatedAt(instance.getCreatedAt() != null ? instance.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(instance.getCreatedBy());
@@ -56,6 +58,9 @@ public class InstanceConverter {
         instance.setCompletionProtocol(CompletionProtocol.isInherit(dto.getCompletionProtocol())
                 ? null : CompletionProtocol.from(dto.getCompletionProtocol()).name());
         instance.setConfig(normalizeConfig(dto.getConfig()));
+        instance.setInstanceRole(dto.getInstanceRole() == null || dto.getInstanceRole().isBlank()
+                ? "CHAT" : dto.getInstanceRole().toUpperCase());
+        instance.setSystemManaged(Boolean.TRUE.equals(dto.getSystemManaged()));
         instance.setStatus(InstanceEnum.STATUS_ENABLED);
         return instance;
     }

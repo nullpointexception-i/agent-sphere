@@ -10,6 +10,9 @@ public interface RouteSpi {
 
     ModelRouteVO getRoute(Long id);
 
+    /** Owner-scoped default route, or null when not configured. */
+    ModelRouteVO getDefaultRoute();
+
     List<ModelRouteVO> listRoutesByProvider(Long providerId, String keyword);
 
     ModelRouteVO updateRoute(Long id, CreateRouteDTO dto);

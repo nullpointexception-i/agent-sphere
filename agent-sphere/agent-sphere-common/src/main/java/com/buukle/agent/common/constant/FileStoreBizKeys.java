@@ -15,5 +15,8 @@ public final class FileStoreBizKeys {
     /** 浏览器截图（ScreenshotFileService 使用，插件 CDP 捕获后 base64 上报，单张上限 8MB） */
     public static final String BROWSER_SCREENSHOT = "browser-screenshot";
 
+    /** IM 附件（按会话隔离：bizKey = im-attachment:{conversationId}）。 */
+    public static final String IM_ATTACHMENT = "im-attachment";
+
     private FileStoreBizKeys() {}
 }

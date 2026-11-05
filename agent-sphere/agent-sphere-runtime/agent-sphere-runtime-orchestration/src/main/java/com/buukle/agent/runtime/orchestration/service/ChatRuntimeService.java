@@ -12,8 +12,10 @@ import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.dto.ResolveClarificationsDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.enums.RunEnum;
+import com.buukle.agent.instance.dtvo.enums.ToolApprovalState;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
+import com.buukle.agent.instance.dtvo.vo.ClarificationAnswerPayloadVO;
 import com.buukle.agent.instance.dtvo.vo.ClarificationVO;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
@@ -94,7 +96,7 @@ public class ChatRuntimeService {
                     dto.getReasoningEffort());
             ChatMessageResponseVO queued = new ChatMessageResponseVO();
             queued.setRunId(active.getId());
-            queued.setStatus("QUEUED");
+            queued.setStatus(ChatConstant.RESPONSE_STATUS_QUEUED);
             queued.setQueueId(queueId);
             sessionSpi.touchSession(sessionId);
             return queued;
@@ -129,6 +131,7 @@ public class ChatRuntimeService {
         SessionVO session = sessionSpi.getSession(sessionId);
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);
+        createRunDTO.setThreadId(dto.getThreadId());
         createRunDTO.setRunMode(RunMode.from(
                 dto.getRunMode() != null ? dto.getRunMode() : session.getRunMode()).name());
         createRunDTO.setUserMessage(TextSanitizer.sanitize(dto.getMessage()));
@@ -480,7 +483,7 @@ public class ChatRuntimeService {
             vo.setMultiple(Boolean.TRUE.equals(row.getMultiple()));
             vo.setOptions(row.getOptions());
             vo.setDescription(row.getDescription());
-            vo.setStatus("pending");
+            vo.setStatus(ChatConstant.CLARIFICATION_STATUS_PENDING);
             out.add(vo);
         }
         return out;
@@ -573,9 +576,9 @@ public class ChatRuntimeService {
     }
 
     private static String answerJson(ResolveClarificationsDTO.Answer answer) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("selected", answer.getSelected() == null ? List.of() : answer.getSelected());
-        payload.put("text", answer.getText() == null ? "" : answer.getText());
+        ClarificationAnswerPayloadVO payload = new ClarificationAnswerPayloadVO();
+        payload.setSelected(answer.getSelected() == null ? List.of() : answer.getSelected());
+        payload.setText(answer.getText() == null ? "" : answer.getText());
         return JsonUtils.toJson(payload);
     }
 
@@ -713,12 +716,12 @@ public class ChatRuntimeService {
                 || !sessionId.equals(approval.getSessionId())) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Tool approval not found");
         }
-        if ("PENDING".equals(approval.getStatus())) {
+        if (ToolApprovalState.PENDING.equals(approval.getStatus())) {
             if (!toolApprovalService.resolve(sessionId, runId, approvalId, decisionsJson)) {
                 throw new BizException(CommonErrorCode.PARAM_INVALID,
                         "Tool approval is not pending or decisions are invalid");
             }
-        } else if (!"APPROVED".equals(approval.getStatus())) {
+        } else if (!ToolApprovalState.APPROVED.equals(approval.getStatus())) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Tool approval is already closed");
         }
 

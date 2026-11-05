@@ -9,6 +9,9 @@ public class AgentLlmInteractionRecordVO implements Serializable {
     private Long id;
     private Long runId;
     private Long sessionId;
+    private Long superAgentId;
+    private String sessionType;
+    private Long threadId;
     /** 主 Agent 问答轮次序号（= run.loop_count）。 */
     private Integer turnNo;
     /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */

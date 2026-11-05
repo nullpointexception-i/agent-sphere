@@ -1,5 +1,6 @@
 package com.buukle.agent.instance.service.impl;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.admin.spi.RoleSpi;
@@ -15,8 +16,10 @@ import com.buukle.agent.instance.dtvo.dto.LoginDTO;
 import com.buukle.agent.instance.dtvo.dto.RegisterDTO;
 import com.buukle.agent.instance.dtvo.enums.UserEnum;
 import com.buukle.agent.instance.dtvo.vo.IssuedTokenVO;
+import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
 import com.buukle.agent.instance.dtvo.vo.UserSessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
+import com.buukle.agent.instance.dtvo.vo.WorkspaceContactVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.UserMapper;
 import com.buukle.agent.instance.service.UserService;
@@ -27,8 +30,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
+import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -283,5 +289,60 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         var voPage = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
         voPage.setRecords(mpPage.getRecords().stream().map(this::toVO).toList());
         return voPage;
+    }
+
+    @Override
+    public Page<WorkspaceContactVO> pageContacts(int page, int size, String keyword) {
+        Long tenantId = com.buukle.agent.common.context.TenantContext.get();
+        var mpPage = lambdaQuery()
+                .eq(AgentUser::getStatus, UserEnum.STATUS_ACTIVE)
+                .eq(tenantId != null, AgentUser::getTenantId, tenantId)
+                .and(keyword != null && !keyword.isBlank(), w -> w
+                        .like(AgentUser::getUsername, keyword)
+                        .or().like(AgentUser::getDisplayName, keyword)
+                        .or().like(AgentUser::getEnglishName, keyword))
+                .orderByDesc(AgentUser::getLastLoginAt)
+                .orderByDesc(AgentUser::getId)
+                .page(new Page<>(Math.max(1, page), Math.max(1, size)));
+        Page<WorkspaceContactVO> voPage = new Page<>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
+        voPage.setRecords(mpPage.getRecords().stream().map(this::toContactVO).toList());
+        return voPage;
+    }
+
+    @Override
+    public Map<Long, UserIdentityVO> identityMap(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        return lambdaQuery()
+                .select(AgentUser::getId, AgentUser::getUsername, AgentUser::getDisplayName,
+                        AgentUser::getEnglishName, AgentUser::getAvatar)
+                .in(AgentUser::getId, userIds)
+                .list()
+                .stream()
+                .collect(Collectors.toMap(AgentUser::getId, this::toIdentityVO, (left, right) -> left));
+    }
+
+    private UserIdentityVO toIdentityVO(AgentUser user) {
+        UserIdentityVO vo = new UserIdentityVO();
+        vo.setId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setDisplayName(user.getDisplayName());
+        vo.setEnglishName(user.getEnglishName());
+        vo.setAvatar(user.getAvatar());
+        return vo;
+    }
+
+    private WorkspaceContactVO toContactVO(AgentUser user) {
+        WorkspaceContactVO vo = new WorkspaceContactVO();
+        vo.setId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setDisplayName(user.getDisplayName());
+        vo.setEnglishName(user.getEnglishName());
+        vo.setAvatar(user.getAvatar());
+        vo.setStatus(user.getStatus());
+        vo.setLastLoginAt(user.getLastLoginAt());
+        vo.setRoles(roleSpi.listByUserId(user.getId()).stream().map(r -> r.getCode()).toList());
+        return vo;
     }
 }

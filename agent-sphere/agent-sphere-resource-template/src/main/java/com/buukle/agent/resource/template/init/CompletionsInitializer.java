@@ -6,6 +6,8 @@ import com.buukle.agent.completions.dtvo.CreateCompletionsDTO;
 import com.buukle.agent.completions.dtvo.CreatePromptDTO;
 import com.buukle.agent.completions.service.CompletionsPromptService;
 import com.buukle.agent.completions.service.CompletionsService;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
+import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.resource.template.ResourceExistsException;
 import com.buukle.agent.resource.template.ResourceInitContext;
 import com.buukle.agent.resource.template.ResourceInitializer;
@@ -22,6 +24,7 @@ public class CompletionsInitializer implements ResourceInitializer {
 
     private final CompletionsService completionsService;
     private final CompletionsPromptService completionsPromptService;
+    private final RouteSpi routeSpi;
 
     @Override
     public String type() {
@@ -46,9 +49,14 @@ public class CompletionsInitializer implements ResourceInitializer {
         dto.setConfig(descriptor.path("config").asText(null));
         dto.setInputSchema(descriptor.path("inputSchema").asText(null));
         dto.setOutputSchema(descriptor.path("outputSchema").asText(null));
-        String routeName = descriptor.path("route").asText(null);
-        if (StringUtils.hasText(routeName)) {
-            dto.setModelRouteId(ctx.get("model_route", routeName));
+        ModelRouteVO defaultRoute = routeSpi.getDefaultRoute();
+        if (defaultRoute != null) {
+            dto.setModelRouteId(defaultRoute.getId());
+        } else {
+            String routeName = descriptor.path("route").asText(null);
+            if (StringUtils.hasText(routeName)) {
+                dto.setModelRouteId(ctx.get("model_route", routeName));
+            }
         }
         CompletionsVO vo = completionsService.create(dto);
 

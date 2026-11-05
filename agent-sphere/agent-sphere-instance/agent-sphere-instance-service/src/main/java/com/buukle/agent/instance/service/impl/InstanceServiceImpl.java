@@ -3,10 +3,12 @@ package com.buukle.agent.instance.service.impl;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.AvatarGenerator;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
+import com.buukle.agent.instance.dtvo.enums.InstanceEnum;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.InstanceMapper;
@@ -54,8 +56,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
         boolean clearLoop = dto.getMaxLoopCount() != null && dto.getMaxLoopCount() == 0;
         // MODEL_DEFAULT / blank = clear the instance override and follow the model route again.
         boolean clearCompletionProtocol = dto.getCompletionProtocol() != null
-                && com.buukle.agent.common.constant.CompletionProtocol
-                        .isInherit(dto.getCompletionProtocol());
+                && CompletionProtocol.isInherit(dto.getCompletionProtocol());
         AgentInstance instance = instanceConverter.toDO(dto);
         instance.setId(id);
         updateById(instance);
@@ -121,9 +122,25 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     }
 
     @Override
+    public InstanceVO findByRole(String instanceRole) {
+        if (instanceRole == null || instanceRole.isBlank()) {
+            return null;
+        }
+        AgentInstance instance = lambdaQuery()
+                .eq(AgentInstance::getInstanceRole, instanceRole.toUpperCase())
+                .eq(AgentInstance::getSystemManaged, true)
+                .eq(AgentInstance::getStatus, InstanceEnum.STATUS_ENABLED)
+                .orderByAsc(AgentInstance::getId)
+                .last("LIMIT 1")
+                .one();
+        return instance == null ? null : instanceConverter.toVO(instance);
+    }
+
+    @Override
     public List<InstanceVO> listInstances(String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         log.info("listInstances called: keyword='{}', startTime={}, endTime={}", keyword, startTime, endTime);
         List<AgentInstance> instances = lambdaQuery()
+                .eq(AgentInstance::getInstanceRole, "CHAT")
                 .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
                 .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
                 .le(endTime != null, AgentInstance::getCreatedAt, endTime)
@@ -135,7 +152,19 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
 
     @Override
     public IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime, LocalDateTime endTime) {
+        return pageInstances(page, size, keyword, startTime, endTime, null);
+    }
+
+    @Override
+    public IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
+                                           LocalDateTime endTime, String instanceRole) {
+        String role = instanceRole == null || instanceRole.isBlank()
+                ? "CHAT" : instanceRole.trim().toUpperCase();
+        boolean allRoles = "ALL".equals(role);
         Page<AgentInstance> p = lambdaQuery()
+                .eq(!allRoles, AgentInstance::getInstanceRole, role)
+                .and(w -> w.isNull(AgentInstance::getSystemManaged)
+                        .or().eq(AgentInstance::getSystemManaged, false))
                 .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
                 .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
                 .le(endTime != null, AgentInstance::getCreatedAt, endTime)
@@ -163,6 +192,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     public List<InstanceVO> listLatestNInstances(int n) {
         int limit = Math.min(Math.max(n, 1), 32);
         List<AgentInstance> instances = lambdaQuery()
+                .eq(AgentInstance::getInstanceRole, "CHAT")
                 .orderByDesc(AgentInstance::getCreatedAt)
                 .last("LIMIT " + limit)
                 .list();

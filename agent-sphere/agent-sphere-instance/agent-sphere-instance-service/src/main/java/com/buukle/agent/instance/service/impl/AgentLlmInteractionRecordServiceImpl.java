@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.buukle.agent.common.util.TimeUtils;
 import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
 import com.buukle.agent.instance.domain.vo.SessionUsageVO;
+import com.buukle.agent.instance.domain.vo.SuperAgentUsageVO;
 import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.repository.AgentLlmInteractionRecordMapper;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
@@ -13,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -166,6 +169,9 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         AgentLlmInteractionRecord record = new AgentLlmInteractionRecord();
         record.setRunId(vo.getRunId());
         record.setSessionId(vo.getSessionId());
+        record.setSuperAgentId(vo.getSuperAgentId());
+        record.setSessionType(vo.getSessionType());
+        record.setThreadId(vo.getThreadId());
         record.setTurnNo(vo.getTurnNo());
         record.setAttemptNo(vo.getAttemptNo() == null ? 0 : vo.getAttemptNo());
         record.setRetryNo(vo.getRetryNo() == null ? 0 : vo.getRetryNo());
@@ -292,11 +298,21 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         return vo;
     }
 
+    @Override
+    public List<SuperAgentUsageVO> usageBySuperAgent(Long superAgentId, int days) {
+        int window = Math.max(1, days);
+        LocalDateTime since = LocalDate.now().minusDays(window - 1L).atStartOfDay();
+        return mapper.sumUsageBySuperAgent(superAgentId, since);
+    }
+
     private AgentLlmInteractionRecordVO toVO(AgentLlmInteractionRecord record) {
         AgentLlmInteractionRecordVO vo = new AgentLlmInteractionRecordVO();
         vo.setId(record.getId());
         vo.setRunId(record.getRunId());
         vo.setSessionId(record.getSessionId());
+        vo.setSuperAgentId(record.getSuperAgentId());
+        vo.setSessionType(record.getSessionType());
+        vo.setThreadId(record.getThreadId());
         vo.setTurnNo(record.getTurnNo());
         vo.setAttemptNo(record.getAttemptNo());
         vo.setRetryNo(record.getRetryNo());

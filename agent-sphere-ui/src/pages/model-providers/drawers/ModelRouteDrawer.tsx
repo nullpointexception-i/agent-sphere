@@ -111,6 +111,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
           ? Number(values.maxOutputTokens) * 1000
           : null,
         supportsAttachment: !!values.supportsAttachment,
+        isDefault: !!values.isDefault,
         reasoningSupported,
         reasoningMode: reasoningSupported == null ? null : 'levels',
         reasoningLevels:
@@ -157,6 +158,26 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
       dataIndex: 'weight',
       key: 'weight',
       width: 80,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.models.isDefault',
+        defaultMessage: 'Default',
+      }),
+      dataIndex: 'isDefault',
+      key: 'isDefault',
+      width: 100,
+      render: (v: boolean) =>
+        v ? (
+          <Tag color="gold">
+            {intl.formatMessage({
+              id: 'pages.models.isDefaultYes',
+              defaultMessage: 'Default',
+            })}
+          </Tag>
+        ) : (
+          <Tag>{intl.formatMessage({ id: 'pages.table.disabled' })}</Tag>
+        ),
     },
     {
       title: intl.formatMessage({
@@ -223,9 +244,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
                     record.reasoningSupported == null
                       ? 'inherit'
                       : String(record.reasoningSupported),
-                  reasoningLevels: parseReasoningLevels(
-                    record.reasoningLevels,
-                  ),
+                  reasoningLevels: parseReasoningLevels(record.reasoningLevels),
                   reasoningAnswerReserveRatio:
                     record.reasoningAnswerReserveRatio ?? undefined,
                 });
@@ -350,6 +369,24 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
             rules={[{ required: true }]}
           >
             <Input maxLength={64} />
+          </Form.Item>
+          <Form.Item
+            name="isDefault"
+            label={labelWithRule(
+              intl.formatMessage({
+                id: 'pages.models.isDefault',
+                defaultMessage: 'Default',
+              }),
+              intl.formatMessage({
+                id: 'pages.models.isDefaultHint',
+                defaultMessage:
+                  'Use this route for new super-agent router and worker instances',
+              }),
+            )}
+            valuePropName="checked"
+            initialValue={false}
+          >
+            <Switch />
           </Form.Item>
           <Form.Item
             name="supportsAttachment"
@@ -490,8 +527,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
               }),
               intl.formatMessage({
                 id: 'pages.models.reasoningSupportedHint',
-                defaultMessage:
-                  'Leave empty to inherit the provider config',
+                defaultMessage: 'Leave empty to inherit the provider config',
               }),
             )}
             initialValue="inherit"
@@ -593,6 +629,18 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
               {
                 label: intl.formatMessage({ id: 'pages.table.weight' }),
                 value: viewRoute?.weight,
+              },
+              {
+                label: intl.formatMessage({
+                  id: 'pages.models.isDefault',
+                  defaultMessage: 'Default',
+                }),
+                value: viewRoute?.isDefault
+                  ? intl.formatMessage({
+                      id: 'pages.models.isDefaultYes',
+                      defaultMessage: 'Default',
+                    })
+                  : intl.formatMessage({ id: 'pages.table.disabled' }),
               },
               {
                 label: intl.formatMessage({

@@ -1,5 +1,6 @@
 export type SseCallbacks = {
   onMessage?: (payload: string) => void;
+  onEvent?: (eventType: string, payload: string) => void;
   onOpen?: () => void;
   onError?: (error: Error) => void;
 };
@@ -27,6 +28,7 @@ export async function connectSse(
 
   try {
     const response = await fetch(url, {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'text/event-stream',
@@ -86,15 +88,20 @@ export async function connectSse(
           if (trimmed.startsWith(':')) continue;
 
           const lines = trimmed.split('\n');
+          let eventType = 'message';
           const dataLines: string[] = [];
           for (const line of lines) {
-            if (line.startsWith('data:')) {
+            if (line.startsWith('event:')) {
+              eventType = line.slice(6).trim() || 'message';
+            } else if (line.startsWith('data:')) {
               dataLines.push(line.slice(5).trim());
             }
           }
 
           if (dataLines.length > 0) {
-            callbacks.onMessage?.(dataLines.join('\n'));
+            const data = dataLines.join('\n');
+            callbacks.onEvent?.(eventType, data);
+            callbacks.onMessage?.(data);
           }
         }
       }

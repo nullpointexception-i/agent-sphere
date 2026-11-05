@@ -992,6 +992,7 @@ public class SessionRunner {
                 if (reply != null && !reply.isBlank()) {
                     currentRun.setAssistantReply(reply);
                 }
+                currentRun.setFinishStatus(declaredStatus);
                 currentRun.setStatus(RunStatus.COMPLETED.name());
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
@@ -1647,6 +1648,9 @@ public class SessionRunner {
                                 }
                             },
                             new LlmInteractionMeta().setRunId(runId).setSessionId(sessionId)
+                                    .setSuperAgentId(ctx.getSession() == null ? null : ctx.getSession().getSuperAgentId())
+                                    .setSessionType(ctx.getSession() == null ? null : ctx.getSession().getSessionType())
+                                    .setThreadId(ctx.getSession() == null ? null : ctx.getSession().getThreadId())
                                     .setInteractionType(LlmInteractionType.CHAT_REPLY)
                                     .setTurnNo(loopCount)
                                     .setAttemptNo(i)

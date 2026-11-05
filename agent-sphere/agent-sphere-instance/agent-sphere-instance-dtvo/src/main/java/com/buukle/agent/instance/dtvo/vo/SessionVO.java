@@ -11,6 +11,10 @@ public class SessionVO implements Serializable {
     private Long agentInstanceId;
     private String status;
     private String runMode;
+    /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG。 */
+    private String sessionType;
+    private Long superAgentId;
+    private Long threadId;
     private String summary;
     private String summaryUpdatedAt;
     private Long summaryModelRouteId;

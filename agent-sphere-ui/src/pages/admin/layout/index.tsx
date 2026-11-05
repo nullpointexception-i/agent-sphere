@@ -6,6 +6,7 @@ import {
   LogoutOutlined,
   SafetyOutlined,
   SettingOutlined,
+  TagsOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -52,6 +53,12 @@ const SIDEBAR_ITEMS = [
     perm: 'admin:settings:read',
   },
   {
+    key: '/admin/dictionaries',
+    icon: <TagsOutlined />,
+    locale: 'pages.admin.dictionaries.title',
+    perm: 'admin:dictionary:read',
+  },
+  {
     key: '/admin/audit-logs',
     icon: <EyeOutlined />,
     locale: 'pages.admin.auditLogs.title',
@@ -71,15 +78,15 @@ export default function AdminLayout() {
   const { initialState, setInitialState } = useModel('@@initialState');
   const currentUser = initialState?.currentUser;
 
-  const canUser = useCan('admin:user:read');
   const canRole = useCan('admin:role:read');
-  const canPerm = useCan('admin:permission:read');
   const canSettings = useCan('admin:settings:read');
+  const canDictionary = useCan('admin:dictionary:read');
   const canAuditLog = useCan('admin:audit-log:read');
   const canIdentityProvider = useCan('admin:identity-provider:read');
   const visibleItems = SIDEBAR_ITEMS.filter((item) => {
     if (item.perm === 'admin:role:read') return canRole;
     if (item.perm === 'admin:settings:read') return canSettings;
+    if (item.perm === 'admin:dictionary:read') return canDictionary;
     if (item.perm === 'admin:audit-log:read') return canAuditLog;
     if (item.perm === 'admin:identity-provider:read')
       return canIdentityProvider;

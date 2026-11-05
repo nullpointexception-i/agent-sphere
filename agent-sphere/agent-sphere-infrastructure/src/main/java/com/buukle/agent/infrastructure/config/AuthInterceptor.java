@@ -4,6 +4,7 @@ import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfaceResolver;
+import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.error.CommonErrorCode;
@@ -80,6 +81,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
+        TenantContext.set(user.getTenantId());
         boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
         AuthContext.setSuperAdmin(isSuperAdmin);
         AuthContext.setPermissions(new HashSet<>(
@@ -107,6 +109,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         TenantUtil.stop();
+        TenantContext.clear();
         AuthContext.clear();
         // Tomcat 线程池会复用线程：不清理会把本请求的来源端串给下一个请求
         SessionSurfaceHolder.clear();

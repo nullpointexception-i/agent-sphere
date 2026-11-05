@@ -11,6 +11,8 @@ export default function access(
       perms.some((p) => p.startsWith('admin:')),
     canManageModels: perms.includes('model:provider:read'),
     canManageInstances: perms.includes('instance:read'),
+    canManageSuperAgent: perms.includes('super-agent:read'),
+    canManageIm: perms.includes('im:conversation:read'),
     canManageCapabilities: perms.some((p) => p.startsWith('capability:')),
     canManageMcp: perms.includes('capability:mcp:read'),
     canManageSkill: perms.includes('capability:skill:read'),

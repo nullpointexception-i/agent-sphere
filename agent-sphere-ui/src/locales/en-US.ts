@@ -5,6 +5,7 @@ import network from './en-US/network';
 import pages from './en-US/pages';
 import settingDrawer from './en-US/settingDrawer';
 import settings from './en-US/settings';
+import workspace from './en-US/workspace';
 
 export default {
   'navBar.lang': 'Languages',
@@ -19,4 +20,5 @@ export default {
   ...network,
   ...component,
   ...pages,
+  ...workspace,
 };

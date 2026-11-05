@@ -19,6 +19,8 @@ public class ModelRouteVO implements Serializable {
     private String providerName;
     private Boolean supportsAttachment;
     private String completionProtocol;
+    /** Whether this route is the owner's default route. */
+    private Boolean isDefault;
     /** 思考强度覆盖：NULL=继承厂商。 */
     private Boolean reasoningSupported;
     private String reasoningMode;

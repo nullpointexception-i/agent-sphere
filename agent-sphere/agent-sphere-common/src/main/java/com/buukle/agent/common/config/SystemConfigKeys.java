@@ -36,6 +36,8 @@ public final class SystemConfigKeys {
     public static final String SKILL_AUTO_UPDATE_ENABLED = "skill.auto-update-enabled";
     /** Skill 自动同步执行记录（capability_skill_sync_run）保留天数：每轮扫描一行，不清理会一直涨 */
     public static final String SKILL_SYNC_LOG_RETENTION_DAYS = "skill.sync-log-retention-days";
+    /** Global Agent Router system prompt; blank falls back to the built-in template. */
+    public static final String SUPER_AGENT_ROUTER_SYSTEM_PROMPT = "super-agent.router-system-prompt";
 
     /** 允许不经鉴权公开读取的配置键（仅安全/非敏感项） */
     public static final java.util.Set<String> PUBLIC_KEYS =

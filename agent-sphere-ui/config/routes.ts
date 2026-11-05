@@ -116,6 +116,22 @@ export default [
         component: './instances',
       },
       {
+        path: 'super-agent',
+        name: 'superAgent',
+        icon: 'team',
+        locale: 'menu.superAgent',
+        access: 'canManageSuperAgent',
+        component: './super-agent',
+      },
+      {
+        path: 'im',
+        name: 'im',
+        icon: 'message',
+        locale: 'menu.im',
+        access: 'canManageIm',
+        component: './im',
+      },
+      {
         path: 'completions',
         name: 'completions',
         icon: 'thunderbolt',
@@ -229,6 +245,7 @@ export default [
           { path: 'roles', component: './admin/roles' },
           { path: 'permissions', component: './admin/permissions' },
           { path: 'settings', component: './admin/settings' },
+          { path: 'dictionaries', component: './admin/dictionaries' },
           { path: 'audit-logs', component: './admin/audit-logs' },
           {
             path: 'identity-providers',
@@ -260,8 +277,13 @@ export default [
     ],
   },
   {
+    path: '/workspace',
+    layout: false,
+    component: './workspace',
+  },
+  {
     path: '/',
-    redirect: '/dashboard',
+    redirect: '/workspace',
   },
   {
     component: './exception/404',

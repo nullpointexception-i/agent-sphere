@@ -1064,10 +1064,10 @@ public class CompactionService {
                     } else if (p instanceof Map<?, ?> map
                             && (ChatMessagePartDTO.TYPE_IMAGE_URL.equals(map.get("type"))
                                 || map.containsKey("image_url"))) {
-                        Map<String, Object> text = new LinkedHashMap<>();
-                        text.put("type", ChatMessagePartDTO.TYPE_TEXT);
-                        text.put("text", RUN_TAIL_IMAGE_OMITTED);
-                        sanitized.add(text);
+                        ChatMessagePartDTO omitted = new ChatMessagePartDTO();
+                        omitted.setType(ChatMessagePartDTO.TYPE_TEXT);
+                        omitted.setText(RUN_TAIL_IMAGE_OMITTED);
+                        sanitized.add(omitted);
                     } else {
                         sanitized.add(p);
                     }

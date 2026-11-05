@@ -125,6 +125,17 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     }
 
     @Override
+    public void bindWorkItem(Long sessionId, Long workItemId) {
+        if (sessionId == null || workItemId == null) {
+            return;
+        }
+        lambdaUpdate()
+                .eq(AgentSession::getId, sessionId)
+                .set(AgentSession::getWorkItemId, workItemId)
+                .update();
+    }
+
+    @Override
     public void updateSummary(Long sessionId, String summary, String summaryUpdatedAt, Long modelRouteId) {
         AgentSession session = getById(sessionId);
         if (session == null) return;

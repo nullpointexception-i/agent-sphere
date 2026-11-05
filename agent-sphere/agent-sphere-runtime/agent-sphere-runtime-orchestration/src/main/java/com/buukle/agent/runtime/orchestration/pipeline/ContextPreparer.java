@@ -22,6 +22,7 @@ import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.instance.dtvo.vo.CapabilityFullVO;
 import com.buukle.agent.instance.dtvo.vo.CapabilityVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.spi.InstanceCapabilitySpi;
 import com.buukle.agent.runtime.kernel.constants.ExecBindingKeys;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
@@ -58,6 +59,22 @@ public class ContextPreparer {
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROGRESS.getId(),
             SubAgentConstants.DELEGATE_TOOL);
+    private static final Set<Long> ROUTER_TOOL_IDS = Set.of(
+            (long) BuiltinToolEnum.DISPATCH_WORKER.getId(),
+            (long) BuiltinToolEnum.SEND_MESSAGE.getId(),
+            (long) BuiltinToolEnum.RECALL_EVENT.getId(),
+            (long) BuiltinToolEnum.SUBSCRIBE_THREAD.getId(),
+            (long) BuiltinToolEnum.CLOSE_THREAD.getId());
+    private static final Set<Long> ROUTER_ALLOWED_IDS = Set.of(
+            (long) BuiltinToolEnum.DISPATCH_WORKER.getId(),
+            (long) BuiltinToolEnum.SEND_MESSAGE.getId(),
+            (long) BuiltinToolEnum.RECALL_EVENT.getId(),
+            (long) BuiltinToolEnum.SUBSCRIBE_THREAD.getId(),
+            (long) BuiltinToolEnum.CLOSE_THREAD.getId(),
+            (long) BuiltinToolEnum.FINISH.getId(),
+            (long) BuiltinToolEnum.ASK_CLARIFICATION.getId(),
+            (long) BuiltinToolEnum.CURRENT_TIME.getId(),
+            (long) BuiltinToolEnum.READ_TOOL_RESULT.getId());
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
     private final CapabilitySkillSpi skillSpi;
@@ -88,6 +105,7 @@ public class ContextPreparer {
         List<CapabilityFullVO> fullCapabilities = resolveFullCapabilities(capabilities);
         List<RuntimeTool> tools = resolveTools(capabilities, validated,
                 Boolean.TRUE.equals(run.getNoClarification()), run);
+        tools = applyRolePolicy(tools, validated);
 
         return KernelContext.builder()
                 .agentInstance(validated.getAgentInstance())
@@ -136,6 +154,56 @@ public class ContextPreparer {
             }
         }
         return result;
+    }
+
+    private List<RuntimeTool> applyRolePolicy(List<RuntimeTool> tools, ValidationResult validated) {
+        String sessionType = validated.getSession() == null ? null
+                : validated.getSession().getSessionType();
+        if (SessionType.GROUP_ROUTER.equals(sessionType)) {
+            return List.of();
+        }
+        if (SessionType.ROUTER.equals(sessionType)) {
+            List<RuntimeTool> filtered = new ArrayList<>();
+            Set<Long> present = new HashSet<>();
+            for (RuntimeTool tool : tools) {
+                if (tool.getCapabilityId() != null && ROUTER_ALLOWED_IDS.contains(tool.getCapabilityId())) {
+                    filtered.add(tool);
+                    present.add(tool.getCapabilityId());
+                }
+            }
+            for (BuiltinToolVO tool : builtinSpi.listBuiltinTools()) {
+                long id = tool.getId();
+                if (ROUTER_TOOL_IDS.contains(id) && !present.contains(id)) {
+                    filtered.add(toRuntimeTool(tool));
+                }
+            }
+            return filtered;
+        }
+        tools.removeIf(tool -> tool.getCapabilityId() != null
+                && ROUTER_TOOL_IDS.contains(tool.getCapabilityId()));
+        return tools;
+    }
+
+    private static RuntimeTool toRuntimeTool(BuiltinToolVO tool) {
+        String llmName = LLM_PREFIX_BUILTIN + tool.getId();
+        Map<String, Object> binding = new HashMap<>();
+        binding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, tool.getName());
+        return RuntimeTool.builder()
+                .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                .capabilityId(tool.getId())
+                .llmToolName(llmName)
+                .toolRef(ToolRefs.builtin(tool.getName()))
+                .displayName(tool.getDisplayNameCn())
+                .displayNameCn(tool.getDisplayNameCn())
+                .displayNameEn(tool.getDisplayNameEn())
+                .description(tool.getDescription() != null ? tool.getDescription() : "")
+                .parametersSchemaJson(tool.getParamSchema())
+                .execBinding(binding)
+                .compressEnabled(tool.isCompressEnabled())
+                .accessMode(tool.getAccessMode())
+                .securityLevel(tool.getSecurityLevel())
+                .approvalScope(tool.getApprovalScope())
+                .build();
     }
 
     // ---- New RuntimeTool resolution ----

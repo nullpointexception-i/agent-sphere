@@ -10,6 +10,8 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.spi.InstanceCapabilitySpi;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.instance.service.InstanceService;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
+import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.resource.template.ResourceInitContext;
 import com.buukle.agent.resource.template.init.InstanceInitializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,6 +43,8 @@ class InstanceInitializerTest {
     CapabilityBuiltinSpi capabilityBuiltinSpi;
     @Mock
     InstanceCapabilitySpi instanceCapabilitySpi;
+    @Mock
+    RouteSpi routeSpi;
 
     InstanceInitializer initializer;
     final ObjectMapper mapper = new ObjectMapper();
@@ -48,7 +52,8 @@ class InstanceInitializerTest {
 
     @BeforeEach
     void setUp() {
-        initializer = new InstanceInitializer(instanceSpi, instanceService, capabilityBuiltinSpi, instanceCapabilitySpi);
+        initializer = new InstanceInitializer(instanceSpi, instanceService, capabilityBuiltinSpi,
+                instanceCapabilitySpi, routeSpi);
     }
 
     private InstanceVO instanceVO(Long id) {
@@ -106,6 +111,22 @@ class InstanceInitializerTest {
         assertEquals("task", dto.getValue().getBusinessType());
         assertEquals("You are Headhunter Assist.\nStrict rules:\n- Only answer business questions.",
                 dto.getValue().getSystemPrompt());
+    }
+
+    @Test
+    void initialize_shouldBindDefaultModelRoute() throws Exception {
+        when(instanceSpi.listInstances(anyString(), any(), any())).thenReturn(List.of());
+        when(instanceService.createInstance(any(CreateInstanceDTO.class))).thenReturn(instanceVO(10L));
+        when(capabilityBuiltinSpi.listBuiltinTools()).thenReturn(List.of());
+        ModelRouteVO route = new ModelRouteVO();
+        route.setId(77L);
+        when(routeSpi.getDefaultRoute()).thenReturn(route);
+
+        initializer.initialize(descriptor(), ctx);
+
+        ArgumentCaptor<CreateInstanceDTO> dto = ArgumentCaptor.forClass(CreateInstanceDTO.class);
+        verify(instanceService).createInstance(dto.capture());
+        assertEquals(77L, dto.getValue().getModelRouteId());
     }
 
     @Test

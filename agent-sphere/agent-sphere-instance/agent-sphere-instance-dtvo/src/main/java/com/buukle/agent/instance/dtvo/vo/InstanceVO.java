@@ -24,6 +24,10 @@ public class InstanceVO implements Serializable {
     /** 单次 run 最大循环次数（NULL=未配置走系统默认）。 */
     private Integer maxLoopCount;
     private String completionProtocol;
+    /** CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG。 */
+    private String instanceRole;
+    /** 系统托管实例。 */
+    private Boolean systemManaged;
     /** 采样/请求参数 JSON 配置（NULL=未配置）。 */
     private String config;
     private String createdAt;

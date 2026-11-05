@@ -5,10 +5,12 @@ import com.buukle.agent.instance.domain.AgentLlmInteractionRecord;
 import com.buukle.agent.instance.domain.vo.RunUsagePointVO;
 import com.buukle.agent.instance.domain.vo.RunUsageVO;
 import com.buukle.agent.instance.domain.vo.SessionUsageVO;
+import com.buukle.agent.instance.domain.vo.SuperAgentUsageVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -100,4 +102,26 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
             """)
     Long selectLatestPromptTokens(@Param("sessionId") Long sessionId,
                                   @Param("interactionType") String interactionType);
+
+    /** Daily usage of one Super-Agent grouped by session type (cost attribution view). */
+    @Select("""
+            SELECT super_agent_id,
+                   TO_CHAR(created_at, 'YYYY-MM-DD')                   AS day,
+                   session_type,
+                   COUNT(DISTINCT run_id)                              AS run_count,
+                   COUNT(*)                                            AS interaction_count,
+                   COALESCE(SUM(prompt_tokens), 0)                     AS prompt_tokens,
+                   COALESCE(SUM(completion_tokens), 0)                 AS completion_tokens,
+                   COALESCE(SUM(total_tokens), 0)                      AS total_tokens,
+                   COALESCE(SUM(cache_hit_tokens), 0)                  AS cache_hit_tokens,
+                   COALESCE(SUM(cache_miss_tokens), 0)                 AS cache_miss_tokens
+            FROM agent_llm_interaction_record
+            WHERE delete_flag = 0
+              AND super_agent_id = #{superAgentId}
+              AND created_at >= #{since}
+            GROUP BY super_agent_id, TO_CHAR(created_at, 'YYYY-MM-DD'), session_type
+            ORDER BY day DESC, session_type
+            """)
+    List<SuperAgentUsageVO> sumUsageBySuperAgent(@Param("superAgentId") Long superAgentId,
+                                                 @Param("since") LocalDateTime since);
 }

@@ -2,8 +2,8 @@ import { ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Drawer, Select, Space, Table, Tag } from 'antd';
 import { useRef, useState } from 'react';
-import { agentApi } from '@/services/agentSphere/api';
 import type { SessionCleanupRun } from '@/services/agentSphere/api';
+import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 
 interface Props {
@@ -44,10 +44,10 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
   return (
     <Drawer
       title={t('pages.admin.settings.cleanup.runs.title', '会话清理执行记录')}
-      width={1080}
+      size={1080}
       open={open}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
     >
       <Space style={{ marginBottom: 12 }}>
         <Select
@@ -65,28 +65,61 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
           options={[
             {
               value: 'SCHEDULED',
-              label: t('pages.admin.settings.cleanup.runs.triggerScheduled', '定时'),
+              label: t(
+                'pages.admin.settings.cleanup.runs.triggerScheduled',
+                '定时',
+              ),
             },
             {
               value: 'MANUAL',
-              label: t('pages.admin.settings.cleanup.runs.triggerManual', '手动'),
+              label: t(
+                'pages.admin.settings.cleanup.runs.triggerManual',
+                '手动',
+              ),
             },
           ]}
         />
         <Select
           allowClear
           style={{ width: 140 }}
-          placeholder={t('pages.admin.settings.cleanup.runs.filterStatus', '状态')}
+          placeholder={t(
+            'pages.admin.settings.cleanup.runs.filterStatus',
+            '状态',
+          )}
           value={status}
           onChange={(v) => {
             setStatus(v);
             reload();
           }}
           options={[
-            { value: 'RUNNING', label: t('pages.admin.settings.cleanup.runs.statusRunning', '运行中') },
-            { value: 'SUCCESS', label: t('pages.admin.settings.cleanup.runs.statusSuccess', '成功') },
-            { value: 'FAILED', label: t('pages.admin.settings.cleanup.runs.statusFailed', '失败') },
-            { value: 'SKIPPED', label: t('pages.admin.settings.cleanup.runs.statusSkipped', '已跳过') },
+            {
+              value: 'RUNNING',
+              label: t(
+                'pages.admin.settings.cleanup.runs.statusRunning',
+                '运行中',
+              ),
+            },
+            {
+              value: 'SUCCESS',
+              label: t(
+                'pages.admin.settings.cleanup.runs.statusSuccess',
+                '成功',
+              ),
+            },
+            {
+              value: 'FAILED',
+              label: t(
+                'pages.admin.settings.cleanup.runs.statusFailed',
+                '失败',
+              ),
+            },
+            {
+              value: 'SKIPPED',
+              label: t(
+                'pages.admin.settings.cleanup.runs.statusSkipped',
+                '已跳过',
+              ),
+            },
           ]}
         />
       </Space>
@@ -103,7 +136,10 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
             width: 70,
           },
           {
-            title: t('pages.admin.settings.cleanup.runs.col.trigger', '触发方式'),
+            title: t(
+              'pages.admin.settings.cleanup.runs.col.trigger',
+              '触发方式',
+            ),
             dataIndex: 'triggerType',
             width: 90,
             render: (_, row: SessionCleanupRun) =>
@@ -113,7 +149,10 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
                 </Tag>
               ) : (
                 <Tag>
-                  {t('pages.admin.settings.cleanup.runs.triggerScheduled', '定时')}
+                  {t(
+                    'pages.admin.settings.cleanup.runs.triggerScheduled',
+                    '定时',
+                  )}
                 </Tag>
               ),
           },
@@ -150,14 +189,22 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
             },
           },
           {
-            title: t('pages.admin.settings.cleanup.runs.col.retention', '保留天数'),
+            title: t(
+              'pages.admin.settings.cleanup.runs.col.retention',
+              '保留天数',
+            ),
             dataIndex: 'retentionDays',
             width: 100,
             render: (_, row: SessionCleanupRun) =>
-              row.retentionDays ? `${row.retentionDays}/${row.fileRetentionDays}` : '-',
+              row.retentionDays
+                ? `${row.retentionDays}/${row.fileRetentionDays}`
+                : '-',
           },
           {
-            title: t('pages.admin.settings.cleanup.runs.col.sessions', '会话数'),
+            title: t(
+              'pages.admin.settings.cleanup.runs.col.sessions',
+              '会话数',
+            ),
             dataIndex: 'sessionCount',
             width: 90,
             align: 'right' as const,
@@ -169,7 +216,10 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
             align: 'right' as const,
           },
           {
-            title: t('pages.admin.settings.cleanup.runs.col.activeBlocked', '活跃跳过'),
+            title: t(
+              'pages.admin.settings.cleanup.runs.col.activeBlocked',
+              '活跃跳过',
+            ),
             dataIndex: 'skippedActiveSessions',
             width: 100,
             align: 'right' as const,
@@ -183,7 +233,10 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
               row.elapsedMs == null ? '-' : `${row.elapsedMs} ms`,
           },
           {
-            title: t('pages.admin.settings.cleanup.runs.col.startedAt', '开始时间'),
+            title: t(
+              'pages.admin.settings.cleanup.runs.col.startedAt',
+              '开始时间',
+            ),
             dataIndex: 'startedAt',
             width: 170,
             render: (_, row: SessionCleanupRun) => formatTime(row.startedAt),
@@ -194,12 +247,17 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
             <Space direction="vertical" style={{ width: '100%' }}>
               {row.skipReason && (
                 <span>
-                  {t('pages.admin.settings.cleanup.runs.skipReason', '跳过原因')}：{row.skipReason}
+                  {t(
+                    'pages.admin.settings.cleanup.runs.skipReason',
+                    '跳过原因',
+                  )}
+                  ：{row.skipReason}
                 </span>
               )}
               {row.errorMessage && (
                 <span>
-                  {t('pages.admin.settings.cleanup.runs.errorMessage', '错误')}：{row.errorMessage}
+                  {t('pages.admin.settings.cleanup.runs.errorMessage', '错误')}
+                  ：{row.errorMessage}
                 </span>
               )}
               {row.truncated && (
@@ -214,9 +272,18 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
                 size="small"
                 pagination={false}
                 rowKey="table"
-                dataSource={statsOf(row).map(([table, rows]) => ({ table, rows }))}
+                dataSource={statsOf(row).map(([table, rows]) => ({
+                  table,
+                  rows,
+                }))}
                 columns={[
-                  { title: t('pages.admin.settings.cleanup.col.table', '数据表'), dataIndex: 'table' },
+                  {
+                    title: t(
+                      'pages.admin.settings.cleanup.col.table',
+                      '数据表',
+                    ),
+                    dataIndex: 'table',
+                  },
                   {
                     title: t('pages.admin.settings.cleanup.col.rows', '行数'),
                     dataIndex: 'rows',

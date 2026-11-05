@@ -46,8 +46,9 @@ public class InstanceController extends BaseController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        return ok(instanceService.pageInstances(page, size, keyword, startTime, endTime));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            @RequestParam(required = false) String instanceRole) {
+        return ok(instanceService.pageInstances(page, size, keyword, startTime, endTime, instanceRole));
     }
 
     @GetMapping("/{id}")

@@ -3,6 +3,7 @@ package com.buukle.agent.instance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.buukle.agent.instance.domain.AgentToolApproval;
+import com.buukle.agent.instance.dtvo.enums.ToolApprovalState;
 import com.buukle.agent.instance.dtvo.vo.ToolApprovalVO;
 import com.buukle.agent.instance.repository.AgentToolApprovalMapper;
 import com.buukle.agent.instance.spi.ToolApprovalSpi;
@@ -24,7 +25,7 @@ public class ToolApprovalServiceImpl implements ToolApprovalSpi {
         row.setSessionId(sessionId);
         row.setRunId(runId);
         row.setToolCallsJson(toolCallsJson);
-        row.setStatus("PENDING");
+        row.setStatus(ToolApprovalState.PENDING);
         mapper.insert(row);
     }
 
@@ -32,7 +33,7 @@ public class ToolApprovalServiceImpl implements ToolApprovalSpi {
     public ToolApprovalVO getPending(Long sessionId) {
         AgentToolApproval row = mapper.selectOne(new LambdaQueryWrapper<AgentToolApproval>()
                 .eq(AgentToolApproval::getSessionId, sessionId)
-                .eq(AgentToolApproval::getStatus, "PENDING")
+                .eq(AgentToolApproval::getStatus, ToolApprovalState.PENDING)
                 .orderByAsc(AgentToolApproval::getId)
                 .last("LIMIT 1"));
         return toVO(row);
@@ -49,7 +50,7 @@ public class ToolApprovalServiceImpl implements ToolApprovalSpi {
     public List<ToolApprovalVO> listPendingByRunId(Long runId) {
         return mapper.selectList(new LambdaQueryWrapper<AgentToolApproval>()
                         .eq(AgentToolApproval::getRunId, runId)
-                        .eq(AgentToolApproval::getStatus, "PENDING")
+                        .eq(AgentToolApproval::getStatus, ToolApprovalState.PENDING)
                         .orderByAsc(AgentToolApproval::getId))
                 .stream().map(ToolApprovalServiceImpl::toVO).toList();
     }
@@ -58,7 +59,7 @@ public class ToolApprovalServiceImpl implements ToolApprovalSpi {
     public ToolApprovalVO findResumableByRunId(Long runId) {
         AgentToolApproval row = mapper.selectOne(new LambdaQueryWrapper<AgentToolApproval>()
                 .eq(AgentToolApproval::getRunId, runId)
-                .eq(AgentToolApproval::getStatus, "APPROVED")
+                .eq(AgentToolApproval::getStatus, ToolApprovalState.APPROVED)
                 .orderByDesc(AgentToolApproval::getId)
                 .last("LIMIT 1"));
         return toVO(row);
@@ -77,15 +78,15 @@ public class ToolApprovalServiceImpl implements ToolApprovalSpi {
     public void consume(String approvalId) {
         mapper.update(null, new LambdaUpdateWrapper<AgentToolApproval>()
                 .eq(AgentToolApproval::getApprovalId, approvalId)
-                .eq(AgentToolApproval::getStatus, "APPROVED")
-                .set(AgentToolApproval::getStatus, "CONSUMED"));
+                .eq(AgentToolApproval::getStatus, ToolApprovalState.APPROVED)
+                .set(AgentToolApproval::getStatus, ToolApprovalState.CONSUMED));
     }
 
     @Override
     public void dismissByRunId(Long runId, String status) {
         mapper.update(null, new LambdaUpdateWrapper<AgentToolApproval>()
                 .eq(AgentToolApproval::getRunId, runId)
-                .eq(AgentToolApproval::getStatus, "PENDING")
+                .eq(AgentToolApproval::getStatus, ToolApprovalState.PENDING)
                 .set(AgentToolApproval::getStatus, status));
     }
 

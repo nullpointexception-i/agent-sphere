@@ -3,6 +3,7 @@ package com.buukle.agent.instance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.common.constant.ToolApprovalScope;
 import com.buukle.agent.instance.domain.AgentToolApprovalGrant;
+import com.buukle.agent.instance.dtvo.enums.ToolApprovalState;
 import com.buukle.agent.instance.dtvo.vo.ToolApprovalGrantVO;
 import com.buukle.agent.instance.repository.AgentToolApprovalGrantMapper;
 import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
@@ -25,7 +26,7 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         }
         LambdaQueryWrapper<AgentToolApprovalGrant> query = new LambdaQueryWrapper<AgentToolApprovalGrant>()
                 .eq(AgentToolApprovalGrant::getToolRef, toolRef)
-                .eq(AgentToolApprovalGrant::getStatus, "APPROVED");
+                .eq(AgentToolApprovalGrant::getStatus, ToolApprovalState.APPROVED);
         if (maxScope == ToolApprovalScope.SESSION) {
             query.and(w -> {
                 w.nested(x -> x.eq(AgentToolApprovalGrant::getScope, ToolApprovalScope.SESSION.name())
@@ -53,7 +54,7 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         }
         Long count = mapper.selectCount(new LambdaQueryWrapper<AgentToolApprovalGrant>()
                 .eq(AgentToolApprovalGrant::getToolRef, toolRef)
-                .eq(AgentToolApprovalGrant::getStatus, "DENIED")
+                .eq(AgentToolApprovalGrant::getStatus, ToolApprovalState.DENIED)
                 .eq(AgentToolApprovalGrant::getScope, ToolApprovalScope.RUN.name())
                 .eq(AgentToolApprovalGrant::getRunId, runId));
         return count != null && count > 0;
@@ -68,7 +69,7 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
                 .eq(AgentToolApprovalGrant::getRunId, runId)
                 .last("LIMIT 1"));
         if (existing != null) {
-            existing.setStatus("DENIED");
+            existing.setStatus(ToolApprovalState.DENIED);
             existing.setApprovedBy(approvedBy);
             mapper.updateById(existing);
             return;
@@ -78,7 +79,7 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         grant.setRunId(runId);
         grant.setToolRef(toolRef);
         grant.setScope(ToolApprovalScope.RUN.name());
-        grant.setStatus("DENIED");
+        grant.setStatus(ToolApprovalState.DENIED);
         grant.setApprovedBy(approvedBy);
         mapper.insert(grant);
     }
@@ -102,7 +103,7 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         }
         AgentToolApprovalGrant existing = mapper.selectOne(existingQuery.last("LIMIT 1"));
         if (existing != null) {
-            existing.setStatus("APPROVED");
+            existing.setStatus(ToolApprovalState.APPROVED);
             existing.setApprovedBy(approvedBy);
             existing.setDisplayName(resolvedName);
             existing.setSecurityLevel(resolvedLevel);
@@ -117,7 +118,7 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         grant.setSecurityLevel(resolvedLevel);
         grant.setScope(approvalScope.name());
         grant.setApprovedBy(approvedBy);
-        grant.setStatus("APPROVED");
+        grant.setStatus(ToolApprovalState.APPROVED);
         mapper.insert(grant);
     }
 
@@ -126,7 +127,7 @@ public class ToolApprovalGrantServiceImpl implements ToolApprovalGrantSpi {
         if (sessionId == null) return List.of();
         return mapper.selectList(new LambdaQueryWrapper<AgentToolApprovalGrant>()
                         .eq(AgentToolApprovalGrant::getSessionId, sessionId)
-                        .eq(AgentToolApprovalGrant::getStatus, "APPROVED")
+                        .eq(AgentToolApprovalGrant::getStatus, ToolApprovalState.APPROVED)
                         .orderByDesc(AgentToolApprovalGrant::getId))
                 .stream().map(g -> {
                     ToolApprovalGrantVO vo = new ToolApprovalGrantVO();

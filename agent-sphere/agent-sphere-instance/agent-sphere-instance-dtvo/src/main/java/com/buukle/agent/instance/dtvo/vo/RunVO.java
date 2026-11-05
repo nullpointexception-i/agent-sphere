@@ -11,6 +11,8 @@ import java.util.List;
 public class RunVO implements Serializable {
     private Long id;
     private Long sessionId;
+    private Long threadId;
+    private String finishStatus;
     private String type;
     private String userMessage;
     private String assistantReply;

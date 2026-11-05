@@ -10,6 +10,8 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.spi.InstanceCapabilitySpi;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.instance.service.InstanceService;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
+import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.resource.template.ResourceExistsException;
 import com.buukle.agent.resource.template.ResourceInitContext;
 import com.buukle.agent.resource.template.ResourceInitializer;
@@ -30,6 +32,7 @@ public class InstanceInitializer implements ResourceInitializer {
     private final InstanceService instanceService;
     private final CapabilityBuiltinSpi capabilityBuiltinSpi;
     private final InstanceCapabilitySpi instanceCapabilitySpi;
+    private final RouteSpi routeSpi;
 
     @Override
     public String type() {
@@ -55,9 +58,14 @@ public class InstanceInitializer implements ResourceInitializer {
         if (descriptor.hasNonNull("config")) {
             dto.setConfig(descriptor.path("config").toString());
         }
-        String routeName = descriptor.path("route").asText(null);
-        if (StringUtils.hasText(routeName)) {
-            dto.setModelRouteId(ctx.get("model_route", routeName));
+        ModelRouteVO defaultRoute = routeSpi.getDefaultRoute();
+        if (defaultRoute != null) {
+            dto.setModelRouteId(defaultRoute.getId());
+        } else {
+            String routeName = descriptor.path("route").asText(null);
+            if (StringUtils.hasText(routeName)) {
+                dto.setModelRouteId(ctx.get("model_route", routeName));
+            }
         }
         InstanceVO vo = instanceService.createInstance(dto);
         bindBuiltinBrowser(vo.getId());

@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.service;
 
 import com.buukle.agent.common.constant.ToolApprovalDecision;
 import com.buukle.agent.common.constant.ToolApprovalScope;
+import com.buukle.agent.instance.dtvo.enums.ToolApprovalState;
 import com.buukle.agent.instance.dtvo.vo.ToolApprovalVO;
 import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
 import com.buukle.agent.instance.spi.ToolApprovalSpi;
@@ -67,7 +68,7 @@ public class ToolApprovalService {
     /** Resolve from the bottom drawer. decisionsJson = [{callId, decision}]. */
     public boolean resolve(Long sessionId, Long runId, String approvalId, String decisionsJson) {
         ToolApprovalVO approval = approvalSpi.getByApprovalId(approvalId);
-        if (approval == null || !"PENDING".equals(approval.getStatus())) {
+        if (approval == null || !ToolApprovalState.PENDING.equals(approval.getStatus())) {
             return false;
         }
         List<Map<String, Object>> rows = parseRows(approval.getToolCallsJson());
@@ -75,7 +76,7 @@ public class ToolApprovalService {
         if (decisions == null) {
             return false;
         }
-        approvalSpi.resolve(approvalId, decisionsJson, "APPROVED", "user");
+        approvalSpi.resolve(approvalId, decisionsJson, ToolApprovalState.APPROVED, "user");
         for (Map<String, Object> row : rows) {
             if (!pending(row)) {
                 continue;
@@ -168,10 +169,10 @@ public class ToolApprovalService {
         if (runId == null) return;
         List<ToolApprovalVO> pending = approvalSpi.listPendingByRunId(runId);
         for (ToolApprovalVO approval : pending) {
-            approvalSpi.resolve(approval.getApprovalId(), null, "DISMISSED", "system");
+            approvalSpi.resolve(approval.getApprovalId(), null, ToolApprovalState.DISMISSED, "system");
             publishDismissed(approval.getSessionId(), runId, approval.getApprovalId());
         }
-        approvalSpi.dismissByRunId(runId, "DISMISSED");
+        approvalSpi.dismissByRunId(runId, ToolApprovalState.DISMISSED);
     }
 
     private static Map<String, ToolApprovalDecision> parseDecisions(

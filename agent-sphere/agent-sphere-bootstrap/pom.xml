@@ -86,6 +86,14 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-im-controller</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-superagent-controller</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-infrastructure</artifactId>
         </dependency>
         <dependency>

@@ -45,6 +45,28 @@ class RouteConverterTest {
     }
 
     @Test
+    void toVO_mapsIsDefault() {
+        AgentModelRoute route = new AgentModelRoute();
+        route.setIsDefault(true);
+
+        ModelRouteVO vo = converter.toVO(route);
+
+        assertTrue(vo.getIsDefault());
+    }
+
+    @Test
+    void toDO_mapsIsDefault() {
+        CreateRouteDTO dto = new CreateRouteDTO();
+        dto.setProviderId(7L);
+        dto.setModelName("deepseek-chat");
+        dto.setIsDefault(true);
+
+        AgentModelRoute route = converter.toDO(dto);
+
+        assertTrue(route.getIsDefault());
+    }
+
+    @Test
     void toVO_nullRoute_returnsNull() {
         assertNull(converter.toVO(null));
     }

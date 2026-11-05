@@ -1,6 +1,8 @@
 package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.domain.AgentModelProvider;
@@ -15,6 +17,7 @@ import com.buukle.agent.model.service.RouteService;
 import com.buukle.agent.model.service.converter.RouteConverter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -27,9 +30,16 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     private final ApiKeyMapper apiKeyMapper;
 
     @Override
+    @Transactional
     public ModelRouteVO createRoute(CreateRouteDTO dto) {
         validateFallbacks(null, dto);
+        if (Boolean.TRUE.equals(dto.getIsDefault())) {
+            baseMapper.clearDefault(currentOwner());
+        }
         AgentModelRoute route = routeConverter.toDO(dto);
+        if (route.getIsDefault() == null) {
+            route.setIsDefault(false);
+        }
         save(route);
         ModelRouteVO vo = routeConverter.toVO(route);
         enrichFallbackNames(vo);
@@ -49,8 +59,40 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     }
 
     @Override
+    @Transactional
+    public ModelRouteVO setDefault(Long id) {
+        AgentModelRoute route = getById(id);
+        if (route == null) {
+            throw new BizException(ModelErrorCode.ROUTE_NOT_FOUND);
+        }
+        baseMapper.clearDefault(currentOwner());
+        lambdaUpdate()
+                .eq(AgentModelRoute::getId, id)
+                .set(AgentModelRoute::getIsDefault, true)
+                .update();
+        return getRoute(id);
+    }
+
+    @Override
+    public ModelRouteVO getDefaultRoute() {
+        AgentModelRoute route = baseMapper.selectDefault(currentOwner());
+        if (route == null) {
+            return null;
+        }
+        ModelRouteVO vo = routeConverter.toVO(route);
+        enrichFallbackNames(vo);
+        enrichApiKeyConfigured(vo);
+        enrichProviderName(vo);
+        return vo;
+    }
+
+    @Override
+    @Transactional
     public ModelRouteVO updateRoute(Long id, CreateRouteDTO dto) {
         validateFallbacks(id, dto);
+        if (Boolean.TRUE.equals(dto.getIsDefault())) {
+            baseMapper.clearDefault(currentOwner());
+        }
         AgentModelRoute route = routeConverter.toDO(dto);
         route.setId(id);
         updateById(route);
@@ -100,6 +142,18 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
         enrichApiKeyConfigured(vos);
         enrichProviderName(vos);
         return vos;
+    }
+
+    private static String currentOwner() {
+        String tenant = TenantUtil.get();
+        if (tenant != null && !tenant.isBlank()) {
+            return tenant;
+        }
+        String username = AuthContext.getUsername();
+        if (username != null && !username.isBlank()) {
+            return username;
+        }
+        return "system";
     }
 
     private void enrichApiKeyConfigured(ModelRouteVO vo) {

@@ -38,6 +38,10 @@ public class CreateInstanceDTO implements Serializable {
     private Integer maxLoopCount;
     /** STRICT_FINISH by default; IMPLICIT_TEXT is for compatible conversational instances. */
     private String completionProtocol;
+    /** CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG；留空默认 CHAT。 */
+    private String instanceRole;
+    /** 系统托管实例；留空默认 false。 */
+    private Boolean systemManaged;
     /** 采样/请求参数 JSON 配置（与 LlmSamplingConfigDTO 同形状）；NULL/空=未配置，更新时空字符串=清除。 */
     @Size(max = 8000, message = "config must be <= 8000 chars")
     private String config;

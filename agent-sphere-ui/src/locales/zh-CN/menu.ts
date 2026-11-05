@@ -10,6 +10,8 @@ export default {
   'menu.tasks': '单次任务',
   'menu.capabilities': '能力',
   'menu.agents': '智能体',
+  'menu.superAgent': '数字员工',
+  'menu.im': '消息',
   'menu.modelsGroup': '模型',
   'menu.tasksGroup': '任务',
   'menu.periodicTasks': '周期任务',

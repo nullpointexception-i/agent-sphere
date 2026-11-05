@@ -70,6 +70,7 @@ export default function InstanceList() {
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
   const [keyword, setKeyword] = useState('');
+  const [instanceRole, setInstanceRole] = useState('ALL');
   const [timeRange, setTimeRange] = useState<
     [dayjs.Dayjs | null, dayjs.Dayjs | null]
   >([null, null]);
@@ -82,6 +83,7 @@ export default function InstanceList() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const [tableScrollY, setTableScrollY] = useState(400);
+  const roleReadOnly = instanceRole !== 'CHAT';
   const routeNameMap = useMemo(() => {
     const m: Record<number, string> = {};
     allRoutes.forEach((r: any) => {
@@ -102,6 +104,7 @@ export default function InstanceList() {
       const size = ps ?? 12;
       const res = await agentApi.instances.list({
         keyword: keyword || undefined,
+        instanceRole,
         startTime: formatParamDate(timeRange[0]),
         endTime: formatParamDate(timeRange[1]?.endOf('day')),
         page: p,
@@ -112,7 +115,7 @@ export default function InstanceList() {
       setPage(p);
       return res;
     },
-    [keyword, timeRange],
+    [keyword, timeRange, instanceRole],
   );
 
   useEffect(() => {
@@ -188,6 +191,13 @@ export default function InstanceList() {
         ),
     },
     {
+      title: '角色',
+      dataIndex: 'instanceRole',
+      key: 'instanceRole',
+      width: 110,
+      render: (v: string) => v || 'CHAT',
+    },
+    {
       title: intl.formatMessage({ id: 'pages.table.created' }),
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -218,59 +228,63 @@ export default function InstanceList() {
               setDetailOpen(true);
             }}
           />
-          <Can code="instance:update">
-            <Button
-              type="link"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => {
-                setEditing(record);
-                setInfoDrawerOpen(true);
-              }}
-            />
-          </Can>
-          <Button
-            type="link"
-            size="small"
-            icon={<ApiOutlined />}
-            onClick={() => {
-              setEditing(record);
-              setCapDrawerOpen(true);
-            }}
-          />
-          <Can code="instance:delete">
-            <Button
-              type="link"
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-              onClick={() => {
-                modal.confirm({
-                  title: intl.formatMessage(
-                    {
-                      id: 'pages.deleteConfirm.title',
-                      defaultMessage: 'Delete {name}',
-                    },
-                    { name: 'instance' },
-                  ),
-                  content: intl.formatMessage(
-                    {
-                      id: 'pages.deleteConfirm.content',
-                      defaultMessage:
-                        'Are you sure you want to delete this {name}?',
-                    },
-                    { name: 'instance' },
-                  ),
-                  okType: 'danger',
-                  onOk: async () => {
-                    await agentApi.instances.delete(record.id);
-                    message.success('Deleted');
-                    actionRef.current?.reload();
-                  },
-                });
-              }}
-            />
-          </Can>
+          {record.instanceRole === 'CHAT' && (
+            <>
+              <Can code="instance:update">
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => {
+                    setEditing(record);
+                    setInfoDrawerOpen(true);
+                  }}
+                />
+              </Can>
+              <Button
+                type="link"
+                size="small"
+                icon={<ApiOutlined />}
+                onClick={() => {
+                  setEditing(record);
+                  setCapDrawerOpen(true);
+                }}
+              />
+              <Can code="instance:delete">
+                <Button
+                  type="link"
+                  danger
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    modal.confirm({
+                      title: intl.formatMessage(
+                        {
+                          id: 'pages.deleteConfirm.title',
+                          defaultMessage: 'Delete {name}',
+                        },
+                        { name: 'instance' },
+                      ),
+                      content: intl.formatMessage(
+                        {
+                          id: 'pages.deleteConfirm.content',
+                          defaultMessage:
+                            'Are you sure you want to delete this {name}?',
+                        },
+                        { name: 'instance' },
+                      ),
+                      okType: 'danger',
+                      onOk: async () => {
+                        await agentApi.instances.delete(record.id);
+                        message.success('Deleted');
+                        actionRef.current?.reload();
+                      },
+                    });
+                  }}
+                />
+              </Can>
+            </>
+          )}
         </>
       ),
     },
@@ -433,25 +447,43 @@ export default function InstanceList() {
                 setTimeRange(dates || [null, null]);
               }}
             />
+            <Select
+              value={instanceRole}
+              style={{ width: 140 }}
+              onChange={(value) => {
+                setInstanceRole(value);
+                setSelectMode(false);
+                setSelectedIds(new Set());
+              }}
+              options={[
+                { value: 'CHAT', label: '普通实例' },
+                { value: 'ROUTER', label: 'Router' },
+                { value: 'WORKER', label: 'Worker' },
+                { value: 'ALL', label: '全部' },
+              ]}
+            />
             <Button
               icon={<ClearOutlined />}
               onClick={() => {
                 setKeyword('');
                 setTimeRange([null, null]);
+                setInstanceRole('ALL');
                 setTimeout(() => setRefreshKey((k) => k + 1), 0);
               }}
             />
-            <Tooltip
-              title={intl.formatMessage({
-                id: 'pages.instances.batchOperation',
-                defaultMessage: 'Batch operation',
-              })}
-            >
-              <Button
-                icon={<CheckSquareOutlined />}
-                onClick={() => setSelectMode(true)}
-              />
-            </Tooltip>
+            {!roleReadOnly && (
+              <Tooltip
+                title={intl.formatMessage({
+                  id: 'pages.instances.batchOperation',
+                  defaultMessage: 'Batch operation',
+                })}
+              >
+                <Button
+                  icon={<CheckSquareOutlined />}
+                  onClick={() => setSelectMode(true)}
+                />
+              </Tooltip>
+            )}
             <Button
               icon={
                 viewMode === 'card' ? (
@@ -464,18 +496,20 @@ export default function InstanceList() {
                 setViewMode(viewMode === 'card' ? 'table' : 'card')
               }
             />
-            <Can code="instance:create">
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  setEditing(null);
-                  form.resetFields();
-                  setImagePreview('');
-                  setModalOpen(true);
-                }}
-              />
-            </Can>
+            {instanceRole !== 'ROUTER' && instanceRole !== 'WORKER' && (
+              <Can code="instance:create">
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => {
+                    setEditing(null);
+                    form.resetFields();
+                    setImagePreview('');
+                    setModalOpen(true);
+                  }}
+                />
+              </Can>
+            )}
           </>
         )}
       </div>
@@ -545,7 +579,7 @@ export default function InstanceList() {
                         })}
                       </span>
                     </div>,
-                    ...(canEdit
+                    ...(item.instanceRole === 'CHAT' && canEdit
                       ? [
                           <div
                             key="edit"
@@ -570,7 +604,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(canManageCaps
+                    ...(item.instanceRole === 'CHAT' && canManageCaps
                       ? [
                           <div
                             key="caps"
@@ -595,7 +629,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(canBindModel
+                    ...(item.instanceRole === 'CHAT' && canBindModel
                       ? [
                           <div
                             key="model"
@@ -620,7 +654,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(canDelete
+                    ...(item.instanceRole === 'CHAT' && canDelete
                       ? [
                           <div
                             key="delete"
@@ -694,6 +728,13 @@ export default function InstanceList() {
                           }
                         >
                           {item.status}
+                        </Tag>
+                        <Tag
+                          color={
+                            item.instanceRole === 'CHAT' ? 'default' : 'purple'
+                          }
+                        >
+                          {item.instanceRole || 'CHAT'}
                         </Tag>
                         {item.businessType && (
                           <Tag color="blue">{item.businessType}</Tag>
@@ -778,12 +819,14 @@ export default function InstanceList() {
           }}
           params={{
             keyword: keyword || undefined,
+            instanceRole,
             startTime: formatParamDate(timeRange[0]),
             endTime: formatParamDate(timeRange[1]?.endOf('day')),
           }}
           request={async (p) => {
             const res = await agentApi.instances.list({
               keyword: p.keyword,
+              instanceRole: p.instanceRole,
               startTime: p.startTime,
               endTime: p.endTime,
               page: p.current,
@@ -920,7 +963,8 @@ export default function InstanceList() {
               }),
               intl.formatMessage({
                 id: 'pages.instances.allowConsoleSession.extra',
-                defaultMessage: '关闭后主站（控制台）不能对该实例发起或继续会话',
+                defaultMessage:
+                  '关闭后主站（控制台）不能对该实例发起或继续会话',
               }),
             )}
             valuePropName="checked"

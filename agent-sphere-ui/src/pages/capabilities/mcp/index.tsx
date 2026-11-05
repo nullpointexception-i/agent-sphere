@@ -417,7 +417,7 @@ export default function McpList() {
                 : undefined
             }
             onChange={(dates) => {
-              if (dates && dates[0] && dates[1]) {
+              if (dates?.[0] && dates[1]) {
                 const diff = dates[1].diff(dates[0], 'day');
                 if (diff > 90) {
                   setTimeRange([dates[0], dates[0].add(90, 'day')]);
@@ -553,9 +553,27 @@ export default function McpList() {
           >
             <Select
               options={[
-                { value: 'READ', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.read', defaultMessage: 'Read' }) },
-                { value: 'WRITE', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.write', defaultMessage: 'Write' }) },
-                { value: 'READ_WRITE', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.readWrite', defaultMessage: 'Read/write' }) },
+                {
+                  value: 'READ',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.accessMode.read',
+                    defaultMessage: 'Read',
+                  }),
+                },
+                {
+                  value: 'WRITE',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.accessMode.write',
+                    defaultMessage: 'Write',
+                  }),
+                },
+                {
+                  value: 'READ_WRITE',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.accessMode.readWrite',
+                    defaultMessage: 'Read/write',
+                  }),
+                },
               ]}
             />
           </Form.Item>
@@ -584,9 +602,27 @@ export default function McpList() {
           >
             <Select
               options={[
-                { value: 'SESSION', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.session', defaultMessage: 'Session' }) },
-                { value: 'RUN', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.run', defaultMessage: 'Run' }) },
-                { value: 'ONCE', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.once', defaultMessage: 'Once' }) },
+                {
+                  value: 'SESSION',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.approvalScope.session',
+                    defaultMessage: 'Session',
+                  }),
+                },
+                {
+                  value: 'RUN',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.approvalScope.run',
+                    defaultMessage: 'Run',
+                  }),
+                },
+                {
+                  value: 'ONCE',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.approvalScope.once',
+                    defaultMessage: 'Once',
+                  }),
+                },
               ]}
             />
           </Form.Item>
@@ -696,7 +732,7 @@ export default function McpList() {
         })}`}
         open={toolsOpen}
         onClose={() => setToolsOpen(false)}
-        width={680}
+        size={680}
       >
         {toolsLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}>
@@ -718,7 +754,9 @@ export default function McpList() {
             }
           />
         ) : tools.length === 0 ? (
-          <Empty description={intl.formatMessage({ id: 'pages.table.empty' })} />
+          <Empty
+            description={intl.formatMessage({ id: 'pages.table.empty' })}
+          />
         ) : (
           <Space direction="vertical" style={{ width: '100%' }} size={12}>
             {tools.map((tool) => (

@@ -9,6 +9,12 @@ public class LlmInteractionMeta {
     private Long runId;
     private Long sessionId;
     private LlmInteractionType interactionType;
+    /** Super-Agent ownership for cost attribution. */
+    private Long superAgentId;
+    /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG. */
+    private String sessionType;
+    /** Super-Agent thread id for cost attribution. */
+    private Long threadId;
     /** 归属的子 Agent 运行（NULL=主 Agent）。 */
     private Long subAgentRunId;
     /** 上游 HTTP 状态码（错误事件携带；正常结束记 200；无 HTTP 交互时为 null）。 */

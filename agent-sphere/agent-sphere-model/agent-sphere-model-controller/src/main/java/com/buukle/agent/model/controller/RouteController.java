@@ -25,6 +25,11 @@ public class RouteController extends BaseController {
         return created(routeService.createRoute(dto));
     }
 
+    @GetMapping("/default")
+    public ResponseEntity<?> getDefault() {
+        return ok(routeService.getDefaultRoute());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
         return ok(routeService.getRoute(id));
@@ -44,6 +49,13 @@ public class RouteController extends BaseController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateRouteDTO dto) {
         return ok(routeService.updateRoute(id, dto));
+    }
+
+    @AuditLog(action = "SET_DEFAULT", resourceType = "ModelRoute", resourceId = "#id")
+    @RequirePermission("model:route:update")
+    @PutMapping("/{id}/default")
+    public ResponseEntity<?> setDefault(@PathVariable Long id) {
+        return ok(routeService.setDefault(id));
     }
 
     @AuditLog(action = "DELETE", resourceType = "ModelRoute", resourceId = "#id")

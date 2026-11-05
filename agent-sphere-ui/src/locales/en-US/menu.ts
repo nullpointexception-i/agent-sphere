@@ -5,6 +5,8 @@ export default {
   'menu.dashboard': 'Dashboard',
   'menu.chat': 'Chat',
   'menu.instances': 'Instances',
+  'menu.superAgent': 'Super Agents',
+  'menu.im': 'Messages',
   'menu.models': 'Model Providers',
   'menu.completions': 'Completions',
   'menu.tasks': 'One-off Tasks',

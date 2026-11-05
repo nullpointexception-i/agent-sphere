@@ -1,5 +1,6 @@
 package com.buukle.agent.model.service.converter;
 
+import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.model.domain.AgentModelRoute;
 import com.buukle.agent.model.dtvo.constants.RouteConstants;
 import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
@@ -49,6 +50,7 @@ public class RouteConverter {
         vo.setCompany(route.getCompany());
         vo.setSupportsAttachment(route.getSupportsAttachment());
         vo.setCompletionProtocol(route.getCompletionProtocol());
+        vo.setIsDefault(route.getIsDefault());
         vo.setReasoningSupported(route.getReasoningSupported());
         vo.setReasoningMode(route.getReasoningMode());
         vo.setReasoningLevels(route.getReasoningLevels());
@@ -74,13 +76,14 @@ public class RouteConverter {
             route.setSupportsAttachment(dto.getSupportsAttachment());
         }
         if (dto.getCompletionProtocol() != null && !dto.getCompletionProtocol().isBlank()) {
-            route.setCompletionProtocol(com.buukle.agent.common.constant.CompletionProtocol
+            route.setCompletionProtocol(CompletionProtocol
                     .from(dto.getCompletionProtocol()).name());
         }
         route.setReasoningSupported(dto.getReasoningSupported());
         route.setReasoningMode(dto.getReasoningMode());
         route.setReasoningLevels(dto.getReasoningLevels());
         route.setReasoningAnswerReserveRatio(dto.getReasoningAnswerReserveRatio());
+        route.setIsDefault(dto.getIsDefault());
         return route;
     }
 }

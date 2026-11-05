@@ -35,6 +35,14 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-superagent-spi</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-superagent-dtvo</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-capability-mcp-spi</artifactId>
         </dependency>
         <dependency>

@@ -32,6 +32,10 @@ public class AgentInstance {
     private Integer maxLoopCount;
     /** Completion contract for tool-using runs; defaults to STRICT_FINISH. */
     private String completionProtocol;
+    /** Super-Agent 角色：CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG。 */
+    private String instanceRole;
+    /** 系统托管实例（如 Group Router），普通实例列表应隐藏。 */
+    private Boolean systemManaged;
     /** 采样/请求参数配置（JSON，与 LlmSamplingConfigDTO 同形状；NULL=走全局兜底）。 */
     private String config;
     @TableLogic

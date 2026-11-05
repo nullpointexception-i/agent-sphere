@@ -28,6 +28,8 @@ public class CreateRouteDTO implements Serializable {
     private Boolean supportsAttachment;
     /** STRICT_FINISH by default; IMPLICIT_TEXT only for compatible conversational models. */
     private String completionProtocol;
+    /** Mark this route as the owner's default route. */
+    private Boolean isDefault;
     /** 思考强度覆盖：NULL=继承厂商。 */
     private Boolean reasoningSupported;
     private String reasoningMode;

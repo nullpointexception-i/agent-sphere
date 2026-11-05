@@ -11,6 +11,8 @@ public class AgentRun {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long sessionId;
+    private Long threadId;
+    private String finishStatus;
     private String type;
     private String userMessage;
     private String assistantReply;

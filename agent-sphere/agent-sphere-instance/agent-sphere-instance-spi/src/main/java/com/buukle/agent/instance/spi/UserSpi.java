@@ -2,10 +2,15 @@ package com.buukle.agent.instance.spi;
 
 import com.buukle.agent.instance.dtvo.dto.LoginDTO;
 import com.buukle.agent.instance.dtvo.dto.RegisterDTO;
+import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
 import com.buukle.agent.instance.dtvo.vo.UserSessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
+import com.buukle.agent.instance.dtvo.vo.WorkspaceContactVO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 public interface UserSpi {
     UserVO login(LoginDTO dto);
@@ -38,4 +43,10 @@ public interface UserSpi {
     UserVO getByUserId(Long userId);
 
     com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO> listPage(int page, int size);
+
+    /** Safe contact fields for the C-end workspace; never exposes token/email/permissions. */
+    Page<WorkspaceContactVO> pageContacts(int page, int size, String keyword);
+
+    /** Lightweight id -> current identity lookup for cross-domain display. */
+    Map<Long, UserIdentityVO> identityMap(Collection<Long> userIds);
 }

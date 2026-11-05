@@ -101,7 +101,14 @@ export const agentApi = {
       request<any[]>(`${BASE}/instance/instances/all`),
     listLatest: (n: number) =>
       request<any[]>(`${BASE}/instance/instances/latest/${n}`),
-    list: (params: { keyword?: string; startTime?: string; endTime?: string; page?: number; size?: number }) =>
+    list: (params: {
+      keyword?: string;
+      startTime?: string;
+      endTime?: string;
+      instanceRole?: string;
+      page?: number;
+      size?: number;
+    }) =>
       request<any>(`${BASE}/instance/instances`, {
         params,
       }),
@@ -381,12 +388,20 @@ export const agentApi = {
         params: { keyword },
       }),
     get: (id: number) => request<any>(`${BASE}/model/routes/${id}`),
+    getDefault: () => request<any>(`${BASE}/model/routes/default`),
     create: (data: any) =>
       request<any>(`${BASE}/model/routes`, { method: 'POST', data }),
     update: (id: number, data: any) =>
       request<any>(`${BASE}/model/routes/${id}`, { method: 'PUT', data }),
+    setDefault: (id: number) =>
+      request<any>(`${BASE}/model/routes/${id}/default`, { method: 'PUT' }),
     delete: (id: number) =>
       request<void>(`${BASE}/model/routes/${id}`, { method: 'DELETE' }),
+  },
+
+  workspaceContacts: {
+    users: (params: { keyword?: string; page?: number; size?: number }) =>
+      request<any>(`${BASE}/workspace/contacts/users`, { params }),
   },
 
   mcp: {

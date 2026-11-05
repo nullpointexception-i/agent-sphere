@@ -52,6 +52,7 @@ public interface SessionCleanupMapper {
             SELECT s.id
             FROM agent_session s
             WHERE s.delete_flag = 0
+              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER')
               AND s.created_at &lt; #{cutoff}
               AND s.updated_at  &lt; #{cutoff}
               AND NOT EXISTS (
@@ -83,6 +84,7 @@ public interface SessionCleanupMapper {
             <script>
             SELECT count(*) FROM agent_session s
             WHERE s.delete_flag = 0
+              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER')
               AND s.created_at &lt; #{cutoff}
               AND s.updated_at  &lt; #{cutoff}
               AND NOT EXISTS (
@@ -109,6 +111,7 @@ public interface SessionCleanupMapper {
             SELECT count(*)
             FROM agent_session s
             WHERE s.delete_flag = 0
+              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER')
               AND s.created_at &lt; #{cutoff}
               AND s.updated_at  &lt; #{cutoff}
               AND ( EXISTS (SELECT 1 FROM agent_run r
@@ -425,4 +428,16 @@ public interface SessionCleanupMapper {
             </script>
             """)
     int deleteCompletionsCallsByIds(@Param("ids") Collection<Long> ids);
+
+    /** IM attachments use per-conversation biz keys ({@code im-attachment:{id}}). */
+    @Select("""
+            SELECT id FROM agent_file_store
+            WHERE created_at < #{cutoff}
+              AND biz_key LIKE CONCAT(#{prefix}, '%')
+            ORDER BY id
+            LIMIT #{limit}
+            """)
+    List<Long> selectExpiredFileIdsByPrefix(@Param("cutoff") LocalDateTime cutoff,
+                                            @Param("prefix") String prefix,
+                                            @Param("limit") int limit);
 }
