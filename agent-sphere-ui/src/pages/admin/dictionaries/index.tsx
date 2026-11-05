@@ -181,7 +181,7 @@ export default function AdminDictionaries() {
             options={[
               {
                 value: DIC_TYPE_POSITION,
-                label: t('pages.admin.dictionaries.typePosition', '职位'),
+                label: t('pages.admin.dictionaries.typePosition', '角色'),
               },
             ]}
           />

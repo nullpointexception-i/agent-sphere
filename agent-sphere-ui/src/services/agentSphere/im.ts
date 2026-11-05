@@ -103,6 +103,11 @@ export const imApi = {
       method: 'POST',
       data,
     }),
+  createAgentDm: (agentId: number) =>
+    request<ImConversation>(`${BASE}/im/conversations/agent-dm`, {
+      method: 'POST',
+      data: { agentId },
+    }),
   participants: (id: number) =>
     request<any[]>(`${BASE}/im/conversations/${id}/participants`),
   addParticipant: (

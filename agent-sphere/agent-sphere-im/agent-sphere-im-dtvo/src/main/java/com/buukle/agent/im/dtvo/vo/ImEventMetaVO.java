@@ -12,6 +12,7 @@ public class ImEventMetaVO implements Serializable {
     private String type;
     private List<MentionDTO> mentions;
     private List<Long> agentIds;
+    private String conversationType;
     private String conversationTitle;
     private String purpose;
     private String gateConfig;

@@ -73,8 +73,12 @@ public class EventIngestService implements EventIngestPort {
         try {
             eventMapper.insert(row);
             metrics.increment(AgentMetrics.EVENT_INGESTED);
-            passThroughSubscriptions(row);
-            directDeliverMentions(row, event);
+            if (isDirectDm(event.rawMeta())) {
+                directDeliverAgents(row, agentIds(row.getPayload()));
+            } else {
+                passThroughSubscriptions(row);
+                directDeliverMentions(row, event);
+            }
             return IngestResult.accepted(row.getId(), thread.getId());
         } catch (DuplicateKeyException e) {
             AgentEvent existing = eventMapper.selectOne(Wrappers.<AgentEvent>lambdaQuery()
@@ -121,8 +125,55 @@ public class EventIngestService implements EventIngestPort {
         }
     }
 
-    private static Set<Long> agentIds(String payload) {
+    /** DM messages are delivered straight to the agent participants. */
+    private static boolean isDirectDm(String rawMeta) {
+        if (rawMeta == null || rawMeta.isBlank()) {
+            return false;
+        }
         try {
+            JsonNode root = JsonUtils.getMapper().readTree(rawMeta);
+            JsonNode type = root == null ? null : root.get("conversationType");
+            return type != null && type.isTextual() && "DM".equalsIgnoreCase(type.asText());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void directDeliverAgents(AgentEvent row, Set<Long> agentIds) {
+        if (agentIds.isEmpty()) {
+            row.setGroupDecision(GroupRouterDecisionType.OBSERVE);
+            row.setGroupReason("no agents in dm");
+            row.setGroupProcessedAt(LocalDateTime.now());
+            row.setStatus(AgentEventStatus.DELIVERED);
+            eventMapper.updateById(row);
+            return;
+        }
+        for (Long agentId : agentIds) {
+            if (agentId == null) {
+                continue;
+            }
+            AgentEventDelivery delivery = new AgentEventDelivery();
+            delivery.setEventId(row.getId());
+            delivery.setSuperAgentId(agentId);
+            delivery.setDecision(GroupRouterDecisionType.DIRECT);
+            delivery.setReason("dm participant");
+            delivery.setStatus(AgentEventDeliveryStatus.PENDING);
+            delivery.setAttempts(0);
+            delivery.setActorType(ActorType.SYSTEM);
+            try {
+                deliveryMapper.insert(delivery);
+            } catch (DuplicateKeyException ignored) {
+                // Already delivered.
+            }
+        }
+        row.setGroupDecision(GroupRouterDecisionType.DIRECT);
+        row.setGroupReason("dm participant agents: " + agentIds);
+        row.setGroupProcessedAt(LocalDateTime.now());
+        row.setStatus(AgentEventStatus.DELIVERED);
+        eventMapper.updateById(row);
+    }
+
+    private static Set<Long> agentIds(String payload) {        try {
             JsonNode root = JsonUtils.getMapper().readTree(payload);
             JsonNode raw = root == null ? null : root.get("rawMeta");
             if (raw == null || !raw.isTextual()) {

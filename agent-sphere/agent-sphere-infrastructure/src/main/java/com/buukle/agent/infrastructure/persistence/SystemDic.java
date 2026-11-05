@@ -23,7 +23,7 @@ public class SystemDic {
     private Integer sortNo;
     private String status;
     private String remark;
-    @TableLogic
+    @TableLogic(value = "false", delval = "true")
     private Boolean deleteFlag;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

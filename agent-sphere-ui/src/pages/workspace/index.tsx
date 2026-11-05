@@ -3,10 +3,14 @@ import {
   CheckOutlined,
   CloseOutlined,
   ContactsOutlined,
+  DeleteOutlined,
+  EditOutlined,
   GlobalOutlined,
   HomeOutlined,
   LogoutOutlined,
   MessageOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
   PlusOutlined,
   PushpinOutlined,
   RobotOutlined,
@@ -28,6 +32,7 @@ import {
   App,
   Avatar,
   Button,
+  Drawer,
   Dropdown,
   Empty,
   Form,
@@ -57,7 +62,7 @@ import {
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
-import { messageText } from '../im/components/messageUtils';
+import { messageText, parsedContent } from '../im/components/messageUtils';
 import { tw } from './i18n';
 import { useStyles } from './style';
 
@@ -188,9 +193,19 @@ function conversationDisplayName(conversation: ImConversation, me: any) {
 
 function conversationPreview(conversation: ImConversation) {
   const lastMessage = (conversation as any).lastMessage;
-  return lastMessage
-    ? messageText(lastMessage)
-    : conversation.purpose || tw('conversation.noMessages', '暂无消息');
+  if (!lastMessage) {
+    return conversation.purpose || tw('conversation.noMessages', '暂无消息');
+  }
+  const card = taskCardOf(lastMessage);
+  if (card) {
+    return (
+      card.title ||
+      card.summary ||
+      tw('chat.taskFallback', '任务') ||
+      tw('conversation.noMessages', '暂无消息')
+    );
+  }
+  return messageText(lastMessage) || tw('conversation.noMessages', '暂无消息');
 }
 
 function conversationAvatar(conversation: ImConversation, me: any) {
@@ -249,6 +264,47 @@ function messageTime(value?: string) {
   return time.isValid() ? time.format('HH:mm') : '';
 }
 
+function fullTime(value?: string) {
+  if (!value) return '-';
+  const time = dayjs(value);
+  return time.isValid() ? time.format('YYYY-MM-DD HH:mm') : '-';
+}
+
+type TaskCardView = {
+  title?: string;
+  status?: string;
+  summary?: string;
+  workItemId?: number;
+};
+
+function taskCardOf(message: ImMessage): TaskCardView | null {
+  const content = parsedContent(message);
+  if (!content?.cardType) return null;
+  return content as TaskCardView;
+}
+
+function taskStatusLabel(status?: string) {
+  switch (status) {
+    case 'QUEUED':
+      return tw('chat.taskStatus.queued', '排队中');
+    case 'DISPATCHING':
+      return tw('chat.taskStatus.dispatching', '准备执行');
+    case 'RUNNING':
+      return tw('chat.taskStatus.running', '执行中');
+    case 'WAITING':
+      return tw('chat.taskStatus.waiting', '等待中');
+    case 'COMPLETED':
+    case 'DONE':
+      return tw('chat.taskStatus.completed', '已完成');
+    case 'FAILED':
+      return tw('chat.taskStatus.failed', '失败');
+    case 'CANCELLED':
+      return tw('chat.taskStatus.cancelled', '已取消');
+    default:
+      return status || tw('chat.taskStatus.unknown', '未知');
+  }
+}
+
 function mergeMessages(older: ImMessage[], current: ImMessage[]) {
   const byId = new Map<number, ImMessage>();
   for (const message of [...older, ...current]) {
@@ -274,7 +330,7 @@ export default function WorkspacePage() {
     <div className={styles.backdrop}>
       <div className={styles.app}>
         <SideRail tab={tab} onChange={setTab} me={me} styles={styles} />
-        <div className={styles.main}>
+        <div className={styles.main} id="workspace-main">
           {tab === 'chat' ? (
             <ChatTab
               conversationId={conversationId}
@@ -292,7 +348,9 @@ export default function WorkspacePage() {
                     onOpenChat={openChat}
                   />
                 ) : null}
-                {tab === 'avatars' ? <AvatarsTab /> : null}
+                {tab === 'avatars' ? (
+                  <AvatarsTab onOpenChat={openChat} />
+                ) : null}
                 {tab === 'contacts' ? (
                   <ContactsTab onOpenChat={openChat} />
                 ) : null}
@@ -594,12 +652,13 @@ function ConversationRow({
   );
 }
 
-function AvatarsTab() {
+function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
   const { styles } = useStyles();
   const { message, modal } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [agents, setAgents] = useState<SuperAgent[]>([]);
   const [positions, setPositions] = useState<SystemDicEntry[]>([]);
+  const [startingChat, setStartingChat] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
@@ -664,6 +723,24 @@ function AvatarsTab() {
       positionCode: editingAgent.positionCode,
     });
     setAgentModalMode('edit');
+  };
+
+  const startChat = async () => {
+    if (!editingAgent || startingChat) return;
+    if (editingAgent.status !== 'ACTIVE') {
+      message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
+      return;
+    }
+    setStartingChat(true);
+    try {
+      const conversation = await imApi.createAgentDm(editingAgent.id);
+      setEditingAgent(null);
+      onOpenChat(conversation.id);
+    } catch {
+      message.error(tw('avatars.chatFailed', '发起对话失败'));
+    } finally {
+      setStartingChat(false);
+    }
   };
 
   const saveEdit = async () => {
@@ -842,7 +919,7 @@ function AvatarsTab() {
 
           <div className={styles.fieldBlock}>
             <div className={styles.fieldLabel}>
-              {tw('avatars.position', '职位')}{' '}
+              {tw('avatars.position', '角色')}{' '}
               <span className={styles.required}>*</span>
             </div>
             <Form.Item
@@ -850,14 +927,14 @@ function AvatarsTab() {
               rules={[
                 {
                   required: true,
-                  message: tw('avatars.positionRequired', '请选择职位'),
+                  message: tw('avatars.positionRequired', '请选择角色'),
                 },
               ]}
               style={{ marginBottom: 0 }}
             >
               <Select
                 className={styles.softField}
-                placeholder={tw('avatars.positionPlaceholder', '请选择职位')}
+                placeholder={tw('avatars.positionPlaceholder', '请选择角色')}
                 options={positionOptions}
               />
             </Form.Item>
@@ -913,196 +990,256 @@ function AvatarsTab() {
         </div>
       </Modal>
 
-      <Modal
-        className={styles.createModal}
+      <Drawer
         open={editingAgent != null}
-        footer={null}
+        placement="right"
+        width={440}
         closable={false}
-        width={520}
-        onCancel={() => setEditingAgent(null)}
+        onClose={() => setEditingAgent(null)}
         destroyOnHidden
+        rootClassName={styles.avatarDrawerRoot}
+        getContainer={() =>
+          document.getElementById('workspace-main') ?? document.body
+        }
+        styles={{ body: { padding: 0 } }}
       >
-        <div className={styles.createHero}>
-          <button
-            type="button"
-            className={styles.createClose}
-            onClick={() => setEditingAgent(null)}
-          >
-            <CloseOutlined />
-          </button>
-          <div className={styles.createHeroText}>
-            <div className={styles.createTitle}>
-              {agentModalMode === 'view'
-                ? editingAgent?.name || tw('nav.avatars', '数字分身')
-                : tw('avatars.editTitle', '编辑数字分身')}
+        <div className={styles.avatarDrawerBody}>
+          <div className={styles.avatarDetailHeader}>
+            <Avatar
+              className={styles.avatarDetailAvatar}
+              size={52}
+              shape="square"
+              style={avatarStyle(
+                agentModalMode === 'edit'
+                  ? editName || editingAgent?.name
+                  : editingAgent?.name,
+              )}
+            >
+              {initials(
+                agentModalMode === 'edit'
+                  ? editName || editingAgent?.name
+                  : editingAgent?.name,
+              )}
+            </Avatar>
+            <div className={styles.avatarDetailHeadText}>
+              <div className={styles.avatarDetailName}>
+                {agentModalMode === 'view'
+                  ? editingAgent?.name || tw('nav.avatars', '数字分身')
+                  : tw('avatars.editTitle', '编辑数字分身')}
+              </div>
+              <div className={styles.avatarDetailSub}>
+                {agentModalMode === 'view'
+                  ? tw('avatars.detailTitle', '数字分身详情')
+                  : tw('avatars.editSubtitle', '修改名称和职责')}
+              </div>
             </div>
-            <div className={styles.createSubtitle}>
-              {agentModalMode === 'view'
-                ? tw('avatars.detailTitle', '数字分身详情')
-                : tw('avatars.editSubtitle', '修改名称和职责')}
-            </div>
+            <button
+              type="button"
+              className={styles.avatarDetailClose}
+              onClick={() => setEditingAgent(null)}
+            >
+              <CloseOutlined />
+            </button>
           </div>
-          <div className={styles.createOrb}>
-            <span className={styles.createOrbInitial}>
-              {initials(editName || editingAgent?.name || 'AI')}
-            </span>
-          </div>
+
+          {agentModalMode === 'view' ? (
+            <>
+              <div className={styles.avatarDetailSection}>
+                <div className={styles.avatarDetailLabel}>
+                  {tw('avatars.position', '角色')}
+                </div>
+                <span className={styles.avatarRoleTag}>
+                  {positionLabel(editingAgent) ||
+                    tw('avatars.positionUnset', '未设置')}
+                </span>
+              </div>
+
+              <div className={styles.avatarDetailSection}>
+                <div className={styles.avatarDetailLabel}>
+                  {tw('avatars.desc', '职责描述')}
+                </div>
+                <div className={styles.avatarDetailValue}>
+                  {editingAgent?.description ||
+                    tw('common.noDescription', '暂无描述')}
+                </div>
+              </div>
+
+              <div className={styles.avatarDetailSection}>
+                <div className={styles.avatarDetailLabel}>
+                  {tw('avatars.status', '状态')}
+                </div>
+                <div className={styles.avatarStatusRow}>
+                  <span
+                    className={`${styles.avatarStatusDot} ${
+                      editingAgent?.status === 'ACTIVE'
+                        ? ''
+                        : styles.avatarStatusDotPaused
+                    }`}
+                  />
+                  {statusLabel(editingAgent?.status)}
+                </div>
+              </div>
+
+              <div className={styles.avatarDetailSection}>
+                <div className={styles.avatarDetailLabel}>
+                  {tw('avatars.createdAtLabel', '创建时间')}
+                </div>
+                <div className={styles.avatarDetailValue}>
+                  {fullTime(editingAgent?.createdAt)}
+                </div>
+              </div>
+
+              {editingAgent?.status !== 'ACTIVE' ? (
+                <div className={styles.avatarPausedHint}>
+                  {tw('avatars.chatPaused', '分身已暂停，请恢复后再对话')}
+                </div>
+              ) : null}
+
+              <div className={styles.avatarDetailFooter}>
+                <Button
+                  type="primary"
+                  block
+                  icon={<MessageOutlined />}
+                  loading={startingChat}
+                  disabled={editingAgent?.status !== 'ACTIVE'}
+                  className={styles.avatarDetailPrimary}
+                  onClick={startChat}
+                >
+                  {tw('avatars.startChat', '开始对话')}
+                </Button>
+                <div className={styles.avatarSecondaryActions}>
+                  <button
+                    type="button"
+                    className={`${styles.avatarSecondaryButton} ${styles.avatarEditButton}`}
+                    onClick={startEdit}
+                  >
+                    <EditOutlined />
+                    {tw('avatars.editProfile', '编辑资料')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.avatarSecondaryButton} ${styles.avatarPauseButton}`}
+                    onClick={() => editingAgent && toggle(editingAgent)}
+                  >
+                    {editingAgent?.status === 'ACTIVE' ? (
+                      <PauseCircleOutlined />
+                    ) : (
+                      <PlayCircleOutlined />
+                    )}
+                    {editingAgent?.status === 'ACTIVE'
+                      ? tw('avatars.pause', '暂停分身')
+                      : tw('avatars.resume', '恢复分身')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.avatarSecondaryButton} ${styles.avatarDeleteButton}`}
+                    onClick={() => editingAgent && remove(editingAgent)}
+                  >
+                    <DeleteOutlined />
+                    {tw('avatars.delete', '删除分身')}
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <Form
+                form={editForm}
+                layout="vertical"
+                className={styles.avatarEditForm}
+              >
+                <div className={styles.fieldBlock}>
+                  <div className={styles.fieldLabel}>
+                    {tw('avatars.name', '分身名称')}{' '}
+                    <span className={styles.required}>*</span>
+                  </div>
+                  <Form.Item
+                    name="name"
+                    rules={[{ required: true, max: 128 }]}
+                    style={{ marginBottom: 0 }}
+                  >
+                    <Input
+                      className={styles.softField}
+                      maxLength={32}
+                      placeholder={tw(
+                        'avatars.namePlaceholder',
+                        '例如：产品助手',
+                      )}
+                    />
+                  </Form.Item>
+                </div>
+
+                <div className={styles.fieldBlock}>
+                  <div className={styles.fieldLabel}>
+                    {tw('avatars.position', '角色')}{' '}
+                    <span className={styles.required}>*</span>
+                  </div>
+                  <Form.Item
+                    name="positionCode"
+                    rules={[
+                      {
+                        required: true,
+                        message: tw('avatars.positionRequired', '请选择角色'),
+                      },
+                    ]}
+                    style={{ marginBottom: 0 }}
+                  >
+                    <Select
+                      className={styles.softField}
+                      placeholder={tw(
+                        'avatars.positionPlaceholder',
+                        '请选择角色',
+                      )}
+                      options={positionOptions}
+                    />
+                  </Form.Item>
+                </div>
+
+                <div className={styles.fieldBlock} style={{ marginBottom: 10 }}>
+                  <div className={styles.fieldLabel}>
+                    {tw('avatars.desc', '职责描述')}{' '}
+                    <span className={styles.optional}>
+                      {tw('common.optional', '可选')}
+                    </span>
+                  </div>
+                  <Form.Item name="description" style={{ marginBottom: 14 }}>
+                    <Input.TextArea
+                      className={styles.softTextarea}
+                      rows={4}
+                      maxLength={200}
+                      showCount
+                      placeholder={tw(
+                        'avatars.descPlaceholder',
+                        '简单描述它擅长什么、负责什么',
+                      )}
+                    />
+                  </Form.Item>
+                  <div className={styles.fieldHint}>
+                    {tw('avatars.editHint', '修改后会在下一次运行时生效')}
+                  </div>
+                </div>
+              </Form>
+
+              <div className={styles.avatarEditFooter}>
+                <Button
+                  className={styles.avatarCancelButton}
+                  onClick={() => setAgentModalMode('view')}
+                >
+                  {tw('common.cancel', '取消')}
+                </Button>
+                <Button
+                  type="primary"
+                  className={styles.avatarSaveButton}
+                  loading={editSubmitting}
+                  onClick={saveEdit}
+                >
+                  {tw('avatars.saveEdit', '保存修改')}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
-
-        {agentModalMode === 'view' ? (
-          <>
-            <div className={styles.createBody}>
-              <div className={styles.detailDesc}>
-                {tw('avatars.positionDetail', '职位：{name}', {
-                  name:
-                    positionLabel(editingAgent) ||
-                    tw('avatars.positionUnset', '未设置'),
-                })}
-              </div>
-              <div className={styles.detailDesc}>
-                {editingAgent?.description ||
-                  tw('common.noDescription', '暂无描述')}
-              </div>
-            </div>
-
-            <div className={styles.editMetaRow} style={{ padding: '0 8px' }}>
-              <span className={styles.editStatus}>
-                {tw('avatars.currentStatus', '当前状态：{status}', {
-                  status: statusLabel(editingAgent?.status),
-                })}
-              </span>
-              <div className={styles.editSecondaryActions}>
-                <button
-                  type="button"
-                  className={styles.textAction}
-                  onClick={() => editingAgent && toggle(editingAgent)}
-                >
-                  {editingAgent?.status === 'ACTIVE'
-                    ? tw('avatars.pause', '暂停分身')
-                    : tw('avatars.resume', '恢复分身')}
-                </button>
-                <span className={styles.actionDivider}>·</span>
-                <button
-                  type="button"
-                  className={styles.dangerTextAction}
-                  onClick={() => editingAgent && remove(editingAgent)}
-                >
-                  {tw('avatars.delete', '删除分身')}
-                </button>
-              </div>
-            </div>
-
-            <div
-              className={styles.createFooter}
-              style={{ justifyContent: 'flex-end' }}
-            >
-              <Button
-                type="primary"
-                className={styles.primaryPill}
-                onClick={startEdit}
-              >
-                {tw('avatars.goEdit', '去修改 →')}
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <Form
-              form={editForm}
-              layout="vertical"
-              className={styles.createBody}
-            >
-              <div className={styles.fieldBlock}>
-                <div className={styles.fieldLabel}>
-                  {tw('avatars.name', '分身名称')}{' '}
-                  <span className={styles.required}>*</span>
-                </div>
-                <Form.Item
-                  name="name"
-                  rules={[{ required: true, max: 128 }]}
-                  style={{ marginBottom: 0 }}
-                >
-                  <Input
-                    className={styles.softField}
-                    maxLength={32}
-                    placeholder={tw(
-                      'avatars.namePlaceholder',
-                      '例如：产品助手',
-                    )}
-                  />
-                </Form.Item>
-              </div>
-
-              <div className={styles.fieldBlock}>
-                <div className={styles.fieldLabel}>
-                  {tw('avatars.position', '职位')}{' '}
-                  <span className={styles.required}>*</span>
-                </div>
-                <Form.Item
-                  name="positionCode"
-                  rules={[
-                    {
-                      required: true,
-                      message: tw('avatars.positionRequired', '请选择职位'),
-                    },
-                  ]}
-                  style={{ marginBottom: 0 }}
-                >
-                  <Select
-                    className={styles.softField}
-                    placeholder={tw(
-                      'avatars.positionPlaceholder',
-                      '请选择职位',
-                    )}
-                    options={positionOptions}
-                  />
-                </Form.Item>
-              </div>
-
-              <div className={styles.fieldBlock} style={{ marginBottom: 10 }}>
-                <div className={styles.fieldLabel}>
-                  {tw('avatars.desc', '职责描述')}{' '}
-                  <span className={styles.optional}>
-                    {tw('common.optional', '可选')}
-                  </span>
-                </div>
-                <Form.Item name="description" style={{ marginBottom: 14 }}>
-                  <Input.TextArea
-                    className={styles.softTextarea}
-                    rows={4}
-                    maxLength={200}
-                    showCount
-                    placeholder={tw(
-                      'avatars.descPlaceholder',
-                      '简单描述它擅长什么、负责什么',
-                    )}
-                  />
-                </Form.Item>
-                <div className={styles.fieldHint}>
-                  {tw('avatars.editHint', '修改后会在下一次运行时生效')}
-                </div>
-              </div>
-            </Form>
-
-            <div className={styles.createFooter}>
-              <Button
-                className={styles.ghostPill}
-                onClick={() => setAgentModalMode('view')}
-              >
-                {tw('common.cancel', '取消')}
-              </Button>
-              <Button
-                type="primary"
-                className={styles.primaryPill}
-                loading={editSubmitting}
-                onClick={saveEdit}
-              >
-                {tw('avatars.saveEdit', '保存修改')}
-              </Button>
-            </div>
-          </>
-        )}
-      </Modal>
+      </Drawer>
     </div>
   );
 }
@@ -1805,6 +1942,7 @@ function ChatDetail({
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [agentPaused, setAgentPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [setting, setSetting] = useState<ImConversationSetting | null>(null);
   const [memberKeyword, setMemberKeyword] = useState('');
@@ -1843,6 +1981,23 @@ function ChatDetail({
   useEffect(() => {
     setSettingsOpen(false);
   }, [conversationId]);
+
+  const chatAgentId =
+    conversation?.type === 'DM'
+      ? participants.find((member) => member.participantType === 'AGENT')
+          ?.participantId
+      : undefined;
+
+  useEffect(() => {
+    if (!chatAgentId) {
+      setAgentPaused(false);
+      return;
+    }
+    superAgentApi
+      .get(chatAgentId)
+      .then((agent) => setAgentPaused(agent.status !== 'ACTIVE'))
+      .catch(() => setAgentPaused(false));
+  }, [conversationId, chatAgentId]);
 
   useEffect(() => {
     const first = loadedIdRef.current !== conversationId;
@@ -1936,6 +2091,10 @@ function ChatDetail({
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
+    if (agentPaused) {
+      message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
+      return;
+    }
     setSending(true);
     try {
       await imApi.send(conversationId, value, `workspace-${Date.now()}`);
@@ -2123,6 +2282,11 @@ function ChatDetail({
                   {tw('common.meTag', '我')}
                 </span>
               ) : null}
+              {!isGroup && agentParticipant ? (
+                <span className={styles.agentTag}>
+                  {tw('chat.agentTag', '数字分身')}
+                </span>
+              ) : null}
             </div>
             <div className={styles.chatMembers}>
               {isGroup
@@ -2192,6 +2356,7 @@ function ChatDetail({
                     ? tw('chat.system', '系统')
                     : tw('chat.unknownUser', '未知用户'));
               const avatarName = self ? displayName(me) : senderName;
+              const card = taskCardOf(item);
               const pinned = conversation?.pinnedMessage?.id === item.id;
               const menuItems: any[] = [
                 pinned
@@ -2238,12 +2403,44 @@ function ChatDetail({
                         {' · '}
                         {messageTime(item.createdAt)}
                       </div>
-                      <div
-                        className={`${styles.bubble} ${self ? styles.bubbleSelf : ''}`}
-                      >
-                        {messageText(item) ||
-                          tw('chat.messageFallback', '[消息]')}
-                      </div>
+                      {card ? (
+                        <div className={styles.taskCard}>
+                          <div className={styles.taskCardTop}>
+                            <span className={styles.taskCardTitle}>
+                              {card.title || tw('chat.taskFallback', '任务')}
+                            </span>
+                            <span
+                              className={`${styles.taskCardStatus} ${
+                                card.status === 'COMPLETED' ||
+                                card.status === 'DONE'
+                                  ? styles.taskCardStatusDone
+                                  : card.status === 'FAILED' ||
+                                      card.status === 'CANCELLED'
+                                    ? styles.taskCardStatusFailed
+                                    : styles.taskCardStatusRunning
+                              }`}
+                            >
+                              {taskStatusLabel(card.status)}
+                            </span>
+                          </div>
+                          {card.summary ? (
+                            <div className={styles.taskCardSummary}>
+                              {card.summary}
+                            </div>
+                          ) : (
+                            <div className={styles.taskCardSummary}>
+                              {tw('chat.taskCreated', '任务已创建，正在处理')}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div
+                          className={`${styles.bubble} ${self ? styles.bubbleSelf : ''}`}
+                        >
+                          {messageText(item) ||
+                            tw('chat.messageFallback', '[消息]')}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Dropdown>
@@ -2253,12 +2450,19 @@ function ChatDetail({
         </Spin>
       </div>
 
+      {agentPaused ? (
+        <div className={styles.agentPausedBanner}>
+          {tw('avatars.chatPaused', '分身已暂停，请恢复后再对话')}
+        </div>
+      ) : null}
+
       <div className={styles.composer}>
         <textarea
           ref={composerRef}
           className={styles.composerInput}
           rows={1}
           value={text}
+          disabled={agentPaused}
           placeholder={tw('chat.inputPlaceholder', '输入消息...')}
           onChange={(event) => {
             setText(event.target.value);
@@ -2276,7 +2480,9 @@ function ChatDetail({
         <button
           type="button"
           className={`${styles.composerSend} ${
-            !text.trim() || sending ? styles.composerSendDisabled : ''
+            !text.trim() || sending || agentPaused
+              ? styles.composerSendDisabled
+              : ''
           }`}
           onClick={send}
         >
@@ -2478,6 +2684,8 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
   const [keyword, setKeyword] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [groups, setGroups] = useState<ImConversation[]>([]);
+  const [agents, setAgents] = useState<SuperAgent[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const loadUsers = () => {
@@ -2498,9 +2706,24 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
       .catch(() => setGroups([]));
   }, []);
 
+  useEffect(() => {
+    setAgentsLoading(true);
+    superAgentApi
+      .list(100)
+      .then(setAgents)
+      .catch(() => setAgents([]))
+      .finally(() => setAgentsLoading(false));
+  }, []);
+
   useEffect(loadUsers, [keyword]);
 
   const normalizedKeyword = keyword.trim().toLowerCase();
+  const filteredAgents = agents.filter((agent) => {
+    if (!normalizedKeyword) return true;
+    return `${agent.name} ${agent.description || ''} ${positionLabel(agent)}`
+      .toLowerCase()
+      .includes(normalizedKeyword);
+  });
   const filteredGroups = groups.filter((group) => {
     if (!normalizedKeyword) return true;
     return (
@@ -2519,6 +2742,19 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
         title: self ? tw('conversation.self', '自己') : displayName(user),
         participantUserIds: [user.id],
       });
+      onOpenChat(conversation.id);
+    } catch {
+      message.error(tw('contacts.createDmFailed', '创建会话失败'));
+    }
+  };
+
+  const openAgentChat = async (agent: SuperAgent) => {
+    if (agent.status !== 'ACTIVE') {
+      message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
+      return;
+    }
+    try {
+      const conversation = await imApi.createAgentDm(agent.id);
       onOpenChat(conversation.id);
     } catch {
       message.error(tw('contacts.createDmFailed', '创建会话失败'));
@@ -2548,6 +2784,68 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
       <div className={styles.contactsGrid}>
         <div className={styles.contactsPanel}>
           <div className={styles.contactsPanelHead}>
+            <span>{tw('contacts.agents', '数字分身')}</span>
+            <span className={styles.sectionMore}>
+              {tw('contacts.agentCount', '{count} 位', {
+                count: filteredAgents.length,
+              })}
+            </span>
+          </div>
+          <div className={styles.contactsPanelBody}>
+            <Spin spinning={agentsLoading}>
+              {filteredAgents.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    normalizedKeyword
+                      ? tw('contacts.noMatchedAgents', '没有匹配的数字分身')
+                      : tw('contacts.noAgents', '暂无数字分身')
+                  }
+                />
+              ) : (
+                filteredAgents.map((agent) => (
+                  <div
+                    key={agent.id}
+                    className={styles.row}
+                    style={{ opacity: agent.status === 'ACTIVE' ? 1 : 0.6 }}
+                    onClick={() => openAgentChat(agent)}
+                  >
+                    <Avatar
+                      className={styles.avatar}
+                      size={42}
+                      style={avatarStyle(agent.name)}
+                    >
+                      {initials(agent.name)}
+                    </Avatar>
+                    <div className={styles.rowBody}>
+                      <div className={styles.rowTitle}>
+                        <span className={styles.conversationNameText}>
+                          {agent.name}
+                        </span>
+                        <Tag
+                          color={
+                            agent.status === 'ACTIVE' ? 'green' : 'default'
+                          }
+                        >
+                          {statusLabel(agent.status)}
+                        </Tag>
+                      </div>
+                      <div className={styles.rowDesc}>
+                        {[positionLabel(agent), agent.description]
+                          .filter(Boolean)
+                          .join(' · ') ||
+                          tw('common.noDescription', '暂无描述')}
+                      </div>
+                    </div>
+                    <MessageOutlined style={{ color: '#a7a2b8' }} />
+                  </div>
+                ))
+              )}
+            </Spin>
+          </div>
+        </div>
+        <div className={styles.contactsPanel}>
+          <div className={styles.contactsPanelHead}>
             <span>{tw('contacts.groups', '群聊')}</span>
             <span className={styles.sectionMore}>
               {tw('contacts.groupCount', '{count} 个', {
@@ -2555,43 +2853,45 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
               })}
             </span>
           </div>
-          {filteredGroups.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                normalizedKeyword
-                  ? tw('contacts.noMatchedGroups', '没有匹配的群聊')
-                  : tw('contacts.noGroups', '暂无群聊')
-              }
-            />
-          ) : (
-            filteredGroups.map((group) => (
-              <div
-                key={group.id}
-                className={styles.row}
-                onClick={() => onOpenChat(group.id)}
-              >
-                <Avatar
-                  className={styles.avatar}
-                  size={42}
-                  shape="square"
-                  style={avatarStyle(conversationDisplayName(group, me))}
+          <div className={styles.contactsPanelBody}>
+            {filteredGroups.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  normalizedKeyword
+                    ? tw('contacts.noMatchedGroups', '没有匹配的群聊')
+                    : tw('contacts.noGroups', '暂无群聊')
+                }
+              />
+            ) : (
+              filteredGroups.map((group) => (
+                <div
+                  key={group.id}
+                  className={styles.row}
+                  onClick={() => onOpenChat(group.id)}
                 >
-                  {initials(conversationDisplayName(group, me))}
-                </Avatar>
-                <div className={styles.rowBody}>
-                  <div className={styles.rowTitle}>
-                    <span className={styles.conversationNameText}>
-                      {conversationDisplayName(group, me)}
-                    </span>
-                  </div>
-                  <div className={styles.rowDesc}>
-                    {conversationPreview(group)}
+                  <Avatar
+                    className={styles.avatar}
+                    size={42}
+                    shape="square"
+                    style={avatarStyle(conversationDisplayName(group, me))}
+                  >
+                    {initials(conversationDisplayName(group, me))}
+                  </Avatar>
+                  <div className={styles.rowBody}>
+                    <div className={styles.rowTitle}>
+                      <span className={styles.conversationNameText}>
+                        {conversationDisplayName(group, me)}
+                      </span>
+                    </div>
+                    <div className={styles.rowDesc}>
+                      {conversationPreview(group)}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
 
         <div className={styles.contactsPanel}>
@@ -2603,54 +2903,56 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
               })}
             </span>
           </div>
-          <Spin spinning={loading}>
-            {users.length === 0 ? (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  normalizedKeyword
-                    ? tw('contacts.noMatchedUsers', '没有匹配的用户')
-                    : tw('contacts.noUsers', '暂无用户')
-                }
-              />
-            ) : (
-              users.map((user) => (
-                <div
-                  key={user.id}
-                  className={styles.row}
-                  onClick={() => openUser(user)}
-                >
-                  <Avatar
-                    className={styles.avatar}
-                    size={42}
-                    src={user.avatar}
-                    style={avatarStyle(displayName(user))}
+          <div className={styles.contactsPanelBody}>
+            <Spin spinning={loading}>
+              {users.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    normalizedKeyword
+                      ? tw('contacts.noMatchedUsers', '没有匹配的用户')
+                      : tw('contacts.noUsers', '暂无用户')
+                  }
+                />
+              ) : (
+                users.map((user) => (
+                  <div
+                    key={user.id}
+                    className={styles.row}
+                    onClick={() => openUser(user)}
                   >
-                    {initials(displayName(user))}
-                  </Avatar>
-                  <div className={styles.rowBody}>
-                    <div className={styles.rowTitle}>
-                      <span className={styles.conversationNameText}>
-                        {displayName(user)}
-                      </span>
-                      {isSelfUser(user, me) ? (
-                        <span className={styles.selfTag}>
-                          {tw('common.meTag', '我')}
+                    <Avatar
+                      className={styles.avatar}
+                      size={42}
+                      src={user.avatar}
+                      style={avatarStyle(displayName(user))}
+                    >
+                      {initials(displayName(user))}
+                    </Avatar>
+                    <div className={styles.rowBody}>
+                      <div className={styles.rowTitle}>
+                        <span className={styles.conversationNameText}>
+                          {displayName(user)}
                         </span>
-                      ) : null}
+                        {isSelfUser(user, me) ? (
+                          <span className={styles.selfTag}>
+                            {tw('common.meTag', '我')}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className={styles.rowDesc}>
+                        {(user.roles || []).join(' / ') || user.username}
+                        {user.lastLoginAt
+                          ? ` · ${listTime(user.lastLoginAt)}`
+                          : ''}
+                      </div>
                     </div>
-                    <div className={styles.rowDesc}>
-                      {(user.roles || []).join(' / ') || user.username}
-                      {user.lastLoginAt
-                        ? ` · ${listTime(user.lastLoginAt)}`
-                        : ''}
-                    </div>
+                    <MessageOutlined style={{ color: '#a7a2b8' }} />
                   </div>
-                  <MessageOutlined style={{ color: '#a7a2b8' }} />
-                </div>
-              ))
-            )}
-          </Spin>
+                ))
+              )}
+            </Spin>
+          </div>
         </div>
       </div>
     </div>

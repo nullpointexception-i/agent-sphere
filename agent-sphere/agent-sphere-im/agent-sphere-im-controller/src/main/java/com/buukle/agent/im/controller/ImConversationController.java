@@ -5,6 +5,7 @@ import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.im.dtvo.dto.AddParticipantDTO;
+import com.buukle.agent.im.dtvo.dto.CreateAgentDmDTO;
 import com.buukle.agent.im.dtvo.dto.CreateConversationDTO;
 import com.buukle.agent.im.dtvo.dto.ImGateConfig;
 import com.buukle.agent.im.dtvo.dto.MarkReadDTO;
@@ -38,6 +39,13 @@ public class ImConversationController extends BaseController {
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateConversationDTO dto) {
         return created(conversationService.create(dto));
+    }
+
+    @AuditLog(action = "CREATE_AGENT_DM", resourceType = "ImConversation", resourceId = "#result?.body?.id")
+    @RequirePermission("im:conversation:create")
+    @PostMapping("/agent-dm")
+    public ResponseEntity<?> createAgentDm(@Valid @RequestBody CreateAgentDmDTO dto) {
+        return created(conversationService.createAgentDm(dto.getAgentId()));
     }
 
     @RequirePermission("im:conversation:read")

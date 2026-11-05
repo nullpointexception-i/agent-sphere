@@ -37,9 +37,13 @@ import com.buukle.agent.im.service.ImConversationService;
 import com.buukle.agent.im.service.ImStreamService;
 import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
 import com.buukle.agent.instance.spi.UserSpi;
+import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
+import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -75,6 +79,7 @@ public class ImConversationServiceImpl implements ImConversationService {
     private final ImConversationSettingMapper settingMapper;
     private final UserSpi userSpi;
     private final ImStreamService streamService;
+    private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
 
     @Override
     @Transactional
@@ -86,7 +91,7 @@ public class ImConversationServiceImpl implements ImConversationService {
         }
         if (ImConversationType.DM.equals(type)) {
             Long otherUserId = firstOtherUser(dto.getParticipantUserIds(), userId);
-            ImConversation existing = findExistingDm(userId, otherUserId);
+            ImConversation existing = findExistingDm(userId, otherUserId, null);
             if (existing != null) {
                 return toVO(existing, userId);
             }
@@ -627,12 +632,52 @@ public class ImConversationServiceImpl implements ImConversationService {
         return null;
     }
 
+    @Override
+    @Transactional
+    public ConversationVO createAgentDm(Long agentId) {
+        Long userId = currentUserId();
+        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+        if (directory == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "super-agent directory is unavailable");
+        }
+        ChatAgentIdentity agent = directory.resolveForChat(agentId, userId);
+        if (!SuperAgentStatus.ACTIVE.equals(agent.status())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "digital avatar is paused; resume it before chatting");
+        }
+        ImConversation existing = findExistingDm(userId, null, agent.agentId());
+        if (existing != null) {
+            return toVO(existing, userId);
+        }
+        ImConversation conversation = new ImConversation();
+        conversation.setType(ImConversationType.DM);
+        conversation.setTitle(agent.name());
+        conversation.setOwnerUserId(userId);
+        conversation.setStatus(ImConversationStatus.ACTIVE);
+        conversation.setLastSeq(0L);
+        conversationMapper.insert(conversation);
+
+        addParticipantInternal(conversation.getId(), userId, ImParticipantType.USER,
+                ImParticipantRole.OWNER, displayName());
+        addParticipantInternal(conversation.getId(), agent.agentId(), ImParticipantType.AGENT,
+                ImParticipantRole.BOT, agent.name());
+
+        publishToMembersAfterCommit(conversation.getId(), ImStreamEvent.builder()
+                .type(ImStreamEventType.CONVERSATION_CREATED)
+                .conversationId(conversation.getId())
+                .title(conversation.getTitle())
+                .timestamp(System.currentTimeMillis())
+                .build());
+        return toVO(conversation, userId);
+    }
+
     /**
      * Reuse an existing one-to-one conversation instead of creating a duplicate.
      * The read is owner-bypassed because the other participant may have created it.
      * A null {@code otherUserId} means the user is chatting with themselves.
      */
-    private ImConversation findExistingDm(Long userId, Long otherUserId) {
+    private ImConversation findExistingDm(Long userId, Long otherUserId, Long otherAgentId) {
         List<Long> conversationIds = systemRead(() -> participantMapper.selectList(
                         Wrappers.<ImParticipant>lambdaQuery()
                                 .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
@@ -657,11 +702,20 @@ public class ImConversationServiceImpl implements ImConversationService {
                     .filter(member -> ImParticipantType.USER.equals(member.getParticipantType()))
                     .map(ImParticipant::getParticipantId)
                     .filter(Objects::nonNull).collect(Collectors.toSet());
-            if (otherUserId == null) {
+            Set<Long> agentIds = members.stream()
+                    .filter(member -> ImParticipantType.AGENT.equals(member.getParticipantType()))
+                    .map(ImParticipant::getParticipantId)
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            if (otherAgentId != null) {
+                if (members.size() == 2 && userIds.equals(Set.of(userId))
+                        && agentIds.equals(Set.of(otherAgentId))) {
+                    return candidate;
+                }
+            } else if (otherUserId == null) {
                 if (members.size() == 1 && userIds.contains(userId)) {
                     return candidate;
                 }
-            } else if (userIds.size() == 2 && userIds.contains(userId)
+            } else if (agentIds.isEmpty() && userIds.size() == 2 && userIds.contains(userId)
                     && userIds.contains(otherUserId)) {
                 return candidate;
             }

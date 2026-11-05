@@ -22,6 +22,7 @@ public class AgentThread {
     private String kind;
     private String title;
     private Long groupRouterSessionId;
+    private Long routerSessionId;
     private String summary;
     private Long eventSeq;
     private String state;

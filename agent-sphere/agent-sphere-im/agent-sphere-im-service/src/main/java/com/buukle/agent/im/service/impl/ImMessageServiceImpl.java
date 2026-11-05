@@ -31,6 +31,9 @@ import com.buukle.agent.im.repository.ImParticipantMapper;
 import com.buukle.agent.im.repository.ImReadCursorMapper;
 import com.buukle.agent.im.service.ImMessageService;
 import com.buukle.agent.im.service.ImStreamService;
+import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
+import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -68,6 +71,7 @@ public class ImMessageServiceImpl implements ImMessageService {
     private final ImReadCursorMapper readCursorMapper;
     private final ImStreamService streamService;
     private final ObjectProvider<EventIngestPort> ingestPortProvider;
+    private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
     private final AgentMetrics metrics;
 
     @org.springframework.beans.factory.annotation.Value("${buukle.agent.im.max-message-chars:8000}")
@@ -88,6 +92,7 @@ public class ImMessageServiceImpl implements ImMessageService {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "conversation not found");
         }
         assertMember(conversationId, userId);
+        assertAgentChattable(conversation, userId);
 
         if (dto.getClientMsgId() != null && !dto.getClientMsgId().isBlank()) {
             ImMessage existing = messageMapper.selectOne(Wrappers.<ImMessage>lambdaQuery()
@@ -435,8 +440,35 @@ public class ImMessageServiceImpl implements ImMessageService {
         return conversation == null ? "" : conversation.getGateConfig();
     }
 
-    private boolean shouldIngest(Long conversationId, SendMessageDTO dto) {
+    private String conversationType(Long conversationId) {
         ImConversation conversation = systemRead(() -> conversationMapper.selectById(conversationId));
+        return conversation == null ? null : conversation.getType();
+    }
+
+    /** Paused avatars cannot receive new messages in their direct chats. */
+    private void assertAgentChattable(ImConversation conversation, Long userId) {
+        if (!"DM".equalsIgnoreCase(conversation.getType())) {
+            return;
+        }
+        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+        if (directory == null) {
+            return;
+        }
+        List<ImParticipant> agents = systemRead(() -> participantMapper.selectList(
+                Wrappers.<ImParticipant>lambdaQuery()
+                        .eq(ImParticipant::getConversationId, conversation.getId())
+                        .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)));
+        for (ImParticipant agent : agents) {
+            ChatAgentIdentity identity = directory.resolveForChat(
+                    agent.getParticipantId(), userId);
+            if (identity != null && !SuperAgentStatus.ACTIVE.equals(identity.status())) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "digital avatar is paused; resume it before chatting");
+            }
+        }
+    }
+
+    private boolean shouldIngest(Long conversationId, SendMessageDTO dto) {        ImConversation conversation = systemRead(() -> conversationMapper.selectById(conversationId));
         if (conversation == null || !"GROUP".equals(conversation.getType())) {
             return true;
         }
@@ -462,8 +494,7 @@ public class ImMessageServiceImpl implements ImMessageService {
                         && ImParticipantType.AGENT.equalsIgnoreCase(mention.getType()));
     }
 
-    private void ingest(Long conversationId, ImMessage message, SendMessageDTO dto) {
-        EventIngestPort port = ingestPortProvider.getIfAvailable();
+    private void ingest(Long conversationId, ImMessage message, SendMessageDTO dto) {        EventIngestPort port = ingestPortProvider.getIfAvailable();
         if (port == null) {
             return;
         }
@@ -503,6 +534,7 @@ public class ImMessageServiceImpl implements ImMessageService {
         meta.setType(message.getType());
         meta.setMentions(dto.getMentions() == null ? List.of() : dto.getMentions());
         meta.setAgentIds(agentIds);
+        meta.setConversationType(conversationType(conversationId));
         meta.setConversationTitle(conversationTitle(conversationId));
         meta.setPurpose(conversationPurpose(conversationId));
         meta.setGateConfig(conversationGateConfig(conversationId));

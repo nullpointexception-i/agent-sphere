@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -95,6 +96,7 @@ class SuperAgentServiceImplTest {
         CreateSuperAgentDTO dto = new CreateSuperAgentDTO();
         dto.setName("Support");
         dto.setPositionCode("FINANCE");
+        dto.setDescription("Handle invoices and budgets");
 
         SuperAgentVO result = service.create(dto);
 
@@ -104,7 +106,9 @@ class SuperAgentServiceImplTest {
         CreateInstanceDTO routerDTO = created.get(0);
         CreateInstanceDTO workerDTO = created.get(1);
         assertEquals("ROUTER", routerDTO.getInstanceRole());
-        assertEquals("global router prompt\n\nSTRICT: You may only reply to requests related to "
+        assertEquals("You are a Finance Specialist. Use the available tools and skills to help "
+                + "the user achieve their goals. Your job scope is Handle invoices and budgets."
+                + "\n\nglobal router prompt\n\nSTRICT: You may only reply to requests related to "
                 + "Finance Specialist. If a request is unrelated, decline it briefly.",
                 routerDTO.getSystemPrompt());
         assertEquals(5L, routerDTO.getModelRouteId());
@@ -112,7 +116,9 @@ class SuperAgentServiceImplTest {
         assertFalse(routerDTO.getAllowConsoleSession());
         assertFalse(routerDTO.getAllowWidgetSession());
         assertEquals("WORKER", workerDTO.getInstanceRole());
-        assertEquals("STRICT: You may only reply to requests related to Finance Specialist. "
+        assertEquals("You are a Finance Specialist. Use the available tools and skills to help "
+                + "the user achieve their goals. Your job scope is Handle invoices and budgets."
+                + "\n\nSTRICT: You may only reply to requests related to Finance Specialist. "
                 + "If a request is unrelated, decline it briefly.", workerDTO.getSystemPrompt());
         assertEquals(5L, workerDTO.getModelRouteId());
         assertEquals(128, workerDTO.getMaxLoopCount());
@@ -156,8 +162,52 @@ class SuperAgentServiceImplTest {
     }
 
     @Test
-    void getInstances_returnsRouterWorkerAndGuardianSession() {
+    void update_position_refreshesBothInstancePrompts() {
         AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setName("Support");
+        agent.setPositionCode("FINANCE");
+        agent.setPositionNameCn("财务专家");
+        agent.setPositionNameEn("Finance Specialist");
+        agent.setRouterInstanceId(11L);
+        agent.setWorkerInstanceId(12L);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+        when(systemDicSpi.findActive(SystemDicConstants.TYPE_POSITION, "TECH"))
+                .thenReturn(new SystemDicEntry("TECH", "技术专家", "Technology Specialist"));
+        when(agentRouterPromptService.resolve()).thenReturn("global router prompt");
+        InstanceVO router = instance(11L);
+        router.setName("Support Router");
+        InstanceVO worker = instance(12L);
+        worker.setName("Support Worker");
+        when(instanceSpi.getInstance(11L)).thenReturn(router);
+        when(instanceSpi.getInstance(12L)).thenReturn(worker);
+
+        CreateSuperAgentDTO dto = new CreateSuperAgentDTO();
+        dto.setName("Support");
+        dto.setPositionCode("TECH");
+        dto.setDescription("Own payroll and tax");
+
+        service.update(7L, dto);
+
+        ArgumentCaptor<CreateInstanceDTO> prompts = ArgumentCaptor.forClass(CreateInstanceDTO.class);
+        verify(instanceSpi, times(2)).updateInstance(anyLong(), prompts.capture());
+        assertEquals("You are a Technology Specialist. Use the available tools and skills to help "
+                + "the user achieve their goals. Your job scope is Own payroll and tax."
+                + "\n\nglobal router prompt\n\nSTRICT: You may only reply to requests related to "
+                + "Technology Specialist. If a request is unrelated, decline it briefly.",
+                prompts.getAllValues().get(0).getSystemPrompt());
+        assertEquals("You are a Technology Specialist. Use the available tools and skills to help "
+                + "the user achieve their goals. Your job scope is Own payroll and tax."
+                + "\n\nSTRICT: You may only reply to requests related to Technology Specialist. "
+                + "If a request is unrelated, decline it briefly.",
+                prompts.getAllValues().get(1).getSystemPrompt());
+        assertEquals("TECH", agent.getPositionCode());
+        assertEquals("技术专家", agent.getPositionNameCn());
+    }
+
+    @Test
+    void getInstances_returnsRouterWorkerAndGuardianSession() {        AgentSuperAgent agent = new AgentSuperAgent();
         agent.setId(7L);
         agent.setOwnerUserId(1L);
         agent.setRouterInstanceId(11L);

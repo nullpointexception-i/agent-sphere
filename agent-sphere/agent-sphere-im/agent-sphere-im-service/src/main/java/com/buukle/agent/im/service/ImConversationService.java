@@ -16,6 +16,9 @@ public interface ImConversationService {
 
     ConversationVO create(CreateConversationDTO dto);
 
+    /** Create or reuse a DM between the current user and one Super-Agent. */
+    ConversationVO createAgentDm(Long agentId);
+
     List<ConversationVO> list();
 
     ConversationPageVO page(int limit, String cursor, String type);

@@ -112,6 +112,221 @@ export const useStyles = createStyles(({ css }) => ({
     display: flex;
     flex-direction: column;
     background: #f7f6fb;
+    position: relative;
+  `,
+  avatarDrawerRoot: css`
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    .ant-drawer-mask {
+      position: absolute !important;
+      inset: 0 !important;
+    }
+    .ant-drawer-content-wrapper {
+      box-shadow: -12px 0 40px rgba(38, 28, 84, 0.16) !important;
+    }
+  `,
+  avatarDrawerBody: css`
+    min-height: 100%;
+    box-sizing: border-box;
+    padding: 20px 24px 24px;
+    display: flex;
+    flex-direction: column;
+  `,
+  avatarDetailHeader: css`
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #f0ecfa;
+  `,
+  avatarDetailAvatar: css`
+    flex: 0 0 52px;
+    border-radius: 15px;
+    box-shadow: 0 8px 20px rgba(91, 76, 196, 0.18);
+  `,
+  avatarDetailHeadText: css`
+    flex: 1;
+    min-width: 0;
+  `,
+  avatarDetailName: css`
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #241b4d;
+    font-size: 18px;
+    line-height: 1.35;
+  `,
+  avatarDetailSub: css`
+    margin-top: 3px;
+    color: #9d98b4;
+    font-size: 12px;
+  `,
+  avatarDetailClose: css`
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: #f5f2fb;
+    color: #6f6a86;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    &:hover {
+      background: #ece7f9;
+      color: #241b4d;
+    }
+  `,
+  avatarDetailSection: css`
+    padding: 16px 0;
+    border-bottom: 1px solid #f4f1fa;
+  `,
+  avatarDetailLabel: css`
+    margin-bottom: 8px;
+    color: #9d98b4;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  `,
+  avatarDetailValue: css`
+    color: #3a3358;
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  `,
+  avatarRoleTag: css`
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: #f0ebff;
+    color: #6c5ce7;
+    font-size: 13px;
+  `,
+  avatarStatusRow: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #3a3358;
+    font-size: 14px;
+  `,
+  avatarStatusDot: css`
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+  `,
+  avatarStatusDotPaused: css`
+    background: #f59e0b;
+  `,
+  avatarDetailFooter: css`
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding: 18px 0 2px;
+    border-top: 1px solid #f0ecfa;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  `,
+  avatarDetailPrimary: css`
+    height: 42px;
+    border-radius: 10px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  `,
+  avatarSecondaryActions: css`
+    display: flex;
+    gap: 10px;
+  `,
+  avatarSecondaryButton: css`
+    flex: 1;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.16s ease;
+  `,
+  avatarPauseButton: css`
+    border: 1px solid #e4def7;
+    background: #f7f5fd;
+    color: #6b5bd6;
+    &:hover {
+      border-color: #d6ccf4;
+      background: #f0ebff;
+    }
+  `,
+  avatarEditButton: css`
+    border: 1px solid #e8e4f4;
+    background: #faf9fd;
+    color: #5d5773;
+    &:hover {
+      border-color: #dcd5ef;
+      background: #f4f1fb;
+      color: #241b4d;
+    }
+  `,
+  avatarPausedHint: css`
+    margin-top: 14px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #fff8e8;
+    color: #b7791f;
+    font-size: 12px;
+    line-height: 1.5;
+  `,
+  avatarDeleteButton: css`
+    border: 1px solid #ffe0e7;
+    background: #fff7f9;
+    color: #f2637f;
+    &:hover {
+      border-color: #ffd0da;
+      background: #fff0f4;
+    }
+  `,
+  avatarEditForm: css`
+    padding-top: 6px;
+  `,
+  avatarEditFooter: css`
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding: 18px 0 2px;
+    border-top: 1px solid #f0ecfa;
+    background: #fff;
+    display: flex;
+    gap: 10px;
+  `,
+  avatarCancelButton: css`
+    flex: 1;
+    height: 42px;
+    border: 1px solid #eeeaf7;
+    border-radius: 10px;
+    background: #f6f4fb;
+    color: #5d5773;
+    font-size: 14px;
+    &:hover {
+      border-color: #e2dcf3;
+      background: #f0edf9;
+      color: #241b4d;
+    }
+  `,
+  avatarSaveButton: css`
+    flex: 1;
+    height: 42px;
+    border-radius: 10px;
+    font-size: 14px;
   `,
   topBar: css`
     display: flex;
@@ -615,6 +830,16 @@ export const useStyles = createStyles(({ css }) => ({
     font-weight: 400;
     line-height: 1.5;
   `,
+  agentTag: css`
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #e8f2ff;
+    color: #3b7ddd;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1.5;
+  `,
   chatMembers: css`
     font-size: 11px;
     color: #a7a2b8;
@@ -663,6 +888,64 @@ export const useStyles = createStyles(({ css }) => ({
   bubbleSelf: css`
     background: linear-gradient(135deg, #95ecb0, #7fdc9d);
     color: #143d27;
+  `,
+  taskCard: css`
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fff;
+    border: 1px solid #eeeaf8;
+    box-shadow: 0 3px 12px rgba(44, 34, 94, 0.05);
+  `,
+  taskCardTop: css`
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  `,
+  taskCardTitle: css`
+    flex: 1;
+    min-width: 0;
+    color: #241b4d;
+    font-size: 13px;
+    line-height: 1.5;
+    word-break: break-word;
+  `,
+  taskCardStatus: css`
+    flex: 0 0 auto;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.6;
+  `,
+  taskCardStatusRunning: css`
+    background: #eef4ff;
+    color: #3b7ddd;
+  `,
+  taskCardStatusDone: css`
+    background: #eaf8ef;
+    color: #1f9d55;
+  `,
+  taskCardStatusFailed: css`
+    background: #fff0f4;
+    color: #f2637f;
+  `,
+  taskCardSummary: css`
+    margin-top: 8px;
+    color: #6f6a86;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  `,
+  agentPausedBanner: css`
+    flex: 0 0 auto;
+    margin: 0 18px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: #fff8e8;
+    color: #b7791f;
+    font-size: 12px;
+    line-height: 1.5;
   `,
   composer: css`
     display: flex;
@@ -835,15 +1118,30 @@ export const useStyles = createStyles(({ css }) => ({
   `,
   contactsGrid: css`
     display: grid;
-    grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
-    align-items: start;
+    align-items: stretch;
+    min-height: 0;
+    @media (max-width: 900px) {
+      grid-template-columns: 1fr;
+    }
   `,
   contactsPanel: css`
     background: #fff;
     border-radius: 7px;
     padding: 10px;
     box-shadow: 0 6px 20px rgba(44, 34, 94, 0.05);
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 330px);
+    min-height: 320px;
+    max-height: 560px;
+  `,
+  contactsPanelBody: css`
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
   `,
   contactsPanelHead: css`
     display: flex;

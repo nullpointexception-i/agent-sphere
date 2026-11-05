@@ -8,6 +8,7 @@ import com.buukle.agent.channel.spi.OutboundFormat;
 import com.buukle.agent.channel.spi.OutboundMessage;
 import com.buukle.agent.channel.spi.SendResult;
 import com.buukle.agent.channel.spi.TaskCardPayload;
+import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.im.domain.ImConversation;
 import com.buukle.agent.im.dtvo.vo.ImTextContentVO;
 import com.buukle.agent.im.dtvo.vo.MessageVO;
@@ -52,9 +53,7 @@ public class ImChannelAdapter implements ChannelAdapter {
         if (message == null || message.threadId() == null) {
             return SendResult.failed("threadId is required");
         }
-        ImConversation conversation = conversationMapper.selectOne(Wrappers.<ImConversation>lambdaQuery()
-                .eq(ImConversation::getThreadId, message.threadId())
-                .last("LIMIT 1"));
+        ImConversation conversation = findByThread(message.threadId());
         if (conversation == null) {
             return SendResult.failed("conversation not found for thread " + message.threadId());
         }
@@ -77,9 +76,7 @@ public class ImChannelAdapter implements ChannelAdapter {
         if (message == null || message.targetMessageId() == null || message.threadId() == null) {
             return SendResult.failed("targetMessageId and threadId are required");
         }
-        ImConversation conversation = conversationMapper.selectOne(Wrappers.<ImConversation>lambdaQuery()
-                .eq(ImConversation::getThreadId, message.threadId())
-                .last("LIMIT 1"));
+        ImConversation conversation = findByThread(message.threadId());
         if (conversation == null) {
             return SendResult.failed("conversation not found for thread " + message.threadId());
         }
@@ -92,6 +89,20 @@ public class ImChannelAdapter implements ChannelAdapter {
             log.warn("IM message update failed: thread={}, message={}, error={}",
                     message.threadId(), message.targetMessageId(), e.getMessage());
             return SendResult.failed(e.getMessage());
+        }
+    }
+
+    private ImConversation findByThread(Long threadId) {
+        String tenant = TenantUtil.get();
+        TenantUtil.stop();
+        try {
+            return conversationMapper.selectOne(Wrappers.<ImConversation>lambdaQuery()
+                    .eq(ImConversation::getThreadId, threadId)
+                    .last("LIMIT 1"));
+        } finally {
+            if (tenant != null && !tenant.isBlank()) {
+                TenantUtil.start(tenant);
+            }
         }
     }
 

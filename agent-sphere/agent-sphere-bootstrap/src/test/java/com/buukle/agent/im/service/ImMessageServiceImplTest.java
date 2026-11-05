@@ -19,6 +19,7 @@ import com.buukle.agent.im.repository.ImMessageMapper;
 import com.buukle.agent.im.repository.ImParticipantMapper;
 import com.buukle.agent.im.repository.ImReadCursorMapper;
 import com.buukle.agent.im.service.impl.ImMessageServiceImpl;
+import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +65,8 @@ class ImMessageServiceImplTest {
     @Mock
     ObjectProvider<EventIngestPort> ingestPortProvider;
     @Mock
+    ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
+    @Mock
     AgentMetrics metrics;
 
     ImMessageServiceImpl service;
@@ -71,11 +74,13 @@ class ImMessageServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new ImMessageServiceImpl(messageMapper, conversationMapper, settingMapper,
-                participantMapper, readCursorMapper, streamService, ingestPortProvider, metrics);
+                participantMapper, readCursorMapper, streamService, ingestPortProvider,
+                directoryPortProvider, metrics);
         AuthContext.setUserId(1L);
         AuthContext.setUsername("alice");
         AuthContext.setDisplayName("Alice");
         lenient().when(ingestPortProvider.getIfAvailable()).thenReturn(null);
+        lenient().when(directoryPortProvider.getIfAvailable()).thenReturn(null);
         lenient().when(participantMapper.selectCount(any())).thenReturn(1L);
         lenient().when(readCursorMapper.selectOne(any())).thenReturn(null);
         lenient().when(conversationMapper.updateLastMessage(anyLong(), anyLong(), any())).thenReturn(1);

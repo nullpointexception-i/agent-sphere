@@ -86,8 +86,8 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         CreateInstanceDTO routerDTO = new CreateInstanceDTO();
         routerDTO.setName(dto.getName() + " Router");
         routerDTO.setDescription("Super-Agent router: " + dto.getName());
-        routerDTO.setSystemPrompt(SuperAgentPrompt.withStrict(
-                agentRouterPromptService.resolve(), position.nameEn()));
+        routerDTO.setSystemPrompt(SuperAgentPrompt.routerPrompt(
+                position.nameEn(), dto.getDescription(), agentRouterPromptService.resolve()));
         routerDTO.setModelRouteId(modelRouteId);
         routerDTO.setInstanceRole(ROLE_ROUTER);
         routerDTO.setSystemManaged(false);
@@ -109,7 +109,8 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         CreateInstanceDTO workerDTO = new CreateInstanceDTO();
         workerDTO.setName(dto.getName() + " Worker");
         workerDTO.setDescription("Super-Agent worker: " + dto.getName());
-        workerDTO.setSystemPrompt(SuperAgentPrompt.strict(position.nameEn()));
+        workerDTO.setSystemPrompt(SuperAgentPrompt.workerPrompt(
+                position.nameEn(), dto.getDescription()));
         workerDTO.setModelRouteId(modelRouteId);
         workerDTO.setInstanceRole(ROLE_WORKER);
         workerDTO.setSystemManaged(false);
@@ -188,10 +189,12 @@ public class SuperAgentServiceImpl implements SuperAgentService {
     @Override
     public SuperAgentVO update(Long id, CreateSuperAgentDTO dto) {
         AgentSuperAgent agent = requireOwned(id);
+        boolean promptsChanged = false;
         if (dto.getName() != null && !dto.getName().isBlank()) {
             agent.setName(dto.getName());
         }
         if (dto.getDescription() != null) {
+            promptsChanged = !dto.getDescription().equals(agent.getDescription());
             agent.setDescription(dto.getDescription());
         }
         if (dto.getPositionCode() != null && !dto.getPositionCode().isBlank()) {
@@ -202,12 +205,13 @@ public class SuperAgentServiceImpl implements SuperAgentService {
             agent.setPositionCode(position.code());
             agent.setPositionNameCn(position.nameCn());
             agent.setPositionNameEn(position.nameEn());
-            if (changed) {
-                syncPositionPrompts(agent, position);
-            }
+            promptsChanged = promptsChanged || changed;
         }
         if (dto.getConfig() != null) {
             agent.setConfig(dto.getConfig());
+        }
+        if (promptsChanged) {
+            syncPrompts(agent);
         }
         superAgentMapper.updateById(agent);
         return toVO(agent);
@@ -256,23 +260,27 @@ public class SuperAgentServiceImpl implements SuperAgentService {
 
     private SystemDicEntry requirePosition(String positionCode) {
         if (positionCode == null || positionCode.isBlank()) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "position is required");
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "role is required");
         }
         SystemDicEntry position = systemDicSpi.findActive(
                 SystemDicConstants.TYPE_POSITION, positionCode.trim());
         if (position == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "unknown position: " + positionCode);
+                    "unknown role: " + positionCode);
         }
         return position;
     }
 
-    /** Position edits must be reflected in both managed instances' system prompts. */
-    private void syncPositionPrompts(AgentSuperAgent agent, SystemDicEntry position) {
-        updateInstancePrompt(agent.getRouterInstanceId(), SuperAgentPrompt.withStrict(
-                agentRouterPromptService.resolve(), position.nameEn()));
-        updateInstancePrompt(agent.getWorkerInstanceId(),
-                SuperAgentPrompt.strict(position.nameEn()));
+    /** Role / scope / position edits must be reflected in both managed instances' prompts. */
+    private void syncPrompts(AgentSuperAgent agent) {
+        if (agent.getPositionNameEn() == null || agent.getPositionNameEn().isBlank()) {
+            return;
+        }
+        updateInstancePrompt(agent.getRouterInstanceId(), SuperAgentPrompt.routerPrompt(
+                agent.getPositionNameEn(), agent.getDescription(),
+                agentRouterPromptService.resolve()));
+        updateInstancePrompt(agent.getWorkerInstanceId(), SuperAgentPrompt.workerPrompt(
+                agent.getPositionNameEn(), agent.getDescription()));
     }
 
     private void updateInstancePrompt(Long instanceId, String systemPrompt) {

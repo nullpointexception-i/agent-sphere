@@ -308,7 +308,7 @@ export default function SuperAgentPage() {
       ellipsis: true,
     },
     {
-      title: t('pages.superAgent.position', '职位'),
+      title: t('pages.superAgent.position', '角色'),
       dataIndex: 'positionCode',
       width: 150,
       render: (_: unknown, record: SuperAgent) => positionName(record) || '-',
@@ -602,11 +602,11 @@ export default function SuperAgentPage() {
           </Form.Item>
           <Form.Item
             name="positionCode"
-            label={t('pages.superAgent.position', '职位')}
+            label={t('pages.superAgent.position', '角色')}
             rules={[
               {
                 required: true,
-                message: t('pages.superAgent.positionRequired', '请选择职位'),
+                message: t('pages.superAgent.positionRequired', '请选择角色'),
               },
             ]}
           >
@@ -614,7 +614,7 @@ export default function SuperAgentPage() {
               options={positionOptions}
               placeholder={t(
                 'pages.superAgent.positionPlaceholder',
-                '请选择职位',
+                '请选择角色',
               )}
             />
           </Form.Item>
@@ -868,11 +868,11 @@ export default function SuperAgentPage() {
           </Form.Item>
           <Form.Item
             name="positionCode"
-            label={t('pages.superAgent.position', '职位')}
+            label={t('pages.superAgent.position', '角色')}
             rules={[
               {
                 required: true,
-                message: t('pages.superAgent.positionRequired', '请选择职位'),
+                message: t('pages.superAgent.positionRequired', '请选择角色'),
               },
             ]}
           >
@@ -880,7 +880,7 @@ export default function SuperAgentPage() {
               options={positionOptions}
               placeholder={t(
                 'pages.superAgent.positionPlaceholder',
-                '请选择职位',
+                '请选择角色',
               )}
             />
           </Form.Item>

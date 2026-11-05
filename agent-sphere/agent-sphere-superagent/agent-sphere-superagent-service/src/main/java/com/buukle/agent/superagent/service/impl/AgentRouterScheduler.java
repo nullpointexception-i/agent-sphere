@@ -7,13 +7,19 @@ import com.buukle.agent.channel.spi.TaskCardType;
 import com.buukle.agent.common.constant.ActorType;
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.SessionSurface;
+import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SuperAgentTraceContext;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.metrics.AgentMetrics;
+import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
+import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
+import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.domain.AgentEvent;
 import com.buukle.agent.superagent.domain.AgentEventDelivery;
@@ -92,6 +98,7 @@ public class AgentRouterScheduler {
     private final AgentWorkItemMapper workItemMapper;
     private final AgentOutboundMessageMapper outboundMapper;
     private final InstanceSpi instanceSpi;
+    private final SessionSpi sessionSpi;
     private final UserSpi userSpi;
     private final ObjectProvider<AgentRouterPort> agentRouterPortProvider;
     private final ObjectProvider<AgentRouterRunPort> agentRouterRunPortProvider;
@@ -150,7 +157,7 @@ public class AgentRouterScheduler {
             AgentEvent event = eventMapper.selectById(delivery.getEventId());
             AgentSuperAgent agent = superAgentMapper.selectById(delivery.getSuperAgentId());
             if (event == null || agent == null || !SuperAgentStatus.ACTIVE.equals(agent.getStatus())
-                    || agent.getRouterSessionId() == null || event.getThreadId() == null) {
+                    || agent.getRouterInstanceId() == null || event.getThreadId() == null) {
                 continue;
             }
             contexts.add(new DeliveryContext(delivery, event, agent));
@@ -187,6 +194,14 @@ public class AgentRouterScheduler {
                 }
                 DeliveryContext first = claimed.get(0);
                 TenantContext.set(first.agent.getTenantId());
+                Long routerSessionId = ensureRouterSession(first.agent, first.event.getThreadId());
+                if (routerSessionId == null) {
+                    for (DeliveryContext context : claimed) {
+                        deliveryMapper.release(context.delivery.getId(),
+                                LocalDateTime.now().plusSeconds(RETRY_DELAY_SECONDS));
+                    }
+                    continue;
+                }
                 StringBuilder input = new StringBuilder("[DELIVERIES]\n");
                 for (DeliveryContext context : claimed) {
                     input.append("deliveryId=").append(context.delivery.getId())
@@ -201,7 +216,7 @@ public class AgentRouterScheduler {
                 AgentRouterRunResult result;
                 try {
                     result = port.start(new AgentRouterRunCommand(
-                            first.agent.getRouterSessionId(), first.agent.getId(),
+                            routerSessionId, first.agent.getId(),
                             first.event.getThreadId(), input.toString(), RunMode.WRITE.name()));
                 } catch (Exception e) {
                     for (DeliveryContext context : claimed) {
@@ -245,6 +260,57 @@ public class AgentRouterScheduler {
     }
 
     private record DeliveryContext(AgentEventDelivery delivery, AgentEvent event, AgentSuperAgent agent) {
+    }
+
+    /** One Router session per thread; legacy threads fall back to the guardian session. */
+    private Long ensureRouterSession(AgentSuperAgent agent, Long threadId) {
+        if (threadId == null) {
+            return null;
+        }
+        AgentThread thread = threadMapper.selectById(threadId);
+        if (thread != null && thread.getRouterSessionId() != null) {
+            return thread.getRouterSessionId();
+        }
+        if (agent.getRouterInstanceId() == null) {
+            return agent.getRouterSessionId();
+        }
+        SessionSurface previous = SessionSurfaceHolder.get();
+        SessionSurfaceHolder.set(SessionSurface.INTERNAL);
+        try {
+            CreateSessionDTO dto = new CreateSessionDTO();
+            dto.setAgentInstanceId(agent.getRouterInstanceId());
+            dto.setTitle(routerSessionTitle(agent, thread));
+            dto.setSessionType(SessionType.ROUTER);
+            dto.setSuperAgentId(agent.getId());
+            dto.setThreadId(threadId);
+            dto.setCreatedBy(thread == null ? null : thread.getCreatedBy());
+            SessionVO session = sessionSpi.createSession(dto);
+            if (session == null || session.getId() == null) {
+                return agent.getRouterSessionId();
+            }
+            if (thread != null) {
+                thread.setRouterSessionId(session.getId());
+                threadMapper.updateById(thread);
+            }
+            return session.getId();
+        } catch (Exception e) {
+            log.warn("Router session create failed: agent={}, thread={}, error={}",
+                    agent.getId(), threadId, e.getMessage());
+            return agent.getRouterSessionId();
+        } finally {
+            if (previous == null) {
+                SessionSurfaceHolder.clear();
+            } else {
+                SessionSurfaceHolder.set(previous);
+            }
+        }
+    }
+
+    private static String routerSessionTitle(AgentSuperAgent agent, AgentThread thread) {
+        String suffix = thread == null || thread.getTitle() == null || thread.getTitle().isBlank()
+                ? "对话" : thread.getTitle();
+        String title = (agent.getName() == null ? "" : agent.getName()) + " · " + suffix;
+        return title.length() <= MAX_TITLE ? title : title.substring(0, MAX_TITLE);
     }
 
     private void consume(AgentEventDelivery delivery) {
