@@ -63,6 +63,9 @@ public class AgentRouterScheduler {
     private static final int RETRY_DELAY_SECONDS = 30;
     private static final long GROUP_LOCK_LEASE_SECONDS = 60;
     private static final String GROUP_LOCK_PREFIX = "superagent:agent-router:";
+    /** Metric tag value for deliveries terminally failed because nothing can consume them. */
+    private static final String DELIVERY_STATUS_TAG = "status";
+    private static final String DELIVERY_STATUS_UNDELIVERABLE = "UNDELIVERABLE";
 
     private final AgentEventDeliveryMapper deliveryMapper;
     private final AgentEventMapper eventMapper;
@@ -135,10 +138,24 @@ public class AgentRouterScheduler {
     private void processSessionBatch() {
         List<DeliveryContext> contexts = new ArrayList<>();
         for (AgentEventDelivery delivery : deliveryMapper.selectPending(Math.max(1, batchSize))) {
-            AgentEvent event = eventMapper.selectById(delivery.getEventId());
-            AgentSuperAgent agent = superAgentMapper.selectById(delivery.getSuperAgentId());
-            if (event == null || agent == null || !SuperAgentStatus.ACTIVE.equals(agent.getStatus())
-                    || agent.getRouterInstanceId() == null || event.getThreadId() == null) {
+            AgentEvent event = delivery.getEventId() == null
+                    ? null : eventMapper.selectById(delivery.getEventId());
+            AgentSuperAgent agent = event == null
+                    ? null : superAgentMapper.selectById(delivery.getSuperAgentId());
+            if (event == null || agent == null) {
+                failUndeliverable(delivery, event == null ? "event missing" : "agent missing");
+                continue;
+            }
+            if (!SuperAgentStatus.ACTIVE.equals(agent.getStatus())) {
+                failUndeliverable(delivery, "agent " + agent.getStatus());
+                continue;
+            }
+            if (agent.getRouterInstanceId() == null) {
+                failUndeliverable(delivery, "agent has no router instance");
+                continue;
+            }
+            if (event.getThreadId() == null) {
+                failUndeliverable(delivery, "event has no thread");
                 continue;
             }
             contexts.add(new DeliveryContext(delivery, event, agent));
@@ -241,6 +258,23 @@ public class AgentRouterScheduler {
     }
 
     private record DeliveryContext(AgentEventDelivery delivery, AgentEvent event, AgentSuperAgent agent) {
+    }
+
+    /**
+     * Terminally fails a delivery its target can never consume. A later recovery
+     * (archive undone, router instance bound) re-runs the ingest pipeline with a
+     * new event, so keeping the row pending forever only makes every fallback
+     * poll spend its batch on dead rows — the exact busy loop this method ends.
+     */
+    private void failUndeliverable(AgentEventDelivery delivery, String cause) {
+        String remark = "UNDELIVERABLE: " + cause
+                + "; superAgentId=" + delivery.getSuperAgentId()
+                + ", eventId=" + delivery.getEventId();
+        if (deliveryMapper.failPending(delivery.getId(), remark) > 0) {
+            metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY,
+                    DELIVERY_STATUS_TAG, DELIVERY_STATUS_UNDELIVERABLE);
+            log.warn("Agent delivery terminally failed ({}): deliveryId={}", cause, delivery.getId());
+        }
     }
 
     /** One Router session per thread; no guardian fallback. */

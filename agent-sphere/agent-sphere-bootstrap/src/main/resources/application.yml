@@ -57,6 +57,7 @@ logging:
     com.buukle.agent.superagent.repository.AgentEventDeliveryMapper: INFO
     com.buukle.agent.superagent.repository.AgentOutboundMessageMapper: INFO
     com.buukle.agent.superagent.repository.AgentWorkItemMapper: INFO
+    com.buukle.agent.superagent.repository.AgentEventMapper: INFO
     org.springframework: INFO                       # Spring 框架日志 / Spring framework log
 
 buukle:
@@ -83,7 +84,7 @@ buukle:
           base-backoff-ms: 3000
       agent-router:
         enabled: true
-        interval-ms: 1000                          # 兜底轮询间隔（正常由事务提交事件毫秒级唤醒）
+        interval-ms: 5000                          # 兜底轮询间隔（主路径是事务提交事件的毫秒级唤醒，本值只兜底事件丢失/重启悬挂）
         batch-size: 20                             # 单批投递数
         max-loop-count: 64                         # Agent Router 单 run 循环上限
       router:
@@ -118,7 +119,7 @@ buukle:
         batch-sleep-ms: 200
       outbound:
         enabled: true
-        interval-ms: 1000                          # 兜底轮询间隔（正常由 outbound 插入事件毫秒级唤醒）
+        interval-ms: 5000                          # 兜底轮询间隔（主路径是 outbound 插入事件的毫秒级唤醒）
         batch-size: 20                             # 单批发送数
         max-attempts: 8                            # 最大重试次数
         retry-base-ms: 2000                        # 退避基数

@@ -38,4 +38,16 @@ public interface AgentEventDeliveryMapper extends BaseMapper<AgentEventDelivery>
             WHERE id = #{id} AND status = 'CLAIMED' AND delete_flag = FALSE
             """)
     int release(@Param("id") Long id, @Param("nextRetryAt") LocalDateTime nextRetryAt);
+
+    /**
+     * Terminal-fails a PENDING delivery that can never be consumed (agent removed,
+     * archived or not configured). Without this the row is picked up forever by
+     * the fallback poll every cycle, starving the batch and spamming the log.
+     */
+    @Update("""
+            UPDATE agent_event_delivery
+            SET status = 'FAILED', remark = #{remark}, next_retry_at = NULL, updated_at = now()
+            WHERE id = #{id} AND status = 'PENDING' AND delete_flag = FALSE
+            """)
+    int failPending(@Param("id") Long id, @Param("remark") String remark);
 }
