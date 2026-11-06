@@ -1194,7 +1194,7 @@ export default function Chat() {
               const rsState =
                 d?.status ||
                 (tlSubType === 'run_waiting' ? 'WAITING' : undefined);
-              const rsText = d?.assistantReply || d?.response || '';
+              const rsText = d?.statusTitle || d?.assistantReply || d?.response || '';
               mergeTimeline([
                 {
                   seq: rsSeq,
@@ -1232,7 +1232,10 @@ export default function Chat() {
                       : 'COMPLETED'
                     : 'RUNNING',
                   title:
-                    d?.assistantReply || existing?.title || '正在压缩上下文…',
+                    d?.statusTitle ||
+                    d?.assistantReply ||
+                    existing?.title ||
+                    '正在压缩上下文…',
                   content,
                 });
                 return [...m.values()].sort((a, b) => a.seq - b.seq);

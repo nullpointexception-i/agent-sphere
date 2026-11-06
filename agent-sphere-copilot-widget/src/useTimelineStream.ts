@@ -597,7 +597,10 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
                 : 'COMPLETED'
               : 'RUNNING',
             title:
-              d?.assistantReply || existing?.title || '正在压缩上下文…',
+              d?.statusTitle ||
+              d?.assistantReply ||
+              existing?.title ||
+              '正在压缩上下文…',
             content,
           });
           return [...m.values()].sort((a, b) => a.seq - b.seq);
@@ -641,7 +644,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       if (d?.seq != null && d?.kind === 'run_status') {
         const rsSeq = Number(d.seq);
         const rsState = d?.status || (tlSubType === 'run_waiting' ? 'WAITING' : null);
-        const rsText = d?.assistantReply || d?.response || '';
+        const rsText =
+          d?.statusTitle || d?.assistantReply || d?.response || '';
         const row: TimelineRow = {
           seq: rsSeq,
           runId: d?.runId != null ? Number(d.runId) : null,
