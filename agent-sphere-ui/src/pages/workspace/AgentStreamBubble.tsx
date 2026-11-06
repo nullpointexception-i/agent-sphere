@@ -1,9 +1,9 @@
-import { DownOutlined, UpOutlined } from '@ant-design/icons';
 import { Avatar } from 'antd';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { ImParticipant } from '@/services/agentSphere/im';
 import type { AgentStreamState } from './agentStreamStore';
 import { tw } from './i18n';
+import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, initials } from './shared';
 import { useStyles } from './style';
 
@@ -12,6 +12,9 @@ function streamStatusLabel(state: AgentStreamState) {
     return state.errorMessage
       ? `${tw('chat.agentStreamFailed', '回复失败')} · ${state.errorMessage}`
       : tw('chat.agentStreamFailed', '回复失败');
+  }
+  if (state.phase === 'waiting') {
+    return tw('chat.agentWaiting', '正在处理…');
   }
   if (state.phase === 'tool') {
     const tool = state.displayName || state.toolName || '';
@@ -26,32 +29,101 @@ function streamStatusLabel(state: AgentStreamState) {
     return tw('chat.agentAwaitingUser', '等待你的回复');
   }
   if (state.phase === 'reply') {
-    return tw('chat.agentReplying', '正在回复');
+    return tw('chat.agentReplying', '正在回复…');
   }
-  if (state.phase === 'done') {
-    return tw('chat.agentStreamDone', '已完成，等待消息…');
-  }
-  return tw('chat.agentWaiting', '正在处理…');
+  return tw('chat.agentDone', '已完成');
 }
 
 /**
- * Ephemeral agent streaming bubble: shows Router thinking / reply fragments in real
- * time. It is display-only — the authoritative message replaces it once it lands.
+ * Reasoning chip in the title line: streams the latest thinking fragment as a
+ * scrolling pill (tail keeps scrolling in); clicking expands a floating panel
+ * with the full reasoning text, so the message flow layout never shifts.
+ */
+const ThinkingChip = memo(function ThinkingChip({
+  thinking,
+  live,
+  seconds,
+}: {
+  thinking: string;
+  live: boolean;
+  seconds?: number | null;
+}) {
+  const { styles } = useStyles();
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLSpanElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // While live, keep the tail of the reasoning visible inside the pill.
+  useEffect(() => {
+    if (!live) return;
+    const box = boxRef.current;
+    if (box) {
+      box.scrollLeft = box.scrollWidth;
+    }
+  }, [thinking, live]);
+
+  // Floating panel follows the stream while the reasoning is running.
+  useEffect(() => {
+    if (!open || !live) return;
+    const panel = panelRef.current;
+    if (panel) {
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }, [open, live, thinking]);
+
+  return (
+    <span className={styles.agentStreamChipWrap}>
+      <button
+        type="button"
+        className={styles.agentStreamChip}
+        onClick={() => setOpen((previous) => !previous)}
+        aria-expanded={open}
+      >
+        <span ref={boxRef} className={styles.agentStreamChipText}>
+          {live
+            ? thinking
+            : tw('chat.agentThoughtFor', '已思考 {seconds} 秒', {
+                seconds: seconds ?? 0,
+              })}
+        </span>
+      </button>
+      {open ? (
+        <div
+          ref={panelRef}
+          role="dialog"
+          className={live
+            ? `${styles.agentStreamChipPanel} ${styles.agentStreamChipPanelLive}`
+            : styles.agentStreamChipPanel}
+        >
+          <pre className={styles.agentStreamChipPanelText}>{thinking}</pre>
+        </div>
+      ) : null}
+    </span>
+  );
+});
+
+/**
+ * Ephemeral agent streaming bubble. Layout mirrors an incoming message row:
+ * typing-dots placeholder bubble while reasoning runs, reasoning chip in the
+ * title line, then the reply streams as markdown into the white bubble and is
+ * finally replaced by the authoritative message.
  */
 export const AgentStreamBubble = memo(function AgentStreamBubble({
   state,
   agent,
+  hidden,
 }: {
   state: AgentStreamState;
   agent?: ImParticipant;
+  /**
+   * True while the placeholder must not render yet: the waiting bubble is
+   * gated on the user's own message being visible in the list first.
+   */
+  hidden?: boolean;
 }) {
   const { styles } = useStyles();
   const [elapsed, setElapsed] = useState(0);
-  const [thinkingOpen, setThinkingOpen] = useState(true);
-
-  useEffect(() => {
-    setThinkingOpen(state.phase === 'thinking');
-  }, [state.phase]);
+  const [thinkingSeconds, setThinkingSeconds] = useState<number | null>(null);
 
   useEffect(() => {
     if (state.finalized) return undefined;
@@ -63,13 +135,32 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
     return () => window.clearInterval(timer);
   }, [state.startedAt, state.finalized]);
 
-  if (state.phase === 'done' && !state.thinking && !state.reply) {
+  useEffect(() => {
+    if (state.phase === 'thinking') {
+      return;
+    }
+    // Freeze how long reasoning took, shown later as "已思考 Xs 秒".
+    setThinkingSeconds((previous) => {
+      if (previous !== null) {
+        return previous;
+      }
+      return Math.max(0, Math.round((Date.now() - state.startedAt) / 1000));
+    });
+  }, [state.phase, state.startedAt]);
+
+  if (hidden) {
+    return null;
+  }
+  if (state.phase === 'done' && !state.thinking) {
     return null;
   }
 
   const agentName = agent?.displayName || tw('chat.agent', '数字分身');
-  const showThinking = state.thinking.length > 0;
   const streaming = !state.finalized;
+  const liveThinking = state.phase === 'thinking' && streaming;
+  const showPlaceholder =
+    !state.reply && state.phase !== 'failed' && state.phase !== 'done';
+  const awaiting = state.phase === 'awaiting';
 
   return (
     <div className={styles.agentStreamRow}>
@@ -77,50 +168,42 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
         {initials(agentName)}
       </Avatar>
       <div className={styles.agentStreamBubbleWrap}>
-        <div className={styles.messageMeta}>
-          {agentName} · {streamStatusLabel(state)}
+        <div className={`${styles.messageMeta} ${styles.agentStreamMeta}`}>
+          {agentName}
+          {' · '}
+          {streamStatusLabel(state)}
           {streaming && elapsed > 0 ? ` · ${elapsed}s` : ''}
-        </div>
-        <div className={styles.agentStreamBubble}>
-          {showThinking ? (
-            <div className={styles.agentStreamThinking}>
-              <button
-                type="button"
-                className={styles.agentStreamThinkingToggle}
-                onClick={() => setThinkingOpen((open) => !open)}
-              >
-                {thinkingOpen ? <UpOutlined /> : <DownOutlined />}
-                {tw('chat.thinkingProcess', '思考过程')}
-              </button>
-              {thinkingOpen ? (
-                <div className={styles.agentStreamThinkingText}>
-                  {state.thinking}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {state.reply ? (
-            <div className={styles.agentStreamReply}>
-              {state.reply}
-              {streaming ? (
-                <span className={styles.agentStreamCursor} aria-hidden />
-              ) : null}
-            </div>
-          ) : null}
-          {state.phase === 'failed' && state.errorMessage ? (
-            <div className={styles.agentStreamError}>{state.errorMessage}</div>
-          ) : null}
-          {!state.reply &&
-          state.phase !== 'failed' &&
-          state.phase !== 'done' ? (
-            <div className={styles.agentStreamStatus}>
-              {streamStatusLabel(state)}
-              {streaming ? (
-                <span className={styles.agentStreamCursor} aria-hidden />
-              ) : null}
-            </div>
+          {state.thinking ? (
+            <ThinkingChip
+              thinking={state.thinking}
+              live={liveThinking}
+              seconds={thinkingSeconds}
+            />
           ) : null}
         </div>
+        {state.reply ? (
+          <div className={styles.agentStreamReplyBubble}>
+            <MessageMarkdown text={state.reply} streaming={streaming} />
+          </div>
+        ) : null}
+        {showPlaceholder ? (
+          <div className={styles.agentStreamBubble}>
+            {awaiting ? (
+              <span className={styles.agentStreamStatus}>
+                {streamStatusLabel(state)}
+              </span>
+            ) : (
+              <span className={styles.agentStreamDots} aria-hidden>
+                <span />
+                <span />
+                <span />
+              </span>
+            )}
+          </div>
+        ) : null}
+        {state.phase === 'failed' && state.errorMessage ? (
+          <div className={styles.agentStreamError}>{state.errorMessage}</div>
+        ) : null}
       </div>
     </div>
   );

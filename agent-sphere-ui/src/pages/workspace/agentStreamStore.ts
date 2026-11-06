@@ -22,6 +22,8 @@ export interface AgentStreamState {
   streamStatus?: string;
   errorMessage?: string;
   startedAt: number;
+  /** Wall clock of the last applied stream fragment; drives the stall watchdog. */
+  lastEventAt?: number;
   lastStreamSeq: number;
   finalized: boolean;
   finalSeq?: number;
@@ -32,6 +34,18 @@ interface Store {
   versions: Map<number, number>;
   listeners: Set<() => void>;
 }
+
+/**
+ * SSE fragments may be silently lost when the client reconnects (focus /
+ * visibilitychange aborts the stream; the server never replays). A run that has
+ * produced nothing for this long is finalized into the authoritative-message
+ * recovery path. Thinking gaps shorter than this are normal model latency.
+ */
+const STREAM_STALL_RECOVER_MS = 30_000;
+/** Absolute ceiling: a stream this old without finalizing is abandoned. */
+const STREAM_HARD_TIMEOUT_MS = 5 * 60_000;
+/** How often the watchdog re-checks commodity stalls. */
+const STREAM_WATCHDOG_TICK_MS = 2_000;
 
 const store: Store = {
   states: new Map(),
@@ -61,6 +75,7 @@ function beginState(conversationId: number): AgentStreamState {
     thinking: '',
     reply: '',
     startedAt: Date.now(),
+    lastEventAt: Date.now(),
     lastStreamSeq: 0,
     finalized: false,
   };
@@ -154,6 +169,7 @@ export function applyAgentStreamEvent(event: ImStreamPayload) {
     runId: event.runId ?? existing.runId,
     agentId: event.agentId ?? existing.agentId,
     phase,
+    lastEventAt: Date.now(),
     streamStatus: event.streamStatus ?? existing.streamStatus,
     lastStreamSeq: streamSeq || existing.lastStreamSeq,
   };
@@ -214,6 +230,32 @@ export function useAgentStream(conversationId: number) {
     }
     return undefined;
   }, [conversationId, state?.finalized, state?.phase, state?.startedAt]);
+
+  useEffect(() => {
+    // Stall watchdog: SSE is lossy (reconnects on focus/visibility abort the
+    // connection mid-stream and the server never replays), so a stream that
+    // stops emitting fragments for too long is finalized here. Finalizing
+    // routes the bubble into the authoritative-message recovery path, which
+    // refetches what the SSE gap swallowed. Deliberately skipped for phases
+    // that legitimately park for minutes (tool dispatch, awaiting user).
+    if (!state || state.finalized) return undefined;
+    const timer = window.setInterval(() => {
+      const current = currentState(conversationId);
+      if (!current || current.finalized) return;
+      if (current.phase === 'tool' || current.phase === 'awaiting') {
+        return;
+      }
+      const now = Date.now();
+      const lastActivity = current.lastEventAt ?? current.startedAt;
+      const stalled = now - lastActivity >= STREAM_STALL_RECOVER_MS;
+      const expired = now - current.startedAt >= STREAM_HARD_TIMEOUT_MS;
+      if (!stalled && !expired) {
+        return;
+      }
+      finalizeAgentStream(conversationId);
+    }, STREAM_WATCHDOG_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [conversationId, state?.finalized, state?.startedAt]);
 
   return state;
 }

@@ -1053,37 +1053,232 @@ export const useStyles = createStyles(({ css }) => ({
     word-break: break-word;
     box-shadow: 0 3px 10px rgba(44, 34, 94, 0.04);
   `,
-  agentStreamThinking: css`
-    border-bottom: 1px dashed #eeeaf8;
-    padding-bottom: 8px;
-    margin-bottom: 8px;
+  /** Title line of the ephemeral row: single line, never re-wraps the header. */
+  agentStreamMeta: css`
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
   `,
-  agentStreamThinkingToggle: css`
+  /** Reasoning chip in the title line: scroll-in tail, floating expand panel. */
+  agentStreamChipWrap: css`
+    position: relative;
+    display: inline-flex;
+    margin-left: 8px;
+    vertical-align: middle;
+  `,
+  agentStreamChip: css`
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    border: none;
-    background: transparent;
-    padding: 0;
+    max-width: 180px;
+    padding: 1px 8px;
+    border: 1px solid #e4defc;
+    border-radius: 10px;
+    background: #f7f5fd;
     font-size: 11px;
     color: #8b86a0;
+    line-height: 1.6;
     cursor: pointer;
     user-select: none;
+    &:hover {
+      border-color: #cbbef7;
+      color: #6f6594;
+    }
   `,
-  agentStreamThinkingText: css`
-    margin-top: 6px;
-    max-height: 168px;
+  agentStreamChipText: css`
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-align: left;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  `,
+  agentStreamChipPanel: css`
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    width: 320px;
+    max-height: 260px;
     overflow-y: auto;
+    padding: 10px 12px;
+    border: 1px solid #eeeaf8;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 10px 30px rgba(44, 34, 94, 0.14);
+  `,
+  agentStreamChipPanelLive: css`
+    border-color: #e4defc;
+    background: #fbfaff;
+  `,
+  agentStreamChipPanelText: css`
+    margin: 0;
+    font-family: inherit;
     white-space: pre-wrap;
     word-break: break-word;
     font-size: 12px;
-    color: #8b86a0;
-    line-height: 1.6;
+    color: #6f6a86;
+    line-height: 1.7;
   `,
-  agentStreamReply: css`
-    white-space: pre-wrap;
-    word-break: break-word;
+  /** Typing-dots placeholder bubble shown while reasoning runs. */
+  agentStreamDots: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 16px;
+    span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #8f7ff7;
+      @keyframes agent-dot-bounce {
+        0%,
+        60%,
+        100% {
+          transform: translateY(0);
+          opacity: 0.4;
+        }
+        30% {
+          transform: translateY(-4px);
+          opacity: 1;
+        }
+      }
+      animation: agent-dot-bounce 1.2s ease-in-out infinite;
+    }
+    span:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+    span:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+  `,
+  agentStreamReplyBubble: css`
+    padding: 10px 13px;
+    border-radius: 9px;
+    background: #fff;
     color: #3a3358;
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-word;
+    box-shadow: 0 3px 10px rgba(44, 34, 94, 0.04);
+    transform-origin: 0 100%;
+    @keyframes agent-reply-enter {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    animation: agent-reply-enter 180ms ease-out;
+  `,
+  messageMarkdown: css`
+    font-size: 13px;
+    line-height: 1.6;
+    color: inherit;
+    word-break: break-word;
+    p {
+      margin: 0 0 8px;
+    }
+    p:last-child {
+      margin-bottom: 0;
+    }
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      margin: 10px 0 4px;
+      font-weight: 600;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    ul,
+    ol {
+      margin: 4px 0 8px;
+      padding-left: 20px;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #eeeaf8;
+      margin: 8px 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8px 0;
+      display: block;
+      overflow-x: auto;
+    }
+    th,
+    td {
+      border: 1px solid #eeeaf8;
+      padding: 5px 9px;
+      text-align: left;
+      font-size: 12px;
+      word-break: break-word;
+    }
+    th {
+      background: #f7f5fd;
+      font-weight: 600;
+    }
+    pre {
+      margin: 8px 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #f7f5fd;
+      overflow-x: auto;
+      overflow-wrap: normal;
+      word-break: normal;
+      white-space: pre !important;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      font-size: 12px;
+    }
+    p > code,
+    li > code {
+      background: #f7f5fd;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    blockquote {
+      margin: 8px 0;
+      padding: 2px 0 2px 10px;
+      border-left: 3px solid #ddd6f3;
+      color: #6f6a86;
+    }
+    a {
+      color: #6e5bf0;
+      word-break: break-all;
+    }
+    img {
+      max-width: 100%;
+    }
+  `,
+  messageMarkdownStreaming: css`
+    > :last-child::after {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 13px;
+      margin-left: 2px;
+      vertical-align: -2px;
+      background: #7c6cff;
+      @keyframes agent-markdown-blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      animation: agent-markdown-blink 1s steps(1) infinite;
+    }
   `,
   agentStreamStatus: css`
     margin-top: 6px;
@@ -1094,20 +1289,6 @@ export const useStyles = createStyles(({ css }) => ({
     margin-top: 6px;
     font-size: 12px;
     color: #f2637f;
-  `,
-  agentStreamCursor: css`
-    display: inline-block;
-    width: 6px;
-    height: 14px;
-    margin-left: 2px;
-    vertical-align: -2px;
-    background: #7c6cff;
-    @keyframes agent-stream-blink {
-      50% {
-        opacity: 0;
-      }
-    }
-    animation: agent-stream-blink 1s steps(1) infinite;
   `,
   agentPausedBanner: css`
     flex: 0 0 auto;

@@ -43,9 +43,12 @@ export interface ImStreamPayload {
 export function useReconnectingSse(
   url: string,
   onEvent: (type: string, event: ImStreamPayload) => void,
+  onOpen?: () => void,
 ) {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
+  const openRef = useRef(onOpen);
+  openRef.current = onOpen;
 
   useEffect(() => {
     const token = getToken();
@@ -63,6 +66,7 @@ export function useReconnectingSse(
         {
           onOpen: () => {
             retry = 0;
+            openRef.current?.();
           },
           onEvent: (eventType, payload) => {
             let parsed: ImStreamPayload = {};

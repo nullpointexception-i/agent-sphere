@@ -70,6 +70,7 @@ import {
   ROUTER_CLARIFICATION,
 } from './AgentInputCard';
 import { AgentStreamBubble } from './AgentStreamBubble';
+import { MessageMarkdown } from './MessageMarkdown';
 import {
   applyAgentStreamEvent,
   beginAgentStream,
@@ -1555,7 +1556,18 @@ function ChatTab({
     );
   };
 
-  useReconnectingSse('/api/v1/im/stream', applyStreamEvent);
+  useReconnectingSse(
+    '/api/v1/im/stream',
+    applyStreamEvent,
+    // Every (re)connect: notify the chat panel so it refetches whatever the
+    // dropped connection swallowed (server never replays missed events).
+    () =>
+      setStreamEvent({
+        type: 'sse_reconnected',
+        data: {} as ImStreamPayload,
+        nonce: Date.now(),
+      }),
+  );
 
   useEffect(() => {
     const tick = () => {
@@ -1958,16 +1970,23 @@ function ChatDetail({
   const agentStream = useAgentStream(conversationId);
 
   const load = (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent) {
+      setLoading(true);
+      // 切会话的历史游标要在首载时重置，避免串会话的 beforeSeq。
+      setHasOlder(true);
+      setOlderCursor(undefined);
+    }
     Promise.all([
       imApi.conversation(conversationId),
       imApi.participants(conversationId),
-      imApi.messages(conversationId, undefined, 50),
+      imApi.messagePage(conversationId, undefined, undefined, 50),
     ])
-      .then(([current, members, rows]) => {
+      .then(([current, members, page]) => {
         setConversation(current || null);
         setParticipants(members || []);
-        setMessages((rows || []).slice().sort((a, b) => a.seq - b.seq));
+        setMessages((page?.rows || []).slice().sort((a, b) => a.seq - b.seq));
+        setHasOlder(Boolean(page?.hasMore));
+        setOlderCursor(page?.nextBeforeSeq);
       })
       .catch(() => {
         setMessages([]);
@@ -1982,11 +2001,49 @@ function ChatDetail({
     setSettingsOpen(false);
   }, [conversationId]);
 
+  /**
+   * Scroll-up pagination for the message list. The viewport is pinned to the
+   * first pre-existing row so prepending 50 messages does not visually jump.
+   */
+  const loadOlder = async () => {
+    if (!olderCursor || !hasOlder || olderLoading) return;
+    setOlderLoading(true);
+    try {
+      const page = await imApi.messagePage(
+        conversationId,
+        olderCursor,
+        undefined,
+        50,
+      );
+      const container = listRef.current;
+      const beforeHeight = container?.scrollHeight;
+      setMessages((previous) => mergeMessages(page.rows || [], previous));
+      setHasOlder(Boolean(page.hasMore));
+      setOlderCursor(page.nextBeforeSeq);
+      // React renders the prepended rows after this tick: re-anchor the
+      // viewport on the next frame so the user keeps looking at the same row.
+      window.requestAnimationFrame(() => {
+        const element = listRef.current;
+        if (element && beforeHeight) {
+          element.scrollTop += element.scrollHeight - beforeHeight;
+        }
+      });
+    } catch {
+      setHasOlder(false);
+    } finally {
+      setOlderLoading(false);
+    }
+  };
+
   const chatAgentId =
     conversation?.type === 'DM'
       ? participants.find((member) => member.participantType === 'AGENT')
           ?.participantId
       : undefined;
+
+  const [olderCursor, setOlderCursor] = useState<number | undefined>(undefined);
+  const [hasOlder, setHasOlder] = useState(true);
+  const [olderLoading, setOlderLoading] = useState(false);
 
   useEffect(() => {
     if (!chatAgentId) {
@@ -2005,6 +2062,8 @@ function ChatDetail({
       setMessages([]);
       setParticipants([]);
       setConversation(null);
+      // A freshly opened conversation starts pinned to the bottom.
+      stickToBottomRef.current = true;
     }
     load(!first);
   }, [conversationId, refreshKey]);
@@ -2020,11 +2079,19 @@ function ChatDetail({
     }
   }, [conversationId, participants]);
 
+  /**
+   * Follow new content only while the user is already near the bottom. Without
+   * this gate, prepending a history page (scroll-up pagination) would yank the
+   * viewport straight back down on the very next effect run.
+   */
+  const stickToBottomRef = useRef(true);
+
   useEffect(() => {
-    if (listRef.current) {
+    if (listRef.current && stickToBottomRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [messages, agentStream?.reply, agentStream?.thinking]);
+    // Reasoning fragments now live in the floating title chip, not the flow.
+  }, [messages, agentStream?.reply]);
 
   useEffect(() => {
     const lastSeq = messages[messages.length - 1]?.seq;
@@ -2038,6 +2105,25 @@ function ChatDetail({
       return;
     }
     const { type, data } = streamEvent;
+    if (type === 'sse_reconnected') {
+      // The connection was dropped (or the tab surfaced again): fetch whatever
+      // messages arrived during the gap, since the server never replays them.
+      const lastSeq = messagesRef.current[messagesRef.current.length - 1]?.seq;
+      if (!lastSeq) return;
+      imApi
+        .messagePage(conversationId, undefined, lastSeq, 50)
+        .then((page) => {
+          const rows = page.rows || [];
+          if (rows.length === 0) return;
+          setMessages((previous) => mergeMessages(previous, rows));
+          const agentRow = rows.find((row) => row.senderType === 'AGENT');
+          if (agentRow) {
+            finalizeAgentStream(conversationId, agentRow.seq);
+          }
+        })
+        .catch(() => {});
+      return;
+    }
     if (type === 'message_created') {
       // Agent authoritative reply: retire the ephemeral stream bubble.
       if (data.senderType === 'AGENT') {
@@ -2160,6 +2246,9 @@ function ChatDetail({
     // 只有与数字分身的 DM 才显示“正在处理”气泡；普通用户/群聊会话不显示。
     const shouldStream = Boolean(chatAgentId);
     setSending(true);
+    // Sending is an explicit jump-to-bottom intent even if the user had
+    // scrolled up to read history.
+    stickToBottomRef.current = true;
     if (shouldStream) {
       // 立即显示“正在处理”气泡：Router 调度已在毫秒级，但模型首字仍需等待。
       beginAgentStream(conversationId);
@@ -2423,7 +2512,26 @@ function ChatDetail({
         </div>
       ) : null}
 
-      <div className={styles.messages} ref={listRef}>
+      <div
+        className={styles.messages}
+        ref={listRef}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          const distanceToBottom =
+            element.scrollHeight - element.scrollTop - element.clientHeight;
+          // Only follow streamed content while the user is reading the bottom.
+          stickToBottomRef.current = distanceToBottom < 48;
+          // Scroll-up pagination: near the top pull the next history page.
+          if (
+            hasOlder &&
+            olderCursor &&
+            !olderLoading &&
+            element.scrollTop < 48
+          ) {
+            void loadOlder();
+          }
+        }}
+      >
         <Spin spinning={loading}>
           {messages.length === 0 ? (
             <Empty
@@ -2538,6 +2646,12 @@ function ChatDetail({
                             )}
                           </div>
                         )
+                      ) : item.type === 'TEXT' &&
+                        item.senderType === 'AGENT' &&
+                        messageText(item) ? (
+                        <div className={styles.bubble}>
+                          <MessageMarkdown text={messageText(item) || ''} />
+                        </div>
                       ) : (
                         <div
                           className={`${styles.bubble} ${self ? styles.bubbleSelf : ''}`}
@@ -2554,7 +2668,17 @@ function ChatDetail({
           )}
         </Spin>
         {agentStream && agentParticipant ? (
-          <AgentStreamBubble state={agentStream} agent={agentParticipant} />
+          <AgentStreamBubble
+            state={agentStream}
+            agent={agentParticipant}
+            // Placeholder waits until the user's own message is on the wall:
+            // beginAgentStream fires pre-send, so "waiting" would otherwise
+            // render above a message the list does not show yet.
+            hidden={
+              agentStream.phase === 'waiting' &&
+              messages[messages.length - 1]?.senderType !== 'USER'
+            }
+          />
         ) : null}
       </div>
 
