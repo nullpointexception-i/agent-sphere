@@ -88,14 +88,14 @@ const Login: React.FC = () => {
   }, []);
 
   const getSafeRedirectUrl = (redirect: string | null): string => {
-    if (!redirect?.startsWith('/')) return '/';
-    if (redirect.startsWith('//')) return '/';
+    if (!redirect?.startsWith('/')) return '/workspace';
+    if (redirect.startsWith('//')) return '/workspace';
     try {
       const parsed = new URL(redirect, window.location.origin);
-      if (parsed.origin !== window.location.origin) return '/';
+      if (parsed.origin !== window.location.origin) return '/workspace';
       return `${parsed.pathname}${parsed.search}${parsed.hash}`;
     } catch {
-      return '/';
+      return '/workspace';
     }
   };
 
