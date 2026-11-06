@@ -937,6 +937,81 @@ export const useStyles = createStyles(({ css }) => ({
     white-space: pre-wrap;
     word-break: break-word;
   `,
+  agentStreamRow: css`
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  `,
+  agentStreamBubbleWrap: css`
+    max-width: 68%;
+  `,
+  agentStreamBubble: css`
+    padding: 10px 13px;
+    border-radius: 9px;
+    background: #fff;
+    border: 1px dashed #e4defc;
+    color: #3a3358;
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-word;
+    box-shadow: 0 3px 10px rgba(44, 34, 94, 0.04);
+  `,
+  agentStreamThinking: css`
+    border-bottom: 1px dashed #eeeaf8;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  `,
+  agentStreamThinkingToggle: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 11px;
+    color: #8b86a0;
+    cursor: pointer;
+    user-select: none;
+  `,
+  agentStreamThinkingText: css`
+    margin-top: 6px;
+    max-height: 168px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+    color: #8b86a0;
+    line-height: 1.6;
+  `,
+  agentStreamReply: css`
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #3a3358;
+  `,
+  agentStreamStatus: css`
+    margin-top: 6px;
+    font-size: 12px;
+    color: #8b86a0;
+  `,
+  agentStreamError: css`
+    margin-top: 6px;
+    font-size: 12px;
+    color: #f2637f;
+  `,
+  agentStreamCursor: css`
+    display: inline-block;
+    width: 6px;
+    height: 14px;
+    margin-left: 2px;
+    vertical-align: -2px;
+    background: #7c6cff;
+    @keyframes agent-stream-blink {
+      50% {
+        opacity: 0;
+      }
+    }
+    animation: agent-stream-blink 1s steps(1) infinite;
+  `,
   agentPausedBanner: css`
     flex: 0 0 auto;
     margin: 0 18px;

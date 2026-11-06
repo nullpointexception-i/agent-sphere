@@ -109,6 +109,9 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                 .set(AgentLlmInteractionRecord::getTotalTokens, vo.getTotalTokens())
                 .set(AgentLlmInteractionRecord::getCacheHitTokens, vo.getCacheHitTokens())
                 .set(AgentLlmInteractionRecord::getCacheMissTokens, vo.getCacheMissTokens())
+                .set(AgentLlmInteractionRecord::getStreamAttempts, vo.getStreamAttempts())
+                .set(AgentLlmInteractionRecord::getStreamRetryCount, vo.getStreamRetryCount())
+                .set(AgentLlmInteractionRecord::getStreamError, vo.getStreamError())
                 .set(AgentLlmInteractionRecord::getStatus, Boolean.TRUE.equals(vo.getSuccess())
                         ? AgentLlmInteractionRecord.STATUS_COMPLETED
                         : AgentLlmInteractionRecord.STATUS_FAILED)
@@ -194,6 +197,9 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         record.setTotalTokens(vo.getTotalTokens());
         record.setCacheHitTokens(vo.getCacheHitTokens());
         record.setCacheMissTokens(vo.getCacheMissTokens());
+        record.setStreamAttempts(vo.getStreamAttempts());
+        record.setStreamRetryCount(vo.getStreamRetryCount());
+        record.setStreamError(vo.getStreamError());
         if (vo.getCreatedBy() != null) {
             record.setCreatedBy(vo.getCreatedBy());
         }

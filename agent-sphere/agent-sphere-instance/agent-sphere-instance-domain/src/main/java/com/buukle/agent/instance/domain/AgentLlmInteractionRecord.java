@@ -53,6 +53,12 @@ public class AgentLlmInteractionRecord {
     private Integer totalTokens;
     private Integer cacheHitTokens;
     private Integer cacheMissTokens;
+    /** Provider 传输层实际尝试次数（含首次）。 */
+    private Integer streamAttempts;
+    /** Provider 传输层重试次数（attempts-1）。 */
+    private Integer streamRetryCount;
+    /** 最近一次传输层失败的类型与摘要（成功记录也可能非空）。 */
+    private String streamError;
     @TableLogic
     private Boolean deleteFlag;
     private Long tenantId;

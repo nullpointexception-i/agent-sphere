@@ -21,6 +21,10 @@ public class AgentMetrics {
     public static final String AGENT_ROUTER_DELIVERY = "superagent.agent_router.delivery";
     public static final String AGENT_ROUTER_GROUP_LOCK_SKIPPED = "superagent.agent_router.group_lock_skipped";
     public static final String AGENT_ROUTER_START_FAILED = "superagent.agent_router.start_failed";
+    public static final String AGENT_ROUTER_WAKE_SKIPPED = "superagent.agent_router.wake_skipped";
+    public static final String AGENT_ROUTER_STREAM_PUBLISH_FAILED =
+            "superagent.agent_router.stream_publish_failed";
+    public static final String AGENT_ROUTER_FINAL_REPLY = "superagent.agent_router.final_reply";
     public static final String WORKER_REPORT = "superagent.worker.report";
     public static final String WORKER_DISPATCH_LOCK_SKIPPED = "superagent.worker.dispatch_lock_skipped";
     public static final String RETENTION_ROWS = "superagent.retention.rows";
@@ -29,6 +33,9 @@ public class AgentMetrics {
     public static final String IM_MESSAGE_SENT = "im.message.sent";
     public static final String IM_SSE_REGISTERED = "im.sse.registered";
     public static final String IM_SSE_PUBLISH_FAILED = "im.sse.publish_failed";
+    /** LLM 流式传输层重试与握手失败（用于定位网络型慢回复）。 */
+    public static final String LLM_STREAM_RETRY = "llm.stream.retry";
+    public static final String LLM_STREAM_HANDSHAKE_FAILED = "llm.stream.handshake_failed";
 
     private final ObjectProvider<MeterRegistry> registryProvider;
 

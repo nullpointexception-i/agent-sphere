@@ -209,11 +209,16 @@ public class AgentRuntimeProperties {
         private Duration connectTimeout = Duration.ofSeconds(30);
         private Duration readTimeout = Duration.ofSeconds(60);
         private Duration streamReadTimeout = Duration.ofSeconds(120);
+        /** 响应头/TLS 握手超时；与响应体读取超时分离，避免握手挂住等满 120s。 */
+        private Duration streamHeaderTimeout = Duration.ofSeconds(10);
         private Duration streamTimeout = Duration.ofSeconds(600);
         /** 流式传输瞬时失败（EOF/断连等，chunks=0）重试次数，耗尽后显式报错。 */
         private int streamMaxRetries = 2;
-        /** 流式重试固定退避时长。 */
+        /** 流式重试固定退避时长（streamRetryDelays 未配置时的兜底）。 */
         private Duration streamRetryDelay = Duration.ofSeconds(1);
+        /** 流式重试退避梯度；第 N 次重试取第 N 项，超出后取最后一项。 */
+        private List<Duration> streamRetryDelays = new ArrayList<>(
+                List.of(Duration.ofMillis(300), Duration.ofSeconds(1)));
         /** 统一思考强度配置：全局阈值 + 各厂商默认支持范围。 */
         private ReasoningConfig reasoning = new ReasoningConfig();
 

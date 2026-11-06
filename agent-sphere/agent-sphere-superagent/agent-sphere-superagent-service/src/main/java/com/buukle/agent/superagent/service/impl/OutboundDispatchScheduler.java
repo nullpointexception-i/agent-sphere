@@ -19,18 +19,24 @@ import com.buukle.agent.superagent.repository.AgentChannelBindingMapper;
 import com.buukle.agent.superagent.repository.AgentOutboundMessageMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
+import com.buukle.agent.superagent.service.event.AgentOutboundCreatedEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Outbox 发送器：把 Agent 回复可靠地落到目标信道。
@@ -53,6 +59,9 @@ public class OutboundDispatchScheduler {
     private final List<ChannelAdapter> adapters;
     private final ObjectProvider<MeterRegistry> meterRegistryProvider;
 
+    @Qualifier("runtimeAsyncExecutor")
+    private final Executor wakeExecutor;
+
     @Value("${buukle.agent.super-agent.enabled:false}")
     private boolean superAgentEnabled;
     @Value("${buukle.agent.super-agent.outbound.enabled:false}")
@@ -66,14 +75,60 @@ public class OutboundDispatchScheduler {
     @Value("${buukle.agent.super-agent.outbound.lease-seconds:900}")
     private long leaseSeconds;
 
+    /** Event-driven wake: committed outbound rows are sent within milliseconds; polling is a fallback. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onOutboundCreated(AgentOutboundCreatedEvent event) {
+        wakeAsync();
+    }
+
     @Scheduled(fixedDelayString = "${buukle.agent.super-agent.outbound.interval-ms:3000}")
     public void run() {
+        drain(true);
+    }
+
+    private final AtomicBoolean waking = new AtomicBoolean(false);
+    private final AtomicBoolean wakeAgain = new AtomicBoolean(false);
+
+    private void wakeAsync() {
+        if (!superAgentEnabled || !enabled) {
+            return;
+        }
+        if (wakeExecutor == null) {
+            return;
+        }
+        if (!waking.compareAndSet(false, true)) {
+            wakeAgain.set(true);
+            return;
+        }
+        try {
+            wakeExecutor.execute(() -> {
+                try {
+                    do {
+                        wakeAgain.set(false);
+                        drain(false);
+                    } while (wakeAgain.get());
+                } finally {
+                    waking.set(false);
+                    if (wakeAgain.get()) {
+                        wakeAsync();
+                    }
+                }
+            });
+        } catch (Exception e) {
+            waking.set(false);
+            log.warn("Outbound wake rejected: {}", e.getMessage());
+        }
+    }
+
+    private void drain(boolean resetStuck) {
         if (!superAgentEnabled || !enabled) {
             return;
         }
         TenantUtil.stop();
         AuthContext.clear();
-        outboundMapper.resetStuckSending();
+        if (resetStuck) {
+            outboundMapper.resetStuckSending();
+        }
         List<AgentOutboundMessage> messages = outboundMapper.selectPending(
                 LocalDateTime.now(), Math.max(1, batchSize));
         for (AgentOutboundMessage message : messages) {

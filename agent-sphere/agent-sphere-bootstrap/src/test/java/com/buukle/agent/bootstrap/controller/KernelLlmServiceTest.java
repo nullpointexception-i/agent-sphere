@@ -1,6 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.spi.ModelProviderSpi;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
@@ -51,7 +52,7 @@ class KernelLlmServiceTest {
     @Test
     void invokeSync_syncThrow_shouldReturnFailedResultNotThrow() {
         org.mockito.BDDMockito.willThrow(new RuntimeException("boom"))
-                .given(modelProviderSpi).stream(any(), any(), any(), any(), any(), any(), any());
+                .given(modelProviderSpi).streamWithStats(any(), any(), any(), any(), any(), any(), any());
 
         KernelLlmService.InvokeResult result = service.invokeSync(
                 "openai", "https://api.openai.com/v1", "sk-test", "gpt-4o",
@@ -69,9 +70,9 @@ class KernelLlmServiceTest {
                     onEvent.accept(new com.buukle.agent.model.dtvo.complete.LLMEvent.TextDelta("你好"));
                     onEvent.accept(new com.buukle.agent.model.dtvo.complete.LLMEvent.Finish("stop", java.util.Map.of("total_tokens", 5)));
                     onDone.run();
-                    return null;
+                    return LlmStreamStats.firstAttempt();
                 })
-                .given(modelProviderSpi).stream(any(), any(), any(), any(), any(), any(), any());
+                .given(modelProviderSpi).streamWithStats(any(), any(), any(), any(), any(), any(), any());
 
         KernelLlmService.InvokeResult result = service.invokeSync(
                 "openai", "https://api.openai.com/v1", "sk-test", "gpt-4o",

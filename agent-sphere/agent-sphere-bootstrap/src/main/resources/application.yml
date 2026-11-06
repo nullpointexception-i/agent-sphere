@@ -83,11 +83,22 @@ buukle:
           base-backoff-ms: 3000
       agent-router:
         enabled: true
-        interval-ms: 3000                          # 投递消费间隔
+        interval-ms: 1000                          # 兜底轮询间隔（正常由事务提交事件毫秒级唤醒）
         batch-size: 20                             # 单批投递数
         max-loop-count: 64                         # Agent Router 单 run 循环上限
       router:
         default-model-route-id: 0
+        stream:
+          enabled: true                            # runtime → IM SSE 实时流总开关
+          thinking-enabled: true                   # 是否推送模型 thinking 分片
+          coalesce-ms: 50                          # 分片合并窗口
+          max-chunk-chars: 256                     # 单个合并分片最大字符数
+          session-cache-ttl-seconds: 600           # sessionId → Router 会话缓存
+          target-cache-ttl-seconds: 300            # threadId → 聊天目标缓存
+          buffer-ttl-seconds: 600                  # 无终态 run 的 buffer 泄漏回收
+        reply:
+          auto-final-enabled: true                 # 普通问答最终正文自动落 outbound
+          final-max-chars: 8000                    # 自动 final 的最大字符数
       worker:
         enabled: true
         interval-ms: 3000                          # 调度间隔
@@ -107,7 +118,7 @@ buukle:
         batch-sleep-ms: 200
       outbound:
         enabled: true
-        interval-ms: 3000                          # Outbox 发送间隔
+        interval-ms: 1000                          # 兜底轮询间隔（正常由 outbound 插入事件毫秒级唤醒）
         batch-size: 20                             # 单批发送数
         max-attempts: 8                            # 最大重试次数
         retry-base-ms: 2000                        # 退避基数
@@ -173,9 +184,13 @@ buukle:
       connect-timeout: 30s                         # LLM API 连接超时 / LLM API connect timeout
       read-timeout: 60s                            # LLM API 读取超时 / LLM API read timeout
       stream-read-timeout: 120s                    # 流式读取超时 / Stream read timeout
+      stream-header-timeout: 10s                   # 响应头/TLS 握手超时 / Stream header + TLS handshake timeout
       stream-timeout: 600s                         # 流式总超时（含思考）；长文/大输出需要更长预算 / Stream total timeout
       stream-max-retries: 2                        # 流式瞬时失败(chunks=0)重试次数 / Stream transient retries
-      stream-retry-delay: 1s                       # 流式重试固定退避 / Stream retry fixed backoff
+      stream-retry-delay: 1s                       # 流式重试固定退避兜底 / Stream retry fixed backoff fallback
+      stream-retry-delays:                         # 流式重试退避梯度 / Stream retry backoff ladder
+        - 300ms
+        - 1s
       # 统一思考强度：全局阈值 + 各厂商默认支持范围。
       # 厂商/路由配置只做覆盖；默认档位按实际 max_tokens 动态计算。
       reasoning:

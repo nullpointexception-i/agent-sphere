@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.kernel.model.invoke;
 
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import org.springframework.context.ApplicationEvent;
 
@@ -17,6 +18,8 @@ public class LlmInteractionEvent extends ApplicationEvent {
     private final String errorMessage;
     /** 真实终止原因（stop/length/content_filter/tool_calls）；null = 流未给出。 */
     private String finishReason;
+    /** Provider 传输层重试统计；null = 未采集。 */
+    private LlmStreamStats streamStats;
 
     public LlmInteractionEvent(Object source, LlmInteractionMeta meta, String modelName,
                                String requestBody, String responseBody, long durationMs,
@@ -103,6 +106,16 @@ public class LlmInteractionEvent extends ApplicationEvent {
     /** 链式补充终止原因，避免为审计字段再加重载构造器。 */
     public LlmInteractionEvent withFinishReason(String finishReason) {
         this.finishReason = finishReason;
+        return this;
+    }
+
+    public LlmStreamStats getStreamStats() {
+        return streamStats;
+    }
+
+    /** 链式补充 Provider 传输层重试统计。 */
+    public LlmInteractionEvent withStreamStats(LlmStreamStats streamStats) {
+        this.streamStats = streamStats;
         return this;
     }
 }

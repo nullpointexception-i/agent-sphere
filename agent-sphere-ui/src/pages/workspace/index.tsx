@@ -63,25 +63,19 @@ import {
 } from '@/services/agentSphere/superAgent';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
 import { messageText, parsedContent } from '../im/components/messageUtils';
+import { AgentStreamBubble } from './AgentStreamBubble';
+import {
+  applyAgentStreamEvent,
+  beginAgentStream,
+  finalizeAgentStream,
+  resetAgentStream,
+  useAgentStream,
+} from './agentStreamStore';
 import { tw } from './i18n';
+import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
 
 type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'me';
-
-function initials(name?: string) {
-  const text = (name || '?').trim();
-  return text.slice(0, 1).toUpperCase();
-}
-
-function displayName(user: any) {
-  return (
-    user?.displayName ||
-    user?.englishName ||
-    user?.username ||
-    user?.name ||
-    tw('common.unnamed', '未命名')
-  );
-}
 
 function statusLabel(status?: string) {
   switch (status) {
@@ -111,24 +105,6 @@ function positionLabel(
     agent.positionNameEn ||
     ''
   );
-}
-
-const AVATAR_PALETTE = [
-  'linear-gradient(135deg, #8b7bff, #5b8cff)',
-  'linear-gradient(135deg, #ff9f8a, #ff6b8a)',
-  'linear-gradient(135deg, #5ec9c0, #3aa6a0)',
-  'linear-gradient(135deg, #ffc46b, #e8a33d)',
-  'linear-gradient(135deg, #9d8bff, #c86dd7)',
-  'linear-gradient(135deg, #67b8ff, #3f8cff)',
-];
-
-function avatarStyle(name?: string) {
-  const text = (name || '?').trim();
-  let hash = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = (hash * 31 + text.charCodeAt(index)) % 997;
-  }
-  return { backgroundImage: AVATAR_PALETTE[hash % AVATAR_PALETTE.length] };
 }
 
 function isSameUser(participant: ImParticipant | undefined, me: any) {
@@ -1283,6 +1259,12 @@ function ChatTab({
   const applyStreamEvent = (type: string, event: ImStreamPayload) => {
     const id = event.conversationId;
     if (!id || type === 'heartbeat') return;
+    // Agent streaming fragments go to the per-conversation store so token-level
+    // updates never re-render the whole workspace page.
+    if (type === 'agent_stream') {
+      applyAgentStreamEvent(event);
+      return;
+    }
     setStreamEvent({ type, data: event, nonce: Date.now() });
 
     if (type === 'conversation_hidden') {
@@ -1956,6 +1938,7 @@ function ChatDetail({
   const loadedIdRef = useRef<number | null>(null);
   const messagesRef = useRef<ImMessage[]>([]);
   messagesRef.current = messages;
+  const agentStream = useAgentStream(conversationId);
 
   const load = (silent = false) => {
     if (!silent) setLoading(true);
@@ -2009,11 +1992,22 @@ function ChatDetail({
     load(!first);
   }, [conversationId, refreshKey]);
 
+  // 普通用户会话没有数字分身参与者：清理可能残留的流式气泡状态。
+  useEffect(() => {
+    if (participants.length === 0) return;
+    const hasAgent = participants.some(
+      (member) => member.participantType === 'AGENT',
+    );
+    if (!hasAgent) {
+      resetAgentStream(conversationId);
+    }
+  }, [conversationId, participants]);
+
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, agentStream?.reply, agentStream?.thinking]);
 
   useEffect(() => {
     const lastSeq = messages[messages.length - 1]?.seq;
@@ -2028,6 +2022,10 @@ function ChatDetail({
     }
     const { type, data } = streamEvent;
     if (type === 'message_created') {
+      // Agent authoritative reply: retire the ephemeral stream bubble.
+      if (data.senderType === 'AGENT') {
+        finalizeAgentStream(conversationId, data.seq);
+      }
       const current = messagesRef.current;
       const lastSeq = current[current.length - 1]?.seq;
       if (!lastSeq) {
@@ -2040,6 +2038,10 @@ function ChatDetail({
           const rows = page.rows || [];
           if (rows.length === 0) return;
           setMessages((previous) => mergeMessages(previous, rows));
+          const agentRow = rows.find((row) => row.senderType === 'AGENT');
+          if (agentRow) {
+            finalizeAgentStream(conversationId, agentRow.seq);
+          }
           const last = rows[rows.length - 1]?.seq;
           if (last) {
             imApi.markRead(conversationId, last).catch(() => {});
@@ -2088,6 +2090,41 @@ function ChatDetail({
     }
   }, [streamEvent, conversationId]);
 
+  // 权威消息兜底：流已 completed 但 message_created 迟到/丢失时，补拉一次增量。
+  useEffect(() => {
+    if (agentStream?.phase !== 'done' || !agentStream.finalized) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const lastSeq = messagesRef.current[messagesRef.current.length - 1]?.seq;
+      imApi
+        .messagePage(conversationId, undefined, lastSeq, 50)
+        .then((page) => {
+          const rows = page.rows || [];
+          if (rows.length > 0) {
+            setMessages((previous) => mergeMessages(previous, rows));
+            const agentRow = rows.find((row) => row.senderType === 'AGENT');
+            if (agentRow) {
+              finalizeAgentStream(conversationId, agentRow.seq);
+            }
+          }
+        })
+        .catch(() => {});
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [agentStream?.phase, agentStream?.finalized, conversationId]);
+
+  // 等待态兜底：事件丢失时避免“正在处理”气泡永久停留。
+  useEffect(() => {
+    if (agentStream?.phase !== 'waiting' || agentStream.runId) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      resetAgentStream(conversationId);
+    }, 30000);
+    return () => window.clearTimeout(timer);
+  }, [agentStream?.phase, agentStream?.runId, conversationId]);
+
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
@@ -2095,13 +2132,22 @@ function ChatDetail({
       message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
       return;
     }
+    // 只有与数字分身的 DM 才显示“正在处理”气泡；普通用户/群聊会话不显示。
+    const shouldStream = Boolean(chatAgentId);
     setSending(true);
+    if (shouldStream) {
+      // 立即显示“正在处理”气泡：Router 调度已在毫秒级，但模型首字仍需等待。
+      beginAgentStream(conversationId);
+    }
     try {
       await imApi.send(conversationId, value, `workspace-${Date.now()}`);
       setText('');
       if (composerRef.current) composerRef.current.style.height = 'auto';
       load(true);
     } catch {
+      if (shouldStream) {
+        resetAgentStream(conversationId);
+      }
       message.error(tw('chat.sendFailed', '发送失败'));
     } finally {
       setSending(false);
@@ -2448,6 +2494,9 @@ function ChatDetail({
             })
           )}
         </Spin>
+        {agentStream && agentParticipant ? (
+          <AgentStreamBubble state={agentStream} agent={agentParticipant} />
+        ) : null}
       </div>
 
       {agentPaused ? (

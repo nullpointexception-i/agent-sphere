@@ -31,6 +31,7 @@ import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.repository.AgentThreadSubscriptionMapper;
 import com.buukle.agent.superagent.repository.AgentWorkItemMapper;
+import com.buukle.agent.superagent.service.event.AgentOutboundWakePublisher;
 import com.buukle.agent.superagent.service.impl.WorkItemCardProjector;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -60,9 +61,12 @@ public class AgentRouterToolService {
     private final AgentThreadMapper threadMapper;
     private final AgentThreadSubscriptionMapper subscriptionMapper;
     private final WorkItemCardProjector cardProjector;
+    private final AgentOutboundWakePublisher outboundWakePublisher;
 
     @Value("${buukle.agent.super-agent.reply.im-max-words:100}")
     private int imMaxWords;
+    @Value("${buukle.agent.super-agent.router.reply.final-max-chars:8000}")
+    private int finalMaxChars;
 
     public AgentRouterToolResult dispatch(Long sessionId, Long runId, String goal, Integer priority) {
         RouterContext ctx = resolve(sessionId);
@@ -131,8 +135,51 @@ public class AgentRouterToolService {
         outbound.setActorType(ActorType.AGENT);
         outbound.setActorId(ctx.agent.getId());
         outboundMapper.insert(outbound);
+        outboundWakePublisher.publish(outbound.getId());
         TenantContext.clear();
         return AgentRouterToolResult.ok("queued", outbound.getId());
+    }
+
+    /**
+     * Auto-persists the Router's final plain-text reply as an outbound message.
+     * Skipped when the run already replied through {@code send_message}.
+     */
+    public void sendFinalReply(Long sessionId, Long runId, Long threadId, String text) {
+        if (sessionId == null || runId == null || text == null || text.isBlank()) {
+            return;
+        }
+        RouterContext ctx = resolve(sessionId);
+        if (ctx == null) {
+            return;
+        }
+        try {
+            String sendMessagePrefix = "router-" + sessionId + "-" + runId + "-";
+            Long alreadyReplied = outboundMapper.selectCount(Wrappers.<AgentOutboundMessage>lambdaQuery()
+                    .likeRight(AgentOutboundMessage::getIdempotencyKey, sendMessagePrefix));
+            if (alreadyReplied != null && alreadyReplied > 0) {
+                return;
+            }
+            AgentOutboundMessage outbound = new AgentOutboundMessage();
+            outbound.setSuperAgentId(ctx.agent.getId());
+            Long resolvedThreadId = threadId != null ? threadId : currentThreadId(ctx.session, runId);
+            outbound.setThreadId(resolvedThreadId);
+            outbound.setIdempotencyKey("router-final-" + sessionId + "-" + runId);
+            AgentOutboundPayloadVO payload = new AgentOutboundPayloadVO();
+            payload.setText(truncateFinal(text));
+            payload.setFormat(OutboundFormat.TEXT);
+            outbound.setPayload(JsonUtils.toJson(payload));
+            outbound.setStatus(AgentOutboundMessageStatus.PENDING);
+            outbound.setAttempts(0);
+            outbound.setCreatedBy(ctx.ownerUsername);
+            outbound.setActorType(ActorType.AGENT);
+            outbound.setActorId(ctx.agent.getId());
+            outboundMapper.insert(outbound);
+            outboundWakePublisher.publish(outbound.getId());
+        } catch (DuplicateKeyException ignored) {
+            // Final reply already persisted by a concurrent writer.
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     public AgentRouterToolResult recall(Long sessionId, Long runId, Long eventId) {
@@ -248,6 +295,14 @@ public class AgentRouterToolService {
 
     private String limitReply(String text) {
         int maxChars = Math.max(1, imMaxWords) * 4;
+        if (text.length() <= maxChars) {
+            return text;
+        }
+        return text.substring(0, maxChars);
+    }
+
+    private String truncateFinal(String text) {
+        int maxChars = Math.max(1, finalMaxChars);
         if (text.length() <= maxChars) {
             return text;
         }

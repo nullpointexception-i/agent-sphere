@@ -17,6 +17,23 @@ export interface ImStreamPayload {
   pinned?: boolean;
   muted?: boolean;
   remark?: string;
+  // agent_stream（Router 实时流）字段
+  threadId?: number;
+  runId?: number;
+  agentId?: number;
+  /** thinking / reply / status */
+  phase?: string;
+  delta?: string;
+  /** started / completed / failed / cancelled / tool_pending / tool_succeeded / tool_failed */
+  streamStatus?: string;
+  toolName?: string;
+  displayName?: string;
+  errorMessage?: string;
+  streamSeq?: number;
+  // message_created 附带的发送方信息
+  senderType?: string;
+  senderId?: number;
+  clientMsgId?: string;
 }
 
 /**

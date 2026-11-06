@@ -19,18 +19,21 @@ import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.repository.AgentThreadSubscriptionMapper;
 import com.buukle.agent.superagent.repository.AgentWorkItemMapper;
+import com.buukle.agent.superagent.service.event.AgentOutboundWakePublisher;
 import com.buukle.agent.superagent.service.impl.WorkItemCardProjector;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +60,8 @@ class AgentRouterToolServiceTest {
     AgentThreadSubscriptionMapper subscriptionMapper;
     @Mock
     WorkItemCardProjector cardProjector;
+    @Mock
+    ApplicationEventPublisher publisher;
 
     @Test
     void dispatch_queuesWorkItemAndProjectsCard() {
@@ -195,11 +200,56 @@ class AgentRouterToolServiceTest {
         assertFalse(result.isOk());
     }
 
+    @Test
+    void sendFinalReply_persistsWhenNoSendMessage() {
+        AgentRouterToolService service = service();
+        stubRouterSession(5L, 7L, 11L);
+        when(outboundMapper.selectCount(any())).thenReturn(0L);
+        when(outboundMapper.insert(any(AgentOutboundMessage.class))).thenAnswer(inv -> {
+            inv.getArgument(0, AgentOutboundMessage.class).setId(501L);
+            return 1;
+        });
+
+        service.sendFinalReply(5L, 7L, 11L, "已完成汇总，详见消息列表。");
+
+        ArgumentCaptor<AgentOutboundMessage> captor =
+                ArgumentCaptor.forClass(AgentOutboundMessage.class);
+        verify(outboundMapper).insert(captor.capture());
+        assertEquals("router-final-5-7", captor.getValue().getIdempotencyKey());
+        assertEquals(11L, captor.getValue().getThreadId());
+        assertTrue(captor.getValue().getPayload().contains("已完成汇总"));
+        verify(publisher).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void sendFinalReply_skipsWhenRunAlreadyReplied() {
+        AgentRouterToolService service = service();
+        stubRouterSession(5L, 7L, 11L);
+        when(outboundMapper.selectCount(any())).thenReturn(1L);
+
+        service.sendFinalReply(5L, 7L, 11L, "duplicate");
+
+        verify(outboundMapper, never()).insert(any(AgentOutboundMessage.class));
+        verify(publisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void sendFinalReply_ignoresBlankText() {
+        AgentRouterToolService service = service();
+
+        service.sendFinalReply(5L, 7L, 11L, " ");
+
+        verify(outboundMapper, never()).selectCount(any());
+        verify(outboundMapper, never()).insert(any(AgentOutboundMessage.class));
+    }
+
     private AgentRouterToolService service() {
         AgentRouterToolService service = new AgentRouterToolService(
                 sessionSpi, runSpi, userSpi, superAgentMapper, workItemMapper, outboundMapper,
-                eventMapper, threadMapper, subscriptionMapper, cardProjector);
+                eventMapper, threadMapper, subscriptionMapper, cardProjector,
+                new AgentOutboundWakePublisher(publisher));
         org.springframework.test.util.ReflectionTestUtils.setField(service, "imMaxWords", 100);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "finalMaxChars", 8000);
         return service;
     }
 

@@ -41,6 +41,12 @@ public class AgentLlmInteractionRecordVO implements Serializable {
     private Integer totalTokens;
     private Integer cacheHitTokens;
     private Integer cacheMissTokens;
+    /** Provider 传输层实际尝试次数（含首次）。 */
+    private Integer streamAttempts;
+    /** Provider 传输层重试次数（attempts-1）。 */
+    private Integer streamRetryCount;
+    /** 最近一次传输层失败的类型与摘要。 */
+    private String streamError;
     private String createdBy;
     private String createdAt;
     /** createdAt 的 epoch 毫秒（精确到毫秒，仅供历史重建配对使用，不参与展示）。 */

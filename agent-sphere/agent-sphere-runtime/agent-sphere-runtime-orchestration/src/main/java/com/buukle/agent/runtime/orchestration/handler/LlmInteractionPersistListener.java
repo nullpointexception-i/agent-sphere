@@ -5,6 +5,7 @@ import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionEvent;
 import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionMeta;
@@ -49,6 +50,18 @@ public class LlmInteractionPersistListener {
         vo.setErrorMessage(event.getErrorMessage());
         vo.setHttpStatus(meta.getHttpStatus());
         vo.setFinishReason(event.getFinishReason());
+        LlmStreamStats streamStats = event.getStreamStats();
+        if (streamStats != null) {
+            vo.setStreamAttempts(streamStats.attempts());
+            vo.setStreamRetryCount(streamStats.retryCount());
+            if (streamStats.lastErrorType() != null || streamStats.lastErrorMessage() != null) {
+                String error = (streamStats.lastErrorType() == null ? "stream_error"
+                        : streamStats.lastErrorType())
+                        + (streamStats.lastErrorMessage() == null ? ""
+                        : ": " + streamStats.lastErrorMessage());
+                vo.setStreamError(error.length() <= 512 ? error : error.substring(0, 512));
+            }
+        }
         TokenUsage usage = event.getUsage();
         if (usage != null) {
             vo.setUsage(JsonUtils.toJson(usage));

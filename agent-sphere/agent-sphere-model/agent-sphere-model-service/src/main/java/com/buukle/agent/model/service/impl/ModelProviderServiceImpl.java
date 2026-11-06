@@ -3,8 +3,10 @@ package com.buukle.agent.model.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.model.domain.AgentModelProvider;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
 import com.buukle.agent.model.dtvo.dto.TokenUsage;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
@@ -27,10 +29,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
+import javax.net.ssl.SSLHandshakeException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -46,9 +50,11 @@ import java.util.function.Consumer;
 public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, AgentModelProvider> implements ModelProviderService {
     private final ModelProviderConverter modelProviderConverter;
     private final AgentRuntimeProperties properties;
+    private final AgentMetrics metrics;
     private final HttpClient httpClient;
     private final int logBodyMaxLength;
     private final long streamReadTimeoutSeconds;
+    private final long streamHeaderTimeoutSeconds;
     private static final ScheduledExecutorService READ_TIMEOUT_SCHEDULER = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "llm-read-timeout");
         t.setDaemon(true);
@@ -61,11 +67,15 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
 
     public ModelProviderServiceImpl(ModelProviderConverter modelProviderConverter,
                                     AgentRuntimeProperties properties,
+                                    AgentMetrics metrics,
                                     @Value("${buukle.agent.llm.log-body-max-length:2000}") int logBodyMaxLength) {
         this.modelProviderConverter = modelProviderConverter;
         this.properties = properties;
+        this.metrics = metrics;
         this.logBodyMaxLength = logBodyMaxLength;
         this.streamReadTimeoutSeconds = properties.getLlm().getStreamReadTimeout().getSeconds();
+        this.streamHeaderTimeoutSeconds = Math.max(1,
+                properties.getLlm().getStreamHeaderTimeout().getSeconds());
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(properties.getLlm().getConnectTimeout())
                 .build();
@@ -122,27 +132,44 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     public void stream(String company, String baseUrl, String apiKey, String modelName,
                        ChatCompletionRequestDTO request,
                        Consumer<LLMEvent> onEvent, Runnable onDone) {
-        chatRequestAdapter.adapt(request, company);
-        String requestBody = JsonUtils.toJson(request);
-        streamEvents(baseUrl, apiKey, modelName, requestBody, company, onEvent, onDone);
+        streamWithStats(company, baseUrl, apiKey, modelName, request, onEvent, onDone);
     }
 
-    private void streamEvents(String baseUrl, String apiKey, String modelName, String requestBody,
-                              String company, Consumer<LLMEvent> onEvent, Runnable onDone) {
+    @Override
+    public LlmStreamStats streamWithStats(String company, String baseUrl, String apiKey,
+                                          String modelName,
+                                          ChatCompletionRequestDTO request,
+                                          Consumer<LLMEvent> onEvent, Runnable onDone) {
+        chatRequestAdapter.adapt(request, company);
+        String requestBody = JsonUtils.toJson(request);
+        return streamEvents(baseUrl, apiKey, modelName, requestBody, company, onEvent, onDone);
+    }
+
+    private LlmStreamStats streamEvents(String baseUrl, String apiKey, String modelName,
+                                        String requestBody, String company,
+                                        Consumer<LLMEvent> onEvent, Runnable onDone) {
         int streamMaxRetries = properties.getLlm().getStreamMaxRetries();
-        long retryDelayMillis = properties.getLlm().getStreamRetryDelay().toMillis();
+        int attempts = 0;
+        int retryCount = 0;
+        boolean handshakeFailed = false;
+        String lastErrorType = null;
+        String lastErrorMessage = null;
 
         for (int attempt = 0; attempt <= streamMaxRetries; attempt++) {
             if (attempt > 0) {
-                log.warn("LLM stream transient failure, retrying {}/{}: model={}", attempt, streamMaxRetries, modelName);
+                long retryDelayMillis = retryDelayMillis(attempt);
+                log.warn("LLM stream transient failure, retrying {}/{} in {}ms: model={}, errorType={}, handshake={}",
+                        attempt, streamMaxRetries, retryDelayMillis, modelName,
+                        lastErrorType, handshakeFailed);
                 try {
                     Thread.sleep(retryDelayMillis);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     onDone.run();
-                    return;
+                    return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
                 }
             }
+            attempts++;
             int chunkCount = 0;
             // 本次流里最后一个非空 finish_reason：OpenAI 兼容接口只在最后一个 chunk 给，
             // 过去这里被丢弃、结束时硬编码成 "stop"，导致 length（截断）/content_filter 被当成正常完成。
@@ -162,8 +189,11 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                         .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                         .build();
 
-                HttpResponse<java.io.InputStream> response = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream())
-                        .orTimeout(streamReadTimeoutSeconds, TimeUnit.SECONDS)
+                // 响应头独立短超时：TLS 握手/响应头挂住时快速失败并进入重试，
+                // 不能沿用 120s 的响应体读取超时。
+                HttpResponse<java.io.InputStream> response = httpClient.sendAsync(request,
+                                HttpResponse.BodyHandlers.ofInputStream())
+                        .orTimeout(streamHeaderTimeoutSeconds, TimeUnit.SECONDS)
                         .get();
                 if (response.statusCode() >= 400) {
                     int status = response.statusCode();
@@ -179,7 +209,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     boolean retryable = status == 408 || status == 429 || status >= 500;
                     onEvent.accept(new LLMEvent.Error(uiMsg, status, retryable));
                     onDone.run();
-                    return;
+                    return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
                 }
                 log.info("LLM stream response: status={}", response.statusCode());
 
@@ -283,30 +313,85 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 if (readTimeoutFuture != null) {
                     readTimeoutFuture.cancel(false);
                 }
-                return;
+                return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
             } catch (Exception e) {
                 boolean userTimedOut = Thread.interrupted();
                 if (readTimeoutFuture != null) {
                     readTimeoutFuture.cancel(false);
                 }
+                Throwable root = rootCause(e);
+                lastErrorType = root.getClass().getSimpleName();
+                lastErrorMessage = truncateError(e.toString());
+                boolean handshake = isHandshakeFailure(e);
+                if (handshake) {
+                    handshakeFailed = true;
+                    metrics.increment(AgentMetrics.LLM_STREAM_HANDSHAKE_FAILED, "model", modelName);
+                }
                 // 传输层瞬时失败（EOF/断连等，未收到任何分片）→ 重试；超时/取消不重试
                 if (attempt < streamMaxRetries && chunkCount == 0 && !userTimedOut) {
-                    log.warn("LLM stream failed, will retry: model={}, timedOut={}, chunks={}, err={}",
-                            modelName, userTimedOut, chunkCount, e.toString());
+                    retryCount++;
+                    metrics.increment(AgentMetrics.LLM_STREAM_RETRY, "model", modelName);
+                    log.warn("LLM stream failed, will retry: model={}, attempt={}/{}, timedOut={}, chunks={}, errorType={}, handshake={}, err={}",
+                            modelName, attempt + 1, streamMaxRetries + 1, userTimedOut, chunkCount,
+                            lastErrorType, handshake, e.toString());
                     continue;
                 }
-                log.error("LLM stream failed: model={}, timedOut={}, chunks={}, retried={}",
-                        modelName, userTimedOut, chunkCount, attempt, e);
+                log.error("LLM stream failed: model={}, timedOut={}, chunks={}, retried={}, errorType={}, handshake={}",
+                        modelName, userTimedOut, chunkCount, attempt, lastErrorType, handshake, e);
                 // 显式报错而非静默空结果，供上层路由降级/任务重试感知
                 onEvent.accept(new LLMEvent.Error(userTimedOut
                         ? "模型流式读取超时（已重试）"
                         : "上游连接中断（chunks=0），重试 " + attempt + " 次后仍失败"));
                 onDone.run();
-                return;
+                return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
             }
         }
         onDone.run();
+        return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
     }
+
+    /** 第 N 次重试（N 从 1 开始）的退避；列表耗尽后取最后一项。 */
+    private long retryDelayMillis(int attempt) {
+        List<Duration> delays = properties.getLlm().getStreamRetryDelays();
+        if (delays != null && !delays.isEmpty()) {
+            Duration delay = delays.get(Math.min(attempt - 1, delays.size() - 1));
+            if (delay != null) {
+                return Math.max(0L, delay.toMillis());
+            }
+        }
+        Duration fallback = properties.getLlm().getStreamRetryDelay();
+        return fallback == null ? 0L : Math.max(0L, fallback.toMillis());
+    }
+
+    private static LlmStreamStats stats(int attempts, int retryCount, boolean handshakeFailed,
+                                        String lastErrorType, String lastErrorMessage) {
+        return new LlmStreamStats(attempts, retryCount, handshakeFailed,
+                lastErrorType, lastErrorMessage);
+    }
+
+    private static Throwable rootCause(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private static boolean isHandshakeFailure(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof SSLHandshakeException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && message.contains("SSLHandshake")) {
+                return true;
+            }
+            current = current.getCause() == current ? null : current.getCause();
+        }
+        return false;
+    }
+
 
     private String truncate(String body) {
         if (body == null || body.isEmpty() || logBodyMaxLength <= 0 || body.length() <= logBodyMaxLength) return body;

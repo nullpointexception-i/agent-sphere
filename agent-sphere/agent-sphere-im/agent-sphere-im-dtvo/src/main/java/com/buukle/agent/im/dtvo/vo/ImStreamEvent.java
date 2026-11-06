@@ -13,7 +13,7 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ImStreamEvent implements Serializable {
-    /** message_created / message_updated / message_recalled / unread_changed / ... / heartbeat */
+    /** message_created / message_updated / message_recalled / unread_changed / agent_stream / heartbeat */
     private String type;
     private Long conversationId;
     private Long messageId;
@@ -26,4 +26,25 @@ public class ImStreamEvent implements Serializable {
     private Boolean pinned;
     private Boolean muted;
     private String remark;
+    /** IM thread carrying the agent session (agent_stream only). */
+    private Long threadId;
+    /** Router run id (agent_stream only). */
+    private Long runId;
+    /** Super-Agent id (agent_stream only). */
+    private Long agentId;
+    /** thinking / reply / status (agent_stream only). */
+    private String phase;
+    /** Incremental fragment for thinking / reply. */
+    private String delta;
+    /** started / completed / failed / cancelled (agent_stream only). */
+    private String streamStatus;
+    private String toolName;
+    private String displayName;
+    private String errorMessage;
+    /** Monotonic fragment counter for de-duplication (agent_stream only). */
+    private Long streamSeq;
+    /** USER / AGENT / SYSTEM sender of the authoritative message (message_created only). */
+    private String senderType;
+    private Long senderId;
+    private String clientMsgId;
 }

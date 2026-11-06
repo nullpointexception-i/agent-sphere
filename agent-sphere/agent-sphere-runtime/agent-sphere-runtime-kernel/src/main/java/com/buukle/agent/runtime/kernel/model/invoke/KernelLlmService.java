@@ -94,13 +94,16 @@ public class KernelLlmService {
             AtomicReference<String> errorEventRef = new AtomicReference<>();
             // 上游 HTTP 状态码（错误事件携带）；成功且无错误事件时按 200 记，便于直接按状态码筛。
             AtomicReference<Integer> httpStatusRef = new AtomicReference<>();
+            // Provider 传输层重试统计（连接/TLS/EOF），用于定位网络型慢回复。
+            AtomicReference<com.buukle.agent.model.dtvo.complete.LlmStreamStats> streamStatsRef =
+                    new AtomicReference<>(com.buukle.agent.model.dtvo.complete.LlmStreamStats.empty());
             try {
                 CountDownLatch done = new CountDownLatch(1);
                 AtomicReference<Exception> streamError = new AtomicReference<>();
 
-                Thread.ofVirtual().start(() -> {
+                Thread providerThread = Thread.ofVirtual().start(() -> {
                     try {
-                        modelProviderSpi.stream(company, baseUrl, apiKey, modelName, request,
+                        streamStatsRef.set(modelProviderSpi.streamWithStats(company, baseUrl, apiKey, modelName, request,
                                 event -> {
                                     if (future.isCancelled()) return;
                                     // 清洗 LLM 文本中的 NUL（PG text 列拒绝），再进 collectors 与转发事件
@@ -131,7 +134,7 @@ public class KernelLlmService {
                                         onEvent.accept(event);
                                     }
                                 },
-                                done::countDown);
+                                done::countDown));
                     } catch (Exception e) {
                         streamError.set(e);
                         done.countDown();
@@ -142,6 +145,9 @@ public class KernelLlmService {
                 if (!done.await(timeout, TimeUnit.SECONDS)) {
                     throw new RuntimeException("LLM stream timed out after " + timeout + "s");
                 }
+                // onDone 在 streamWithStats 返回前触发；等待 provider 线程真正返回，
+                // 确保 transport 统计已经写入 streamStatsRef。
+                joinQuietly(providerThread);
                 Exception err = streamError.get();
                 if (err != null) {
                     throw err;
@@ -174,7 +180,8 @@ public class KernelLlmService {
                         reasoningCollector.length() > 0 ? reasoningCollector.toString() : null,
                         TokenUsage.from(usageRef.get()),
                         System.currentTimeMillis() - start, !failed, finalError)
-                        .withFinishReason(finishReasonRef.get()));
+                        .withFinishReason(finishReasonRef.get())
+                        .withStreamStats(streamStatsRef.get()));
             }
         });
 
@@ -201,12 +208,14 @@ public class KernelLlmService {
         AtomicReference<Map<String, Object>> usageRef = new AtomicReference<>();
         AtomicReference<String> finishReasonRef = new AtomicReference<>();
         AtomicReference<Exception> failRef = new AtomicReference<>();
+        AtomicReference<com.buukle.agent.model.dtvo.complete.LlmStreamStats> streamStatsRef =
+                new AtomicReference<>(com.buukle.agent.model.dtvo.complete.LlmStreamStats.empty());
         CountDownLatch done = new CountDownLatch(1);
 
         request.setStream(true);
-        Thread.ofVirtual().start(() -> {
+        Thread providerThread = Thread.ofVirtual().start(() -> {
             try {
-                modelProviderSpi.stream(company, baseUrl, apiKey, modelName, request, event -> {
+                streamStatsRef.set(modelProviderSpi.streamWithStats(company, baseUrl, apiKey, modelName, request, event -> {
                     if (event instanceof LLMEvent.TextDelta(String t)) {
                         content.append(t);
                         merged.append(t);
@@ -219,7 +228,7 @@ public class KernelLlmService {
                             usageRef.set(usage);
                         }
                     }
-                }, done::countDown);
+                }, done::countDown));
             } catch (Exception e) {
                 failRef.set(e);
                 done.countDown();
@@ -235,6 +244,8 @@ public class KernelLlmService {
             Thread.currentThread().interrupt();
             failRef.compareAndSet(null, new RuntimeException("LLM call interrupted", e));
         }
+        // 同 stream()：等 provider 线程返回后再读取 transport 统计，避免 onDone 竞态。
+        joinQuietly(providerThread);
         Exception err = failRef.get();
         boolean success = err == null;
         String errorMessage = err == null ? null : err.getMessage();
@@ -243,7 +254,8 @@ public class KernelLlmService {
                 this, meta, modelName, JsonUtils.toJson(request), merged.toString(),
                 null, null, TokenUsage.from(usageRef.get()),
                 System.currentTimeMillis() - start, success, errorMessage)
-                .withFinishReason(finishReasonRef.get()));
+                .withFinishReason(finishReasonRef.get())
+                .withStreamStats(streamStatsRef.get()));
 
         InvokeResult result = new InvokeResult();
         result.setSuccess(success);
@@ -252,6 +264,18 @@ public class KernelLlmService {
         result.setUsage(usageRef.get());
         result.setError(errorMessage);
         return result;
+    }
+
+    /** 等待 provider 线程返回以采集 transport 统计；不掩盖调用方中断。 */
+    private static void joinQuietly(Thread thread) {
+        if (thread == null) {
+            return;
+        }
+        try {
+            thread.join(1000L);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** 单次同步 LLM 调用结果。 */

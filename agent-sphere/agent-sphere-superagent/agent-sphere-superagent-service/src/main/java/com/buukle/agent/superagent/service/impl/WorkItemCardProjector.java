@@ -12,6 +12,7 @@ import com.buukle.agent.superagent.domain.AgentWorkItem;
 import com.buukle.agent.superagent.dtvo.enums.AgentOutboundMessageStatus;
 import com.buukle.agent.superagent.dtvo.vo.AgentOutboundPayloadVO;
 import com.buukle.agent.superagent.repository.AgentOutboundMessageMapper;
+import com.buukle.agent.superagent.service.event.AgentOutboundWakePublisher;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ public class WorkItemCardProjector {
 
     private final AgentOutboundMessageMapper outboundMapper;
     private final UserSpi userSpi;
+    private final AgentOutboundWakePublisher outboundWakePublisher;
 
     public void projectQueued(AgentWorkItem item) {
         if (item.getThreadId() == null) {
@@ -71,6 +73,7 @@ public class WorkItemCardProjector {
         outbound.setActorId(item.getSuperAgentId());
         try {
             outboundMapper.insert(outbound);
+            outboundWakePublisher.publish(outbound.getId());
         } catch (DuplicateKeyException ignored) {
             // Already projected.
         }
@@ -92,6 +95,7 @@ public class WorkItemCardProjector {
         outbound.setActorId(item.getSuperAgentId());
         try {
             outboundMapper.insert(outbound);
+            outboundWakePublisher.publish(outbound.getId());
         } catch (DuplicateKeyException ignored) {
             // Already projected.
         }

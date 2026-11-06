@@ -1,6 +1,7 @@
 package com.buukle.agent.model.spi;
 
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.vo.ModelProviderVO;
@@ -31,4 +32,16 @@ public interface ModelProviderSpi {
     void stream(String company, String baseUrl, String apiKey, String modelName,
                 ChatCompletionRequestDTO request,
                 Consumer<LLMEvent> onEvent, Runnable onDone);
+
+    /**
+     * Same as {@link #stream} but returns transport retry statistics.
+     * Implementations that do not track retries can use the default.
+     */
+    default LlmStreamStats streamWithStats(String company, String baseUrl, String apiKey,
+                                           String modelName,
+                                           ChatCompletionRequestDTO request,
+                                           Consumer<LLMEvent> onEvent, Runnable onDone) {
+        stream(company, baseUrl, apiKey, modelName, request, onEvent, onDone);
+        return LlmStreamStats.firstAttempt();
+    }
 }

@@ -24,6 +24,7 @@ import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.spi.AgentRouterRunCommand;
 import com.buukle.agent.superagent.spi.AgentRouterRunPort;
 import com.buukle.agent.superagent.spi.AgentRouterRunResult;
+import com.buukle.agent.superagent.service.event.AgentDeliveryCreatedEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -31,15 +32,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Agent Router consumer.
@@ -67,12 +73,24 @@ public class AgentRouterScheduler {
     private final AgentMetrics metrics;
     private final RedissonClient redissonClient;
 
+    @Qualifier("runtimeAsyncExecutor")
+    private final Executor wakeExecutor;
+
+    private final AtomicBoolean waking = new AtomicBoolean(false);
+    private final AtomicBoolean wakeAgain = new AtomicBoolean(false);
+
     @Value("${buukle.agent.super-agent.enabled:false}")
     private boolean superAgentEnabled;
     @Value("${buukle.agent.super-agent.agent-router.enabled:false}")
     private boolean enabled;
     @Value("${buukle.agent.super-agent.agent-router.batch-size:20}")
     private int batchSize;
+
+    /** Event-driven wake: deliveries are consumed milliseconds after commit; polling is a fallback. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onDeliveryCreated(AgentDeliveryCreatedEvent event) {
+        wakeAsync();
+    }
 
     @Scheduled(fixedDelayString = "${buukle.agent.super-agent.agent-router.interval-ms:3000}")
     public void run() {
@@ -83,6 +101,35 @@ public class AgentRouterScheduler {
         AuthContext.clear();
         TenantContext.clear();
         processSessionBatch();
+    }
+
+    private void wakeAsync() {
+        if (!superAgentEnabled || !enabled) {
+            return;
+        }
+        if (!waking.compareAndSet(false, true)) {
+            wakeAgain.set(true);
+            metrics.increment(AgentMetrics.AGENT_ROUTER_WAKE_SKIPPED);
+            return;
+        }
+        try {
+            wakeExecutor.execute(() -> {
+                try {
+                    do {
+                        wakeAgain.set(false);
+                        run();
+                    } while (wakeAgain.get());
+                } finally {
+                    waking.set(false);
+                    if (wakeAgain.get()) {
+                        wakeAsync();
+                    }
+                }
+            });
+        } catch (Exception e) {
+            waking.set(false);
+            log.warn("Agent router wake rejected: {}", e.getMessage());
+        }
     }
 
     private void processSessionBatch() {

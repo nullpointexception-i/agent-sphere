@@ -19,10 +19,12 @@ import com.buukle.agent.superagent.repository.AgentEventDeliveryMapper;
 import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.repository.AgentThreadSubscriptionMapper;
+import com.buukle.agent.superagent.service.event.AgentDeliveryCreatedEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,7 @@ public class EventIngestService implements EventIngestPort {
     private final AgentEventDeliveryMapper deliveryMapper;
     private final AgentThreadSubscriptionMapper subscriptionMapper;
     private final AgentMetrics metrics;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -79,6 +82,7 @@ public class EventIngestService implements EventIngestPort {
                 passThroughSubscriptions(row);
                 directDeliverMentions(row, event);
             }
+            eventPublisher.publishEvent(new AgentDeliveryCreatedEvent(thread.getId()));
             return IngestResult.accepted(row.getId(), thread.getId());
         } catch (DuplicateKeyException e) {
             AgentEvent existing = eventMapper.selectOne(Wrappers.<AgentEvent>lambdaQuery()
