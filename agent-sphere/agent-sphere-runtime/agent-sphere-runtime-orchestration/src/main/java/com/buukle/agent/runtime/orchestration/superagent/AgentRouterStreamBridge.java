@@ -52,7 +52,9 @@ public class AgentRouterStreamBridge {
     private static final int MAX_SESSION_CACHE = 500;
     private static final int MAX_RUN_STATES = 500;
     private static final long NEGATIVE_SESSION_TTL_SECONDS = 30;
-    private static final long FLUSH_INITIAL_DELAY_MS = 50;
+    /** Tests disable the daemon flusher entirely by deferring the initial tick far out. */
+    @Value("${buukle.agent.super-agent.router.stream.flush-initial-delay-ms:50}")
+    private long flushInitialDelayMs;
 
     private final SessionSpi sessionSpi;
     private final ObjectProvider<AgentStreamPort> streamPortProvider;
@@ -90,7 +92,7 @@ public class AgentRouterStreamBridge {
         this.streamPortProvider = streamPortProvider;
         this.replyPortProvider = replyPortProvider;
         this.metrics = metrics;
-        this.flusher.scheduleWithFixedDelay(this::flushTick, FLUSH_INITIAL_DELAY_MS,
+        this.flusher.scheduleWithFixedDelay(this::flushTick, flushInitialDelayMs,
                 Math.max(10, coalesceMs), TimeUnit.MILLISECONDS);
     }
 
@@ -177,7 +179,16 @@ public class AgentRouterStreamBridge {
     private void classifyRunStatus(RunState state, RuntimeEventDataVO data, RunStatus status) {
         switch (status) {
             case PENDING, RUNNING -> {
-                if (!streamEnabled || state.started) {
+                if (!streamEnabled) {
+                    return;
+                }
+                if (state.awaiting) {
+                    // Resumed from AWAITING_USER: reopen the bubble for the continuation.
+                    state.awaiting = false;
+                    state.enqueueSignal(new Signal(AgentStreamStatus.STARTED, null, null, null, null));
+                    return;
+                }
+                if (state.started) {
                     return;
                 }
                 state.started = true;
@@ -193,8 +204,17 @@ public class AgentRouterStreamBridge {
                 state.enqueueSignal(new Signal(terminal, null, null,
                         data.getErrorMessage(), data.getAssistantReply()));
             }
+            case AWAITING_USER -> {
+                // Parked on a clarification/approval: stop the live bubble here; the DM
+                // card asks the user. Non-terminal: the same run resumes later.
+                if (streamEnabled && !state.awaiting) {
+                    state.awaiting = true;
+                    state.enqueueSignal(new Signal(AgentStreamStatus.AWAITING_USER, null, null,
+                            null, null));
+                }
+            }
             default -> {
-                // WAITING / AWAITING_USER: non-terminal park states; the run continues later.
+                // WAITING: non-terminal retry park; the run continues later.
             }
         }
     }
@@ -278,6 +298,8 @@ public class AgentRouterStreamBridge {
         private final ConcurrentLinkedQueue<Signal> signals = new ConcurrentLinkedQueue<>();
         private volatile boolean started;
         private volatile boolean finished;
+        /** The run parked in AWAITING_USER waiting for the user's DM reply. */
+        private volatile boolean awaiting;
         private volatile long lastActivity = System.currentTimeMillis();
 
         private RunState(long runId, SessionInfo session) {

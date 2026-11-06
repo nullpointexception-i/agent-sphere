@@ -55,7 +55,9 @@ export default function ChatBottomSheet({
         <div style={{ flex: 1, minWidth: 0 }}>{title}</div>
         {extra}
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 18px' }}>
+      <div
+        style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 18px' }}
+      >
         {children}
       </div>
       {footer ? (

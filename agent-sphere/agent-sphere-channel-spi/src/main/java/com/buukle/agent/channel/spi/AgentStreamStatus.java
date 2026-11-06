@@ -20,6 +20,13 @@ public final class AgentStreamStatus {
     public static final String TOOL_SUCCEEDED = "tool_succeeded";
     public static final String TOOL_FAILED = "tool_failed";
 
+    /**
+     * The run parked in AWAITING_USER (clarification / tool approval). The bubble
+     * pauses here; a card message in the DM asked the user to respond. Non-terminal:
+     * the same runId resumes later and re-emits {@link #STARTED}.
+     */
+    public static final String AWAITING_USER = "awaiting_user";
+
     private AgentStreamStatus() {
     }
 }

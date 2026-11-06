@@ -441,7 +441,9 @@ export default function Footer({
                   style={{
                     fontSize: 16,
                     cursor:
-                      attachments.length > 0 || uploadingAttachment || inputLocked
+                      attachments.length > 0 ||
+                      uploadingAttachment ||
+                      inputLocked
                         ? 'not-allowed'
                         : 'pointer',
                     color: uploadingAttachment ? '#bfbfbf' : '#8c8c8c',

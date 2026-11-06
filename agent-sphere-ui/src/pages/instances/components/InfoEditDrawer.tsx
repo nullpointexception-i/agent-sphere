@@ -1,6 +1,16 @@
 import { UploadOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
-import { App, Button, Drawer, Form, Input, InputNumber, Select, Switch, Upload } from 'antd';
+import {
+  App,
+  Button,
+  Drawer,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Switch,
+  Upload,
+} from 'antd';
 import { useEffect, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -202,7 +212,8 @@ export default function InfoEditDrawer({
             }),
             intl.formatMessage({
               id: 'pages.instances.completionProtocol.extra',
-              defaultMessage: '严格模式要求调用 finish；兼容模式允许工具后用最终文本收口',
+              defaultMessage:
+                '严格模式要求调用 finish；兼容模式允许工具后用最终文本收口',
             }),
           )}
         >

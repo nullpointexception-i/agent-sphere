@@ -14,7 +14,10 @@ interface SharedRun {
 export default function SharedChat() {
   const { shareToken } = useParams<{ shareToken: string }>();
   const intl = useIntl();
-  const [data, setData] = useState<{ title?: string; runs?: SharedRun[] } | null>(null);
+  const [data, setData] = useState<{
+    title?: string;
+    runs?: SharedRun[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,7 +34,9 @@ export default function SharedChat() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+      <div
+        style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}
+      >
         <Spin size="large" />
       </div>
     );
@@ -64,12 +69,27 @@ export default function SharedChat() {
           borderBottom: '1px solid #eee',
         }}
       >
-        <img src="/logo.svg" alt="AgentSphere" style={{ width: 28, height: 28 }} />
+        <img
+          src="/logo.svg"
+          alt="AgentSphere"
+          style={{ width: 28, height: 28 }}
+        />
         <strong style={{ fontSize: 16 }}>AgentSphere</strong>
       </header>
 
-      <main style={{ flex: 1, width: '100%', maxWidth: 860, margin: '0 auto', padding: '20px 14px 100px' }}>
-        <Typography.Title level={3} style={{ textAlign: 'center', marginTop: 0 }}>
+      <main
+        style={{
+          flex: 1,
+          width: '100%',
+          maxWidth: 860,
+          margin: '0 auto',
+          padding: '20px 14px 100px',
+        }}
+      >
+        <Typography.Title
+          level={3}
+          style={{ textAlign: 'center', marginTop: 0 }}
+        >
           {intl.formatMessage({
             id: 'pages.share.title',
             defaultMessage: '来自 AgentSphere 的分享',

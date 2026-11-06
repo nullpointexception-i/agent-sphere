@@ -59,16 +59,34 @@ const statusIcon = (s: string) => {
 
 function StatRow({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0', fontSize: 12 }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '3px 0',
+        fontSize: 12,
+      }}
+    >
       <span style={{ color: '#8c8c8c' }}>{label}</span>
-      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{value}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+        {value}
+      </span>
     </div>
   );
 }
 
 function UsageRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '2px 0', fontSize: 12 }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '2px 0',
+        fontSize: 12,
+      }}
+    >
       <span style={{ color: '#8c8c8c' }}>{label}</span>
       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
@@ -135,12 +153,23 @@ export default function SessionPanel({
             defaultMessage: 'Session Panel',
           })}
         </strong>
-        <a onClick={onClose} style={{ fontSize: 14, color: '#999', cursor: 'pointer' }}>
+        <a
+          onClick={onClose}
+          style={{ fontSize: 14, color: '#999', cursor: 'pointer' }}
+        >
           ✕
         </a>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
         <div
           style={{
             fontWeight: 500,
@@ -186,7 +215,8 @@ export default function SessionPanel({
                 <span>{statusIcon(t.status)}</span>
                 <span
                   style={{
-                    textDecoration: t.status === 'cancelled' ? 'line-through' : undefined,
+                    textDecoration:
+                      t.status === 'cancelled' ? 'line-through' : undefined,
                     opacity: t.status === 'cancelled' ? 0.5 : 1,
                     flex: 1,
                   }}
@@ -194,14 +224,23 @@ export default function SessionPanel({
                   {t.content}
                 </span>
                 {(t.skillId != null || t.stepId) && (
-                  <Tag color="purple" style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px' }}>
+                  <Tag
+                    color="purple"
+                    style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px' }}
+                  >
                     {t.skillId != null ? `skill#${t.skillId}` : ''}
                     {t.stepId ? ` ${t.stepId}` : ''}
                   </Tag>
                 )}
                 <Tag
                   style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px' }}
-                  color={t.priority === 'high' ? 'red' : t.priority === 'medium' ? 'orange' : 'blue'}
+                  color={
+                    t.priority === 'high'
+                      ? 'red'
+                      : t.priority === 'medium'
+                        ? 'orange'
+                        : 'blue'
+                  }
                 >
                   {t.priority}
                 </Tag>
@@ -213,7 +252,15 @@ export default function SessionPanel({
 
       <Divider style={{ margin: '4px 0', flexShrink: 0 }} />
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
         <div
           style={{
             fontWeight: 500,
@@ -277,10 +324,22 @@ export default function SessionPanel({
               }),
               children: (
                 <div style={{ overflowY: 'auto', height: '100%' }}>
-                  <UsageRow label="Prompt" value={formatTokens(sessionUsage?.promptTokens)} />
-                  <UsageRow label="Completion" value={formatTokens(sessionUsage?.completionTokens)} />
-                  <UsageRow label="Total" value={formatTokens(sessionUsage?.totalTokens)} />
-                  <UsageRow label="Cache" value={cacheRate != null ? `${cacheRate}%` : '-'} />
+                  <UsageRow
+                    label="Prompt"
+                    value={formatTokens(sessionUsage?.promptTokens)}
+                  />
+                  <UsageRow
+                    label="Completion"
+                    value={formatTokens(sessionUsage?.completionTokens)}
+                  />
+                  <UsageRow
+                    label="Total"
+                    value={formatTokens(sessionUsage?.totalTokens)}
+                  />
+                  <UsageRow
+                    label="Cache"
+                    value={cacheRate != null ? `${cacheRate}%` : '-'}
+                  />
                   <UsageRow
                     label={intl.formatMessage({
                       id: 'pages.chat.sessionPanel.currentContext',
@@ -300,7 +359,9 @@ export default function SessionPanel({
               children: (
                 <div style={{ overflowY: 'auto', height: '100%' }}>
                   {authorizedTools.length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#aaa', padding: '4px 0' }}>
+                    <div
+                      style={{ fontSize: 12, color: '#aaa', padding: '4px 0' }}
+                    >
                       {intl.formatMessage({
                         id: 'pages.chat.sessionPanel.noAuthorizedTools',
                         defaultMessage: 'No persistent authorizations',
@@ -319,13 +380,33 @@ export default function SessionPanel({
                         }}
                       >
                         <ToolOutlined style={{ color: '#8c8c8c' }} />
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span
+                          style={{
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {tool.displayName || tool.toolRef}
                         </span>
-                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }} color="orange">
+                        <Tag
+                          style={{
+                            margin: 0,
+                            fontSize: 10,
+                            lineHeight: '16px',
+                          }}
+                          color="orange"
+                        >
                           {tool.securityLevel || 'L2'}
                         </Tag>
-                        <Tag style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                        <Tag
+                          style={{
+                            margin: 0,
+                            fontSize: 10,
+                            lineHeight: '16px',
+                          }}
+                        >
                           {scopeLabel(tool.scope)}
                         </Tag>
                       </div>

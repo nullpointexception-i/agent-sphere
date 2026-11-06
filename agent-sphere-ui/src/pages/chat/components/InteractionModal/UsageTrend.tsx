@@ -1,6 +1,15 @@
 import { Line } from '@ant-design/plots';
 import { useIntl } from '@umijs/max';
-import { Button, Card, Empty, Segmented, Space, Spin, Statistic, Typography } from 'antd';
+import {
+  Button,
+  Card,
+  Empty,
+  Segmented,
+  Space,
+  Spin,
+  Statistic,
+  Typography,
+} from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { cacheHitRate, formatTokens } from '../Usage';
@@ -95,13 +104,9 @@ export default function UsageTrend({
             : 0;
         } else if (incoming.length) {
           setPoints((prev) => {
-            const map = new Map<number, UsagePoint>(
-              prev.map((p) => [p.id, p]),
-            );
+            const map = new Map<number, UsagePoint>(prev.map((p) => [p.id, p]));
             incoming.forEach((p) => map.set(p.id, p));
-            return [...map.values()]
-              .sort((a, b) => a.id - b.id)
-              .slice(-LIMIT);
+            return [...map.values()].sort((a, b) => a.id - b.id).slice(-LIMIT);
           });
           lastIdRef.current = Math.max(
             lastIdRef.current,

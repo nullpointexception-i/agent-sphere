@@ -6,6 +6,7 @@ export type AgentStreamPhase =
   | 'thinking'
   | 'tool'
   | 'reply'
+  | 'awaiting'
   | 'done'
   | 'failed';
 
@@ -111,6 +112,9 @@ function phaseFromEvent(state: AgentStreamState, event: ImStreamPayload) {
   if (status === 'failed' || status === 'cancelled')
     return 'failed' as AgentStreamPhase;
   if (status === 'completed') return 'done' as AgentStreamPhase;
+  // Router parked on a clarification/approval: keep the bubble as "waiting for
+  // the user"; the resumed run re-emits STARTED and later phases take over.
+  if (status === 'awaiting_user') return 'awaiting' as AgentStreamPhase;
   if (event.phase === 'thinking') return 'thinking' as AgentStreamPhase;
   if (event.phase === 'reply') return 'reply' as AgentStreamPhase;
   if (event.phase === 'status' && String(status ?? '').startsWith('tool_')) {

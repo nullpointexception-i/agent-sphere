@@ -22,6 +22,9 @@ function streamStatusLabel(state: AgentStreamState) {
   if (state.phase === 'thinking') {
     return tw('chat.agentThinking', '正在思考…');
   }
+  if (state.phase === 'awaiting') {
+    return tw('chat.agentAwaitingUser', '等待你的回复');
+  }
   if (state.phase === 'reply') {
     return tw('chat.agentReplying', '正在回复');
   }

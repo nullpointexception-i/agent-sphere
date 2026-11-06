@@ -83,6 +83,32 @@ describe('agentStreamStore', () => {
     expect(state?.displayName).toBe('派发任务');
   });
 
+  it('awaiting_user parks the bubble until the run resumes', () => {
+    beginAgentStream(CONVERSATION);
+
+    applyAgentStreamEvent(
+      streamEvent({
+        phase: 'status',
+        streamStatus: 'awaiting_user',
+        runId: 7,
+      }),
+    );
+
+    expect(peekAgentStream(CONVERSATION)?.phase).toBe('awaiting');
+
+    // User answered the clarification card; the resumed run re-emits STARTED
+    // (non-fragmented status) and then continues streaming.
+    applyAgentStreamEvent(
+      streamEvent({ phase: 'status', streamStatus: 'started', runId: 7 }),
+    );
+    expect(peekAgentStream(CONVERSATION)?.phase).toBe('awaiting');
+
+    applyAgentStreamEvent(
+      streamEvent({ phase: 'thinking', delta: '继续', runId: 7, streamSeq: 2 }),
+    );
+    expect(peekAgentStream(CONVERSATION)?.phase).toBe('thinking');
+  });
+
   it('terminal failed marks the stream failed with the error message', () => {
     beginAgentStream(CONVERSATION);
 

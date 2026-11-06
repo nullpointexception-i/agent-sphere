@@ -56,6 +56,7 @@ import {
   type ImMessage,
   type ImParticipant,
   imApi,
+  type SessionInputDecision,
 } from '@/services/agentSphere/im';
 import {
   type SuperAgent,
@@ -63,6 +64,11 @@ import {
 } from '@/services/agentSphere/superAgent';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
 import { messageText, parsedContent } from '../im/components/messageUtils';
+import {
+  AgentInputCard,
+  ROUTER_APPROVAL,
+  ROUTER_CLARIFICATION,
+} from './AgentInputCard';
 import { AgentStreamBubble } from './AgentStreamBubble';
 import {
   applyAgentStreamEvent,
@@ -251,6 +257,13 @@ type TaskCardView = {
   status?: string;
   summary?: string;
   workItemId?: number;
+  /** Router input cards (ROUTER_CLARIFICATION / ROUTER_APPROVAL) only. */
+  cardType?: string;
+  inputId?: string;
+  description?: string;
+  multiple?: boolean;
+  options?: string;
+  toolCallsJson?: string;
 };
 
 function taskCardOf(message: ImMessage): TaskCardView | null {
@@ -276,6 +289,10 @@ function taskStatusLabel(status?: string) {
       return tw('chat.taskStatus.failed', '失败');
     case 'CANCELLED':
       return tw('chat.taskStatus.cancelled', '已取消');
+    case 'PENDING':
+      return tw('chat.taskStatus.pending', '待回复');
+    case 'ANSWERED':
+      return tw('chat.taskStatus.answered', '已回复');
     default:
       return status || tw('chat.taskStatus.unknown', '未知');
   }
@@ -2128,6 +2145,14 @@ function ChatDetail({
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
+    await sendText(value, `workspace-${Date.now()}`);
+    setText('');
+    if (composerRef.current) composerRef.current.style.height = 'auto';
+  };
+
+  /** Sends an arbitrary DM text; clarification option buttons reuse this path. */
+  const sendText = async (value: string, clientMsgId?: string) => {
+    if (!value || sending) return;
     if (agentPaused) {
       message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
       return;
@@ -2140,9 +2165,11 @@ function ChatDetail({
       beginAgentStream(conversationId);
     }
     try {
-      await imApi.send(conversationId, value, `workspace-${Date.now()}`);
-      setText('');
-      if (composerRef.current) composerRef.current.style.height = 'auto';
+      await imApi.send(
+        conversationId,
+        value,
+        clientMsgId || `option-${Date.now()}`,
+      );
       load(true);
     } catch {
       if (shouldStream) {
@@ -2151,6 +2178,27 @@ function ChatDetail({
       message.error(tw('chat.sendFailed', '发送失败'));
     } finally {
       setSending(false);
+    }
+  };
+
+  /** Submits per-call approval decisions for a Router tool-approval card. */
+  const approveSessionInput = async (
+    inputConversationId: number,
+    inputId: string,
+    decisions: SessionInputDecision[],
+  ) => {
+    try {
+      await imApi.resolveSessionInputApproval(
+        inputConversationId,
+        inputId,
+        decisions,
+      );
+      message.success(tw('chat.inputApproved', '审批已提交'));
+      load(true);
+      return true;
+    } catch {
+      message.error(tw('chat.inputApproveFailed', '审批提交失败，请重试'));
+      return false;
     }
   };
 
@@ -2450,35 +2498,46 @@ function ChatDetail({
                         {messageTime(item.createdAt)}
                       </div>
                       {card ? (
-                        <div className={styles.taskCard}>
-                          <div className={styles.taskCardTop}>
-                            <span className={styles.taskCardTitle}>
-                              {card.title || tw('chat.taskFallback', '任务')}
-                            </span>
-                            <span
-                              className={`${styles.taskCardStatus} ${
-                                card.status === 'COMPLETED' ||
-                                card.status === 'DONE'
-                                  ? styles.taskCardStatusDone
-                                  : card.status === 'FAILED' ||
-                                      card.status === 'CANCELLED'
-                                    ? styles.taskCardStatusFailed
-                                    : styles.taskCardStatusRunning
-                              }`}
-                            >
-                              {taskStatusLabel(card.status)}
-                            </span>
+                        card.cardType === ROUTER_CLARIFICATION ||
+                        card.cardType === ROUTER_APPROVAL ? (
+                          <AgentInputCard
+                            card={card}
+                            conversationId={conversationId}
+                            onReplyText={sendText}
+                            submitting={sending}
+                            onApprove={approveSessionInput}
+                          />
+                        ) : (
+                          <div className={styles.taskCard}>
+                            <div className={styles.taskCardTop}>
+                              <span className={styles.taskCardTitle}>
+                                {card.title || tw('chat.taskFallback', '任务')}
+                              </span>
+                              <span
+                                className={`${styles.taskCardStatus} ${
+                                  card.status === 'COMPLETED' ||
+                                  card.status === 'DONE'
+                                    ? styles.taskCardStatusDone
+                                    : card.status === 'FAILED' ||
+                                        card.status === 'CANCELLED'
+                                      ? styles.taskCardStatusFailed
+                                      : styles.taskCardStatusRunning
+                                }`}
+                              >
+                                {taskStatusLabel(card.status)}
+                              </span>
+                            </div>
+                            {card.summary ? (
+                              <div className={styles.taskCardSummary}>
+                                {card.summary}
+                              </div>
+                            ) : (
+                              <div className={styles.taskCardSummary}>
+                                {tw('chat.taskCreated', '任务已创建，正在处理')}
+                              </div>
+                            )}
                           </div>
-                          {card.summary ? (
-                            <div className={styles.taskCardSummary}>
-                              {card.summary}
-                            </div>
-                          ) : (
-                            <div className={styles.taskCardSummary}>
-                              {tw('chat.taskCreated', '任务已创建，正在处理')}
-                            </div>
-                          )}
-                        </div>
+                        )
                       ) : (
                         <div
                           className={`${styles.bubble} ${self ? styles.bubbleSelf : ''}`}

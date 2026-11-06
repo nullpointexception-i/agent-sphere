@@ -80,6 +80,7 @@ class AgentRouterStreamBridgeTest {
         ReflectionTestUtils.setField(bridge, "thinkingEnabled", true);
         // Effectively disable the daemon flusher; tests drive flushTick() manually.
         ReflectionTestUtils.setField(bridge, "coalesceMs", 1_000_000L);
+        ReflectionTestUtils.setField(bridge, "flushInitialDelayMs", 3_600_000L);
         ReflectionTestUtils.setField(bridge, "maxChunkChars", 256);
         ReflectionTestUtils.setField(bridge, "sessionCacheTtlSeconds", 600L);
         ReflectionTestUtils.setField(bridge, "bufferTtlSeconds", 600L);
@@ -240,6 +241,36 @@ class AgentRouterStreamBridgeTest {
                 AgentStreamStatus.FAILED.equals(e.streamStatus())
                         && "模型超时".equals(e.errorMessage())));
         verify(replyPort, never()).sendFinalReply(anyLong(), anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void awaitingUserParksBubbleAndReopensOnResume() {
+        stubRouterSession();
+
+        bridge.onEvent(runEvent(RunStatus.RUNNING, null));
+        bridge.onEvent(runEvent(RunStatus.AWAITING_USER, null));
+        bridge.onEvent(runEvent(RunStatus.AWAITING_USER, null));
+
+        bridge.flushTick();
+
+        List<AgentStreamEvent> parked = capturedStreamEvents();
+        assertEquals(1, parked.stream()
+                .filter(e -> AgentStreamStatus.AWAITING_USER.equals(e.streamStatus()))
+                .count());
+        verify(replyPort, never()).sendFinalReply(anyLong(), anyLong(), anyLong(), anyString());
+
+        // User answered the clarification card: the same run resumes and completes.
+        bridge.onEvent(runEvent(RunStatus.RUNNING, null));
+        bridge.onEvent(runEvent(RunStatus.COMPLETED, "继续回答"));
+        bridge.flushTick();
+
+        List<AgentStreamEvent> resumed = capturedStreamEvents();
+        assertEquals(2, resumed.stream()
+                .filter(e -> AgentStreamStatus.STARTED.equals(e.streamStatus()))
+                .count());
+        assertTrue(resumed.stream().anyMatch(e ->
+                AgentStreamStatus.COMPLETED.equals(e.streamStatus())));
+        verify(replyPort).sendFinalReply(SESSION_ID, RUN_ID, THREAD_ID, "继续回答");
     }
 
     private void stubRouterSession() {

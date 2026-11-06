@@ -38,7 +38,11 @@ interface Props {
   submitting?: boolean;
   bottomOffset?: number;
   onResolve: (
-    answers: Array<{ clarificationId: string; selected?: string[]; text?: string }>,
+    answers: Array<{
+      clarificationId: string;
+      selected?: string[];
+      text?: string;
+    }>,
   ) => void;
   onCancel?: () => void;
 }
@@ -96,7 +100,10 @@ export default function ClarificationDrawer({
   const tabs = useMemo(
     () =>
       items.map((item) => {
-        const answer = answers[item.clarificationId] || { selected: [], text: '' };
+        const answer = answers[item.clarificationId] || {
+          selected: [],
+          text: '',
+        };
         const options = parseOptions(item.options);
         const type = item.type || 'input';
         return {
@@ -121,7 +128,11 @@ export default function ClarificationDrawer({
               </Typography.Text>
               {item.description ? (
                 <Typography.Paragraph
-                  style={{ whiteSpace: 'pre-wrap', marginBottom: 0, color: '#595959' }}
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    marginBottom: 0,
+                    color: '#595959',
+                  }}
                 >
                   {item.description}
                 </Typography.Paragraph>
@@ -130,7 +141,9 @@ export default function ClarificationDrawer({
                 <Radio.Group
                   value={answer.selected[0]}
                   onChange={(e) =>
-                    setAnswer(item.clarificationId, { selected: [e.target.value] })
+                    setAnswer(item.clarificationId, {
+                      selected: [e.target.value],
+                    })
                   }
                 >
                   <Space direction="vertical">
@@ -219,14 +232,23 @@ export default function ClarificationDrawer({
                 id: 'pages.chat.clarification.selected',
                 defaultMessage: '{selected}/{total} answered',
               },
-              { selected: Object.values(answers).filter((a) => a.selected.length || a.text.trim()).length, total: items.length },
+              {
+                selected: Object.values(answers).filter(
+                  (a) => a.selected.length || a.text.trim(),
+                ).length,
+                total: items.length,
+              },
             )}
           </Tag>
         </Space>
       }
       footer={
         <>
-          <Button danger disabled={submitting || items.length === 0} onClick={onCancel}>
+          <Button
+            danger
+            disabled={submitting || items.length === 0}
+            onClick={onCancel}
+          >
             {intl.formatMessage({
               id: 'pages.chat.clarification.cancel',
               defaultMessage: 'Cancel run',

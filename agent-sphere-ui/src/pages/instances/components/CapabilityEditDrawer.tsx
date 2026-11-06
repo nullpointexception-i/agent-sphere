@@ -266,9 +266,15 @@ export default function CapabilityEditDrawer({
                         width: 190,
                         render: (_: any, r: any) => (
                           <Space size={4} wrap>
-                            {r.compressEnabled ? <Tag color="blue">compress</Tag> : null}
+                            {r.compressEnabled ? (
+                              <Tag color="blue">compress</Tag>
+                            ) : null}
                             <Tag>{r.accessMode || 'READ_WRITE'}</Tag>
-                            <Tag color={r.securityLevel === 'L2' ? 'orange' : 'default'}>
+                            <Tag
+                              color={
+                                r.securityLevel === 'L2' ? 'orange' : 'default'
+                              }
+                            >
                               {r.securityLevel || 'L1'}
                               {r.securityLevel === 'L2'
                                 ? ` / ${r.approvalScope || 'ONCE'}`

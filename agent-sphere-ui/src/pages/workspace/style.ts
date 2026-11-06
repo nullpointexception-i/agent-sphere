@@ -937,6 +937,103 @@ export const useStyles = createStyles(({ css }) => ({
     white-space: pre-wrap;
     word-break: break-word;
   `,
+  agentInputPrompt: css`
+    margin-top: 8px;
+    color: #241b4d;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  `,
+  agentInputOptions: css`
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  `,
+  agentInputOption: css`
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid #ddd6f3;
+    background: #fff;
+    color: #241b4d;
+    font-size: 12px;
+    cursor: pointer;
+  `,
+  agentInputOptionActive: css`
+    background: #6e5bf0;
+    border-color: #6e5bf0;
+    color: #fff;
+  `,
+  agentInputOptionDisabled: css`
+    opacity: 0.55;
+    cursor: default;
+  `,
+  agentInputToolCall: css`
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #f7f5fd;
+    border: 1px solid #eeeaf8;
+    font-size: 12px;
+    color: #241b4d;
+  `,
+  agentInputToolName: css`
+    font-weight: 600;
+    word-break: break-word;
+  `,
+  agentInputToolArgs: css`
+    margin-top: 4px;
+    color: #6f6a86;
+    font-size: 11px;
+    word-break: break-all;
+    max-height: 72px;
+    overflow: hidden;
+  `,
+  agentInputDecisions: css`
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  `,
+  agentInputDecision: css`
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid #ddd6f3;
+    background: #fff;
+    color: #5c5578;
+    font-size: 11px;
+    cursor: pointer;
+  `,
+  agentInputDecisionActive: css`
+    background: #3b7ddd;
+    border-color: #3b7ddd;
+    color: #fff;
+  `,
+  agentInputDecisionDeny: css`
+    border-color: #f2637f;
+    color: #f2637f;
+  `,
+  agentInputSubmit: css`
+    margin-top: 10px;
+    width: fit-content;
+    padding: 5px 16px;
+    border-radius: 8px;
+    border: none;
+    background: #6e5bf0;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+  `,
+  agentInputSubmitDisabled: css`
+    opacity: 0.5;
+    cursor: default;
+  `,
+  agentInputDoneHint: css`
+    margin-top: 8px;
+    color: #9b95b5;
+    font-size: 12px;
+  `,
   agentStreamRow: css`
     display: flex;
     gap: 8px;

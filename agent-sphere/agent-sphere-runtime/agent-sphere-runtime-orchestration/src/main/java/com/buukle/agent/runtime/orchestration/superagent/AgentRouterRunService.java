@@ -7,7 +7,10 @@ import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
+import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.service.ChatRuntimeService;
 import com.buukle.agent.superagent.dtvo.enums.AgentRouterRunStatus;
@@ -27,6 +30,7 @@ public class AgentRouterRunService implements AgentRouterRunPort {
     private static final int MAX_MESSAGE = 5000;
 
     private final SessionSpi sessionSpi;
+    private final RunSpi runSpi;
     private final ChatRuntimeService chatRuntimeService;
 
     @Override
@@ -48,6 +52,15 @@ public class AgentRouterRunService implements AgentRouterRunPort {
             AuthContext.setSuperAdmin(true);
             if (session.getCreatedBy() != null) {
                 AuthContext.setUsername(session.getCreatedBy());
+            }
+            // Park guard: a pending clarification/approval card waits for the user in the
+            // DM and resumes its own run. Starting another run here would fork the
+            // conversation (the parked run holds the question context).
+            RunVO activeRun = runSpi.findActiveRun(command.sessionId());
+            if (activeRun != null && RunStatus.AWAITING_USER.name().equals(activeRun.getStatus())) {
+                log.info("Agent router start rejected: session={}, run={} awaiting user input",
+                        command.sessionId(), activeRun.getId());
+                return AgentRouterRunResult.rejected("router is awaiting user input");
             }
             SendMessageDTO message = new SendMessageDTO();
             message.setMessage(truncate(command.input()));

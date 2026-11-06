@@ -43,7 +43,9 @@ export default function SessionCleanupRunPanel({
   const processed = run?.sessionCount ?? 0;
   const total = run?.totalSessions ?? 0;
   const percent =
-    total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : undefined;
+    total > 0
+      ? Math.min(100, Math.round((processed / total) * 100))
+      : undefined;
 
   const stats = Object.entries(run?.tableStats || {})
     .filter(([, rows]) => rows > 0)
@@ -58,7 +60,10 @@ export default function SessionCleanupRunPanel({
       footer={[
         <Button key="close" onClick={onClose}>
           {running
-            ? t('pages.admin.settings.cleanup.closeInBackground', '后台继续执行')
+            ? t(
+                'pages.admin.settings.cleanup.closeInBackground',
+                '后台继续执行',
+              )
             : t('pages.cancel')}
         </Button>,
         // 只有「预演已出结果、且确实有东西可删」才允许真删
@@ -114,7 +119,10 @@ export default function SessionCleanupRunPanel({
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
-              message={run.skipReason || t('pages.admin.settings.cleanup.skipped', '本次未执行')}
+              message={
+                run.skipReason ||
+                t('pages.admin.settings.cleanup.skipped', '本次未执行')
+              }
             />
           )}
           {run.status === 'FAILED' && (
@@ -124,7 +132,10 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
               message={
                 run.errorMessage ||
-                t('pages.admin.settings.cleanup.failed', '执行失败，请查看后端日志')
+                t(
+                  'pages.admin.settings.cleanup.failed',
+                  '执行失败，请查看后端日志',
+                )
               }
             />
           )}
@@ -187,13 +198,22 @@ export default function SessionCleanupRunPanel({
           )}
 
           {!running && (
-            <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
-              <Descriptions.Item label={t('pages.admin.settings.cleanup.sessions', '会话数')}>
+            <Descriptions
+              size="small"
+              column={2}
+              bordered
+              style={{ marginBottom: 16 }}
+            >
+              <Descriptions.Item
+                label={t('pages.admin.settings.cleanup.sessions', '会话数')}
+              >
                 <Tag color={(run.sessionCount ?? 0) > 0 ? 'red' : 'default'}>
                   {run.sessionCount ?? 0}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label={t('pages.admin.settings.cleanup.rows', '删除行数')}>
+              <Descriptions.Item
+                label={t('pages.admin.settings.cleanup.rows', '删除行数')}
+              >
                 {run.totalRows ?? 0}
               </Descriptions.Item>
               <Descriptions.Item
@@ -236,7 +256,10 @@ export default function SessionCleanupRunPanel({
               type="info"
               showIcon
               style={{ marginTop: 16 }}
-              message={t('pages.admin.settings.cleanup.vacuumHint', '磁盘处置建议')}
+              message={t(
+                'pages.admin.settings.cleanup.vacuumHint',
+                '磁盘处置建议',
+              )}
               description={run.remark}
             />
           )}
@@ -245,7 +268,10 @@ export default function SessionCleanupRunPanel({
         <Alert
           type="info"
           showIcon
-          message={t('pages.admin.settings.cleanup.submitting', '正在提交清理任务…')}
+          message={t(
+            'pages.admin.settings.cleanup.submitting',
+            '正在提交清理任务…',
+          )}
         />
       )}
     </Modal>

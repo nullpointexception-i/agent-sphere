@@ -112,7 +112,9 @@ export default function ToolApprovalDrawer({
           label: (
             <Space size={4}>
               <span>{call.displayName || call.toolName}</span>
-              {selected ? <Tag color="blue">{decisionLabel(selected)}</Tag> : null}
+              {selected ? (
+                <Tag color="blue">{decisionLabel(selected)}</Tag>
+              ) : null}
             </Space>
           ),
           children: (

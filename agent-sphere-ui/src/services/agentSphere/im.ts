@@ -53,6 +53,13 @@ export interface ImConversationSetting {
   remark?: string;
 }
 
+/** Per-call decision for a Router tool-approval card. */
+export interface SessionInputDecision {
+  callId: string;
+  /** DENY / ALLOW_ONCE / ALLOW_RUN / ALLOW_SESSION */
+  decision: string;
+}
+
 export interface ImMessage {
   id: number;
   conversationId: number;
@@ -229,5 +236,14 @@ export const imApi = {
     request<ImConversation>(
       `${BASE}/im/conversations/${conversationId}/pinned-message`,
       { method: 'DELETE' },
+    ),
+  resolveSessionInputApproval: (
+    conversationId: number,
+    inputId: string,
+    decisions: SessionInputDecision[],
+  ) =>
+    request<void>(
+      `${BASE}/im/conversations/${conversationId}/session-inputs/${inputId}/approve`,
+      { method: 'POST', data: { decisions } },
     ),
 };

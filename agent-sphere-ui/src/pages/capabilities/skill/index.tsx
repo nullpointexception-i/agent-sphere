@@ -278,7 +278,7 @@ export default function SkillList() {
             </Tag>
           </span>
         ) : (
-          v ?? 1
+          (v ?? 1)
         ),
     },
     {
@@ -1010,10 +1010,12 @@ export default function SkillList() {
                             id: 'pages.capabilities.skill.syncedVersionValue',
                             defaultMessage: '源头 v{v}',
                           },
-                          { v:
+                          {
+                            v:
                               viewRecord?.syncedFromVersion ??
                               viewRecord?.originVersion ??
-                              1 },
+                              1,
+                          },
                         )}
                       </b>
                     </span>

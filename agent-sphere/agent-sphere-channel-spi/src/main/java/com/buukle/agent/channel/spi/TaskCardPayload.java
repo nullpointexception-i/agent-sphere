@@ -13,4 +13,18 @@ public class TaskCardPayload implements Serializable {
     private String status;
     private String summary;
     private Long superAgentId;
+
+    /** Router input cards (ROUTER_CLARIFICATION / ROUTER_APPROVAL) only. */
+    private String inputType;
+    /** clarificationId / approvalId. */
+    private String inputId;
+    private Long sessionId;
+    private Long runId;
+    private String description;
+    /** Clarification: whether multiple options may be selected. */
+    private Boolean multiple;
+    /** Clarification: options JSON passthrough. */
+    private String options;
+    /** Approval: pending tool calls JSON passthrough. */
+    private String toolCallsJson;
 }

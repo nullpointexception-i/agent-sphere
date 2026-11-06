@@ -7,7 +7,18 @@ import {
 } from '@ant-design/icons';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
-import { App, Button, DatePicker, Form, Input, Modal, Select, Space, Switch, Tag } from 'antd';
+import {
+  App,
+  Button,
+  DatePicker,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Switch,
+  Tag,
+} from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
@@ -381,9 +392,27 @@ export default function CliList() {
           >
             <Select
               options={[
-                { value: 'READ', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.read', defaultMessage: 'Read' }) },
-                { value: 'WRITE', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.write', defaultMessage: 'Write' }) },
-                { value: 'READ_WRITE', label: intl.formatMessage({ id: 'pages.capabilities.accessMode.readWrite', defaultMessage: 'Read/write' }) },
+                {
+                  value: 'READ',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.accessMode.read',
+                    defaultMessage: 'Read',
+                  }),
+                },
+                {
+                  value: 'WRITE',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.accessMode.write',
+                    defaultMessage: 'Write',
+                  }),
+                },
+                {
+                  value: 'READ_WRITE',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.accessMode.readWrite',
+                    defaultMessage: 'Read/write',
+                  }),
+                },
               ]}
             />
           </Form.Item>
@@ -395,7 +424,12 @@ export default function CliList() {
             })}
             initialValue="L1"
           >
-            <Select options={[{ value: 'L1', label: 'L1' }, { value: 'L2', label: 'L2' }]} />
+            <Select
+              options={[
+                { value: 'L1', label: 'L1' },
+                { value: 'L2', label: 'L2' },
+              ]}
+            />
           </Form.Item>
           <Form.Item
             name="approvalScope"
@@ -407,9 +441,27 @@ export default function CliList() {
           >
             <Select
               options={[
-                { value: 'SESSION', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.session', defaultMessage: 'Session' }) },
-                { value: 'RUN', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.run', defaultMessage: 'Run' }) },
-                { value: 'ONCE', label: intl.formatMessage({ id: 'pages.capabilities.approvalScope.once', defaultMessage: 'Once' }) },
+                {
+                  value: 'SESSION',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.approvalScope.session',
+                    defaultMessage: 'Session',
+                  }),
+                },
+                {
+                  value: 'RUN',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.approvalScope.run',
+                    defaultMessage: 'Run',
+                  }),
+                },
+                {
+                  value: 'ONCE',
+                  label: intl.formatMessage({
+                    id: 'pages.capabilities.approvalScope.once',
+                    defaultMessage: 'Once',
+                  }),
+                },
               ]}
             />
           </Form.Item>

@@ -3,11 +3,11 @@ import { App, Button, Collapse, Form, Input, Modal, Tag, Upload } from 'antd';
 import { useEffect, useState } from 'react';
 import { useCan } from '@/hooks/usePermission';
 import { useRecordedTask } from '@/hooks/useRecordedTask';
-import { agentApi } from '@/services/agentSphere/api';
 import type {
   SessionCleanupRun,
   SkillSyncRun,
 } from '@/services/agentSphere/api';
+import { agentApi } from '@/services/agentSphere/api';
 import ResourceTemplateEditor from './resourceTemplate/ResourceTemplateEditor';
 import SessionCleanupRunPanel from './sessionCleanup';
 import SessionCleanupRunsDrawer from './sessionCleanupRuns';

@@ -18,6 +18,7 @@ import com.buukle.agent.im.dtvo.dto.ImGateConfig;
 import com.buukle.agent.im.dtvo.enums.ImMessageStatus;
 import com.buukle.agent.im.dtvo.enums.ImMessageType;
 import com.buukle.agent.im.dtvo.enums.ImParticipantType;
+import com.buukle.agent.im.dtvo.enums.ImConversationType;
 import com.buukle.agent.im.dtvo.enums.ImStreamEventType;
 import com.buukle.agent.im.dtvo.vo.ImEventMetaVO;
 import com.buukle.agent.im.dtvo.vo.ImMessagePageVO;
@@ -33,6 +34,7 @@ import com.buukle.agent.im.service.ImMessageService;
 import com.buukle.agent.im.service.ImStreamService;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.SessionInputSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
@@ -72,6 +74,7 @@ public class ImMessageServiceImpl implements ImMessageService {
     private final ImStreamService streamService;
     private final ObjectProvider<EventIngestPort> ingestPortProvider;
     private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
+    private final ObjectProvider<SessionInputSpi> sessionInputPortProvider;
     private final AgentMetrics metrics;
 
     @org.springframework.beans.factory.annotation.Value("${buukle.agent.im.max-message-chars:8000}")
@@ -147,8 +150,43 @@ public class ImMessageServiceImpl implements ImMessageService {
 
         publishToMembers(conversationId, message, userId);
         metrics.increment(AgentMetrics.IM_MESSAGE_SENT, "sender", "USER");
+        if (answerPendingRouterClarification(conversation, message, dto)) {
+            // The text resumed the parked Router run; keep it out of a fresh Router delivery.
+            return toVO(message);
+        }
         ingest(conversationId, message, dto);
         return toVO(message);
+    }
+
+    /**
+     * Consumes the user's plain-text reply as the answer to a pending Router
+     * clarification card, resuming the parked run. Fail-open: any error falls
+     * back to the normal ingest path.
+     */
+    private boolean answerPendingRouterClarification(ImConversation conversation, ImMessage message,
+                                                     SendMessageDTO dto) {
+        if (conversation.getThreadId() == null
+                || !ImConversationType.DM.equals(conversation.getType())
+                || !ImMessageType.TEXT.equals(message.getType())) {
+            return false;
+        }
+        Object content = parseJson(message.getContent());
+        String text = content instanceof ImTextContentVO textContent ? textContent.getText()
+                : extractText(content);
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        SessionInputSpi sessionInputSpi = sessionInputPortProvider.getIfAvailable();
+        if (sessionInputSpi == null) {
+            return false;
+        }
+        try {
+            return sessionInputSpi.answerRouterClarification(conversation.getThreadId(), text);
+        } catch (Exception e) {
+            log.warn("Router clarification intercept failed: conversation={}, error={}",
+                    conversation.getId(), e.getMessage());
+            return false;
+        }
     }
 
     @Override

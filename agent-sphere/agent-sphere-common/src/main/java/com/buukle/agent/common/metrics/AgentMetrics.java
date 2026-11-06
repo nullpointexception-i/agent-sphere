@@ -36,6 +36,11 @@ public class AgentMetrics {
     /** LLM 流式传输层重试与握手失败（用于定位网络型慢回复）。 */
     public static final String LLM_STREAM_RETRY = "llm.stream.retry";
     public static final String LLM_STREAM_HANDSHAKE_FAILED = "llm.stream.handshake_failed";
+    /** Router parked input (clarification / tool approval) bridged to the IM DM. */
+    public static final String ROUTER_INPUT_PROJECTED = "superagent.router_input.projected";
+    public static final String ROUTER_INPUT_ANSWERED = "superagent.router_input.answered";
+    public static final String ROUTER_INPUT_CANCELLED = "superagent.router_input.cancelled";
+    public static final String ROUTER_INPUT_CARD_FAILED = "superagent.router_input.card_failed";
 
     private final ObjectProvider<MeterRegistry> registryProvider;
 
