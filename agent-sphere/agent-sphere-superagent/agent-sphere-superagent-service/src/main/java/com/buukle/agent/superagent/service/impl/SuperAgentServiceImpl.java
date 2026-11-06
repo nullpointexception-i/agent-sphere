@@ -24,6 +24,8 @@ import com.buukle.agent.superagent.service.SuperAgentService;
 import com.buukle.agent.superagent.service.support.SuperAgentPrompt;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -226,6 +228,32 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         return position;
     }
 
+    /**
+     * Refresh managed instance prompts on startup.
+     *
+     * <p>The global router prompt is baked into the Router instance's system prompt when
+     * that instance is created or its role/scope is edited. Without this refresh, prompt
+     * improvements in code would never reach existing Super-Agents.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void refreshManagedPrompts() {
+        List<AgentSuperAgent> agents;
+        try {
+            agents = superAgentMapper.selectList(Wrappers.<AgentSuperAgent>lambdaQuery());
+        } catch (Exception e) {
+            log.warn("Router prompt refresh skipped: {}", e.getMessage());
+            return;
+        }
+        for (AgentSuperAgent agent : agents) {
+            try {
+                syncPrompts(agent);
+            } catch (Exception e) {
+                log.warn("Router prompt refresh failed: agent={}, error={}",
+                        agent.getId(), e.getMessage());
+            }
+        }
+    }
+
     /** Role / scope / position edits must be reflected in both managed instances' prompts. */
     private void syncPrompts(AgentSuperAgent agent) {
         if (agent.getPositionNameEn() == null || agent.getPositionNameEn().isBlank()) {
@@ -252,10 +280,8 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         if (instance == null) {
             return;
         }
-        CreateInstanceDTO dto = new CreateInstanceDTO();
-        dto.setName(instance.getName());
-        dto.setSystemPrompt(systemPrompt);
-        instanceSpi.updateInstance(instanceId, dto);
+        // Targeted update: a full updateInstance would reset status/completionProtocol/config.
+        instanceSpi.updateSystemPrompt(instanceId, systemPrompt);
     }
 
     private AgentSuperAgent requireOwned(Long id) {

@@ -86,6 +86,18 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     }
 
     @Override
+    public void updateSystemPrompt(Long id, String systemPrompt) {
+        if (id == null || systemPrompt == null) {
+            return;
+        }
+        // Internal system maintenance (startup prompt refresh): no request context/owner here.
+        lambdaUpdate()
+                .eq(AgentInstance::getId, id)
+                .set(AgentInstance::getSystemPrompt, systemPrompt)
+                .update();
+    }
+
+    @Override
     public void deleteInstance(Long id) {
         requireOwnership(id);
         removeById(id);

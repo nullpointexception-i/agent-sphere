@@ -170,18 +170,18 @@ class SuperAgentServiceImplTest {
 
         service.update(7L, dto);
 
-        ArgumentCaptor<CreateInstanceDTO> prompts = ArgumentCaptor.forClass(CreateInstanceDTO.class);
-        verify(instanceSpi, times(2)).updateInstance(anyLong(), prompts.capture());
+        ArgumentCaptor<String> prompts = ArgumentCaptor.forClass(String.class);
+        verify(instanceSpi, times(2)).updateSystemPrompt(anyLong(), prompts.capture());
         assertEquals("You are a Technology Specialist. Use the available tools and skills to help "
                 + "the user achieve their goals. Your job scope is Own payroll and tax."
                 + "\n\nglobal router prompt\n\nSTRICT: You may only reply to requests related to "
                 + "Technology Specialist. If a request is unrelated, decline it briefly.",
-                prompts.getAllValues().get(0).getSystemPrompt());
+                prompts.getAllValues().get(0));
         assertEquals("You are a Technology Specialist. Use the available tools and skills to help "
                 + "the user achieve their goals. Your job scope is Own payroll and tax."
                 + "\n\nSTRICT: You may only reply to requests related to Technology Specialist. "
                 + "If a request is unrelated, decline it briefly.",
-                prompts.getAllValues().get(1).getSystemPrompt());
+                prompts.getAllValues().get(1));
         assertEquals("TECH", agent.getPositionCode());
         assertEquals("技术专家", agent.getPositionNameCn());
     }

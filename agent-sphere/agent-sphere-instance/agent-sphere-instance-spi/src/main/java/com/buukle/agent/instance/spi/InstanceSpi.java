@@ -17,6 +17,9 @@ public interface InstanceSpi {
 
     InstanceVO updateInstance(Long id, CreateInstanceDTO dto);
 
+    /** Targeted update: refresh a managed instance's system prompt without touching other columns. */
+    void updateSystemPrompt(Long id, String systemPrompt);
+
     void deleteInstance(Long id);
 
     void batchDeleteInstances(List<Long> ids);
