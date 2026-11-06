@@ -16,6 +16,7 @@ import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.constant.ToolAccessMode;
 import com.buukle.agent.common.sub.agent.ToolRefs;
@@ -341,7 +342,13 @@ public class ContextPreparer {
         // 「没有工具调用」既可能是做完、也可能是放弃，只靠沉默无法区分 —— finish 让它变成显式声明。
         // 纯聊天实例（无任何真实能力且非自主任务）不下发，避免模型用 terse summary 顶替正常回答；
         // 运行期还会用「是否真的用过工具」再兜一层（SessionRunner）。
-        if (noClarification || (capabilities != null && !capabilities.isEmpty())) {
+        //
+        // 合同要求 finish 时无条件下发：STRICT_FINISH 的 run 若拿不到 finish 就没有任何
+        // 合法收口方式（恢复路径曾因 noClarification 丢失而漏发 finish，worker 因此空转
+        // 直到被手动停止）。这条判据不能依赖 noClarification / capabilities 是否成立。
+        boolean strictFinish = CompletionProtocol.from(
+                run == null ? null : run.getCompletionProtocol()) == CompletionProtocol.STRICT_FINISH;
+        if (noClarification || (capabilities != null && !capabilities.isEmpty()) || strictFinish) {
             long finishId = BuiltinToolEnum.FINISH.getId();
             Map<String, Object> finishBinding = new HashMap<>();
             finishBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, FinishConstants.INTERNAL_NAME);

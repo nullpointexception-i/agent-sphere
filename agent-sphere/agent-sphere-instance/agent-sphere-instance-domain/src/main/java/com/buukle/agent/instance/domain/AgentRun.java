@@ -24,6 +24,15 @@ public class AgentRun {
     private String runMode;
     /** Snapshot of the instance completion contract for this run. */
     private String completionProtocol;
+    /**
+     * 创建时快照：自主任务（Worker / 任务型 run）禁止向用户澄清。
+     *
+     * <p>必须落库（V100）。此前只写在内存的 RunVO 上，任何恢复路径
+     * （claimForResume / getRun / 审批或等待恢复）从 DB 重建 run 时都会丢，
+     * 导致 ContextPreparer 判定 noClarification=false：finish 不再注册、
+     * ask_clarification 反而注册，STRICT_FINISH 的 worker 因此没有收口工具而空转。
+     */
+    private Boolean noClarification;
     /** 聊天图片附件引用 JSON（[{"fileKey","contentType"}]）；Timeline USER 行回显用。 */
     private String attachments;
     /** 命中循环次数上限被强收口（任务守卫据此判失败，避免"半成品"冒充完成）。 */

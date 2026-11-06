@@ -29,6 +29,7 @@ public class RunConverter {
         vo.setStatus(run.getStatus());
         vo.setRunMode(run.getRunMode());
         vo.setCompletionProtocol(run.getCompletionProtocol());
+        vo.setNoClarification(run.getNoClarification());
         vo.setLoopCapped(run.getLoopCapped());
         vo.setLoopCount(run.getLoopCount());
         vo.setLoopLimit(run.getLoopLimit());
@@ -53,6 +54,8 @@ public class RunConverter {
                 ? JsonUtils.toJson(dto.getAttachments()) : null);
         run.setStatus(RunEnum.STATUS_PENDING);
         run.setRunMode(dto.getRunMode() != null ? dto.getRunMode() : RunMode.WRITE.name());
+        // Column is NOT NULL: normalize an absent DTO value to false at creation time.
+        run.setNoClarification(Boolean.TRUE.equals(dto.getNoClarification()));
         run.setReasoningEffort(dto.getReasoningEffort());
         return run;
     }
@@ -73,6 +76,9 @@ public class RunConverter {
         run.setStatus(vo.getStatus());
         run.setRunMode(vo.getRunMode());
         run.setCompletionProtocol(vo.getCompletionProtocol());
+        // null is intentionally preserved: MyBatis-Plus skips null fields on update,
+        // so an older VO cannot silently clear a persisted true.
+        run.setNoClarification(vo.getNoClarification());
         run.setLoopCapped(vo.getLoopCapped());
         run.setLoopCount(vo.getLoopCount());
         run.setLoopLimit(vo.getLoopLimit());

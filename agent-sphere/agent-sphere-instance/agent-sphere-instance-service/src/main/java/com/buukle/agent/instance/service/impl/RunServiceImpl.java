@@ -53,7 +53,8 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         AgentRun run = runConverter.toDO(dto);
         save(run);
         RunVO vo = runConverter.toVO(run);
-        vo.setNoClarification(dto.getNoClarification());
+        // Mirror the persisted NOT NULL column: absent means false, never null.
+        vo.setNoClarification(Boolean.TRUE.equals(dto.getNoClarification()));
         return vo;
     }
 
