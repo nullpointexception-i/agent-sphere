@@ -263,6 +263,12 @@ public class AgentRouterToolService {
         return session.getThreadId();
     }
 
+    /** Worker instance bound to a Router session's Super-Agent; null when unset. */
+    public Long workerInstanceId(Long sessionId) {
+        RouterContext ctx = resolve(sessionId);
+        return ctx == null ? null : ctx.agent().getWorkerInstanceId();
+    }
+
     private RouterContext resolve(Long sessionId) {
         if (sessionId == null) {
             return null;

@@ -22,6 +22,7 @@ import com.buukle.agent.common.constant.ToolAccessMode;
 import com.buukle.agent.common.sub.agent.ToolRefs;
 import com.buukle.agent.instance.dtvo.vo.CapabilityFullVO;
 import com.buukle.agent.instance.dtvo.vo.CapabilityVO;
+import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.spi.InstanceCapabilitySpi;
@@ -65,13 +66,15 @@ public class ContextPreparer {
             (long) BuiltinToolEnum.SEND_MESSAGE.getId(),
             (long) BuiltinToolEnum.RECALL_EVENT.getId(),
             (long) BuiltinToolEnum.SUBSCRIBE_THREAD.getId(),
-            (long) BuiltinToolEnum.CLOSE_THREAD.getId());
+            (long) BuiltinToolEnum.CLOSE_THREAD.getId(),
+            (long) BuiltinToolEnum.WORKER_CAPABILITY.getId());
     private static final Set<Long> ROUTER_ALLOWED_IDS = Set.of(
             (long) BuiltinToolEnum.DISPATCH_WORKER.getId(),
             (long) BuiltinToolEnum.SEND_MESSAGE.getId(),
             (long) BuiltinToolEnum.RECALL_EVENT.getId(),
             (long) BuiltinToolEnum.SUBSCRIBE_THREAD.getId(),
             (long) BuiltinToolEnum.CLOSE_THREAD.getId(),
+            (long) BuiltinToolEnum.WORKER_CAPABILITY.getId(),
             (long) BuiltinToolEnum.FINISH.getId(),
             (long) BuiltinToolEnum.ASK_CLARIFICATION.getId(),
             (long) BuiltinToolEnum.CURRENT_TIME.getId(),
@@ -102,6 +105,20 @@ public class ContextPreparer {
         full.setAuthConfig(authConfig);
         full.setToolSchema(toolSchema);
         return full;
+    }
+
+    /**
+     * Preview the tools an instance would receive, for Router → Worker feasibility checks.
+     * Mirrors the Worker dispatch context: no clarification tool and no run-mode filtering.
+     */
+    public List<RuntimeTool> previewTools(InstanceVO instance) {
+        if (instance == null || instance.getId() == null) {
+            return List.of();
+        }
+        List<CapabilityVO> capabilities = capabilitySpi.getCapabilitiesByInstance(instance.getId());
+        ValidationResult validated = ValidationResult.builder().agentInstance(instance).build();
+        // Same as a real Worker session: no clarification tool, and Router-only tools removed.
+        return applyRolePolicy(resolveTools(capabilities, validated, true, null), validated);
     }
 
     public KernelContext prepare(RunVO run, ValidationResult validated, String message) {
