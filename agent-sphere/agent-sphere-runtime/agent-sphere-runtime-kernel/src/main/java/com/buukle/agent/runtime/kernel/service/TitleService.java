@@ -57,10 +57,10 @@ public class TitleService {
             if (title != null && !title.isBlank()) {
                 sessionSpi.updateSession(sessionId, title);
                 eventPublisher.publishEvent(new RuntimeEventVO(SessionStatus.TITLE_UPDATED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(runId)
-                                .setAssistantReply(title)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(runId)
+                                .assistantReply(title).build()));
             }
         });
     }

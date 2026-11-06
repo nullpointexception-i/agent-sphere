@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -91,16 +92,19 @@ class TimelineRecorderTest {
                 any(), any(), any(), any(), any())).thenReturn(11L);
         recorder.recordCompaction(SESSION_ID, RUN_ID, "compact-1", 7L, TimelineState.RUNNING.getCode(), null);
 
-        RuntimeEventDataVO token = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID)
-                .setRunId(RUN_ID)
-                .setPublishId("compact-1")
-                .setResponse("## Goal\n...");
+        RuntimeEventDataVO token = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID)
+                .runId(RUN_ID)
+                .publishId("compact-1")
+                .response("## Goal\n...").build();
 
-        recorder.stampCompactionSeq(token);
+        RuntimeEventDataVO stamped = recorder.stampCompactionSeq(token);
 
-        assertEquals(11L, token.getSeq());
-        assertEquals(TimelineKind.COMPACTION.getCode(), token.getKind());
+        assertEquals(11L, stamped.getSeq());
+        assertEquals(TimelineKind.COMPACTION.getCode(), stamped.getKind());
+        // The payload is immutable: the source instance must stay untouched.
+        assertNull(token.getSeq());
+        assertNull(token.getKind());
     }
 
     @Test

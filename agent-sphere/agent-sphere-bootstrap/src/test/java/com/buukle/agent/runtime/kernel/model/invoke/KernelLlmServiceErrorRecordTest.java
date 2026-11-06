@@ -3,6 +3,7 @@ package com.buukle.agent.runtime.kernel.model.invoke;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.spi.ModelProviderSpi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,8 +60,8 @@ class KernelLlmServiceErrorRecordTest {
                 consumer.accept(e);
             }
             done.run();
-            return null;
-        }).when(modelProviderSpi).stream(anyString(), anyString(), any(), anyString(),
+            return LlmStreamStats.empty();
+        }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), any(), anyString(),
                 any(ChatCompletionRequestDTO.class), any(), any());
     }
 
@@ -137,7 +138,7 @@ class KernelLlmServiceErrorRecordTest {
     void providerThrows_isRecordedAsFailure() throws Exception {
         doAnswer(inv -> {
             throw new IllegalStateException("connection reset");
-        }).when(modelProviderSpi).stream(anyString(), anyString(), any(), anyString(),
+        }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), any(), anyString(),
                 any(ChatCompletionRequestDTO.class), any(), any());
 
         try {

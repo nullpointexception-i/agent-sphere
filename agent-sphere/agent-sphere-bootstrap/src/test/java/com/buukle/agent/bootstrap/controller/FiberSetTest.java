@@ -29,9 +29,11 @@ class FiberSetTest {
         });
 
         // 等待任务真正开始执行后，传入返回 true 的取消检查器
-        while (!started.get()) {
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        while (!started.get() && System.nanoTime() < deadline) {
             Thread.onSpinWait();
         }
+        assertTrue(started.get(), "task should start before cancellation");
 
         ConcurrentHashMap<String, String> results = fibers.awaitAll(() -> started.get());
 

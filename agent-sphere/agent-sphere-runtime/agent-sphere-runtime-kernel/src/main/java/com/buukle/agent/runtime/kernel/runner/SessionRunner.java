@@ -274,11 +274,11 @@ public class SessionRunner {
                 currentRun.setErrorMessage("Tool approval is no longer resumable: " + approvalResumeId);
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(currentRunId)
-                                .setErrorMessage(currentRun.getErrorMessage())
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(currentRunId)
+                                .errorMessage(currentRun.getErrorMessage())
+                                .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                 return true;
             }
             String systemPrompt = runPromptBuilder.buildSystemPrompt(topCtx);
@@ -333,28 +333,28 @@ public class SessionRunner {
             for (ToolApprovalService.ApprovalCall call : approvalCalls) {
                 String callId = call.call().id();
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(currentRunId)
-                                .setToolName(call.call().name())
-                                .setDisplayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
-                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
-                                .setArgumentsJson(call.call().arguments())
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(currentRunId)
+                                .toolName(call.call().name())
+                                .displayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
+                                .displayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
+                                .argumentsJson(call.call().arguments())
+                                .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId).build()));
                 String result;
                 if (denied.containsKey(callId)) {
                     result = denied.get(callId);
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setToolName(call.call().name())
-                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
-                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
-                                    .setArtifact(result)
-                                    .setErrorMessage("User denied tool execution")
-                                    .setArgumentsJson(call.call().arguments())
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId)));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .toolName(call.call().name())
+                                    .displayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
+                                    .displayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
+                                    .artifact(result)
+                                    .errorMessage("User denied tool execution")
+                                    .argumentsJson(call.call().arguments())
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId).build()));
                 } else {
                     try {
                         result = toolExecutor.execute(call.call(),
@@ -363,16 +363,16 @@ public class SessionRunner {
                         result = "{\"error\":\"" + e.getMessage() + "\"}";
                     }
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setToolName(call.call().name())
-                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
-                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
-                                    .setArtifact(result)
-                                    .setCompressEnabled(compressEnabled(call.call().name(), resumeTools))
-                                    .setArgumentsJson(call.call().arguments())
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId)));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .toolName(call.call().name())
+                                    .displayNameCn(toolExecutor.resolveDisplayName(call.call().name(), resumeTools))
+                                    .displayNameEn(toolExecutor.resolveDisplayNameEn(call.call().name(), resumeTools))
+                                    .artifact(result)
+                                    .compressEnabled(compressEnabled(call.call().name(), resumeTools))
+                                    .argumentsJson(call.call().arguments())
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + callId).build()));
                 }
                 String toolMessage = result;
                 if (call.call().name().equals(
@@ -500,10 +500,10 @@ public class SessionRunner {
             currentRun.setLoopLimit(maxLoopCount);
 
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.RUNNING,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(currentRunId)
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(currentRunId)
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
 
             if (!hasToolCalls) {
                 String todolistText = null;
@@ -647,11 +647,11 @@ public class SessionRunner {
                         currentRun.setErrorMessage(turn.errorMessage());
                         runSpi.updateRun(currentRun);
                         eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                                new RuntimeEventDataVO()
-                                        .setSessionId(sessionId)
-                                        .setRunId(currentRunId)
-                                        .setErrorMessage(turn.errorMessage())
-                                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                                RuntimeEventDataVO.builder()
+                                        .sessionId(sessionId)
+                                        .runId(currentRunId)
+                                        .errorMessage(turn.errorMessage())
+                                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                         break loop;
                     }
                     // LLM 瞬时失败：梯度退避 + 挂起（不占执行资源），到点由 wait 调度器唤醒重跑同一轮。
@@ -682,18 +682,18 @@ public class SessionRunner {
                     }
 
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.WAITING,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setWaitKind(WaitConstants.KIND_LLM_RETRY)
-                                    .setRetryAttempt(attempt)
-                                    .setRetryMax(maxAttempts)
-                                    .setNextRetryAt(wakeAt.atZone(java.time.ZoneId.systemDefault())
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .waitKind(WaitConstants.KIND_LLM_RETRY)
+                                    .retryAttempt(attempt)
+                                    .retryMax(maxAttempts)
+                                    .nextRetryAt(wakeAt.atZone(java.time.ZoneId.systemDefault())
                                             .toInstant().toEpochMilli())
-                                    .setRetryHint(turn.retryHint())
-                                    .setRetryHttpStatus(turn.httpStatus())
-                                    .setErrorMessage(turn.errorMessage())
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                                    .retryHint(turn.retryHint())
+                                    .retryHttpStatus(turn.httpStatus())
+                                    .errorMessage(turn.errorMessage())
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                     log.warn("LLM transient failure, run {} suspended for retry {}/{} in {}ms (hint={}, status={})",
                             currentRunId, attempt, maxAttempts, delayMs, turn.retryHint(), turn.httpStatus());
                     break loop;
@@ -706,11 +706,11 @@ public class SessionRunner {
                     currentRun.setStatus(RunStatus.FAILED.name());
                     runSpi.updateRun(currentRun);
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setErrorMessage(turn.errorMessage())
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .errorMessage(turn.errorMessage())
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                     break loop;
                 }
                 case COMPLETE -> {
@@ -744,12 +744,12 @@ public class SessionRunner {
                         currentRun.setStatus(RunStatus.FAILED.name());
                         runSpi.updateRun(currentRun);
                         eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                                new RuntimeEventDataVO()
-                                        .setSessionId(sessionId)
-                                        .setRunId(currentRunId)
-                                        .setErrorMessage("模型连续 " + currentSilentTurn
+                                RuntimeEventDataVO.builder()
+                                        .sessionId(sessionId)
+                                        .runId(currentRunId)
+                                        .errorMessage("模型连续 " + currentSilentTurn
                                                 + " 轮未调用任何工具，也未调用 finish 收口")
-                                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                         break loop;
                     }
                     if (implicitText) {
@@ -770,11 +770,11 @@ public class SessionRunner {
                     currentRun.setStatus(RunStatus.COMPLETED.name());
                     runSpi.updateRun(currentRun);
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setAssistantReply(currentRun.getAssistantReply())
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .assistantReply(currentRun.getAssistantReply())
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                     logSkillCompliance(sessionId, currentRunId);
                     break loop;
                 }
@@ -857,10 +857,10 @@ public class SessionRunner {
                     currentRun.setStatus(RunStatus.AWAITING_USER.name());
                     runSpi.updateRun(currentRun);
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.AWAITING_USER,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                     break loop;
                 }
             }
@@ -868,14 +868,14 @@ public class SessionRunner {
             for (TurnToolCall tc : turn.toolCalls()) {
                 String runPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(currentRunId)
-                                .setToolName(tc.name())
-                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                                .setArgumentsJson(tc.arguments())
-                                .setPublishId(runPublishId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(currentRunId)
+                                .toolName(tc.name())
+                                .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                .argumentsJson(tc.arguments())
+                                .publishId(runPublishId).build()));
             }
 
             // 含 delegate 工具的轮次：外层 fiber 整批执行超时要容得下子 Agent 自身预算（子 Agent 会按自己的 deadline 自终止），
@@ -909,16 +909,16 @@ public class SessionRunner {
                         : (sr.result() != null ? sr.result() : "");
                 if (deniedReasons.containsKey(matching.id())) {
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sid)
-                                    .setRunId(rid)
-                                    .setToolName(matching.name())
-                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
-                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
-                                    .setArtifact(artifact)
-                                    .setErrorMessage("User denied tool execution")
-                                    .setArgumentsJson(matching.arguments())
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sid)
+                                    .runId(rid)
+                                    .toolName(matching.name())
+                                    .displayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
+                                    .displayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
+                                    .artifact(artifact)
+                                    .errorMessage("User denied tool execution")
+                                    .argumentsJson(matching.arguments())
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id()).build()));
                     return;
                 }
                 // wait 的“结果”只是挂起信号，不代表等待已经完成：此时保持 RUNNING，
@@ -928,16 +928,16 @@ public class SessionRunner {
                         ? ToolCallStatus.RUNNING
                         : ToolCallStatus.SUCCEEDED;
                 eventPublisher.publishEvent(new RuntimeEventVO(resultStatus,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sid)
-                                .setRunId(rid)
-                                .setToolName(matching.name())
-                                .setDisplayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
-                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
-                                .setArtifact(artifact)
-                                .setCompressEnabled(compressEnabled(matching.name(), tl))
-                                .setArgumentsJson(matching.arguments())
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id())));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sid)
+                                .runId(rid)
+                                .toolName(matching.name())
+                                .displayNameCn(toolExecutor.resolveDisplayName(matching.name(), tl))
+                                .displayNameEn(toolExecutor.resolveDisplayNameEn(matching.name(), tl))
+                                .artifact(artifact)
+                                .compressEnabled(compressEnabled(matching.name(), tl))
+                                .argumentsJson(matching.arguments())
+                                .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id()).build()));
             });
 
             // Check for cancellation before ANY tool submission
@@ -964,26 +964,26 @@ public class SessionRunner {
                     }
                     log.warn("Discarding tool call {} from a finish turn (run {})", other.name(), currentRunId);
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setToolName(other.name())
-                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(other.name(), tools))
-                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(other.name(), tools))
-                                    .setErrorMessage("skipped: finish was called in the same turn")
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + other.id())));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .toolName(other.name())
+                                    .displayNameCn(toolExecutor.resolveDisplayName(other.name(), tools))
+                                    .displayNameEn(toolExecutor.resolveDisplayNameEn(other.name(), tools))
+                                    .errorMessage("skipped: finish was called in the same turn")
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + other.id()).build()));
                 }
                 // 关闭 finish 自身的 PENDING 记录
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(currentRunId)
-                                .setToolName(finishCall.name())
-                                .setDisplayNameCn(FinishConstants.DISPLAY_NAME_CN)
-                                .setDisplayNameEn(FinishConstants.DISPLAY_NAME)
-                                .setArgumentsJson(finishCall.arguments())
-                                .setArtifact(finishCall.arguments())
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + finishCall.id())));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(currentRunId)
+                                .toolName(finishCall.name())
+                                .displayNameCn(FinishConstants.DISPLAY_NAME_CN)
+                                .displayNameEn(FinishConstants.DISPLAY_NAME)
+                                .argumentsJson(finishCall.arguments())
+                                .artifact(finishCall.arguments())
+                                .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + finishCall.id()).build()));
                 String declaredSummary = jsonField(finishCall.arguments(), FinishConstants.JSON_SUMMARY);
                 String declaredStatus = jsonField(finishCall.arguments(), FinishConstants.JSON_STATUS);
                 String reply = declaredSummary != null && !declaredSummary.isBlank()
@@ -996,11 +996,11 @@ public class SessionRunner {
                 currentRun.setStatus(RunStatus.COMPLETED.name());
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(currentRunId)
-                                .setAssistantReply(currentRun.getAssistantReply())
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(currentRunId)
+                                .assistantReply(currentRun.getAssistantReply())
+                                .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                 log.info("Run {} finished by finish tool: declaredStatus={}", currentRunId, declaredStatus);
                 break loop;
             }
@@ -1024,13 +1024,13 @@ public class SessionRunner {
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                 for (TurnToolCall tc : turn.toolCalls()) {
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(currentRunId)
-                                    .setToolName(tc.name())
-                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id())));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(currentRunId)
+                                    .toolName(tc.name())
+                                    .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                    .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id()).build()));
                 }
                 break;
             }
@@ -1057,10 +1057,10 @@ public class SessionRunner {
                 currentRun.setStatus(suspendStatus.name());
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(suspendStatus,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(currentRunId)
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(currentRunId)
+                                .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                 break;
             }
 
@@ -1113,11 +1113,11 @@ public class SessionRunner {
                 currentRun.setStatus(RunStatus.COMPLETED.name());
                 runSpi.updateRun(currentRun);
                 eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(currentRunId)
-                                .setAssistantReply(fallback)
-                                .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(currentRunId)
+                                .assistantReply(fallback)
+                                .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                 break;
             }
 
@@ -1150,11 +1150,11 @@ public class SessionRunner {
             // 发 CANCELLED（而非 FAILED）：与 DB 状态一致，前端走 run_cancelled 分支显示“已取消”。
             // 旧实现发 FAILED，RuntimeEventListener 收到后又把 DB 覆写回 FAILED —— 取消被记成失败。
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.CANCELLED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(currentRunId)
-                            .setAssistantReply(RunnerConstants.CANCEL_MSG)
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(currentRunId)
+                            .assistantReply(RunnerConstants.CANCEL_MSG)
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
         }
         // 安全网：任何 break / 自然退出都不允许把 run 留在 RUNNING。
         // 此时 coordinator 会把 session state 置 IDLE 并清掉 owner，而 OrphanRunSweeper 只认
@@ -1164,11 +1164,11 @@ public class SessionRunner {
             currentRun.setStatus(RunStatus.FAILED.name());
             runSpi.updateRun(currentRun);
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(currentRunId)
-                            .setErrorMessage(RunnerConstants.RUN_LOOP_NO_TERMINAL_MSG)
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId)));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(currentRunId)
+                            .errorMessage(RunnerConstants.RUN_LOOP_NO_TERMINAL_MSG)
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
         }
         return parked;
     }
@@ -1182,11 +1182,11 @@ public class SessionRunner {
         run.setErrorMessage(message);
         runSpi.updateRun(run);
         eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(run.getId())
-                        .setErrorMessage(message)
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(run.getId())
+                        .errorMessage(message)
+                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId()).build()));
     }
 
     /** 从异常完成的 future 中提取可落库的失败原因（ExecutionException 需要拆 cause）。 */
@@ -1472,12 +1472,12 @@ public class SessionRunner {
                         log.info("No attachment-capable route, degrading to text: session={}, run={}", sessionId, runId);
                         stripImageParts(messages);
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                new RuntimeEventDataVO()
-                                        .setSessionId(sessionId).setRunId(runId)
-                                        .setResponse("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
-                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                        .setPublishId(UUID.randomUUID().toString())));
+                                RuntimeEventDataVO.builder()
+                                        .sessionId(sessionId).runId(runId)
+                                        .response("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
+                                        .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                        .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                        .publishId(UUID.randomUUID().toString()).build()));
                     } else {
                         routes = capable;
                     }
@@ -1582,48 +1582,48 @@ public class SessionRunner {
                                     case LLMEvent.TextDelta t -> {
                                         contentRef.updateAndGet(c -> c + t.text());
                                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
-                                                new RuntimeEventDataVO()
-                                                        .setSessionId(sessionId).setRunId(runId).setResponse(t.text())));
+                                                RuntimeEventDataVO.builder()
+                                                        .sessionId(sessionId).runId(runId).response(t.text()).build()));
                                     }
                                     case LLMEvent.ReasoningDelta r -> {
                                         reasoningRef.updateAndGet(c -> c + r.text());
                                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                                new RuntimeEventDataVO()
-                                                        .setSessionId(sessionId).setRunId(runId)
-                                                        .setResponse(r.text())
-                                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                                        .setPublishId(UUID.randomUUID().toString())));
+                                                RuntimeEventDataVO.builder()
+                                                        .sessionId(sessionId).runId(runId)
+                                                        .response(r.text())
+                                                        .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                                                        .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                                        .publishId(UUID.randomUUID().toString()).build()));
                                     }
                                     case LLMEvent.ToolInputStart start -> {
                                         // 参数可能还要流式生成几十秒（如整篇文档），先给前端一个
                                         // “正在生成调用参数”的即时反馈；审批卡仍等参数完整后创建。
                                         eventPublisher.publishEvent(new RuntimeEventVO(
                                                 FlowEventType.REASONING_TOKEN,
-                                                new RuntimeEventDataVO()
-                                                        .setSessionId(sessionId)
-                                                        .setRunId(runId)
-                                                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + start.id())
-                                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_INPUT_PREPARING)
-                                                        .setToolName(start.name())
-                                                        .setDisplayNameCn(toolExecutor.resolveDisplayName(start.name(), tools))
-                                                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(start.name(), tools))
-                                                        .setResponse("⚙️ " + toolExecutor.resolveDisplayName(start.name(), tools)
-                                                                + "：正在生成调用参数…")));
+                                                RuntimeEventDataVO.builder()
+                                                        .sessionId(sessionId)
+                                                        .runId(runId)
+                                                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + start.id())
+                                                        .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                                        .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_INPUT_PREPARING)
+                                                        .toolName(start.name())
+                                                        .displayNameCn(toolExecutor.resolveDisplayName(start.name(), tools))
+                                                        .displayNameEn(toolExecutor.resolveDisplayNameEn(start.name(), tools))
+                                                        .response("⚙️ " + toolExecutor.resolveDisplayName(start.name(), tools)
+                                                                + "：正在生成调用参数…").build()));
                                     }
                                     case LLMEvent.ToolCall tc -> {
                                         String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
                                         toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
                                         eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
-                                                new RuntimeEventDataVO()
-                                                        .setSessionId(sessionId).setRunId(runId)
-                                                        .setTurnNo(loopCount)
-                                                        .setToolName(tc.name())
-                                                        .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
-                                                        .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
-                                                        .setArgumentsJson(tc.arguments())
-                                                        .setPublishId(callPublishId)));
+                                                RuntimeEventDataVO.builder()
+                                                        .sessionId(sessionId).runId(runId)
+                                                        .turnNo(loopCount)
+                                                        .toolName(tc.name())
+                                                        .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), tools))
+                                                        .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
+                                                        .argumentsJson(tc.arguments())
+                                                        .publishId(callPublishId).build()));
                                         // finish 的 summary 就是最终答案：正文为空时作为助手正文实时推给前端。
                                         // 否则前端只剩一张 finish 工具卡、答案空白；正文已流式输出时不重复发。
                                         if (FinishConstants.TOOL_NAME.equals(tc.name())) {
@@ -1631,9 +1631,9 @@ public class SessionRunner {
                                             if (summary != null && !summary.isBlank() && contentRef.get().isEmpty()) {
                                                 contentRef.set(summary);
                                                 eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
-                                                        new RuntimeEventDataVO()
-                                                                .setSessionId(sessionId).setRunId(runId)
-                                                                .setResponse(summary)));
+                                                        RuntimeEventDataVO.builder()
+                                                                .sessionId(sessionId).runId(runId)
+                                                                .response(summary).build()));
                                             }
                                         }
                                     }
@@ -1686,12 +1686,12 @@ public class SessionRunner {
                         String failure = futureFailureMessage(future);
                         errorRef.compareAndSet(null, failure);
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                new RuntimeEventDataVO()
-                                        .setSessionId(sessionId).setRunId(runId)
-                                        .setResponse("⚠️ " + route.getModelName() + ": " + failure + "，尝试备用路由...")
-                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                        .setPublishId(UUID.randomUUID().toString())));
+                                RuntimeEventDataVO.builder()
+                                        .sessionId(sessionId).runId(runId)
+                                        .response("⚠️ " + route.getModelName() + ": " + failure + "，尝试备用路由...")
+                                        .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                        .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                        .publishId(UUID.randomUUID().toString()).build()));
                         throw new RouteAttemptException("Route failed: " + failure, null, true);
                     }
 
@@ -1699,12 +1699,12 @@ public class SessionRunner {
                     if (error != null) {
                         acceptingEvents.set(false);
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                                new RuntimeEventDataVO()
-                                        .setSessionId(sessionId).setRunId(runId)
-                                        .setResponse("⚠️ " + route.getModelName() + ": " + error + "，尝试备用路由...")
-                                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                        .setPublishId(UUID.randomUUID().toString())));
+                                RuntimeEventDataVO.builder()
+                                        .sessionId(sessionId).runId(runId)
+                                        .response("⚠️ " + route.getModelName() + ": " + error + "，尝试备用路由...")
+                                        .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                        .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                        .publishId(UUID.randomUUID().toString()).build()));
                         throw new RouteAttemptException("Route failed: " + error,
                                 errorStatusRef.get(), errorRetryableRef.get());
                     }

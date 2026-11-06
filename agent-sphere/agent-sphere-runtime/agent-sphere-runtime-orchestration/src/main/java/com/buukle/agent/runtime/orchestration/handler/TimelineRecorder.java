@@ -77,21 +77,20 @@ public class TimelineRecorder {
         }
     }
 
-    /** 主 Agent 助手容器：首个 token 建行并回填 seq（打字机目标）。 */
-    public void stampStreamingSeq(Long sessionId, Long runId, com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO data) {
+    /** 主 Agent 助手容器：首个 token 建行并回填 seq（打字机目标）。返回带 seq/kind 的副本。 */
+    public RuntimeEventDataVO stampStreamingSeq(Long sessionId, Long runId, RuntimeEventDataVO data) {
         if (runId == null) {
-            return;
+            return data;
         }
         Long seq = assistantSeqByRun.get(runId);
         if (seq == null) {
             seq = openAssistantTurn(sessionId, runId);
             if (seq == null || seq <= 0) {
-                return;
+                return data;
             }
             assistantSeqByRun.put(runId, seq);
         }
-        data.setSeq(seq);
-        data.setKind(TimelineKind.ASSISTANT.getCode());
+        return data.toBuilder().seq(seq).kind(TimelineKind.ASSISTANT.getCode()).build();
     }
 
     /**
@@ -422,8 +421,8 @@ public class TimelineRecorder {
         }
     }
 
-    /** 压缩输出流式 token：按 publishId 回填 seq/kind（行应在 RUNNING 事件时已建好）。 */
-    public void stampCompactionSeq(RuntimeEventDataVO data) {
+    /** 压缩输出流式 token：按 publishId 回填 seq/kind（行应在 RUNNING 事件时已建好）。返回副本。 */
+    public RuntimeEventDataVO stampCompactionSeq(RuntimeEventDataVO data) {
         Long runId = data.getRunId();
         String key = compactionKey(data.getPublishId(), runId);
         Long seq = compactionSeqByPublishId.get(key);
@@ -432,9 +431,9 @@ public class TimelineRecorder {
                     TimelineState.RUNNING.getCode(), null);
         }
         if (seq != null && seq > 0) {
-            data.setSeq(seq);
-            data.setKind(TimelineKind.COMPACTION.getCode());
+            return data.toBuilder().seq(seq).kind(TimelineKind.COMPACTION.getCode()).build();
         }
+        return data;
     }
 
     private static String compactionKey(String publishId, Long runId) {

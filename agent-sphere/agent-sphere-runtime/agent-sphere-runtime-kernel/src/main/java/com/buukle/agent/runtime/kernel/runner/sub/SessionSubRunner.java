@@ -228,16 +228,16 @@ public class SessionSubRunner {
                 messages.add(assistantToolCallWithReasoning(tc, turn.reasoning()));
                 String publishId = policy.publishIdPrefix() + subRunToolId + "-" + tc.id();
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
-                        new RuntimeEventDataVO()
-                                .setSessionId(childCtx.getSessionId())
-                                .setRunId(childCtx.getRunId())
-                                .setToolName(tc.name())
-                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
-                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
-                                .setSubAgentRunId(subAgentRunId)
-                                .setParentToolCallId(childCtx.getParentToolCallId())
-                                .setArgumentsJson(tc.arguments())
-                                .setPublishId(publishId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(childCtx.getSessionId())
+                                .runId(childCtx.getRunId())
+                                .toolName(tc.name())
+                                .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
+                                .subAgentRunId(subAgentRunId)
+                                .parentToolCallId(childCtx.getParentToolCallId())
+                                .argumentsJson(tc.arguments())
+                                .publishId(publishId).build()));
                 String result;
                 try {
                     RuntimeTool executed = subTools.stream()
@@ -269,31 +269,31 @@ public class SessionSubRunner {
                     }
 eventPublisher.publishEvent(new RuntimeEventVO(
                         approvalDenied || accessDenied != null ? ToolCallStatus.FAILED : ToolCallStatus.SUCCEEDED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(childCtx.getSessionId())
-                                .setRunId(childCtx.getRunId())
-                                .setToolName(tc.name())
-                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
-                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
-                                .setSubAgentRunId(subAgentRunId)
-                                .setParentToolCallId(childCtx.getParentToolCallId())
-                                .setArtifact(result)
-                                .setErrorMessage(approvalDenied ? "User denied tool execution"
+                        RuntimeEventDataVO.builder()
+                                .sessionId(childCtx.getSessionId())
+                                .runId(childCtx.getRunId())
+                                .toolName(tc.name())
+                                .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
+                                .subAgentRunId(subAgentRunId)
+                                .parentToolCallId(childCtx.getParentToolCallId())
+                                .artifact(result)
+                                .errorMessage(approvalDenied ? "User denied tool execution"
                                         : (accessDenied != null ? "Read-only tool access denied" : null))
-                                .setPublishId(publishId)));
+                                .publishId(publishId).build()));
                 } catch (Exception e) {
                     result = "{\"error\":\"" + e.getMessage() + "\"}";
 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(childCtx.getSessionId())
-                                .setRunId(childCtx.getRunId())
-                                .setToolName(tc.name())
-                                .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
-                                .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
-                                .setSubAgentRunId(subAgentRunId)
-                                .setParentToolCallId(childCtx.getParentToolCallId())
-                                .setErrorMessage(e.getMessage())
-                                .setPublishId(publishId)));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(childCtx.getSessionId())
+                                .runId(childCtx.getRunId())
+                                .toolName(tc.name())
+                                .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
+                                .subAgentRunId(subAgentRunId)
+                                .parentToolCallId(childCtx.getParentToolCallId())
+                                .errorMessage(e.getMessage())
+                                .publishId(publishId).build()));
                 }
                 messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id()).setContent(result));
                 toolResults.put(tc.id(), result);
@@ -362,15 +362,15 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 ScreenshotObservationSupport.stripImageParts(messages);
                 eventPublisher.publishEvent(new RuntimeEventVO(
                         FlowEventType.REASONING_TOKEN,
-                        new RuntimeEventDataVO()
-                                .setSessionId(ctx.getSessionId())
-                                .setRunId(ctx.getRunId())
-                                .setSubAgentRunId(subAgentRunId)
-                                .setParentToolCallId(ctx.getParentToolCallId())
-                                .setResponse("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
-                                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                .setPublishId(UUID.randomUUID().toString())));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(ctx.getSessionId())
+                                .runId(ctx.getRunId())
+                                .subAgentRunId(subAgentRunId)
+                                .parentToolCallId(ctx.getParentToolCallId())
+                                .response("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
+                                .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                .publishId(UUID.randomUUID().toString()).build()));
             }
         }
         try {
@@ -410,53 +410,53 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                     contentRef.updateAndGet(c -> c + t.text());
                                     // 子 Agent model reply 实时流式发布（供前端子卡片展示回复）
                                     eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
-                                            new RuntimeEventDataVO()
-                                                    .setSessionId(ctx.getSessionId())
-                                                    .setRunId(ctx.getRunId())
-                                                    .setNodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
-                                                    .setSubAgentRunId(subAgentRunId)
-                                                    .setParentToolCallId(ctx.getParentToolCallId())
-                                                    .setResponse(t.text())
-                                                    .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8))));
+                                            RuntimeEventDataVO.builder()
+                                                    .sessionId(ctx.getSessionId())
+                                                    .runId(ctx.getRunId())
+                                                    .nodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
+                                                    .subAgentRunId(subAgentRunId)
+                                                    .parentToolCallId(ctx.getParentToolCallId())
+                                                    .response(t.text())
+                                                    .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8)).build()));
                                 }
                                 case LLMEvent.ReasoningDelta r -> {
                                     boolean firstDelta = reasoningRef.get().isBlank();
                                     reasoningRef.updateAndGet(c -> c + r.text());
-                                    RuntimeEventDataVO data = new RuntimeEventDataVO()
-                                            .setSessionId(ctx.getSessionId())
-                                            .setRunId(ctx.getRunId())
-                                            .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                            .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                            .setPublishId(UUID.randomUUID().toString())
-                                            .setSubAgentRunId(subAgentRunId)
-                                            .setParentToolCallId(ctx.getParentToolCallId())
-                                            // 子 Agent thinking 全程打 sub-run 标记：前端按 nodeName 路由到子卡片
-                                            .setNodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
-                                            // 首帧标记：前端据此刻新 LLM 轮（避免解析哨兵前缀）
-                                            .setFirstFrame(firstDelta);
                                     // 首帧加哨兵行，前端据此新建一个 sub-run 段；次帧原样追加到当前段
+                                    String responseText = r.text();
                                     if (firstDelta) {
                                         String name = displayName != null && !displayName.isBlank()
                                                 ? displayName : String.valueOf(subRunToolId);
-                                        data.setResponse(subRunPolicy.markerPrefix() + subRunToolId + ": " + name + "\n" + r.text());
-                                    } else {
-                                        data.setResponse(r.text());
+                                        responseText = subRunPolicy.markerPrefix() + subRunToolId + ": " + name + "\n" + responseText;
                                     }
+                                    RuntimeEventDataVO data = RuntimeEventDataVO.builder()
+                                            .sessionId(ctx.getSessionId())
+                                            .runId(ctx.getRunId())
+                                            .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                                            .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                                            .publishId(UUID.randomUUID().toString())
+                                            .subAgentRunId(subAgentRunId)
+                                            .parentToolCallId(ctx.getParentToolCallId())
+                                            // 子 Agent thinking 全程打 sub-run 标记：前端按 nodeName 路由到子卡片
+                                            .nodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
+                                            // 首帧标记：前端据此刻新 LLM 轮（避免解析哨兵前缀）
+                                            .firstFrame(firstDelta)
+                                            .response(responseText).build();
                                     eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN, data));
                                 }
                                 case LLMEvent.ToolCall tc -> {
                                     toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
                                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
-                                            new RuntimeEventDataVO()
-                                                    .setSessionId(ctx.getSessionId())
-                                                    .setRunId(ctx.getRunId())
-                                                    .setToolName(tc.name())
-                                                    .setDisplayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
-                                                    .setDisplayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
-                                                    .setArgumentsJson(tc.arguments())
-                                                    .setSubAgentRunId(subAgentRunId)
-                                                    .setParentToolCallId(ctx.getParentToolCallId())
-                                                    .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + tc.id())));
+                                            RuntimeEventDataVO.builder()
+                                                    .sessionId(ctx.getSessionId())
+                                                    .runId(ctx.getRunId())
+                                                    .toolName(tc.name())
+                                                    .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                                                    .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
+                                                    .argumentsJson(tc.arguments())
+                                                    .subAgentRunId(subAgentRunId)
+                                                    .parentToolCallId(ctx.getParentToolCallId())
+                                                    .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + tc.id()).build()));
                                 }
                                 case LLMEvent.Error e -> errorRef.set(e.message());
                                 default -> {
@@ -560,11 +560,11 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
 
     private void publishReasoning(String text, long subRunToolId) {
         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
-                new RuntimeEventDataVO()
-                        .setResponse(text)
-                        .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                        .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                        .setPublishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8))));
+                RuntimeEventDataVO.builder()
+                        .response(text)
+                        .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                        .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                        .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8)).build()));
     }
 
     /** 子 Agent 工具集 = 父 tools 全集，剔除 ask_clarification 与 wait。 */

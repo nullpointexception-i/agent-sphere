@@ -172,11 +172,11 @@ public class StaleRunningRunReconciler {
         fresh.setErrorMessage(reason);
         runSpi.updateRun(fresh);
         eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setErrorMessage(reason)
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .errorMessage(reason)
+                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId).build()));
 
         // 死 run 的 session 若还停在 RUNNING（副本崩溃场景），顺手复位；残留排队输入交给 wake 继续跑。
         RBucket<String> stateBucket = redissonClient.getBucket(

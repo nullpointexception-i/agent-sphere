@@ -80,10 +80,10 @@ class RouterInputBridgeTest {
         row.setOptions("[\"差旅\",\"办公\"]");
         row.setMultiple(false);
         when(clarificationMapper.selectOne(any(Wrapper.class))).thenReturn(row);
-        RuntimeEventDataVO data = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID)
-                .setClarificationId("c1abc123").setPrompt("缺少报销类型").setMultiple(true)
-                .setArgumentsJson("[\"其他\"]");
+        RuntimeEventDataVO data = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID)
+                .clarificationId("c1abc123").prompt("缺少报销类型").multiple(true)
+                .argumentsJson("[\"其他\"]").build();
 
         bridge.onEvent(new RuntimeEventVO(ClarificationStatus.PENDING, data));
 
@@ -125,10 +125,10 @@ class RouterInputBridgeTest {
     @Test
     void approvalPendingProjectsApprovalCommand() {
         bridge.onEvent(new RuntimeEventVO(ToolApprovalStatus.TOOL_APPROVAL_PENDING,
-                new RuntimeEventDataVO()
-                        .setSessionId(SESSION_ID).setRunId(RUN_ID)
-                        .setApprovalId("ap1abc456").setPrompt("需要确认工具调用")
-                        .setToolCallsJson("[{\"callId\":\"call_1\"}]")));
+                RuntimeEventDataVO.builder()
+                        .sessionId(SESSION_ID).runId(RUN_ID)
+                        .approvalId("ap1abc456").prompt("需要确认工具调用")
+                        .toolCallsJson("[{\"callId\":\"call_1\"}]").build()));
 
         ArgumentCaptor<SessionInputCommand> captor = ArgumentCaptor.forClass(SessionInputCommand.class);
         verify(sessionInputSpi).projectPending(captor.capture());
@@ -140,7 +140,7 @@ class RouterInputBridgeTest {
     @Test
     void terminalRunCancelsPendingInputs() {
         bridge.onEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                new RuntimeEventDataVO().setSessionId(SESSION_ID).setRunId(RUN_ID)));
+                RuntimeEventDataVO.builder().sessionId(SESSION_ID).runId(RUN_ID).build()));
 
         verify(sessionInputSpi).projectRunTerminal(RUN_ID);
     }
@@ -154,7 +154,7 @@ class RouterInputBridgeTest {
 
         bridge.onEvent(new RuntimeEventVO(ClarificationStatus.PENDING, clarifyData()));
         bridge.onEvent(new RuntimeEventVO(RunStatus.COMPLETED,
-                new RuntimeEventDataVO().setSessionId(SESSION_ID).setRunId(RUN_ID)));
+                RuntimeEventDataVO.builder().sessionId(SESSION_ID).runId(RUN_ID).build()));
 
         verify(sessionInputSpi, never()).projectPending(any());
         verify(sessionInputSpi, never()).projectRunTerminal(any());
@@ -162,7 +162,7 @@ class RouterInputBridgeTest {
 
     @Test
     void subAgentClarificationIsIgnored() {
-        RuntimeEventDataVO data = clarifyData().setSubAgentRunId(99L);
+        RuntimeEventDataVO data = clarifyData().toBuilder().subAgentRunId(99L).build();
 
         bridge.onEvent(new RuntimeEventVO(ClarificationStatus.PENDING, data));
 
@@ -170,7 +170,7 @@ class RouterInputBridgeTest {
     }
 
     private static RuntimeEventDataVO clarifyData() {
-        return new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID).setClarificationId("c1abc123");
+        return RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID).clarificationId("c1abc123").build();
     }
 }

@@ -26,6 +26,7 @@ import com.buukle.agent.instance.repository.InstanceCapabilityMapper;
 import com.buukle.agent.instance.service.impl.InstanceCapabilityServiceImpl;
 import com.buukle.agent.instance.spi.*;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
@@ -56,6 +57,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.redisson.api.*;
 import org.springframework.context.ApplicationEventPublisher;
@@ -79,6 +81,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /** Real binding services, native loader, runner, executor and transport; storage and model are fixtures. */
+@Timeout(180)
 class ParallelSearchAgentLoopTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Path EXAMPLE = Path.of("../../examples/parallel-search/mcp.json");
@@ -309,8 +312,8 @@ class ParallelSearchAgentLoopTest {
                 } finally {
                     done.run();
                 }
-                return null;
-            }).when(model).stream(anyString(), anyString(), anyString(), anyString(), any(), any(), any());
+                return LlmStreamStats.empty();
+            }).when(model).streamWithStats(anyString(), anyString(), anyString(), anyString(), any(), any(), any());
             ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
             CompactionService compaction = mock(CompactionService.class);
             org.mockito.Mockito.lenient().when(compaction.resolveNominalChatMaxOutput(

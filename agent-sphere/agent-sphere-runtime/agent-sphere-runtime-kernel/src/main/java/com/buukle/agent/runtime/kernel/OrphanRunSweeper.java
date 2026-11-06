@@ -74,11 +74,11 @@ public class OrphanRunSweeper {
                     active.setErrorMessage("interrupted by server restart and superseded by newer run");
                     runSpi.updateRun(active);
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(active.getId())
-                                    .setAssistantReply(active.getErrorMessage())
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + active.getId())));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(active.getId())
+                                    .assistantReply(active.getErrorMessage())
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + active.getId()).build()));
                     stateBucket.delete();
                     var activeSessions = redissonClient.getSet(DistributedRuntimeConstants.KEY_ACTIVE_SESSIONS);
                     if (activeSessions != null) activeSessions.remove(sessionId);

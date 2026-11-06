@@ -122,14 +122,14 @@ public class ToolExecutor {
                             multiple, optionsJson, description, clarificationId);
                     eventPublisher.publishEvent(new RuntimeEventVO(
                             ClarificationStatus.PENDING,
-                            new RuntimeEventDataVO()
-                                    .setRunId(runId)
-                                    .setSessionId(sessionId)
-                                    .setPrompt(title)
-                                    .setType(clarifyType)
-                                    .setMultiple(multiple)
-                                    .setArgumentsJson(optionsJson)
-                                    .setClarificationId(clarificationId)));
+                            RuntimeEventDataVO.builder()
+                                    .runId(runId)
+                                    .sessionId(sessionId)
+                                    .prompt(title)
+                                    .type(clarifyType)
+                                    .multiple(multiple)
+                                    .argumentsJson(optionsJson)
+                                    .clarificationId(clarificationId).build()));
                     return JSON.writeValueAsString(Map.of(
                             ChatClarification.CLARIFYING_JSON_STATUS, ChatClarification.CLARIFYING_STATUS_AWAITING_USER,
                             ChatClarification.CLARIFYING_JSON_CLARIFICATION_ID, clarificationId

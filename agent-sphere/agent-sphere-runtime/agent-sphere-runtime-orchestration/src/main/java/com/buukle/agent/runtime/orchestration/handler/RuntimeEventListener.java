@@ -49,14 +49,14 @@ public class RuntimeEventListener {
     private final TimelineRecorder timelineRecorder;
     private final ToolApprovalSpi toolApprovalSpi;
 
-    private static RuntimeEventVO transformForFrontend(RuntimeEventVO event) {
+    private static RuntimeEventVO transformForFrontend(RuntimeEventVO event, RuntimeEventDataVO data) {
         EventType type = event.getEventType();
         return switch (type) {
-            case ToolCallStatus t -> wrapReasoning(event, toolCallSubType(t));
-            case CompactionStatus c -> wrapReasoning(event, compactSubType(c));
-            case SessionStatus s -> wrapReasoning(event, sessionSubType(s));
-            case RunStatus r -> wrapReasoning(event, runSubType(r));
-            default -> event;
+            case ToolCallStatus t -> wrapReasoning(event, data, toolCallSubType(t));
+            case CompactionStatus c -> wrapReasoning(event, data, compactSubType(c));
+            case SessionStatus s -> wrapReasoning(event, data, sessionSubType(s));
+            case RunStatus r -> wrapReasoning(event, data, runSubType(r));
+            default -> new RuntimeEventVO(type, data);
         };
     }
 
@@ -96,41 +96,9 @@ public class RuntimeEventListener {
         };
     }
 
-    private static RuntimeEventVO wrapReasoning(RuntimeEventVO event, String subType) {
-        RuntimeEventDataVO src = event.getData();
-        RuntimeEventDataVO dst = new RuntimeEventDataVO()
-                .setSessionId(src.getSessionId())
-                .setRunId(src.getRunId())
-                .setPublishId(src.getPublishId())
-                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                .setReasoningSubType(subType)
-                .setAssistantReply(src.getAssistantReply())
-                .setArtifact(src.getArtifact())
-                .setArgumentsJson(src.getArgumentsJson())
-                .setErrorMessage(src.getErrorMessage())
-                .setSubAgentRunId(src.getSubAgentRunId())
-                .setNodeName(src.getNodeName())
-                .setSeq(src.getSeq())
-                .setKind(src.getKind())
-                .setType(src.getType())
-                .setClarificationId(src.getClarificationId())
-                .setMultiple(src.getMultiple())
-                .setPrompt(src.getPrompt())
-                // 重试/状态行元数据：前端据此就地更新 run_status 行，不必再轮询
-                .setWaitKind(src.getWaitKind())
-                .setRetryAttempt(src.getRetryAttempt())
-                .setRetryMax(src.getRetryMax())
-                .setNextRetryAt(src.getNextRetryAt())
-                .setRetryHint(src.getRetryHint())
-                .setRetryHttpStatus(src.getRetryHttpStatus())
-                .setStatus(src.getStatus());
-
+    private static RuntimeEventVO wrapReasoning(RuntimeEventVO event, RuntimeEventDataVO src, String subType) {
         String name = src.getDisplayNameCn() != null ? src.getDisplayNameCn()
                 : (src.getToolName() != null ? src.getToolName() : "");
-        dst.setDisplayNameCn(name);
-        dst.setDisplayNameEn(src.getDisplayNameEn());
-        dst.setToolName(src.getToolName());
-
         String text = switch (subType) {
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_CALL_STARTED -> "⚙️ **" + name + "**: starting...";
             case RuntimeEventTypeConstant.REASONING_SUB_TYPE_TOOL_CALL_IN_PROGRESS -> "⚙️ **" + name + "**: calling...";
@@ -150,7 +118,38 @@ public class RuntimeEventListener {
                     src.getAssistantReply() != null ? src.getAssistantReply() : "⏳ Waiting";
             default -> "";
         };
-        dst.setResponse(text);
+        RuntimeEventDataVO dst = RuntimeEventDataVO.builder()
+                .sessionId(src.getSessionId())
+                .runId(src.getRunId())
+                .publishId(src.getPublishId())
+                .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                .reasoningSubType(subType)
+                .assistantReply(src.getAssistantReply())
+                .statusTitle(src.getStatusTitle())
+                .artifact(src.getArtifact())
+                .argumentsJson(src.getArgumentsJson())
+                .errorMessage(src.getErrorMessage())
+                .subAgentRunId(src.getSubAgentRunId())
+                .nodeName(src.getNodeName())
+                .seq(src.getSeq())
+                .kind(src.getKind())
+                .type(src.getType())
+                .clarificationId(src.getClarificationId())
+                .multiple(src.getMultiple())
+                .prompt(src.getPrompt())
+                // 重试/状态行元数据：前端据此就地更新 run_status 行，不必再轮询
+                .waitKind(src.getWaitKind())
+                .retryAttempt(src.getRetryAttempt())
+                .retryMax(src.getRetryMax())
+                .nextRetryAt(src.getNextRetryAt())
+                .retryHint(src.getRetryHint())
+                .retryHttpStatus(src.getRetryHttpStatus())
+                .status(src.getStatus())
+                .displayNameCn(name)
+                .displayNameEn(src.getDisplayNameEn())
+                .toolName(src.getToolName())
+                .response(text)
+                .build();
 
         return new RuntimeEventVO(FlowEventType.REASONING_TOKEN, dst);
     }
@@ -161,20 +160,22 @@ public class RuntimeEventListener {
         RuntimeEventDataVO data = event.getData();
 
         switch (eventType) {
-            case RunStatus r -> handleRunLifecycle(data, r);
+            case RunStatus r -> data = handleRunLifecycle(data, r);
             case ToolCallStatus s -> handleToolCallLifecycle(data, s);
             case UserInLoopRecordStatus s -> handleUserInLoopLifecycle(data, s);
-            case CompactionStatus s -> handleCompaction(data, s);
+            case CompactionStatus s -> data = handleCompaction(data, s);
             case SessionStatus s -> handleSessionLifecycle(data, s);
-            case FlowEventType f -> handleFlow(data, f);
-            case ChromeCommandEventType s -> handleChromeCommand(event, data);
+            case FlowEventType f -> data = handleFlow(data, f);
             case ClarificationStatus s -> handleClarification(data, s);
             case ToolApprovalStatus s -> handleToolApproval(data, s);
+            // Chrome commands now travel as their own record event (ChromeCommandEvent).
+            case ChromeCommandEventType ignored -> {
+            }
         }
 
         Long sessionId = data != null ? data.getSessionId() : null;
         if (sessionId != null) {
-            RuntimeEventVO frontendEvent = transformForFrontend(event);
+            RuntimeEventVO frontendEvent = transformForFrontend(event, data);
             // 新 run 开始时清空该 session 缓存，避免重连后重放旧 run 事件
             if (event.getEventType() instanceof RunStatus s && s == RunStatus.PENDING) {
                 eventCache.clearSessionEvents(sessionId);
@@ -186,11 +187,9 @@ public class RuntimeEventListener {
     }
 
     /** 浏览器指令：按 session 归属用户投递到用户级 task 连接（浏览器插件），经事件总线广播。 */
-    private void handleChromeCommand(RuntimeEventVO event, RuntimeEventDataVO data) {
-        if (!(event instanceof ChromeCommandEvent chromeEvent)) {
-            return;
-        }
-        Long sessionId = chromeEvent.getCommand() != null ? chromeEvent.getCommand().getSessionId() : null;
+    @EventListener
+    public void onChromeCommand(ChromeCommandEvent chromeEvent) {
+        Long sessionId = chromeEvent.sessionId();
         if (sessionId == null) {
             return;
         }
@@ -198,17 +197,17 @@ public class RuntimeEventListener {
             SessionVO session = sessionSpi.getSession(sessionId);
             if (session != null && session.getCreatedBy() != null && !session.getCreatedBy().isBlank()) {
                 eventBus.publish(DistributedRuntimeConstants.TOPIC_CHROME_COMMAND,
-                        new ChromeCommandEnvelope(session.getCreatedBy(), chromeEvent.getCommand()));
+                        new ChromeCommandEnvelope(session.getCreatedBy(), chromeEvent.command()));
             }
         } catch (Exception e) {
             // session 不存在/无归属：仅按 session 投递前端，忽略
         }
     }
 
-    private void handleRunLifecycle(RuntimeEventDataVO data, RunStatus status) {
-        if (data.getRunId() == null) return;
+    private RuntimeEventDataVO handleRunLifecycle(RuntimeEventDataVO data, RunStatus status) {
+        if (data.getRunId() == null) return data;
         RunVO run = runSpi.getRun(data.getRunId());
-        if (run == null) return;
+        if (run == null) return data;
         switch (status) {
             case PENDING, RUNNING -> {
                 // 条件更新：终态 run 不能被迟到的 PENDING/RUNNING 事件拉回执行中
@@ -221,7 +220,7 @@ public class RuntimeEventListener {
                 flushReasoning(run);
                 runSpi.updateRun(run);
                 timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.COMPLETED.getCode());
-                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                data = stampRunStatus(data, timelineRecorder.recordRunTerminal(
                         data.getSessionId(), run.getId(), status), status);
             }
             case FAILED -> {
@@ -236,7 +235,7 @@ public class RuntimeEventListener {
                 flushReasoning(run);
                 runSpi.updateRun(run);
                 timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.FAILED.getCode());
-                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                data = stampRunStatus(data, timelineRecorder.recordRunTerminal(
                         data.getSessionId(), run.getId(), status), status);
             }
             case CANCELLED -> {
@@ -244,23 +243,24 @@ public class RuntimeEventListener {
                 flushReasoning(run);
                 runSpi.updateRun(run);
                 timelineRecorder.closeAssistant(data.getSessionId(), run.getId(), TimelineState.CANCELLED.getCode());
-                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                data = stampRunStatus(data, timelineRecorder.recordRunTerminal(
                         data.getSessionId(), run.getId(), status), status);
             }
             case AWAITING_USER -> {
                 // 条件更新：已取消/已终态的 run 不能被迟到的暂停事件降级
                 runSpi.updateStatusIfActive(run.getId(), status.value());
-                stampRunStatus(data, timelineRecorder.recordRunTerminal(
+                data = stampRunStatus(data, timelineRecorder.recordRunTerminal(
                         data.getSessionId(), run.getId(), status), status);
             }
             case WAITING -> {
                 // wait 挂起：与 AWAITING_USER 同属停车态 —— 更新 run 状态 + 记 timeline“等待中”行；
                 // 之后同一个 run 到点续跑，行会原位更新。
                 runSpi.updateStatusIfActive(run.getId(), status.value());
-                stampRunStatus(data, timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status,
+                data = stampRunStatus(data, timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status,
                         retryTitle(data)), status);
             }
         }
+        return data;
     }
 
     /** LLM 重试的等待行文案；非重试挂起返回 null（沿用默认「等待中」）。 */
@@ -293,49 +293,55 @@ public class RuntimeEventListener {
     }
 
     /** 把 run_status 行的 seq/title/state 带回 SSE 事件：前端无需再盲等一次 afterSeq 刷新。 */
-    private static void stampRunStatus(RuntimeEventDataVO data, TimelineRecorder.RunStatusRow row, RunStatus status) {
-        data.setStatus(status.value());
+    /** 把 run_status 行的 seq/title/state 带回 SSE 事件：前端无需再盲等一次 afterSeq 刷新。 */
+    private static RuntimeEventDataVO stampRunStatus(RuntimeEventDataVO data,
+                                                     TimelineRecorder.RunStatusRow row,
+                                                     RunStatus status) {
+        var builder = data.toBuilder().status(status.value());
         if (row != null && row.seq() > 0) {
-            data.setSeq(row.seq());
-            data.setKind(com.buukle.agent.instance.dtvo.enums.TimelineKind.RUN_STATUS.getCode());
-            data.setAssistantReply(row.title());
+            builder.seq(row.seq())
+                    .kind(com.buukle.agent.instance.dtvo.enums.TimelineKind.RUN_STATUS.getCode())
+                    // 行标题走独立字段，不再覆盖 assistantReply（正文）
+                    .statusTitle(row.title());
         }
+        return builder.build();
     }
 
     /** 累积该 run 的模型推理（thinking）文本：仅 llm 类型，排除系统状态行；终态一次性写入 run。
- *  同时：主 Agent 首 token 打开统一 Timeline 助手容器行并回填 seq（打字机目标）。 */
-    private void handleFlow(RuntimeEventDataVO data, FlowEventType flow) {
+     *  同时：主 Agent 首 token 打开统一 Timeline 助手容器行并回填 seq（打字机目标）。
+     *  返回带 seq/kind 的副本（事件对象本身不可变）。 */
+    private RuntimeEventDataVO handleFlow(RuntimeEventDataVO data, FlowEventType flow) {
         Long runId = data.getRunId();
         if (runId == null) {
-            return;
+            return data;
         }
         boolean isReasoning = flow == FlowEventType.REASONING_TOKEN;
         boolean isContent = flow == FlowEventType.CONTENT_TOKEN;
         if (!isReasoning && !isContent) {
-            return;
+            return data;
         }
         // 压缩模型的流式输出：打到 compaction 行，绝不能落到 assistant 容器（会污染本轮回复/推理）。
         if (isContent && RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_OUTPUT
                 .equals(data.getReasoningSubType())) {
-            timelineRecorder.stampCompactionSeq(data);
-            return;
+            return timelineRecorder.stampCompactionSeq(data);
         }
         // 主 Agent 流式容器：仅主 agent（子 Agent 与其头行由 SkillReActExecutor 管理，卡内按 sub_agent_run_id 实时订阅）
         if (data.getSubAgentRunId() == null
                 && (isContent || RuntimeEventTypeConstant.REASONING_TYPE_LLM.equals(data.getReasoningType()))) {
-            timelineRecorder.stampStreamingSeq(data.getSessionId(), runId, data);
+            data = timelineRecorder.stampStreamingSeq(data.getSessionId(), runId, data);
         }
         if (!isReasoning) {
-            return;
+            return data;
         }
         String response = data.getResponse();
         if (response == null || response.isBlank()) {
-            return;
+            return data;
         }
         if (!RuntimeEventTypeConstant.REASONING_TYPE_LLM.equals(data.getReasoningType())) {
-            return;
+            return data;
         }
         reasoningBufferStore.accumulate(runId, response);
+        return data;
     }
 
     /**
@@ -343,9 +349,9 @@ public class RuntimeEventListener {
      * 前端据此本地插行、随后把 compaction_output 的流式正文打在分割线下；
      * COMPLETED/FAILED 原地更新，刷新后正文从 agent_compact_record.summary_after 解析。
      */
-    private void handleCompaction(RuntimeEventDataVO data, CompactionStatus status) {
+    private RuntimeEventDataVO handleCompaction(RuntimeEventDataVO data, CompactionStatus status) {
         if (data.getSessionId() == null) {
-            return;
+            return data;
         }
         String state = switch (status) {
             case PENDING, RUNNING -> TimelineState.RUNNING.getCode();
@@ -355,11 +361,14 @@ public class RuntimeEventListener {
         long seq = timelineRecorder.recordCompaction(data.getSessionId(), data.getRunId(),
                 data.getPublishId(), data.getCompactRecordId(), state, data.getAssistantReply());
         if (seq > 0) {
-            data.setSeq(seq);
-            data.setKind(TimelineKind.COMPACTION.getCode());
-            // 前端按 assistantReply 本地插行，必须是完整标题（含状态前缀 + 轮次数）
-            data.setAssistantReply(TimelineRecorder.compactionTitle(state, data.getAssistantReply()));
+            // 前端按 statusTitle 本地插行，必须是完整标题（含状态前缀 + 轮次数）
+            return data.toBuilder()
+                    .seq(seq)
+                    .kind(TimelineKind.COMPACTION.getCode())
+                    .statusTitle(TimelineRecorder.compactionTitle(state, data.getAssistantReply()))
+                    .build();
         }
+        return data;
     }
 
     private void handleClarification(RuntimeEventDataVO data, ClarificationStatus status) {

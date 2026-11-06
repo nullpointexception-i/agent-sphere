@@ -521,12 +521,12 @@ public class CompactionService {
     private void publishCompaction(CompactionStatus status, Long sessionId, Long runId,
                                    String publishId, Long compactRecordId, String detail) {
         eventPublisher.publishEvent(new RuntimeEventVO(status,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setPublishId(publishId)
-                        .setCompactRecordId(compactRecordId)
-                        .setAssistantReply(detail)));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .publishId(publishId)
+                        .compactRecordId(compactRecordId)
+                        .assistantReply(detail).build()));
     }
 
     /**
@@ -1118,13 +1118,13 @@ public class CompactionService {
                             case LLMEvent.TextDelta t -> {
                                 content.append(t.text());
                                 eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
-                                        new RuntimeEventDataVO()
-                                                .setSessionId(sessionId)
-                                                .setRunId(runId)
-                                                .setResponse(t.text())
-                                                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                                .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_OUTPUT)
-                                                .setPublishId(publishId)));
+                                        RuntimeEventDataVO.builder()
+                                                .sessionId(sessionId)
+                                                .runId(runId)
+                                                .response(t.text())
+                                                .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                                                .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_OUTPUT)
+                                                .publishId(publishId).build()));
                             }
                             // 摘要模型的思考不展示（避免和压缩正文混在一起）。
                             case LLMEvent.ReasoningDelta r -> {

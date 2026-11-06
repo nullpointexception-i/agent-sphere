@@ -56,12 +56,12 @@ public class ToolApprovalService {
         approvalSpi.createPending(approvalId, sessionId, runId, callsJson);
         eventPublisher.publishEvent(new RuntimeEventVO(
                 ToolApprovalStatus.TOOL_APPROVAL_PENDING,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setApprovalId(approvalId)
-                        .setToolCallsJson(callsJson)
-                        .setPrompt("需要确认工具调用")));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .approvalId(approvalId)
+                        .toolCallsJson(callsJson)
+                        .prompt("需要确认工具调用").build()));
         return approvalId;
     }
 
@@ -104,10 +104,10 @@ public class ToolApprovalService {
         }
         eventPublisher.publishEvent(new RuntimeEventVO(
                 ToolApprovalStatus.TOOL_APPROVAL_RESPONDED,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setApprovalId(approvalId)));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .approvalId(approvalId).build()));
         return true;
     }
 
@@ -228,10 +228,10 @@ public class ToolApprovalService {
     private void publishDismissed(Long sessionId, Long runId, String approvalId) {
         eventPublisher.publishEvent(new RuntimeEventVO(
                 ToolApprovalStatus.TOOL_APPROVAL_DISMISSED,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setApprovalId(approvalId)));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .approvalId(approvalId).build()));
     }
 
     private static String callsJson(List<ApprovalCall> calls) {

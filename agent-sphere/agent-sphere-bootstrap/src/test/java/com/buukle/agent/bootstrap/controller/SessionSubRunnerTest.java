@@ -7,6 +7,7 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.spi.AgentSubAgentRunSpi;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.model.dtvo.complete.LLMEvent;
+import com.buukle.agent.model.dtvo.complete.LlmStreamStats;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
@@ -134,8 +135,8 @@ class SessionSubRunnerTest {
             onEvent.accept(new LLMEvent.TextDelta("最终答案"));
             Runnable done = inv.getArgument(6);
             done.run();
-            return null;
-        }).when(modelProviderSpi).stream(anyString(), anyString(), anyString(), anyString(),
+            return LlmStreamStats.empty();
+        }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), anyString(), anyString(),
                 any(), any(), any());
 
         String result = executor.execute(delegateTool(null), "{}", rootCtx(), List.of());
@@ -157,8 +158,8 @@ class SessionSubRunnerTest {
             onEvent.accept(new LLMEvent.TextDelta("ok"));
             Runnable done = inv.getArgument(6);
             done.run();
-            return null;
-        }).when(modelProviderSpi).stream(anyString(), anyString(), anyString(), anyString(),
+            return LlmStreamStats.empty();
+        }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), anyString(), anyString(),
                 any(), any(), any());
 
         executor.execute(delegateTool("INSTANCE-SYSTEM-PROMPT"), "{}", rootCtx(), List.of());
@@ -191,8 +192,8 @@ class SessionSubRunnerTest {
             onEvent.accept(new LLMEvent.TextDelta("done"));
             Runnable done = inv.getArgument(6);
             done.run();
-            return null;
-        }).when(modelProviderSpi).stream(anyString(), anyString(), anyString(), anyString(),
+            return LlmStreamStats.empty();
+        }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), anyString(), anyString(),
                 any(), any(), any());
 
         // 顶层：owner=null → parent_run_id=null
@@ -220,8 +221,8 @@ class SessionSubRunnerTest {
             onEvent.accept(new LLMEvent.TextDelta("最终答案"));
             Runnable done = inv.getArgument(6);
             done.run();
-            return null;
-        }).when(modelProviderSpi).stream(anyString(), anyString(), anyString(), anyString(),
+            return LlmStreamStats.empty();
+        }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), anyString(), anyString(),
                 any(), any(), any());
 
         List<RuntimeEventVO> reasoningEvents = new ArrayList<>();
@@ -261,8 +262,8 @@ class SessionSubRunnerTest {
             onEvent.accept(new LLMEvent.TextDelta("ok"));
             Runnable done = inv.getArgument(6);
             done.run();
-            return null;
-        }).when(modelProviderSpi).stream(anyString(), anyString(), anyString(), anyString(),
+            return LlmStreamStats.empty();
+        }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), anyString(), anyString(),
                 any(), any(), any());
 
         Map<String, Object> binding = new HashMap<>();

@@ -1,18 +1,15 @@
 package com.buukle.agent.runtime.orchestration.chrome;
 
 import com.buukle.agent.common.chrome.ChromeCommandDTO;
-import com.buukle.agent.runtime.kernel.port.vo.ChromeCommandEventType;
-import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
-import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
-import lombok.Getter;
 
-@Getter
-public class ChromeCommandEvent extends RuntimeEventVO {
-    private final ChromeCommandDTO command;
+/**
+ * Browser command event. Deliberately a standalone record: the runtime event
+ * envelope is now an immutable record and cannot be extended. A dedicated
+ * {@code @EventListener} consumes this type.
+ */
+public record ChromeCommandEvent(ChromeCommandDTO command) {
 
-    public ChromeCommandEvent(ChromeCommandDTO cmd) {
-        super(ChromeCommandEventType.SEND_COMMAND,
-                new RuntimeEventDataVO().setSessionId(cmd.getSessionId()));
-        this.command = cmd;
+    public Long sessionId() {
+        return command == null ? null : command.getSessionId();
     }
 }

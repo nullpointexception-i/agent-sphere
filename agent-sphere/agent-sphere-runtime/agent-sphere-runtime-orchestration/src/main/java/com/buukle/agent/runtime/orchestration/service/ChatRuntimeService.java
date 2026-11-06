@@ -172,10 +172,10 @@ public class ChatRuntimeService {
     public void startRun(RunVO run, Long sessionId, SendMessageDTO dto, boolean isClarificationResume) {
         eventPublisher.publishEvent(new RuntimeEventVO(
                 RunStatus.PENDING,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(run.getId())
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(run.getId())
+                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId()).build()));
 
         orchestrator.asyncHandleUserMessage(run, sessionId, dto.getMessage(), dto.getModelRouteId(),
                 isClarificationResume, chatAttachmentService.resolve(dto.getAttachmentKeys()));
@@ -267,14 +267,14 @@ public class ChatRuntimeService {
                 TimelineRecorder.RunStatusRow row = timelineRecorder.markRetryResumed(sessionId, runId);
                 if (row != null) {
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.RUNNING,
-                            new RuntimeEventDataVO()
-                                    .setSessionId(sessionId)
-                                    .setRunId(runId)
-                                    .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)
-                                    .setSeq(row.seq())
-                                    .setKind(TimelineKind.RUN_STATUS.getCode())
-                                    .setAssistantReply(row.title())
-                                    .setStatus(RunStatus.RUNNING.value())));
+                            RuntimeEventDataVO.builder()
+                                    .sessionId(sessionId)
+                                    .runId(runId)
+                                    .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)
+                                    .seq(row.seq())
+                                    .kind(TimelineKind.RUN_STATUS.getCode())
+                                    .statusTitle(row.title())
+                                    .status(RunStatus.RUNNING.value()).build()));
                 }
                 log.info("LLM retry resumed: waitId={} runId={} sessionId={} attempt={} hint={}",
                         wait.getId(), runId, sessionId, wait.getAttempts(), wait.getReason());
@@ -304,14 +304,14 @@ public class ChatRuntimeService {
                     + ",\"resumed_at\":\"" + java.time.LocalDateTime.now() + "\""
                     + ",\"resumed_at_ms\":" + nowMs + "}";
             eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(runId)
-                            .setToolName(WaitConstants.TOOL_NAME)
-                            .setDisplayNameCn(WaitConstants.DISPLAY_NAME_CN)
-                            .setDisplayNameEn(WaitConstants.DISPLAY_NAME)
-                            .setArtifact(artifact)
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + wait.getCallId())));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(runId)
+                            .toolName(WaitConstants.TOOL_NAME)
+                            .displayNameCn(WaitConstants.DISPLAY_NAME_CN)
+                            .displayNameEn(WaitConstants.DISPLAY_NAME)
+                            .artifact(artifact)
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + wait.getCallId()).build()));
         } catch (Exception e) {
             log.warn("Failed to record wait tool success: waitId={} runId={}", wait.getId(), runId, e);
         }
@@ -346,11 +346,11 @@ public class ChatRuntimeService {
         run.setStatus(RunStatus.FAILED.name());
         runSpi.updateRun(run);
         eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.FAILED,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setAssistantReply("等待恢复失败：" + reason)
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .assistantReply("等待恢复失败：" + reason)
+                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId).build()));
     }
 
     /**
@@ -411,11 +411,11 @@ public class ChatRuntimeService {
         // Notify frontend which clarification was responded and with what text
         eventPublisher.publishEvent(new RuntimeEventVO(
                 ClarificationStatus.RESPONDED,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setClarificationId(pending.getClarificationId())
-                        .setResponse(response)));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .clarificationId(pending.getClarificationId())
+                        .response(response).build()));
 
         sessionSpi.touchSession(sessionId);
 
@@ -445,10 +445,10 @@ public class ChatRuntimeService {
 
         eventPublisher.publishEvent(new RuntimeEventVO(
                 RunStatus.PENDING,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(run.getId())
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(run.getId())
+                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId()).build()));
 
         orchestrator.asyncHandleUserMessage(run, sessionId, resumeText, null, true);
 
@@ -525,12 +525,12 @@ public class ChatRuntimeService {
             clarificationMapper.updateById(row);
             eventPublisher.publishEvent(new RuntimeEventVO(
                     ClarificationStatus.RESPONDED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(runId)
-                            .setClarificationId(row.getClarificationId())
-                            .setMultiple(Boolean.TRUE.equals(row.getMultiple()))
-                            .setResponse(answerText(answer))));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(runId)
+                            .clarificationId(row.getClarificationId())
+                            .multiple(Boolean.TRUE.equals(row.getMultiple()))
+                            .response(answerText(answer)).build()));
             resumeText.append("\nQ: ").append(row.getTitle() == null ? "" : row.getTitle())
                     .append("\nA: ").append(answerText(answer));
         }
@@ -556,10 +556,10 @@ public class ChatRuntimeService {
         RunVO run = runSpi.createRun(createRunDTO);
         eventPublisher.publishEvent(new RuntimeEventVO(
                 RunStatus.PENDING,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(run.getId())
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(run.getId())
+                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId()).build()));
         orchestrator.asyncHandleUserMessage(run, sessionId, resumeText, null, true);
         return processingResponse(run.getId());
     }
@@ -796,10 +796,10 @@ public class ChatRuntimeService {
                 clarificationMapper.updateById(pending);
                 eventPublisher.publishEvent(new RuntimeEventVO(
                         ClarificationStatus.DISMISSED,
-                        new RuntimeEventDataVO()
-                                .setSessionId(sessionId)
-                                .setRunId(runId)
-                                .setClarificationId(pending.getClarificationId())));
+                        RuntimeEventDataVO.builder()
+                                .sessionId(sessionId)
+                                .runId(runId)
+                                .clarificationId(pending.getClarificationId()).build()));
             }
 
             int cancelledWaits = pendingWaitSpi.cancelPendingByRunId(runId);
@@ -824,11 +824,11 @@ public class ChatRuntimeService {
     private void publishCancelled(Long sessionId, Long runId) {
         eventPublisher.publishEvent(new RuntimeEventVO(
                 RunStatus.CANCELLED,
-                new RuntimeEventDataVO()
-                        .setSessionId(sessionId)
-                        .setRunId(runId)
-                        .setAssistantReply(RunnerConstants.CANCEL_MSG)
-                        .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId)));
+                RuntimeEventDataVO.builder()
+                        .sessionId(sessionId)
+                        .runId(runId)
+                        .assistantReply(RunnerConstants.CANCEL_MSG)
+                        .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId).build()));
     }
 
     /**
@@ -845,10 +845,10 @@ public class ChatRuntimeService {
             clarificationMapper.updateById(pending);
             eventPublisher.publishEvent(new RuntimeEventVO(
                     ClarificationStatus.DISMISSED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(pending.getRunId())
-                            .setClarificationId(pending.getClarificationId())));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(pending.getRunId())
+                            .clarificationId(pending.getClarificationId()).build()));
         }
     }
 

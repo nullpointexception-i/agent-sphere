@@ -60,11 +60,11 @@ public class RuntimeOrchestrator {
             log.error("LLM-retry resume failed: sessionId={}, runId={}", sessionId, run.getId(), e);
             eventPublisher.publishEvent(new RuntimeEventVO(
                     RunStatus.FAILED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(run.getId())
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
-                            .setErrorMessage(e.getMessage())));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(run.getId())
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
+                            .errorMessage(e.getMessage()).build()));
         }
     }
 
@@ -82,11 +82,11 @@ public class RuntimeOrchestrator {
             log.error("Interrupted run recovery failed: sessionId={}, runId={}", sessionId, run.getId(), e);
             eventPublisher.publishEvent(new RuntimeEventVO(
                     RunStatus.FAILED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(run.getId())
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
-                            .setErrorMessage(e.getMessage())));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(run.getId())
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
+                            .errorMessage(e.getMessage()).build()));
         }
     }
 
@@ -104,11 +104,11 @@ public class RuntimeOrchestrator {
             log.error("Tool approval resume failed: sessionId={}, runId={}", sessionId, run.getId(), e);
             eventPublisher.publishEvent(new RuntimeEventVO(
                     RunStatus.FAILED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(run.getId())
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
-                            .setErrorMessage(e.getMessage())));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(run.getId())
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
+                            .errorMessage(e.getMessage()).build()));
         }
     }
 
@@ -138,11 +138,11 @@ public class RuntimeOrchestrator {
             log.error("Runtime execution failed: sessionId={}, runId={}", sessionId, run.getId(), e);
             eventPublisher.publishEvent(new RuntimeEventVO(
                     RunStatus.FAILED,
-                    new RuntimeEventDataVO()
-                            .setSessionId(sessionId)
-                            .setRunId(run.getId())
-                            .setPublishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
-                            .setErrorMessage(e.getMessage())));
+                    RuntimeEventDataVO.builder()
+                            .sessionId(sessionId)
+                            .runId(run.getId())
+                            .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId())
+                            .errorMessage(e.getMessage()).build()));
         }
     }
 
