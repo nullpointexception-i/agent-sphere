@@ -8,6 +8,8 @@ import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.metrics.AgentMetrics;
+import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
+import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.SessionSpi;
@@ -18,6 +20,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.superagent.spi.AgentRouterReplyPort;
+import com.buukle.agent.util.json.JsonUtils;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -150,6 +153,11 @@ public class AgentRouterStreamBridge {
                     .equals(data.getReasoningSubType())) {
                 return;
             }
+            // The send_message payload was already streamed as the reply; a later LLM turn
+            // would only paraphrase it (and is not delivered to IM anyway).
+            if (state.sendMessageReplyPushed()) {
+                return;
+            }
             state.append(AgentStreamPhase.REPLY, data.getResponse());
         }
     }
@@ -173,6 +181,39 @@ public class AgentRouterStreamBridge {
         if (status == ToolCallStatus.PENDING) {
             // Entering a tool turn: content streamed afterwards is the final answer text.
             state.clearReply();
+            state.resetSendMessagePush();
+        } else if (status == ToolCallStatus.SUCCEEDED && isSendMessageTool(data.getToolName())) {
+            // A plain-text send_message is the message the user actually receives; show it
+            // immediately instead of waiting for the post-tool LLM turn to restate it.
+            state.pushSendMessageText(data);
+        }
+    }
+
+    private static boolean isSendMessageTool(String toolName) {
+        return toolName != null
+                && toolName.equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN
+                        + BuiltinToolEnum.SEND_MESSAGE.getId());
+    }
+
+    /** Plain-text payload of a send_message call; cards are not user replies. */
+    private static String plainSendMessageText(RuntimeEventDataVO data) {
+        String json = data.getArgumentsJson();
+        if (json == null || json.isBlank()) {
+            json = data.getArtifact();
+        }
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            Map<?, ?> payload = JsonUtils.parse(json, Map.class);
+            Object format = payload.get("format");
+            if (format != null && "CARD".equalsIgnoreCase(String.valueOf(format))) {
+                return null;
+            }
+            Object text = payload.get("text");
+            return text == null ? null : String.valueOf(text).trim();
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -300,6 +341,8 @@ public class AgentRouterStreamBridge {
         private volatile boolean finished;
         /** The run parked in AWAITING_USER waiting for the user's DM reply. */
         private volatile boolean awaiting;
+        /** A plain-text send_message payload was streamed as the reply for this run. */
+        private volatile boolean sendMessageReplyPushed;
         private volatile long lastActivity = System.currentTimeMillis();
 
         private RunState(long runId, SessionInfo session) {
@@ -328,6 +371,28 @@ public class AgentRouterStreamBridge {
                 finalReply.setLength(0);
             }
             lastActivity = System.currentTimeMillis();
+        }
+
+        boolean sendMessageReplyPushed() {
+            return sendMessageReplyPushed;
+        }
+
+        /** A new tool turn may legitimately report text again. */
+        void resetSendMessagePush() {
+            sendMessageReplyPushed = false;
+        }
+
+        /** Stream a plain-text send_message payload once; later turns must not restate it. */
+        void pushSendMessageText(RuntimeEventDataVO data) {
+            if (sendMessageReplyPushed) {
+                return;
+            }
+            String text = plainSendMessageText(data);
+            if (text == null || text.isEmpty()) {
+                return;
+            }
+            sendMessageReplyPushed = true;
+            append(AgentStreamPhase.REPLY, text);
         }
 
         void enqueueSignal(Signal signal) {

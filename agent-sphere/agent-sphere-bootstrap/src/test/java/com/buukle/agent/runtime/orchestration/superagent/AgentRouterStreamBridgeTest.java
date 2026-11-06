@@ -1,5 +1,6 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
+import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.channel.spi.AgentStreamEvent;
 import com.buukle.agent.channel.spi.AgentStreamPhase;
 import com.buukle.agent.channel.spi.AgentStreamPort;
@@ -127,6 +128,46 @@ class AgentRouterStreamBridgeTest {
     }
 
     @Test
+    void plainSendMessageTextStreamsImmediatelyAndLaterContentIsSuppressed() {
+        stubRouterSession();
+
+        RuntimeEventDataVO sent = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID)
+                .toolName("builtin_" + BuiltinToolEnum.SEND_MESSAGE.getId())
+                .argumentsJson("{\"format\":\"TEXT\",\"text\":\"立即显示的回复\"}")
+                .build();
+        bridge.onEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED, sent));
+        // A later LLM turn restating the answer must not duplicate the bubble.
+        bridge.onEvent(event(FlowEventType.CONTENT_TOKEN, data("稍后重复的回复")));
+        bridge.onEvent(runEvent(RunStatus.COMPLETED, null));
+
+        bridge.flushTick();
+
+        List<AgentStreamEvent> published = capturedStreamEvents();
+        assertTrue(published.stream().anyMatch(e ->
+                AgentStreamPhase.REPLY.equals(e.phase()) && "立即显示的回复".equals(e.delta())));
+        assertFalse(published.stream().anyMatch(e -> "稍后重复的回复".equals(e.delta())));
+    }
+
+    @Test
+    void cardSendMessageIsNotStreamedAsReply() {
+        stubRouterSession();
+
+        RuntimeEventDataVO card = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID)
+                .toolName("builtin_" + BuiltinToolEnum.SEND_MESSAGE.getId())
+                .argumentsJson("{\"format\":\"CARD\",\"cardTitle\":\"任务卡片\",\"text\":\"卡片\"}")
+                .build();
+        bridge.onEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED, card));
+        bridge.onEvent(runEvent(RunStatus.COMPLETED, null));
+
+        bridge.flushTick();
+
+        List<AgentStreamEvent> published = capturedStreamEvents();
+        assertFalse(published.stream().anyMatch(e -> AgentStreamPhase.REPLY.equals(e.phase())));
+    }
+
+    @Test
     void finalReplyFallsBackToAssistantReplyWhenBufferEmpty() {
         stubRouterSession();
 
@@ -141,15 +182,15 @@ class AgentRouterStreamBridgeTest {
     void thinkingFragmentsStreamAndSystemReasoningIsIgnored() {
         stubRouterSession();
 
-        RuntimeEventDataVO llmReasoning = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID).setResponse("思考中")
-                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                .setReasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON);
+        RuntimeEventDataVO llmReasoning = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID).response("思考中")
+                .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON).build();
         bridge.onEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN, llmReasoning));
 
-        RuntimeEventDataVO systemReasoning = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID).setResponse("系统状态")
-                .setReasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM);
+        RuntimeEventDataVO systemReasoning = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID).response("系统状态")
+                .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM).build();
         bridge.onEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN, systemReasoning));
 
         bridge.onEvent(runEvent(RunStatus.COMPLETED, null));
@@ -181,9 +222,9 @@ class AgentRouterStreamBridgeTest {
     void subAgentEventsAreIgnored() {
         stubRouterSession();
 
-        RuntimeEventDataVO subAgent = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID).setResponse("子 Agent 输出")
-                .setSubAgentRunId(99L);
+        RuntimeEventDataVO subAgent = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID).response("子 Agent 输出")
+                .subAgentRunId(99L).build();
         bridge.onEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN, subAgent));
         bridge.onEvent(runEvent(RunStatus.COMPLETED, null));
         bridge.flushTick();
@@ -229,9 +270,9 @@ class AgentRouterStreamBridgeTest {
     void failedRunPublishesErrorStatusWithoutFinalReply() {
         stubRouterSession();
 
-        RuntimeEventDataVO failed = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID)
-                .setErrorMessage("模型超时");
+        RuntimeEventDataVO failed = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID)
+                .errorMessage("模型超时").build();
         bridge.onEvent(new RuntimeEventVO(RunStatus.FAILED, failed));
 
         bridge.flushTick();
@@ -283,8 +324,8 @@ class AgentRouterStreamBridgeTest {
     }
 
     private static RuntimeEventDataVO data(String text) {
-        return new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID).setResponse(text);
+        return RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID).response(text).build();
     }
 
     private static RuntimeEventVO event(FlowEventType type, RuntimeEventDataVO data) {
@@ -292,18 +333,16 @@ class AgentRouterStreamBridgeTest {
     }
 
     private static RuntimeEventVO runEvent(RunStatus status, String assistantReply) {
-        RuntimeEventDataVO data = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID);
-        if (assistantReply != null) {
-            data.setAssistantReply(assistantReply);
-        }
+        RuntimeEventDataVO data = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID)
+                .assistantReply(assistantReply).build();
         return new RuntimeEventVO(status, data);
     }
 
     private static RuntimeEventVO toolEvent(ToolCallStatus status) {
-        RuntimeEventDataVO data = new RuntimeEventDataVO()
-                .setSessionId(SESSION_ID).setRunId(RUN_ID)
-                .setToolName("dispatch_worker").setDisplayNameCn("派发任务");
+        RuntimeEventDataVO data = RuntimeEventDataVO.builder()
+                .sessionId(SESSION_ID).runId(RUN_ID)
+                .toolName("dispatch_worker").displayNameCn("派发任务").build();
         return new RuntimeEventVO(status, data);
     }
 

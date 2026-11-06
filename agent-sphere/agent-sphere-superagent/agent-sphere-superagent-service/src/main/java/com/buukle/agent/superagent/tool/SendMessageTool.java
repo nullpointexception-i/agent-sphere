@@ -45,7 +45,9 @@ public class SendMessageTool extends AbstractAgentRouterTool {
 
     @Override
     protected String description() {
-        return "Send a reply to the thread through the outbox. This is the only outbound message path.";
+        return "Only for task cards and proactive notifications (format=CARD, or a work-item update). "
+                + "For a normal answer, put the final reply in your own message text and do NOT call this tool: "
+                + "the system delivers that text automatically.";
     }
 
     @Override
