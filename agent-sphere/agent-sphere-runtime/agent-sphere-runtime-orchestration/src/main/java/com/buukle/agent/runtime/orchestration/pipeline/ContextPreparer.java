@@ -74,7 +74,11 @@ public class ContextPreparer {
             (long) BuiltinToolEnum.FINISH.getId(),
             (long) BuiltinToolEnum.ASK_CLARIFICATION.getId(),
             (long) BuiltinToolEnum.CURRENT_TIME.getId(),
-            (long) BuiltinToolEnum.READ_TOOL_RESULT.getId());
+            (long) BuiltinToolEnum.READ_TOOL_RESULT.getId(),
+            // L2 write tools: Router DM 会话可现场触发（docwrite / skill_manage），
+            // 落入 SessionRunner 的 L2 审批拦截 → TOOL_APPROVAL_PENDING → ROUTER_APPROVAL 卡片投 IM。
+            (long) BuiltinToolEnum.DOCWRITE.getId(),
+            (long) BuiltinToolEnum.SKILL_MANAGE.getId());
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
     private final CapabilitySkillSpi skillSpi;
