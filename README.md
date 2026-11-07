@@ -7,6 +7,7 @@
 ## Contents
 
 - [0. One-Line Positioning](#0-one-line-positioning)
+- [Product Preview](#product-preview)
 - [1. Business Architecture](#1-business-architecture)
 - [2. Application Architecture](#2-application-architecture)
 - [3. Technology Architecture](#3-technology-architecture)
@@ -23,6 +24,30 @@
 > Package LLM + tools + browser + memory + model routing into a **configurable Agent instance**, and expose it through conversational, task-oriented and capability-based entry points.
 
 AgentSphere is **an agent hosting platform**, not a single agent. The instance is the configuration unit, capabilities are the supply unit, and models are the routing unit. All three are decoupled.
+
+---
+
+## Product Preview
+
+Live screenshots from the deployed product. The Chinese versions of the same screens are used by [README.zh-CN.md](README.zh-CN.md).
+
+| Agent operations | System administration | Super Agent workspace |
+|---|---|---|
+| ![Agent operations dashboard](agent-sphere-readme/01-dashboard-en.png) | ![System administration](agent-sphere-readme/07-admin-settings-en.png) | ![Super Agent workspace](agent-sphere-readme/06-workspace-en.png) |
+
+### Agent configuration and conversation
+
+| Instances | Chat |
+|---|---|
+| ![Agent instances](agent-sphere-readme/02-instances-en.png) | ![Chat](agent-sphere-readme/05-chat-en.png) |
+
+### Digital employees and IM
+
+Screenshots from the Super Agent product at `/workspace`.
+
+| Digital employees | Digital employee chats |
+|---|---|
+| ![Digital employees in workspace](agent-sphere-readme/03-digital-employees-en.png) | ![Digital employee chats in workspace](agent-sphere-readme/04-im-en.png) |
 
 ---
 

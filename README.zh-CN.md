@@ -7,6 +7,7 @@
 ## 目录
 
 - [0. 一句话定位](#0-一句话定位)
+- [产品截图](#产品截图)
 - [1. 业务架构](#1-业务架构)
 - [2. 应用架构](#2-应用架构)
 - [3. 技术架构](#3-技术架构)
@@ -23,6 +24,30 @@
 > 把 **LLM + 工具 + 浏览器 + 记忆 + 模型路由** 封装成一个**可配置的 Agent 实例**，并通过对话式、任务式、能力式三种入口对外提供。
 
 AgentSphere 不是单个 Agent，而是 **Agent 托管平台**。实例是配置单元，能力是供给单元，模型是路由单元，三者互相解耦。
+
+---
+
+## 产品截图
+
+以下为部署环境的实际界面截图。相同页面的英文界面截图见 [README.md](README.md)。
+
+| Agent 运营管理 | 系统管理 | Super Agent 产品 |
+|---|---|---|
+| ![Agent 运营管理仪表盘](agent-sphere-readme/01-dashboard-zh.png) | ![系统管理](agent-sphere-readme/07-admin-settings-zh.png) | ![Super Agent 产品](agent-sphere-readme/06-workspace-zh.png) |
+
+### Agent 配置与对话
+
+| 实例 | 对话 |
+|---|---|
+| ![Agent 实例](agent-sphere-readme/02-instances-zh.png) | ![对话](agent-sphere-readme/05-chat-zh.png) |
+
+### 数字员工与 IM
+
+以下截图来自 `/workspace` 的 Super Agent 产品。
+
+| 数字员工 | 数字员工会话 |
+|---|---|
+| ![Workspace 数字员工](agent-sphere-readme/03-digital-employees-zh.png) | ![Workspace 数字员工会话](agent-sphere-readme/04-im-zh.png) |
 
 ---
 
