@@ -12,7 +12,7 @@ import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
 import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;

@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import type { Settings as LayoutSettings } from '@ant-design/pro-components';
 import { SettingDrawer } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
@@ -106,7 +107,7 @@ export async function getInitialState(): Promise<{
     try {
       const stored = getStoredUser();
       if (!stored) return undefined;
-      const user = await umiRequest('/api/v1/auth/me', {
+      const user = await umiRequest(API_PATHS.AUTH_ME, {
         skipErrorHandler: true,
       });
       if (!user) {
@@ -115,7 +116,7 @@ export async function getInitialState(): Promise<{
       }
       // SSO users: query the third-party identity (provider_code@subject) during
       // initialization, used for the top-right display
-      const ssoIdentity = await umiRequest('/api/v1/sso/me', {
+      const ssoIdentity = await umiRequest(API_PATHS.SSO_ME, {
         skipErrorHandler: true,
       }).catch(() => null);
       if (ssoIdentity?.providerCode && ssoIdentity?.subject) {

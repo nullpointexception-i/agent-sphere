@@ -1,5 +1,7 @@
 package com.buukle.agent.im.service.impl;
 
+
+import com.buukle.agent.common.constant.ApiPaths;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.FileStoreBizKeys;
 import com.buukle.agent.common.context.AuthContext;
@@ -30,7 +32,7 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class ImAttachmentServiceImpl implements ImAttachmentService {
 
-    private static final String URL_PREFIX = "/api/v1/im/conversations/";
+    private static final String URL_PREFIX = ApiPaths.IM_CONVERSATIONS;
     private static final String URL_SEGMENT = "/attachments/";
     private static final String FALLBACK_CONTENT_TYPE = "application/octet-stream";
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(

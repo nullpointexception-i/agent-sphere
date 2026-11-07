@@ -6,7 +6,7 @@ import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.superagent.spi.WorkerReport;
@@ -46,7 +46,7 @@ public class WorkerTerminalListener {
             return;
         }
         String reportStatus = switch (status) {
-            case COMPLETED -> WorkItemStatus.COMPLETED;
+            case COMPLETED -> WorkItemStatus.DONE;
             case FAILED -> WorkItemStatus.FAILED;
             case CANCELLED -> WorkItemStatus.CANCELLED;
             case WAITING, AWAITING_USER -> WorkItemStatus.WAITING;

@@ -23,19 +23,21 @@ public class GlobalExceptionHandler {
                 ? HttpStatus.FORBIDDEN
                 : HttpStatus.BAD_REQUEST;
         return ResponseEntity.status(status)
-                .body(new ErrorResponse(e.getErrorCode(), e.getMessage(), e.getUserTip()));
+                .body(new ErrorResponse(e.getErrorCode(), e.getErrorNamespace(), e.getMessage(), e.getUserTip()));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(), CommonErrorCode.PARAM_INVALID.getMessage(), e.getMessage()));
+                .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(), CommonErrorCode.PARAM_INVALID.namespace(),
+                        CommonErrorCode.PARAM_INVALID.getMessage(), e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(), CommonErrorCode.PARAM_INVALID.getMessage(),
+                .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(), CommonErrorCode.PARAM_INVALID.namespace(),
+                        CommonErrorCode.PARAM_INVALID.getMessage(),
                         e.getBindingResult().getFieldErrors().stream()
                                 .map(f -> f.getField() + ": " + f.getDefaultMessage())
                                 .reduce((a, b) -> a + "; " + b)
@@ -46,14 +48,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
         log.warn("Request body not readable: {}", e.getMessage());
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(),
+                .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(), CommonErrorCode.PARAM_INVALID.namespace(),
                         CommonErrorCode.PARAM_INVALID.getMessage(), "Malformed request body; check field types"));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ErrorResponse(CommonErrorCode.RESOURCE_NOT_FOUND.getCode(),
+                .body(new ErrorResponse(CommonErrorCode.RESOURCE_NOT_FOUND.getCode(), CommonErrorCode.RESOURCE_NOT_FOUND.namespace(),
                         CommonErrorCode.RESOURCE_NOT_FOUND.getMessage(), e.getResourcePath()));
     }
 
@@ -65,6 +67,7 @@ public class GlobalExceptionHandler {
         }
         log.error("unexpected error", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse(CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.getMessage(), CommonErrorCode.INTERNAL_ERROR.getUserTip()));
+                .body(new ErrorResponse(CommonErrorCode.INTERNAL_ERROR.getCode(), CommonErrorCode.INTERNAL_ERROR.namespace(),
+                        CommonErrorCode.INTERNAL_ERROR.getMessage(), CommonErrorCode.INTERNAL_ERROR.getUserTip()));
     }
 }

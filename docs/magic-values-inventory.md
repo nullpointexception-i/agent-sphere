@@ -18,12 +18,12 @@ or enum is introduced.
 | `ACTIVE` / `DISABLED` / `ENABLED` | user / instance / session / provider / binding | domain enums (`UserEnum`, `InstanceEnum`, `AgentChannelBindingStatus`, ...) | REUSE per domain; do not create a universal status |
 | `DONE` / `COMPLETED` | work item | `WorkItemStatus` | MERGE with compatibility helper (`isTerminal`, `normalize`) |
 
-Existing duplicate representation:
+Completed:
 
-- `RunEnum.STATUS_*` (persisted strings) and `RunStatus` (enum) coexist.
-  `RunEnum` is referenced about 28 times, `RunStatus` about 291 times.
-  Target: keep `RunStatus` as the only enum, keep the string values stable, migrate
-  `RunEnum.STATUS_*` callers, and leave `RunEnum.TYPE_*` as `RunType` constants if still needed.
+- `RunEnum` was removed. `RunStatus` now lives in `instance-dtvo` and is the only enum;
+  `RunType` / `RunDirection` / `RunStatus.Codes` cover the former string constants.
+  `EventType` moved to `common` (non-sealed) so the persisted status enum can be shared
+  without inverting module dependencies.
 
 ## Roles
 
@@ -83,26 +83,33 @@ Target: shared `src/constants/status.ts` (UI) and `src/status.ts` (widget) with
 
 Implemented:
 
-- `HttpHeaders` + `ApiPrefix` + `PermissionCodes` in `agent-sphere-common`.
+- `HttpHeaders` + `ApiPrefix` + `ApiPaths` + `PermissionCodes` in `agent-sphere-common`.
 - All `*Controller` mappings use `ApiPrefix`; all `@RequirePermission` values use
   `PermissionCodes` (zero literal annotations remain).
+- `ApiPrefixScanTest` guards main Java against new hard-coded `/api/v1`.
 - `InstanceRole` enum added; instance/superagent role literals migrated.
 - `SessionSurfaceHolder.HEADER` now delegates to `HttpHeaders.CLIENT_SURFACE`.
 - `AuthInterceptor`, `LlmApiConstants` and `JinaReader` share `HttpHeaders`.
-- `WorkItemStatus` exposes `isTerminal`, `isInFlight` and `normalizeTerminal`.
-- Front-end `API_BASE` and `PERM` constants added; service clients and `<Can code>` /
-  route access checks use them.
+- `RunStatus` moved to `instance-dtvo`; `EventType` moved to `common` (non-sealed);
+  `RunEnum` removed and replaced by `RunType` / `RunDirection` / `RunStatus.Codes`.
+- `ErrorCode` exposes `namespace()`; `ErrorResponse` / `BizException` carry
+  `errorNamespace`; all 11 error enums declare their namespace.
+- Front-end `errors.<namespace>.<code>` locale files added; `localizeApiError` is used by
+  the global request error handler and direct auth/chat catch blocks.
+- `WorkItemStatus` exposes `isTerminal`, `isInFlight` and `normalizeTerminal`;
+  `WorkerTerminalListener` now reports the canonical `DONE` for completed workers.
+- Front-end `API_BASE`, `API_PATHS`, `PERM`, `status.ts` and `pagination.ts` constants added;
+  service clients, auth calls, route access checks and table status metadata use them.
 
 Kept intentionally:
 
-- `RunEnum.STATUS_*` and `RunStatus`: `RunEnum` lives in `instance-dtvo` and `RunStatus`
-  lives in `runtime-kernel`; referencing one from the other would invert the module
-  layering. Both keep the same string values.
 - `SessionType` and `InstanceRole`: session lane vs configured instance role are different
   concepts even though some names overlap.
 - `ACTIVE` per domain: user / instance / session / provider lifecycles differ.
 - `ChatRuntimeService` approval parsing still accepts Chinese words (`允许` / `确认`) in
   addition to English, because users may type them.
+- SQL migration comments and seed data remain Chinese and are frozen by Flyway checksums;
+  see `docs/migration-comments-en.md`.
 
 ## Keep list
 

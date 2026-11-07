@@ -5,7 +5,7 @@ import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import lombok.RequiredArgsConstructor;

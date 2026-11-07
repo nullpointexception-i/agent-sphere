@@ -1,5 +1,7 @@
 package com.buukle.agent.infrastructure.config;
 
+
+import com.buukle.agent.common.constant.ApiPaths;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -14,7 +16,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/api/v1/auth/login", "/api/v1/auth/sso/exchange");
+        registry.addInterceptor(rateLimitInterceptor).addPathPatterns(
+                ApiPaths.AUTH_LOGIN, ApiPaths.AUTH_SSO_EXCHANGE);
         registry.addInterceptor(authInterceptor).addPathPatterns("/api/**");
     }
 }

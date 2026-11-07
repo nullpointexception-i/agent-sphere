@@ -7,18 +7,33 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.time.LocalDateTime;
 
-public record ErrorResponse(String errorCode, String errorMessage, String userTip, LocalDateTime timestamp) {
+/**
+ * Standard error envelope.
+ *
+ * <p>{@code errorNamespace + errorCode} is the stable front-end i18n key
+ * ({@code errors.<namespace>.<code>}); codes alone are not globally unique.
+ */
+public record ErrorResponse(String errorCode,
+                            String errorNamespace,
+                            String errorMessage,
+                            String userTip,
+                            LocalDateTime timestamp) {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .findAndRegisterModules()
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    public ErrorResponse(String errorCode, String errorMessage, String userTip) {
-        this(errorCode, errorMessage, userTip, LocalDateTime.now());
+    public ErrorResponse(String errorCode, String errorNamespace, String errorMessage, String userTip) {
+        this(errorCode, errorNamespace, errorMessage, userTip, LocalDateTime.now());
     }
 
-    public static ErrorResponse of(CommonErrorCode ec) {
-        return new ErrorResponse(ec.getCode(), ec.getMessage(), ec.getUserTip());
+    /** Backward-compatible constructor: unknown callers fall back to the common namespace. */
+    public ErrorResponse(String errorCode, String errorMessage, String userTip) {
+        this(errorCode, "common", errorMessage, userTip, LocalDateTime.now());
+    }
+
+    public static ErrorResponse of(ErrorCode ec) {
+        return new ErrorResponse(ec.getCode(), ec.namespace(), ec.getMessage(), ec.getUserTip());
     }
 
     public String toJson() {

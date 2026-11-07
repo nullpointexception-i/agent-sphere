@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import {
   AudioOutlined,
   CheckOutlined,
@@ -1585,7 +1586,7 @@ function ChatTab({
   };
 
   useReconnectingSse(
-    '/api/v1/im/stream',
+    API_PATHS.IM_STREAM,
     applyStreamEvent,
     // Every (re)connect: notify the chat panel so it refetches whatever the
     // dropped connection swallowed (server never replays missed events).
@@ -3343,7 +3344,7 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
 
   const logout = async () => {
     try {
-      await umiRequest('/api/v1/auth/logout', { method: 'POST' });
+      await umiRequest(API_PATHS.AUTH_LOGOUT, { method: 'POST' });
     } catch {
       // clear local session even if the server call fails
     }

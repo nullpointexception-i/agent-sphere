@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
@@ -744,7 +745,7 @@ export default function SkillList() {
           options={false}
           scroll={{ x: 1010, y: tableScrollY }}
           pagination={{
-            defaultPageSize: 10,
+            defaultPageSize: DEFAULT_PAGE_SIZE,
             showSizeChanger: true,
             showQuickJumper: true,
             pageSizeOptions: [5, 10, 20, 50],
@@ -789,7 +790,7 @@ export default function SkillList() {
           options={false}
           scroll={{ x: 1630, y: tableScrollY }}
           pagination={{
-            defaultPageSize: 10,
+            defaultPageSize: DEFAULT_PAGE_SIZE,
             showSizeChanger: true,
             showQuickJumper: true,
             pageSizeOptions: [5, 10, 20, 50],

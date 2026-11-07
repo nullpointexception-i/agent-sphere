@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
@@ -211,7 +212,7 @@ export default function AdminPermissions() {
         pagination={{
           current: page,
           total,
-          pageSize: 10,
+          pageSize: DEFAULT_PAGE_SIZE,
           onChange: (p) => {
             setPage(p);
             loadItems(p);

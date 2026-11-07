@@ -7,7 +7,7 @@ import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
 import com.buukle.agent.instance.spi.RunSpi;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -35,7 +35,7 @@ import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.CompactionStatus;
 import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.CompactionPromptConstant;

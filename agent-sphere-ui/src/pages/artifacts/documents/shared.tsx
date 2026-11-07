@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import { MenuOutlined } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import { useIntl, useParams } from '@umijs/max';
@@ -62,7 +63,7 @@ export default function SharedDocument() {
   useEffect(() => {
     if (!shareToken) return;
     setLoading(true);
-    fetch(`/api/v1/artifacts/documents/shared/${shareToken}`)
+    fetch(API_PATHS.DOCUMENT_SHARE(shareToken))
       .then((r) => (r.ok ? r.json() : null))
       .then(setDoc)
       .catch(() => setDoc(null))

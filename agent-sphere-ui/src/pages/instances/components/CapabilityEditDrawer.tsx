@@ -150,7 +150,7 @@ export default function CapabilityEditDrawer({
           })}
         </div>
         <Tabs
-          tabPlacement="left"
+          tabPlacement="start"
           items={capTypes.map((type) => {
             const bound = boundCaps.filter((c) => c.capabilityType === type);
             const added = addCaps.filter((c) => c.capabilityType === type);
@@ -388,7 +388,7 @@ export default function CapabilityEditDrawer({
               open
               footer={null}
               onCancel={() => setAddingType(null)}
-              size="large"
+              width={800}
             >
               <Table
                 rowKey="id"

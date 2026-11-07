@@ -75,8 +75,12 @@ declare namespace API {
   type ErrorResponse = {
     /** Business-agreed error code */
     errorCode: string;
+    /** Stable namespace for errors.<namespace>.<code> i18n keys */
+    errorNamespace?: string;
     /** Business error message */
     errorMessage?: string;
+    /** Localized user-facing tip */
+    userTip?: string;
     /** Whether the business request succeeded */
     success?: boolean;
   };

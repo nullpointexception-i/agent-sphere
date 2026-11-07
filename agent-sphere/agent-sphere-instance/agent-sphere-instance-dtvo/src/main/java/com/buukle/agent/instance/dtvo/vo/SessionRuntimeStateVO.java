@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.dtvo.vo;
 
-import lombok.Data;
+
+import com.buukle.agent.instance.dtvo.enums.RunStatus;import lombok.Data;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;

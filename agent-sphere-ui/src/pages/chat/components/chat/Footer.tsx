@@ -411,7 +411,7 @@ export default function Footer({
         <Sender
           ref={senderRef}
           value={inputValue}
-          onChange={onInputValueChange}
+          onChange={(v) => onInputValueChange(v.slice(0, 5000))}
           loading={inputLocked}
           readOnly={inputLocked}
           disabled={!!consoleBlocked}
@@ -422,7 +422,6 @@ export default function Footer({
             id: 'pages.chat.typeMessageHint',
             defaultMessage: 'Type a message... (Shift+Enter for new line)',
           })}
-          maxLength={5000}
           style={{ flex: 1 }}
           autoSize={false}
           suffix={(oriNode) => (

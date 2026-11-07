@@ -1,3 +1,4 @@
+import { IM_TASK_STATUS, WORK_ITEM_ACTIVE_STATUSES } from '@/constants/status';
 import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
@@ -16,16 +17,7 @@ import { Can } from '@/components/Can';
 import { type ImMessage, imApi } from '@/services/agentSphere/im';
 import { messageText, parsedContent } from './messageUtils';
 
-const TASK_STATUS: Record<string, { color: string; labelKey: string }> = {
-  QUEUED: { color: 'blue', labelKey: 'pages.im.status.queued' },
-  DISPATCHING: { color: 'processing', labelKey: 'pages.im.status.dispatching' },
-  RUNNING: { color: 'processing', labelKey: 'pages.im.status.running' },
-  WAITING: { color: 'gold', labelKey: 'pages.im.status.waiting' },
-  COMPLETED: { color: 'green', labelKey: 'pages.im.status.completed' },
-  DONE: { color: 'green', labelKey: 'pages.im.status.completed' },
-  FAILED: { color: 'red', labelKey: 'pages.im.status.failed' },
-  CANCELLED: { color: 'default', labelKey: 'pages.im.status.cancelled' },
-};
+const TASK_STATUS = IM_TASK_STATUS;
 
 function AttachmentMessage({
   conversationId,
@@ -103,7 +95,7 @@ function TaskCard({
   const intl = useIntl();
   const cfg = TASK_STATUS[status];
   const canRetry = status === 'FAILED' || status === 'CANCELLED';
-  const canCancel = ['QUEUED', 'DISPATCHING', 'RUNNING', 'WAITING'].includes(
+  const canCancel = WORK_ITEM_ACTIVE_STATUSES.has(
     status,
   );
   return (

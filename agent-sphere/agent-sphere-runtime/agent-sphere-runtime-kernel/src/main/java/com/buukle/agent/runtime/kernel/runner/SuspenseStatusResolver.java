@@ -2,7 +2,7 @@ package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 

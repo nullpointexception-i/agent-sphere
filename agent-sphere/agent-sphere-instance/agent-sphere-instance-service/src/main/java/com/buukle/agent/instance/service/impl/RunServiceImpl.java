@@ -1,5 +1,9 @@
 package com.buukle.agent.instance.service.impl;
 
+
+
+import com.buukle.agent.instance.dtvo.enums.RunDirection;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -9,7 +13,6 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentRun;
 import com.buukle.agent.instance.domain.vo.RunUsageVO;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
-import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.MessageHistoryVO;
 import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
@@ -46,7 +49,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     private static final String REASONING_PROPERTY = "reasoning";
     /** Terminal statuses: no non-terminal event may move a run out of these states. */
     private static final List<String> TERMINAL_STATUSES = List.of(
-            RunEnum.STATUS_COMPLETED, RunEnum.STATUS_FAILED, RunEnum.STATUS_CANCELLED);
+            RunStatus.Codes.COMPLETED, RunStatus.Codes.FAILED, RunStatus.Codes.CANCELLED);
 
     @Override
     public RunVO createRun(CreateRunDTO dto) {
@@ -87,13 +90,13 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         AgentRun run = lambdaQuery()
                 .eq(AgentRun::getSessionId, sessionId)
                 .in(AgentRun::getStatus, List.of(
-                        RunEnum.STATUS_PENDING,
-                        RunEnum.STATUS_RUNNING,
-                        RunEnum.STATUS_AWAITING_USER,
+                        RunStatus.Codes.PENDING,
+                        RunStatus.Codes.RUNNING,
+                        RunStatus.Codes.AWAITING_USER,
                         // WAITING is also a parked state: the loop has exited but the run has not
                         // finished, so it must count as active; otherwise stop/guards would treat it as
                         // "no session" and neither cancel it nor clean it up.
-                        RunEnum.STATUS_WAITING))
+                        RunStatus.Codes.WAITING))
                 .orderByDesc(AgentRun::getId)
                 .last("LIMIT 1")
                 .one();
@@ -147,7 +150,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
      * zero overhead.
      */
     private void fillRetryState(RunVO vo) {
-        if (vo == null || !RunEnum.STATUS_WAITING.equals(vo.getStatus())
+        if (vo == null || !RunStatus.Codes.WAITING.equals(vo.getStatus())
                 || !PendingWaitKind.LLM_RETRY.equals(vo.getWaitKind())) {
             return;
         }
@@ -196,7 +199,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         return lambdaUpdate()
                 .eq(AgentRun::getId, runId)
                 .notIn(AgentRun::getStatus, TERMINAL_STATUSES)
-                .set(AgentRun::getStatus, RunEnum.STATUS_RUNNING)
+                .set(AgentRun::getStatus, RunStatus.Codes.RUNNING)
                 .set(AgentRun::getLoopCount, loopCount)
                 .set(AgentRun::getLoopLimit, loopLimit)
                 .set(AgentRun::getUpdatedAt, LocalDateTime.now())
@@ -210,8 +213,8 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         }
         return lambdaUpdate()
                 .eq(AgentRun::getId, runId)
-                .in(AgentRun::getStatus, List.of(RunEnum.STATUS_RUNNING, RunEnum.STATUS_WAITING))
-                .set(AgentRun::getStatus, RunEnum.STATUS_WAITING)
+                .in(AgentRun::getStatus, List.of(RunStatus.Codes.RUNNING, RunStatus.Codes.WAITING))
+                .set(AgentRun::getStatus, RunStatus.Codes.WAITING)
                 .set(AgentRun::getRetryAttempt, attempt)
                 .set(AgentRun::getWaitKind, PendingWaitKind.LLM_RETRY)
                 .set(AgentRun::getUpdatedAt, LocalDateTime.now())
@@ -225,8 +228,8 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         }
         return lambdaUpdate()
                 .eq(AgentRun::getId, runId)
-                .eq(AgentRun::getStatus, RunEnum.STATUS_RUNNING)
-                .set(AgentRun::getStatus, RunEnum.STATUS_WAITING)
+                .eq(AgentRun::getStatus, RunStatus.Codes.RUNNING)
+                .set(AgentRun::getStatus, RunStatus.Codes.WAITING)
                 .set(AgentRun::getWaitKind, null)
                 .set(AgentRun::getUpdatedAt, LocalDateTime.now())
                 .update();
@@ -239,8 +242,8 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         }
         boolean claimed = lambdaUpdate()
                 .eq(AgentRun::getId, runId)
-                .eq(AgentRun::getStatus, RunEnum.STATUS_WAITING)
-                .set(AgentRun::getStatus, RunEnum.STATUS_RUNNING)
+                .eq(AgentRun::getStatus, RunStatus.Codes.WAITING)
+                .set(AgentRun::getStatus, RunStatus.Codes.RUNNING)
                 .set(AgentRun::getWaitKind, null)
                 .set(AgentRun::getUpdatedAt, LocalDateTime.now())
                 .update();
@@ -268,7 +271,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         return lambdaUpdate()
                 .eq(AgentRun::getId, runId)
                 .notIn(AgentRun::getStatus, TERMINAL_STATUSES)
-                .set(AgentRun::getStatus, RunEnum.STATUS_CANCELLED)
+                .set(AgentRun::getStatus, RunStatus.Codes.CANCELLED)
                 .set(AgentRun::getWaitKind, null)
                 .set(AgentRun::getUpdatedAt, LocalDateTime.now())
                 .update();
@@ -352,13 +355,13 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .select(AgentRun::getId, AgentRun::getUserMessage);
 
         if (runId != null) {
-            if (RunEnum.DIRECTION_PREV.equals(direction)) {
+            if (RunDirection.PREV.equals(direction)) {
                 query.lt(AgentRun::getId, runId).orderByDesc(AgentRun::getId);
             } else {
                 query.gt(AgentRun::getId, runId).orderByAsc(AgentRun::getId);
             }
         } else {
-            if (RunEnum.DIRECTION_NEXT.equals(direction)) {
+            if (RunDirection.NEXT.equals(direction)) {
                 return new MessageHistoryVO(null, null, false);
             }
             query.orderByDesc(AgentRun::getId);
@@ -368,7 +371,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         if (run == null) return new MessageHistoryVO(null, null, false);
 
         boolean hasMore;
-        if (RunEnum.DIRECTION_PREV.equals(direction) || runId == null) {
+        if (RunDirection.PREV.equals(direction) || runId == null) {
             hasMore = lambdaQuery()
                     .eq(AgentRun::getSessionId, sessionId)
                     .ne(AgentRun::getUserMessage, "")

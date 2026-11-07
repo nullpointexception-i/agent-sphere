@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import { App, Button, Checkbox, Modal, Space, Table, Tag } from 'antd';
@@ -177,7 +178,7 @@ export default function AdminUsers() {
         pagination={{
           current: page,
           total,
-          pageSize: 10,
+          pageSize: DEFAULT_PAGE_SIZE,
           onChange: (p) => {
             setPage(p);
             loadUsers(p);

@@ -1,5 +1,9 @@
 package com.buukle.agent.runtime.kernel.runner;
 
+
+
+import com.buukle.agent.instance.dtvo.enums.RunType;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.constant.ToolApprovalDecision;
@@ -9,7 +13,6 @@ import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
-import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.ToolApprovalVO;
@@ -464,7 +467,7 @@ public class SessionRunner {
             if (currentRun == null && input != null) {
                 CreateRunDTO dto = new CreateRunDTO();
                 dto.setSessionId(sessionId);
-                dto.setType(RunEnum.TYPE_AUTO);
+                dto.setType(RunType.AUTO);
                 dto.setUserMessage(input.text());
                 dto.setReasoningEffort(input.reasoningEffort());
                 currentRun = runSpi.createRun(dto);

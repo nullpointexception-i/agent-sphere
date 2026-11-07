@@ -1,6 +1,10 @@
 package com.buukle.agent.infrastructure.config;
 
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.ApiPaths;
 import com.buukle.agent.common.constant.HttpHeaders;import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
@@ -33,8 +37,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
-    private static final List<String> SKIP_PATHS = List.of("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/check-username", "/api/v1/auth/sso", "/api/v1/chrome", "/api/v1/artifacts/documents/shared", "/api/v1/public/shares", "/api/v1/system/config/public", "/api/v1/system/config/plugin/download");
-    private static final String EXTERNAL_API_PREFIX = "/api/v1/api";
+    private static final List<String> SKIP_PATHS = List.of(
+            ApiPaths.AUTH_LOGIN,
+            ApiPaths.AUTH_REGISTER,
+            ApiPaths.AUTH_CHECK_USERNAME,
+            ApiPaths.AUTH_SSO,
+            ApiPaths.CHROME,
+            ApiPaths.DOCUMENTS_SHARED,
+            ApiPaths.PUBLIC_SHARES,
+            ApiPaths.SYSTEM_CONFIG_PUBLIC,
+            ApiPaths.PLUGIN_DOWNLOAD);
+    private static final String EXTERNAL_API_PREFIX = ApiPrefix.API;
     private final UserMapper userMapper;
     private final CacheService cacheService;
     private final PermissionSpi permissionSpi;

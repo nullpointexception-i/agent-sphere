@@ -200,7 +200,7 @@ copies from their origin skill. Replaces the old `SkillAutoUpdateSweeper`.
   且不得重复同一次 wait —— 沿用 `getContent(mode:ready)` 那套「等完必须复核」的经验。
 - **`WAITING` 是一个真正的 run 状态，必须进整套状态机**（这份清单漏一处就静默失效，
   曾导致「停止按钮在等待时无效」）：
-  `RunEnum.STATUS_WAITING` / `RunServiceImpl.findActiveRun`（否则 stopSession 走「无活动 run」
+  `RunStatus.Codes.WAITING` / `RunServiceImpl.findActiveRun`（否则 stopSession 走「无活动 run」
   分支，清掉刚设的取消标志、什么都不取消）/ `ChatRuntimeService.stopSession`+`stopRun`
   （停车态与 `AWAITING_USER` 同构：置 `CANCELLED` + `PendingWaitSpi.cancelPendingByRunId`
   取消挂起 + 发 `run_cancelled`）/ `RuntimeEventListener.handleRunLifecycle` /

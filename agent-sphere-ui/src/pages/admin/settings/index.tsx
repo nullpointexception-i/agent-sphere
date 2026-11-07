@@ -1,3 +1,4 @@
+import { localizeApiError } from '@/utils/errorMessage';
 import { useIntl } from '@umijs/max';
 import { App, Button, Collapse, Form, Input, Modal, Tag, Upload } from 'antd';
 import { useEffect, useState } from 'react';
@@ -126,11 +127,13 @@ export default function AdminSettings() {
       loadConfigs();
     } catch (e: any) {
       message.error(
-        e?.response?.data?.message ||
+        localizeApiError(
+          e?.response?.data,
           intl.formatMessage({
             id: 'pages.chat.saveFailed',
             defaultMessage: 'Save failed',
           }),
+        ),
       );
     }
     return false;

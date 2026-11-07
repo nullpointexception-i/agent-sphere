@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import { request } from '@umijs/max';
 
 import { API_BASE } from '@/constants/api';
@@ -502,13 +503,13 @@ export const agentApi = {
 
   auth: {
     checkUsername: (username: string) =>
-      request<boolean>(`/api/v1/auth/check-username`, { params: { username } }),
+      request<boolean>(API_PATHS.AUTH_CHECK_USERNAME, { params: { username } }),
     register: (data: { username: string; password: string; repeatPassword: string }) =>
-      request<any>(`/api/v1/auth/register`, { method: 'POST', data }),
+      request<any>(API_PATHS.AUTH_REGISTER, { method: 'POST', data }),
     updateProfile: (data: { displayName?: string; englishName?: string; avatar?: string }) =>
-      request<void>(`/api/v1/auth/profile`, { method: 'PUT', data }),
+      request<void>(API_PATHS.AUTH_PROFILE, { method: 'PUT', data }),
     updatePassword: (data: { oldPassword: string; newPassword: string }) =>
-      request<void>(`/api/v1/auth/password`, { method: 'PUT', data }),
+      request<void>(API_PATHS.AUTH_PASSWORD, { method: 'PUT', data }),
   },
 
   admin: {

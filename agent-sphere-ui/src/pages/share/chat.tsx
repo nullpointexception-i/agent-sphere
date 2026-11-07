@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { useIntl, useParams } from '@umijs/max';
@@ -23,7 +24,7 @@ export default function SharedChat() {
   useEffect(() => {
     if (!shareToken) return;
     setLoading(true);
-    fetch(`/api/v1/public/shares/${shareToken}`)
+    fetch(API_PATHS.PUBLIC_SHARE(shareToken))
       .then((r) => (r.ok ? r.json() : null))
       .then(setData)
       .catch(() => setData(null))

@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import { PERM } from '@/constants/permissions';
 import {
   DisconnectOutlined,
@@ -20,7 +21,7 @@ type GlobalHeaderRightProps = {
 export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
   children,
 }) => {
-  const loginOut = async (endpoint = '/api/v1/auth/logout') => {
+  const loginOut = async (endpoint: string = API_PATHS.AUTH_LOGOUT) => {
     try {
       await umiRequest(endpoint, { method: 'POST' });
     } catch {}
@@ -55,7 +56,7 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
         setInitialState((s) => ({ ...s, currentUser: undefined }));
       });
       // Revoke all sessions for this user: other devices / the widget must sign in again
-      loginOut('/api/v1/auth/logout-all');
+      loginOut(API_PATHS.AUTH_LOGOUT_ALL);
       return;
     }
     if (key === 'admin') {

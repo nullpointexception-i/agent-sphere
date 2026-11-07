@@ -1,3 +1,5 @@
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { TASK_STATUS } from '@/constants/status';
 import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
@@ -15,13 +17,7 @@ import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
 
-const STATUS_TAG: Record<string, { color: string; label: string }> = {
-  QUEUED: { color: 'blue', label: 'pages.admin.tasks.statusQueued' },
-  RUNNING: { color: 'processing', label: 'pages.admin.tasks.statusRunning' },
-  COMPLETED: { color: 'green', label: 'pages.admin.tasks.statusCompleted' },
-  FAILED: { color: 'red', label: 'pages.admin.tasks.statusFailed' },
-  CANCELLED: { color: 'default', label: 'pages.admin.tasks.statusCancelled' },
-};
+const STATUS_TAG = TASK_STATUS;
 
 export default function TaskList() {
   const { message, modal } = App.useApp();
@@ -67,7 +63,7 @@ export default function TaskList() {
   const statusRender = (value: any) => {
     const cfg = STATUS_TAG[value];
     return cfg ? (
-      <Tag color={cfg.color}>{t(cfg.label, value)}</Tag>
+      <Tag color={cfg.color}>{t(cfg.labelKey, value)}</Tag>
     ) : (
       <Tag>{value}</Tag>
     );
@@ -236,7 +232,7 @@ export default function TaskList() {
       label: t('pages.admin.tasks.status', 'Status'),
       value: viewRecord?.status
         ? STATUS_TAG[viewRecord.status]
-          ? t(STATUS_TAG[viewRecord.status].label, viewRecord.status)
+          ? t(STATUS_TAG[viewRecord.status].labelKey, viewRecord.status)
           : viewRecord.status
         : '-',
     },
@@ -298,7 +294,7 @@ export default function TaskList() {
         options={false}
         scroll={{ y: tableScrollY }}
         pagination={{
-          defaultPageSize: 10,
+          defaultPageSize: DEFAULT_PAGE_SIZE,
           showSizeChanger: true,
           showQuickJumper: true,
           pageSizeOptions: [5, 10, 20, 50],
@@ -351,7 +347,7 @@ export default function TaskList() {
             onChange={(v) => setStatus(v)}
             options={Object.keys(STATUS_TAG).map((s) => ({
               value: s,
-              label: t(STATUS_TAG[s].label, s),
+              label: t(STATUS_TAG[s].labelKey, s),
             }))}
           />,
           <DatePicker.RangePicker

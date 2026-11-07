@@ -1,3 +1,5 @@
+import { localizeApiError } from '@/utils/errorMessage';
+import { API_PATHS } from '@/constants/endpoints';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import {
@@ -1104,7 +1106,7 @@ export default function Chat() {
     }
 
     connectSse(
-      `/api/v1/runtime/${sid}/stream`,
+      API_PATHS.RUNTIME_STREAM(sid),
       token,
       {
         onOpen: () => {
@@ -1979,10 +1981,7 @@ export default function Chat() {
     } catch (e: any) {
       setSending(false);
       const errMsg =
-        e?.data?.userTip ||
-        e?.data?.errorMessage ||
-        e?.message ||
-        'Failed to create session';
+        localizeApiError(e?.data, e?.message || 'Failed to create session');
       message.error(errMsg);
     }
   };

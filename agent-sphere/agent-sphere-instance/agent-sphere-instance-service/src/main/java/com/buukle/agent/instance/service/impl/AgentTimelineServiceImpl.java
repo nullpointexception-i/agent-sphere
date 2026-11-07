@@ -1,7 +1,9 @@
 package com.buukle.agent.instance.service.impl;
 
 
-import com.buukle.agent.instance.dtvo.enums.RunEnum;import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.common.context.AuthContext;
@@ -626,9 +628,9 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             return null;
         }
         return switch (status.toUpperCase(Locale.ROOT)) {
-            case RunEnum.STATUS_PENDING, RunEnum.STATUS_RUNNING -> TimelineState.IN_PROGRESS.getCode();
+            case RunStatus.Codes.PENDING, RunStatus.Codes.RUNNING -> TimelineState.IN_PROGRESS.getCode();
             case "SUCCEEDED" -> TimelineState.SUCCEEDED.getCode();
-            case RunEnum.STATUS_FAILED -> TimelineState.FAILED.getCode();
+            case RunStatus.Codes.FAILED -> TimelineState.FAILED.getCode();
             default -> null;
         };
     }
@@ -639,7 +641,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             return null;
         }
         return switch (status.toUpperCase(Locale.ROOT)) {
-            case RunEnum.STATUS_PENDING -> TimelineState.PENDING.getCode();
+            case RunStatus.Codes.PENDING -> TimelineState.PENDING.getCode();
             case "DISMISSED" -> TimelineState.CANCELLED.getCode();
             default -> TimelineState.ANSWERED.getCode();
         };
@@ -662,9 +664,9 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             return null;
         }
         return switch (status.toUpperCase(Locale.ROOT)) {
-            case RunEnum.STATUS_PENDING, RunEnum.STATUS_RUNNING -> TimelineState.RUNNING.getCode();
-            case RunEnum.STATUS_COMPLETED -> TimelineState.COMPLETED.getCode();
-            case RunEnum.STATUS_FAILED -> TimelineState.FAILED.getCode();
+            case RunStatus.Codes.PENDING, RunStatus.Codes.RUNNING -> TimelineState.RUNNING.getCode();
+            case RunStatus.Codes.COMPLETED -> TimelineState.COMPLETED.getCode();
+            case RunStatus.Codes.FAILED -> TimelineState.FAILED.getCode();
             default -> null;
         };
     }

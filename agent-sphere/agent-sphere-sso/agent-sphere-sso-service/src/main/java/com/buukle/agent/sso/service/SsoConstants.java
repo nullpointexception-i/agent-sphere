@@ -1,5 +1,7 @@
 package com.buukle.agent.sso.service;
 
+
+import com.buukle.agent.common.constant.ApiPaths;
 import com.nimbusds.jose.JWSAlgorithm;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +14,7 @@ public final class SsoConstants {
     private SsoConstants() {
     }
 
-    public static final String CALLBACK_PATH = "/api/v1/auth/sso/callback";
+    public static final String CALLBACK_PATH = ApiPaths.AUTH_SSO_CALLBACK;
 
     public static final String STATE_KEY_PREFIX = "sso:state:";
     public static final String OTC_KEY_PREFIX = "sso:otc:";

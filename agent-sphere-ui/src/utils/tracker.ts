@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import { getToken } from '@/utils/auth';
 
 interface FrontendEvent {
@@ -137,7 +138,7 @@ class UserTracker {
         },
       ]);
       const token = getToken();
-      fetch('/api/v1/track/frontend', {
+      fetch(API_PATHS.TRACK_FRONTEND, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,7 +169,7 @@ class UserTracker {
     try {
       // Use native fetch instead of the global request: a tracking failure/401 should not trigger
       // global error handling (avoiding a full-page reload on the login page)
-      await fetch('/api/v1/track/frontend', {
+      await fetch(API_PATHS.TRACK_FRONTEND, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

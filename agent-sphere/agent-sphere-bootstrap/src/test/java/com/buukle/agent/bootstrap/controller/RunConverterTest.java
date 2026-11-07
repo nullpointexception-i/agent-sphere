@@ -1,8 +1,9 @@
 package com.buukle.agent.bootstrap.controller;
 
+
+import com.buukle.agent.instance.dtvo.enums.RunType;
 import com.buukle.agent.instance.domain.AgentRun;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
-import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.service.converter.RunConverter;
@@ -21,7 +22,7 @@ class RunConverterTest {
     void toDO_persistsAttachmentsAsJson() {
         CreateRunDTO dto = new CreateRunDTO();
         dto.setSessionId(1L);
-        dto.setType(RunEnum.TYPE_AUTO);
+        dto.setType(RunType.AUTO);
         dto.setUserMessage("看图");
         dto.setAttachments(List.of(
                 new RunAttachment("key-a", "image/png"),
@@ -38,7 +39,7 @@ class RunConverterTest {
     void toDO_skipsEmptyAttachments() {
         CreateRunDTO dto = new CreateRunDTO();
         dto.setSessionId(1L);
-        dto.setType(RunEnum.TYPE_AUTO);
+        dto.setType(RunType.AUTO);
         dto.setUserMessage("hi");
         dto.setAttachments(List.of());
 
@@ -52,7 +53,7 @@ class RunConverterTest {
         AgentRun run = new AgentRun();
         run.setId(1L);
         run.setSessionId(1L);
-        run.setType(RunEnum.TYPE_AUTO);
+        run.setType(RunType.AUTO);
         run.setUserMessage("看图");
         run.setAttachments("[{\"fileKey\":\"key-a\",\"contentType\":\"image/png\"}]");
 
@@ -109,7 +110,7 @@ class RunConverterTest {
     void completionProtocol_roundTripsButStartsNullForFirstEntryResolution() {
         CreateRunDTO dto = new CreateRunDTO();
         dto.setSessionId(1L);
-        dto.setType(RunEnum.TYPE_AUTO);
+        dto.setType(RunType.AUTO);
         dto.setUserMessage("hi");
         assertNull(converter.toDO(dto).getCompletionProtocol(),
                 "新 run 必须留空，等 RuntimeOrchestrator 解析实例/路由后固化");

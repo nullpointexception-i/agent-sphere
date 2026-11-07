@@ -1,3 +1,4 @@
+import { CLEANUP_RUN_STATUS } from '@/constants/status';
 import { ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Drawer, Select, Space, Table, Tag } from 'antd';
@@ -11,24 +12,7 @@ interface Props {
   onClose: () => void;
 }
 
-const STATUS_META: Record<string, { color: string; labelKey: string }> = {
-  RUNNING: {
-    color: 'processing',
-    labelKey: 'pages.admin.settings.cleanup.runs.statusRunning',
-  },
-  SUCCESS: {
-    color: 'green',
-    labelKey: 'pages.admin.settings.cleanup.runs.statusSuccess',
-  },
-  FAILED: {
-    color: 'red',
-    labelKey: 'pages.admin.settings.cleanup.runs.statusFailed',
-  },
-  SKIPPED: {
-    color: 'default',
-    labelKey: 'pages.admin.settings.cleanup.runs.statusSkipped',
-  },
-};
+const STATUS_META = CLEANUP_RUN_STATUS;
 
 /**
  * Session cleanup execution records.

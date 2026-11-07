@@ -49,7 +49,7 @@ public interface SessionCleanupMapper {
      *   <li>a task is QUEUED/RUNNING — Bole open-layer long-running tasks only update task/run rows
      *       and never the session row, so the updated_at condition above alone would still delete them by mistake.</li>
      * </ul>
-     * Status values are passed in by the caller from RunEnum / TaskEnum (no literals in SQL).
+     * Status values are passed in by the caller from RunStatus / TaskEnum (no literals in SQL).
      */
     @Select("""
             <script>

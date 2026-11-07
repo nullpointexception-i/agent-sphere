@@ -1,3 +1,4 @@
+import { SKILL_SYNC_RUN_STATUS } from '@/constants/status';
 import { ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Drawer, Select, Space, Table, Tag } from 'antd';
@@ -11,24 +12,7 @@ interface Props {
   onClose: () => void;
 }
 
-const STATUS_META: Record<string, { color: string; labelKey: string }> = {
-  RUNNING: {
-    color: 'processing',
-    labelKey: 'pages.admin.settings.skillSyncRuns.running',
-  },
-  SUCCESS: {
-    color: 'green',
-    labelKey: 'pages.admin.settings.skillSyncRuns.success',
-  },
-  FAILED: {
-    color: 'red',
-    labelKey: 'pages.admin.settings.skillSyncRuns.failed',
-  },
-  SKIPPED: {
-    color: 'default',
-    labelKey: 'pages.admin.settings.skillSyncRuns.skipped',
-  },
-};
+const STATUS_META = SKILL_SYNC_RUN_STATUS;
 
 /**
  * Skill Hub auto-sync execution records.

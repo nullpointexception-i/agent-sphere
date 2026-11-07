@@ -1,7 +1,7 @@
 package com.buukle.agent.runtime.orchestration.handler;
 
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import lombok.RequiredArgsConstructor;

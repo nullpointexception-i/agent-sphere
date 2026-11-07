@@ -1,3 +1,4 @@
+import { LARGE_PAGE_SIZE } from '@/constants/pagination';
 import { EyeOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Button, Descriptions, Input, Modal, Select, Table, Tag } from 'antd';
@@ -216,7 +217,7 @@ export default function AdminAuditLogs() {
         pagination={{
           current: page,
           total,
-          pageSize: 20,
+          pageSize: LARGE_PAGE_SIZE,
           onChange: (p) => {
             setPage(p);
             loadItems(p);

@@ -25,4 +25,9 @@ public enum InstanceErrorCode implements ErrorCode {
     private final String code;
     private final String message;
     private final String userTip;
+
+    @Override
+    public String namespace() {
+        return "instance";
+    }
 }

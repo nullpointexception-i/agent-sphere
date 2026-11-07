@@ -1,3 +1,4 @@
+import { localizeApiError } from '@/utils/errorMessage';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history, SelectLang, useIntl } from '@umijs/max';
@@ -65,11 +66,7 @@ const Register: React.FC = () => {
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
       setErrorMessage(
-        body?.userTip ||
-          body?.errorMessage ||
-          body?.message ||
-          error?.message ||
-          'Registration failed',
+        localizeApiError(body, error?.message || 'Registration failed'),
       );
     }
   };
@@ -131,6 +128,12 @@ const Register: React.FC = () => {
               prefix: <UserOutlined />,
               maxLength: 32,
               onBlur: (e) => checkUsername(e.target.value),
+              suffix:
+                usernameStatus === 'valid' ? (
+                  <span style={{ color: '#52c41a' }}>✓</span>
+                ) : usernameStatus === 'invalid' ? (
+                  <span style={{ color: '#ff4d4f' }}>✗</span>
+                ) : null,
             }}
             placeholder={intl.formatMessage({
               id: 'pages.login.username.placeholder',
@@ -162,13 +165,6 @@ const Register: React.FC = () => {
                 }),
               },
             ]}
-            suffix={
-              usernameStatus === 'valid' ? (
-                <span style={{ color: '#52c41a' }}>✓</span>
-              ) : usernameStatus === 'invalid' ? (
-                <span style={{ color: '#ff4d4f' }}>✗</span>
-              ) : null
-            }
             help={
               usernameStatus === 'invalid'
                 ? intl.formatMessage({

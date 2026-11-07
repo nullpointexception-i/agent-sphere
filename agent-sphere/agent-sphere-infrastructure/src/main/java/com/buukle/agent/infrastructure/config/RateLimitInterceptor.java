@@ -1,5 +1,7 @@
 package com.buukle.agent.infrastructure.config;
 
+
+import com.buukle.agent.common.constant.ApiPaths;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.error.CommonErrorCode;
@@ -23,8 +25,8 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class RateLimitInterceptor implements HandlerInterceptor {
 
-    private static final String LOGIN_PATH = "/api/v1/auth/login";
-    private static final String SSO_EXCHANGE_PATH = "/api/v1/auth/sso/exchange";
+    private static final String LOGIN_PATH = ApiPaths.AUTH_LOGIN;
+    private static final String SSO_EXCHANGE_PATH = ApiPaths.AUTH_SSO_EXCHANGE;
     private static final String RATE_KEY_LOGIN = "rate:login:";
     private static final String RATE_KEY_SSO_EXCHANGE = "rate:sso:exchange:";
 

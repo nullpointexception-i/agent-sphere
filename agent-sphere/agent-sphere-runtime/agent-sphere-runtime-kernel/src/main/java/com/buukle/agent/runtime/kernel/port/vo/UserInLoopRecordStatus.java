@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.port.vo;
 
-public enum UserInLoopRecordStatus implements EventType {
+
+import com.buukle.agent.common.event.EventType;public enum UserInLoopRecordStatus implements EventType {
     WAITING, RESPONDED;
 
     @Override

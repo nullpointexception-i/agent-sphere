@@ -38,7 +38,7 @@ export const useStyles = createStyles(({ css, token }) => ({
   `,
 
   cardTime: css`
-    font-size: ${token.fontSizeXS}px;
+    font-size: ${token.fontSizeSM}px;
     color: ${token.colorTextQuaternary};
     margin-top: 2px;
   `,

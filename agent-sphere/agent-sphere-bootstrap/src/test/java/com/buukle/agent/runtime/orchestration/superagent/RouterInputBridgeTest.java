@@ -8,7 +8,7 @@ import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.ToolApprovalStatus;

@@ -5,7 +5,7 @@ import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.orchestration.service.ChatRuntimeService;
 import com.buukle.agent.superagent.spi.AgentRouterRunCommand;
 import com.buukle.agent.superagent.spi.AgentRouterRunResult;

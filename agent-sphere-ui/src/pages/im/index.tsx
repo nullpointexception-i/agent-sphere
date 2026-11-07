@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import { SettingOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
@@ -389,7 +390,7 @@ export default function ImPage() {
   }, []);
 
   // IM user-level SSE: incremental updates by event type instead of a full refresh on each event.
-  useReconnectingSse('/api/v1/im/stream', (type, event) => {
+  useReconnectingSse(API_PATHS.IM_STREAM, (type, event) => {
     void handleStreamEvent(type, event).catch(() => {});
   });
 

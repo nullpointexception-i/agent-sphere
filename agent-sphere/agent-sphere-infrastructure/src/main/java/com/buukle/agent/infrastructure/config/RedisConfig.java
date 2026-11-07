@@ -38,7 +38,7 @@ public class RedisConfig {
 
     /**
      * Dedicated client for the event bus: JsonJacksonCodec (supports POJO serialization/deserialization
-     * such as {@link com.buukle.agent.runtime.kernel.port.vo.EventType}). Separated from the default
+     * such as {@link com.buukle.agent.common.event.EventType}). Separated from the default
      * client so the default codec used by CacheService/locks/RBucket is unaffected.
      */
     @Bean(destroyMethod = "shutdown")

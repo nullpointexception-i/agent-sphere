@@ -1,6 +1,6 @@
 package com.buukle.agent.runtime.orchestration.service;
 
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 
 import java.util.ArrayList;
 import java.util.List;

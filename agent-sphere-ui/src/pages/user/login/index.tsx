@@ -1,3 +1,6 @@
+import { localizeApiError } from '@/utils/errorMessage';
+import { API_BASE } from '@/constants/api';
+import { API_PATHS } from '@/constants/endpoints';
 import {
   DownOutlined,
   GlobalOutlined,
@@ -26,8 +29,8 @@ import { labelWithRule } from '@/utils/labelWithRule';
 import Settings from '../../../../config/defaultSettings';
 import { useStyles } from './style';
 
-const SSO_AUTHORIZE_PATH = '/api/v1/auth/sso/authorize';
-const SSO_EXCHANGE_PATH = '/api/v1/auth/sso/exchange';
+const SSO_AUTHORIZE_PATH = API_PATHS.SSO_AUTHORIZE;
+const SSO_EXCHANGE_PATH = API_PATHS.SSO_EXCHANGE;
 const SSO_QUERY_PARAM_OTC = 'otc';
 const SSO_QUERY_PARAM_ERROR = 'error';
 const SSO_REDIRECT_PATH = '/user/login';
@@ -79,7 +82,7 @@ const Login: React.FC = () => {
           if (!raw) return '';
           return /^https?:\/\//i.test(raw)
             ? raw
-            : `${window.location.origin}${raw.startsWith('/') ? `/api/v1${raw}` : `/api/v1/${raw}`}`;
+            : `${window.location.origin}${raw.startsWith('/') ? `${API_BASE}${raw}` : `${API_BASE}/${raw}`}`;
         };
         setPluginStoreUrl(toAbs(res?.['plugin.store-url'] || ''));
         setPluginDownloadUrl(toAbs(res?.['plugin.download-url'] || ''));
@@ -144,15 +147,8 @@ const Login: React.FC = () => {
       await completeLogin(user);
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
-      const msg =
-        body?.userTip ||
-        body?.errorMessage ||
-        body?.message ||
-        error?.message ||
-        intl.formatMessage({
-          id: 'pages.login.failure',
-          defaultMessage: 'Login failed, please try again!',
-        });
+      const msg = localizeApiError(body, error?.message || intl.formatMessage({ id: 'pages.login.failure',
+          defaultMessage: 'Login failed, please try again!', }));
       setErrorMessage(msg);
     }
   };
@@ -180,15 +176,8 @@ const Login: React.FC = () => {
       window.location.href = authorizeUrl;
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
-      const msg =
-        body?.userTip ||
-        body?.errorMessage ||
-        body?.message ||
-        error?.message ||
-        intl.formatMessage({
-          id: 'pages.login.ssoFailed',
-          defaultMessage: 'Failed to start enterprise sign-in, please retry!',
-        });
+      const msg = localizeApiError(body, error?.message || intl.formatMessage({ id: 'pages.login.ssoFailed',
+          defaultMessage: 'Failed to start enterprise sign-in, please retry!', }));
       message.error(msg);
     }
   };
@@ -196,22 +185,15 @@ const Login: React.FC = () => {
   const handleSubmit = async (values: any) => {
     try {
       setErrorMessage('');
-      const user = await umiRequest('/api/v1/auth/login', {
+      const user = await umiRequest(API_PATHS.AUTH_LOGIN, {
         method: 'POST',
         data: { username: values.username, password: values.password },
       });
       await completeLogin(user);
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
-      const msg =
-        body?.userTip ||
-        body?.errorMessage ||
-        body?.message ||
-        error?.message ||
-        intl.formatMessage({
-          id: 'pages.login.failure',
-          defaultMessage: 'Login failed, please try again!',
-        });
+      const msg = localizeApiError(body, error?.message || intl.formatMessage({ id: 'pages.login.failure',
+          defaultMessage: 'Login failed, please try again!', }));
       setErrorMessage(msg);
     }
   };

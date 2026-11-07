@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { PERM } from '@/constants/permissions';
 import {
   DeleteOutlined,
@@ -268,7 +269,7 @@ export default function DocumentList() {
         actionRef={actionRef}
         scroll={{ y: tableScrollY }}
         pagination={{
-          defaultPageSize: 10,
+          defaultPageSize: DEFAULT_PAGE_SIZE,
           showSizeChanger: true,
           showQuickJumper: true,
           pageSizeOptions: [5, 10, 20, 50],

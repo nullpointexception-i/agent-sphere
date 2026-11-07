@@ -4,7 +4,7 @@ import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.PendingWaitSpi;
 import com.buukle.agent.instance.spi.RunSpi;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.orchestration.service.ChatRuntimeService;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;

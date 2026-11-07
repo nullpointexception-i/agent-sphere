@@ -3,7 +3,7 @@ package com.buukle.agent.runtime.orchestration.superagent;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.SessionSpi;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.superagent.spi.AgentRouterReportPort;

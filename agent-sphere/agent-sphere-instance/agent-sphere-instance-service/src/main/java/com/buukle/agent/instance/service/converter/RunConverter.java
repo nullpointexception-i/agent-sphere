@@ -1,9 +1,10 @@
 package com.buukle.agent.instance.service.converter;
 
+
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.instance.domain.AgentRun;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
-import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.vo.RunAttachment;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.util.json.JsonUtils;
@@ -52,7 +53,7 @@ public class RunConverter {
         run.setUserMessage(dto.getUserMessage());
         run.setAttachments(dto.getAttachments() != null && !dto.getAttachments().isEmpty()
                 ? JsonUtils.toJson(dto.getAttachments()) : null);
-        run.setStatus(RunEnum.STATUS_PENDING);
+        run.setStatus(RunStatus.Codes.PENDING);
         run.setRunMode(dto.getRunMode() != null ? dto.getRunMode() : RunMode.WRITE.name());
         // Column is NOT NULL: normalize an absent DTO value to false at creation time.
         run.setNoClarification(Boolean.TRUE.equals(dto.getNoClarification()));

@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.port.vo;
 
-import com.fasterxml.jackson.annotation.JsonValue;
+
+import com.buukle.agent.common.event.EventType;import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum ClarificationStatus implements EventType {
     PENDING("clarification_pending"),

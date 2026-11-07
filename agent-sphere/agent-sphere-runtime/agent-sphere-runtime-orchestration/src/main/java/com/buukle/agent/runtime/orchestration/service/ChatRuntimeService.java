@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.service;
 
+
+import com.buukle.agent.instance.dtvo.enums.RunType;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.context.AuthContext;
@@ -11,7 +13,6 @@ import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.dtvo.dto.ResolveClarificationsDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
-import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.enums.ToolApprovalState;
 import com.buukle.agent.instance.dtvo.enums.TimelineKind;
 import com.buukle.agent.instance.dtvo.enums.TimelineState;
@@ -34,7 +35,7 @@ import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.service.CompactionService;
 import com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver;
 import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
@@ -135,7 +136,7 @@ public class ChatRuntimeService {
         createRunDTO.setRunMode(RunMode.from(
                 dto.getRunMode() != null ? dto.getRunMode() : session.getRunMode()).name());
         createRunDTO.setUserMessage(TextSanitizer.sanitize(dto.getMessage()));
-        createRunDTO.setType(RunEnum.TYPE_AUTO);
+        createRunDTO.setType(RunType.AUTO);
         createRunDTO.setNoClarification(dto.getNoClarification());
         createRunDTO.setAttachments(resolveRunAttachments(dto));
         createRunDTO.setReasoningEffort(dto.getReasoningEffort());
@@ -438,7 +439,7 @@ public class ChatRuntimeService {
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);
         createRunDTO.setUserMessage(ChatClarification.CLARIFICATION_RESUME_PREFIX + response);
-        createRunDTO.setType(RunEnum.TYPE_AUTO);
+        createRunDTO.setType(RunType.AUTO);
         createRunDTO.setRunMode(RunMode.from(session.getRunMode()).name());
         RunVO run = runSpi.createRun(createRunDTO);
         log.info("Clarification fork: new runId={} for session={} from previous runId={}", run.getId(), sessionId, runId);
@@ -551,7 +552,7 @@ public class ChatRuntimeService {
         CreateRunDTO createRunDTO = new CreateRunDTO();
         createRunDTO.setSessionId(sessionId);
         createRunDTO.setUserMessage(resumeText);
-        createRunDTO.setType(RunEnum.TYPE_AUTO);
+        createRunDTO.setType(RunType.AUTO);
         createRunDTO.setRunMode(RunMode.from(session.getRunMode()).name());
         RunVO run = runSpi.createRun(createRunDTO);
         eventPublisher.publishEvent(new RuntimeEventVO(

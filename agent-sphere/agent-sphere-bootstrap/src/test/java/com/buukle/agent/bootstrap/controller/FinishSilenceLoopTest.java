@@ -22,7 +22,7 @@ import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
 import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
 import com.buukle.agent.runtime.kernel.runner.SessionInputManager;

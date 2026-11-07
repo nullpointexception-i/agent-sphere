@@ -1,3 +1,4 @@
+import { SUPER_AGENT_STATUS, WORK_ITEM_ACTIVE_STATUSES, WORK_ITEM_STATUS } from '@/constants/status';
 import { PERM } from '@/constants/permissions';
 import {
   AlertOutlined,
@@ -38,37 +39,9 @@ import {
   type WorkItem,
 } from '@/services/agentSphere/superAgent';
 
-const AGENT_STATUS: Record<string, { color: string; labelKey: string }> = {
-  ACTIVE: { color: 'green', labelKey: 'pages.superAgent.agentStatus.active' },
-  PAUSED: { color: 'orange', labelKey: 'pages.superAgent.agentStatus.paused' },
-  ARCHIVED: {
-    color: 'default',
-    labelKey: 'pages.superAgent.agentStatus.archived',
-  },
-};
+const AGENT_STATUS = SUPER_AGENT_STATUS;
 
-const WORK_STATUS: Record<string, { color: string; labelKey: string }> = {
-  QUEUED: { color: 'blue', labelKey: 'pages.superAgent.workStatus.queued' },
-  DISPATCHING: {
-    color: 'processing',
-    labelKey: 'pages.superAgent.workStatus.dispatching',
-  },
-  RUNNING: {
-    color: 'processing',
-    labelKey: 'pages.superAgent.workStatus.running',
-  },
-  WAITING: { color: 'gold', labelKey: 'pages.superAgent.workStatus.waiting' },
-  COMPLETED: {
-    color: 'green',
-    labelKey: 'pages.superAgent.workStatus.completed',
-  },
-  DONE: { color: 'green', labelKey: 'pages.superAgent.workStatus.completed' },
-  FAILED: { color: 'red', labelKey: 'pages.superAgent.workStatus.failed' },
-  CANCELLED: {
-    color: 'default',
-    labelKey: 'pages.superAgent.workStatus.cancelled',
-  },
-};
+const WORK_STATUS = WORK_ITEM_STATUS;
 
 function StatusTag({
   value,
@@ -500,7 +473,7 @@ export default function SuperAgentPage() {
           ) : null}
         </Can>,
         <Can key="cancel" code={PERM.superAgentUpdate}>
-          {['QUEUED', 'DISPATCHING', 'RUNNING', 'WAITING'].includes(
+          {WORK_ITEM_ACTIVE_STATUSES.has(
             record.status,
           ) ? (
             <Button

@@ -1,3 +1,4 @@
+import { API_PATHS } from '@/constants/endpoints';
 import {
   EyeOutlined,
   HomeOutlined,
@@ -127,7 +128,7 @@ export default function AdminLayout() {
       startTransition(() =>
         setInitialState((s: any) => ({ ...s, currentUser: undefined })),
       );
-      umiRequest('/api/v1/auth/logout', { method: 'POST' }).catch(() => {});
+      umiRequest(API_PATHS.AUTH_LOGOUT, { method: 'POST' }).catch(() => {});
       clearStoredUser();
       history.push('/user/login');
       return;

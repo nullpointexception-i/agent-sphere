@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.service.impl;
 
+
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.config.SystemConfigKeys;
@@ -8,7 +10,6 @@ import com.buukle.agent.common.constant.FileStoreBizKeys;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.common.support.AbstractRecordedTask;
 import com.buukle.agent.instance.domain.vo.SessionCleanupRunRowVO;
-import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.enums.SessionCleanupRunStatusEnum;
 import com.buukle.agent.instance.dtvo.enums.SessionCleanupTriggerEnum;
 import com.buukle.agent.instance.dtvo.vo.SessionCleanupReportVO;
@@ -78,7 +79,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
      *  arrives — unlike AWAITING_USER "waiting for a person who may never reply", it is a genuinely
      *  in-flight state and must be guarded). */
     private static final List<String> ACTIVE_RUN_STATUSES =
-            List.of(RunEnum.STATUS_PENDING, RunEnum.STATUS_RUNNING, RunEnum.STATUS_WAITING);
+            List.of(RunStatus.Codes.PENDING, RunStatus.Codes.RUNNING, RunStatus.Codes.WAITING);
 
     /** Active tasks: Bole open-layer long-running tasks only update task/run rows and never the session row, so they need their own guard. */
     private static final List<String> ACTIVE_TASK_STATUSES =

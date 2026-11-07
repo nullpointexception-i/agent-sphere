@@ -1,8 +1,9 @@
 package com.buukle.agent.instance.service.impl;
 
+
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
-import com.buukle.agent.instance.dtvo.enums.RunEnum;
 import com.buukle.agent.instance.dtvo.enums.SessionCleanupRunStatusEnum;
 import com.buukle.agent.instance.dtvo.enums.SessionCleanupTriggerEnum;
 import com.buukle.agent.instance.domain.vo.SessionCleanupRunRowVO;
@@ -58,7 +59,7 @@ class SessionCleanupTaskTest {
     private static final int BATCH_SIZE = 2;
     private static final int MAX_BATCHES = 5;
     private static final List<String> ACTIVE_RUN_STATUSES =
-            List.of(RunEnum.STATUS_PENDING, RunEnum.STATUS_RUNNING, RunEnum.STATUS_WAITING);
+            List.of(RunStatus.Codes.PENDING, RunStatus.Codes.RUNNING, RunStatus.Codes.WAITING);
     private static final List<String> ACTIVE_TASK_STATUSES =
             List.of(TaskEnum.STATUS_QUEUED, TaskEnum.STATUS_RUNNING);
 

@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { PERM } from '@/constants/permissions';
 import {
   ApiOutlined,
@@ -827,7 +828,7 @@ export default function InstanceList() {
               : undefined
           }
           pagination={{
-            defaultPageSize: 10,
+            defaultPageSize: DEFAULT_PAGE_SIZE,
             showSizeChanger: true,
             showQuickJumper: true,
             pageSizeOptions: [5, 10, 20, 50],

@@ -6,7 +6,7 @@ import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
-import com.buukle.agent.runtime.kernel.port.vo.RunStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

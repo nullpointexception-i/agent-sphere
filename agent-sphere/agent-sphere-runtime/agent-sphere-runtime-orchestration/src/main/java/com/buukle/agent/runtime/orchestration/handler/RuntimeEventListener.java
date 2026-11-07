@@ -1,6 +1,8 @@
 package com.buukle.agent.runtime.orchestration.handler;
 
-import com.buukle.agent.common.config.AgentRuntimeProperties;
+
+
+import com.buukle.agent.common.event.EventType;import com.buukle.agent.instance.dtvo.enums.RunStatus;import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
@@ -170,6 +172,8 @@ public class RuntimeEventListener {
             case ToolApprovalStatus s -> handleToolApproval(data, s);
             // Chrome commands now travel as their own record event (ChromeCommandEvent).
             case ChromeCommandEventType ignored -> {
+            }
+            default -> {
             }
         }
 

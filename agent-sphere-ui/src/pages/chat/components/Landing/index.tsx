@@ -156,7 +156,7 @@ export default function Landing({
             ) : undefined
           }
           value={inputValue}
-          onChange={onInputValueChange}
+          onChange={(v) => onInputValueChange(v.slice(0, 5000))}
           loading={sending}
           disabled={noData || consoleBlocked}
           onSubmit={onStartSession}
@@ -164,7 +164,6 @@ export default function Landing({
             id: 'pages.chat.typeMessageHint',
             defaultMessage: 'Type a message... (Shift+Enter for new line)',
           })}
-          maxLength={5000}
           style={{ flex: 1 }}
           autoSize={false}
           styles={{

@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { CopyOutlined, EyeOutlined } from '@ant-design/icons';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
@@ -131,7 +132,7 @@ export default function TaskArtifactList() {
             success: true,
           };
         }}
-        pagination={{ defaultPageSize: 10 }}
+        pagination={{ defaultPageSize: DEFAULT_PAGE_SIZE }}
       />
       <Drawer
         title={t(

@@ -139,3 +139,9 @@ cd agent-sphere-copilot-widget && npm run dev
   后端构建、`gh` 操作、`.local-workflow/*.sh` 需另找已装环境；`origin` 是 HTTPS。
 - 以下均被 gitignore，勿提交：`local-config/`、`.local-workflow/{.env,.cache,output}`、
   `package-lock.json`、`node_modules`、`dist`。
+
+## Flyway comment language (2026-11)
+
+- New Flyway migrations must use English comments.
+- Historical V1...V149 files are frozen; do not rewrite them just to translate comments (Flyway checksum failure).
+- Use docs/migration-comments-en.md for the English index of historical migrations.
