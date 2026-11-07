@@ -353,48 +353,7 @@ Dependency discipline:
 - The kernel must not depend back on orchestration; use Spring local events for cross-layer actions.
 - `infrastructure` depends on `instance-service`, so instance must not depend back on infrastructure.
 
-### 2.3 Application Service Inventory
-
-| Domain | REST prefix | Controllers |
-|---|---|---|
-| Auth | `/api/v1/auth`, `/api/v1/auth/sso` | `AuthController`, `SsoAuthController`, `SsoIdentityController` |
-| Instance | `/api/v1/instance/**` | `InstanceController`, `InstanceCapabilityController`, `SessionController`, `SessionTimelineController`, `SessionTodoController`, `RunController`, `RunActivityController`, `MemoryController`, `LlmInteractionController`, `SessionCleanupController`, `SubAgentRunController` |
-| Runtime | `/api/v1/runtime`, `/api/v1/chrome` | `ChatRuntimeController`, `SseRuntimeController`, `ChromeCallbackController` |
-| Model | `/api/v1/model/**` | `ModelProviderController`, `RouteController`, `ApiKeyController` |
-| Capability | `/api/v1/capability/**` | `CapabilityMcpController`, `CapabilitySkillController`, `CapabilityCliController`, `BuiltinToolController` |
-| Tasks | `/api/v1/api/tasks`, `/api/v1/admin/tasks` | `TaskController`, `AdminTasksController`, `AdminTaskArtifactController` |
-| Completions | `/api/v1/api/completions` | `CompletionsController`, `AdminCompletionsController` |
-| Super Agent | `/api/v1/super-agents/**` | `SuperAgentController`, `SuperAgentQueryController`, `WorkItemController`, `ChannelBindingController`, `GroupRouterTemplateController`, `SuperAgentWatchdogController` |
-| Channel | `/api/v1/channels/**` | `ChannelWebhookController` |
-| IM | `/api/v1/im/**` | `ImConversationController`, `ImMessageController`, `ImAttachmentController`, `ImSessionInputController`, `ImStreamController` |
-| Governance | `/api/v1/admin/**`, `/api/v1/system/config` | `AdminUserController`, `RoleController`, `PermissionController`, `IdentityProviderAdminController`, `AuditLogController`, `SystemConfigController` |
-| Content | `/api/v1/files`, `/api/v1/artifacts/documents`, `/api/v1/browser` | `FileController`, `DocumentController`, `BrowserScreenshotController` |
-
-### 2.4 Key Application Components
-
-| Layer | Component | Responsibility |
-|---|---|---|
-| Orchestration | `ChatRuntimeService` / `RuntimeOrchestrator` | Create the run, submit asynchronously, drive the kernel |
-| Orchestration | `ContextPreparer` / `KernelContextAssembler` | Assemble history, memory, tools and prompts |
-| Orchestration | `SseManager` / `SseEventRelay` / `SseEventCache` | Broadcast per session; `afterSeq` catch-up |
-| Orchestration | `TimelineRecorder` / `RuntimeEventListener` | Single funnel from events to timeline and terminal state |
-| Orchestration | `PendingWaitWakeScheduler` / `WaitingRunReconciler` | Resume primary path plus reconciliation fallback |
-| Kernel | `SessionRunner` / `SessionRunCoordinator` | ReAct loop, cancellation, timeouts, turn guardrails |
-| Kernel | `KernelLlmService` + `ProviderStrategy` + `FallbackRouteExecutor` | Streaming, vendor adaptation, failover |
-| Kernel | `ToolExecutor` + `FiberSet` | Tool dispatch, concurrency, timeout box |
-| Kernel | `HistoryLoader` / `CompactionService` / `ToolResultCompressor` | Context watermark control |
-| Kernel | `DelegateService` / `SessionSubRunner` | Sub-agent delegation |
-| Capability | `CapabilityMcpSpi` / `CapabilitySkillSpi` / `CapabilityCliSpi` / `CapabilityBuiltinToolSpi` | Four uniform capability slots |
-| Super Agent | `SuperAgentService` / `WorkItemService` | Digital employee CRUD, router/worker instances, work item lifecycle |
-| Super Agent | `EventIngestService` / `GroupRouterScheduler` | Persist channel events idempotently; decide relevance/group routing |
-| Super Agent | `AgentRouterScheduler` / `WorkerScheduler` | Per-thread routing, work-item CAS claim, worker dispatch |
-| Super Agent | `WorkerReportService` / `OutboundDispatchScheduler` | Collect worker results; deliver replies through the outbox |
-| Super Agent | `SuperAgentWatchdogTask` / `SuperAgentRetentionTask` | Watchdog checks and retention cleanup |
-| IM | `ImConversationService` / `ImMessageService` | Conversation, participant, message and attachment lifecycle |
-| IM | `ImSessionInputService` / `ImStreamService` | Route IM input to Agent sessions; stream messages |
-| Channel | `ChannelAdapter` / `EventIngestPort` | IM / webhook protocol adapters and normalized event ingestion |
-
-### 2.5 Call Graphs
+### 2.3 Call Graphs
 
 #### Static component relationships
 
@@ -510,7 +469,7 @@ sequenceDiagram
     S-->>U: reply message
 ```
 
-### 2.6 Integration Matrix
+### 2.4 Integration Matrix
 
 | Direction | Counterparty | Protocol / credentials |
 |---|---|---|

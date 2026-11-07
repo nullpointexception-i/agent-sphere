@@ -353,48 +353,7 @@ flowchart TD
 - kernel 不得反向依赖 orchestration；需要跨层动作时使用 Spring 本地事件。
 - `infrastructure` 已依赖 `instance-service`，因此 instance 不得反向依赖 infrastructure。
 
-### 2.3 应用服务清单
-
-| 域 | REST 前缀 | Controller |
-|---|---|---|
-| 认证 | `/api/v1/auth`, `/api/v1/auth/sso` | `AuthController`, `SsoAuthController`, `SsoIdentityController` |
-| 实例 | `/api/v1/instance/**` | `InstanceController`, `InstanceCapabilityController`, `SessionController`, `SessionTimelineController`, `SessionTodoController`, `RunController`, `RunActivityController`, `MemoryController`, `LlmInteractionController`, `SessionCleanupController`, `SubAgentRunController` |
-| 运行时 | `/api/v1/runtime`, `/api/v1/chrome` | `ChatRuntimeController`, `SseRuntimeController`, `ChromeCallbackController` |
-| 模型 | `/api/v1/model/**` | `ModelProviderController`, `RouteController`, `ApiKeyController` |
-| 能力 | `/api/v1/capability/**` | `CapabilityMcpController`, `CapabilitySkillController`, `CapabilityCliController`, `BuiltinToolController` |
-| 任务 | `/api/v1/api/tasks`, `/api/v1/admin/tasks` | `TaskController`, `AdminTasksController`, `AdminTaskArtifactController` |
-| 补全 | `/api/v1/api/completions` | `CompletionsController`, `AdminCompletionsController` |
-| Super Agent | `/api/v1/super-agents/**` | `SuperAgentController`, `SuperAgentQueryController`, `WorkItemController`, `ChannelBindingController`, `GroupRouterTemplateController`, `SuperAgentWatchdogController` |
-| 渠道 | `/api/v1/channels/**` | `ChannelWebhookController` |
-| IM | `/api/v1/im/**` | `ImConversationController`, `ImMessageController`, `ImAttachmentController`, `ImSessionInputController`, `ImStreamController` |
-| 治理 | `/api/v1/admin/**`, `/api/v1/system/config` | `AdminUserController`, `RoleController`, `PermissionController`, `IdentityProviderAdminController`, `AuditLogController`, `SystemConfigController` |
-| 内容 | `/api/v1/files`, `/api/v1/artifacts/documents`, `/api/v1/browser` | `FileController`, `DocumentController`, `BrowserScreenshotController` |
-
-### 2.4 关键应用组件
-
-| 层 | 组件 | 职责 |
-|---|---|---|
-| 编排 | `ChatRuntimeService` / `RuntimeOrchestrator` | 创建 run、异步提交、驱动内核 |
-| 编排 | `ContextPreparer` / `KernelContextAssembler` | 组装历史、记忆、工具与提示词 |
-| 编排 | `SseManager` / `SseEventRelay` / `SseEventCache` | 按会话广播；`afterSeq` 补发 |
-| 编排 | `TimelineRecorder` / `RuntimeEventListener` | 事件到时间线与终态的唯一漏斗 |
-| 编排 | `PendingWaitWakeScheduler` / `WaitingRunReconciler` | 主恢复路径 + 补偿对账 |
-| 内核 | `SessionRunner` / `SessionRunCoordinator` | ReAct 主循环、取消、超时、轮次护栏 |
-| 内核 | `KernelLlmService` + `ProviderStrategy` + `FallbackRouteExecutor` | 流式调用、厂商适配、故障切换 |
-| 内核 | `ToolExecutor` + `FiberSet` | 工具分发、并发执行、超时盒子 |
-| 内核 | `HistoryLoader` / `CompactionService` / `ToolResultCompressor` | 上下文水位控制 |
-| 内核 | `DelegateService` / `SessionSubRunner` | 子 Agent 委派 |
-| 能力 | `CapabilityMcpSpi` / `CapabilitySkillSpi` / `CapabilityCliSpi` / `CapabilityBuiltinToolSpi` | 四类统一能力槽 |
-| Super Agent | `SuperAgentService` / `WorkItemService` | 数字员工增删改查、Router/Worker 实例、工作项生命周期 |
-| Super Agent | `EventIngestService` / `GroupRouterScheduler` | 幂等落库渠道事件；相关性/分组路由 |
-| Super Agent | `AgentRouterScheduler` / `WorkerScheduler` | 每线程路由、工作项 CAS 领取、Worker 派发 |
-| Super Agent | `WorkerReportService` / `OutboundDispatchScheduler` | 收集 Worker 结果；通过 outbox 投递回复 |
-| Super Agent | `SuperAgentWatchdogTask` / `SuperAgentRetentionTask` | 看门狗检查与保留期清理 |
-| IM | `ImConversationService` / `ImMessageService` | 会话、参与者、消息、附件生命周期 |
-| IM | `ImSessionInputService` / `ImStreamService` | 把 IM 输入路由到 Agent 会话；消息流 |
-| 渠道 | `ChannelAdapter` / `EventIngestPort` | IM / webhook 协议适配与归一化事件接入 |
-
-### 2.5 调用图
+### 2.3 调用图
 
 #### 静态组件关系
 
@@ -510,7 +469,7 @@ sequenceDiagram
     S-->>U: 回复消息
 ```
 
-### 2.6 集成矩阵
+### 2.4 集成矩阵
 
 | 方向 | 对端 | 协议 / 凭证 |
 |---|---|---|
