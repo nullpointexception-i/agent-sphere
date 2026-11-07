@@ -15,6 +15,9 @@ export default function access(
     canManageInstances: perms.includes(PERM.instanceRead),
     canManageSuperAgent: perms.includes(PERM.superAgentRead),
     canManageIm: perms.includes(PERM.imConversationRead),
+    canViewDigitalEmployee:
+      perms.includes(PERM.superAgentRead) ||
+      perms.includes(PERM.imConversationRead),
     canManageCapabilities: perms.some((p) => p.startsWith('capability:')),
     canManageMcp: perms.includes(PERM.capabilityMcpRead),
     canManageSkill: perms.includes(PERM.capabilitySkillRead),

@@ -12,6 +12,19 @@ public interface RoleSpi {
 
     List<SysRoleVO> listByUserId(Long userId);
 
+    default List<SysRoleVO> listByUserId(Long userId, Long tenantId) {
+        return listByUserId(userId);
+    }
+
+    /** All role assignments of a user across tenants, used by platform admins. */
+    default List<SysRoleVO> listAssignments(Long userId) {
+        return listByUserId(userId);
+    }
+
+    default List<SysRoleVO> listAll(Long tenantId) {
+        return listAll();
+    }
+
     SysRoleVO create(SysRoleVO vo);
 
     SysRoleVO update(Long id, SysRoleVO vo);

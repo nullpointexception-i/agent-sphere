@@ -1,5 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.capability.mcp.dtvo.dto.CreateMcpDTO;
 import com.buukle.agent.capability.mcp.exception.CapabilityMcpErrorCode;
 import com.buukle.agent.capability.mcp.repository.McpMapper;

@@ -4,6 +4,8 @@ export default {
   'errors.admin.A0701': 'Choose a different permission code',
   'errors.admin.A0702': 'Choose a different role code',
   'errors.admin.A0703': 'Do not assign it twice',
+  'errors.admin.A0707':
+    'Set the current tenant visibility to “Current tenant and descendants” before creating a child tenant',
   'errors.capability.cli.A0023': 'Check the CLI ID',
   'errors.capability.cli.B0012': 'The CLI command failed; retry later',
   'errors.capability.mcp.A0021': 'Check the MCP ID',

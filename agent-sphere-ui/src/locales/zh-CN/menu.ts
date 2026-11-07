@@ -2,6 +2,7 @@ export default {
   'menu.login': '登录',
   'menu.register': '注册',
   'menu.workbench': '工作台',
+  'menu.workspace': 'workspace',
   'menu.dashboard': '仪表盘',
   'menu.chat': '对话',
   'menu.instances': '实例',
@@ -12,6 +13,7 @@ export default {
   'menu.agents': '智能体',
   'menu.superAgent': '数字员工',
   'menu.im': '消息',
+  'menu.digitalEmployeeGroup': '数字员工与消息',
   'menu.modelsGroup': '模型',
   'menu.tasksGroup': '任务',
   'menu.periodicTasks': '周期任务',
@@ -32,4 +34,5 @@ export default {
   'menu.artifacts.taskArtifacts': '任务产物',
   'menu.admin': '系统管理',
   'menu.admin.settings': '系统配置',
+  'menu.admin.tenants': '租户',
 };

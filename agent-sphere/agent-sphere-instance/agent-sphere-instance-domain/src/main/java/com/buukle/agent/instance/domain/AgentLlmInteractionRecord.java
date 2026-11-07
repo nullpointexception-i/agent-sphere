@@ -61,6 +61,7 @@ public class AgentLlmInteractionRecord {
     private String streamError;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

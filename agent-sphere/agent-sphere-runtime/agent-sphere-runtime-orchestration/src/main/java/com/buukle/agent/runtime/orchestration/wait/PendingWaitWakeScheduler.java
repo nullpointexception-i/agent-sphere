@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.wait;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.spi.PendingWaitCreatedEvent;
@@ -110,6 +112,7 @@ public class PendingWaitWakeScheduler {
      */
     static void clearInheritedContext() {
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
     }
 

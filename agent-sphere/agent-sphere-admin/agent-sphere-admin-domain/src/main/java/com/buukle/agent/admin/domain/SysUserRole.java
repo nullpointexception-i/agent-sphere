@@ -16,6 +16,9 @@ public class SysUserRole {
     private Long id;
     private Long userId;
     private Long roleId;
+    /** NULL = global grant; otherwise only effective inside the tenant. */
+    @TableField(fill = FieldFill.INSERT)
+    private Long tenantId;
     private String status;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

@@ -5,6 +5,9 @@ import com.buukle.agent.instance.dtvo.enums.RunType;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
@@ -208,6 +211,8 @@ public class ChatRuntimeService {
         // Only called by background wake/reconcile paths: clear tenant possibly inherited by the thread,
         // otherwise DataPermission filters by someone else's created_by and the run reads as null.
         TenantUtil.stop();
+        TenantScopeHolder.clear();
+        TenantContext.clear();
         AuthContext.clear();
         Long sessionId = wait.getSessionId();
         Long runId = wait.getRunId();
@@ -231,12 +236,16 @@ public class ChatRuntimeService {
                 return ResumeOutcome.SKIPPED;
             }
 
-            // The resume thread (timer/cron) has no tenant context: fill in the username for audit/ownership.
-            // Deliberately does not set TenantUtil — DataPermissionInterceptor filters by tenant as created_by,
-            // and setting it could instead filter out system table (model/instance) rows.
+            // The resume thread (timer/cron) has no tenant context. Restore the
+            // tenant of the run so audit fields and new rows are written into the
+            // correct tenant, and so SELECTs do not read another tenant's rows.
             String createdBy = run.getCreatedBy();
             boolean ctx = createdBy != null && !createdBy.isBlank();
             boolean llmRetry = WaitConstants.KIND_LLM_RETRY.equals(wait.getKind());
+            if (run.getTenantId() != null) {
+                TenantContext.set(run.getTenantId());
+                TenantScopeHolder.start(TenantScope.tenantOnly(run.getTenantId(), createdBy));
+            }
             if (ctx) AuthContext.setUsername(createdBy);
             try {
                 sessionSpi.touchSession(sessionId);
@@ -250,6 +259,8 @@ public class ChatRuntimeService {
                 }
                 submitted = true;
             } finally {
+                TenantScopeHolder.clear();
+                TenantContext.clear();
                 if (ctx) AuthContext.clear();
             }
 

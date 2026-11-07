@@ -40,6 +40,7 @@ public class RunConverter {
         vo.setModelRouteId(run.getModelRouteId());
         vo.setReasoningEffort(run.getReasoningEffort());
         vo.setReasoningBudgetTokens(run.getReasoningBudgetTokens());
+        vo.setTenantId(run.getTenantId());
         vo.setCreatedBy(run.getCreatedBy());
         vo.setCreatedAt(run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
         return vo;

@@ -16,6 +16,7 @@ public class ImConversation {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     /** DM / GROUP */
     private String type;

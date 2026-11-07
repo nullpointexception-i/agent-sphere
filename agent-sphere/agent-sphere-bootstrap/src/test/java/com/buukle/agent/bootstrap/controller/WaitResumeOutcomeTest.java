@@ -1,5 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
@@ -98,6 +100,7 @@ class WaitResumeOutcomeTest {
     void tearDown() {
         AuthContext.clear();
         TenantUtil.stop();
+        TenantScopeHolder.clear();
     }
 
     private static PendingWaitVO pendingWait() {

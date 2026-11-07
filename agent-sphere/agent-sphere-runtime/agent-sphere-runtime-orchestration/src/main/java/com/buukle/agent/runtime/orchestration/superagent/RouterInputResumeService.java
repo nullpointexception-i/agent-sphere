@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
@@ -40,6 +42,7 @@ public class RouterInputResumeService implements RouterInputResumePort {
 
     private void withOwnerContext(Long sessionId, Runnable action) {
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         TenantContext.clear();
         AuthContext.clear();
         try {
@@ -54,6 +57,7 @@ public class RouterInputResumeService implements RouterInputResumePort {
             action.run();
         } finally {
             TenantUtil.stop();
+            TenantScopeHolder.clear();
             TenantContext.clear();
             AuthContext.clear();
         }

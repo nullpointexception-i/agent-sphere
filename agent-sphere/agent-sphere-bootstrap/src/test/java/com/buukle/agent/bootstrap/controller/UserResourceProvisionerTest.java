@@ -1,7 +1,11 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.admin.spi.TenantScopeSpi;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -10,6 +14,7 @@ import com.buukle.agent.resource.template.ResourceInitResult;
 import com.buukle.agent.resource.template.ResourceTemplateCoordinator;
 import com.buukle.agent.resource.template.UserResourceProvisioner;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,8 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,12 +46,23 @@ class UserResourceProvisionerTest {
     @Mock
     SystemConfigSpi systemConfigSpi;
 
+    @Mock
+    TenantScopeSpi tenantScopeSpi;
+
     @InjectMocks
     UserResourceProvisioner provisioner;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(tenantScopeSpi.resolve(anyLong(), anyString()))
+                .thenReturn(TenantScope.tenantOnly(2L, "business_7"));
+    }
 
     @AfterEach
     void tearDown() {
         TenantUtil.stop();
+        TenantScopeHolder.clear();
+        TenantContext.clear();
     }
 
     private UserVO user(Long id, String username) {

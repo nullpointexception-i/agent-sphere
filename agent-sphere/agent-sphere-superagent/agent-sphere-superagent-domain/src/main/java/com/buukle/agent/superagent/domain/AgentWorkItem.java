@@ -16,6 +16,7 @@ public class AgentWorkItem {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     private Long ownerUserId;
     private Long superAgentId;

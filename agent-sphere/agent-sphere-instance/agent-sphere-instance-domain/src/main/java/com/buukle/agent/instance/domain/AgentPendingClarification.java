@@ -38,5 +38,6 @@ public class AgentPendingClarification {
     private LocalDateTime updatedAt;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
 }

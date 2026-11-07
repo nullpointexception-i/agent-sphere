@@ -1,8 +1,11 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.admin.spi.PermissionSpi;
+import com.buukle.agent.admin.spi.TenantScopeSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.infrastructure.config.AuthInterceptor;
 import com.buukle.agent.infrastructure.persistence.CacheService;
 import com.buukle.agent.instance.domain.AgentUser;
@@ -41,6 +44,8 @@ class AuthInterceptorTest {
     PermissionSpi permissionSpi;
     @Mock
     UserTokenSpi userTokenSpi;
+    @Mock
+    TenantScopeSpi tenantScopeSpi;
 
     @InjectMocks
     AuthInterceptor authInterceptor;
@@ -49,6 +54,8 @@ class AuthInterceptorTest {
     void tearDown() {
         AuthContext.clear();
         SessionSurfaceHolder.clear();
+        TenantScopeHolder.clear();
+        TenantContext.clear();
     }
 
     @Test
@@ -86,7 +93,7 @@ class AuthInterceptorTest {
         when(cacheService.get(anyString())).thenReturn(null);
         when(userTokenSpi.validate("raw-token")).thenReturn(7L);
         when(userMapper.selectById(7L)).thenReturn(activeUser(7L, "alice"));
-        when(permissionSpi.listCodesByUserId(7L)).thenReturn(List.of());
+        when(permissionSpi.listCodesByUserId(7L, null)).thenReturn(List.of());
 
         boolean allowed = authInterceptor.preHandle(request, response, null);
 

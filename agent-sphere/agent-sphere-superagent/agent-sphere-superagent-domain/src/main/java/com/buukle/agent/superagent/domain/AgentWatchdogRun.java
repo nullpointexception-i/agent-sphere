@@ -16,6 +16,7 @@ public class AgentWatchdogRun {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     private String status;
     private Integer dispatchedStuck;

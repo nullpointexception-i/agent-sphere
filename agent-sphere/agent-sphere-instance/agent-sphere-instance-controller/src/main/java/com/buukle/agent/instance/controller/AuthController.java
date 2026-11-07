@@ -9,6 +9,8 @@ import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfaceResolver;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.BaseController;
@@ -52,6 +54,8 @@ public class AuthController extends BaseController {
             // Standalone tests bypass the interceptor, so clean up here to keep the surface
             // from leaking into subsequent tests/requests
             SessionSurfaceHolder.clear();
+            TenantScopeHolder.clear();
+            TenantContext.clear();
         }
     }
 
@@ -66,6 +70,8 @@ public class AuthController extends BaseController {
             return ok(userService.register(dto));
         } finally {
             SessionSurfaceHolder.clear();
+            TenantScopeHolder.clear();
+            TenantContext.clear();
         }
     }
 

@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
@@ -54,6 +56,8 @@ public class WorkerDispatchService implements WorkerDispatchPort {
         }
 
         TenantUtil.stop();
+
+        TenantScopeHolder.clear();
         TenantContext.clear();
         AuthContext.clear();
         if (instanceSpi.getInstance(command.workerInstanceId()) == null) {
@@ -96,6 +100,7 @@ public class WorkerDispatchService implements WorkerDispatchPort {
         } finally {
             AuthContext.clear();
             TenantUtil.stop();
+            TenantScopeHolder.clear();
             TenantContext.clear();
         }
     }

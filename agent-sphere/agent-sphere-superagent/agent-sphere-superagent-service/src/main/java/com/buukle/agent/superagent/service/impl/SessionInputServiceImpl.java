@@ -1,5 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.channel.spi.OutboundFormat;
 import com.buukle.agent.channel.spi.TaskCardPayload;
@@ -72,6 +74,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             return;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         try {
             TenantContext.set(agent.getTenantId());
             String owner = ownerUsername(agent.getOwnerUserId());
@@ -110,6 +113,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             return;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         try {
             AgentSessionInput input = sessionInputMapper.selectOne(Wrappers.<AgentSessionInput>lambdaQuery()
                     .eq(AgentSessionInput::getInputType, command.inputType())
@@ -134,6 +138,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             return;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         try {
             var pending = sessionInputMapper.selectList(Wrappers.<AgentSessionInput>lambdaQuery()
                     .eq(AgentSessionInput::getRunId, runId)
@@ -156,6 +161,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             return null;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         try {
             AgentSessionInput input = sessionInputMapper.selectOne(Wrappers.<AgentSessionInput>lambdaQuery()
                     .eq(AgentSessionInput::getThreadId, threadId)
@@ -175,6 +181,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             return false;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         TenantContext.clear();
         try {
             AgentSessionInput input = sessionInputMapper.selectOne(Wrappers.<AgentSessionInput>lambdaQuery()
@@ -221,6 +228,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "inputId and decisions are required");
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         TenantContext.clear();
         try {
             AgentSessionInput input = sessionInputMapper.selectOne(Wrappers.<AgentSessionInput>lambdaQuery()

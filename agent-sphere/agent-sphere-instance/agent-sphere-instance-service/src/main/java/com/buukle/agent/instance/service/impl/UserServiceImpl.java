@@ -4,8 +4,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.admin.spi.RoleSpi;
+import com.buukle.agent.admin.spi.TenantScopeSpi;
+import com.buukle.agent.admin.dtvo.vo.SysRoleVO;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.event.UserRegisteredEvent;
 import com.buukle.agent.common.exception.BizException;
@@ -17,6 +22,7 @@ import com.buukle.agent.instance.dtvo.dto.RegisterDTO;
 import com.buukle.agent.instance.dtvo.enums.UserEnum;
 import com.buukle.agent.instance.dtvo.vo.IssuedTokenVO;
 import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
+import com.buukle.agent.instance.dtvo.vo.UserRoleVO;
 import com.buukle.agent.instance.dtvo.vo.UserSessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.dtvo.vo.WorkspaceContactVO;
@@ -34,6 +40,7 @@ import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,6 +52,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
     private final RoleSpi roleSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final UserTokenSpi userTokenSpi;
+    private final TenantScopeSpi tenantScopeSpi;
 
     public static String sha256(String input) {
         try {
@@ -86,12 +94,48 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         vo.setStatus(user.getStatus());
         vo.setLastLoginAt(user.getLastLoginAt());
         vo.setSuperAdmin(user.getSuperAdmin());
-        var roles = roleSpi.listByUserId(user.getId());
-        vo.setRoles(roles.stream().map(r -> r.getCode()).toList());
-        vo.setDemo(roles.stream().anyMatch(r -> "DEMO".equals(r.getCode())));
+        Long tenantId = TenantScopeHolder.currentTenantId();
+        vo.setCurrentTenantId(tenantId);
+        // Platform administrators manage users across the tree; tenant
+        // administrators only see roles in tenants they can manage.
+        List<SysRoleVO> assignments = roleSpi.listAssignments(user.getId());
+        List<SysRoleVO> effectiveRoles;
+        if (AuthContext.isSuperAdmin()) {
+            effectiveRoles = assignments;
+        } else {
+            TenantScope scope = TenantScopeHolder.get();
+            Set<Long> visible = scope == null ? Set.of() : scope.visibleTenantIds();
+            effectiveRoles = assignments.stream()
+                    .filter(role -> role.getTenantId() != null
+                            && visible.contains(role.getTenantId()))
+                    .toList();
+        }
+        vo.setRoles(effectiveRoles.stream().map(SysRoleVO::getCode).toList());
+        vo.setDemo(effectiveRoles.stream().anyMatch(r -> "DEMO".equals(r.getCode())));
+        vo.setRoleDetails(effectiveRoles.stream()
+                .map(role -> {
+                    UserRoleVO detail = new UserRoleVO();
+                    detail.setId(role.getId());
+                    detail.setCode(role.getCode());
+                    detail.setName(role.getName());
+                    detail.setTenantId(role.getTenantId());
+                    detail.setTenantName(role.getTenantName());
+                    detail.setPlatformRole(role.getPlatformRole());
+                    return detail;
+                })
+                .toList());
         boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
-        vo.setPermissions(isSuperAdmin ? permissionSpi.listAllCodes() : permissionSpi.listCodesByUserId(user.getId()));
+        vo.setPermissions(isSuperAdmin
+                ? permissionSpi.listAllCodes()
+                : permissionSpi.listCodesByUserId(user.getId(), tenantId));
         return vo;
+    }
+
+    private TenantScope applyTenantContext(AgentUser user) {
+        TenantScope scope = tenantScopeSpi.resolve(user.getId(), user.getUsername());
+        TenantContext.set(scope.currentTenantId());
+        TenantScopeHolder.start(scope);
+        return scope;
     }
 
     @Override
@@ -121,6 +165,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
         AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
+        applyTenantContext(user);
 
         UserVO vo = toVO(user);
         vo.setToken(issued.getToken());
@@ -141,6 +186,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         if (token != null) {
             userTokenSpi.revoke(token);
         }
+        TenantScopeHolder.clear();
+        TenantContext.clear();
         AuthContext.clear();
     }
 
@@ -150,6 +197,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         if (userId != null) {
             userTokenSpi.revokeAll(userId);
         }
+        TenantScopeHolder.clear();
+        TenantContext.clear();
         AuthContext.clear();
     }
 
@@ -222,6 +271,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
         AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
+        applyTenantContext(user);
         UserVO vo = toVO(user);
         vo.setToken(issued.getToken());
         return vo;
@@ -255,6 +305,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             }
             throw new BizException(InstanceErrorCode.REGISTER_FAILED);
         }
+        // Every new user belongs to the default tenant; an admin can move them later.
+        tenantScopeSpi.ensureDefaultAssignment(user.getId());
         // Roles: when defaultRoleId is given it replaces the default USER role (SSO provisioning scenario)
         List<Long> initialRoleIds = resolveInitialRoleIds(roleSpi, defaultRoleId);
         if (!initialRoleIds.isEmpty()) {
@@ -280,6 +332,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
         AuthContext.setSuperAdmin(UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin()));
+        TenantScope scope = applyTenantContext(user);
+        if (scope.currentTenantId() != null && !scope.currentTenantId().equals(user.getTenantId())) {
+            user.setTenantId(scope.currentTenantId());
+            updateById(user);
+        }
         UserVO vo = toVO(user);
         vo.setToken(issued.getToken());
         return vo;
@@ -287,18 +344,56 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
 
     @Override
     public com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO> listPage(int page, int size) {
-        var mpPage = lambdaQuery().page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size));
-        var voPage = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO>(mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
+        TenantScope scope = TenantScopeHolder.currentOrFallback();
+        if (scope == null || scope.selfOnly()) {
+            // SELF_ONLY means the user may only see rows they created. The admin
+            // user directory is not owned-row data, and the current user is
+            // excluded anyway, so the directory is empty for this visibility.
+            return emptyUserPage(page, size);
+        }
+        List<Long> userIds = tenantScopeSpi.listUserIdsInTenants(scope.visibleTenantIds());
+        if (userIds.isEmpty()) {
+            return emptyUserPage(page, size);
+        }
+        Long currentUserId = AuthContext.getUserId();
+        var mpPage = lambdaQuery()
+                .in(AgentUser::getId, userIds)
+                .ne(currentUserId != null, AgentUser::getId, currentUserId)
+                .page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size));
+        var voPage = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO>(
+                mpPage.getCurrent(), mpPage.getSize(), mpPage.getTotal());
         voPage.setRecords(mpPage.getRecords().stream().map(this::toVO).toList());
         return voPage;
     }
 
+    private static com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO> emptyUserPage(int page, int size) {
+        var empty = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<UserVO>(
+                Math.max(1, page), Math.max(1, size), 0);
+        empty.setRecords(List.of());
+        return empty;
+    }
+
     @Override
     public Page<WorkspaceContactVO> pageContacts(int page, int size, String keyword) {
-        Long tenantId = com.buukle.agent.common.context.TenantContext.get();
+        TenantScope scope = TenantScopeHolder.currentOrFallback();
+        Long tenantId = TenantScopeHolder.currentTenantId();
+        if (scope == null || tenantId == null) {
+            return new Page<>(Math.max(1, page), Math.max(1, size), 0);
+        }
+        Long currentUserId = AuthContext.getUserId();
+        // Workspace contacts are the user directory of the current tenant. The
+        // data visibility scope must not shrink the candidate list for group
+        // chats (SELF_ONLY would otherwise return only the caller).
+        List<Long> userIds = tenantScopeSpi.listUserIdsInTenants(Set.of(tenantId));
+        if (userIds.isEmpty()) {
+            Page<WorkspaceContactVO> empty = new Page<>(Math.max(1, page), Math.max(1, size), 0);
+            empty.setRecords(List.of());
+            return empty;
+        }
         var mpPage = lambdaQuery()
                 .eq(AgentUser::getStatus, UserEnum.STATUS_ACTIVE)
-                .eq(tenantId != null, AgentUser::getTenantId, tenantId)
+                .in(AgentUser::getId, userIds)
+                .ne(currentUserId != null, AgentUser::getId, currentUserId)
                 .and(keyword != null && !keyword.isBlank(), w -> w
                         .like(AgentUser::getUsername, keyword)
                         .or().like(AgentUser::getDisplayName, keyword)

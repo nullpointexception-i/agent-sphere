@@ -517,6 +517,31 @@ export const agentApi = {
       list: (page = 1, size = 20) =>
         request<any>(`${BASE}/admin/users`, { params: { page, size } }),
     },
+    tenants: {
+      tree: () => request<any[]>(`${BASE}/admin/tenants/tree`),
+      list: () => request<any[]>(`${BASE}/admin/tenants`),
+      mine: () => request<any[]>(`${BASE}/admin/tenants/mine`),
+      userAssignments: (userId: number) =>
+        request<any[]>(`${BASE}/admin/tenants/user/${userId}`),
+      create: (data: any) =>
+        request<any>(`${BASE}/admin/tenants`, { method: 'POST', data }),
+      update: (id: number, data: any) =>
+        request<any>(`${BASE}/admin/tenants/${id}`, { method: 'PUT', data }),
+      updateStatus: (id: number, status: string) =>
+        request<void>(`${BASE}/admin/tenants/${id}/status`, {
+          method: 'PUT',
+          params: { status },
+        }),
+      remove: (id: number) =>
+        request<void>(`${BASE}/admin/tenants/${id}`, { method: 'DELETE' }),
+      assign: (data: { userId: number; assignments: any[] }) =>
+        request<any[]>(`${BASE}/admin/tenants/assign`, { method: 'POST', data }),
+      switch: (tenantId: number) =>
+        request<{ currentTenantId: number; currentTenantName?: string }>(
+          `${BASE}/admin/tenants/switch`,
+          { method: 'POST', params: { tenantId } },
+        ),
+    },
     listConfigs: () =>
       request<any[]>(`${BASE}/system/config`),
     updateConfig: (key: string, value: string) =>

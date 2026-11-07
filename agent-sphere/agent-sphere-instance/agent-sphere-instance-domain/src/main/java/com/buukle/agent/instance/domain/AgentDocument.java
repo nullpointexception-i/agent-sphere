@@ -20,6 +20,7 @@ public class AgentDocument {
     private Long runId;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

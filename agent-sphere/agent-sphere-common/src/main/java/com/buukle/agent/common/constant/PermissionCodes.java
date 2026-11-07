@@ -11,10 +11,12 @@ public final class PermissionCodes {
 
     // ---- admin ----
     public static final String ADMIN_USER_READ = "admin:user:read";
+    public static final String ADMIN_ROLE_READ = "admin:role:read";
     public static final String ADMIN_ROLE_CREATE = "admin:role:create";
     public static final String ADMIN_ROLE_UPDATE = "admin:role:update";
     public static final String ADMIN_ROLE_DELETE = "admin:role:delete";
     public static final String ADMIN_ROLE_ASSIGN = "admin:role:assign";
+    public static final String ADMIN_PERMISSION_READ = "admin:permission:read";
     public static final String ADMIN_PERMISSION_CREATE = "admin:permission:create";
     public static final String ADMIN_PERMISSION_UPDATE = "admin:permission:update";
     public static final String ADMIN_PERMISSION_DELETE = "admin:permission:delete";
@@ -34,6 +36,11 @@ public final class PermissionCodes {
     public static final String ADMIN_COMPLETIONS_READ = "admin:completions:read";
     public static final String ADMIN_COMPLETIONS_UPDATE = "admin:completions:update";
     public static final String ADMIN_COMPLETIONS_DELETE = "admin:completions:delete";
+    public static final String ADMIN_TENANT_READ = "admin:tenant:read";
+    public static final String ADMIN_TENANT_CREATE = "admin:tenant:create";
+    public static final String ADMIN_TENANT_UPDATE = "admin:tenant:update";
+    public static final String ADMIN_TENANT_DELETE = "admin:tenant:delete";
+    public static final String ADMIN_TENANT_ASSIGN = "admin:tenant:assign";
     public static final String ADMIN_TASKS_CREATE = "admin:tasks:create";
     public static final String ADMIN_TASKS_READ = "admin:tasks:read";
     public static final String ADMIN_TASKS_UPDATE = "admin:tasks:update";

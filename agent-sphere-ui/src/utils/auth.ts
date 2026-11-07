@@ -10,6 +10,8 @@ export interface UserVO {
   demo?: boolean;
   roles?: string[];
   permissions?: string[];
+  currentTenantId?: number;
+  currentTenantName?: string;
   ssoProviderCode?: string;
   ssoSubject?: string;
 }

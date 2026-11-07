@@ -10,7 +10,6 @@ import type { MenuProps } from 'antd';
 import { Spin } from 'antd';
 import React, { startTransition } from 'react';
 import { API_PATHS } from '@/constants/endpoints';
-import { PERM } from '@/constants/permissions';
 import { clearStoredUser } from '@/utils/auth';
 import HeaderDropdown from '../HeaderDropdown';
 
@@ -71,7 +70,9 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
   }
 
   const { currentUser, permissions } = initialState;
-  const canAdmin = permissions?.includes(PERM.adminSettingsRead) ?? false;
+  const canAdmin =
+    currentUser?.access === 'admin' ||
+    (permissions ?? []).some((permission) => permission.startsWith('admin:'));
 
   if (!currentUser) {
     return <Spin size="small" />;

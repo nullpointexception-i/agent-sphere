@@ -1,5 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurface;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
@@ -101,6 +103,7 @@ public class AgentRouterScheduler {
             return;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
         TenantContext.clear();
         processSessionBatch();

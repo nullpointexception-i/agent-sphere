@@ -1,5 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.capability.skill.domain.CapabilitySkill;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.exception.CapabilitySkillErrorCode;
@@ -48,12 +50,14 @@ class SkillHubServiceTest {
         f.set(service, skillMapper);
         AuthContext.setUsername("alice");
         TenantUtil.stop();
+        TenantScopeHolder.clear();
     }
 
     @AfterEach
     void tearDown() {
         AuthContext.clear();
         TenantUtil.stop();
+        TenantScopeHolder.clear();
     }
 
     private CapabilitySkill skill(Long id, String name, String createdBy, String visibility) {

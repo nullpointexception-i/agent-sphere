@@ -3,6 +3,8 @@ package com.buukle.agent.infrastructure.config;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +26,7 @@ public class AsyncConfig {
         return task -> {
             String tenant = TenantUtil.get();
             Long tenantId = TenantContext.get();
+            TenantScope tenantScope = TenantScopeHolder.currentOrFallback();
             String token = AuthContext.getToken();
             String username = AuthContext.getUsername();
             String displayName = AuthContext.getDisplayName();
@@ -35,6 +38,7 @@ public class AsyncConfig {
                 try {
                     if (tenant != null && !tenant.isBlank()) TenantUtil.start(tenant);
                     TenantContext.set(tenantId);
+                    TenantScopeHolder.start(tenantScope);
                     AuthContext.setToken(token);
                     AuthContext.setUsername(username);
                     AuthContext.setDisplayName(displayName);
@@ -43,6 +47,7 @@ public class AsyncConfig {
                     if (taskLoopLimit != null) TaskLoopLimitHolder.set(taskLoopLimit);
                     task.run();
                 } finally {
+                    TenantScopeHolder.clear();
                     TenantUtil.stop();
                     TenantContext.clear();
                     AuthContext.clear();

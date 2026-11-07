@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.domain;
 
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
@@ -23,6 +25,7 @@ public class AgentUser {
     private String superAdmin;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;

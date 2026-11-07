@@ -1,5 +1,7 @@
 package com.buukle.agent.im.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.channel.spi.EventIngestPort;
 import com.buukle.agent.channel.spi.NormalizedEvent;
@@ -642,6 +644,7 @@ public class ImMessageServiceImpl implements ImMessageService {
         String tenant = TenantUtil.get();
         boolean admin = AuthContext.isSuperAdmin();
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.setSuperAdmin(true);
         try {
             return supplier.get();

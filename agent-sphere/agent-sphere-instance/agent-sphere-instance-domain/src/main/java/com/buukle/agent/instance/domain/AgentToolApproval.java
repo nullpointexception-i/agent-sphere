@@ -18,6 +18,7 @@ public class AgentToolApproval {
     private String status;
     private String approvedBy;
     private String comment;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableLogic
     private Boolean deleteFlag;

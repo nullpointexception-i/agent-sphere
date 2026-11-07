@@ -1,5 +1,7 @@
 package com.buukle.agent.im.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 
 import com.buukle.agent.common.constant.ApiPaths;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -143,6 +145,7 @@ public class ImAttachmentServiceImpl implements ImAttachmentService {
         String tenant = TenantUtil.get();
         boolean admin = AuthContext.isSuperAdmin();
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.setSuperAdmin(true);
         try {
             return supplier.get();

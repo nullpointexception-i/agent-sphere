@@ -23,6 +23,7 @@ public class AgentCompletionsPrompt {
     private String remark;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

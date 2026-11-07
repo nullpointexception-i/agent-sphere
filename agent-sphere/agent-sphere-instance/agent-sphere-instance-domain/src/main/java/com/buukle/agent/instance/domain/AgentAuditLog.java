@@ -1,6 +1,8 @@
 package com.buukle.agent.instance.domain;
 
+import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -23,6 +25,8 @@ public class AgentAuditLog {
     private String userAgent;
     private Boolean success;
     private String errorMessage;
+    @TableField(fill = FieldFill.INSERT)
+    private Long tenantId;
     private LocalDateTime createdAt;
     @TableLogic
     private Integer deleteFlag;

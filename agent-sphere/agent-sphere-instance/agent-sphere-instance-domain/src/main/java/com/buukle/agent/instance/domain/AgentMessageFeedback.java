@@ -15,6 +15,7 @@ public class AgentMessageFeedback {
     private Long interactionId;
     private Long userId;
     private String value;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

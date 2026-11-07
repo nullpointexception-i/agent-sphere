@@ -1,5 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.ActorType;
@@ -109,6 +111,7 @@ public class GroupRouterScheduler {
             return;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
         TenantContext.clear();
         List<Long> threadIds = eventMapper.selectPendingThreadIds(20);

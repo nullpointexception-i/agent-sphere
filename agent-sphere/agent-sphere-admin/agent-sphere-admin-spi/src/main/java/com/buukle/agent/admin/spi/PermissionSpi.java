@@ -16,6 +16,14 @@ public interface PermissionSpi {
 
     List<String> listCodesByUserId(Long userId);
 
+    /**
+     * Permission codes effective inside one tenant (global grants + tenant grants).
+     * Default keeps older implementations working during migration.
+     */
+    default List<String> listCodesByUserId(Long userId, Long tenantId) {
+        return listCodesByUserId(userId);
+    }
+
     List<String> listAllCodes();
 
     SysPermissionVO create(SysPermissionVO vo);

@@ -33,6 +33,7 @@ public class AgentModelRoute {
     private java.math.BigDecimal reasoningAnswerReserveRatio;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

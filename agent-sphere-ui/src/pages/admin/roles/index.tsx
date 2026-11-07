@@ -140,6 +140,21 @@ export default function AdminRoles() {
     },
     {
       title: intl.formatMessage({
+        id: 'pages.admin.roles.scope',
+        defaultMessage: 'Tenant',
+      }),
+      dataIndex: 'tenantId',
+      key: 'tenantId',
+      render: (tenantId: number | null, record: any) =>
+        record.platformRole || tenantId == null
+          ? intl.formatMessage({
+              id: 'pages.admin.roles.platformRole',
+              defaultMessage: 'Platform',
+            })
+          : record.tenantName || `#${tenantId}`,
+    },
+    {
+      title: intl.formatMessage({
         id: 'pages.table.description',
         defaultMessage: 'Description',
       }),

@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.kernel.reconcile;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.event.InterruptedRunRecoveryEvent;
@@ -76,6 +78,7 @@ public class StaleRunningRunReconciler {
     public void reconcile() {
         // The background thread may inherit the request thread's tenant, and DataPermissionInterceptor appends created_by to findStaleByStatus.
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
         RLock lock = redissonClient.getLock(LOCK_KEY);
         boolean locked = false;

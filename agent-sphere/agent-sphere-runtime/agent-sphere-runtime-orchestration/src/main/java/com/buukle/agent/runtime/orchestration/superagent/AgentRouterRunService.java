@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
@@ -42,6 +44,7 @@ public class AgentRouterRunService implements AgentRouterRunPort {
             return AgentRouterRunResult.rejected("input is required");
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         TenantContext.clear();
         AuthContext.clear();
         try {
@@ -77,6 +80,7 @@ public class AgentRouterRunService implements AgentRouterRunPort {
             return AgentRouterRunResult.rejected(e.getMessage());
         } finally {
             TenantUtil.stop();
+            TenantScopeHolder.clear();
             TenantContext.clear();
             AuthContext.clear();
         }

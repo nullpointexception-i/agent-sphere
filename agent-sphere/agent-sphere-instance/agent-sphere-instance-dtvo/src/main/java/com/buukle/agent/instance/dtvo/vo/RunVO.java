@@ -68,6 +68,7 @@ public class RunVO implements Serializable {
     /** Reasoning budget pinned for this run (Qwen, V118). */
     private Integer reasoningBudgetTokens;
     private String delivery;
+    private Long tenantId;
     private String createdBy;
     private String createdAt;
     /** Whether this run is a clarification answer (userMessage carries the clarification resume prefix); the view layer uses this to skip a separate user bubble */

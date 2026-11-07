@@ -1,5 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
@@ -83,6 +85,7 @@ public class SuperAgentEventServiceImpl implements SuperAgentEventService {
         Long tenantId = TenantContext.get();
         boolean admin = AuthContext.isSuperAdmin();
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         TenantContext.clear();
         AuthContext.setSuperAdmin(true);
         try {

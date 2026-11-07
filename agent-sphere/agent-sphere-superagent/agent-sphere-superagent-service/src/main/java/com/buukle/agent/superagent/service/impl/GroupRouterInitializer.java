@@ -1,5 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.context.AuthContext;
@@ -49,6 +51,7 @@ public class GroupRouterInitializer implements ApplicationRunner {
             return;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
         InstanceVO existing = instanceSpi.findByRole(ROLE_GROUP_ROUTER);
         if (existing != null) {

@@ -14,12 +14,14 @@ import { API_PATHS } from '@/constants/endpoints';
 
 dayjs.extend(relativeTime);
 
+import { AppstoreOutlined } from '@ant-design/icons';
 import { Alert, App, Button } from 'antd';
 import {
   AvatarDropdown,
   ErrorBoundary,
   LangDropdown,
   OfflineBanner,
+  TenantSwitcher,
 } from '@/components';
 import MessageInitializer from '@/components/MessageInitializer';
 import {
@@ -181,7 +183,18 @@ export const layout: RunTimeLayoutConfig = ({
       }
       return dom;
     },
-    actionsRender: () => [<LangDropdown key="lang" />],
+    actionsRender: () => [
+      <Button
+        key="workspace"
+        type="text"
+        icon={<AppstoreOutlined />}
+        onClick={() => history.push('/workspace')}
+      >
+        <FormattedMessage id="menu.workspace" defaultMessage="workspace" />
+      </Button>,
+      <TenantSwitcher key="tenant" />,
+      <LangDropdown key="lang" />,
+    ],
     avatarProps: {
       src: initialState?.currentUser?.avatar,
       title: ssoDisplayName(initialState?.currentUser),

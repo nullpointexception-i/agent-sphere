@@ -22,6 +22,7 @@ public class AgentUserInLoopRecord {
     private String comment;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

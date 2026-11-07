@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
@@ -26,6 +28,7 @@ public class WorkerControlService implements WorkerControlPort {
             return false;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
         try {
             SessionVO session = sessionSpi.getSession(workerSessionId);
@@ -41,6 +44,7 @@ public class WorkerControlService implements WorkerControlPort {
         } finally {
             AuthContext.clear();
             TenantUtil.stop();
+            TenantScopeHolder.clear();
         }
     }
 }

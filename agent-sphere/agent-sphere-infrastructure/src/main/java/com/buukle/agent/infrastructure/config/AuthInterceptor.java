@@ -6,10 +6,13 @@ package com.buukle.agent.infrastructure.config;
 import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.constant.ApiPaths;
 import com.buukle.agent.common.constant.HttpHeaders;import com.buukle.agent.admin.spi.PermissionSpi;
+import com.buukle.agent.admin.spi.TenantScopeSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfaceResolver;
 import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.error.CommonErrorCode;
@@ -52,6 +55,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     private final CacheService cacheService;
     private final PermissionSpi permissionSpi;
     private final UserTokenSpi userTokenSpi;
+    private final TenantScopeSpi tenantScopeSpi;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
@@ -97,15 +101,23 @@ public class AuthInterceptor implements HandlerInterceptor {
         AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
-        TenantContext.set(user.getTenantId());
         boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
         AuthContext.setSuperAdmin(isSuperAdmin);
-        AuthContext.setPermissions(new HashSet<>(
-                isSuperAdmin ? permissionSpi.listAllCodes() : permissionSpi.listCodesByUserId(user.getId())));
+
+        TenantScope scope = tenantScopeSpi.resolve(user.getId(), user.getUsername());
+        if (scope == null) {
+            scope = TenantScope.empty(user.getId(), user.getUsername());
+        }
+        TenantContext.set(scope.currentTenantId());
+        TenantScopeHolder.start(scope);
+        java.util.List<String> codes = isSuperAdmin
+                ? permissionSpi.listAllCodes()
+                : permissionSpi.listCodesByUserId(user.getId(), scope.currentTenantId());
+        AuthContext.setPermissions(new HashSet<>(codes == null ? java.util.List.of() : codes));
 
         if (handler instanceof HandlerMethod hm) {
             Class<?> beanType = ClassUtils.getUserClass(hm.getBeanType());
-            if (beanType.isAnnotationPresent(WithTenant.class) && !AuthContext.isSuperAdmin()) {
+            if (beanType.isAnnotationPresent(WithTenant.class) && !isSuperAdmin) {
                 TenantUtil.start(user.getUsername());
             }
         }
@@ -125,6 +137,7 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        TenantScopeHolder.clear();
         TenantUtil.stop();
         TenantContext.clear();
         AuthContext.clear();

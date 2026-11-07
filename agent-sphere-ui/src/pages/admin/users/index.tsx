@@ -1,11 +1,21 @@
 import { useIntl } from '@umijs/max';
-import { App, Button, Checkbox, Modal, Space, Table, Tag } from 'antd';
+import { Button, Space, Table, Tag } from 'antd';
 import { useEffect, useState } from 'react';
-import { Can } from '@/components/Can';
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { PERM } from '@/constants/permissions';
 import { STATUS } from '@/constants/status';
+import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
+import UserAccessModal from './UserAccessModal';
+
+interface UserRoleItem {
+  id?: number;
+  code: string;
+  name?: string;
+  tenantId?: number | null;
+  tenantName?: string;
+  platformRole?: boolean;
+}
 
 interface UserItem {
   id: number;
@@ -14,19 +24,20 @@ interface UserItem {
   englishName: string;
   status: string;
   createdAt: string;
+  roles?: string[];
+  roleDetails?: UserRoleItem[];
 }
 
 export default function AdminUsers() {
   const intl = useIntl();
-  const { message } = App.useApp();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [roleModalUser, setRoleModalUser] = useState<UserItem | null>(null);
-  const [allRoles, setAllRoles] = useState<any[]>([]);
-  const [userRoleIds, setUserRoleIds] = useState<number[]>([]);
-  const [roleSaving, setRoleSaving] = useState(false);
+  const [accessModalUser, setAccessModalUser] = useState<UserItem | null>(null);
+  const canAssignTenant = useCan(PERM.adminTenantAssign);
+  const canAssignRole = useCan(PERM.adminRoleAssign);
+  const canManageAccess = canAssignTenant && canAssignRole;
 
   const loadUsers = async (p = page) => {
     setLoading(true);
@@ -44,46 +55,6 @@ export default function AdminUsers() {
   useEffect(() => {
     loadUsers();
   }, []);
-
-  const handleOpenRoleModal = async (user: UserItem) => {
-    setRoleModalUser(user);
-    try {
-      const roles = await agentApi.admin.roles.listAll();
-      setAllRoles(roles || []);
-    } catch {
-      setAllRoles([]);
-    }
-    try {
-      const urs = await agentApi.admin.roles.listByUser(user.id);
-      setUserRoleIds((urs || []).map((r: any) => r.id));
-    } catch {
-      setUserRoleIds([]);
-    }
-  };
-
-  const handleSaveRoles = async () => {
-    if (!roleModalUser) return;
-    setRoleSaving(true);
-    try {
-      await agentApi.admin.roles.assignUser(roleModalUser.id, userRoleIds);
-      message.success(
-        intl.formatMessage({
-          id: 'pages.save.success',
-          defaultMessage: 'Saved',
-        }),
-      );
-      setRoleModalUser(null);
-    } catch {
-      message.error(
-        intl.formatMessage({
-          id: 'pages.chat.saveFailed',
-          defaultMessage: 'Save failed',
-        }),
-      );
-    } finally {
-      setRoleSaving(false);
-    }
-  };
 
   const columns = [
     {
@@ -121,10 +92,27 @@ export default function AdminUsers() {
         id: 'pages.admin.users.roles',
         defaultMessage: 'Roles',
       }),
-      dataIndex: 'roles',
       key: 'roles',
-      render: (roles: string[]) =>
-        roles?.length ? roles.map((r) => <Tag key={r}>{r}</Tag>) : '-',
+      render: (_: any, record: UserItem) => {
+        const details: UserRoleItem[] = record.roleDetails?.length
+          ? record.roleDetails
+          : (record.roles || []).map((code) => ({ code }));
+        if (!details.length) return '-';
+        return details.map((role) => {
+          const source = role.platformRole
+            ? intl.formatMessage({
+                id: 'pages.admin.users.roleSourcePlatform',
+                defaultMessage: 'Platform',
+              })
+            : role.tenantName;
+          return (
+            <Tag key={`${role.id ?? role.code}-${role.tenantId ?? 'platform'}`}>
+              {role.code}
+              {source ? ` · ${source}` : ''}
+            </Tag>
+          );
+        });
+      },
     },
     {
       title: intl.formatMessage({
@@ -153,18 +141,20 @@ export default function AdminUsers() {
       }),
       key: 'actions',
       render: (_: any, record: UserItem) => (
-        <Can code={PERM.adminRoleAssign}>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => handleOpenRoleModal(record)}
-          >
-            {intl.formatMessage({
-              id: 'pages.admin.users.assignRole',
-              defaultMessage: 'Assign Roles',
-            })}
-          </Button>
-        </Can>
+        <Space>
+          {canManageAccess && (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => setAccessModalUser(record)}
+            >
+              {intl.formatMessage({
+                id: 'pages.admin.users.accessTitle',
+                defaultMessage: 'Tenants and roles',
+              })}
+            </Button>
+          )}
+        </Space>
       ),
     },
   ];
@@ -188,32 +178,16 @@ export default function AdminUsers() {
         }}
         size="small"
       />
-      <Modal
-        title={intl.formatMessage({
-          id: 'pages.admin.users.assignRole',
-          defaultMessage: 'Assign Roles',
-        })}
-        open={!!roleModalUser}
-        onOk={handleSaveRoles}
-        onCancel={() => setRoleModalUser(null)}
-        confirmLoading={roleSaving}
-      >
-        <Checkbox.Group
-          value={userRoleIds}
-          onChange={(vals) => setUserRoleIds(vals as number[])}
-        >
-          <Space orientation="vertical">
-            {allRoles.map((r: any) => (
-              <Checkbox key={r.id} value={r.id}>
-                {r.name}
-                <span style={{ color: '#999', marginLeft: 8, fontSize: 12 }}>
-                  ({r.code})
-                </span>
-              </Checkbox>
-            ))}
-          </Space>
-        </Checkbox.Group>
-      </Modal>
+      <UserAccessModal
+        open={!!accessModalUser}
+        userId={accessModalUser?.id ?? null}
+        userName={accessModalUser?.displayName || accessModalUser?.username}
+        onCancel={() => setAccessModalUser(null)}
+        onSaved={() => {
+          setAccessModalUser(null);
+          loadUsers();
+        }}
+      />
     </>
   );
 }

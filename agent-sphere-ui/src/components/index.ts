@@ -7,6 +7,7 @@
  */
 import { LangDropdown } from './RightContent';
 import { AvatarDropdown } from './RightContent/AvatarDropdown';
+import TenantSwitcher from './TenantSwitcher';
 
 /**
  * Business components
@@ -14,4 +15,4 @@ import { AvatarDropdown } from './RightContent/AvatarDropdown';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as OfflineBanner } from './OfflineBanner';
 
-export { AvatarDropdown, LangDropdown };
+export { AvatarDropdown, LangDropdown, TenantSwitcher };

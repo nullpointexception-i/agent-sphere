@@ -10,6 +10,8 @@ import com.buukle.agent.admin.dtvo.vo.SysRoleVO;
 import com.buukle.agent.admin.spi.RoleSpi;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.util.BaseController;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,7 @@ public class RoleController extends BaseController {
 
     private final RoleSpi roleSpi;
 
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_READ)
     @GetMapping
     public ResponseEntity<Page<SysRoleVO>> listPage(
             @RequestParam(defaultValue = "1") int page,
@@ -40,14 +43,31 @@ public class RoleController extends BaseController {
         return ok(roleSpi.listPage(page, size));
     }
 
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_READ)
     @GetMapping("/all")
     public ResponseEntity<List<SysRoleVO>> listAll() {
-        return ok(roleSpi.listAll());
+        return ok(roleSpi.listAll(TenantScopeHolder.currentTenantId()));
     }
 
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_READ)
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<SysRoleVO>> listByUserId(@PathVariable Long userId) {
-        return ok(roleSpi.listByUserId(userId));
+        // Platform administrators manage users across the tenant tree, so the
+        // assignment dialog must show every assignment (with its source tenant).
+        // Tenant administrators see assignments inside their manageable subtree.
+        List<SysRoleVO> assignments = roleSpi.listAssignments(userId);
+        if (com.buukle.agent.common.context.AuthContext.isSuperAdmin()) {
+            return ok(assignments);
+        }
+        TenantScope scope = TenantScopeHolder.get();
+        if (scope == null) {
+            return ok(List.of());
+        }
+        java.util.Set<Long> manageable = scope.manageableTenantIds();
+        return ok(assignments.stream()
+                .filter(role -> role.getTenantId() != null
+                        && manageable.contains(role.getTenantId()))
+                .toList());
     }
 
     @AuditLog(action = "CREATE", resourceType = "Role", resourceId = "#result?.body?.id")

@@ -16,6 +16,7 @@ public class AgentEvent {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     private Long threadId;
     private Long seq;

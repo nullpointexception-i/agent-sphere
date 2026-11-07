@@ -4,6 +4,8 @@ export default {
   'errors.admin.A0701': '请更换权限标识',
   'errors.admin.A0702': '请更换角色编码',
   'errors.admin.A0703': '请勿重复分配',
+  'errors.admin.A0707':
+    '请先将当前租户的可见级别改为“可见当前及下辖”后再创建下级租户',
   'errors.capability.cli.A0023': '请检查CLI ID',
   'errors.capability.cli.B0012': 'CLI命令执行异常，请稍后重试',
   'errors.capability.mcp.A0021': '请检查MCP ID',

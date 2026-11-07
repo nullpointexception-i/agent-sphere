@@ -16,6 +16,7 @@ public class AgentChatShare {
     private Integer runCount;
     private String createdBy;
     private String status;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

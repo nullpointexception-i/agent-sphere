@@ -43,5 +43,6 @@ public class AgentPendingWait {
     private LocalDateTime updatedAt;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
 }

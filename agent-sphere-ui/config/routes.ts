@@ -42,6 +42,32 @@ export default [
   },
   {
     path: '',
+    key: 'digitalEmployeeGroup',
+    name: 'digitalEmployee',
+    icon: 'team',
+    locale: 'menu.digitalEmployeeGroup',
+    access: 'canViewDigitalEmployee',
+    routes: [
+      {
+        path: 'super-agent',
+        name: 'superAgent',
+        icon: 'team',
+        locale: 'menu.superAgent',
+        access: 'canManageSuperAgent',
+        component: './super-agent',
+      },
+      {
+        path: 'im',
+        name: 'im',
+        icon: 'message',
+        locale: 'menu.im',
+        access: 'canManageIm',
+        component: './im',
+      },
+    ],
+  },
+  {
+    path: '',
     key: 'modelGroup',
     name: 'models',
     icon: 'cloud',
@@ -114,22 +140,6 @@ export default [
         locale: 'menu.instances',
         access: 'canManageInstances',
         component: './instances',
-      },
-      {
-        path: 'super-agent',
-        name: 'superAgent',
-        icon: 'team',
-        locale: 'menu.superAgent',
-        access: 'canManageSuperAgent',
-        component: './super-agent',
-      },
-      {
-        path: 'im',
-        name: 'im',
-        icon: 'message',
-        locale: 'menu.im',
-        access: 'canManageIm',
-        component: './im',
       },
       {
         path: 'completions',
@@ -242,6 +252,7 @@ export default [
         component: './admin/layout',
         routes: [
           { path: 'users', component: './admin/users' },
+          { path: 'tenants', component: './admin/tenants' },
           { path: 'roles', component: './admin/roles' },
           { path: 'permissions', component: './admin/permissions' },
           { path: 'settings', component: './admin/settings' },

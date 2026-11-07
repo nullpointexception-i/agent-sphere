@@ -1,4 +1,5 @@
 import {
+  AppstoreOutlined,
   AudioOutlined,
   CheckOutlined,
   CloseOutlined,
@@ -166,6 +167,15 @@ function TopBar({ me }: { me: any }) {
   return (
     <div className={styles.topBar}>
       <div className={styles.topRight}>
+        <button
+          type="button"
+          className={styles.langButton}
+          onClick={() => {
+            window.location.href = '/dashboard';
+          }}
+        >
+          <AppstoreOutlined /> {tw('app.operations', 'console')}
+        </button>
         <Dropdown
           trigger={['click']}
           menu={{
@@ -234,6 +244,20 @@ function SideRail({
         </div>
       ))}
       <div className={styles.railSpacer} />
+      <div
+        className={styles.railItem}
+        title={tw('app.operations', 'console')}
+        onClick={() => {
+          window.location.href = '/dashboard';
+        }}
+      >
+        <span className={styles.railIcon}>
+          <AppstoreOutlined />
+        </span>
+        <span className={styles.railLabel}>
+          {tw('app.operations', 'console')}
+        </span>
+      </div>
       <div className={styles.railUser} title={displayName(me)}>
         <Avatar
           className={styles.railAvatar}
@@ -3143,13 +3167,6 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
     load();
   };
 
-  const isAdmin =
-    me?.superAdmin === '1' ||
-    me?.superAdmin === true ||
-    (me?.roles || []).some(
-      (role: string) => role === 'ADMIN' || role === 'SUPER_ADMIN',
-    );
-
   const logout = async () => {
     try {
       await umiRequest(API_PATHS.AUTH_LOGOUT, { method: 'POST' });
@@ -3253,27 +3270,25 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
             </div>
             <span className={styles.sectionMore}>›</span>
           </div>
-          {isAdmin ? (
-            <div
-              className={styles.menuRow}
-              onClick={() => {
-                window.location.href = '/dashboard';
-              }}
-            >
-              <div className={styles.menuIcon}>
-                <SettingOutlined />
-              </div>
-              <div className={styles.menuBody}>
-                <div className={styles.menuTitle}>
-                  {tw('me.admin', 'Admin console')}
-                </div>
-                <div className={styles.menuDesc}>
-                  {tw('me.adminDesc', 'Open the admin console')}
-                </div>
-              </div>
-              <span className={styles.sectionMore}>›</span>
+          <div
+            className={styles.menuRow}
+            onClick={() => {
+              window.location.href = '/dashboard';
+            }}
+          >
+            <div className={styles.menuIcon}>
+              <SettingOutlined />
             </div>
-          ) : null}
+            <div className={styles.menuBody}>
+              <div className={styles.menuTitle}>
+                {tw('me.admin', 'console')}
+              </div>
+              <div className={styles.menuDesc}>
+                {tw('me.adminDesc', 'Open console')}
+              </div>
+            </div>
+            <span className={styles.sectionMore}>›</span>
+          </div>
         </div>
       </Spin>
 

@@ -1,5 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.channel.spi.ChannelAdapter;
 import com.buukle.agent.channel.spi.OutboundFormat;
@@ -126,6 +128,7 @@ public class OutboundDispatchScheduler {
             return;
         }
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
         if (resetStuck) {
             outboundMapper.resetStuckSending();
@@ -183,6 +186,7 @@ public class OutboundDispatchScheduler {
             fail(row, e.getMessage(), true, token);
         } finally {
             TenantUtil.stop();
+            TenantScopeHolder.clear();
             TenantContext.clear();
             AuthContext.clear();
         }

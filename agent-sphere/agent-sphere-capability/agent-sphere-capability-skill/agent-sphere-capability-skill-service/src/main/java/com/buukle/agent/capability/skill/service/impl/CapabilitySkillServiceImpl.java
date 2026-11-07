@@ -1,5 +1,9 @@
 package com.buukle.agent.capability.skill.service.impl;
 
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -189,11 +193,21 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         // Privileged read of the source (bypasses row-level isolation), then validate visibility
         // manually; restore the original tenant afterwards
         String savedTenant = TenantUtil.get();
+        TenantScope savedScope = TenantScopeHolder.get();
+        Long savedTenantId = TenantContext.get();
         CapabilitySkill source;
         try {
             TenantUtil.stop();
+            TenantScopeHolder.clear();
+            TenantContext.clear();
             source = getById(sourceId);
         } finally {
+            if (savedScope != null) {
+                TenantScopeHolder.start(savedScope);
+            }
+            if (savedTenantId != null) {
+                TenantContext.set(savedTenantId);
+            }
             if (savedTenant != null && !savedTenant.isBlank()) {
                 TenantUtil.start(savedTenant);
             }

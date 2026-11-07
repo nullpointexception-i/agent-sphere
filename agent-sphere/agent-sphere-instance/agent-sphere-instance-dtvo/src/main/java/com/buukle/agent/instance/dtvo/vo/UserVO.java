@@ -18,7 +18,10 @@ public class UserVO implements Serializable {
     private String status;
     private String superAdmin;
     private Boolean demo;
+    private Long currentTenantId;
+    private String currentTenantName;
     private LocalDateTime lastLoginAt;
     private List<String> roles;
+    private List<UserRoleVO> roleDetails;
     private List<String> permissions;
 }

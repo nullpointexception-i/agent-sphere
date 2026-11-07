@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.wait;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
@@ -52,6 +54,7 @@ class PendingWaitWakeSchedulerTest {
     @AfterEach
     void tearDown() {
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
     }
 

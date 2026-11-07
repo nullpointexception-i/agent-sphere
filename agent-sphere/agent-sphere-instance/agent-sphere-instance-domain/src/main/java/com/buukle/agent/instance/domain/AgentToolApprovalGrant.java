@@ -18,6 +18,7 @@ public class AgentToolApprovalGrant {
     private String scope;
     private String approvedBy;
     private String status;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

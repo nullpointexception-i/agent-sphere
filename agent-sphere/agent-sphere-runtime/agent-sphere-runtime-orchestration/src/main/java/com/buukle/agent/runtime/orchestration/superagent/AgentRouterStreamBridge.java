@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.buukle.agent.channel.spi.AgentStreamEvent;
 import com.buukle.agent.channel.spi.AgentStreamPhase;
 import com.buukle.agent.channel.spi.AgentStreamPort;
@@ -316,6 +318,7 @@ public class AgentRouterStreamBridge {
 
     private static void clearRuntimeContext() {
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         AuthContext.clear();
         TenantContext.clear();
     }

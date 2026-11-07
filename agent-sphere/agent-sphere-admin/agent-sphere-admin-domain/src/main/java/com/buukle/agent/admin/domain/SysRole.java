@@ -16,6 +16,9 @@ public class SysRole {
     private Long id;
     private String name;
     private String code;
+    /** NULL = platform role; otherwise the owning tenant. */
+    @TableField(fill = FieldFill.INSERT)
+    private Long tenantId;
     private String description;
     private String status;
     private String remark;

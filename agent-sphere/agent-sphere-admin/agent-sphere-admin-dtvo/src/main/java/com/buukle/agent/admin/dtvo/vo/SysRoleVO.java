@@ -10,6 +10,10 @@ public class SysRoleVO {
     private Long id;
     private String name;
     private String code;
+    /** NULL = platform role. */
+    private Long tenantId;
+    private String tenantName;
+    private Boolean platformRole;
     private String description;
     private LocalDateTime createdAt;
     private List<Long> permissionIds;

@@ -1,5 +1,7 @@
 package com.buukle.agent.im.service.impl;
 
+import com.buukle.agent.common.context.TenantScopeHolder;
+
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.channel.spi.ChannelAdapter;
 import com.buukle.agent.channel.spi.InboundRequest;
@@ -96,6 +98,7 @@ public class ImChannelAdapter implements ChannelAdapter {
     private ImConversation findByThread(Long threadId) {
         String tenant = TenantUtil.get();
         TenantUtil.stop();
+        TenantScopeHolder.clear();
         try {
             return conversationMapper.selectOne(Wrappers.<ImConversation>lambdaQuery()
                     .eq(ImConversation::getThreadId, threadId)

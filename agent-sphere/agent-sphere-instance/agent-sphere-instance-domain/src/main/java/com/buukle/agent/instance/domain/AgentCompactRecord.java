@@ -23,6 +23,7 @@ public class AgentCompactRecord {
     private String errorMessage;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

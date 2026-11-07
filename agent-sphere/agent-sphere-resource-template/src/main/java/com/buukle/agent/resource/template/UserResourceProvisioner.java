@@ -1,7 +1,11 @@
 package com.buukle.agent.resource.template;
 
+import com.buukle.agent.admin.spi.TenantScopeSpi;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -26,6 +30,7 @@ public class UserResourceProvisioner {
     private final ResourceTemplateCoordinator resourceTemplateCoordinator;
     private final UserSpi userSpi;
     private final SystemConfigSpi systemConfigSpi;
+    private final TenantScopeSpi tenantScopeSpi;
 
     /**
      * Provisions a resource copy for the user. Any exception is caught and recorded in the result;
@@ -43,6 +48,9 @@ public class UserResourceProvisioner {
             template = systemConfigSpi.get(SystemConfigKeys.USER_RESOURCE_TEMPLATE, "");
         }
         String owner = user.getUsername();
+        TenantScope scope = tenantScopeSpi.resolve(userId, owner);
+        TenantContext.set(scope.currentTenantId());
+        TenantScopeHolder.start(scope);
         TenantUtil.start(owner);
         try {
             return resourceTemplateCoordinator.initialize(
@@ -54,6 +62,8 @@ public class UserResourceProvisioner {
             return result;
         } finally {
             TenantUtil.stop();
+            TenantScopeHolder.clear();
+            TenantContext.clear();
         }
     }
 }

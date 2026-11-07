@@ -27,6 +27,7 @@ public class AgentSubAgentRun {
     private LocalDateTime finishedAt;
     @TableLogic
     private Boolean deleteFlag;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     @TableField(fill = FieldFill.INSERT)
     private String createdBy;

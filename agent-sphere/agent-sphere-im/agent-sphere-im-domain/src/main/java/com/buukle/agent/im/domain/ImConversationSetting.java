@@ -16,6 +16,7 @@ public class ImConversationSetting {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField(fill = FieldFill.INSERT)
     private Long tenantId;
     private Long conversationId;
     private Long userId;

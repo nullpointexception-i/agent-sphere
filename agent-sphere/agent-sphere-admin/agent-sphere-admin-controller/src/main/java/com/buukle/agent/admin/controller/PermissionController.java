@@ -30,6 +30,7 @@ public class PermissionController extends BaseController {
 
     private final PermissionSpi permissionSpi;
 
+    @RequirePermission(PermissionCodes.ADMIN_PERMISSION_READ)
     @GetMapping
     public ResponseEntity<Page<SysPermissionVO>> listPage(
             @RequestParam(defaultValue = "1") int page,
@@ -37,16 +38,28 @@ public class PermissionController extends BaseController {
         return ok(permissionSpi.listPage(page, size));
     }
 
+    /**
+     * Role permission assignment needs the permission tree, but tenant
+     * administrators deliberately do not have the permission-management menu.
+     * Gate these two endpoints by role permissions instead.
+     */
+    @RequirePermission(
+            value = {PermissionCodes.ADMIN_ROLE_READ, PermissionCodes.ADMIN_ROLE_ASSIGN},
+            mode = RequirePermission.MatchMode.OR)
     @GetMapping("/tree")
     public ResponseEntity<List<SysPermissionVO>> listTree() {
         return ok(permissionSpi.listAll());
     }
 
+    @RequirePermission(
+            value = {PermissionCodes.ADMIN_ROLE_READ, PermissionCodes.ADMIN_ROLE_ASSIGN},
+            mode = RequirePermission.MatchMode.OR)
     @GetMapping("/role/{roleId}")
     public ResponseEntity<List<SysPermissionVO>> listByRoleId(@PathVariable Long roleId) {
         return ok(permissionSpi.listByRoleId(roleId));
     }
 
+    @RequirePermission(PermissionCodes.ADMIN_USER_READ)
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<SysPermissionVO>> listByUserId(@PathVariable Long userId) {
         return ok(permissionSpi.listByUserId(userId));
