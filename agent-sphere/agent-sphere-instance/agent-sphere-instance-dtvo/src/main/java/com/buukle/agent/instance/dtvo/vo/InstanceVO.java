@@ -15,6 +15,8 @@ public class InstanceVO implements Serializable {
     private String image;
     private String status;
     private String businessType;
+    /** Owning tenant. Task creation inherits it so runtime tenant scoping can still see the instance. */
+    private Long tenantId;
 
     /** Whether the console site may start/continue sessions (V89). */
     private Boolean allowConsoleSession;

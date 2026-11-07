@@ -26,6 +26,7 @@ public class InstanceConverter {
         vo.setImage(instance.getImage());
         vo.setStatus(instance.getStatus());
         vo.setBusinessType(instance.getBusinessType());
+        vo.setTenantId(instance.getTenantId());
         vo.setAllowConsoleSession(instance.getAllowConsoleSession());
         vo.setAllowWidgetSession(instance.getAllowWidgetSession());
         vo.setMaxLoopCount(instance.getMaxLoopCount());

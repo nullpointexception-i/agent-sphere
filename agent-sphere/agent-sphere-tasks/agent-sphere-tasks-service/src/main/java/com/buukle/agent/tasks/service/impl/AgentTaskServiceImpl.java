@@ -8,6 +8,9 @@ import com.buukle.agent.util.markdown.MarkdownRenderer;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TaskLoopLimitHolder;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
@@ -133,64 +136,83 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     public TaskVO submit(CreateTaskDTO dto, CallerAuth auth) {
         ResolvedIdentityVO identity = resolveIdentity(auth);
         InstanceVO instance = resolveInstanceByBusinessType(auth.businessType(), identity.getUsername());
+
+        // The external task API has no tenant scope: without this, audit fills tenant_id=0 and
+        // the runtime can never see the instance again (wait resume fails with "Agent instance not found").
+        Long tenantId = instance.getTenantId() != null
+                ? instance.getTenantId()
+                : TenantScopeHolder.currentTenantId();
+        if (tenantId == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "agent instance has no tenant");
+        }
+
         // Initialize the current context with the resolved caller identity: the task's session/run is owned
         // by that user, so the browser extension's per-username task connection receives instruction
         // deliveries during execution (instead of external-service).
         AuthContext.setUsername(identity.getUsername());
         AuthContext.setSuperAdmin(false);
         AuthContext.setPermissions(Set.of());
-        AgentTask task = new AgentTask();
-        task.setGoal(dto.getGoal());
-        task.setContextJson(dto.getContext() == null ? null : JsonUtils.toJson(dto.getContext()));
-        task.setExpectedOutputJson(dto.getExpectedOutput() == null ? null : JsonUtils.toJson(dto.getExpectedOutput()));
-        task.setConfig(dto.getConfig() == null ? null : JsonUtils.toJson(dto.getConfig()));
-        task.setCallbackUrl(dto.getCallbackUrl());
-        // Shares the same value as the MCP credential TTL issued by the caller (see CreateTaskDTO#taskTimeoutSeconds)
-        task.setTaskTimeoutSeconds(dto.getTaskTimeoutSeconds());
-        task.setCreatedBy(identity.getUsername());
-        task.setInstanceId(instance.getId());
-        task.setStatus(TaskEnum.STATUS_QUEUED);
-        taskMapper.insert(task);
-
+        TenantScopeHolder.start(TenantScope.tenantOnly(tenantId, identity.getUsername()));
+        TenantContext.set(tenantId);
         try {
-            CreateSessionDTO sessionDTO = new CreateSessionDTO();
-            sessionDTO.setAgentInstanceId(instance.getId());
-            sessionDTO.setTitle(titleOf(dto.getGoal()));
-            SessionVO session = sessionSpi.createSession(sessionDTO);
+            AgentTask task = new AgentTask();
+            task.setGoal(dto.getGoal());
+            task.setContextJson(dto.getContext() == null ? null : JsonUtils.toJson(dto.getContext()));
+            task.setExpectedOutputJson(dto.getExpectedOutput() == null ? null : JsonUtils.toJson(dto.getExpectedOutput()));
+            task.setConfig(dto.getConfig() == null ? null : JsonUtils.toJson(dto.getConfig()));
+            task.setCallbackUrl(dto.getCallbackUrl());
+            // Shares the same value as the MCP credential TTL issued by the caller (see CreateTaskDTO#taskTimeoutSeconds)
+            task.setTaskTimeoutSeconds(dto.getTaskTimeoutSeconds());
+            task.setCreatedBy(identity.getUsername());
+            task.setTenantId(tenantId);
+            task.setInstanceId(instance.getId());
+            task.setStatus(TaskEnum.STATUS_QUEUED);
+            taskMapper.insert(task);
 
-            // Must be registered before chat: tool calls happen while the run executes, and registering later
-            // means the first MCP call cannot obtain the credential (symptom: "the first candidate was not
-            // deduplicated, later ones were").
-            // TTL uses the task's actual timeout + margin: a fixed value would expire before long tasks (up to 4h).
-            taskMcpCredentialStore.put(session.getId(), dto.getMcpCredential(),
-                    CREDENTIAL_TTL_MARGIN.plusSeconds(effectiveTimeoutSeconds(dto.getTaskTimeoutSeconds())));
-
-            SendMessageDTO message = new SendMessageDTO();
-            message.setMessage(buildPrompt(dto));
-            message.setNoClarification(true);
-            TaskLoopLimitHolder.set(propertiesTaskLoopLimit());
-            ChatMessageResponseVO resp;
             try {
-                resp = chatRuntimeService.chat(session.getId(), message);
-            } finally {
-                TaskLoopLimitHolder.clear();
+                CreateSessionDTO sessionDTO = new CreateSessionDTO();
+                sessionDTO.setAgentInstanceId(instance.getId());
+                sessionDTO.setTitle(titleOf(dto.getGoal()));
+                SessionVO session = sessionSpi.createSession(sessionDTO);
+
+                // Must be registered before chat: tool calls happen while the run executes, and registering later
+                // means the first MCP call cannot obtain the credential (symptom: "the first candidate was not
+                // deduplicated, later ones were").
+                // TTL uses the task's actual timeout + margin: a fixed value would expire before long tasks (up to 4h).
+                taskMcpCredentialStore.put(session.getId(), dto.getMcpCredential(),
+                        CREDENTIAL_TTL_MARGIN.plusSeconds(effectiveTimeoutSeconds(dto.getTaskTimeoutSeconds())));
+
+                SendMessageDTO message = new SendMessageDTO();
+                message.setMessage(buildPrompt(dto));
+                message.setNoClarification(true);
+                TaskLoopLimitHolder.set(propertiesTaskLoopLimit());
+                ChatMessageResponseVO resp;
+                try {
+                    resp = chatRuntimeService.chat(session.getId(), message);
+                } finally {
+                    TaskLoopLimitHolder.clear();
+                }
+
+                task.setSessionId(session.getId());
+                task.setRunId(resp.getRunId());
+                task.setStatus(TaskEnum.STATUS_RUNNING);
+                task.setPollPhase(PHASE_EXECUTE);
+                task.setStartedAt(LocalDateTime.now());
+                task.setPolledAt(LocalDateTime.now());
+                taskMapper.updateById(task);
+
+                // DB-backed polling: no local scheduling needed; each replica's @Scheduled sweep claims tasks (see pollSweep)
+            } catch (Exception e) {
+                log.warn("Task {} submit failed: {}", task.getId(), e.getMessage());
+                markTaskFailed(task.getId(), e.getMessage());
+                throw e;
             }
-
-            task.setSessionId(session.getId());
-            task.setRunId(resp.getRunId());
-            task.setStatus(TaskEnum.STATUS_RUNNING);
-            task.setPollPhase(PHASE_EXECUTE);
-            task.setStartedAt(LocalDateTime.now());
-            task.setPolledAt(LocalDateTime.now());
-            taskMapper.updateById(task);
-
-            // DB-backed polling: no local scheduling needed; each replica's @Scheduled sweep claims tasks (see pollSweep)
-        } catch (Exception e) {
-            log.warn("Task {} submit failed: {}", task.getId(), e.getMessage());
-            markTaskFailed(task.getId(), e.getMessage());
-            throw e;
+            return toVO(task);
+        } finally {
+            TenantScopeHolder.clear();
+            TenantContext.clear();
+            AuthContext.clear();
         }
-        return toVO(task);
     }
 
     @Override
@@ -368,18 +390,15 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         // The external API has no request context (AuthInterceptor sets no identity for the /api/v1/api prefix):
         // cancel the run as the task creator, otherwise ChatRuntimeService.assertSessionOwnership throws FORBIDDEN;
         // once swallowed, the Redis cancel set is never written and the run cannot be stopped.
-        AuthContext.setUsername(task.getCreatedBy());
-        AuthContext.setSuperAdmin(false);
-        AuthContext.setPermissions(Set.of());
-        try {
-            if (task.getSessionId() != null && task.getRunId() != null) {
-                chatRuntimeService.stopRun(task.getSessionId(), task.getRunId());
+        runAsTaskTenant(task, () -> {
+            try {
+                if (task.getSessionId() != null && task.getRunId() != null) {
+                    chatRuntimeService.stopRun(task.getSessionId(), task.getRunId());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to stop run for task {}: {}", id, e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Failed to stop run for task {}: {}", id, e.getMessage());
-        } finally {
-            AuthContext.clear();
-        }
+        });
         // DB-backed polling: no local future to cancel; a conditional update guarantees a single winner
         transitionToTerminal(task, TaskEnum.STATUS_CANCELLED, task.getResultJson());
     }
@@ -434,6 +453,10 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     /** Per-replica @Scheduled sweep: claims due RUNNING tasks and runs one pollOnce for each (DB-backed, replicas are interchangeable). */
     @Scheduled(fixedDelayString = "${hri-ai.tasks.poll-interval:2s}")
     public void pollSweep() {
+        // Scheduler threads are reused: clear any scope inherited from the previous task before querying.
+        TenantScopeHolder.clear();
+        TenantContext.clear();
+        AuthContext.clear();
         LocalDateTime cutoff = LocalDateTime.now().minus(pollInterval);
         List<AgentTask> due = taskMapper.selectList(new LambdaQueryWrapper<AgentTask>()
                 .eq(AgentTask::getStatus, TaskEnum.STATUS_RUNNING)
@@ -444,16 +467,34 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                 continue; // another replica already claimed it
             }
             try {
-                // The background scheduler thread has no request context: run as the task creator to satisfy ownership checks
-                AuthContext.setUsername(task.getCreatedBy());
-                AuthContext.setSuperAdmin(false);
-                AuthContext.setPermissions(Set.of());
-                pollOnce(task);
+                // The background scheduler thread has no request context: run as the task creator and tenant
+                // so ownership checks pass and extract/refine runs are written into the same tenant.
+                runAsTaskTenant(task, () -> pollOnce(task));
             } catch (Exception e) {
                 log.warn("Poll task {} failed: {}", task.getId(), e.getMessage());
-            } finally {
-                AuthContext.clear();
             }
+        }
+    }
+
+    /** Runs task-scoped work under the task's tenant; the external task API and scheduler have no request scope. */
+    private void runAsTaskTenant(AgentTask task, Runnable action) {
+        Long tenantId = task.getTenantId();
+        String username = task.getCreatedBy();
+        if (tenantId != null) {
+            TenantScopeHolder.start(TenantScope.tenantOnly(tenantId, username));
+            TenantContext.set(tenantId);
+        }
+        try {
+            if (username != null && !username.isBlank()) {
+                AuthContext.setUsername(username);
+            }
+            AuthContext.setSuperAdmin(false);
+            AuthContext.setPermissions(Set.of());
+            action.run();
+        } finally {
+            TenantScopeHolder.clear();
+            TenantContext.clear();
+            AuthContext.clear();
         }
     }
 

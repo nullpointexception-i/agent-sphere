@@ -3,6 +3,7 @@ package com.buukle.agent.bootstrap.controller;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
@@ -41,6 +42,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -113,6 +115,7 @@ class AgentTaskServiceTest {
         instance.setStatus("ENABLED");
         instance.setBusinessType("sourcing");
         instance.setCreatedBy("elvin");
+        instance.setTenantId(2L);
         return instance;
     }
 
@@ -155,6 +158,42 @@ class AgentTaskServiceTest {
         assertEquals("RUNNING", saved.getStatus());
         assertEquals("{\"month\":\"2026-04\"}", saved.getContextJson());
         assertEquals("elvin", saved.getCreatedBy());
+    }
+
+    @Test
+    void submit_shouldWriteTaskAndStartRunInsideInstanceTenant() {
+        stubIdentity();
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(instance(2L)));
+
+        CreateTaskDTO dto = new CreateTaskDTO();
+        dto.setGoal("整理月报");
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("sourcing");
+
+        SessionVO session = new SessionVO();
+        session.setId(11L);
+        given(sessionSpi.createSession(any(CreateSessionDTO.class))).willReturn(session);
+
+        ChatMessageResponseVO chatResp = new ChatMessageResponseVO();
+        chatResp.setRunId(22L);
+        given(chatRuntimeService.chat(anyLong(), any(SendMessageDTO.class))).willReturn(chatResp);
+
+        AtomicLong tenantAtInsert = new AtomicLong();
+        given(taskMapper.insert(any(AgentTask.class))).willAnswer(inv -> {
+            tenantAtInsert.set(TenantScopeHolder.currentTenantId());
+            inv.<AgentTask>getArgument(0).setId(1L);
+            return 1;
+        });
+
+        taskService.submit(dto, AUTH);
+
+        assertEquals(2L, tenantAtInsert.get());
+        ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
+        verify(taskMapper).insert(taskCaptor.capture());
+        assertEquals(2L, taskCaptor.getValue().getTenantId());
+        // The scope must not leak into the next request on this thread.
+        assertNull(TenantScopeHolder.get());
     }
 
     @Test
