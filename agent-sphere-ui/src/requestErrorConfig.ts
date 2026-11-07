@@ -21,7 +21,8 @@ export const errorConfig: RequestConfig = {
           return;
         }
         if (status === 403) {
-          // 权限不足不是登录态失效：跳登录页会让用户陷入「登录成功但仍然 403」的循环
+          // Insufficient permission is not a session expiry: redirecting to login would trap the user
+          // in a "login succeeds but still 403" loop
           showError(msg);
           return;
         }

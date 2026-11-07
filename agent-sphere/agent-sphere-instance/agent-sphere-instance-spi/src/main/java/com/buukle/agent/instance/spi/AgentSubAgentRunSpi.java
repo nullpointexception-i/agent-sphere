@@ -17,6 +17,6 @@ public interface AgentSubAgentRunSpi {
 
     List<AgentSubAgentRunVO> listByRun(Long runId);
 
-    /** 该子 Agent 运行名下的 interactions + tool_calls 时序流（按 created_at 递增）。 */
+    /** Chronological stream of interactions + tool_calls under this sub-agent run (ascending by created_at). */
     List<SubAgentTimelineItemVO> timeline(Long subAgentRunId);
 }

@@ -7,7 +7,7 @@ import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 
 /**
- * 标题提取工具类 - 从 HTML 中智能提取页面标题
+ * Title extraction utility - extracts a page title from HTML intelligently
  */
 @Slf4j
 @Component
@@ -16,11 +16,11 @@ public class TitleExtractor {
     private static final int MAX_TITLE_LENGTH = 200;
 
     /**
-     * 从 HTML 中提取标题
-     * 优先级：<title> > og:title > meta title > 第一个 <h1>
+     * Extracts the title from HTML
+     * Priority: <title> > og:title > meta title > first <h1>
      *
-     * @param html HTML 内容
-     * @return 提取出的标题
+     * @param html HTML content
+     * @return the extracted title
      */
     public String extract(String html) {
         if (html == null || html.trim().isEmpty()) {
@@ -30,37 +30,37 @@ public class TitleExtractor {
         try {
             Document doc = Jsoup.parse(html);
 
-            // 1. 尝试从 <title> 标签提取
+            // 1. Try extracting from the <title> tag
             String title = extractFromTitle(doc);
             if (!title.isEmpty()) {
                 return title;
             }
 
-            // 2. 尝试从 og:title meta 标签提取
+            // 2. Try extracting from the og:title meta tag
             title = extractFromMetaTag(doc, "property", "og:title");
             if (!title.isEmpty()) {
                 return title;
             }
 
-            // 3. 尝试从 meta name="title" 提取
+            // 3. Try extracting from meta name="title"
             title = extractFromMetaTag(doc, "name", "title");
             if (!title.isEmpty()) {
                 return title;
             }
 
-            // 4. 尝试从第一个 <h1> 提取
+            // 4. Try extracting from the first <h1>
             title = extractFromFirstHeading(doc);
             if (!title.isEmpty()) {
                 return title;
             }
 
-            // 5. 尝试从第一个 <h2> 提取
+            // 5. Try extracting from the first <h2>
             title = extractFromHeading(doc, "h2");
             if (!title.isEmpty()) {
                 return title;
             }
 
-            // 6. 返回空字符串
+            // 6. Return an empty string
             return "";
         } catch (Exception e) {
             log.warn("Title extraction failed", e);
@@ -69,7 +69,7 @@ public class TitleExtractor {
     }
 
     /**
-     * 从 <title> 标签提取标题
+     * Extracts the title from the <title> tag
      */
     private String extractFromTitle(Document doc) {
         Element titleElement = doc.selectFirst("title");
@@ -81,7 +81,7 @@ public class TitleExtractor {
     }
 
     /**
-     * 从 meta 标签提取标题
+     * Extracts the title from a meta tag
      */
     private String extractFromMetaTag(Document doc, String attrName, String attrValue) {
         Element metaElement = doc.selectFirst(String.format("meta[%s=%s]", attrName, attrValue));
@@ -93,7 +93,7 @@ public class TitleExtractor {
     }
 
     /**
-     * 从第一个 <h1> 标签提取标题
+     * Extracts the title from the first <h1> tag
      */
     private String extractFromFirstHeading(Document doc) {
         Element h1 = doc.selectFirst("h1");
@@ -105,7 +105,7 @@ public class TitleExtractor {
     }
 
     /**
-     * 从指定 heading 标签提取标题
+     * Extracts the title from the given heading tag
      */
     private String extractFromHeading(Document doc, String selector) {
         Element heading = doc.selectFirst(selector);
@@ -117,17 +117,17 @@ public class TitleExtractor {
     }
 
     /**
-     * 规范化标题长度
+     * Normalizes the title length
      */
     private String normalizeTitleLength(String title) {
         if (title == null || title.isEmpty()) {
             return "";
         }
 
-        // 移除多个连续空白
+        // Collapse runs of whitespace
         title = title.replaceAll("\\s+", " ");
 
-        // 如果超过最大长度，截断并添加省略号
+        // If it exceeds the maximum length, truncate and append an ellipsis
         if (title.length() > MAX_TITLE_LENGTH) {
             return title.substring(0, MAX_TITLE_LENGTH) + "...";
         }

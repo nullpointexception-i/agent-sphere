@@ -1,16 +1,17 @@
 package com.buukle.agent.instance.dtvo.enums;
 
 /**
- * 会话清理任务的触发方式（{@code agent_session_cleanup_run.trigger_type}）。
+ * Trigger type of the session cleanup task ({@code agent_session_cleanup_run.trigger_type}).
  *
- * <p>两者都要留痕：定时任务是常规运维动作，手动触发往往对应「磁盘告警要立刻处理」，
- * 事后需要区分是谁在什么时候按的。
+ * <p>Both must leave a trace: the scheduled task is a routine operational action, while a manual
+ * trigger usually corresponds to "a disk alert needs immediate handling", so afterwards it must be
+ * possible to tell who pressed it and when.
  */
 public final class SessionCleanupTriggerEnum {
 
-    /** cron 定时触发 */
+    /** Triggered by cron */
     public static final String TRIGGER_SCHEDULED = "SCHEDULED";
-    /** 管理端接口手动触发 */
+    /** Manually triggered through an admin endpoint */
     public static final String TRIGGER_MANUAL = "MANUAL";
 
     private SessionCleanupTriggerEnum() {

@@ -323,7 +323,7 @@ public class AgentRouterScheduler {
 
     private static String routerSessionTitle(AgentSuperAgent agent, AgentThread thread) {
         String suffix = thread == null || thread.getTitle() == null || thread.getTitle().isBlank()
-                ? "对话" : thread.getTitle();
+                ? "Conversation" : thread.getTitle();
         String title = (agent.getName() == null ? "" : agent.getName()) + " · " + suffix;
         return title.length() <= MAX_TITLE ? title : title.substring(0, MAX_TITLE);
     }

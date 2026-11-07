@@ -1,5 +1,8 @@
 package com.buukle.agent.admin.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.admin.dtvo.dto.AssignPermissionDTO;
 import com.buukle.agent.admin.dtvo.dto.AssignRoleDTO;
@@ -24,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/admin/roles")
+@RequestMapping(ApiPrefix.V1 + "/admin/roles")
 @RequiredArgsConstructor
 public class RoleController extends BaseController {
 
@@ -48,21 +51,21 @@ public class RoleController extends BaseController {
     }
 
     @AuditLog(action = "CREATE", resourceType = "Role", resourceId = "#result?.body?.id")
-    @RequirePermission("admin:role:create")
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_CREATE)
     @PostMapping
     public ResponseEntity<SysRoleVO> create(@RequestBody SysRoleVO vo) {
         return ok(roleSpi.create(vo));
     }
 
     @AuditLog(action = "UPDATE", resourceType = "Role", resourceId = "#id")
-    @RequirePermission("admin:role:update")
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<SysRoleVO> update(@PathVariable Long id, @RequestBody SysRoleVO vo) {
         return ok(roleSpi.update(id, vo));
     }
 
     @AuditLog(action = "DELETE", resourceType = "Role", resourceId = "#id")
-    @RequirePermission("admin:role:delete")
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         roleSpi.delete(id);
@@ -70,7 +73,7 @@ public class RoleController extends BaseController {
     }
 
     @AuditLog(action = "ASSIGN_PERMISSION", resourceType = "Role", resourceId = "#dto.roleId")
-    @RequirePermission("admin:role:assign")
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_ASSIGN)
     @PostMapping("/assign-permissions")
     public ResponseEntity<?> assignPermissions(@Valid @RequestBody AssignPermissionDTO dto) {
         roleSpi.assignPermissions(dto.getRoleId(), dto.getPermissionIds());
@@ -78,7 +81,7 @@ public class RoleController extends BaseController {
     }
 
     @AuditLog(action = "ASSIGN_ROLE", resourceType = "User", resourceId = "#dto.userId")
-    @RequirePermission("admin:role:assign")
+    @RequirePermission(PermissionCodes.ADMIN_ROLE_ASSIGN)
     @PostMapping("/assign-user")
     public ResponseEntity<?> assignUser(@Valid @RequestBody AssignRoleDTO dto) {
         roleSpi.assignRoles(dto.getUserId(), dto.getRoleIds());

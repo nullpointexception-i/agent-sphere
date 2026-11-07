@@ -15,15 +15,16 @@ import lombok.EqualsAndHashCode;
 public class TextContainsExecuteContext extends ExecuteContext {
 
     @NotBlank
-    @Schema(description = "要找的子串 A。不能为空或纯空白 —— 纯空白在 TRIMMED 模式下会退化成空串，"
-            + "而空串被任何字符串包含，会返回反直觉的 true。")
+    @Schema(description = "Substring A to search for. Must not be empty or whitespace-only - whitespace-only "
+            + "collapses to an empty string under TRIMMED mode, and an empty string is contained by every "
+            + "string, returning a counter-intuitive true.")
     private String needle;
 
     @NotNull
-    @Schema(description = "被检索的目标字符串 B。允许为空串 —— 空目标串不含任何子串，答案是 false。")
+    @Schema(description = "Target string B to search in. May be empty - an empty target contains no substring, so the answer is false.")
     private String haystack;
 
-    @Schema(description = "匹配模式：EXACT（默认，区分大小写）/ IGNORE_CASE / TRIMMED（两端去空白）/ "
-            + "IGNORE_CASE_TRIMMED。留空按 EXACT 处理。")
+    @Schema(description = "Match mode: EXACT (default, case-sensitive) / IGNORE_CASE / TRIMMED (trim both ends) / "
+            + "IGNORE_CASE_TRIMMED. Blank is treated as EXACT.")
     private TextMatchMode mode;
 }

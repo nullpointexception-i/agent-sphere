@@ -91,7 +91,7 @@ class AgentTaskServiceTest {
 
     @BeforeAll
     static void initMpTableInfo() {
-        // 单元测试无 MyBatis-Plus 上下文：LambdaWrapper 需要实体 TableInfo
+        // Unit tests have no MyBatis-Plus context: LambdaWrapper needs the entity TableInfo
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), ""), AgentTask.class);
     }
@@ -229,9 +229,9 @@ class AgentTaskServiceTest {
 
         taskService.stop(7L, AUTH);
 
-        // 取消 run 必须以任务创建人身份执行（否则 assertSessionOwnership 抛 FORBIDDEN 被吞）
+        // Cancelling a run must execute as the task creator (otherwise assertSessionOwnership throws FORBIDDEN and it is swallowed)
         assertEquals("elvin", ctxAtCall.get());
-        // 调用后上下文已清理
+        // Context has been cleared after the call
         assertNull(com.buukle.agent.common.context.AuthContext.getUsername());
         verify(chatRuntimeService).stopRun(11L, 22L);
     }
@@ -279,14 +279,14 @@ class AgentTaskServiceTest {
         SendMessageDTO sent = messageCaptor.getValue();
         assertEquals(Boolean.TRUE, sent.getNoClarification());
         org.junit.jupiter.api.Assertions.assertTrue(sent.getMessage().contains("整理月报"));
-        org.junit.jupiter.api.Assertions.assertTrue(sent.getMessage().contains("禁止向用户提问"));
+        org.junit.jupiter.api.Assertions.assertTrue(sent.getMessage().contains("do NOT ask the user"));
     }
 
     /**
-     * 【任务配置】段必须渲染为 Markdown 小节，而不是 JSON。
+     * The [task config] section must render as Markdown subsections, not JSON.
      *
-     * <p>config 里装的是给模型执行的指令；JSON 的引号与花括号会让模型把它当数据读，
-     * 长句规则也更难被遵循。这条断言直接盯住"别回退成 JSON"。
+     * <p>config holds instructions for the model to execute; JSON quotes and braces make the model read it as data,
+     * and long-sentence rules are harder to follow. This assertion directly guards against "regressing to JSON".
      */
     @Test
     void submit_shouldRenderTaskConfigAsMarkdownSections() {
@@ -325,11 +325,11 @@ class AgentTaskServiceTest {
 
         assertTrue(prompt.contains("### 硬性门槛（必要条件，任一不满足即不得收藏）"), prompt);
         assertTrue(prompt.contains("学历符合其一：bachelor"), prompt);
-        // 不得残留 JSON 结构（花括号 / title 字段名）
+        // No JSON structure may remain (braces / the title field name)
         assertFalse(prompt.contains("{\"sections\""), prompt);
         assertFalse(prompt.contains("\"title\""), prompt);
-        // 期望输出是 JSON Schema，必须保持 JSON 原样（模型需要字面 schema 才能产出合规结构）
-        assertTrue(prompt.contains("【期望输出】"), prompt);
+        // The expected output is a JSON Schema and must stay verbatim (the model needs the literal schema to produce a compliant structure)
+        assertTrue(prompt.contains("[EXPECTED OUTPUT]"), prompt);
         assertTrue(prompt.contains("\"type\":\"object\""), prompt);
     }
 
@@ -422,7 +422,7 @@ class AgentTaskServiceTest {
         org.junit.jupiter.api.Assertions.assertTrue(failed.getResultJson().contains("boom"));
     }
 
-    // ---------- 两阶段「结构化提炼」 ----------
+    // ---------- Two-phase "structured distillation" ----------
 
     private AgentTask taskWithContract(long id, long runId) {
         AgentTask task = new AgentTask();
@@ -486,7 +486,7 @@ class AgentTaskServiceTest {
         boolean extractDone = ReflectionTestUtils.invokeMethod(taskService, "handleCompletedPhase",
                 afterExtract, "extract", 20L, run(20L, "COMPLETED", "{\"status\":\"bad\"}"));
         assertEquals(false, extractDone);
-        // 触发第三轮修正 run
+        // Trigger a third correction run
         verify(chatRuntimeService, org.mockito.Mockito.times(2)).chat(eq(11L), any(SendMessageDTO.class));
     }
 
@@ -523,9 +523,9 @@ class AgentTaskServiceTest {
         ArgumentCaptor<AgentTask> taskCaptor = ArgumentCaptor.forClass(AgentTask.class);
         verify(taskCallbackService).notifyTerminal(taskCaptor.capture());
         assertEquals("FAILED", taskCaptor.getValue().getStatus());
-        // resultJson 必须带上 run 的实际产出，而不是只回一句无关的错误串 ——
-        // 线上 task 360/362 就是只收到 {"error":"run loop limit reached"}，
-        // 模型写的结构化结论被整个丢弃。失败原因改由 remark 承载。
+        // resultJson must carry the run's actual output instead of just an unrelated error string —
+        // production tasks 360/362 received only {"error":"run loop limit reached"},
+        // and the model's structured conclusion was dropped entirely. The failure reason now lives in remark.
         org.junit.jupiter.api.Assertions.assertTrue(taskCaptor.getValue().getResultJson().contains("部分结果"),
                 "loop cap 失败也必须让业务方看到 run 产出");
         org.junit.jupiter.api.Assertions.assertNotNull(taskCaptor.getValue().getRemark(),

@@ -37,7 +37,6 @@ import {
   Checkbox,
   Divider,
   Image,
-  Input,
   Modal,
   Radio,
   Tabs,
@@ -74,9 +73,11 @@ import {
 } from './toolRenderers';
 
 /**
- * 展示状态：run_status 用行快照 state（同一 run 可能有多条等待/恢复/终态行），
- * 其它 kind 优先后端按来源表覆盖的 content.state。
- * timeline 的快照 state 只在 content 缺失时兜底，不参与任何控制判断。
+ * Display state: run_status uses the row snapshot state (one run may have several waiting/resume/
+ * terminal rows), while other kinds prefer content.state overridden by the backend from source
+ * tables.
+ * The timeline snapshot state is only a fallback when content is missing and does not take part
+ * in any control decisions.
  */
 const displayState = (row: any): string | undefined =>
   row?.kind === 'run_status'
@@ -84,8 +85,9 @@ const displayState = (row: any): string | undefined =>
     : (row?.content?.state ?? row?.state);
 
 /**
- * 流式 Markdown 限频：内容每 token 都变，但整段重解析不需要 60fps。
- * 非流式（ms=0）直接返回原值，不引入任何延迟。
+ * Streaming Markdown throttling: content changes on every token, but re-parsing the whole block
+ * does not need 60fps.
+ * Non-streaming (ms=0) returns the value as is with no added delay.
  */
 function useThrottledValue<T>(value: T, ms: number): T {
   const [throttled, setThrottled] = useState(value);
@@ -110,7 +112,7 @@ interface TimelineListProps {
   loadSubAgentSteps?: (subId: number) => Promise<any[]>;
   subAgentLive?: SubAgentLiveMap;
   preparingTool?: { publishId?: string; name?: string } | null;
-  /** LLM 重试读秒：来自 /runtime/{sid}/state，按 run 匹配 run_status 行。 */
+  /** LLM retry countdown: from /runtime/{sid}/state, matched to run_status rows by run. */
   retryState?: {
     runId: number;
     attempt?: number | null;
@@ -119,24 +121,26 @@ interface TimelineListProps {
   } | null;
 }
 
-const KIND_LABEL: Record<string, string> = {
-  user: '用户',
-  assistant: '助手',
-  tool: '工具',
-  clarification: '澄清',
-  tool_approval: '工具授权',
-  subagent: '子 Agent',
-  compaction: '压缩',
-  run_status: '状态',
-  error: '错误',
+const KIND_LABEL_KEY: Record<string, string> = {
+  user: 'pages.chat.timeline.kind.user',
+  assistant: 'pages.chat.timeline.kind.assistant',
+  tool: 'pages.chat.timeline.kind.tool',
+  clarification: 'pages.chat.timeline.kind.clarification',
+  tool_approval: 'pages.chat.timeline.kind.toolApproval',
+  subagent: 'pages.chat.timeline.kind.subagent',
+  compaction: 'pages.chat.timeline.kind.compaction',
+  run_status: 'pages.chat.timeline.kind.runStatus',
+  error: 'pages.chat.timeline.kind.error',
 };
 
-// 长会话 DOM 上限：超过后只渲染最近 N 条，顶部提供「显示更早」按钮。
-// 避免 1000+ 行 Markdown/截图同时挂载导致滚动掉帧。
+// DOM cap for long sessions: beyond this only the latest N rows are rendered, with a
+// "show earlier" button at the top.
+// Prevents 1000+ Markdown/screenshot rows from mounting at once and dropping scroll frames.
 const DEFAULT_RENDER_LIMIT = 300;
 const RENDER_LIMIT_STEP = 200;
 
-// 内部协议工具：finish 的答案已作为助手正文展示，ask_clarification 由澄清行展示。
+// Internal protocol tools: the finish answer is already shown as assistant body text, and
+// ask_clarification is shown by the clarification row.
 const FINISH_TOOL_NAME = 'builtin_12';
 const ASK_CLARIFICATION_TOOL_NAME = 'builtin_7';
 
@@ -165,15 +169,16 @@ function formatDuration(ms?: number) {
   return s ? `${m}m${s}s` : `${m}m`;
 }
 
-/** 助手 RUNNING 状态：来回晃动的小球（终态时该位不渲染，直接消失）。 */
+/** Assistant RUNNING state: a bouncing dot (not rendered, simply gone, in terminal states). */
 function RunningDot() {
   const { styles } = useStyles();
   return <span className={styles.runningDot} />;
 }
 
-/** 一键复制：点击复制到剪切板，提示"已复制"，图标切对勾后还原。 */
+/** One-click copy: click to copy to the clipboard, show "copied", then restore the icon to a check mark. */
 function CopyButton({ text }: { text: string }) {
   const { message } = App.useApp();
+  const intl = useIntl();
   const [copied, setCopied] = useState(false);
   const timer = useRef<number | null>(null);
   const onCopy = () => {
@@ -182,11 +187,20 @@ function CopyButton({ text }: { text: string }) {
       ?.writeText(text)
       .then(() => {
         setCopied(true);
-        message.success('已复制到剪切板');
+        message.success(
+          intl.formatMessage({ id: 'chat.copied', defaultMessage: 'Copied' }),
+        );
         if (timer.current) window.clearTimeout(timer.current);
         timer.current = window.setTimeout(() => setCopied(false), 2000);
       })
-      .catch(() => message.error('复制失败'));
+      .catch(() =>
+        message.error(
+          intl.formatMessage({
+            id: 'pages.chat.copyFailed',
+            defaultMessage: 'Copy failed',
+          }),
+        ),
+      );
   };
   useEffect(() => {
     return () => {
@@ -199,7 +213,10 @@ function CopyButton({ text }: { text: string }) {
       size="small"
       icon={copied ? <CheckOutlined /> : <CopyOutlined />}
       onClick={onCopy}
-      title="复制"
+      title={intl.formatMessage({
+        id: 'pages.chat.copy',
+        defaultMessage: 'Copy',
+      })}
       style={{
         width: 24,
         height: 24,
@@ -235,7 +252,7 @@ function StateTag({ state, small }: { state?: string; small?: boolean }) {
   );
 }
 
-/** 自持折叠状态的可展开块：点击只切当前块，不再涉及整卡收起；传 open/onToggle 时为受控；faint 弱化（工具卡用）。 */
+/** Expandable block with self-managed collapse state: clicking toggles only this block, no longer collapses the whole card; controlled when open/onToggle are passed; faint dims it (used by tool cards). */
 function Block({
   defaultOpen = false,
   title,
@@ -529,17 +546,21 @@ function formatToolDuration(ms?: number) {
   return `${minutes}m${Math.round(seconds % 60)}s`;
 }
 
-/** 超过该耗时视为慢工具（红色 + ⚠）。 */
+/** Durations beyond this are treated as slow tools (red + ⚠). */
 const SLOW_TOOL_MS = 5000;
 
-/** 工具耗时：超过 5s 视为慢工具，红色 + ⚠ 提醒。 */
+/** Tool duration: over 5s is a slow tool, flagged in red with ⚠. */
 function ToolDuration({ ms }: { ms?: number }) {
+  const intl = useIntl();
   const text = formatToolDuration(ms);
   if (!text || typeof ms !== 'number') return null;
   const slow = ms >= SLOW_TOOL_MS;
   return (
     <div
-      title={slow ? '慢工具' : '工具耗时'}
+      title={intl.formatMessage({
+        id: slow ? 'pages.chat.tool.slowTool' : 'pages.chat.tool.toolDuration',
+        defaultMessage: slow ? 'Slow tool' : 'Tool duration',
+      })}
       style={{
         marginTop: 4,
         fontSize: 10.5,
@@ -552,7 +573,7 @@ function ToolDuration({ ms }: { ms?: number }) {
   );
 }
 
-/** 长内容预览：正文超过阈值时提供弹窗，避免把整页正文挤进时间线。 */
+/** Long-content preview: offer a modal once the body exceeds the threshold, keeping the full text out of the timeline. */
 function ContentPreviewButton({
   title,
   content,
@@ -561,7 +582,6 @@ function ContentPreviewButton({
   content?: string | null;
 }) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const [open, setOpen] = useState(false);
   if (!content || content.length < 200) return null;
   return (
@@ -575,9 +595,13 @@ function ContentPreviewButton({
           setOpen(true);
         }}
       >
-        {isEn
-          ? `Preview (${content.length.toLocaleString()} chars)`
-          : `预览全文（${content.length.toLocaleString()} 字符）`}
+        {intl.formatMessage(
+          {
+            id: 'pages.chat.tool.previewChars',
+            defaultMessage: 'Preview ({count} chars)',
+          },
+          { count: content.length },
+        )}
       </Button>
       <Modal
         open={open}
@@ -604,10 +628,9 @@ function ContentPreviewButton({
   );
 }
 
-/** 参数 + 结果收口为一个折叠块，避免每个工具占两行裸 JSON。 */
+/** Fold arguments + result into one collapsible block so each tool does not take two rows of raw JSON. */
 function RawDataBlock({ content, label }: { content: any; label?: string }) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   return (
     <details style={{ marginTop: 5 }}>
       <summary
@@ -618,10 +641,17 @@ function RawDataBlock({ content, label }: { content: any; label?: string }) {
           userSelect: 'none',
         }}
       >
-        {label || (isEn ? 'Raw data' : '查看原始数据')}
+        {label ||
+          intl.formatMessage({
+            id: 'pages.chat.tool.rawData',
+            defaultMessage: 'Raw data',
+          })}
       </summary>
       <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
-        {isEn ? 'Arguments' : '参数'}
+        {intl.formatMessage({
+          id: 'pages.chat.tool.arguments',
+          defaultMessage: 'Arguments',
+        })}
       </div>
       <pre
         style={{
@@ -636,7 +666,10 @@ function RawDataBlock({ content, label }: { content: any; label?: string }) {
         {prettyJsonSafe(content.args)}
       </pre>
       <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
-        {isEn ? 'Result' : '结果'}
+        {intl.formatMessage({
+          id: 'pages.chat.tool.result',
+          defaultMessage: 'Result',
+        })}
       </div>
       <pre
         style={{
@@ -670,7 +703,13 @@ function TodoCard({ content }: { content: any }) {
           color: done === total ? '#389e0d' : '#d46b08',
         }}
       >
-        {done}/{total} 已完成
+        {intl.formatMessage(
+          {
+            id: 'pages.chat.tool.completedCount',
+            defaultMessage: '{done}/{total} completed',
+          },
+          { done, total },
+        )}
       </Tag>
     ) : null;
   return (
@@ -748,10 +787,28 @@ function TodoCard({ content }: { content: any }) {
                   style={{ fontSize: 9, lineHeight: '15px', marginLeft: 4 }}
                   title={
                     t.skillId != null && t.stepId
-                      ? `技能 #${t.skillId} · 步骤 ${t.stepId}`
+                      ? intl.formatMessage(
+                          {
+                            id: 'pages.chat.tool.skillStepTitle',
+                            defaultMessage: 'Skill #{skillId} · Step {stepId}',
+                          },
+                          { skillId: t.skillId, stepId: t.stepId },
+                        )
                       : t.skillId != null
-                        ? `技能 #${t.skillId}`
-                        : `步骤 ${t.stepId}`
+                        ? intl.formatMessage(
+                            {
+                              id: 'pages.chat.tool.skillTitle',
+                              defaultMessage: 'Skill #{skillId}',
+                            },
+                            { skillId: t.skillId },
+                          )
+                        : intl.formatMessage(
+                            {
+                              id: 'pages.chat.tool.stepTitle',
+                              defaultMessage: 'Step {stepId}',
+                            },
+                            { stepId: t.stepId },
+                          )
                   }
                 >
                   {t.skillId != null ? `skill#${t.skillId}` : ''}
@@ -857,14 +914,22 @@ function DocCard({ content }: { content: any }) {
               documentId != null ? `documentId=${documentId}` : null,
               version != null ? `v${version}` : null,
               contentChars != null
-                ? isEn
-                  ? `${contentChars.toLocaleString()} chars`
-                  : `正文 ${contentChars.toLocaleString()} 字符`
+                ? intl.formatMessage(
+                    {
+                      id: 'pages.chat.tool.charsCount',
+                      defaultMessage: '{count} chars',
+                    },
+                    { count: contentChars.toLocaleString() },
+                  )
                 : null,
               totalLines != null
-                ? isEn
-                  ? `${totalLines} lines`
-                  : `${totalLines} 行`
+                ? intl.formatMessage(
+                    {
+                      id: 'pages.chat.tool.linesCount',
+                      defaultMessage: '{count} lines',
+                    },
+                    { count: totalLines },
+                  )
                 : null,
             ]
               .filter(Boolean)
@@ -875,13 +940,23 @@ function DocCard({ content }: { content: any }) {
               type="secondary"
               style={{ display: 'block', fontSize: 11, lineHeight: '16px' }}
             >
-              {documentTitle || (isEn ? 'Document' : '文档')}
-              {artifactPreview ? `：${artifactPreview.slice(0, 60)}…` : ''}
+              {documentTitle ||
+                intl.formatMessage({
+                  id: 'pages.chat.tool.document',
+                  defaultMessage: 'Document',
+                })}
+              {artifactPreview ? `: ${artifactPreview.slice(0, 60)}…` : ''}
             </Typography.Text>
           )}
           <div>
             <ContentPreviewButton
-              title={documentTitle || (isEn ? 'Document' : '文档')}
+              title={
+                documentTitle ||
+                intl.formatMessage({
+                  id: 'pages.chat.tool.document',
+                  defaultMessage: 'Document',
+                })
+              }
               content={documentContent}
             />
           </div>
@@ -908,7 +983,12 @@ function GenericCard({
     (intl.locale === 'en-US'
       ? content.displayNameEn || content.displayName
       : content.displayName || content.displayNameEn) ||
-    (family === 'todo' ? '待办写入' : content.toolName) ||
+    (family === 'todo'
+      ? intl.formatMessage({
+          id: 'pages.chat.tool.todoWrite',
+          defaultMessage: 'Todo write',
+        })
+      : content.toolName) ||
     intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
   return (
     <div style={{ marginTop: 4 }}>
@@ -1038,9 +1118,11 @@ function ToolCardBody({ row }: any) {
       : content.displayName || content.displayNameEn) ||
     row.title ||
     intl.formatMessage({ id: 'pages.chat.tool.tool', defaultMessage: 'Tool' });
-  // 「委派子 Agent」工具调用在下方已由 SubAgentCard 完整展示，顶部标题行冗余，隐藏。
+  // The "delegate sub-agent" tool call is fully shown below by SubAgentCard, so the top title
+  // row is redundant and hidden.
   const isDelegate = /委派|子 ?agent/i.test(name);
-  // 浏览器工具：后端把超时/失败编码进 artifact（快照 state 恒为 SUCCEEDED），此处按 artifact 解析真实状态。
+  // Browser tools: the backend encodes timeouts/failures into artifact (the snapshot state is
+  // always SUCCEEDED), so the real state is parsed from artifact here.
   const isBrowser = isBrowserTool(content, content.displayName);
   const isSkillLibrary =
     content.toolName === 'builtin_8' || /技能库|skill library/i.test(name);
@@ -1050,7 +1132,7 @@ function ToolCardBody({ row }: any) {
       ? 'timeout'
       : 'failed'
     : undefined;
-  // 浏览器/doc：顶部标题行冗余，由 GenericCard/DocCard 自身渲染，这里隐藏。
+  // Browser/doc: the top title row is redundant, rendered by GenericCard/DocCard itself, so hide it here.
   const hideTitleRow = isDelegate || family === 'doc' || isBrowser;
   return (
     <div>
@@ -1108,7 +1190,10 @@ function ToolCard({ row }: any) {
             whiteSpace: 'nowrap',
           }}
         >
-          {intl.locale === 'en-US' ? 'Reason: ' : '理由：'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.reason',
+            defaultMessage: 'Reason: ',
+          })}
           {reason.slice(0, 120)}
         </div>
       )}
@@ -1510,14 +1595,11 @@ function CurrentTimeCard({ content, state }: any) {
   );
 }
 
-const TEXT_MATCH_MODE_LABEL: Record<string, { zh: string; en: string }> = {
-  EXACT: { zh: '精确匹配', en: 'exact' },
-  IGNORE_CASE: { zh: '忽略大小写', en: 'ignore case' },
-  TRIMMED: { zh: '去首尾空白', en: 'trimmed' },
-  IGNORE_CASE_TRIMMED: {
-    zh: '忽略大小写 + 去空白',
-    en: 'ignore case + trimmed',
-  },
+const TEXT_MATCH_MODE_LABEL: Record<string, string> = {
+  EXACT: 'pages.chat.tool.modeExact',
+  IGNORE_CASE: 'pages.chat.tool.modeIgnoreCase',
+  TRIMMED: 'pages.chat.tool.modeTrimmed',
+  IGNORE_CASE_TRIMMED: 'pages.chat.tool.modeIgnoreCaseTrimmed',
 };
 
 function prettyJsonSafe(raw?: string) {
@@ -1529,18 +1611,36 @@ function prettyJsonSafe(raw?: string) {
   }
 }
 
-/** 文本包含判断：结果优先，参数只保留 needle/mode/长度，避免两个裸 JSON 折叠块。 */
+/** Text-contains check: results take priority; arguments keep only needle/mode/length, avoiding two raw JSON blocks. */
 function TextContainsCard({ content, state }: any) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const view = textContainsView(content);
-  const mode = TEXT_MATCH_MODE_LABEL[view.mode] || {
-    zh: view.mode,
-    en: view.mode.toLowerCase(),
-  };
+  const modeId = TEXT_MATCH_MODE_LABEL[view.mode];
+  const modeLabel = modeId
+    ? intl.formatMessage({ id: modeId, defaultMessage: view.mode })
+    : view.mode.toLowerCase();
   const failed = view.error != null;
   const matched = !failed && view.hit === true;
   const unknown = !failed && view.hit === null;
+  const resultLabel = failed
+    ? intl.formatMessage({
+        id: 'pages.chat.tool.checkFailed',
+        defaultMessage: 'failed',
+      })
+    : matched
+      ? intl.formatMessage({
+          id: 'pages.chat.tool.matched',
+          defaultMessage: 'matched',
+        })
+      : unknown
+        ? intl.formatMessage({
+            id: 'pages.chat.tool.unknownResult',
+            defaultMessage: 'unknown',
+          })
+        : intl.formatMessage({
+            id: 'pages.chat.tool.notFound',
+            defaultMessage: 'not found',
+          });
   const accent = failed
     ? '#cf1322'
     : matched
@@ -1576,30 +1676,19 @@ function TextContainsCard({ content, state }: any) {
       >
         <SearchOutlined style={{ fontSize: 12, color: accent }} />
         <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
-          {isEn ? 'Text contains' : '文本包含判断'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.textContains',
+            defaultMessage: 'Text contains',
+          })}
         </Typography.Text>
         <Tag
           color={matched ? 'green' : unknown ? 'blue' : 'default'}
           style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
         >
-          {failed
-            ? isEn
-              ? 'failed'
-              : '失败'
-            : matched
-              ? isEn
-                ? 'matched'
-                : '命中'
-              : unknown
-                ? isEn
-                  ? 'unknown'
-                  : '无结果'
-                : isEn
-                  ? 'not found'
-                  : '未命中'}
+          {resultLabel}
         </Tag>
         <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-          {mode[isEn ? 'en' : 'zh']}
+          {modeLabel}
         </Typography.Text>
         {showState && <StateTag state={state} small />}
       </div>
@@ -1625,7 +1714,12 @@ function TextContainsCard({ content, state }: any) {
         >
           {view.needle && (
             <>
-              <span style={{ flexShrink: 0 }}>{isEn ? 'needle' : '查找'}</span>
+              <span style={{ flexShrink: 0 }}>
+                {intl.formatMessage({
+                  id: 'pages.chat.tool.needle',
+                  defaultMessage: 'needle',
+                })}
+              </span>
               <Typography.Text
                 code
                 title={view.needle}
@@ -1643,8 +1737,16 @@ function TextContainsCard({ content, state }: any) {
           )}
           {view.haystackChars != null && (
             <span style={{ flexShrink: 0 }}>
-              · {isEn ? 'target' : '目标'} {view.haystackChars.toLocaleString()}{' '}
-              {isEn ? 'chars' : '字符'}
+              ·{' '}
+              {intl.formatMessage({
+                id: 'pages.chat.tool.target',
+                defaultMessage: 'target',
+              })}{' '}
+              {view.haystackChars.toLocaleString()}{' '}
+              {intl.formatMessage({
+                id: 'pages.chat.tool.charsUnit',
+                defaultMessage: 'chars',
+              })}
             </span>
           )}
         </div>
@@ -1658,10 +1760,16 @@ function TextContainsCard({ content, state }: any) {
             userSelect: 'none',
           }}
         >
-          {isEn ? 'Raw data' : '查看原始数据'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.rawData',
+            defaultMessage: 'Raw data',
+          })}
         </summary>
         <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
-          {isEn ? 'Arguments' : '参数'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.arguments',
+            defaultMessage: 'Arguments',
+          })}
         </div>
         <pre
           style={{
@@ -1676,7 +1784,10 @@ function TextContainsCard({ content, state }: any) {
           {prettyJsonSafe(content.args)}
         </pre>
         <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>
-          {isEn ? 'Result' : '结果'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.result',
+            defaultMessage: 'Result',
+          })}
         </div>
         <pre
           style={{
@@ -1701,7 +1812,6 @@ function isSucceededState(state: any) {
 
 function ProgressCard({ content, state }: any) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const view = progressView(content);
   return (
     <div
@@ -1719,7 +1829,10 @@ function ProgressCard({ content, state }: any) {
           style={{ fontSize: 12, color: '#1677ff' }}
         />
         <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
-          {isEn ? 'Progress' : '报告进度'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.progress',
+            defaultMessage: 'Progress',
+          })}
         </Typography.Text>
         {view.percent != null && (
           <Tag
@@ -1738,7 +1851,10 @@ function ProgressCard({ content, state }: any) {
       )}
       {view.nextAction && (
         <div style={{ marginTop: 3, fontSize: 11, color: '#8c8c8c' }}>
-          {isEn ? 'Next: ' : '下一步：'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.next',
+            defaultMessage: 'Next: ',
+          })}
           {view.nextAction}
         </div>
       )}
@@ -1776,7 +1892,6 @@ function WebPageCard({
   kind: 'read' | 'fetch';
 }) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const view = webPageView(content);
   let body = '';
   try {
@@ -1868,9 +1983,13 @@ function WebPageCard({
       ) : (
         view.chars != null && (
           <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
-            {isEn
-              ? `${view.chars.toLocaleString()} chars`
-              : `正文 ${view.chars.toLocaleString()} 字符`}
+            {intl.formatMessage(
+              {
+                id: 'pages.chat.tool.charsCount',
+                defaultMessage: '{count} chars',
+              },
+              { count: view.chars.toLocaleString() },
+            )}
           </div>
         )
       )}
@@ -1897,7 +2016,6 @@ function SkillCard({
   kind: 'library' | 'manage';
 }) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const view = skillView(content);
   const title =
     content.displayName ||
@@ -1912,9 +2030,13 @@ function SkillCard({
         }));
   const summary =
     kind === 'library' && view.total != null
-      ? isEn
-        ? `${view.total} skills`
-        : `${view.total} 个技能`
+      ? intl.formatMessage(
+          {
+            id: 'pages.chat.tool.skillsCount',
+            defaultMessage: '{count} skills',
+          },
+          { count: view.total },
+        )
       : view.action;
   return (
     <div
@@ -1977,7 +2099,6 @@ function SkillCard({
 
 function ReadToolResultCard({ content, state }: any) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const view = readToolResultView(content);
   const end = view.nextOffset ?? view.totalChars;
   return (
@@ -2002,7 +2123,10 @@ function ReadToolResultCard({ content, state }: any) {
           style={{ fontSize: 12, color: view.error ? '#cf1322' : '#8c8c8c' }}
         />
         <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
-          {isEn ? 'Read tool result' : '回读工具结果'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.readToolResult',
+            defaultMessage: 'Read tool result',
+          })}
         </Typography.Text>
         {view.callId && (
           <Typography.Text code style={{ fontSize: 10 }}>
@@ -2013,9 +2137,18 @@ function ReadToolResultCard({ content, state }: any) {
       </div>
       {view.totalChars != null ? (
         <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
-          {isEn ? 'chars' : '字符'} {view.offset ?? 0}–{end ?? view.totalChars}{' '}
-          / {view.totalChars.toLocaleString()}
-          {view.truncated ? (isEn ? ' · truncated' : ' · 已截断') : ''}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.charsUnit',
+            defaultMessage: 'chars',
+          })}{' '}
+          {view.offset ?? 0}–{end ?? view.totalChars} /{' '}
+          {view.totalChars.toLocaleString()}
+          {view.truncated
+            ? ` · ${intl.formatMessage({
+                id: 'pages.chat.tool.truncated',
+                defaultMessage: 'truncated',
+              })}`
+            : ''}
         </div>
       ) : (
         !view.error && (
@@ -2036,7 +2169,6 @@ function ReadToolResultCard({ content, state }: any) {
 
 function CliCard({ content, state }: any) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const view = cliView(content);
   const output = (view.stderr || view.stdout || '').trim();
   const firstLine = view.firstLine || output.split('\n')[0] || '';
@@ -2063,7 +2195,11 @@ function CliCard({ content, state }: any) {
           style={{ fontSize: 12, color: ok ? '#8c8c8c' : '#cf1322' }}
         />
         <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
-          {content.displayName || (isEn ? 'Command' : '命令执行')}
+          {content.displayName ||
+            intl.formatMessage({
+              id: 'pages.chat.tool.command',
+              defaultMessage: 'Command',
+            })}
         </Typography.Text>
         {view.exitCode != null && (
           <Tag
@@ -2098,7 +2234,13 @@ function CliCard({ content, state }: any) {
       )}
       <div>
         <ContentPreviewButton
-          title={content.displayName || (isEn ? 'Command output' : '命令输出')}
+          title={
+            content.displayName ||
+            intl.formatMessage({
+              id: 'pages.chat.tool.commandOutput',
+              defaultMessage: 'Command output',
+            })
+          }
           content={output}
         />
       </div>
@@ -2109,7 +2251,6 @@ function CliCard({ content, state }: any) {
 
 function BrowserCard({ content, state }: any) {
   const intl = useIntl();
-  const isEn = intl.locale === 'en-US';
   const brow = browserResult(content, content.displayName);
   let args: any = {};
   let artifact: any = {};
@@ -2159,13 +2300,15 @@ function BrowserCard({ content, state }: any) {
       : '';
   const scopeLabel =
     args?.scope === 'full'
-      ? isEn
-        ? 'full page'
-        : '整页'
+      ? intl.formatMessage({
+          id: 'pages.chat.tool.fullPage',
+          defaultMessage: 'full page',
+        })
       : args?.scope === 'viewport'
-        ? isEn
-          ? 'viewport'
-          : '视口'
+        ? intl.formatMessage({
+            id: 'pages.chat.tool.viewport',
+            defaultMessage: 'viewport',
+          })
         : args?.scope;
   const screenshotImages =
     Array.isArray(content.images) && content.images.length > 0
@@ -2200,7 +2343,10 @@ function BrowserCard({ content, state }: any) {
           style={{ fontSize: 12, color: brow.failed ? '#cf1322' : '#1677ff' }}
         />
         <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
-          {isEn ? 'Browser' : '浏览器'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.browser',
+            defaultMessage: 'Browser',
+          })}
         </Typography.Text>
         {action && (
           <Tag
@@ -2223,7 +2369,10 @@ function BrowserCard({ content, state }: any) {
             color="red"
             style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}
           >
-            {isEn ? 'failed' : '失败'}
+            {intl.formatMessage({
+              id: 'pages.chat.tool.checkFailed',
+              defaultMessage: 'failed',
+            })}
           </Tag>
         )}
         {!brow.failed && !isSucceededState(state) && (
@@ -2255,7 +2404,14 @@ function BrowserCard({ content, state }: any) {
       {screenshotImages.length > 0 && (
         <div style={{ marginTop: 6 }}>
           <div style={{ marginBottom: 4, fontSize: 10.5, color: '#a0a0a0' }}>
-            {[isEn ? 'Screenshot' : '截图', screenshotSize, scopeLabel]
+            {[
+              intl.formatMessage({
+                id: 'pages.chat.tool.screenshot',
+                defaultMessage: 'Screenshot',
+              }),
+              screenshotSize,
+              scopeLabel,
+            ]
               .filter(Boolean)
               .join(' · ')}
           </div>
@@ -2413,7 +2569,12 @@ function ClarificationCard({ row }: any) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <MessageOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong>
-          {content.title || row.title || '澄清'}
+          {content.title ||
+            row.title ||
+            intl.formatMessage({
+              id: 'pages.chat.timeline.kind.clarification',
+              defaultMessage: 'Clarification',
+            })}
         </Typography.Text>
         <StateTag state={displayState(row)} />
       </div>
@@ -2448,13 +2609,13 @@ function ClarificationCard({ row }: any) {
           <>
             {options.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {options.map((o: any, index: number) => {
+                {options.map((o: any) => {
                   const value = String(o?.value ?? o?.label ?? '');
                   const label = String(o?.label ?? value);
                   const isSelected = selected.includes(value);
                   return (
                     <Tag
-                      key={`${value}-${index}`}
+                      key={value}
                       color={isSelected ? 'blue' : undefined}
                       style={{
                         margin: 0,
@@ -2490,11 +2651,11 @@ function ClarificationCard({ row }: any) {
   );
 }
 
-/** 子 Agent 单步：LLM 交互对齐主 Agent（Model Reason + 回复），标题不再裸展示内部枚举名。 */
+/** Sub-agent single step: LLM interactions mirror the main agent (Model Reason + reply); the title no longer exposes internal enum names raw. */
 function SubAgentLlmItem({ s }: any) {
   const intl = useIntl();
   const reasoningBoxRef = useRef<HTMLPreElement | null>(null);
-  // 子 Agent 流式推理持续增长：贴底滚动（与主 Agent 思考容器一致）
+  // Sub-agent streaming reasoning keeps growing: stick to the bottom (consistent with the main agent's thinking container)
   useEffect(() => {
     const el = reasoningBoxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -2549,7 +2710,10 @@ function SubAgentLlmItem({ s }: any) {
           </div>
           {s.running && (
             <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-              正在生成…
+              {intl.formatMessage({
+                id: 'pages.chat.tool.generating',
+                defaultMessage: 'Generating…',
+              })}
             </Typography.Text>
           )}
         </Block>
@@ -2558,7 +2722,7 @@ function SubAgentLlmItem({ s }: any) {
   );
 }
 
-/** 子 Agent 单步：工具调用对齐主 Agent 工具卡（🛠️ 显示名 + 状态 + 详情）。 */
+/** Sub-agent single step: tool calls mirror the main agent's tool card (🛠️ display name + status + details). */
 function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
   const intl = useIntl();
   const argsJson = s.argumentsJson
@@ -2594,7 +2758,10 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
             whiteSpace: 'nowrap',
           }}
         >
-          {intl.locale === 'en-US' ? 'Reason: ' : '理由：'}
+          {intl.formatMessage({
+            id: 'pages.chat.tool.reason',
+            defaultMessage: 'Reason: ',
+          })}
           {reason.slice(0, 120)}
         </div>
       )}
@@ -2604,7 +2771,7 @@ function SubAgentToolItem({ s, detailOpen, onDetailToggle }: any) {
           variant={s.toolName === 'builtin_5' ? 'screenshot' : 'attachment'}
         />
       )}
-      {/* 受控：最新一条 Tool 详情默认展开，下一条到来时关闭之前的（单一展开） */}
+      {/* Controlled: the latest Tool detail is expanded by default; when the next one arrives, close the previous (single expansion) */}
       <Block
         title={intl.formatMessage({
           id: 'pages.chat.tool.details',
@@ -2658,7 +2825,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   const isRunning = displayState(row) === 'RUNNING';
   const live = subId != null && isRunning ? (subAgentLive?.[subId] ?? []) : [];
 
-  // 与 list.map 的 key 一致：历史步走主键，SSE 实时步走 publishId/序号
+  // Consistent with list.map keys: historical steps use the primary key, SSE live steps use publishId/index
   const stepKey = (s: any, i: number) =>
     String(
       s?.interactionId ??
@@ -2675,7 +2842,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steps, isRunning, live]);
 
-  // 最新一条 Tool 详情默认展开；下一条到来时自动切换过去（关掉上一条）
+  // The latest Tool detail is expanded by default; when the next one arrives, switch to it automatically (closing the previous)
   const latestToolKey = useMemo(() => {
     for (let i = list.length - 1; i >= 0; i--) {
       const s = list[i];
@@ -2694,14 +2861,14 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestToolKey]);
 
-  // 最新内容自动滚到容器底部（流式推理/artifact 增长时持续贴底）
+  // Auto-scroll the latest content to the container bottom (stays pinned as streaming reasoning / artifact grows)
   useEffect(() => {
     if (!open) return;
     const el = stepsBoxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [open, live, steps]);
 
-  // 一次性权威同步：已结束子 Agent 展开 / 终态校正时静默拉取，替换 live 展示
+  // One-off authoritative sync: silently fetch when an ended sub-agent is expanded / on terminal-state correction, replacing the live display
   const stepsRef = useRef<any[] | null>(null);
   stepsRef.current = steps;
   const sync = () => {
@@ -2715,11 +2882,11 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
 
   const expand = () => {
     setOpen((o) => !o);
-    // 运行中：纯 SSE live 渲染，不拉历史（避免与实时步骤双源叠加）；终态/已结束才一次拉取
+    // Running: pure SSE live rendering, no history fetch (avoids stacking two sources with live steps); fetch once only on terminal/ended
     if (steps === null && !isRunning) sync();
   };
 
-  // 终态（COMPLETED/FAILED/…）一次性校正：权威数据整体替换 live
+  // Terminal state (COMPLETED/FAILED/…): one-off correction, replacing live wholesale with authoritative data
   const prevStateRef = useRef(displayState(row));
   useEffect(() => {
     const prev = prevStateRef.current;
@@ -2752,7 +2919,10 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
         {open && isRunning && (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             <LoadingOutlined spin style={{ fontSize: 11, marginRight: 4 }} />
-            实时更新中
+            {intl.formatMessage({
+              id: 'pages.chat.tool.liveUpdating',
+              defaultMessage: 'Live updates',
+            })}
           </Typography.Text>
         )}
       </div>
@@ -2785,7 +2955,12 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
             }}
           >
             {loading && steps === null ? (
-              <Typography.Text type="secondary">加载中…</Typography.Text>
+              <Typography.Text type="secondary">
+                {intl.formatMessage({
+                  id: 'pages.chat.tool.loading',
+                  defaultMessage: 'Loading…',
+                })}
+              </Typography.Text>
             ) : list.length ? (
               list.map((s: any, i: number) => {
                 const isTool =
@@ -2841,6 +3016,7 @@ function UserImages({
   images: any;
   variant?: 'attachment' | 'screenshot';
 }) {
+  const intl = useIntl();
   const [urls, setUrls] = useState<Record<string, string>>({});
   const currentUrlsRef = useRef<Record<string, string>>({});
   const screenshot = variant === 'screenshot';
@@ -2848,7 +3024,7 @@ function UserImages({
     .map((im: any) => im?.fileKey || '')
     .join(',');
   useEffect(() => {
-    // 按 fileKey 集合变化响应式重取：live 刷新迟到补上的 images 也能加载
+    // Refetch responsively when the fileKey set changes: images added late by a live refresh can also load
     const list = (images || []).filter((im: any) => im?.fileKey);
     if (list.length === 0) return;
     let alive = true;
@@ -2864,7 +3040,7 @@ function UserImages({
       }),
     ).then(() => {
       if (!alive) return;
-      // 新 URL 就绪后再释放旧 URL，避免短暂渲染破损图
+      // Release old URLs only after the new ones are ready, avoiding a brief broken image
       Object.values(currentUrlsRef.current).forEach((u) => {
         if (u) URL.revokeObjectURL(u);
       });
@@ -2897,7 +3073,12 @@ function UserImages({
               background: screenshot ? '#f5f5f5' : undefined,
               cursor: 'pointer',
             }}
-            preview={{ mask: '查看大图' }}
+            preview={{
+              mask: intl.formatMessage({
+                id: 'pages.chat.tool.viewLargeImage',
+                defaultMessage: 'View large image',
+              }),
+            }}
           />
         ))}
       </Image.PreviewGroup>
@@ -2910,7 +3091,7 @@ function subAgentMemberKey(row: any): string {
   return String(id ?? row?.seq ?? Math.random());
 }
 
-/** 同批次并行子 Agent 的分组键：共享 parentToolCallId（同一 delegate 调用派生）。 */
+/** Grouping key for parallel sub-agents in the same batch: shared parentToolCallId (derived from the same delegate call). */
 function parallelGroupKey(row: any): string | null {
   if (row?.kind !== 'subagent') return null;
   const pid = row?.content?.parentToolCallId;
@@ -2919,9 +3100,9 @@ function parallelGroupKey(row: any): string | null {
 }
 
 /**
- * 同批次并行子 Agent 的横向 Tab 容器：Tab 条原生横向滚动，
- * 面板复用 SubAgentCard（live 聚合/展开/步骤加载逻辑不变）。
- * inactive 面板默认保持挂载，切换 Tab 不丢各卡片状态。
+ * Horizontal tab container for parallel sub-agents in the same batch: the tab strip scrolls horizontally natively,
+ * and panels reuse SubAgentCard (live aggregation / expansion / step loading logic unchanged).
+ * Inactive panels stay mounted by default, so switching tabs does not lose each card's state.
  */
 function ParallelSubAgentTabsImpl({
   members,
@@ -2958,7 +3139,13 @@ function ParallelSubAgentTabsImpl({
           })}
         </Tag>
         <Tag style={{ margin: 0, fontSize: 11, color: '#999' }}>
-          ×{members.length} 并行
+          {intl.formatMessage(
+            {
+              id: 'pages.chat.tool.parallel',
+              defaultMessage: '{count} in parallel',
+            },
+            { count: members.length },
+          )}
         </Tag>
         {anyRunning ? <RunningDot /> : null}
       </div>
@@ -3007,15 +3194,31 @@ const ParallelSubAgentTabs = memo(
     prev.subAgentLive === next.subAgentLive,
 );
 
-/** LLM 重试读秒：targetAt 为绝对时间戳；归零显示“正在重试…”。 */
+/** LLM retry countdown: targetAt is an absolute timestamp; at zero it shows "retrying…". */
 function RetryCountdown({ targetAt }: { targetAt: number }) {
+  const intl = useIntl();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(timer);
   }, []);
   const seconds = Math.max(0, Math.ceil((targetAt - now) / 1000));
-  return <span>{seconds > 0 ? `${seconds}s 后重试` : '正在重试…'}</span>;
+  return (
+    <span>
+      {seconds > 0
+        ? intl.formatMessage(
+            {
+              id: 'pages.chat.tool.retryIn',
+              defaultMessage: 'Retrying in {seconds}s',
+            },
+            { seconds },
+          )
+        : intl.formatMessage({
+            id: 'pages.chat.tool.retrying',
+            defaultMessage: 'Retrying…',
+          })}
+    </span>
+  );
 }
 
 function RowCardImpl({
@@ -3029,12 +3232,13 @@ function RowCardImpl({
   retryState,
 }: any) {
   const { styles } = useStyles();
+  const intl = useIntl();
   const isUser = row.kind === 'user';
-  // 复制目标：用户消息 / 助手回复正文（markdown 原文）
+  // Copy target: user message / assistant reply body (original markdown)
   const isAssistant = row.kind === 'assistant';
   const copyText = isUser ? row.content?.text || row.title || '' : '';
 
-  // 压缩行：分割线 + 压缩模型的实时输出（生成中逐 token 追加，刷新后取 summary_after）
+  // Compaction row: divider + live output of the compaction model (tokens appended while generating; after refresh it uses summary_after)
   if (row.kind === 'compaction') {
     const text = row.content?.text || '';
     const running = displayState(row) === 'RUNNING';
@@ -3050,7 +3254,11 @@ function RowCardImpl({
           ) : (
             <SyncOutlined style={{ fontSize: 12, color: '#8c8c8c' }} />
           )}{' '}
-          {row.title || '上下文压缩'}
+          {row.title ||
+            intl.formatMessage({
+              id: 'pages.chat.tool.contextCompaction',
+              defaultMessage: 'Context compaction',
+            })}
         </Divider>
         {text ? (
           <div
@@ -3067,14 +3275,17 @@ function RowCardImpl({
           </div>
         ) : running ? (
           <div style={{ fontSize: 12, color: '#bfbfbf', paddingLeft: 4 }}>
-            （压缩中…）
+            {intl.formatMessage({
+              id: 'pages.chat.tool.compacting',
+              defaultMessage: 'Compacting…',
+            })}
           </div>
         ) : null}
       </div>
     );
   }
 
-  // 状态行：横线 + 状态 + 耗时 + LLM 模型名（不再渲染卡片）
+  // Status row: hairline + status + elapsed + LLM model name (no longer renders a card)
   if (row.kind === 'run_status') {
     const state = displayState(row);
     const terminal =
@@ -3082,7 +3293,8 @@ function RowCardImpl({
     const duration = formatDuration(row.content?.durationMs);
     const usage = row.content?.usage;
     const isRunFailed = state === 'FAILED' || state === 'failed';
-    // 后端失败文案「❌ 执行失败」的红叉太粗，前端剥掉改细线红叉（与行文字同字号）。
+    // The backend failure text's "❌" cross is too heavy; strip it and draw a
+    // thin red cross at the same font size as the row text.
     const text = (row.content?.text || row.title || '')
       .replace(/^❌\s*/, '')
       .replace(/^⏹️\s*/, '')
@@ -3091,15 +3303,17 @@ function RowCardImpl({
       .replace(/^▶️\s*/, '');
     const parts = [
       text,
-      // 等待/恢复/运行中行不展示 run 级耗时、模型、Tokens：这些值描述的是整个 run，
-      // 放在暂停点上会被误读成「本次等待耗时」。等待详情由 WaitCard 自己展示。
+      // Waiting/resume/running rows do not show run-level elapsed, model or tokens: those values
+      // describe the whole run, and placing them at a pause point would be misread as "time spent
+      // waiting this round". Wait details are shown by WaitCard itself.
       terminal ? duration : null,
       terminal ? row.content?.modelName : null,
       terminal && usage && usage.totalTokens
         ? `Tokens ${formatTokens(usage.totalTokens)}`
         : null,
     ].filter((p): p is string => !!p);
-    // LLM 重试：只对当前活动 run 的 run_status 行显示读秒，普通 wait 仍由 WaitCard 展示。
+    // LLM retry: show the countdown only on run_status rows of the currently active run; regular
+    // waits are still shown by WaitCard.
     const retryActive =
       retryState != null &&
       Number(row.runId) === Number(retryState.runId) &&
@@ -3227,7 +3441,10 @@ function RowCardImpl({
               }}
             >
               <Tag style={{ margin: 0 }}>
-                {KIND_LABEL[row.kind] || row.kind}
+                {intl.formatMessage({
+                  id: KIND_LABEL_KEY[row.kind] ?? row.kind,
+                  defaultMessage: row.kind,
+                })}
               </Tag>
               <StateTag state={displayState(row)} />
             </div>
@@ -3267,8 +3484,8 @@ const RowCard = memo(RowCardImpl, (prev: any, next: any) => {
   if (prev.retryState?.attempt !== next.retryState?.attempt) return false;
   if (prev.retryState?.remainingMs !== next.retryState?.remainingMs)
     return false;
-  // subAgentLive 是整个 session 的 map，只有子 Agent 行需要跟随它刷新；
-  // 其它行不受子 Agent token 影响，否则一次子 Agent 输出会让整列表重渲染。
+  // subAgentLive is a map for the whole session; only sub-agent rows need to refresh with it.
+  // Other rows are unaffected by sub-agent tokens, otherwise one sub-agent output would re-render the whole list.
   if (prev.row?.kind === 'subagent') {
     return prev.subAgentLive === next.subAgentLive;
   }
@@ -3288,9 +3505,9 @@ export default function TimelineList({
   retryState,
 }: TimelineListProps) {
   const intl = useIntl();
-  // 同批次并行子 Agent（共享 parentToolCallId 且 ≥2 个）合并为横向 Tab；
-  // 单个子 Agent / 缺分组键的过渡态仍走原 RowCard，保证行为不变。
-  // 同一 subId 的占位行与权威行可能短暂共存，去重时优先保留权威行（seq>=0）。
+  // Merge parallel sub-agents in the same batch (shared parentToolCallId and ≥2 of them) into horizontal tabs;
+  // a single sub-agent / transitional state without a group key still goes through the original RowCard, keeping behavior unchanged.
+  // Placeholder and authoritative rows for the same subId may coexist briefly; when deduplicating, keep the authoritative row (seq>=0).
   const latestAssistantSeq = useMemo(() => {
     for (let i = rows.length - 1; i >= 0; i -= 1) {
       if (rows[i]?.kind === 'assistant') return rows[i].seq;
@@ -3312,8 +3529,8 @@ export default function TimelineList({
       if (isInternalToolRow(r)) {
         continue;
       }
-      // wait 的等待/恢复状态由 WaitCard 独立展示，run_status 再画一条会重复且带 run 级耗时误导。
-      // LLM 重试（subtype=LLM_RETRY）要保留：它是用户唯一能看到「失败原因 + 重试进度」的行。
+      // Wait waiting/resume states are shown independently by WaitCard; drawing another run_status row would duplicate it and mislead with run-level elapsed time.
+      // LLM retry (subtype=LLM_RETRY) must be kept: it is the only row where the user can see "failure reason + retry progress".
       if (
         r.kind === 'run_status' &&
         ['WAITING', 'RESUMED'].includes(String(r.state ?? '').toUpperCase()) &&
@@ -3356,7 +3573,10 @@ export default function TimelineList({
       {hasMore && (
         <div style={{ textAlign: 'center' }}>
           <Button type="link" size="small" onClick={onLoadOlder}>
-            加载更早
+            {intl.formatMessage({
+              id: 'pages.chat.tool.loadOlder',
+              defaultMessage: 'Load older',
+            })}
           </Button>
         </div>
       )}
@@ -3367,7 +3587,13 @@ export default function TimelineList({
             size="small"
             onClick={() => setRenderLimit((n) => n + RENDER_LIMIT_STEP)}
           >
-            显示更早的 {hiddenCount} 条
+            {intl.formatMessage(
+              {
+                id: 'pages.chat.tool.showEarlier',
+                defaultMessage: 'Show {count} earlier',
+              },
+              { count: hiddenCount },
+            )}
           </Button>
         </div>
       )}
@@ -3410,7 +3636,12 @@ export default function TimelineList({
         >
           <LoadingOutlined spin style={{ fontSize: 12 }} />
           <span>
-            {preparingTool.name || '工具'} ·{' '}
+            {preparingTool.name ||
+              intl.formatMessage({
+                id: 'pages.chat.tool.tool',
+                defaultMessage: 'Tool',
+              })}{' '}
+            ·{' '}
             {intl.formatMessage({
               id: 'pages.chat.tool.preparingArguments',
               defaultMessage: 'Generating call arguments…',

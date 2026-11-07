@@ -76,7 +76,7 @@ class RunConverterTest {
 
     @Test
     void errorMessage_roundTripsBothDirections() {
-        // RunConverter 是手写的，漏掉一个方向不会报错、只会让失败原因静默丢失（V87 的教训）
+        // RunConverter is hand-written; missing one direction raises no error and only loses the failure reason silently (the V87 lesson)
         RunVO vo = new RunVO();
         vo.setId(1L);
         vo.setErrorMessage("rate limited by upstream");
@@ -90,8 +90,8 @@ class RunConverterTest {
 
     @Test
     void loopLimit_roundTripsBothDirections() {
-        // loop_limit 是轮次预算的分母固化（V88）。漏掉一个方向不会报错，
-        // 只会让续跑时重新解析出更小的预算而中途缩水 —— 失败是静默的。
+        // loop_limit pins the loop-budget denominator (V88). Missing one direction raises no error
+        // and only makes resumed runs resolve a smaller budget and shrink mid-run — the failure is silent.
         RunVO vo = new RunVO();
         vo.setId(1L);
         vo.setLoopCount(50);
@@ -124,8 +124,8 @@ class RunConverterTest {
 
     @Test
     void loopLimit_nullStaysNullSoFirstEntryStillResolves() {
-        // 存量 run 的 loop_limit 为 NULL：必须原样透传，不能被默认值覆盖，
-        // 否则首次进入就没机会解析出正确的（可能更大的）预算。
+        // loop_limit is NULL for legacy runs: it must pass through unchanged and not be overwritten by a default,
+        // otherwise the first entry has no chance to resolve the correct (possibly larger) budget.
         RunVO vo = new RunVO();
         vo.setId(1L);
         vo.setLoopLimit(null);

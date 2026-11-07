@@ -18,10 +18,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 工具时间线的标准化元数据。
+ * Standardized metadata for the tool timeline.
  *
- * <p>前端不应为每个工具解析完整 args/artifact；这里在服务端一次性提取展示所需字段，
- * 随 {@code content.meta} 下发。字段缺失时不写入，前端仍可回退解析原始 JSON。
+ * <p>The frontend should not parse the full args/artifact for every tool; the server extracts the
+ * fields needed for display once and ships them as {@code content.meta}. Missing fields are simply
+ * omitted, and the frontend can still fall back to parsing the raw JSON.
  */
 public final class ToolMetaResolver {
 
@@ -113,9 +114,10 @@ public final class ToolMetaResolver {
     }
 
     /**
-     * wait 工具的真实耗时不在 created_at/updated_at（工具立即返回，差值是毫秒级），
-     * 而在 artifact.elapsed_ms。这里把请求时长、实际等待、开始/恢复时间统一提取，
-     * 并用实际等待覆盖 durationMs，避免前端展示 0s/2ms。
+     * The wait tool's real elapsed time is not in created_at/updated_at (the tool returns
+     * immediately, so the difference is milliseconds) but in artifact.elapsed_ms. Here the request
+     * duration, actual wait and start/resume times are extracted together, with the actual wait
+     * overriding durationMs so the frontend does not show 0s/2ms.
      */
     private static void waitMeta(Map<String, Object> meta, JsonNode args, JsonNode artifact,
                                  AgentToolCallRecord record) {

@@ -8,58 +8,60 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 历史会话清理报告（定时任务与手动接口共用同一结构）。
+ * Historical session cleanup report (shared structure for the scheduled task and the manual endpoint).
  *
- * <p>{@code tableStats} 的 key 是表名、value 是受影响行数：dry-run 时是「将会删除」的行数，
- * 实际执行时是「已删除」的行数。顺序按删除顺序，便于人工核对。
+ * <p>{@code tableStats} maps table name to affected row count: during a dry-run these are the rows
+ * that "would be deleted"; on a real execution they are the rows "already deleted". The order
+ * follows the deletion order so it can be verified by hand.
  */
 @Data
 public class SessionCleanupReportVO implements Serializable {
 
-    /** 本次是否为预演（true=只统计不删除） */
+    /** Whether this run is a rehearsal (true=count only, no deletion) */
     private boolean dryRun;
 
-    /** 清理开关（session.cleanup-enabled）；false 表示本次直接跳过 */
+    /** Cleanup switch (session.cleanup-enabled); false means this run was skipped outright */
     private boolean enabled;
 
-    /** 另一副本或另一次手动执行正持锁时为 true，此时未做任何事 */
+    /** True when another replica or another manual execution holds the lock; nothing was done in that case */
     private boolean skippedByLock;
 
     private String skipReason;
 
-    /** 实际生效的保留天数（配置非法时已回退默认值） */
+    /** Effective retention days (already fell back to the default when the configuration was invalid) */
     private int retentionDays;
 
     private int fileRetentionDays;
 
-    /** 过期判定线：created_at 与 updated_at 均早于该时间即过期 */
+    /** Expiry cutoff: a session is expired when both created_at and updated_at are earlier than this */
     private LocalDateTime cutoff;
 
     private LocalDateTime fileCutoff;
 
-    /** 删除的会话数 */
+    /** Number of sessions deleted */
     private int sessionCount;
 
     /**
-     * 进度分母：执行前 count 出的过期会话总数。
-     * 同步执行路径（单测/内部调用）的报告也带它，异步路径则落在执行记录上供前端轮询。
+     * Progress denominator: total expired sessions counted before the run.
+     * The synchronous execution path (unit tests/internal calls) also carries it; the asynchronous
+     * path stores it on the execution record for the frontend to poll.
      */
     private int totalSessions;
 
-    /** 因仍在跑（PENDING/RUNNING 的 run 或 task）而被活跃守卫挡住的会话数 */
+    /** Sessions blocked by the active guard because they still have a PENDING/RUNNING run or task */
     private long skippedActiveSessions;
 
-    /** 各表受影响行数 */
+    /** Affected row count per table */
     private Map<String, Long> tableStats = new LinkedHashMap<>();
 
-    /** 已处理批次数（受 max-batches 限制，达到上限会提前结束） */
+    /** Number of batches processed (bounded by max-batches; reaching the cap ends the run early) */
     private int batches;
 
-    /** 是否因达到单轮批次数上限而提前结束（false=已清完所有过期数据） */
+    /** Whether the run ended early because the per-round batch cap was reached (false=all expired data was cleaned) */
     private boolean truncated;
 
     private long elapsedMs;
 
-    /** 硬删后空间只回到库内可复用，数据文件不会自动变小；此字段是给运维的处置建议 */
+    /** After a hard delete, space only becomes reusable inside the database and the data files do not shrink; this field is the handling advice for operators */
     private String vacuumHint;
 }

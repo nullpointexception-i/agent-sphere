@@ -9,12 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * loopCount 必须在 VO ↔ DO 之间完整往返。
+ * loopCount must round-trip fully between VO ↔ DO.
  *
- * <p>这是「挂起不再重置循环预算」的前提：SessionRunner 恢复时从
- * {@code currentRun.getLoopCount()} 起步，而该值是经 converter 从 DB 行读回来的。
- * 若 converter 漏了映射，字段恒为 null，循环预算会静默退回到「每次调用从 0 起算」——
- * 不报错，只是护栏失效，正是最该被测住的那类回归。
+ * <p>This is the premise for "suspension no longer resets the loop budget": on resume, SessionRunner starts from
+ * {@code currentRun.getLoopCount()}, a value read back from the DB row through the converter.
+ * If the converter misses the mapping, the field stays null and the loop budget silently falls back to "start from 0 on every call" —
+ * no error, just a dead guard, which is exactly the kind of regression that must be tested.
  */
 class RunLoopCountConverterTest {
 
@@ -52,7 +52,7 @@ class RunLoopCountConverterTest {
 
     @Test
     void nullLoopCount_staysNullForLegacyRows() {
-        // V82 之前的历史行没有该值；null 必须原样保留，不能被静默变成 0 之外的语义
+        // Rows predating V82 have no value; null must be preserved, not silently given semantics other than 0
         assertNull(converter.toVO(row(null)).getLoopCount());
     }
 }

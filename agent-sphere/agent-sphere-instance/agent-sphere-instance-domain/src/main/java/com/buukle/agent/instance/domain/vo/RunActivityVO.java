@@ -21,7 +21,7 @@ public class RunActivityVO implements Serializable {
     private Integer durationMs;
     private String llmErrorMessage;
     private Boolean success;
-    /** 该次调用的归一化用量（仅 llm_interaction 行有值）。 */
+    /** Normalized usage of this call (only populated on llm_interaction rows). */
     private String usage;
     private Integer promptTokens;
     private Integer completionTokens;

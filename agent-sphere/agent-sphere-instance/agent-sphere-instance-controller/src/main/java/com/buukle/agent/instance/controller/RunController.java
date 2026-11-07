@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
@@ -13,7 +15,7 @@ import java.util.List;
 
 @WithTenant
 @RestController
-@RequestMapping("/api/v1/instance/runs")
+@RequestMapping(ApiPrefix.V1 + "/instance/runs")
 @RequiredArgsConstructor
 public class RunController extends BaseController {
     private final RunService runService;
@@ -28,7 +30,7 @@ public class RunController extends BaseController {
         return ok(runService.getRun(id));
     }
 
-    /** run 级用量聚合（InteractionModal 头部 / RunDrawer 明细）。 */
+    /** Run-level usage aggregation (InteractionModal header / RunDrawer details). */
     @GetMapping("/{id}/usage")
     public ResponseEntity<?> usage(@PathVariable Long id) {
         return ok(runService.usageSummary(id));
@@ -43,8 +45,8 @@ public class RunController extends BaseController {
     }
 
     /**
-     * 按需批量补拉推理（离行列表的定点填充）：返回 runId → reasoning。
-     * 示例：/api/v1/instance/runs/reasoning?runIds=1,2,3
+     * Fetch reasoning in batches on demand (targeted fill for off-row lists): returns runId → reasoning.
+     * Example: /api/v1/instance/runs/reasoning?runIds=1,2,3
      */
     @GetMapping("/reasoning")
     public ResponseEntity<?> reasoning(@RequestParam("runIds") List<Long> runIds) {

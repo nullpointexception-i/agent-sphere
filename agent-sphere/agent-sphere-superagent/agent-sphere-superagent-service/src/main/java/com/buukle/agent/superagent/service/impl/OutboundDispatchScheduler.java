@@ -39,10 +39,11 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Outbox 发送器：把 Agent 回复可靠地落到目标信道。
+ * Outbox sender: reliably delivers Agent replies to the target channel.
  *
- * <p>先入库再发送，发送失败按指数退避重试；同一消息用 idempotency_key 去重。
- * 目标信道由 {@link ChannelAdapter#type()} 匹配，目前只有 IM_BUILTIN。
+ * <p>Persist first, then send; failed sends retry with exponential backoff; duplicate messages are
+ * deduplicated by idempotency_key. The target channel is matched by {@link ChannelAdapter#type()};
+ * currently only IM_BUILTIN exists.
  */
 @Slf4j
 @Service

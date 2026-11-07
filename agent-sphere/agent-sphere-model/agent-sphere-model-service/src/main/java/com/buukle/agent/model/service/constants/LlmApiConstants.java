@@ -1,15 +1,17 @@
 package com.buukle.agent.model.service.constants;
 
+import com.buukle.agent.common.constant.HttpHeaders;
+
 public final class LlmApiConstants {
     // URL
     public static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
     // Headers
-    public static final String HEADER_AUTHORIZATION = "Authorization";
+    public static final String HEADER_AUTHORIZATION = HttpHeaders.AUTHORIZATION;
     public static final String HEADER_CONTENT_TYPE = "Content-Type";
     public static final String HEADER_ACCEPT = "Accept";
     public static final String APPLICATION_JSON = "application/json";
     public static final String TEXT_EVENT_STREAM = "text/event-stream";
-    public static final String BEARER_PREFIX = "Bearer ";
+    public static final String BEARER_PREFIX = HttpHeaders.BEARER_PREFIX;
     // SSE
     public static final String SSE_DATA_PREFIX = "data: ";
     public static final String SSE_DONE_MARKER = "[DONE]";
@@ -18,7 +20,7 @@ public final class LlmApiConstants {
     public static final String FIELD_DELTA = "delta";
     public static final String FIELD_CONTENT = "content";
     public static final String FIELD_REASONING_CONTENT = "reasoning_content";
-    /** vLLM / Qwen3 reasoning-parser 返回的字段名（与 DeepSeek/智谱的 reasoning_content 并存）。 */
+    /** Field name returned by the vLLM / Qwen3 reasoning-parser (coexists with reasoning_content from DeepSeek/Zhipu). */
     public static final String FIELD_REASONING = "reasoning";
     public static final String FIELD_FINISH_REASON = "finish_reason";
     public static final String FIELD_USAGE = "usage";

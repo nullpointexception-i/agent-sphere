@@ -54,21 +54,25 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             15. frameId=0 addresses the TOP frame only; null broadcasts across same-origin frames.
             16. Expanding panels: hover/click trigger -> getContent(mode=ready, selectors:['[role=listbox] li'], waitMs) -> query to confirm -> click the scoped item. Never click an empty/absent li.
             17. Filters: set-then-verify each one; check active chips/container text and `_hints.count`; do not batch-set filters.
-            18. Concurrency guard: one command at a time. On "上一命令仍在执行" wait ~retryAfterMs or verify state; never burst.
+            18. Concurrency guard: one command at a time. On a "command already running" (concurrency guard) error wait ~retryAfterMs or verify state; never burst.
             19. Repeated-failure guard: the same action+target failing twice returns repeated_failure — switch strategy.
             20. screenshot(scope=viewport|full, format, quality): viewport is the only clickAt target; a user image observation follows.
             21. clickAt(x, y): device-pixel coordinates of the LAST viewport screenshot; check `changed`/`_clickable`.
             Rules: prefer snapshot+ref; use `_hints.dialogs`/`chips`; not_found/not_interactable -> wait/ready or re-snapshot (refs may shift); never blindly retry csp/detached; click/type/hover/key use trusted CDP input; ambiguous/occluded/not_interactable/wrong_site have specific handling; check `_selfChanged` before declaring failure. When a filter returns 0, report the filter conditions; never lower the task's acceptance criteria. Results include errorCategory/method/warning.
             """;
     private static final long NAVIGATE_TIMEOUT_SECONDS = 30;
-    // 交互动作（click/type/hover/key/select/upload/…）15s：动作本身是毫秒级的，但扩展侧的
-    // 写动作现在会先画光标（到达屏障 1.5s）+ CDP 拟人轨迹，且背景 service worker 偶有冷启动，
-    // 10s 偏紧。15s 仍远低于扩展侧 COMMAND_LEASE_MS=60s，也留足了「后端先放弃会撞并发守卫」
-    // 的余量：最坏 2×15s+0.3s = 30.3s，仍 < 全局 tool.execution-timeout 60s。
+    // Interaction actions (click/type/hover/key/select/upload/...) get 15s: the action itself takes
+    // milliseconds, but on the extension side write actions now draw the cursor first (1.5s barrier)
+    // plus a CDP human-like trajectory, and the background service worker occasionally cold-starts,
+    // so 10s is too tight. 15s is still far below the extension's COMMAND_LEASE_MS=60s and leaves
+    // room for "giving up on the backend side would trip the concurrency guard": worst case
+    // 2x15s+0.3s = 30.3s, still < the global tool.execution-timeout 60s.
     private static final long ACTION_TIMEOUT_SECONDS = 15;
-    // executeJS 是唯一需要长耗时的动作（页面里等条件、等异步接口都可能十几秒），
-    // 单独给 30s。扩展侧 EXECJS_TIMEOUT_MS=27s 会先返回干净的 timeout，
-    // 比后端先放弃更好 —— 否则扩展仍持租约，迟到回调被丢弃，下一命令还会撞上并发守卫。
+    // executeJS is the only action that may legitimately take long (waiting for page conditions or
+    // async endpoints can take over ten seconds), so it gets 30s on its own. The extension's
+    // EXECJS_TIMEOUT_MS=27s returns a clean timeout first, which beats the backend giving up -
+    // otherwise the extension still holds the lease, the late callback is dropped, and the next
+    // command trips the concurrency guard again.
     private static final long EXECUTEJS_TIMEOUT_SECONDS = 30;
     private static final long MAX_COMMAND_TIMEOUT_SECONDS = 30;
 
@@ -82,7 +86,7 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
     private static final String ERR_NAVIGATE_URL = "url is required for navigate action. Example: {\"action\":\"navigate\",\"url\":\"https://example.com\"}";
     private static final String ERR_SELECTOR_REQUIRED = "selector is required for %s action";
 
-    // ---- 连续失败护栏：同一 session+action+定位 连续失败达到阈值即停手，防烧任务轮次 ----
+    // ---- Consecutive-failure guard: stop after the same session+action+target fails repeatedly, to avoid burning task turns ----
     private static final int CONSECUTIVE_FAIL_LIMIT = 2;
     private static final long FAIL_TRACK_TTL_MILLIS = 10 * 60 * 1000L;
     private static final String ERROR_CATEGORY_REPEATED = "repeated_failure";
@@ -90,35 +94,38 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
     private static final String ERROR_CATEGORY_TIMEOUT = "timeout";
     private static final String ERROR_CATEGORY_CANCELLED = "cancelled";
     private static final String ERROR_CATEGORY_UNKNOWN = "unknown";
-    /** executeJS 里做导航写操作 —— 见 JS_NAVIGATION_WRITE_PATTERNS。 */
+    /** Navigation write in executeJS - see JS_NAVIGATION_WRITE_PATTERNS. */
     private static final String ERROR_CATEGORY_JS_NAVIGATION_BLOCKED = "js_navigation_blocked";
 
     /**
-     * executeJS 的**执行范围**：只允许只读（读 DOM/取值/计算并 return 小 JSON）。
+     * **Execution scope** of executeJS: read-only only (read the DOM / values / compute and return
+     * small JSON).
      *
-     * <p>以下模式属于**导航写操作**，一律拒绝执行。原因：脚本式跳转（尤其
-     * {@code location.href = ...} 与 {@code history.back()}）会绕过真实点击链路与
-     * referer/点击语境，是最强的自动化指纹 —— 线上任务正是因此被判异常并跳转到
-     * 站点的风控验证页。详情/返回必须走 click 与平台控件。
+     * <p>The patterns below are **navigation writes** and are always rejected. Reason: scripted
+     * navigation (especially {@code location.href = ...} and {@code history.back()}) bypasses the
+     * real click path and the referer/click context, making it the strongest automation fingerprint -
+     * production tasks were flagged exactly because of this and redirected to the site's risk
+     * verification page. Opening details or going back must use click and platform controls.
      *
-     * <p>这是**防协作型 agent 走错路**，不是防对抗：静态字符串匹配足够，不追求不可绕过。
-     * <b>本清单是唯一权威出处</b>（插件端不再复制一份）。
+     * <p>This is meant to **keep a cooperative agent on the right path**, not to stop an adversary:
+     * static string matching is enough, and being unbypassable is not a goal.
+     * <b>This list is the single source of truth</b> (the extension no longer keeps a copy).
      */
     private static final List<Pattern> JS_NAVIGATION_WRITE_PATTERNS = List.of(
-            // location.xxx = value  （href/hash/search/pathname/host/... 任一属性赋值都会触发导航）
+            // location.xxx = value  (assigning any of href/hash/search/pathname/host/... triggers navigation)
             Pattern.compile("location\\s*\\.\\s*[A-Za-z_$][\\w$]*\\s*=(?!=)"),
             // location['xxx'] = value
             Pattern.compile("location\\s*\\[[^\\]]+\\]\\s*=(?!=)"),
             // location.assign( / replace( / reload(
             Pattern.compile("location\\s*\\.\\s*(assign|replace|reload)\\s*\\("),
-            // document.location / window.location / top.location / self.location / parent.location 上的赋值
+            // Assignment on document.location / window.location / top.location / self.location / parent.location
             Pattern.compile("(document|window|top|self|parent)\\s*\\.\\s*location\\s*"
                     + "(\\.\\s*[A-Za-z_$][\\w$]*\\s*=|\\[[^\\]]+\\]\\s*=|=(?!=))"),
-            // history 导航
+            // history navigation
             Pattern.compile("history\\s*\\.\\s*(pushState|replaceState|go|back|forward)\\s*\\("),
-            // 新窗口
+            // New window
             Pattern.compile("window\\s*\\.\\s*open\\s*\\("),
-            // 表单提交（会整页导航）
+            // Form submission (navigates the whole page)
             Pattern.compile("\\.\\s*submit\\s*\\(")
     );
 
@@ -171,22 +178,22 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
 
         log.debug("Chrome command: {} (sessionId={})", action, cec.getSessionId());
 
-        // executeJS 只读闸：命中导航写操作 → 直接失败且**不构造命令**
-        // （浏览器命令的唯一出口是 buildCommand，故此处拦截即全网生效）。
+        // executeJS read-only gate: a navigation write hit -> fail immediately and **build no command**
+        // (the only exit for browser commands is buildCommand, so blocking here applies everywhere).
         if (ACTION_EXECUTE_JS.equals(action)) {
             String hit = matchNavigationWrite(cec.getCode());
             if (hit != null) {
                 log.warn("Blocked executeJS navigation write: sessionId={} pattern={}",
                         cec.getSessionId(), hit);
-                return failed("executeJS 仅允许只读操作，检测到导航写操作（命中模式 " + hit
-                                + "）。打开/返回详情请用 click + 平台控件，整页跳转请用 navigate",
+                return failed("executeJS allows read-only operations only; a navigation write was detected (matched pattern " + hit
+                                + "). Use click with platform controls to open/return to details, and navigate for full-page jumps",
                         ERROR_CATEGORY_JS_NAVIGATION_BLOCKED, cec.getFrameId());
             }
         }
 
-        // 帧语义：frameId 仅支持 0（主框架）或留空（全部广播）；其他 frame 不可用（AGENT 实测 1/2/3 报错）
+        // Frame semantics: frameId supports only 0 (top frame) or blank (broadcast to all); other frames are unavailable (AGENT tests showed 1/2/3 error out)
         if (cec.getFrameId() != null && cec.getFrameId() > 0) {
-            return failed("frameId 仅支持 0（主框架）或留空；其他 frame 不可用",
+            return failed("frameId supports only 0 (top frame) or blank; other frames are unavailable",
                     ERROR_CATEGORY_INVALID_REQUEST, cec.getFrameId());
         }
 
@@ -203,18 +210,18 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
         }
         if (ACTION_CLICK_AT.equals(action)
                 && (cec.getX() == null || cec.getY() == null)) {
-            return failed("clickAt 需要 x/y（最后一张 viewport 截图的设备像素坐标）",
+            return failed("clickAt requires x/y (device-pixel coordinates from the last viewport screenshot)",
                     ERROR_CATEGORY_INVALID_REQUEST, cec.getFrameId());
         }
 
-        // 连续失败护栏：命中即停手，避免 LLM 反复重试同一坏定位烧光任务轮次
+        // Consecutive-failure guard: stop as soon as it trips, so the LLM does not keep retrying a bad locator and burn all task turns
         String failKey = failKey(cec);
         FailEntry hit = consecutiveFailures.get(failKey);
         if (hit != null && hit.count >= CONSECUTIVE_FAIL_LIMIT) {
             log.warn("Chrome repeated-failure guard: {} consecutive failures for key={}",
                     hit.count, failKey);
-            ChromeResultVO vo = failed("连续 " + CONSECUTIVE_FAIL_LIMIT
-                    + " 次失败(" + action + ")。请改用 snapshot ref 重定位、更换 selector，或另选方案");
+            ChromeResultVO vo = failed("Failed " + CONSECUTIVE_FAIL_LIMIT
+                    + " times in a row (" + action + "). Re-locate via a snapshot ref, use another selector, or choose a different approach");
             vo.setErrorCategory(ERROR_CATEGORY_REPEATED);
             vo.setAttemptedFrameId(cec.getFrameId());
             return vo;
@@ -233,13 +240,14 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             return cancelled(cec.getFrameId());
         }
 
-        // 单次执行：不再对 inject_failed 自动重发。导航/重注入竞态如实回报给模型，
-        // 由模型按提示先 wait/getContent 再操作（扩展内部的通道自愈仍保留，见 tab-manager）。
+        // Single execution: no automatic resend on inject_failed. Navigation/re-injection races are
+        // reported to the model as-is, and the model follows the hint to wait/getContent before
+        // acting (channel self-healing inside the extension is still in place, see tab-manager).
         ChromeCallbackDTO cb;
         String commandId = UUID.randomUUID().toString();
         ChromeCommandDTO cmd = buildCommand(cec, commandId);
         CompletableFuture<ChromeCallbackDTO> future = new CompletableFuture<>();
-        // 先注册 pending，再发布事件，避免扩展 callback 在发布事件期间抢先到达而丢失。
+        // Register pending before publishing the event, so an extension callback arriving during publishing is not lost.
         ChromePendingStore.put(commandId, future);
         try {
             eventPublisher.publishEvent(cmd);
@@ -261,7 +269,7 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
             log.warn("Chrome command failed: {}", action, e);
             return failed(e.getMessage(), ERROR_CATEGORY_UNKNOWN, cec.getFrameId());
         } finally {
-            // complete() 已经 remove 时这里是 no-op；异常、超时和迟到 callback 也不会泄漏。
+            // No-op here when complete() already removed it; exceptions, timeouts and late callbacks do not leak either.
             ChromePendingStore.remove(commandId);
         }
 
@@ -285,7 +293,7 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
 
     private ChromeCommandDTO buildCommand(ChromeExecuteContext cec, String commandId) {
         ChromeCommandDTO command = new ChromeCommandDTO(cec.getSessionId(), commandId, cec.getAction());
-        // 回调要带回 run/工具调用 id，才能把「哪台设备执行」落到工具记录上
+        // The callback must carry run/tool call ids so "which device executed it" lands on the tool record
         command.setRunId(cec.getRunId());
         command.setCallId(cec.getCallId());
         return command
@@ -358,16 +366,16 @@ public class CapabilityBuiltinToolChrome implements CapabilityBuiltinToolSpi {
         ChromeResultVO vo = ChromeResultVO.fail(String.format("Chrome operation timed out after %ds", seconds));
         vo.setErrorCategory(ERROR_CATEGORY_TIMEOUT);
         vo.setAttemptedFrameId(frameId);
-        // 慢页面超时通常不等于失败：操作可能已生效。
-        // 提示 LLM 先 getContent 确认实际状态，不要盲目重试同一 selector。
-        vo.setWarning("操作可能已生效（slow page），请先 getContent 确认实际状态，勿盲目重试同一 selector");
+        // A timeout on a slow page is usually not a failure: the operation may have taken effect.
+        // Tell the LLM to confirm the actual state with getContent first instead of blindly retrying the same selector.
+        vo.setWarning("The operation may have taken effect (slow page); call getContent first to confirm the actual state, and do not blindly retry the same selector");
         return vo;
     }
 
     /**
-     * 检测 executeJS 代码里是否含导航写操作。
+     * Detects whether executeJS code contains a navigation write.
      *
-     * @return 命中的模式字符串（便于告知 agent 具体改哪一处）；未命中返回 {@code null}
+     * @return the matched pattern string (so the agent can be told exactly what to change); {@code null} when nothing matched
      */
     static String matchNavigationWrite(String code) {
         if (code == null || code.isBlank()) {

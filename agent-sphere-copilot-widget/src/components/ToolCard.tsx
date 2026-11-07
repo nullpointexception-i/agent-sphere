@@ -1,12 +1,11 @@
 /**
- * 工具卡家族渲染（自 UmiJS 主站 ToolCard 移植，去除 antd 依赖）。
- * 与 `toolRenderers.ts` 的纯判别函数配合：todo/doc/generic 三类 + 可折叠 JSON 块。
+ * Tool card family rendering (ported from the main site's UmiJS ToolCard, with antd dependencies removed).
+ * Works with the pure discriminators in `toolRenderers.ts`: todo/doc/generic plus a collapsible JSON block.
  */
 import { useState } from 'react';
 import { DocIcon } from '../icons';
 import {
   docSummary,
-  docSummaryZh,
   extractTodos,
   genericSummary,
   todoProgress,
@@ -24,7 +23,7 @@ export function prettyJson(raw?: string | null): string {
   }
 }
 
-/** 参数 + 结果收口为一个折叠块，避免每个工具占两行裸 JSON。 */
+/** Args and result are wrapped into one collapsible block, so each tool does not take two lines of raw JSON. */
 export function formatToolDuration(ms?: number) {
   if (typeof ms !== 'number' || ms < 0) return '';
   if (ms < 1000) return `${ms}ms`;
@@ -36,7 +35,7 @@ export function formatToolDuration(ms?: number) {
   return `${minutes}m${Math.round(seconds % 60)}s`;
 }
 
-/** 长内容预览弹层（widget 无 antd，使用 shadow DOM 内的 fixed 浮层）。 */
+/** Long-content preview overlay (the widget has no antd, so it uses a fixed overlay inside the shadow DOM). */
 export function ContentPreview({
   title,
   content,
@@ -61,7 +60,7 @@ export function ContentPreview({
         }}
         onClick={() => setOpen(true)}
       >
-        预览全文（{content.length.toLocaleString()} 字符）
+        Preview full text ({content.length.toLocaleString()} chars)
       </button>
       {open && (
         <div
@@ -152,7 +151,7 @@ export function ContentPreview({
 
 export function RawData({
   content,
-  label = '查看原始数据',
+  label = 'View raw data',
 }: {
   content: ToolContent;
   label?: string;
@@ -169,9 +168,9 @@ export function RawData({
       >
         {label}
       </summary>
-      <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>参数</div>
+      <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>Arguments</div>
       <pre className="aw-tl-pre">{prettyJson(content.args)}</pre>
-      <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>结果</div>
+      <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>Result</div>
       <pre className="aw-tl-pre">{prettyJson(content.artifact)}</pre>
     </details>
   );
@@ -187,7 +186,7 @@ function sortTodos(todos: TodoItem[]): TodoItem[] {
   );
 }
 
-/** 待办工具卡：进度 done/total + 勾选态 + 高优先级标记 + 原始待办折叠。 */
+/** Todo tool card: done/total progress + check states + high-priority markers + collapsible raw todos. */
 export function TodoCard({ content }: { content: ToolContent }) {
   const todos = extractTodos(content);
   const total = todoTotal(content);
@@ -196,7 +195,7 @@ export function TodoCard({ content }: { content: ToolContent }) {
   return (
     <div>
       <div className="aw-tool-todo-progress">
-        ☑ {done}/{total} 已完成
+        ☑ {done}/{total} completed
       </div>
       <div>
         {sorted.map((t, i) => (
@@ -220,17 +219,17 @@ export function TodoCard({ content }: { content: ToolContent }) {
               {t.content}
             </span>
             {t.priority === 'high' && (
-              <span className="aw-tool-todo-pri">高</span>
+              <span className="aw-tool-todo-pri">High</span>
             )}
             {(t.skillId != null || t.stepId) && (
               <span
                 className="aw-tool-todo-skill"
                 title={
                   t.skillId != null && t.stepId
-                    ? `技能 #${t.skillId} · 步骤 ${t.stepId}`
+                    ? `Skill #${t.skillId} · Step ${t.stepId}`
                     : t.skillId != null
-                      ? `技能 #${t.skillId}`
-                      : `步骤 ${t.stepId}`
+                      ? `Skill #${t.skillId}`
+                      : `Step ${t.stepId}`
                 }
               >
                 {t.skillId != null ? `skill#${t.skillId}` : ''}
@@ -245,9 +244,9 @@ export function TodoCard({ content }: { content: ToolContent }) {
   );
 }
 
-/** 文档工具卡：摘要 + artifact preview（不跳转，仅展示）。 */
+/** Document tool card: summary + artifact preview (display only, no navigation). */
 export function DocCard({ content }: { content: ToolContent }) {
-  const summary = docSummaryZh(content) || docSummary(content);
+  const summary = docSummary(content);
   let preview = '';
   let detail = '';
   let documentContent = '';
@@ -280,13 +279,13 @@ export function DocCard({ content }: { content: ToolContent }) {
     detail = [
       documentId != null ? `documentId=${documentId}` : null,
       version != null ? `v${version}` : null,
-      chars != null ? `正文 ${chars.toLocaleString()} 字符` : null,
-      typeof totalLines === 'number' ? `${totalLines} 行` : null,
+      chars != null ? `body ${chars.toLocaleString()} chars` : null,
+      typeof totalLines === 'number' ? `${totalLines} lines` : null,
     ]
       .filter(Boolean)
       .join(' · ');
   } catch {
-    /* 忽略 */
+    /* ignore */
   }
   return (
     <div className="aw-tool-doc">
@@ -309,14 +308,14 @@ export function DocCard({ content }: { content: ToolContent }) {
       )}
       {preview && <div className="aw-tool-doc-preview">{preview.slice(0, 60)}</div>}
       <div>
-        <ContentPreview title={documentTitle || '文档'} content={documentContent} />
+        <ContentPreview title={documentTitle || 'Document'} content={documentContent} />
       </div>
       <RawData content={content} />
     </div>
   );
 }
 
-/** 通用工具卡：动作摘要 + 可折叠参数/结果（hideJson 时隐藏原始 JSON）。 */
+/** Generic tool card: action summary + collapsible args/result (raw JSON hidden when hideJson). */
 export function GenericCard({
   content,
   hideJson,

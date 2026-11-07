@@ -4,7 +4,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-/** 任务执行日志记录（合并 LLM 交互 + 工具调用，按时间正序）。 */
+/** Task execution log record (LLM interactions + tool calls merged, in ascending time order). */
 @Data
 public class TaskExecutionLogVO implements Serializable {
 
@@ -13,15 +13,15 @@ public class TaskExecutionLogVO implements Serializable {
 
     private Long id;
     private Long runId;
-    /** 日志类型：LLM / TOOL。 */
+    /** Log type: LLM / TOOL. */
     private String logType;
     private String createdAt;
-    // LLM 交互字段
+    // LLM interaction fields
     private String interactionType;
     private String modelName;
     private String responseBody;
     private Boolean success;
-    // 工具调用字段
+    // Tool call fields
     private String toolName;
     private String displayNameCn;
     private String argumentsJson;

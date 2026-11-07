@@ -6,12 +6,15 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 会话清理执行记录的<strong>数据库行形态</strong>，只供 {@code SessionCleanupRunMapper} 使用。
+ * <strong>Database row shape</strong> of a session cleanup execution record; only used by
+ * {@code SessionCleanupRunMapper}.
  *
- * <p>与 API 层 {@code SessionCleanupRunVO}（instance-dtvo）的唯一差别是 {@code tableStats} 为字符串：列类型是 jsonb，
- * MyBatis 对自动映射无法凭空把 JSON 文本变成 {@code Map}（{@code JsonbTypeHandler} 在
- * infrastructure，而 instance 不能反向依赖它）。所以这里取 {@code CAST(table_stats AS text)}，
- * 由调用方用 JsonUtils 转成 Map 再装进 VO。
+ * <p>The only difference from the API-layer {@code SessionCleanupRunVO} (instance-dtvo) is that
+ * {@code tableStats} is a string: the column type is jsonb, and MyBatis auto-mapping cannot turn
+ * JSON text into a {@code Map} out of nowhere ({@code JsonbTypeHandler} lives in infrastructure,
+ * and instance must not depend on it in reverse). So this reads
+ * {@code CAST(table_stats AS text)} and the caller converts it to a Map with JsonUtils before
+ * populating the VO.
  */
 @Data
 public class SessionCleanupRunRowVO implements Serializable {
@@ -25,22 +28,22 @@ public class SessionCleanupRunRowVO implements Serializable {
     private LocalDateTime cutoff;
     private LocalDateTime fileCutoff;
     private Integer sessionCount;
-    /** 进度分母：执行前 count 出的过期会话总数（V78 新增列） */
+    /** Progress denominator: total expired sessions counted before the run (column added in V78) */
     private Integer totalSessions;
     private Long totalRows;
     private Long skippedActiveSessions;
     private Integer batches;
     private Boolean truncated;
     private Long elapsedMs;
-    /** jsonb 文本形态 */
+    /** jsonb in text form */
     private String tableStats;
     private String skipReason;
     private String errorMessage;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
-    /** 疑似中断：未落终态且开始时间已超过阈值 */
+    /** Suspected interruption: no terminal state yet and the start time is past the threshold */
     private Boolean stale;
     private String createdBy;
-    /** 后端写给运维的提示（当前用于承载 VACUUM 建议；该表由机器写入，无人工备注场景） */
+    /** Hint written by the backend for operators (currently carries the VACUUM suggestion; the table is machine-written and has no manual-remark scenario) */
     private String remark;
 }

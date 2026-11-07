@@ -1,5 +1,7 @@
 package com.buukle.agent.superagent.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.channel.spi.EventIngestPort;
 import com.buukle.agent.channel.spi.NormalizedEvent;
 import com.buukle.agent.common.util.BaseController;
@@ -22,7 +24,7 @@ import java.util.List;
 
 /** Generic webhook ingress for channel bindings. */
 @RestController
-@RequestMapping("/api/v1/channels")
+@RequestMapping(ApiPrefix.V1 + "/channels")
 @RequiredArgsConstructor
 public class ChannelWebhookController extends BaseController {
 

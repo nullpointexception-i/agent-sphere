@@ -9,9 +9,10 @@ import org.springframework.stereotype.Component;
 import java.util.function.Consumer;
 
 /**
- * Redis pub/sub 事件总线（Redisson {@link RTopic} + JsonJacksonCodec）。
- * 多副本事件投递的唯一路径：发布方 publish，各副本（含发布者自己）subscribe 后投本地。
- * 载荷为任意 Jackson 可序列化 POJO；订阅时按具体类型反序列化。
+ * Redis pub/sub event bus (Redisson {@link RTopic} + JsonJacksonCodec).
+ * The only path for multi-replica event delivery: the publisher publishes, and each replica (including the
+ * publisher itself) subscribes and delivers locally.
+ * The payload is any Jackson-serializable POJO; on subscribe it is deserialized to the concrete type.
  */
 @Slf4j
 @Component

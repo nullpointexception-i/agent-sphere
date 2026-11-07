@@ -1,15 +1,15 @@
 /**
- * 这个文件作为组件的目录
- * 目的是统一管理对外输出的组件，方便分类
+ * This file acts as the component directory.
+ * Its purpose is to centralize exported components and keep them categorized.
  */
 /**
- * 布局组件
+ * Layout components
  */
 import { LangDropdown } from './RightContent';
 import { AvatarDropdown } from './RightContent/AvatarDropdown';
 
 /**
- * 业务组件
+ * Business components
  */
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as OfflineBanner } from './OfflineBanner';

@@ -17,8 +17,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 会话输入（steer 槽位 / 排队输入）分布式存储。
- * 队列/槽位落 Redis，副本重启或 run 被接管后剩余输入不丢，可续跑。
+ * Session input (steer slot / queued input) distributed storage.
+ * Queue/slot live in Redis, so remaining input survives a replica restart or run takeover and the run can continue.
  */
 @Slf4j
 @Component
@@ -131,7 +131,7 @@ public class SessionInputManager {
     public record InputMessage(String queueId, String text, Long modelRouteId, long timestamp,
                                boolean isClarificationResume,
                                List<PreparedAttachment> attachments,
-                               /** 用户为该条消息选择的思考强度；空则按输出预算动态默认。 */
+                               /** Reasoning effort the user selected for this message; empty means a dynamic default based on the output budget. */
                                String reasoningEffort) {
         public InputMessage {
             attachments = attachments != null ? attachments : Collections.emptyList();

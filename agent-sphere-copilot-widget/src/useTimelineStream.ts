@@ -19,7 +19,7 @@ import type {
   ToolApprovalBatch,
 } from './types';
 
-/** 子 Agent 实时步骤（纯 SSE 聚合，终态由一次性历史拉取校正）。 */
+/** Sub-agent live steps (pure SSE aggregation; the terminal state is corrected by a one-off history fetch). */
 export type SubAgentLiveStep =
   | {
       type: 'llm';
@@ -36,7 +36,7 @@ export type SubAgentLiveStep =
       status: 'pending' | 'in_progress' | 'succeeded' | 'failed';
       argumentsJson?: string;
       artifact?: string;
-      /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），live 步骤回显用。 */
+      /** Browser screenshot references in the tool result ([{fileKey, contentType}]), replayed by live steps. */
       images?: { fileKey: string; contentType?: string }[];
     };
 
@@ -48,18 +48,18 @@ const PULL_TRIGGER_SUB_TYPES = [
   'run_failed',
   'run_cancelled',
   'run_awaiting_user',
-  // wait 挂起：到点会自行恢复同一个 run，需要拉一次让前端显示「等待中」。
-  // 故意不在 RUN_TERMINAL_SUB_TYPES 里 —— 它不是终态，加进去会让等待期间
-  // 就解锁输入框，等同于把「等时间」误报成「任务结束」。
+  // wait suspension: the same run resumes by itself when the time comes, so fetch once to show "waiting".
+  // Deliberately not in RUN_TERMINAL_SUB_TYPES - it is not terminal; including it would unlock the input
+  // during the wait, effectively reporting "waiting" as "task finished".
   'run_waiting',
   'tool_call_succeeded',
   'tool_call_failed',
-  // 压缩终态：拉一次权威行（正文来自 summary_after）。running 不拉 —— 浅合并会覆盖已流出的正文。
+  // Compaction terminal state: fetch the authoritative row once (body comes from summary_after). Not for running - a shallow merge would overwrite the streamed body.
   'compaction_completed',
   'compaction_failed',
 ];
 
-/** 从工具结果 artifact JSON 解析浏览器截图引用（data.screenshot.fileKey/contentType）。 */
+/** Parse browser screenshot references from the tool result artifact JSON (data.screenshot.fileKey/contentType). */
 function parseScreenshotRef(artifact?: string | null): { fileKey: string; contentType?: string } | null {
   if (!artifact) return null;
   try {
@@ -72,7 +72,7 @@ function parseScreenshotRef(artifact?: string | null): { fileKey: string; conten
   }
 }
 
-/** run 终态子类型：到达即代表当前 run 结束（解锁输入/恢复发送按钮）。 */
+/** run terminal sub-types: arriving means the current run is over (unlock input / restore the send button). */
 const RUN_TERMINAL_SUB_TYPES = [
   'run_completed',
   'run_failed',
@@ -80,7 +80,7 @@ const RUN_TERMINAL_SUB_TYPES = [
   'run_awaiting_user',
 ] as const;
 
-/** run 状态类事件：run_status 行原地更新，刷新必须走尾窗（afterSeq 会跳过同 seq）。 */
+/** run status events: the run_status row is updated in place, so refreshes must use the tail window (afterSeq would skip the same seq). */
 const RUN_STATUS_SUB_TYPES = [
   'run_completed',
   'run_failed',
@@ -94,31 +94,31 @@ interface TimelineStream {
   hasMore: boolean;
   loadingOlder: boolean;
   subAgentLiveMap: SubAgentLiveMap;
-  /** 乐观插入、尚未被后端权威行替换的用户消息（seq<0，渲染在 timeline 末尾）。 */
+  /** Optimistically inserted user message not yet replaced by the backend's authoritative row (seq<0, rendered at the end of the timeline). */
   pendingUserRows: TimelineRow[];
-  /** 事件驱动的“当前会话是否有 run 在跑”（run_running/打字机=true；终态=false）。 */
+  /** Event-driven "is a run currently active in this session" (run_running/typewriter=true; terminal=false). */
   runActive: boolean;
-  /** 运行态权威值（来源表聚合）：发送锁 / pending 判定的唯一来源。 */
+  /** Authoritative runtime value (aggregated from source tables): the single source for the send lock / pending checks. */
   runtimeState: RuntimeStateVO | null;
-  /** 工具参数仍在流式生成时的即时提示。 */
+  /** Instant hint while tool arguments are still streaming in. */
   preparingTool: { publishId?: string; name?: string } | null;
   loadInitial: (sessionId: number) => Promise<void>;
   loadOlder: (sessionId: number) => Promise<void>;
   refreshLatest: (sessionId: number) => Promise<void>;
-  /** 工具事件后整页覆盖刷新（补迟到落库的截图 images 等）。 */
+  /** Full-page overwrite refresh after tool events (to pick up late-landing screenshot images and the like). */
   refreshTail: (sessionId: number) => Promise<void>;
-  /** 传播中的用户消息：不入库，先本地上墙，等权威行到达后移除；同时置 runActive=true（点击即锁输入）。 */
+  /** User message being propagated: not persisted yet, shown locally first and removed when the authoritative row arrives; also sets runActive=true (input locks on click). */
   addUserMessage: (text: string, images?: { fileKey: string; contentType?: string }[]) => void;
   removeUserMessage: (text: string) => void;
-  /** 发送失败等场景手动复位 runActive。 */
+  /** Manually reset runActive on scenarios such as send failure. */
   markRunInactive: () => void;
-  /** 整包 SSE 事件（RuntimeEventVO {eventType, data}）→ timeline 打字机/子 Agent live/拉新。 */
+  /** Whole SSE event (RuntimeEventVO {eventType, data}) -> timeline typewriter / sub-agent live / refresh. */
   handleSseEvent: (parsed: Record<string, unknown>) => void;
-  /** 子 Agent 权威时间线拉取（终态校正）。 */
+  /** Fetch the authoritative sub-agent timeline (terminal-state correction). */
   loadSubAgentSteps: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
-  /** 建立会话 SSE 连接（会话切换时调用）；需传 apiBase 以构造正确的流地址（同源相对或跨域绝对）。 */
+  /** Open the session SSE connection (called when the session changes); apiBase is needed to build the right stream URL (same-origin relative or cross-origin absolute). */
   connect: (sessionId: number, token: string, apiBase: string) => void;
-  /** 乐观提交澄清后登记已应答（防 refreshLatest 回退乐观态）。 */
+  /** Record a clarification as answered after an optimistic submit (prevents refreshLatest from rolling back the optimistic state). */
   markClarificationAnswered: (runId: number, clarificationId?: string | null) => void;
   /** L2 tool approval batch shown in the bottom drawer. */
   toolApproval: ToolApprovalBatch | null;
@@ -129,7 +129,7 @@ interface TimelineStream {
   ) => Promise<void>;
 }
 
-/** 子 Agent LIVE 占位行 seq：负且按 subAgentRunId 唯一（避免同 seq 冲突）。 */
+/** Sub-agent LIVE placeholder row seq: negative and unique per subAgentRunId (avoids seq collisions). */
 function placeholderSeq(subAgentRunId: number): number {
   return -(Math.abs(subAgentRunId) + 1);
 }
@@ -170,7 +170,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
   const cursorsRef = useRef<TimelineCursors>({ oldestSeq: null, newestSeq: null });
   const sessionIdRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  /** 已本地应答的澄清 runId：防止 refreshLatest 用服务端旧 PENDING 回退乐观态。 */
+  /** runIds of locally answered clarifications: prevents refreshLatest from rolling back the optimistic state with a stale server PENDING. */
   const answeredClarificationKeysRef = useRef<Set<string>>(new Set());
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
@@ -181,7 +181,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     [api],
   );
 
-  /** 权威行到达后，清掉文本匹配的乐观用户行（避免重复气泡）。 */
+  /** Remove text-matched optimistic user rows once the authoritative row arrives (avoids duplicate bubbles). */
   const reconcilePendingUserRows = useCallback((freshRows: TimelineRow[]) => {
     const authoritativeTexts = new Set<string>();
     for (const r of freshRows) {
@@ -203,8 +203,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     (text: string, images?: { fileKey: string; contentType?: string }[]) => {
       pendingSeqRef.current -= 1;
       const seq = pendingSeqRef.current;
-      // 纯图片发送时给非空占位文本，兼容 reconcile 按 text 去重的既有逻辑（权威行到达后替换）
-      const displayText = text.trim() ? text : '[图片]';
+      // Use a non-empty placeholder text for image-only sends, to stay compatible with reconcile's existing text-based dedup (replaced when the authoritative row arrives)
+      const displayText = text.trim() ? text : '[Image]';
       setPendingUserRows((prev) => [
         ...prev,
         {
@@ -214,7 +214,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
           content: { text: displayText, ...(images && images.length ? { images } : {}) },
         },
       ]);
-      // 发送即锁定输入（无需等 run_running）——事件驱动锁定的“即时”来源
+      // Lock the input on send (no need to wait for run_running) - the "instant" part of event-driven locking
       setRunActiveState(true);
     },
     [],
@@ -231,7 +231,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     setRunActiveState(false);
   }, []);
 
-  /** 运行态权威刷新：只读 /runtime/{sid}/state，不扫描 timeline。 */
+  /** Authoritative runtime refresh: reads only /runtime/{sid}/state, does not scan the timeline. */
   const refreshRuntimeState = useCallback(
     async (sessionId: number) => {
       try {
@@ -242,7 +242,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         setRuntimeState(state);
         setRunActiveState(state.blockReasons?.includes('RUNNING') ?? false);
       } catch {
-        // 不兜底：错误交给全局请求处理；保持上一次权威值
+        // No fallback: errors go to the global request handler; keep the previous authoritative value
       }
     },
     [api],
@@ -258,10 +258,10 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         setRows(pageRows);
         setHasMore(m);
         reconcilePendingUserRows(pageRows);
-        // 发送锁唯一来源：运行态接口（不读 timeline 的 run_status）
+        // Single source for the send lock: the runtime endpoint (not the timeline's run_status)
         void refreshRuntimeState(sessionId);
       } catch {
-        // 加载失败保持空态，SSE 终态事件仍会触发 refreshLatest 尝试补
+        // Keep the empty state when loading fails; terminal SSE events will still trigger refreshLatest to catch up
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,7 +282,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         setRows((prev) => mergeTimeline(prev, older, answeredClarificationKeysRef.current));
         setHasMore(m);
       } catch {
-        // 翻页失败保持现状
+        // Keep the current state when paging fails
       } finally {
         setLoadingOlder(false);
       }
@@ -301,7 +301,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         setRows((prev) => mergeTimeline(prev, fresh, answeredClarificationKeysRef.current));
         reconcilePendingUserRows(fresh);
       } catch {
-        // 补拉失败忽略（SSE 打字机仍会就地更新）
+        // Ignore catch-up failures (the SSE typewriter still updates in place)
       }
     },
     [getPage, reconcilePendingUserRows],
@@ -313,7 +313,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         const { rows: fresh } = await fetchTailTimeline(getPage(sessionId), 30);
         if (fresh.length) {
           setRows((prev) => mergeTimeline(prev, fresh, answeredClarificationKeysRef.current));
-          // 更新游标：尾窗视作权威最新，推动 afterSeq
+          // Update the cursor: the tail window counts as the authoritative latest and advances afterSeq
           updateCursors(cursorsRef.current, {
             rows: fresh,
             hasMore: false,
@@ -323,13 +323,13 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         }
         reconcilePendingUserRows(fresh);
       } catch {
-        // 补拉失败忽略
+        // Ignore catch-up failures
       }
     },
     [getPage, reconcilePendingUserRows],
   );
 
-  // ---- 子 Agent 实时步骤聚合（主站 handleSubAgentLiveEvent 移植） ----
+  // ---- Sub-agent live step aggregation (ported from the main site's handleSubAgentLiveEvent) ----
   const handleSubAgentLiveEvent = useCallback((evtType: string, d: any) => {
     const subId = Number(d.subAgentRunId);
     if (!Number.isFinite(subId)) return;
@@ -385,7 +385,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         };
         if (d?.argumentsJson) update.argumentsJson = d.argumentsJson;
         if (d?.artifact) update.artifact = d.artifact;
-        // 工具结果含浏览器截图 → live 步骤直接带 images（刷新后走后端 timeline 一致）
+        // Tool result contains browser screenshots -> carry images on the live step directly (consistent with the backend timeline after refresh)
         const shot = parseScreenshotRef(update.artifact);
         if (shot) update.images = [shot];
         setSubAgentLiveMap((prev) => {
@@ -408,8 +408,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
 
       if (subType === 'model_reason') {
         if (d?.firstFrame) {
-          // 新 LLM 轮：剥离首帧哨兵行（"<marker>id: name\n"），旧轮标记结束
-          // 新旧前缀均接受（`▶ Agent ` / `▶ Skill `），避免历史会话断裂
+          // New LLM round: strip the first-frame sentinel line ("<marker>id: name\n"), marking the previous round as finished
+          // Accept both old and new prefixes (`▶ Agent ` / `▶ Skill `) so historical sessions are not broken
           const body = stripSubAgentSentinel(delta);
           setSubAgentLiveMap((prev) => {
             const arr: SubAgentLiveStep[] = prev[subId] || [];
@@ -448,7 +448,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     }
   }, []);
 
-  // ---- 整包事件 → timeline（assistant 打字机 + 子 Agent live + 拉新触发）----
+  // ---- Whole events -> timeline (assistant typewriter + sub-agent live + refresh triggers) ----
   const loadPendingApproval = useCallback(
     async (sid: number) => {
       try {
@@ -518,7 +518,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         return;
       }
 
-      // 子 Agent 实时：纯 SSE 聚合 live + 头行占位
+      // Sub-agent live: pure SSE aggregation for live + header-row placeholder
       if (d?.subAgentRunId != null) {
         handleSubAgentLiveEvent(evtType, d);
         const liveSubId = Number(d.subAgentRunId);
@@ -530,7 +530,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
                 Number(r.refSubAgentRunId) === liveSubId,
             );
             if (exists) return prev;
-            const displayName = d?.displayNameCn || d?.displayName || '子 Agent';
+            const displayName = d?.displayNameCn || d?.displayName || 'Sub-agent';
             return [
               ...prev,
               {
@@ -559,7 +559,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
             d?.displayNameCn ||
             d?.displayNameEn ||
             d?.toolName ||
-            '工具',
+            'Tool',
         });
       } else if (
         tlSubType === 'tool_call_started' ||
@@ -575,7 +575,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         setPreparingTool(null);
       }
 
-      // 上下文压缩：RUNNING 本地插行（后端已回填 seq/kind），输出 token 追加到正文
+      // Context compaction: insert a local RUNNING row (the backend has already filled in seq/kind), append output tokens to the body
       if (d?.seq != null && d?.kind === 'compaction') {
         const seq = Number(d.seq);
         const delta = evtType === 'content_token' ? String(d?.response || '') : '';
@@ -600,14 +600,14 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
               d?.statusTitle ||
               d?.assistantReply ||
               existing?.title ||
-              '正在压缩上下文…',
+              'Compacting context…',
             content,
           });
           return [...m.values()].sort((a, b) => a.seq - b.seq);
         });
       }
 
-      // assistant 容器打字机：seq+kind+response 就地追加 reply/thinking
+      // assistant container typewriter: append reply/thinking in place by seq+kind+response
       if (
         d?.seq != null &&
         d?.kind === 'assistant' &&
@@ -639,8 +639,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         });
       }
 
-      // run_status 行是「一个 run 一行、原地更新」：事件已带 seq/status/title，
-      // 直接就地合并，避免 afterSeq 增量拉不到同 seq 的更新（重试次数不刷新）。
+      // A run_status row is "one row per run, updated in place": the event already carries seq/status/title,
+      // so merge it in place directly, avoiding the case where an afterSeq delta cannot fetch a same-seq update (retry count not refreshed).
       if (d?.seq != null && d?.kind === 'run_status') {
         const rsSeq = Number(d.seq);
         const rsState = d?.status || (tlSubType === 'run_waiting' ? 'WAITING' : null);
@@ -658,14 +658,14 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         setRows((prev) => mergeTimeline(prev, [row], answeredClarificationKeysRef.current));
       }
 
-      // 终态/工具结束/澄清 → 按 afterSeq 补行（权威合并）
+      // Terminal/tool end/clarification -> catch up rows by afterSeq (authoritative merge)
 
-      // 事件驱动 runActive：run_running/主助手打字机=在跑；终态=结束
+      // Event-driven runActive: run_running/main-assistant typewriter=running; terminal=finished
       if (tlSubType === 'run_running') {
         setRunActiveState(true);
       } else if (tlSubType === 'run_waiting') {
-        // wait 挂起期间 run 仍在进行，到点自行恢复 —— 保持锁定。
-        // 断线重连正好落在等待窗口时靠这条把 runActive 重新立起来。
+        // During a wait suspension the run is still active and resumes by itself when the time comes - keep it locked.
+        // When a reconnect lands exactly in the wait window, this restores runActive.
         setRunActiveState(true);
       } else if (
         (RUN_TERMINAL_SUB_TYPES as readonly string[]).includes(tlSubType)
@@ -676,10 +676,10 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         d?.seq != null &&
         d?.kind === 'assistant'
       ) {
-        // 澄清续跑等场景可能不重发 run_running，用主助手打字机兜底
+        // Scenarios such as clarification resumption may not resend run_running; fall back to the main-assistant typewriter
         setRunActiveState(true);
       }
-      // 权威校正：run / 澄清 / 审批事件后刷新运行态
+      // Authoritative correction: refresh runtime state after run / clarification / approval events
       if (
         sid != null &&
         (String(tlSubType).startsWith('run_') ||
@@ -690,7 +690,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         void refreshRuntimeState(sid);
       }
 
-      // 澄清：本地就地更新 + 记录已应答（防 refreshLatest 回退）
+      // Clarification: update locally in place + record it as answered (prevents refreshLatest rollback)
       if (String(evtType).startsWith('clarification_')) {
         if (sid != null) void refreshRuntimeState(sid);
         void loadPendingClarifications(sid);
@@ -701,8 +701,8 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
             prev.map((r) => {
               if (r.kind !== 'clarification') return r;
               if (Number(r.runId) !== Number(d?.runId)) return r;
-              // 有 id 必须命中同一轮；无 id 时只改仍 PENDING 的行，避免连带改写
-              // 同 run 续跑产生的后续澄清。
+              // With an id it must match the same round; without an id, only rewrite rows still PENDING, to avoid also rewriting
+              // subsequent clarifications produced by continuing the same run.
               const wantId = d?.clarificationId;
               const haveId = r.content?.clarificationId;
               if (wantId != null && haveId != null) {
@@ -741,10 +741,10 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
       if (
         tlSubType === 'tool_call_succeeded' ||
         tlSubType === 'tool_call_failed' ||
-        // run_status 是原地更新同一行：afterSeq 拉不到，必须走尾窗覆盖
+        // run_status updates the same row in place: afterSeq cannot fetch it, so a tail-window overwrite is required
         (RUN_STATUS_SUB_TYPES as readonly string[]).includes(tlSubType)
       ) {
-        // 工具事件：整页覆盖刷新（补迟到落库的截图 images 等），避免 afterSeq 增量跳过既有工具行
+        // Tool events: full-page overwrite refresh (to pick up late-landing screenshot images etc.), avoiding afterSeq deltas skipping existing tool rows
         void refreshTail(sid);
       } else if (
         PULL_TRIGGER_SUB_TYPES.includes(tlSubType) ||
@@ -763,7 +763,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     }
   }, []);
 
-  // 建立/重建会话 SSE；断线按指数退避重连（≤30s）；仅当仍是当前会话时重连。
+  // Open/rebuild the session SSE; reconnect with exponential backoff (<=30s); only reconnect while it is still the current session.
   const openStream = useCallback(
     (sessionId: number, token: string, apiBase: string) => {
       if (abortRef.current) abortRef.current.abort();
@@ -796,7 +796,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
               const parsed = JSON.parse(payload) as Record<string, unknown>;
               handleSseEvent(parsed);
             } catch {
-              // 忽略非 JSON 行（注释/心跳）
+              // Ignore non-JSON lines (comments/heartbeats)
             }
           },
           onError: () => {
@@ -809,7 +809,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     [clearReconnectTimer, handleSseEvent, loadPendingApproval, loadPendingClarifications],
   );
 
-  // 会话切换即重建：先断开旧流、清空状态；由 CopilotView 在选会话时调用 connect()。
+  // Rebuild on session switch: disconnect the old stream and clear state first; CopilotView calls connect() when the session is selected.
   const connect = useCallback(
     (sessionId: number, token: string, apiBase: string) => {
       clearReconnectTimer();
@@ -837,14 +837,14 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
     [clearReconnectTimer, loadInitial, loadPendingApproval, loadPendingClarifications, openStream],
   );
 
-  /** 乐观提交澄清后立即登记已应答，防止 refreshLatest 用旧 PENDING 回退。
-   *  键必须是 runId+clarificationId：同 run 续跑会复用 runId，只按 runId 会误伤后续澄清。 */
+  /** Record a clarification as answered right after an optimistic submit, preventing refreshLatest from rolling back with a stale PENDING.
+   *  The key must be runId+clarificationId: continuing the same run reuses runId, and runId alone would affect later clarifications. */
   const markClarificationAnswered = useCallback((runId: number, clarificationId?: string | null) => {
     const key = clarificationKey(runId, clarificationId);
     if (key) answeredClarificationKeysRef.current.add(key);
   }, []);
 
-  // 卸载时断开连接并清理重连定时器
+  // Disconnect and clear the reconnect timer on unmount
   useEffect(() => {
     return () => {
       clearReconnectTimer();

@@ -13,15 +13,15 @@
  *    never poison the queue for every later operation.
  */
 
-// 默认操作 deadline：输入类（dispatchMouseEvent/insertText/dispatchKeyEvent）本就毫秒级，
-// 15s 是极宽松的兜底。executeJS 走 evaluate() 时单独传更大的值。
+// Default operation deadline: input calls (dispatchMouseEvent/insertText/dispatchKeyEvent) are millisecond-level anyway,
+// and 15s is a very generous fallback. When executeJS goes through evaluate() a larger value is passed explicitly.
 const CDP_OP_TIMEOUT_MS = 15000;
 
-// ---- 拟人化参数（技术侧；业务节奏由 skill 定义，这里只做"真实输入"与硬地板）----
-// 落点精确：不再对元素坐标做像素抖动。曾经的 ±CLICK_JITTER_PX 会让小目标
-// （勾选框/小图标）点空 —— 屏幕光标画在精确目标点，点击就必须落在同一点。
-// 拟人化只保留"移动"层：起点偏移 + 向量轨迹（见 nativeClick / _moveMouse）。
-// 向量轨迹的步数与每步间隔：约 8 步 × 8~22ms ≈ 100~180ms，肉眼是"移过去"而非瞬移。
+// ---- Humanization parameters (technical side; business pacing is defined by the skill, this only provides "real input" and hard floors) ----
+// Exact landing: no more pixel jitter on element coordinates. The former +/-CLICK_JITTER_PX made small targets
+// (checkboxes/small icons) miss - the on-screen cursor is drawn at the exact target point, so the click must land on that same point.
+// Humanization keeps only the "movement" layer: start offset + vector path (see nativeClick / _moveMouse).
+// Vector path steps and per-step interval: about 8 steps x 8~22ms ~= 100~180ms, which looks like "moving there" rather than teleporting.
 const TRAJECTORY_STEPS = 8;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -101,12 +101,12 @@ export class CdpClient {
   }
 
   _serialized(fn, timeoutMs = CDP_OP_TIMEOUT_MS) {
-    // 防队列中毒：若 fn 永不 settle（页面里跑了 while(true) 或长挂起的 fetch），
-    // this._queue 会永久 pending，之后所有 CDP 操作（click/insertText/hitTest/截图）
-    // 全部排队不执行，直到 service worker 重启。这里给每次操作加独立 deadline，
-    // 让队列始终能继续流动。
-    // 注意：超时并不能取消页面里已在跑的 CDP 命令（CDP 无取消语义），
-    // 但足以保证后续命令不被这一次挂起堵死。
+    // Queue poisoning protection: if fn never settles (a while(true) running in the page or a long-hanging fetch),
+    // this._queue stays pending forever and every subsequent CDP operation (click/insertText/hitTest/screenshot)
+    // queues up without running until the service worker restarts. Each operation gets its own deadline here
+    // so the queue keeps flowing.
+    // Note: a timeout cannot cancel a CDP command already running in the page (CDP has no cancel semantics),
+    // but it is enough to keep later commands from being blocked by this one hanging.
     const guarded = () => {
       let timer;
       return Promise.race([
@@ -117,7 +117,7 @@ export class CdpClient {
             timeoutMs,
           );
         }),
-      ]).finally(() => clearTimeout(timer)); // 两条路径都要清理，否则定时器会堆积
+      ]).finally(() => clearTimeout(timer)); // both paths must clean up, otherwise timers pile up
     };
     const p = this._queue.then(guarded, guarded);
     this._queue = p.catch(() => {});
@@ -159,13 +159,13 @@ export class CdpClient {
     return { success: true, data: value, _resultType: typeof value, method: 'debugger' };
   }
 
-  /** executeJS 的 CDP 层入口（唯一调用方是 background 的 executeJsOnTab）。
-   *  timeoutMs 由调用方给出，必须小于后端 executeJS 超时，扩展才能先返回干净的 TIMEOUT。 */
+  /** CDP-layer entry for executeJS (the only caller is background's executeJsOnTab).
+   *  timeoutMs is supplied by the caller and must be less than the backend executeJS timeout, so the extension can return a clean TIMEOUT first. */
   async evaluate(tabId, expression, timeoutMs = CDP_OP_TIMEOUT_MS) {
     return this._serialized(async () => {
       try {
-        // 包一层：无返回值时一并捕获 document.title（副作用验证技巧），
-        // __NO_RETURN__ 属"执行成功但无返回值"，勿当失败重试。
+        // Wrap it: also capture document.title when nothing is returned (side-effect verification trick),
+        // since __NO_RETURN__ means "executed successfully but returned nothing" - do not retry it as a failure.
         const expr =
           '(async () => { const __asR = await (async () => { ' +
           expression +
@@ -184,7 +184,7 @@ export class CdpClient {
     }, timeoutMs);
   }
 
-  // 解开 evaluate 的 void-title 包装：未返回值 → __NO_RETURN__ + _documentTitle；正常值原样透传。
+  // Unwrap evaluate's void-title wrapper: no return value -> __NO_RETURN__ + _documentTitle; normal values pass through untouched.
   _unwrap(raw) {
     if (!raw) return { success: true, data: '__NO_RETURN__', _resultType: 'void', method: 'debugger' };
     if (raw.unserializableValue) return this._toResult(raw);
@@ -195,7 +195,7 @@ export class CdpClient {
         data: '__NO_RETURN__',
         _resultType: 'void',
         method: 'debugger',
-        warning: 'evaluation succeeded but returned no value（__NO_RETURN__ 属正常）；副作用已用 document.title 标记的话，读 _documentTitle 复核',
+        warning: 'evaluation succeeded but returned no value (__NO_RETURN__ is expected); if side effects were flagged via document.title, verify with _documentTitle',
         _documentTitle: v.__asT,
       };
     }
@@ -205,11 +205,11 @@ export class CdpClient {
     return this._toResult(raw);
   }
 
-  /** 命中校验：报告该 CSS 坐标处实际命中的元素描述（<tag#id.class>）。
-   *  在主视口坐标空间工作，因此跨源 OOPIF 也能覆盖 —— content 侧的
-   *  elementFromPoint 只知道自己 iframe 的坐标空间，跨源时够不着。
-   *  对应 Codex 的 DOM.getNodeForLocation + DOM.describeNode 命中比对。
-   *  只读探测，探测失败一律返回 hit:false，绝不阻断调用方的降级流程。 */
+  /** Hit verification: report the description of the element actually hit at the given CSS coordinate (<tag#id.class>).
+   *  Works in main-viewport coordinate space, so it also covers cross-origin OOPIFs - the content side's
+   *  elementFromPoint only knows its own iframe coordinate space and cannot reach across origins.
+   *  Corresponds to Codex's DOM.getNodeForLocation + DOM.describeNode hit comparison.
+   *  Read-only probe; any probe failure returns hit:false and never blocks the caller's fallback flow. */
   async hitTest(tabId, x, y) {
     try {
       await this.attach(tabId);
@@ -232,7 +232,7 @@ export class CdpClient {
           }
         }
       } catch (e) {
-        // describeNode 失败：仍然报告命中，只是描述不完整
+        // describeNode failed: still report the hit, just with an incomplete description
       }
       const clsOut = cls.trim() ? '.' + cls.trim().split(/\s+/).slice(0, 3).join('.') : '';
       return {
@@ -246,11 +246,11 @@ export class CdpClient {
   }
 
   /**
-   * 受信鼠标移动轨迹（CDP mouseMoved 多点）。
+   * Trusted mouse movement path (multiple CDP mouseMoved events).
    *
-   * <p>真实用户的鼠标是"移过去"的，会先产生一串 mouseMoved 才按下。早先的实现只发
-   * press/release，**没有任何 mouseMoved** —— 这是最典型的自动化指纹之一。
-   * 这里用 easeOutCubic 逼近 + 中间点抖动，最后一步精确落到目标点。
+   * <p>A real user's mouse "moves there", producing a series of mouseMoved events before the press. The earlier implementation sent only
+   * press/release, with **no mouseMoved at all** - one of the most typical automation fingerprints.
+   * This uses an easeOutCubic approximation plus jitter on intermediate points, with the last step landing exactly on the target.
    */
   async _moveMouse(tabId, fromX, fromY, toX, toY, steps = TRAJECTORY_STEPS) {
     for (let i = 1; i <= steps; i++) {
@@ -270,27 +270,27 @@ export class CdpClient {
     }
   }
 
-  /** 受信鼠标点击（CDP Input）：合成事件在严格 SPA 下常不触发
-   *  Vue/React 处理器；Input.dispatchMouseEvent 走真实输入管线（isTrusted=true）。
-   *  x/y 为主 frame 视口 CSS 像素（见 content-locator 的 mainFramePoint）。
+  /** Trusted mouse click (CDP Input): synthetic events often fail to trigger
+   *  Vue/React handlers in strict SPAs; Input.dispatchMouseEvent goes through the real input pipeline (isTrusted=true).
+   *  x/y are main-frame viewport CSS pixels (see mainFramePoint in content-locator).
    *
-   *  <p>拟人化：先走一段 mouseMoved 轨迹 → 落点加随机偏移 → press/release 之间随机延迟。
-   *  这些都不改变"可信输入"的本质，只是补上真实鼠标本就会产生的事件序列。 */
+   *  <p>Humanization: first a mouseMoved path -> random offset on landing -> random delay between press/release.
+   *  None of this changes the "trusted input" nature; it only adds the event sequence a real mouse would produce. */
   async nativeClick(tabId, x, y) {
     return this._serialized(async () => {
       try {
         await this.attach(tabId);
-        // 落点精确：直接点元素坐标，不做像素抖动（见文件头拟人化参数说明）。
+        // Exact landing: click element coordinates directly, no pixel jitter (see the humanization parameters at the top of the file).
         const tx = Math.max(0, x);
         const ty = Math.max(0, y);
-        // 起点在目标附近（模拟"从旁边的上一次位置移过来"），无需额外查询视口尺寸
+        // The start point is near the target (simulating "moving over from the previous nearby position"), with no extra viewport size query
         const sx = Math.max(0, tx + randInt(-120, 120));
         const sy = Math.max(0, ty + randInt(-90, 90));
         await this._moveMouse(tabId, sx, sy, tx, ty);
         await this.sendCommand(tabId, 'Input.dispatchMouseEvent', {
           type: 'mousePressed', x: tx, y: ty, button: 'left', clickCount: 1,
         });
-        await sleep(randInt(35, 120)); // 真实按键有按压时长，不是 0ms
+        await sleep(randInt(35, 120)); // a real key press has a duration, not 0ms
         await this.sendCommand(tabId, 'Input.dispatchMouseEvent', {
           type: 'mouseReleased', x: tx, y: ty, button: 'left', clickCount: 1,
         });
@@ -300,7 +300,7 @@ export class CdpClient {
     });
   }
 
-  /** 受信键盘事件（CDP Input.dispatchKeyEvent）。key 如 Enter/Escape。 */
+  /** Trusted keyboard event (CDP Input.dispatchKeyEvent). key such as Enter/Escape. */
   async nativeKeyPress(tabId, key, code, keyCode) {
     return this._serialized(async () => {
       try {
@@ -319,14 +319,14 @@ export class CdpClient {
     });
   }
 
-  /** 受信文本输入（CDP Input.insertText）：触发输入框自身事件，trusted（含 IME/中文）。
+  /** Trusted text input (CDP Input.insertText): fires the input's own events, trusted (including IME/CJK).
    *
-   *  <p>逐字输入：真实用户是一个字一个字敲的，"一次性插入整段"是机械指纹。
-   *  对 CJK 同样有效（insertText 走真实输入管线）。为避免长文本超出 type 的 10s 超时，
-   *  按总预算（默认 3.5s）自适应每字间隔，并加 ±30% 抖动。 */
+   *  <p>Character-by-character input: a real user types one character at a time, and "inserting the whole block at once" is a mechanical fingerprint.
+   *  It works for CJK too (insertText goes through the real input pipeline). To keep long text from exceeding type's 10s timeout,
+   *  the per-character interval adapts to the total budget (3.5s by default) with +/-30% jitter. */
   async typeText(tabId, text, opts = {}) {
     const s = text == null ? '' : String(text);
-    const chars = Array.from(s); // 正确处理代理对 / CJK
+    const chars = Array.from(s); // handles surrogate pairs / CJK correctly
     const budgetMs = opts.budgetMs || 3500;
     const perChar = chars.length > 0
       ? Math.max(12, Math.min(90, Math.floor(budgetMs / chars.length)))
@@ -345,7 +345,7 @@ export class CdpClient {
     });
   }
 
-  /** 受信文本输入（整段一次性）。保留给"逐字"不适用/过慢的场景与既有调用方。 */
+  /** Trusted text input (the whole block at once). Kept for cases where character-by-character is unsuitable/too slow and for existing callers. */
   async insertText(tabId, text) {
     return this._serialized(async () => {
       try {
@@ -357,8 +357,8 @@ export class CdpClient {
     });
   }
 
-  /** 受信清空当前输入框（Ctrl+A 全选 + 删除）。insertText 只会追加，
-   *  因此整字段替换前必须先清空（对 iframe 内输入框同样有效）。 */
+  /** Trusted clearing of the current input (Ctrl+A select all + delete). insertText only appends,
+   *  so the field must be cleared before replacing it entirely (works for inputs inside iframes too). */
   async clearInput(tabId) {
     return this._serialized(async () => {
       try {
@@ -385,8 +385,8 @@ export class CdpClient {
     });
   }
 
-  /** 受信悬停（CDP mouseMoved）：触发 hover 面板。
-   *  拟人化：悬停前先走一小段轨迹，避免"指针凭空出现在目标上"。 */
+  /** Trusted hover (CDP mouseMoved): triggers hover panels.
+   *  Humanization: move along a short path before hovering, avoiding "the pointer appears on the target out of nowhere". */
   async nativeHover(tabId, x, y) {
     return this._serialized(async () => {
       try {
@@ -400,7 +400,7 @@ export class CdpClient {
     });
   }
 
-  /** 视口尺寸（CSS 像素）；取不到时返回 {}，由调用方兜底。 */
+  /** Viewport size (CSS pixels); returns {} when unavailable, leaving the fallback to the caller. */
   async _viewportSize(tabId) {
     try {
       const { result } = await this.sendCommand(tabId, 'Runtime.evaluate', {
@@ -414,11 +414,11 @@ export class CdpClient {
   }
 
   /**
-   * 页面级滚动：CDP `Input.dispatchMouseEvent{type:'mouseWheel'}`，**分段 + 随机停顿**。
+   * Page-level scrolling: CDP `Input.dispatchMouseEvent{type:'mouseWheel'}`, **segmented + random pauses**.
    *
-   * <p>替代内容脚本的 `window.scrollBy`：后者是"脚本把页面挪了"，**不产生任何滚动事件**——
-   * "位置变了却收不到 wheel 事件"本身就是一个自动化信号。这里发出真实（isTrusted）滚轮事件，
-   * 由 Chrome 自己滚动，并像真人那样一段一段滚。
+   * <p>Replaces the content script's `window.scrollBy`: that is "the script moved the page" and produces **no scroll events** -
+   * "the position changed but no wheel event was received" is itself an automation signal. This emits real (isTrusted) wheel events,
+   * lets Chrome scroll on its own, and scrolls segment by segment like a human.
    */
   async scrollPage(tabId, direction, amount) {
     const dir = direction || 'down';
@@ -441,7 +441,7 @@ export class CdpClient {
             deltaX: vertical ? 0 : sign * per,
             deltaY: vertical ? sign * per : 0,
           });
-          await sleep(randInt(60, 180)); // 段间随机停顿
+          await sleep(randInt(60, 180)); // random pause between segments
         }
       } catch (e) {
         this._retryDetachOnce(tabId, e, () => this.scrollPage(tabId, direction, amount));
@@ -458,9 +458,9 @@ export class CdpClient {
     throw e;
   }
 
-  /** 截图（CDP Page.captureScreenshot，唯一 debugger 入口）。
-   *  fullPage 用 captureBeyondViewport 截全页；返回值含 base64、CSS 视口尺寸与 dpr
-   *  （clickAt 的 x/y 是设备像素，换算 CSS px 用 dpr）。 */
+  /** Screenshot (CDP Page.captureScreenshot, the only debugger entry point).
+   *  fullPage uses captureBeyondViewport to capture the whole page; the result contains base64, CSS viewport size and dpr
+   *  (clickAt's x/y are device pixels; use dpr to convert to CSS px). */
   async captureScreenshot(tabId, { format = 'jpeg', quality = 60, fullPage = false } = {}) {
     return this._serialized(async () => {
       try {
@@ -471,7 +471,7 @@ export class CdpClient {
         if (!data) {
           throw new Error('No screenshot data returned');
         }
-        // 直接用 sendCommand 发 Runtime.evaluate，避免 evaluate() 二次入队自锁
+        // Send Runtime.evaluate directly with sendCommand to avoid evaluate() re-enqueueing and self-locking
         let w = 0, h = 0, dpr = 1;
         try {
           const ev = await this.sendCommand(tabId, 'Runtime.evaluate', {

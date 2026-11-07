@@ -28,7 +28,7 @@ public class ImMessage {
     /** JSON：{text, fileKey, card...} */
     private String content;
     private Long replyToId;
-    /** JSON 数组：@ 的 participant 列表 */
+    /** JSON array: mentioned participants */
     private String mentions;
     /** SENT / EDITED / RECALLED / DELETED */
     private String status;

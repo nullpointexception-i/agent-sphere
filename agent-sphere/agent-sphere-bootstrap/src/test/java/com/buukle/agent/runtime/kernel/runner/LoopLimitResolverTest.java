@@ -6,12 +6,12 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * 轮次上限解析的优先级护栏，重点是 {@link LoopLimitSource#PINNED}。
+ * Priority guard for loop-limit resolution, focused on {@link LoopLimitSource#PINNED}.
  *
- * <p>回归背景：上限原本<b>每次进入循环都重新解析</b>，而主 run 有 5 个重入入口
- * （首次 startRun / wait 恢复 / 澄清恢复×2 / 对账抢救），其中只有首次在任务请求线程上
- * 持有 {@code TaskLoopLimitHolder}。续跑时会在调度线程上取不到 TASK 层而回落到更小的
- * CHAT 值 —— 线上表现为「同一个 run 的预算中途缩水」，任务被更早的 loop cap 打断。
+ * <p>Background: the limit was originally <b>re-resolved on every loop entry</b>, and the main run has 5 re-entry points
+ * (initial startRun / wait resume / clarification resume ×2 / reconciler rescue), and only the first runs on the task request thread
+ * holding {@code TaskLoopLimitHolder}. On resume, the scheduling thread cannot see the TASK layer and falls back to the smaller
+ * CHAT value — in production this showed up as "the same run\'s budget shrank mid-way", and tasks were cut short by an earlier loop cap.
  */
 class LoopLimitResolverTest {
 
@@ -47,7 +47,7 @@ class LoopLimitResolverTest {
 
     @Test
     void pinnedLimitWinsOverEverything() {
-        // 核心护栏：续跑时即便实例/任务/系统三者都变了，预算也不许漂移
+        // Core guard: on resume the budget must not drift even if instance/task/system all changed
         ResolvedLoopLimit r = LoopLimitResolver.resolveMain(
                 INSTANCE_LIMIT, INSTANCE_LIMIT, TASK_LIMIT, CHAT_LIMIT);
 
@@ -57,8 +57,8 @@ class LoopLimitResolverTest {
 
     @Test
     void pinnedLimitSurvivesMissingTaskContextOnSchedulerThread() {
-        // wait 恢复走的是 pending-wait-wake 调度线程，TaskLoopLimitHolder 为 null。
-        // 没有固化时这里会退回 128；固化后必须仍用 2000。
+        // Wait resume runs on the pending-wait-wake scheduling thread, where TaskLoopLimitHolder is null.
+        // Without pinning this falls back to 128; with pinning it must still use 2000.
         ResolvedLoopLimit r = LoopLimitResolver.resolveMain(TASK_LIMIT, null, null, CHAT_LIMIT);
 
         assertEquals(TASK_LIMIT, r.limit(),
@@ -67,7 +67,7 @@ class LoopLimitResolverTest {
 
     @Test
     void pinnedLimitSurvivesInstanceConfigEditedMidRun() {
-        // 运行中把实例上限从 2000 调小到 5：同一 run 的预算不应随之变化
+        // Lower the instance limit from 2000 to 5 mid-run: the same run's budget must not change
         ResolvedLoopLimit r = LoopLimitResolver.resolveMain(2000, 5, TASK_LIMIT, CHAT_LIMIT);
 
         assertEquals(2000, r.limit(), "运行中改实例配置不得让已固化 run 的预算漂移");
@@ -75,7 +75,7 @@ class LoopLimitResolverTest {
 
     @Test
     void zeroOrNegativePinnedIsTreatedAsUnset() {
-        // 存量 run 的 loop_limit 为 NULL；0/负数也应视为未记录而不是把预算清零
+        // Legacy runs have a NULL loop_limit; 0/negative values must also be treated as unrecorded rather than zeroing the budget
         assertEquals(TASK_LIMIT,
                 LoopLimitResolver.resolveMain(0, null, TASK_LIMIT, CHAT_LIMIT).limit());
         assertEquals(TASK_LIMIT,
@@ -84,7 +84,7 @@ class LoopLimitResolverTest {
                 LoopLimitResolver.resolveMain(0, null, TASK_LIMIT, CHAT_LIMIT).source());
     }
 
-    // ---------- 子循环：明确不参与任务提额，也不需要固化 ----------
+    // ---------- Sub-loops: explicitly excluded from task limit boosts and needing no pinning ----------
 
     @Test
     void subLoop_neverUsesTaskLimit() {

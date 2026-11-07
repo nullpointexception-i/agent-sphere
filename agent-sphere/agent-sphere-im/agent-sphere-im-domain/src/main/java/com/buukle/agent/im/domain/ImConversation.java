@@ -22,9 +22,9 @@ public class ImConversation {
     private String title;
     private String purpose;
     private Long ownerUserId;
-    /** 对应的会话级 agent_thread。 */
+    /** Corresponding session-level agent_thread. */
     private Long threadId;
-    /** 群级分派规则（JSON）。 */
+    /** Group-level dispatch rules (JSON). */
     private String gateConfig;
     private Long lastSeq;
     private Long lastMessageId;

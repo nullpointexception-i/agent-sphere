@@ -6,33 +6,33 @@ import com.buukle.agent.instance.dtvo.vo.UserSessionVO;
 import java.util.List;
 
 /**
- * 登录会话契约：签发、校验、吊销。
+ * Login session contract: issue, validate, revoke.
  *
- * <p>一个用户可拥有多条有效会话；任何一端登录都不会覆盖其它端。
+ * <p>A user may hold several valid sessions; logging in from any surface never overwrites the others.
  */
 public interface UserTokenSpi {
 
-    /** 签发一条新会话，返回 token 明文与过期时间。 */
+    /** Issue a new session and return the plaintext token with its expiry time. */
     IssuedTokenVO issue(Long userId, String source, String loginIp, String userAgent);
 
-    /** 校验 token，有效返回 userId；同时按 7 天节流做滑动续期。 */
+    /** Validate a token and return userId when valid; also performs sliding renewal throttled to 7 days. */
     Long validate(String rawToken);
 
-    /** 吊销单个 token（登出）。 */
+    /** Revoke a single token (logout). */
     void revoke(String rawToken);
 
-    /** 吊销某用户全部有效 token（退出所有设备）。 */
+    /** Revoke all valid tokens of a user (sign out of all devices). */
     int revokeAll(Long userId);
 
-    /** 吊销某用户除指定 token 外的全部会话（改密后保留当前设备）。 */
+    /** Revoke all sessions of a user except the given token (keeps the current device after a password change). */
     int revokeAllExcept(Long userId, String keepRawToken);
 
-    /** 吊销某用户的一条会话（按 id，必须属于该用户）。 */
+    /** Revoke one session of a user (by id; it must belong to that user). */
     void revokeById(Long userId, Long sessionId);
 
-    /** 列出某用户的有效会话；currentTokenHash 用于标记当前会话，可为 null。 */
+    /** List a user's valid sessions; currentTokenHash marks the current session and may be null. */
     List<UserSessionVO> listActive(Long userId, String currentTokenHash);
 
-    /** 按 token hash 反查来源端（CONSOLE/WIDGET）；用于浏览器连接登记，查不到返回 null。 */
+    /** Look up the surface (CONSOLE/WIDGET) by token hash; used for browser connection registration, returns null when not found. */
     String findSourceByHash(String tokenHash);
 }

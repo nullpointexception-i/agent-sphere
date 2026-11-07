@@ -14,19 +14,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 浏览器截图观察注入公共支持（主/子 Agent 共用）：
- * - {@link #injectScreenshotObservation}：工具结果含 data.screenshot → 追加一条 USER 观察消息
- *   [text + image_url dataURL]；dataURL 为 null（文件被删）时降级纯文本。
- * - {@link #stripImageParts}：无支持图片的路由时把最后一条 USER 消息折叠为纯文本（空则占位）。
- * - {@link #hasAttachmentImage}：判定末条 USER 消息是否含 image_url 部分。
+ * Shared support for injecting browser screenshot observations (used by both main and sub agents):
+ * - {@link #injectScreenshotObservation}: when a tool result contains data.screenshot → append a USER observation message
+ *   [text + image_url dataURL]; when dataURL is null (file deleted) degrade to plain text.
+ * - {@link #stripImageParts}: when no route supports images, collapse the last USER message to plain text (placeholder if empty).
+ * - {@link #hasAttachmentImage}: decides whether the last USER message contains an image_url part.
  */
 @Slf4j
 public final class ScreenshotObservationSupport {
 
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final String OBSERVATION_TEXT_PREFIX = "【浏览器截图观察】";
+    private static final String OBSERVATION_TEXT_PREFIX = "[Browser screenshot observation]";
 
-    /** run/subRun 级已注入截图次数上限（防模型无限截图烧 token）。 */
+    /** Cap on screenshot injections per run/subRun (prevents the model from screenshotting endlessly and burning tokens). */
     private final ConcurrentHashMap<Long, AtomicInteger> screenshotCounts = new ConcurrentHashMap<>();
     private final int maxPerRun;
     private final ChatAttachmentResolver attachmentResolver;
@@ -36,7 +36,7 @@ public final class ScreenshotObservationSupport {
         this.attachmentResolver = attachmentResolver;
     }
 
-    /** 工具结果是否包含浏览器截图引用（只解析，不加载图片）。 */
+    /** Whether a tool result contains a browser screenshot reference (parse only; does not load the image). */
     public static boolean hasScreenshot(String toolResult) {
         if (toolResult == null || toolResult.isBlank()) {
             return false;
@@ -51,8 +51,8 @@ public final class ScreenshotObservationSupport {
     }
 
     /**
-     * 从工具结果 artifact 构造截图观察消息；无截图返回 null。
-     * 实时链路与恢复链路共用同一格式，避免模型看到两种形态的观察消息。
+     * Builds a screenshot observation message from a tool result artifact; returns null when there is no screenshot.
+     * The live path and the recovery path share the same format, so the model never sees two shapes of observation message.
      */
     public static ChatMessageDTO buildScreenshotObservation(ChatAttachmentResolver resolver, String toolResult) {
         if (toolResult == null || toolResult.isBlank()) {
@@ -88,9 +88,9 @@ public final class ScreenshotObservationSupport {
     }
 
     /**
-     * 浏览器截图工具结果含 data.screenshot → 追加一条 USER 观察消息（text + image_url dataURL）。
-     * - fileKey 缺失/文件被删除 → 跳过该 image part，仅保留文本说明（不阻断工具回合）。
-     * - 每 run 截图注入次数有上限（防模型无限截图烧 token）。
+     * When a browser screenshot tool result contains data.screenshot → append a USER observation message (text + image_url dataURL).
+     * - fileKey missing/file deleted → skip that image part and keep only the text note (does not block the tool turn).
+     * - Screenshot injections are capped per run (prevents the model from screenshotting endlessly and burning tokens).
      */
     public void injectScreenshotObservation(Long sessionId, Long runId,
                                             List<ChatMessageDTO> messages, String toolResult) {
@@ -120,7 +120,7 @@ public final class ScreenshotObservationSupport {
         }
     }
 
-    /** 无支持图片的路由时降级：把最后一条 USER 消息的 parts 折叠为纯文本 String（空则占位）。 */
+    /** Degradation when no route supports images: collapse the last USER message's parts into a plain text String (placeholder if empty). */
     public static void stripImageParts(List<ChatMessageDTO> messages) {
         if (messages == null || messages.isEmpty()) {
             return;
@@ -141,10 +141,10 @@ public final class ScreenshotObservationSupport {
             }
         }
         String folded = text.toString().trim();
-        last.setContent(folded.isEmpty() ? "[图片]" : folded);
+        last.setContent(folded.isEmpty() ? "[Image]" : folded);
     }
 
-    /** 当前轮是否含图片附件：末条 USER 消息 content 为 parts 且含 image_url。 */
+    /** Whether the current turn has image attachments: the last USER message content is parts and contains image_url. */
     public static boolean hasAttachmentImage(List<ChatMessageDTO> messages) {
         if (messages == null || messages.isEmpty()) {
             return false;
@@ -165,7 +165,7 @@ public final class ScreenshotObservationSupport {
         return false;
     }
 
-    /** 供 run 终态清理计数（防长生命周期 Map 泄漏）。 */
+    /** For run terminal-state cleanup counting (prevents long-lived Map leaks). */
     public void clear(Long runId) {
         screenshotCounts.remove(runId);
     }

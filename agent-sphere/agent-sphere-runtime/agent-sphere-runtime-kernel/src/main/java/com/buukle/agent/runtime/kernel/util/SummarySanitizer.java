@@ -3,10 +3,10 @@ package com.buukle.agent.runtime.kernel.util;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 
 /**
- * 压缩摘要完整性检查与超预算裁剪。
+ * Completeness check and over-budget trimming for compaction summaries.
  *
- * <p>摘要被 max_tokens 截断时，模型可能停在未闭合的代码围栏/JSON/引号中间。这里做一层
- * 结构兜底；真正的权威信号仍是流结束的 {@code finish_reason=length}。
+ * <p>When a summary is truncated by max_tokens, the model may stop in the middle of an unclosed code fence/JSON/quotes. This adds one layer of
+ * structural fallback; the real authoritative signal is still the stream's {@code finish_reason=length}.
  */
 public final class SummarySanitizer {
 
@@ -33,8 +33,8 @@ public final class SummarySanitizer {
     }
 
     /**
-     * 把超预算摘要裁到 token 预算内，并尽量停在完整句子/段落边界。
-     * 找不到完整边界时返回 null，由调用方按失败处理，避免落库半截 JSON/代码块。
+     * Trims an over-budget summary to the token budget, stopping at a complete sentence/paragraph boundary where possible.
+     * Returns null when no complete boundary is found, letting the caller treat it as a failure instead of persisting half a JSON/code block.
      */
     public static String trimToTokenBudget(String text, long maxTokens) {
         if (text == null || text.isBlank() || maxTokens <= 0) {

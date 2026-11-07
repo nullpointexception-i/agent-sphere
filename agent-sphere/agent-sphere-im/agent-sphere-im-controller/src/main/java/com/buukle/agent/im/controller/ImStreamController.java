@@ -1,5 +1,7 @@
 package com.buukle.agent.im.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.im.service.ImStreamService;
@@ -13,14 +15,14 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @ConditionalOnProperty(prefix = "buukle.agent.im", name = "enabled", havingValue = "true")
-@RequestMapping("/api/v1/im")
+@RequestMapping(ApiPrefix.V1 + "/im")
 @WithTenant
 @RequiredArgsConstructor
 public class ImStreamController {
 
     private final ImStreamService streamService;
 
-    /** 用户级 IM SSE：只做“有新消息”的提示，权威数据走 REST 补拉。 */
+    /** User-level IM SSE: only signals "new messages"; authoritative data is fetched via REST catch-up. */
     @GetMapping("/stream")
     public SseEmitter stream(HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-cache, no-transform");

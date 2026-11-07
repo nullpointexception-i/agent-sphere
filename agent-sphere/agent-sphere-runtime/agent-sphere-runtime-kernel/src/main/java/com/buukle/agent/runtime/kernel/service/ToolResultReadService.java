@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** 历史工具结果分页读取：只读当前会话的 artifact，单次最多 8000 字符。 */
+/** Paged read of historical tool results: reads only artifacts of the current session, at most 8000 characters per call. */
 @Service
 @RequiredArgsConstructor
 public class ToolResultReadService {

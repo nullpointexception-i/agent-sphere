@@ -25,7 +25,7 @@ const TYPE_COLORS: Record<string, string> = {
   TITLE: 'cyan',
   TOOL_ARGUMENT: 'lime',
   TOOL_RESULT_SUMMARIZE: 'green',
-  // 统一 delegate 后的子 Agent 交互类型；SKILL_EXECUTION 兼容历史数据
+  // Sub-agent interaction types after the unified delegate refactor; SKILL_EXECUTION is for legacy data
   AGENT_EXECUTION: 'magenta',
   SKILL_EXECUTION: 'magenta',
 };

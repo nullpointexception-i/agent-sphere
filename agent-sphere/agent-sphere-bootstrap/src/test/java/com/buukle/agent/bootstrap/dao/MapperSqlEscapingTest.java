@@ -17,28 +17,28 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 守卫：MyBatis 注解 SQL 里「{@code <}」的两种正确写法不能混用。
+ * Guard: the two correct ways to write "{@code <}" in MyBatis annotation SQL must not be mixed.
  *
- * <p>背景：{@code @Select("...")} 只有在 SQL 被 {@code <script>} 包裹时才会走 XML 解析、
- * 才会把 {@code &lt;} 解码成 {@code <}。没包裹时字符串<b>原样</b>发给 JDBC，于是
- * {@code created_at &lt; ?} 到 PG 手里就成了 {@code created_at lt ?} →
- * {@code ERROR: column "lt" does not exist}（真实踩过：SessionCleanupMapper 三处漏包 script）。
- * 反过来，包了 {@code <script>} 却留裸 {@code <}，会在解析期直接炸。
+ * <p>Background: {@code @Select("...")} goes through XML parsing only when the SQL is wrapped in {@code <script>},
+ * and only then is {@code &lt;} decoded to {@code <}. Without the wrapper the string reaches JDBC <b>verbatim</b>, so
+ * {@code created_at &lt; ?} becomes {@code created_at lt ?} in PG →
+ * {@code ERROR: column "lt" does not exist} (really hit: three SessionCleanupMapper queries missed the script wrapper).
+ * Conversely, wrapping in {@code <script>} but leaving a bare {@code <} blows up at parse time.
  *
- * <p>这类问题现有单测一律接不到 —— mapper 全 mock，CI 里也没有库。所以用静态扫描兜住，
- * 思路与 {@code DefaultResourceTemplateMigrationTest} 一致（扫文件防复发）。
+ * <p>No existing unit test can catch this — mappers are fully mocked and CI has no database. A static scan therefore covers it,
+ * following the same idea as {@code DefaultResourceTemplateMigrationTest} (scan files to prevent recurrence).
  */
 class MapperSqlEscapingTest {
 
-    /** 注解读取：text block 与单行字符串两种写法都要覆盖。 */
+    /** Annotation reading: cover both text blocks and single-line strings. */
     private static final Pattern TEXT_BLOCK = Pattern.compile(
             "@(Select|Insert|Update|Delete)\\(\\s*\"\"\"(.*?)\"\"\"", Pattern.DOTALL);
     private static final Pattern SINGLE_LINE = Pattern.compile(
             "@(Select|Insert|Update|Delete)\\(\"((?:[^\"\\\\\\n]|\\\\.)*)\"\\)");
 
     /**
-     * 完整的开闭标签（必须吃掉闭合的 {@code >}）。少了这个 {@code [^>]*}，
-     * {@code </script>} 的 {@code >} 会被当成「残留裸尖括号」而让整份文件误报。
+     * A complete open/close tag (must consume the closing {@code >}). Without this {@code [^>]*},
+     * the {@code >} of {@code </script>} is treated as a "leftover bare angle bracket" and the whole file is a false positive.
      */
     private static final Pattern MYBATIS_TAG = Pattern.compile(
             "</?(script|foreach|if|choose|when|otherwise|trim|where|set|bind|property)\\b[^>]*>",
@@ -67,14 +67,14 @@ class MapperSqlEscapingTest {
             String sql = matcher.group(2);
             int line = (int) source.substring(0, matcher.start()).chars().filter(c -> c == '\n').count() + 1;
             if (sql.contains("<script")) {
-                // 方向 2：剥掉所有 MyBatis 标签后仍有裸尖括号 → XML 解析期会炸
+                // Direction 2: bare angle brackets remain after stripping all MyBatis tags → XML parsing will blow up
                 String rest = MYBATIS_TAG.matcher(sql).replaceAll("");
                 if (rest.contains("<") || rest.contains(">")) {
                     violations.add(file + ":" + line + " 包了 <script> 但内部有未转义的尖括号："
                             + snippet(rest));
                 }
             } else if (XML_ENTITY.matcher(sql).find()) {
-                // 方向 1：转义了却没包 script → 实体被原样发给 PG，当成列名
+                // Direction 1: escaped but not wrapped in script → the entity reaches PG verbatim and is taken as a column name
                 violations.add(file + ":" + line + " 用了 &lt;/&gt; 却没有 <script> 包裹，"
                         + "实体不会被解码，PG 会把 lt 当列名");
             }
@@ -82,11 +82,11 @@ class MapperSqlEscapingTest {
     }
 
     /**
-     * 定位聚合根目录（含全部 agent-sphere-* 模块的 main 源码）。
+     * Locate the aggregate root (containing the main sources of every agent-sphere-* module).
      *
-     * <p>不能简单取 {@code user.dir/../..}：surefire 的 user.dir 是模块目录，
-     * 但从 IDE 或聚合根运行时 user.dir 又是上一层，深浅不一。改为向上找锚点 ——
-     * 第一个包含 {@code agent-sphere-common} 的目录即根。
+     * <p>Cannot simply use {@code user.dir/../..}: surefire's user.dir is the module directory,
+     * but when run from the IDE or the aggregate root user.dir is one level up, so the depth varies. Instead, walk up to an anchor —
+     * the first directory containing {@code agent-sphere-common} is the root.
      */
     private List<Path> sourceFiles() throws IOException {
         Path repoRoot = findRepoRoot();
@@ -94,9 +94,9 @@ class MapperSqlEscapingTest {
                 "定位不到 agent-sphere 源码根（user.dir=" + Paths.get("").toAbsolutePath() + "）。"
                         + "守卫测试必须真的扫到源码，不能静默跳过。");
 
-        // 深度无关地收集所有 src/main/java：子模块是嵌套的
+        // Collect every src/main/java depth-agnostically: sub-modules are nested
         //（agent-sphere/agent-sphere-instance/agent-sphere-instance-repository/src/main/java），
-        // 假设「模块是根目录直接子目录」会只扫到几个扁平模块，漏掉绝大多数 mapper 且不报错。
+        // Assuming "modules are direct children of the root" scans only a few flat modules, missing most mappers without any error.
         List<Path> javaRoots = new ArrayList<>();
         try (Stream<Path> tree = Files.walk(repoRoot)) {
             tree.filter(Files::isDirectory)
@@ -109,14 +109,14 @@ class MapperSqlEscapingTest {
         for (Path javaRoot : javaRoots) {
             collectJava(javaRoot, files);
         }
-        // 数量下限：真实约 600 个文件。扫不到这个量说明路径假设又错了，
-        // 而「只扫到几个文件」的守卫恰恰是这种 bug 的伪装成通过。
+        // Lower bound on count: the real tree has about 600 files. Scanning fewer means the path assumption is wrong again,
+        // and a guard that "only scans a few files" is exactly how such a bug masquerades as passing.
         assertTrue(files.size() >= 200,
                 "只扫到 " + files.size() + " 个源文件（预期 200+），路径假设可能有误，守卫形同虚设");
         return files;
     }
 
-    /** 从当前目录向上找含 {@code agent-sphere-common} 的那一层。 */
+    /** Walk up from the current directory to the level containing {@code agent-sphere-common}. */
     private Path findRepoRoot() {
         Path current = Paths.get("").toAbsolutePath();
         while (current != null) {

@@ -4,7 +4,7 @@ import type { SessionCleanupRun } from '@/services/agentSphere/api';
 
 interface Props {
   open: boolean;
-  /** 执行记录（含实时进度）；null 表示还没提交成功 */
+  /** Execution record (with live progress); null means no successful submission yet */
   run: SessionCleanupRun | null;
   submitting: boolean;
   onClose: () => void;
@@ -14,14 +14,14 @@ interface Props {
 const RUNNING = 'RUNNING';
 
 /**
- * 会话清理的执行面板。
+ * Session cleanup run panel.
  *
- * <p>一个面板承担两种模式，因为它们的数据源是同一个东西 —— 执行记录：
+ * <p>One panel serves two modes because they share the same data source — the execution record:
  * <ul>
- *   <li>RUNNING：进度条 + 已处理会话数 / 已清理行数 / 耗时（后端每批写一次，这里 1s 轮询）；</li>
- *   <li>预演终态：各表行数明细 + 底部「确认删除 N 个会话」；</li>
- *   <li>执行终态：各表行数明细 + 后端给的 VACUUM 建议；</li>
- *   <li>SKIPPED / FAILED：分别展示跳过原因与错误。</li>
+ *   <li>RUNNING: progress bar + processed sessions / deleted rows / elapsed time (the backend writes once per batch; polled every 1s here);</li>
+ *   <li>Dry-run terminal state: row counts per table + a bottom "confirm deletion of N sessions";</li>
+ *   <li>Real-run terminal state: row counts per table + the backend's VACUUM recommendation;</li>
+ *   <li>SKIPPED / FAILED: show the skip reason and error respectively.</li>
  * </ul>
  */
 export default function SessionCleanupRunPanel({
@@ -54,7 +54,10 @@ export default function SessionCleanupRunPanel({
   return (
     <Modal
       open={open}
-      title={t('pages.admin.settings.cleanup.modal.title', '会话清理')}
+      title={t(
+        'pages.admin.settings.cleanup.modal.title',
+        'Session Cleanup Report',
+      )}
       onCancel={onClose}
       maskClosable={false}
       footer={[
@@ -62,11 +65,11 @@ export default function SessionCleanupRunPanel({
           {running
             ? t(
                 'pages.admin.settings.cleanup.closeInBackground',
-                '后台继续执行',
+                'Runs in background',
               )
             : t('pages.cancel')}
         </Button>,
-        // 只有「预演已出结果、且确实有东西可删」才允许真删
+        // Only allow a real delete when the dry run has results and there is actually something to delete
         dryRun && !running ? (
           <Button
             key="confirm"
@@ -78,7 +81,7 @@ export default function SessionCleanupRunPanel({
           >
             {t(
               'pages.admin.settings.cleanup.confirm',
-              '确认删除 {count} 个会话',
+              'Delete {count} sessions',
               { count: run?.sessionCount ?? 0 },
             )}
           </Button>
@@ -92,17 +95,18 @@ export default function SessionCleanupRunPanel({
               <Progress
                 percent={percent}
                 status="active"
-                // 分母为 0 说明没有过期数据，进度条只会永远空转，直接说明原因
+                // A zero denominator means there is no expired data, so the bar would spin
+                // forever; state the reason directly instead
                 format={() =>
                   total > 0
                     ? `${percent ?? 0}%`
-                    : t('pages.admin.settings.cleanup.noData', '统计中…')
+                    : t('pages.admin.settings.cleanup.noData', 'Counting…')
                 }
               />
               <div style={{ marginTop: 8, color: 'rgba(0,0,0,0.45)' }}>
                 {t(
                   'pages.admin.settings.cleanup.progress.hint',
-                  '已处理 {done} / {total} 个会话 · 已清理 {rows} 行 · 已用 {elapsed} ms',
+                  'Processed {done} / {total} sessions · {rows} rows deleted · {elapsed} ms',
                   {
                     done: processed,
                     total,
@@ -121,7 +125,10 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
               message={
                 run.skipReason ||
-                t('pages.admin.settings.cleanup.skipped', '本次未执行')
+                t(
+                  'pages.admin.settings.cleanup.skipped',
+                  'Nothing was executed',
+                )
               }
             />
           )}
@@ -134,7 +141,7 @@ export default function SessionCleanupRunPanel({
                 run.errorMessage ||
                 t(
                   'pages.admin.settings.cleanup.failed',
-                  '执行失败，请查看后端日志',
+                  'Cleanup failed, check backend logs',
                 )
               }
             />
@@ -146,7 +153,7 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
               message={t(
                 'pages.admin.settings.cleanup.staleHint',
-                '该记录长时间停在运行中，进程可能已中断，请查看后端日志确认。',
+                'This record has been running for too long; the process may have died. Check backend logs.',
               )}
             />
           )}
@@ -158,7 +165,7 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
               message={t(
                 'pages.admin.settings.cleanup.alert.dryRun',
-                '这是预演结果，尚未删除任何数据。',
+                'Preview only — nothing has been deleted.',
               )}
             />
           )}
@@ -169,7 +176,7 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
               message={t(
                 'pages.admin.settings.cleanup.alert.irreversible',
-                '清理为不可逆硬删：关联会话、运行记录、交互正文、截图附件均已永久删除，无法恢复。',
+                'Cleanup is an irreversible hard delete: sessions, runs, interaction payloads and screenshots are permanently removed.',
               )}
             />
           )}
@@ -180,7 +187,7 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
               message={t(
                 'pages.admin.settings.cleanup.alert.activeBlocked',
-                '另有 {count} 个会话因仍有进行中的运行或任务被保护，本次未清理。若这个数量长期偏大，说明保留天数相对业务节奏太激进。',
+                '{count} sessions were skipped because runs or tasks are still active. A persistently large number means the retention window is too aggressive.',
                 { count: run.skippedActiveSessions },
               )}
             />
@@ -192,7 +199,7 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
               message={t(
                 'pages.admin.settings.cleanup.alert.truncated',
-                '本轮已达批次上限，仍有数据未清理，可稍后再次执行。',
+                'Batch limit reached; some data is still pending. Run again later.',
               )}
             />
           )}
@@ -205,24 +212,30 @@ export default function SessionCleanupRunPanel({
               style={{ marginBottom: 16 }}
             >
               <Descriptions.Item
-                label={t('pages.admin.settings.cleanup.sessions', '会话数')}
+                label={t('pages.admin.settings.cleanup.sessions', 'Sessions')}
               >
                 <Tag color={(run.sessionCount ?? 0) > 0 ? 'red' : 'default'}>
                   {run.sessionCount ?? 0}
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item
-                label={t('pages.admin.settings.cleanup.rows', '删除行数')}
+                label={t('pages.admin.settings.cleanup.rows', 'Rows deleted')}
               >
                 {run.totalRows ?? 0}
               </Descriptions.Item>
               <Descriptions.Item
-                label={t('pages.admin.settings.cleanup.cutoff', '过期判定线')}
+                label={t(
+                  'pages.admin.settings.cleanup.cutoff',
+                  'Expiry cutoff',
+                )}
               >
                 {run.cutoff || '-'}
               </Descriptions.Item>
               <Descriptions.Item
-                label={t('pages.admin.settings.cleanup.retention', '保留天数')}
+                label={t(
+                  'pages.admin.settings.cleanup.retention',
+                  'Retention (days)',
+                )}
               >
                 {run.retentionDays ?? '-'} / {run.fileRetentionDays ?? '-'}
               </Descriptions.Item>
@@ -238,11 +251,11 @@ export default function SessionCleanupRunPanel({
               scroll={{ y: 240 }}
               columns={[
                 {
-                  title: t('pages.admin.settings.cleanup.col.table', '数据表'),
+                  title: t('pages.admin.settings.cleanup.col.table', 'Table'),
                   dataIndex: 'table',
                 },
                 {
-                  title: t('pages.admin.settings.cleanup.col.rows', '行数'),
+                  title: t('pages.admin.settings.cleanup.col.rows', 'Rows'),
                   dataIndex: 'rows',
                   width: 120,
                   align: 'right',
@@ -258,7 +271,7 @@ export default function SessionCleanupRunPanel({
               style={{ marginTop: 16 }}
               message={t(
                 'pages.admin.settings.cleanup.vacuumHint',
-                '磁盘处置建议',
+                'Disk reclaim hint',
               )}
               description={run.remark}
             />
@@ -270,7 +283,7 @@ export default function SessionCleanupRunPanel({
           showIcon
           message={t(
             'pages.admin.settings.cleanup.submitting',
-            '正在提交清理任务…',
+            'Submitting cleanup task…',
           )}
         />
       )}

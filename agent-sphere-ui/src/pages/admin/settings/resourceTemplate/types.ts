@@ -1,4 +1,4 @@
-export type TemplateItemType =
+﻿export type TemplateItemType =
   | 'model_provider'
   | 'api_key'
   | 'model_route'
@@ -24,7 +24,7 @@ export interface TemplateItem {
   [key: string]: unknown;
 }
 
-/** 类型在模板项中的“主名称”字段（列表展示用） */
+/** The type's "primary name" field within a template item (for list display) */
 export const TYPE_NAME_FIELD: Record<string, string> = {
   model_provider: 'name',
   api_key: 'alias',
@@ -68,7 +68,7 @@ export interface TypeSchema {
   fields: FieldDef[];
 }
 
-/** 各类型 descriptor 表单结构（字段布局复刻现有实体新增表单，值写回模板 descriptor） */
+/** Descriptor form schema per type (field layout mirrors the existing entity create form; values are written back into the template descriptor) */
 export const TYPE_SCHEMAS: Record<TemplateItemType, TypeSchema> = {
   model_provider: {
     nameField: 'name',
@@ -173,7 +173,7 @@ export const TYPE_SCHEMAS: Record<TemplateItemType, TypeSchema> = {
       },
       {
         name: 'businessType',
-        label: { id: 'pages.instances.businessType', def: '业务域' },
+        label: { id: 'pages.instances.businessType', def: 'Business Type' },
         widget: 'input',
         maxLength: 64,
         placeholder: 'sourcing',
@@ -182,7 +182,7 @@ export const TYPE_SCHEMAS: Record<TemplateItemType, TypeSchema> = {
         name: 'route',
         label: {
           id: 'pages.admin.settings.template.label.route',
-          def: '模型路由',
+          def: 'Model Route',
         },
         widget: 'route-select',
       },
@@ -265,7 +265,7 @@ export const TYPE_SCHEMAS: Record<TemplateItemType, TypeSchema> = {
       },
       {
         name: 'businessType',
-        label: { id: 'pages.instances.businessType', def: '业务域' },
+        label: { id: 'pages.instances.businessType', def: 'Business Type' },
         widget: 'input',
         maxLength: 64,
         placeholder: 'sourcing',
@@ -274,13 +274,13 @@ export const TYPE_SCHEMAS: Record<TemplateItemType, TypeSchema> = {
         name: 'route',
         label: {
           id: 'pages.admin.settings.template.label.route',
-          def: '模型路由',
+          def: 'Model Route',
         },
         widget: 'route-select',
       },
       {
         name: 'config',
-        label: { id: 'pages.instances.config', def: '高级配置 (JSON)' },
+        label: { id: 'pages.instances.config', def: 'Advanced Config (JSON)' },
         widget: 'textarea',
         rows: 4,
         json: true,
@@ -385,26 +385,29 @@ export const TYPE_SCHEMAS: Record<TemplateItemType, TypeSchema> = {
   },
 };
 
-/** 类型中文展示标签（i18n key, 带默认文案） */
+/** Display labels per type (i18n key with default text) */
 export const TYPE_LABELS: Record<string, LabelSpec> = {
   model_provider: {
     id: 'pages.admin.settings.template.type.modelProvider',
-    def: '模型供应商',
+    def: 'Model Provider',
   },
   api_key: { id: 'pages.admin.settings.template.type.apiKey', def: 'API Key' },
   model_route: {
     id: 'pages.admin.settings.template.type.modelRoute',
-    def: '模型路由',
+    def: 'Model Route',
   },
   completions: {
     id: 'pages.admin.settings.template.type.completions',
-    def: 'Completions 能力',
+    def: 'Completions Capability',
   },
   instance: {
     id: 'pages.admin.settings.template.type.instance',
-    def: 'Agent 实例',
+    def: 'Agent Instance',
   },
-  mcp: { id: 'pages.admin.settings.template.type.mcp', def: 'MCP 服务' },
-  skill: { id: 'pages.admin.settings.template.type.skill', def: '技能' },
-  document: { id: 'pages.admin.settings.template.type.document', def: '文档' },
+  mcp: { id: 'pages.admin.settings.template.type.mcp', def: 'MCP Server' },
+  skill: { id: 'pages.admin.settings.template.type.skill', def: 'Skill' },
+  document: {
+    id: 'pages.admin.settings.template.type.document',
+    def: 'Document',
+  },
 };

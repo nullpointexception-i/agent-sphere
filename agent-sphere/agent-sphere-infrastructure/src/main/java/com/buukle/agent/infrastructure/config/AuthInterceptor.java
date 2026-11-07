@@ -1,6 +1,7 @@
 package com.buukle.agent.infrastructure.config;
 
-import com.buukle.agent.admin.spi.PermissionSpi;
+
+import com.buukle.agent.common.constant.HttpHeaders;import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfaceResolver;
@@ -44,26 +45,28 @@ public class AuthInterceptor implements HandlerInterceptor {
         String path = request.getRequestURI();
         if (SKIP_PATHS.stream().anyMatch(path::startsWith)) return true;
 
-        // 外部能力开放接口（/api/v1/api/*）：外部调用方直连免 token。
-        // 仅放行，不设置用户身份：会话/任务归属由业务层按资源创建者（如 task 的 instance 创建者）显式初始化，
-        // 避免外部调用污染为统一 service 用户而无法投递到真实用户的连接。
-        // TODO 接口验签（后续版本）：校验来源签名后放行，当前阶段整体豁免。
+        // External capability open API (/api/v1/api/*): external callers connect directly without a token.
+        // Allow only, do not set a user identity: session/task ownership is explicitly initialized by the
+        // business layer from the resource creator (e.g. the instance creator for a task), so external calls
+        // are not polluted into a single service user and can still be delivered to the real user's connection.
+        // TODO API signature verification (later version): verify the source signature before allowing; for now waived entirely.
         if (path.startsWith(EXTERNAL_API_PREFIX)) {
             return true;
         }
 
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (authHeader == null || !authHeader.startsWith(HttpHeaders.BEARER_PREFIX)) {
             writeUnauthorized(response);
             return false;
         }
 
-        String token = authHeader.substring(7);
+        String token = authHeader.substring(HttpHeaders.BEARER_PREFIX.length());
         String cacheKey = TokenCacheKeys.USER_TOKEN_PREFIX + TokenHasher.sha256(token);
         AgentUser user = cacheService.get(cacheKey);
         if (user == null) {
-            // 缓存未命中才回源：token 校验 + 用户查询。会话表支持一个用户多端并存，
-            // 因此这里不再有「后登录覆盖先登录」的问题。
+            // Only fall back to the source on a cache miss: token validation + user lookup. The session
+            // table supports one user across multiple clients, so there is no longer a
+            // "later login overrides earlier login" problem here.
             Long userId = userTokenSpi.validate(token);
             if (userId != null) {
                 user = userMapper.selectById(userId);
@@ -93,8 +96,9 @@ public class AuthInterceptor implements HandlerInterceptor {
                 TenantUtil.start(user.getUsername());
             }
         }
-        // 来源端（主站 / widget）必须在**鉴权通过之后**才设置：preHandle 提前 return false（401）时
-        // Spring 不会调用 afterCompletion，在此之前的赋值会残留在池化线程上串给下一个请求。
+        // The client surface (console / widget) must be set **only after authentication passes**: when
+        // preHandle returns false early (401), Spring does not call afterCompletion, so any assignment made
+        // before that leaks on the pooled thread into the next request.
         SessionSurfaceHolder.set(
                 SessionSurfaceResolver.fromHeader(request.getHeader(SessionSurfaceHolder.HEADER)));
         return true;
@@ -111,7 +115,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         TenantUtil.stop();
         TenantContext.clear();
         AuthContext.clear();
-        // Tomcat 线程池会复用线程：不清理会把本请求的来源端串给下一个请求
+        // The Tomcat thread pool reuses threads: not clearing leaks this request's client surface into the next one
         SessionSurfaceHolder.clear();
     }
 }

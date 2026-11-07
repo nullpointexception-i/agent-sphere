@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * fallback 只应对可重试错误生效；400/401/403/404/413/422 直接失败，
- * 避免备用模型的二次错误掩盖主因。
+ * fallback must only apply to retryable errors; 400/401/403/404/413/422 fail immediately,
+ * so a secondary error from the fallback model does not mask the root cause.
  */
 class FallbackRouteExecutorTest {
 

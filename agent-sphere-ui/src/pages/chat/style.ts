@@ -98,7 +98,8 @@ export const useStyles = createStyles(({ css, token }) => ({
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    /* 关闭浏览器滚动锚定：长消息/图片插入时会自动改 scrollTop，误判用户离开底部 */
+    /* Disable browser scroll anchoring: inserting long messages/images auto-adjusts scrollTop
+       and would misjudge the user as leaving the bottom */
     overflow-anchor: none;
     padding: ${token.paddingMD}px;
     display: flex;
@@ -163,7 +164,7 @@ export const useStyles = createStyles(({ css, token }) => ({
     display: inline-block;
   `,
 
-  // 助手行 RUNNING 状态：来回晃动的小球（完成后该位不渲染，直接消失）
+  // Assistant row RUNNING state: a bouncing dot (not rendered, simply gone, once done)
   runningDot: css`
     width: 8px;
     height: 8px;
@@ -184,7 +185,7 @@ export const useStyles = createStyles(({ css, token }) => ({
     }
   `,
 
-  // 消息卡悬浮显示复制按钮：默认隐藏，hover 时显现
+  // Show the copy button on message card hover: hidden by default, revealed on hover
   copyHover: css`
     .copy-btn {
       opacity: 0;

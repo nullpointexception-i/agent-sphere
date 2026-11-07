@@ -3,9 +3,9 @@ package com.buukle.agent.runtime.kernel.port.vo;
 public enum RunStatus implements EventType {
     PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, AWAITING_USER,
     /**
-     * 等待时间到（wait 工具挂起）。与 {@code AWAITING_USER} 分开是因为前者等人、
-     * 后者等时钟：共用一个状态会让前端把「等 90 秒」显示成「等你回答」，
-     * 也会让输入框提前解锁。
+     * Wait timer elapsed (wait tool suspension). It is kept separate from {@code AWAITING_USER} because the former waits for a person
+     * while the latter waits for the clock: sharing one status would make the frontend show "waiting 90 seconds" as "waiting for your answer",
+     * and would also unlock the input box early.
      */
     WAITING;
 

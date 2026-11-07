@@ -11,14 +11,14 @@ public class AgentCompactRecord {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long sessionId;
-    /** NULL = session 级压缩；非空 = 当前 run 的 run-local 压缩。 */
+    /** NULL = session-level compaction; non-null = run-local compaction for the current run. */
     private Long runId;
     private String status;
     private String summaryBefore;
     private String summaryAfter;
     private Long tokenCount;
     private Long compactedUptoRunId;
-    /** run-local 压缩保留的尾部消息 JSON（不带 reasoning；图片 data URL 已剥离）。 */
+    /** Tail messages JSON retained by run-local compaction (no reasoning; image data URLs already stripped). */
     private String tailJson;
     private String errorMessage;
     @TableLogic

@@ -3,14 +3,15 @@ package com.buukle.agent.common.constant;
 import java.util.List;
 
 /**
- * 统一思考强度档位。
+ * Unified reasoning-effort levels.
  *
- * <p>各厂商底层字段不同（reasoning_effort / thinking / enable_thinking），
- * 统一使用这里的档位名对外表达；具体映射在 ProviderStrategy 中完成。
+ * <p>Each provider uses a different underlying field (reasoning_effort / thinking /
+ * enable_thinking); these level names are the single external vocabulary, and the actual mapping
+ * happens in ProviderStrategy.
  */
 public final class ReasoningEffort {
 
-    /** 关闭思考（不是强度档位，前端单独表达）。 */
+    /** Reasoning off (not an effort level; expressed separately by the UI). */
     public static final String NONE = "none";
     public static final String MINIMAL = "minimal";
     public static final String LOW = "low";
@@ -19,11 +20,11 @@ public final class ReasoningEffort {
     public static final String XHIGH = "xhigh";
     public static final String MAX = "max";
 
-    /** 从低到高；用于“最高可行档”排序。 */
+    /** Low to high; used to rank the "highest feasible level". */
     public static final List<String> ORDER = List.of(
             NONE, MINIMAL, LOW, MEDIUM, HIGH, XHIGH, MAX);
 
-    /** 厂商未声明档位时的兜底范围。 */
+    /** Fallback range when a provider declares no levels. */
     public static final List<String> DEFAULT_LEVELS = List.of(LOW, MEDIUM, HIGH, MAX);
 
     private ReasoningEffort() {

@@ -285,7 +285,7 @@ describe('toolRenderers', () => {
         docSummaryZh({
           args: JSON.stringify({ action: 'create', title: 'Hello' }),
         }),
-      ).toBe('创建文档 Hello');
+      ).toBe('create document Hello');
     });
   });
 

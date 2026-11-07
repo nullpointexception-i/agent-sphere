@@ -4,15 +4,16 @@ import java.io.Serializable;
 import java.time.Instant;
 
 /**
- * 一条等待记录已创建。
+ * A wait record has been created.
  *
- * <p>由 {@code PendingWaitService#createPending} 用 Spring 本地事件发布，
- * 由 orchestration 模块的 {@code PendingWaitWakeScheduler} 监听并注册内存定时器。
+ * <p>Published as a Spring local event by {@code PendingWaitService#createPending} and listened to by
+ * the orchestration module's {@code PendingWaitWakeScheduler}, which registers the in-memory timer.
  *
- * <p>之所以走事件而不是让 SPI 直接调唤醒逻辑：kernel（ToolExecutor）只能依赖
- * instance-spi，而真正恢复 run 的 {@code ChatRuntimeService#resumeFromWait} 在
- * orchestration —— 依赖方向是 orchestration → kernel，反向调用会造成环。
- * Spring 本地事件正是这个仓库既有的跨模块解法（RuntimeEventVO 同理）。
+ * <p>Why an event instead of letting the SPI call the wake logic directly: the kernel (ToolExecutor)
+ * may only depend on instance-spi, while {@code ChatRuntimeService#resumeFromWait}, which actually
+ * resumes the run, lives in orchestration — the dependency direction is orchestration → kernel, and a
+ * reverse call would create a cycle. Spring local events are the existing cross-module solution in
+ * this repository (same as RuntimeEventVO).
  */
 public record PendingWaitCreatedEvent(Long waitId, Long sessionId, Long runId, Instant wakeAt) implements Serializable {
 }

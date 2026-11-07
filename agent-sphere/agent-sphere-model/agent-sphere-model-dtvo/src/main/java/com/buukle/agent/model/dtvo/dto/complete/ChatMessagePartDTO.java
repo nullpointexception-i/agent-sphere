@@ -8,8 +8,9 @@ import lombok.experimental.Accessors;
 import java.io.Serializable;
 
 /**
- * OpenAI 兼容消息 content part：文本/图片块。
- * 图片块 image_url.url 为 data URL（base64 内联），各家（OpenAI/DeepSeek/智谱）格式一致。
+ * OpenAI-compatible message content part: a text or image block.
+ * For image blocks, image_url.url is a data URL (inline base64); the format is the same across
+ * providers (OpenAI/DeepSeek/Zhipu).
  */
 @Data
 @Accessors(chain = true)

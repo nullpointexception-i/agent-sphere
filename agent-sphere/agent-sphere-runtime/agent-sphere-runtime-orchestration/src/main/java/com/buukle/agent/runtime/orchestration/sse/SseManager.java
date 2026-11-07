@@ -15,26 +15,26 @@ import java.util.UUID;
 import java.util.concurrent.*;
 
 /**
- * 本地 SSE emitter 注册表 + 投递。
+ * Local SSE emitter registry + delivery.
  *
- * 多副本下仅持有**本副本**的连接：事件由 Redis 事件总线发布 → 各副本 relay 调
- * {@link #sendBySession}/{@link #sendByUser} 投本地 emitter；缓存/回放由 {@link SseEventCache}
- * 承担（origin 写、注册时 flush）。
+ * Under multiple replicas it holds only **this replica's** connections: events are published on the Redis event bus → each replica's relay
+ * calls {@link #sendBySession}/{@link #sendByUser} to deliver to local emitters; caching/replay is handled by {@link SseEventCache}
+ * (origin writes, flush on registration).
  */
 @Slf4j
 @Component
 public class SseManager {
 
     private final ConcurrentHashMap<Long, List<SseEmitter>> sessionEmitters = new ConcurrentHashMap<>();
-    /** username → connectionId → 连接（同一用户多台浏览器时各占一条）。 */
+    /** username → connectionId → connection (one entry per browser when a user has several). */
     private final ConcurrentHashMap<String, Map<String, UserConnection>> userConnections = new ConcurrentHashMap<>();
     private final SseEventCache sseEventCache;
     private final UserConnectionRegistry userConnectionRegistry;
     private final ScheduledExecutorService heartbeats;
-    /** 缓存回放专用线程：回归放不阻塞连接建立（避免 register 因 Redis 慢卡住 → 前端连接超时）。 */
+    /** Dedicated cache-replay thread: replay does not block connection setup (otherwise a slow Redis would stall register → frontend connection timeout). */
     private final ExecutorService cacheFlushes;
 
-    /** 一条用户级 SSE 连接（含设备信息，供定向投递与登记表使用）。 */
+    /** One user-level SSE connection (with device info, used for targeted delivery and the registry). */
     public record UserConnection(String connectionId, String username, String deviceId, String deviceName,
                                  String source, long connectedAt, SseEmitter emitter) {
     }
@@ -80,7 +80,7 @@ public class SseManager {
                 for (UserConnection connection : new ArrayList<>(entry.getValue().values())) {
                     try {
                         connection.emitter().send(SseEmitter.event().name("heartbeat").data("ping"));
-                        // 顺带续期并重写登记表：Redis 重启/被淘汰后靠这里自愈（≤1 个心跳周期）
+                        // Also renew and rewrite the registry entry: after a Redis restart/eviction this self-heals within one heartbeat cycle
                         userConnectionRegistry.touch(username, new UserConnectionRegistry.ConnectionView(
                                 connection.connectionId(), connection.deviceId(), connection.deviceName(),
                                 connection.source(), connection.connectedAt(), System.currentTimeMillis()));
@@ -105,7 +105,7 @@ public class SseManager {
         }
     }
 
-    /** 缓存回放 fire-and-forget：失败不影响连接建立，只留日志（Redis 抖动降级为空回放）。 */
+    /** Cache replay is fire-and-forget: failure does not affect connection setup, only a log line (Redis flakiness degrades to empty replay). */
     private void asyncFlush(Runnable task) {
         try {
             cacheFlushes.execute(() -> {
@@ -129,12 +129,12 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
-        // 跨副本重连：回放 Redis 缓存中该 session 的近端事件（异步，不阻塞连接建立）
+        // Cross-replica reconnect: replay this session's recent events from the Redis cache (async, does not block connection setup)
         asyncFlush(() -> sseEventCache.flushSessionEvents(sessionId, emitter));
         return emitter;
     }
 
-    /** 本副本 session 级投递（relay 调用；origin 已在发布前写缓存）。 */
+    /** Session-level delivery on this replica (called by relay; origin already wrote the cache before publishing). */
     public void sendBySession(Long sessionId, Object event) {
         List<SseEmitter> emitters = sessionEmitters.get(sessionId);
         if (emitters == null || emitters.isEmpty()) {
@@ -164,14 +164,14 @@ public class SseManager {
         }
     }
 
-    // ---------- 用户级连接（task 指令投递，不依赖 session） ----------
+    // ---------- User-level connections (task command delivery, independent of any session) ----------
 
     /**
-     * 注册用户级 SSE 连接。同一用户可有多条（多台浏览器），
-     * 由 {@link UserConnectionRegistry} 统一登记，投递时按设备定向。
+     * Register a user-level SSE connection. A user may have several (multiple browsers);
+     * they are registered uniformly by {@link UserConnectionRegistry} and delivery is device-targeted.
      */
     public SseEmitter registerUser(String username, String deviceId, String deviceName, String source) {
-        // 同一设备重连：先关掉本副本上它的旧连接，避免旧连接的“幽灵心跳”把登记表又写回来
+        // Same device reconnecting: close its old connection on this replica first, so the old connection's "ghost heartbeat" cannot write the registry entry back
         Map<String, UserConnection> existing = userConnections.get(username);
         if (existing != null && deviceId != null && !deviceId.isBlank()) {
             for (UserConnection old : new ArrayList<>(existing.values())) {
@@ -179,7 +179,7 @@ public class SseManager {
                     try {
                         old.emitter().complete();
                     } catch (Exception ignored) {
-                        // 已经断了就忽略
+                        // Already disconnected; ignore
                     }
                     removeUserConnection(username, old.connectionId());
                 }
@@ -199,15 +199,15 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
-        // 用户级缓存回放（异步，不阻塞连接建立）
+        // User-level cache replay (async, does not block connection setup)
         asyncFlush(() -> sseEventCache.flushUserEvents(username, emitter));
         return emitter;
     }
 
     /**
-     * 投递给指定的用户级连接。
+     * Deliver to the specified user-level connection.
      *
-     * @return 本副本是否持有该连接并投递成功
+     * @return whether this replica holds the connection and delivered successfully
      */
     public boolean sendToConnection(String username, String connectionId, Object event) {
         if (username == null || connectionId == null) {

@@ -11,7 +11,7 @@ import java.net.http.HttpTimeoutException;
 import java.util.Random;
 
 /**
- * 获取重试策略工具类 - 实现指数退避的智能重试机制
+ * Fetch retry policy utility - implements an intelligent exponential-backoff retry mechanism
  */
 @Slf4j
 public class FetchRetryPolicy {
@@ -22,7 +22,7 @@ public class FetchRetryPolicy {
     private final Random random;
 
     /**
-     * 通过配置对象初始化
+     * Initializes from the configuration object
      */
     public FetchRetryPolicy(AgentRuntimeProperties.ToolConfig.WebFetchAdvancedConfig config) {
         this.maxRetries = Math.max(1, config.getMaxRetries());
@@ -32,51 +32,51 @@ public class FetchRetryPolicy {
     }
 
     /**
-     * 检查是否应该重试
+     * Checks whether a retry should happen
      *
-     * @param attempt   当前尝试次数（从 0 开始）
-     * @param exception 发生的异常
-     * @return 如果应该重试返回 true
+     * @param attempt   current attempt number (starting at 0)
+     * @param exception the exception that occurred
+     * @return true when a retry should happen
      */
     public boolean shouldRetry(int attempt, Exception exception) {
-        // 已经达到最大重试次数
+        // Maximum retry count already reached
         if (attempt >= maxRetries) {
             log.debug("Max retries reached: {}", maxRetries);
             return false;
         }
 
-        // 检查异常是否可重试
+        // Check whether the exception is retryable
         return isRetryable(exception);
     }
 
     /**
-     * 检查异常是否可重试
+     * Checks whether the exception is retryable
      */
     public boolean isRetryable(Exception exception) {
         if (exception == null) {
             return false;
         }
 
-        // 超时异常：可重试
+        // Timeout exceptions: retryable
         if (exception instanceof HttpTimeoutException ||
                 exception instanceof SocketTimeoutException) {
             log.debug("Timeout exception detected, will retry");
             return true;
         }
 
-        // 连接异常：可重试
+        // Connection exceptions: retryable
         if (exception instanceof ConnectException ||
                 exception instanceof SocketException) {
             log.debug("Connection exception detected, will retry");
             return true;
         }
 
-        // 网络相关的 IOException：可重试
+        // Network-related IOException: retryable
         if (exception instanceof IOException) {
             String message = exception.getMessage();
             if (message != null) {
                 message = message.toLowerCase();
-                // 检查常见的网络错误信息
+                // Check for common network error messages
                 if (message.contains("connection") ||
                         message.contains("timeout") ||
                         message.contains("reset") ||
@@ -87,32 +87,32 @@ public class FetchRetryPolicy {
             }
         }
 
-        // 其他异常不重试
+        // Other exceptions are not retried
         log.debug("Exception is not retryable: {}", exception.getClass().getName());
         return false;
     }
 
     /**
-     * 计算退避延迟时间（毫秒）
-     * 公式：initialDelayMs * (backoffMultiplier ^ attempt)
+     * Computes the backoff delay in milliseconds
+     * Formula: initialDelayMs * (backoffMultiplier ^ attempt)
      *
-     * @param attempt 当前尝试次数（从 0 开始）
-     * @return 退避延迟时间（毫秒）
+     * @param attempt current attempt number (starting at 0)
+     * @return backoff delay in milliseconds
      */
     public long calculateBackoffDelayMs(int attempt) {
         long delay = initialDelayMs;
         for (int i = 0; i < attempt; i++) {
             delay *= backoffMultiplier;
         }
-        // 加入 0~1s 的随机抖动，避免请求时序被检测
+        // Add 0~1s of random jitter so request timing cannot be fingerprinted
         long jitter = random.nextLong(1001);
         return delay + jitter;
     }
 
     /**
-     * 执行退避等待
+     * Performs the backoff wait
      *
-     * @param attempt 当前尝试次数（从 0 开始）
+     * @param attempt current attempt number (starting at 0)
      */
     public void waitBeforeRetry(int attempt) {
         long delayMs = calculateBackoffDelayMs(attempt);
@@ -126,14 +126,14 @@ public class FetchRetryPolicy {
     }
 
     /**
-     * 获取最大重试次数
+     * Returns the maximum retry count
      */
     public int getMaxRetries() {
         return maxRetries;
     }
 
     /**
-     * 创建建议的日志消息
+     * Builds the suggested log message
      */
     public String getRetryLogMessage(int attempt, Exception exception) {
         long delay = calculateBackoffDelayMs(attempt);
@@ -142,7 +142,7 @@ public class FetchRetryPolicy {
     }
 
     /**
-     * 创建最大重试次数超过时的日志消息
+     * Builds the log message used when the maximum retry count is exceeded
      */
     public String getMaxRetriesExceededMessage(Exception lastException) {
         return String.format("Max retries (%d) exceeded. Last error: %s",

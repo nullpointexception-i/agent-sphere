@@ -32,7 +32,7 @@ import java.util.List;
 public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, CapabilitySkill> implements CapabilitySkillService {
     private final CapabilitySkillConverter capabilitySkillConverter;
 
-    /** 自动更新同步来源内容时使用的操作人（后台任务无用户上下文）。 */
+    /** Operator used when auto-update syncs origin content (background tasks have no user context). */
     private static final String AUTO_UPDATE_OPERATOR = "skill-auto-update";
 
     @Override
@@ -46,7 +46,7 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         CapabilitySkill skill = capabilitySkillConverter.toDO(dto);
         skill.setVersion(1);
         if (createdBy != null && !createdBy.isBlank()) {
-            // 显式指定创建人：MetaObjectHandler 的 fillStrategy 不会覆盖非空值
+            // Explicit creator: MetaObjectHandler's fillStrategy does not overwrite non-null values
             skill.setCreatedBy(createdBy);
             skill.setUpdatedBy(createdBy);
         }
@@ -76,12 +76,12 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         requireOwnership(existing);
         CapabilitySkill skill = capabilitySkillConverter.toDO(dto);
         skill.setId(id);
-        // 保留原状态：更新内容不应把 DISABLED 重置为 ENABLED
+        // Preserve the existing status: updating content must not reset DISABLED back to ENABLED
         skill.setStatus(existing.getStatus());
-        // 内容更新视为新版本：源技能的已安装副本据此对比 origin_version 触发自动更新
+        // A content update counts as a new version: installed copies compare origin_version against it to trigger auto-update
         skill.setVersion(existing.getVersion() != null ? existing.getVersion() + 1 : 1);
         if (updatedBy != null && !updatedBy.isBlank()) {
-            // 显式指定更新人：MetaObjectHandler 的 fillStrategy 不会覆盖非空值
+            // Explicit updater: MetaObjectHandler's fillStrategy does not overwrite non-null values
             skill.setUpdatedBy(updatedBy);
         }
         updateById(skill);
@@ -186,7 +186,8 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
     @Override
     public SkillVO installSkill(Long sourceId, String newName) {
         String operator = AuthContext.getUsername();
-        // 提权读源（绕过行级隔离），再手动校验可见性；读完恢复原租户
+        // Privileged read of the source (bypasses row-level isolation), then validate visibility
+        // manually; restore the original tenant afterwards
         String savedTenant = TenantUtil.get();
         CapabilitySkill source;
         try {
@@ -217,7 +218,7 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         copy.setVersion(1);
         copy.setOriginVersion(source.getVersion() != null ? source.getVersion() : 1);
         copy.setAutoUpdate(false);
-        // 装完就能看到「来自源头 vN / fork 于此刻」，而不是等第一次同步才有值
+        // Show "from origin vN / forked at this moment" immediately after install, instead of waiting for the first sync
         copy.setSyncedAt(LocalDateTime.now());
         copy.setSyncedFromVersion(source.getVersion() != null ? source.getVersion() : 1);
         copy.setCreatedBy(operator);
@@ -230,8 +231,10 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
 
     @Override
     public IPage<SkillVO> pageHubSkills(int page, int size, String keyword) {
-        // hub = 所有用户（含自己）的公开技能：跨用户公开列表，不受行级归属过滤收窄。
-        // WHERE 显式引用 created_by（恒真条件），DataPermissionInterceptor 会整体跳过改写，勿删条件。
+        // hub = public skills of all users (including the caller): a cross-user public list that is
+        // not narrowed by row-level ownership filtering.
+        // The WHERE clause references created_by explicitly (an always-true condition) so
+        // DataPermissionInterceptor skips rewriting it entirely - do not remove the condition.
         com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<CapabilitySkill> qw =
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
         qw.like(keyword != null && !keyword.isBlank(), "name", keyword);
@@ -250,8 +253,8 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         }
         requireOwnership(skill);
         if (skill.getOriginSkillId() == null) {
-            // 只有已安装（fork）副本才有源可跟随；原生技能开启自动更新无意义
-            throw new BizException(CapabilitySkillErrorCode.SKILL_FORBIDDEN, "原生技能不支持自动更新");
+            // Only installed (forked) copies have an origin to follow; enabling auto-update on an original skill is meaningless
+            throw new BizException(CapabilitySkillErrorCode.SKILL_FORBIDDEN, "Original skills do not support auto-update");
         }
         skill.setAutoUpdate(enabled);
         updateById(skill);
@@ -262,7 +265,7 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
     public SkillSyncOutcome syncWithOutcome(CapabilitySkill copy) {
         CapabilitySkill source = getById(copy.getOriginSkillId());
         if (source == null) {
-            // 源被删：副本永远停在旧内容，且没有任何告警 —— 靠这个返回值才会出现在执行记录里
+            // Origin deleted: the copy stays on old content with no alert at all - only this return value surfaces it in the execution record
             return SkillSyncOutcome.SOURCE_GONE;
         }
         if (!SkillVisibilityEnum.PUBLIC.equals(source.getVisibility())) {
@@ -273,9 +276,11 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         if (sourceVersion <= originVersion) {
             return SkillSyncOutcome.VERSION_NOT_AHEAD;
         }
-        // 条件更新：仅当 origin_version 未被其它副本抢先推进时才覆盖，保证多副本幂等。
-        // 同步成功同时写 synced_at / synced_from_version 两个展示快照 —— 它们与 origin_version
-        // 取值始终一致，但 origin_version 一旦条件更新失败就会与界面显示脱节。
+        // Conditional update: only overwrite when origin_version has not already been advanced by
+        // another copy, keeping multiple copies idempotent.
+        // A successful sync also writes the synced_at / synced_from_version display snapshots -
+        // they always match origin_version in value, but once the conditional update fails,
+        // origin_version desyncs from what the UI shows.
         boolean updated = lambdaUpdate()
                 .eq(CapabilitySkill::getId, copy.getId())
                 .eq(CapabilitySkill::getOriginVersion, copy.getOriginVersion())
@@ -295,7 +300,7 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
         return syncWithOutcome(copy) == SkillSyncOutcome.UPDATED;
     }
 
-    /** 同名自动加后缀（hub 安装友好）；上限防极端循环。 */
+    /** Appends a suffix automatically when the name collides (friendlier hub installs); the cap guards against extreme loops. */
     private String resolveCopyName(String base, String operator) {
         String name = base.length() > 56 ? base.substring(0, 56) : base;
         if (!existsByName(name, operator)) {
@@ -310,33 +315,34 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
                 return candidate;
             }
         }
-        throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID, "重名过多，换个名字再安装");
+        throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID, "Too many name collisions; choose another name and install again");
     }
 
     private boolean existsByName(String name, String operator) {
-        // 注意：不用 lambdaQuery()（其内部 getMapperClass 需要真实 MyBatis 代理，
-        // 且此处只需按名字判重）；显式 QueryWrapper 同样受逻辑删除过滤
+        // Note: lambdaQuery() is not used here (it needs a real MyBatis proxy in getMapperClass,
+        // and here we only need to check duplicates by name); an explicit QueryWrapper is also
+        // filtered by logical delete
         com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<CapabilitySkill> qw =
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>();
         qw.eq("name", name);
         return getBaseMapper().selectCount(qw) > 0;
     }
 
-    /** 非超管只能写自己创建的 skill（抄 InstanceServiceImpl.requireOwnership）。 */
+    /** Non-super-admins may only write skills they created (mirrors InstanceServiceImpl.requireOwnership). */
     private void requireOwnership(CapabilitySkill skill) {
         if (AuthContext.isSuperAdmin()) {
             return;
         }
         String owner = AuthContext.getUsername();
         if (!java.util.Objects.equals(owner, skill.getCreatedBy())) {
-            throw new BizException(CapabilitySkillErrorCode.SKILL_FORBIDDEN, "无权操作他人Skill");
+            throw new BizException(CapabilitySkillErrorCode.SKILL_FORBIDDEN, "Not allowed to modify another user's skill");
         }
     }
 
-    /** 创建/更新时校验 definition（非法给出明确错误，不再静默丢弃）。 */
+    /** Validates definition on create/update (invalid input yields a clear error instead of being silently dropped). */
     private void validateDefinition(String definition) {
-        // 共用 common 的规范校验：JSON 形状 + promptTemplate 结构（# / ## stepN / ### stepN.M）。
-        // UI 表单与 agent 技能工具都经过本 service，故这里是唯一强制点。
+        // Shares the canonical validation in common: JSON shape + promptTemplate structure (# / ## stepN / ### stepN.M).
+        // Both the UI form and the agent skill tool go through this service, so this is the single enforcement point.
         String error = com.buukle.agent.common.skill.SkillTemplateValidator.validate(definition);
         if (error != null) {
             throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID, error);

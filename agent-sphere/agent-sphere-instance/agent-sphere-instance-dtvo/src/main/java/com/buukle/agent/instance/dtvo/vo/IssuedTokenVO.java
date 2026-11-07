@@ -6,7 +6,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 签发结果：token 明文只在此处返回一次，服务端只保存摘要。
+ * Issuance result: the plaintext token is returned only here, once; the server stores only the digest.
  */
 @Data
 public class IssuedTokenVO implements Serializable {

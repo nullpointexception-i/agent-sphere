@@ -47,7 +47,7 @@ class PluginFileControllerTest {
 
         mockMvc.perform(multipart("/api/v1/system/config/plugin/upload").file(file))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("上传成功"));
+                .andExpect(jsonPath("$.message").value("Uploaded"));
 
         verify(pluginFileService).upload(any(org.springframework.web.multipart.MultipartFile.class));
     }

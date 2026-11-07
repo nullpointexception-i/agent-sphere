@@ -13,7 +13,7 @@ import java.util.List;
 @Mapper
 public interface ImConversationMapper extends BaseMapper<ImConversation> {
 
-    /** 原子递增会话序号；单条 UPDATE ... RETURNING 保证严格递增。 */
+    /** Atomically increments the conversation sequence; a single UPDATE ... RETURNING guarantees strict monotonicity. */
     @Select("""
             UPDATE im_conversation
             SET last_seq = last_seq + 1

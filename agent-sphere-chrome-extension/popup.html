@@ -47,7 +47,7 @@
     .info-row .label { color: #8e8e93; }
     .info-row .value { font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* Devices tab：多台浏览器在线时手动切换执行设备 */
+    /* Devices tab: manually switch the execution device when multiple browsers are online. */
     .device-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
     .device-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e8e8ed; border-radius: 10px; background: #ffffff; }
     .device-item.preferred { border-color: #0a84ff; background: #eef5ff; }
@@ -114,7 +114,7 @@
     .log-time { color: #8e8e93; font-variant-numeric: tabular-nums; flex-shrink: 0; }
     .log-icon { flex-shrink: 0; }
     .log-action { font-weight: 500; flex-shrink: 0; }
-    /* 单行省略只是视觉截断：完整文本在 title（悬停）与 .log-row[data-line]（点击复制）里 */
+    /* Single-line ellipsis is visual truncation only: the full text is in title (hover) and .log-row[data-line] (click to copy). */
     .log-detail { color: #8e8e93; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .log-row.copied { background: rgba(10,132,255,.12); }
     .log-row.copied::after { content: 'Copied'; color: #0a84ff; font-size: 11px; font-weight: 600; flex-shrink: 0; }
@@ -191,7 +191,7 @@
     </div>
 
     <div id="updateBanner" class="update-banner">
-      <span id="updateBannerText"></span><a id="updateBannerLink" href="#" target="_blank" rel="noreferrer">立即下载</a>
+      <span id="updateBannerText"></span><a id="updateBannerLink" href="#" target="_blank" rel="noreferrer">Download now</a>
     </div>
 
     <div class="tabs">
@@ -215,7 +215,7 @@
       </div>
     </div>
 
-    <!-- Devices Panel：同一账号多台浏览器在线时，手动指定用哪台执行 -->
+    <!-- Devices Panel: manually choose which browser executes when the same account is online in multiple browsers. -->
     <div id="panelDevices" class="panel">
       <div class="card">
         <div class="info-row"><span class="label">Current</span><span class="value" id="devCurrent">-</span></div>

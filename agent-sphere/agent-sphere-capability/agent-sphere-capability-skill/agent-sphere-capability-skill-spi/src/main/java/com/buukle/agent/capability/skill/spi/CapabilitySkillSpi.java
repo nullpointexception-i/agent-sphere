@@ -10,7 +10,7 @@ import java.util.List;
 public interface CapabilitySkillSpi {
     SkillVO createSkill(CreateSkillDTO dto);
 
-    /** 运行线程内创建技能时显式指定创建人（避免审计回落为 system）。 */
+    /** Explicitly sets the creator when creating a skill on a run thread (otherwise audit falls back to system). */
     SkillVO createSkill(CreateSkillDTO dto, String createdBy);
 
     SkillVO getSkill(Long id);
@@ -21,33 +21,34 @@ public interface CapabilitySkillSpi {
 
     SkillVO updateSkill(Long id, CreateSkillDTO dto);
 
-    /** 运行线程内更新技能时显式指定更新人（避免审计回落为 system）。 */
+    /** Explicitly sets the updater when updating a skill on a run thread (otherwise audit falls back to system). */
     SkillVO updateSkill(Long id, CreateSkillDTO dto, String updatedBy);
 
     void deleteSkill(Long id);
 
     void batchDeleteSkill(java.util.List<Long> ids);
 
-    /** 单个启用/禁用。 */
+    /** Enable/disable a single skill. */
     SkillVO updateStatus(Long id, String status);
 
-    /** 批量启用/禁用。 */
+    /** Enable/disable in bulk. */
     void batchUpdateStatus(java.util.List<Long> ids, String status);
 
     List<SkillVO> listSkillsByIds(List<Long> ids);
 
-    /** 设置自己 skill 的 hub 可见性（PRIVATE/PUBLIC）。 */
+    /** Sets the hub visibility of one of the caller's own skills (PRIVATE/PUBLIC). */
     SkillVO setVisibility(Long id, String visibility);
 
     /**
-     * 从 hub 安装：将源 skill 复制一份到当前用户名下（fork，不绑定实例）。
-     * 源须为公开或自己所有；副本默认私有，同名自动加后缀。
+     * Install from the hub: copy the source skill into the current user's namespace (fork, no
+     * instance binding). The source must be public or owned by the caller; the copy is private by
+     * default and gets a suffix automatically when the name collides.
      */
     SkillVO installSkill(Long sourceId, String newName);
 
-    /** hub 列表：公开的全部 + 自己的全部（分页）。 */
+    /** Hub listing: all public skills plus all of the caller's own (paged). */
     com.baomidou.mybatisplus.core.metadata.IPage<SkillVO> pageHubSkills(int page, int size, String keyword);
 
-    /** 设置自己已安装副本的自动更新开关（仅副本可开启）。 */
+    /** Toggles auto-update for one of the caller's installed copies (copies only). */
     SkillVO setAutoUpdate(Long id, boolean enabled);
 }

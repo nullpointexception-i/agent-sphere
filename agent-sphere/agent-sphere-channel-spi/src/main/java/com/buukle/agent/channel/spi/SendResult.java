@@ -2,7 +2,7 @@ package com.buukle.agent.channel.spi;
 
 import java.io.Serializable;
 
-/** 出站发送结果。 */
+/** Result of an outbound send. */
 public record SendResult(boolean success, String externalMessageId, String error) implements Serializable {
 
     public static SendResult ok(String externalMessageId) {

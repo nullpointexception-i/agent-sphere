@@ -2,7 +2,7 @@ package com.buukle.agent.instance.dtvo.enums;
 
 import java.util.Set;
 
-/** 统一 Timeline 行展示类型。 */
+/** Display type of a unified Timeline row. */
 public enum TimelineKind {
     USER("user"),
     ASSISTANT("assistant"),
@@ -10,7 +10,7 @@ public enum TimelineKind {
     CLARIFICATION("clarification"),
     TOOL_APPROVAL("tool_approval"),
     SUBAGENT("subagent"),
-    /** 上下文压缩：分割线 + 压缩模型的流式输出。 */
+    /** Context compaction: divider + streaming output of the compaction model. */
     COMPACTION("compaction"),
     RUN_STATUS("run_status"),
     ERROR("error");
@@ -25,7 +25,7 @@ public enum TimelineKind {
         return code;
     }
 
-    /** 该 kind 允许的展示状态（词表约束的唯一来源）。 */
+    /** Display states allowed for this kind (the single source of truth for the vocabulary constraint). */
     public Set<TimelineState> allowedStates() {
         return switch (this) {
             case USER -> Set.of(TimelineState.COMPLETED);

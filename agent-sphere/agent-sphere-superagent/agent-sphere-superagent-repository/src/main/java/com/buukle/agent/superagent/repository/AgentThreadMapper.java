@@ -9,7 +9,7 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface AgentThreadMapper extends BaseMapper<AgentThread> {
 
-    /** 线程内事件序号原子递增。 */
+    /** Atomically increments the thread's event sequence. */
     @Select("""
             UPDATE agent_thread
             SET event_seq = event_seq + 1, updated_at = now()

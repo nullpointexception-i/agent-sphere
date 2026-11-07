@@ -52,9 +52,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * 图片附件路由 gating 单测：
- * - {@link SessionRunner#hasAttachmentImage} 判定最后一条 USER 消息是否含图片 parts；
- * - runTurn 运行时把附件轮限制为 supportsAttachment=true 的路由，全滤空则发系统事件并报错。
+ * Unit tests for image-attachment route gating:
+ * - {@link SessionRunner#hasAttachmentImage} decides whether the last USER message contains image parts;
+ * - at runtime runTurn restricts attachment turns to routes with supportsAttachment=true; if all are filtered out it publishes a system event and fails.
  */
 @ExtendWith(MockitoExtension.class)
 class SessionRunnerAttachmentTest {
@@ -188,7 +188,7 @@ class SessionRunnerAttachmentTest {
 
     @Test
     void buildUserMessage_resolverReturnsNull_skipsAttachment() {
-        // 附件被回收/无效：组消息时静默跳过，不退化为错误消息
+        // Attachment reclaimed/invalid: skipped silently during message assembly instead of degrading into an error message
         given(attachmentResolver.toDataUrl("k1")).willReturn(null);
         SessionInputManager.InputMessage input = new SessionInputManager.InputMessage(
                 "看图", null, 0L, false,
@@ -225,7 +225,7 @@ class SessionRunnerAttachmentTest {
         assertEquals(4, images, "最多注入 4 个图片 parts");
     }
 
-    // ---------- stripImageParts（无图片路由时降级为纯文本） ----------
+    // ---------- stripImageParts (degrade to plain text when no image route exists) ----------
 
     @Test
     void stripImageParts_textWithImage_collapsesToTextOnly() {
@@ -252,7 +252,7 @@ class SessionRunnerAttachmentTest {
 
         SessionRunner.stripImageParts(messages);
 
-        assertEquals("[图片]", messages.get(0).getContent());
+        assertEquals("[Image]", messages.get(0).getContent());
     }
 
     @Test
@@ -286,7 +286,7 @@ class SessionRunnerAttachmentTest {
         given(properties.getRunner()).willReturn(new AgentRuntimeProperties.RunnerConfig());
         List<ModelRouteFullVO> routes = List.of(route(1L, false), route(2L, false));
         given(routeListBuilder.fromContext(any())).willReturn(routes);
-        // 不真正走 LLM：仅验证 execute 收到全部路由且未阻断
+        // Does not really call the LLM: only verifies execute receives all routes and is not blocked
         org.mockito.Mockito.doReturn(null)
                 .when(fallbackRouteExecutor).execute(any(), any());
 
@@ -300,21 +300,21 @@ class SessionRunnerAttachmentTest {
         TurnResult result = invokeRunTurn(messages, ctxWithModelRoute(routes));
 
         assertEquals(TurnOutcome.COMPLETE, result.outcome());
-        // 图片被剥离：最后一条 USER 消息降级为纯文本
+        // Images stripped: the last USER message degrades to plain text
         ChatMessageDTO last = messages.get(messages.size() - 1);
         assertEquals(LlmApiConstant.ROLE_USER, last.getRole());
         assertEquals("看图", last.getContent());
-        // 全部路由仍被执行（未过滤、未报错）
+        // All routes are still executed (not filtered, no error)
         ArgumentCaptor<List<ModelRouteFullVO>> captor = ArgumentCaptor.forClass(List.class);
         verify(fallbackRouteExecutor).execute(captor.capture(), any());
         assertEquals(2, captor.getValue().size());
-        // 发布非阻塞降级提示事件（不再是阻断错误）
+        // Publishes a non-blocking degradation notice event (no longer a blocking error)
         assertTrue(events.stream().anyMatch(e ->
                         e.getEventType() instanceof FlowEventType
                                 && e.getEventType() == FlowEventType.REASONING_TOKEN
                                 && e.getData().getResponse() != null
-                                && e.getData().getResponse().contains("已按纯文本继续处理")),
-                "应发布 REASONING_TOKEN 系统事件提示已降级为纯文本");
+                                && e.getData().getResponse().contains("continuing with text only")),
+                "Should publish a REASONING_TOKEN system event noting the text-only degradation");
     }
 
     @Test
@@ -322,7 +322,7 @@ class SessionRunnerAttachmentTest {
         given(properties.getRunner()).willReturn(new AgentRuntimeProperties.RunnerConfig());
         List<ModelRouteFullVO> routes = List.of(route(1L, false), route(2L, true));
         given(routeListBuilder.fromContext(any())).willReturn(routes);
-        // 不真正走 LLM：仅验证 execute 收到的是过滤后的可附件路由集合
+        // Does not really call the LLM: only verifies execute receives the filtered set of attachment-capable routes
         org.mockito.Mockito.doReturn(null)
                 .when(fallbackRouteExecutor).execute(any(), any());
 
@@ -394,7 +394,7 @@ class SessionRunnerAttachmentTest {
         return route;
     }
 
-    // ---------- 浏览器截图观察注入 ----------
+    // ---------- Browser screenshot observation injection ----------
 
     @Test
     void injectScreenshotObservation_appendsUserMessageWithImage() throws Exception {
@@ -442,12 +442,12 @@ class SessionRunnerAttachmentTest {
         given(attachmentResolver.toDataUrl("shot-1")).willReturn("data:image/jpeg;base64,BBBB");
         String toolResult = "{\"success\":true,\"data\":{\"screenshot\":{\"fileKey\":\"shot-1\"}}}";
 
-        // 连灌超过上限
+        // Keep feeding past the limit
         for (int i = 0; i < 25; i++) {
             List<ChatMessageDTO> messages = new ArrayList<>();
             invokeInjectScreenshot(messages, toolResult);
             if (messages.isEmpty()) {
-                // 已达每 run 上限
+                // Per-run limit reached
                 List<ChatMessageDTO> probe = new ArrayList<>();
                 invokeInjectScreenshot(probe, toolResult);
                 assertTrue(probe.isEmpty(), "超过上限后不再注入");
@@ -459,7 +459,7 @@ class SessionRunnerAttachmentTest {
 
     @Test
     void multiToolBatch_injectsObservationOnlyAfterAllToolMessages() throws Exception {
-        // 复现主 Runner 的批次组装顺序：assistant(tool_calls:[c1,c2]) → tool(c1) → tool(c2) → 延后注入 user(截图观察)
+        // Reproduce the main Runner's batch assembly order: assistant(tool_calls:[c1,c2]) → tool(c1) → tool(c2) → deferred user(screenshot observation) injection
         given(attachmentResolver.toDataUrl("shot-1")).willReturn("data:image/jpeg;base64,BBBB");
 
         List<ToolCallDTO> toolCalls = List.of(
@@ -472,7 +472,7 @@ class SessionRunnerAttachmentTest {
                 new ChatMessageDTO().setRole(LlmApiConstant.ROLE_TOOL).setToolCallId("c1").setContent("tool-res-c1"),
                 new ChatMessageDTO().setRole(LlmApiConstant.ROLE_TOOL).setToolCallId("c2").setContent("tool-res-c2")));
 
-        // 与 Runner 修复后一致的延后注入：全部 tool 消息已追加，观察消息追加在批次末尾
+        // Deferred injection matching the fixed Runner: all tool messages are appended first, and the observation is appended at the end of the batch
         invokeInjectScreenshot(messages,
                 "{\"success\":true,\"data\":{\"screenshot\":{\"fileKey\":\"shot-1\",\"width\":100,\"height\":200}}}");
 
@@ -480,7 +480,7 @@ class SessionRunnerAttachmentTest {
         ChatMessageDTO last = messages.get(3);
         assertEquals(LlmApiConstant.ROLE_USER, last.getRole());
         assertTrue(last.getContent() instanceof List<?>, "截图观察应以 parts 追加在全部 tool 消息之后");
-        // 前三条顺序不变：assistant + 两个连续 tool 消息（无任何 USER 混插）
+        // The first three keep their order: assistant + two consecutive tool messages (no USER interleaved)
         assertEquals(LlmApiConstant.ROLE_ASSISTANT, messages.get(0).getRole());
         assertEquals(LlmApiConstant.ROLE_TOOL, messages.get(1).getRole());
         assertEquals(LlmApiConstant.ROLE_TOOL, messages.get(2).getRole());

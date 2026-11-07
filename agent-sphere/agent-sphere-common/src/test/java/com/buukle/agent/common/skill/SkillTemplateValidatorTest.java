@@ -8,11 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 技能结构校验的规则护栏（UI 表单与 agent 工具共用此校验）。 */
+/** Rule guardrails for skill structure validation (shared by the UI form and the agent tool). */
 class SkillTemplateValidatorTest {
 
     private static final ObjectMapper M = new ObjectMapper();
-    private static final String OK = "# 技能\n\n## step1 步骤\n### step1.1 子步骤\n正文";
+    private static final String OK = "# Skill\n\n## step1 Step\n### step1.1 Sub-step\nBody";
 
     private static String def(String promptTemplate) {
         ObjectNode root = M.createObjectNode();
@@ -35,44 +35,44 @@ class SkillTemplateValidatorTest {
 
     @Test
     void legacyPromptWithoutStructure_isAlsoRejected() {
-        // 强校验：legacy {"prompt":...} 无标题结构 → 同样被拒
-        String err = SkillTemplateValidator.validate("{\"prompt\":\"请执行\"}");
+        // strict validation: a legacy {"prompt":...} without heading structure → also rejected
+        String err = SkillTemplateValidator.validate("{\"prompt\":\"do it\"}");
         assertNotNull(err);
-        assertTrue(err.contains("结构不符合技能规范"), err);
+        assertTrue(err.contains("does not conform"), err);
     }
 
     @Test
     void missingH1_rejectedWithTemplate() {
-        String err = SkillTemplateValidator.validate(def("## step1 步骤\n正文"));
+        String err = SkillTemplateValidator.validate(def("## step1 Step\nBody"));
         assertNotNull(err);
         assertTrue(err.contains("H1"), err);
-        assertTrue(err.contains("# <技能名称>"), "应回带标准模板: " + err);
+        assertTrue(err.contains("# <Skill name>"), "should include the standard template: " + err);
     }
 
     @Test
     void missingStepHeading_rejected() {
-        String err = SkillTemplateValidator.validate(def("# 技能\n\n## 概述\n正文"));
+        String err = SkillTemplateValidator.validate(def("# Skill\n\n## Overview\nBody"));
         assertNotNull(err);
-        assertTrue(err.contains("步骤"), err);
+        assertTrue(err.contains("step heading"), err);
     }
 
     @Test
     void substepUnderWrongStep_rejected() {
-        String err = SkillTemplateValidator.validate(def("# 技能\n\n## step1 A\n\n## step2 B\n### step1.1 X\n"));
+        String err = SkillTemplateValidator.validate(def("# Skill\n\n## step1 A\n\n## step2 B\n### step1.1 X\n"));
         assertNotNull(err);
         assertTrue(err.contains("step1.1"), err);
     }
 
     @Test
     void levelJump_rejected() {
-        String err = SkillTemplateValidator.validate(def("# 技能\n\n### step1.1 深跳\n\n## step1 A\n"));
+        String err = SkillTemplateValidator.validate(def("# Skill\n\n### step1.1 Deep jump\n\n## step1 A\n"));
         assertNotNull(err);
-        assertTrue(err.contains("层级跳跃"), err);
+        assertTrue(err.contains("heading level jump"), err);
     }
 
     @Test
     void nonStepH3_rejected() {
-        String err = SkillTemplateValidator.validate(def("# 技能\n\n## 概述\n### 背景\n\n## step1 A\n"));
+        String err = SkillTemplateValidator.validate(def("# Skill\n\n## Overview\n### Background\n\n## step1 A\n"));
         assertNotNull(err);
     }
 

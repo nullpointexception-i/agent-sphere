@@ -30,10 +30,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 等待记录的服务层行为：建记录 + 发事件 + CAS 抢占。
+ * Service-layer behavior of wait records: create record + publish event + CAS claim.
  *
- * <p>CAS 是这套机制唯一正确性依赖 —— 内存定时器与 cron 补偿两条路径都会命中同一条记录，
- * 没有 CAS 就会把同一个 run 恢复两次。
+ * <p>CAS is the only correctness dependency in this mechanism — both the in-memory timer and the cron compensation path can hit the same record,
+ * and without CAS the same run is resumed twice.
  */
 @ExtendWith(MockitoExtension.class)
 class PendingWaitServiceTest {
@@ -48,8 +48,8 @@ class PendingWaitServiceTest {
 
     @BeforeAll
     static void initMybatisLambdaCache() {
-        // LambdaUpdateWrapper 靠 TableInfo 解析列名；纯 Mockito 环境没有 MyBatis 启动过程，
-        // 不预热就会抛 "can not find lambda cache"。
+        // LambdaUpdateWrapper resolves column names via TableInfo; a pure Mockito environment has no MyBatis startup,
+        // so without warm-up it throws "can not find lambda cache".
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), "fixture"), AgentPendingWait.class);
     }
@@ -89,11 +89,11 @@ class PendingWaitServiceTest {
 
     @Test
     void claimForResume_succeedsOnlyWhileRowIsPending() {
-        // 第一次抢占：UPDATE 命中 1 行
+        // First claim: the UPDATE matches 1 row
         when(waitMapper.update(any(), any(LambdaUpdateWrapper.class))).thenReturn(1);
         assertTrue(service.claimForResume(5L));
 
-        // 第二次（cron 与定时器同时命中）：已被置为 RESUMED，UPDATE 命中 0 行
+        // Second attempt (cron and timer hit simultaneously): already set to RESUMED, the UPDATE matches 0 rows
         when(waitMapper.update(any(), any(LambdaUpdateWrapper.class))).thenReturn(0);
         assertFalse(service.claimForResume(5L),
                 "CAS 失败方必须放弃 —— 否则同一个 run 会被恢复两次");
@@ -111,8 +111,8 @@ class PendingWaitServiceTest {
 
         service.claimForResume(9L);
 
-        // 必须是「一条带 status=PENDING 条件的 UPDATE」，不能是「先 select 再 update」——
-        // 后者在两条唤醒路径并发时会双双通过检查。
+        // It must be a single UPDATE with a status=PENDING condition, never "select then update" —
+        // the latter lets both wake paths pass the check concurrently.
         verify(waitMapper, times(1)).update(any(), any(LambdaUpdateWrapper.class));
         verify(waitMapper, never()).selectById(any());
     }
@@ -134,7 +134,7 @@ class PendingWaitServiceTest {
 
         assertEquals(2, service.requeueForRetry(11L, "boom"));
 
-        // 必须回到 PENDING：listDue / claimForResume 只认 PENDING，停在 RESUMED 就永远没人再捞
+        // It must go back to PENDING: listDue / claimForResume only accept PENDING, and a record left in RESUMED is never picked up again
         verify(waitMapper).update(any(), any(LambdaUpdateWrapper.class));
     }
 
@@ -161,7 +161,7 @@ class PendingWaitServiceTest {
 
         assertTrue(service.releaseClaim(13L));
 
-        // 必须是单条原子 UPDATE：回读正是失败场景，不能再依赖 selectById
+        // It must be a single atomic UPDATE: reading back is exactly the failure case, so selectById cannot be relied on
         verify(waitMapper, times(1)).update(any(), any(LambdaUpdateWrapper.class));
         verify(waitMapper, never()).selectById(any());
     }
@@ -193,7 +193,7 @@ class PendingWaitServiceTest {
     @Test
     void listDue_boundsLimitToAtLeastOne() {
         when(waitMapper.selectList(any())).thenReturn(java.util.List.of());
-        // limit 传 0 / 负数也不能拼出 "LIMIT 0" 之外的非法 SQL
+        // Passing 0 / a negative limit must not produce anything but "LIMIT 0" either
         service.listDue(Duration.ofSeconds(2), 0);
         service.listDue(Duration.ofSeconds(2), -5);
         verify(waitMapper, times(2)).selectList(any());

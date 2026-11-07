@@ -15,15 +15,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * `text_contains` 内置工具。
+ * The `text_contains` builtin tool.
  *
- * <p>两条最关键的护栏：
+ * <p>Two critical guards:
  * <ul>
- *   <li>{@code needConfig() == false} —— 这是「默认绑定」的**唯一开关**（被
- *       {@code listAutoIncludeBuiltinTools} 收录 → 每个实例自动可用）。改成 true 不会报错，
- *       工具会静默从所有实例消失。</li>
- *   <li>空 needle 必须被拒 —— {@code @NotBlank} 只在 {@code parameterVerify} 里生效，而那条路径
- *       不在运行链路上，光靠注解空串会走到 {@code String.contains("")} 静默返回 true。</li>
+ *   <li>{@code needConfig() == false} — the **only switch** for "default binding" (being
+ *       picked up by {@code listAutoIncludeBuiltinTools} makes it available on every instance). Changing it to true raises no error,
+ *       but the tool silently disappears from every instance.</li>
+ *   <li>An empty needle must be rejected — {@code @NotBlank} only applies in {@code parameterVerify}, and that path
+ *       is not on the runtime path, so the annotation alone lets an empty string reach {@code String.contains("")} and silently return true.</li>
  * </ul>
  */
 class CapabilityBuiltinToolTextContainsTest {
@@ -42,7 +42,7 @@ class CapabilityBuiltinToolTextContainsTest {
         return ((TextContainsResultVO) tool.execute(ctx(needle, haystack, mode))).isContains();
     }
 
-    // ---------- EXACT（默认） ----------
+    // ---------- EXACT (default) ----------
 
     @Test
     void exact_hitsAndMisses() {
@@ -58,7 +58,7 @@ class CapabilityBuiltinToolTextContainsTest {
     @Test
     void modeNull_defaultsToExact() {
         assertTrue(contains("abc", "xxabcxx", null));
-        // 缺省即 EXACT：大小写不同必须不命中
+        // The default is EXACT: different case must not match
         assertFalse(contains("ABC", "xxabcxx", null));
     }
 
@@ -85,17 +85,17 @@ class CapabilityBuiltinToolTextContainsTest {
         assertTrue(contains("  ABC  ", "\n abc \t", TextMatchMode.IGNORE_CASE_TRIMMED));
     }
 
-    // ---------- 边界 ----------
+    // ---------- Edge cases ----------
 
     @Test
     void emptyHaystack_isFalseNotAnError() {
-        // 空目标串不含任何子串：这是有效结果，不是参数错误
+        // An empty haystack contains no substring: that is a valid result, not a parameter error
         assertFalse(contains("abc", "", TextMatchMode.EXACT));
     }
 
     @Test
     void blankNeedle_isRejectedAtRuntime() {
-        // 运行时守卫：@NotBlank 在运行链路上不生效，必须自己拦
+        // Runtime guard: @NotBlank does not apply on the runtime path, so we must enforce it ourselves
         assertThrows(BizException.class, () -> contains("", "anything", TextMatchMode.EXACT));
         assertThrows(BizException.class, () -> contains("   ", "anything", TextMatchMode.EXACT));
         assertThrows(BizException.class, () -> contains(null, "anything", TextMatchMode.EXACT));
@@ -106,7 +106,7 @@ class CapabilityBuiltinToolTextContainsTest {
         assertThrows(BizException.class, () -> contains("abc", null, TextMatchMode.EXACT));
     }
 
-    // ---------- 注册与默认绑定 ----------
+    // ---------- Registration and default binding ----------
 
     @Test
     void needConfig_isFalse_soToolIsBoundByDefault() {
@@ -124,7 +124,7 @@ class CapabilityBuiltinToolTextContainsTest {
     void getInfo_generatesNonEmptySchemaWithAllParams() {
         var info = tool.getInfo();
         assertNotNull(info.getParamSchema());
-        // schema 由 POJO 自动生成：若生成失败会返回 {"error":...}，这里挡住静默失效
+        // The schema is generated from the POJO: on failure it returns {"error":...}; this blocks silent breakage
         assertTrue(info.getParamSchema().contains("needle"), info.getParamSchema());
         assertTrue(info.getParamSchema().contains("haystack"), info.getParamSchema());
         assertTrue(info.getParamSchema().contains("mode"), info.getParamSchema());

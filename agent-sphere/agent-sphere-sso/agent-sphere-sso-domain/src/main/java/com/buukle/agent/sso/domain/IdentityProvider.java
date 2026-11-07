@@ -27,7 +27,7 @@ public class IdentityProvider {
     private String scopes;
     private String claimMappings;
     private Long defaultRoleId;
-    /** 资源模板（JSONB）：新开通该身份源时初始化的一批资源（MCP/模型/completions/实例/文档等） */
+    /** Resource template (JSONB): the set of resources (MCP / model / completions / instance / docs, etc.) initialized when this identity provider is newly provisioned */
     private String resourceTemplate;
     private Boolean enabled;
     private String status;

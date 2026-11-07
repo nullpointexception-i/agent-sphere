@@ -6,7 +6,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 外部调用方解析出的 agent-sphere 身份。
+ * agent-sphere identity resolved from an external caller.
  */
 @Data
 @AllArgsConstructor

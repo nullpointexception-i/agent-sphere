@@ -396,7 +396,7 @@ public class ImMessageServiceImpl implements ImMessageService {
                 .clientMsgId(message.getClientMsgId())
                 .timestamp(System.currentTimeMillis())
                 .previewText(ImStreamEventType.MESSAGE_RECALLED.equals(eventType)
-                        ? "[消息已撤回]" : previewText(message))
+                        ? "[Message recalled]" : previewText(message))
                 .createdAt(message.getCreatedAt() == null ? null : message.getCreatedAt().format(DTF))
                 .build();
         afterCommit(() -> deliverToMembers(conversationId, event));
@@ -452,16 +452,16 @@ public class ImMessageServiceImpl implements ImMessageService {
             // fall through to type label
         }
         if (ImMessageType.IMAGE.equals(message.getType())) {
-            return "[图片]";
+            return "[Image]";
         }
         if (ImMessageType.FILE.equals(message.getType())) {
-            return "[文件]";
+            return "[File]";
         }
         if (ImMessageType.CARD.equals(message.getType())) {
-            return "[卡片]";
+            return "[Card]";
         }
         if (ImMessageType.SYSTEM.equals(message.getType())) {
-            return "[系统消息]";
+            return "[System message]";
         }
         return "";
     }
@@ -563,7 +563,7 @@ public class ImMessageServiceImpl implements ImMessageService {
                 conversationMapper.updateThreadId(conversationId, result.threadId());
             }
         } catch (Exception e) {
-            // 事件入库失败不能阻断消息发送；后续可用 outbox/重试补偿
+            // Event ingestion failure must not block message sending; outbox/retry compensation can follow later
             log.warn("IM event ingest failed: conversation={}, message={}, error={}",
                     conversationId, message.getId(), e.getMessage());
         }
@@ -619,8 +619,8 @@ public class ImMessageServiceImpl implements ImMessageService {
     }
 
     /**
-     * Agent 消息由后台 Outbound 写入（created_by=system），用户读取时必须绕过
-     * created_by 数据权限；成员校验在调用前已完成。
+     * Agent messages are written by the background Outbound (created_by=system), so user reads must
+     * bypass the created_by data permission; membership has already been verified before the call.
      */
     private void checkRateLimit(Long userId) {
         if (redissonClient == null || rateLimitPerMinute <= 0) {

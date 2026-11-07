@@ -90,9 +90,9 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
     }
 
     /**
-     * 读取 URL 并转换为 Markdown
-     * Primary: 使用 Jina API（如果启用）
-     * Fallback: 使用内部 WebFetch + 转换
+     * Reads a URL and converts it to Markdown
+     * Primary: use the Jina API (when enabled)
+     * Fallback: use internal WebFetch + conversion
      */
     public WebReadResultVO readUrl(String url, int timeout) {
         int effectiveTimeout = timeout > 0 ? timeout : (int) properties.getTool().getWebRead().getReadTimeout().getSeconds();
@@ -111,7 +111,7 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
             }
         }
 
-        // Fallback: WebFetch + 内部转换
+        // Fallback: WebFetch + internal conversion
         try {
             return readUrlInternal(url, effectiveTimeout);
         } catch (Exception e) {
@@ -122,10 +122,10 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
     }
 
     /**
-     * 使用内部方法将 HTML 转换为 Markdown
+     * Converts HTML to Markdown using the internal path
      */
     private WebReadResultVO readUrlInternal(String url, int timeout) throws Exception {
-        // 1. 通过 webFetch 获取 HTML（带重试）
+        // 1. Fetch HTML through webFetch (with retries)
         WebFetchResultVO fetchResult = fetchHtml(url, timeout);
 
         int statusCode = fetchResult.getStatusCode();
@@ -138,13 +138,13 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
             throw new IOException("Fetched content is empty");
         }
 
-        // 2. 验证 HTML 内容
+        // 2. Validate the HTML content
         long maxContentLength = properties.getTool().getWebReadAdvanced().getHtmlToMarkdown().getMaxContentLength();
         if (!validationUtils.isValid(html, maxContentLength)) {
             throw new IOException("HTML content validation failed");
         }
 
-        // 3. 清理 HTML
+        // 3. Clean the HTML
         String excludeTags = properties.getTool().getWebReadAdvanced().getHtmlToMarkdown().getExcludeTags();
         String cleanedHtml = htmlCleaner.clean(html, excludeTags);
 
@@ -152,14 +152,14 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
             throw new IOException("HTML cleaning resulted in empty content");
         }
 
-        // 4. 转换为 Markdown
+        // 4. Convert to Markdown
         String markdown = markdownConverter.convert(cleanedHtml);
 
         if (markdown == null || markdown.isEmpty()) {
             throw new IOException("Markdown conversion resulted in empty content");
         }
 
-        // 5. 提取标题
+        // 5. Extract the title
         String title = titleExtractor.extract(html);
 
         log.debug("Successfully converted URL to markdown: {} (size: {} bytes)", url, markdown.length());
@@ -167,7 +167,7 @@ public class CapabilityBuiltinToolWebRead implements CapabilityBuiltinToolSpi {
     }
 
     /**
-     * 通过 webFetch 获取 HTML 内容
+     * Fetches HTML content through webFetch
      */
     private WebFetchResultVO fetchHtml(String url, int timeout) throws Exception {
         if (webFetch == null) {

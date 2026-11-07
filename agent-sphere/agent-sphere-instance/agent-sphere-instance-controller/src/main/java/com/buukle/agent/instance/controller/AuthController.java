@@ -1,5 +1,9 @@
 package com.buukle.agent.instance.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.AuthContext;
@@ -22,7 +26,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping(ApiPrefix.V1 + "/auth")
 @RequiredArgsConstructor
 public class AuthController extends BaseController {
     private final UserService userService;
@@ -36,7 +40,8 @@ public class AuthController extends BaseController {
     @AuditLog(action = "LOGIN", resourceType = "User", resourceId = "#result?.body?.id")
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginDTO dto, HttpServletRequest request) {
-        // 登录接口在 SKIP_PATHS 内，拦截器不会解析来源端，这里显式设置供签发会话使用
+        // The login endpoint is in SKIP_PATHS, so the interceptor does not resolve the surface;
+        // set it explicitly here for session issuance
         SessionSurfaceHolder.set(
                 SessionSurfaceResolver.fromHeader(request.getHeader(SessionSurfaceHolder.HEADER)));
         try {
@@ -44,7 +49,8 @@ public class AuthController extends BaseController {
             dto.setUserAgent(RequestUtils.resolveUserAgent(request));
             return ok(userService.login(dto));
         } finally {
-            // standalone 测试不经过拦截器，必须自己清理，避免来源端串到后续用例/请求
+            // Standalone tests bypass the interceptor, so clean up here to keep the surface
+            // from leaking into subsequent tests/requests
             SessionSurfaceHolder.clear();
         }
     }
@@ -72,7 +78,8 @@ public class AuthController extends BaseController {
     public ResponseEntity<?> me() {
         UserVO user = userService.getCurrentUser();
         if (user != null) {
-            // token 不再存于 agent_user；返回当前请求正在使用的 token，保证前端刷新后仍可用
+            // The token is no longer stored on agent_user; return the token used by the current
+            // request so the frontend still works after a refresh
             user.setToken(AuthContext.getToken());
         }
         return ok(user);
@@ -105,7 +112,7 @@ public class AuthController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE_PROFILE", resourceType = "User")
-    @RequirePermission("user:profile:update")
+    @RequirePermission(PermissionCodes.USER_PROFILE_UPDATE)
     @PutMapping("/profile")
     public ResponseEntity<?> updateProfile(@Valid @RequestBody UpdateProfileDTO dto) {
         userService.updateProfile(getCurrentUserId(), dto.getDisplayName(), dto.getEnglishName(), dto.getAvatar());
@@ -113,7 +120,7 @@ public class AuthController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE_PASSWORD", resourceType = "User")
-    @RequirePermission("user:password:update")
+    @RequirePermission(PermissionCodes.USER_PASSWORD_UPDATE)
     @PutMapping("/password")
     public ResponseEntity<?> updatePassword(@Valid @RequestBody UpdatePasswordDTO dto) {
         userService.updatePassword(getCurrentUserId(), dto.getOldPassword(), dto.getNewPassword());

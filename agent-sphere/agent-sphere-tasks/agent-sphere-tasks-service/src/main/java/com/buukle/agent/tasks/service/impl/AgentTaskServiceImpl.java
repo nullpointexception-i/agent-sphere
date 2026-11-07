@@ -66,26 +66,27 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     private static final int MAX_TITLE_LENGTH = 60;
     /**
-     * 任务输出了 mcpCredential 时，凭证在 Redis 的存活时间 = 任务超时 + 该余量。
+     * When the task carries an mcpCredential, the credential's Redis TTL = task timeout + this margin.
      *
-     * <p>必须 **大于** 业务方签发 JWT 时自己加的余量（约定 5 分钟），否则会出现
-     * 「Redis 先于 JWT 过期」—— 表现为报「缺少凭证」而不是「凭证过期」，极难排查。
+     * <p>It must be **greater** than the margin the caller adds when issuing the JWT (agreed 5 minutes);
+     * otherwise Redis expires before the JWT — the symptom is "missing credential" rather than
+     * "credential expired", which is extremely hard to diagnose.
      */
     private static final Duration CREDENTIAL_TTL_MARGIN = Duration.ofMinutes(15);
-    private static final String MSG_AUTONOMOUS_HEADER = "\n【自主任务模式】这是一个后台自动执行的任务：禁止向用户提问、请求澄清或确认任何内容；信息不足时基于已有上下文做合理假设并继续完成。\n";
-    private static final String MSG_TASK_CONFIG_HEADER = "\n\n【任务配置】请严格依据以下配置执行任务：\n";
-    private static final String MSG_EXPECTED_OUTPUT_HEADER = "\n\n【期望输出】请严格按以下 JSON Schema 返回最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
-    private static final String MSG_STRICT_RETURN = "\n\n请务必按上述配置完成任务，并将你的执行结果按照符合【期望输出】schema 的 JSON 返回。";
-    // 结构化提炼（第二阶段）
-    private static final String MSG_EXTRACT_HEADER = "\n\n【结构化提炼】请严格根据本会话上一轮的执行过程与结果，仅输出符合以下 JSON Schema 的最终结果 JSON 对象：\n";
-    private static final String MSG_EXTRACT_RULES = "\n\n要求：\n1. 只输出一个 JSON 对象，不要 markdown 代码块、不要 ```json 标记、不要任何解释、标题或额外文字；\n2. 字段必须完整且类型符合 schema；\n3. 不要调用任何工具，直接输出最终结果。";
-    private static final String MSG_REFINE_HEADER = "\n\n上一轮输出不符合契约校验，请严格依据以下校验错误修正后，重新输出完整且符合 schema 的 JSON 对象（同样要求：无代码块、无解释、不调用工具）：\n";
+    private static final String MSG_AUTONOMOUS_HEADER = "\n[AUTONOMOUS TASK MODE] This task runs automatically in the background: do NOT ask the user questions, request clarification, or seek confirmation on anything. If information is insufficient, make reasonable assumptions from the available context and keep going.\n";
+    private static final String MSG_TASK_CONFIG_HEADER = "\n\n[TASK CONFIGURATION] Execute the task strictly according to the following configuration:\n";
+    private static final String MSG_EXPECTED_OUTPUT_HEADER = "\n\n[EXPECTED OUTPUT] Return the final result strictly according to the following JSON Schema (output only JSON that conforms to the schema, with no extra explanation):\n";
+    private static final String MSG_STRICT_RETURN = "\n\nComplete the task strictly according to the configuration above, and return your execution result as JSON that conforms to the [EXPECTED OUTPUT] schema.";
+    // Structured extraction (second phase)
+    private static final String MSG_EXTRACT_HEADER = "\n\n[STRUCTURED EXTRACTION] Based strictly on the execution process and results of the previous turn in this session, output only the final result JSON object that conforms to the following JSON Schema:\n";
+    private static final String MSG_EXTRACT_RULES = "\n\nRequirements:\n1. Output exactly one JSON object: no markdown code fence, no ```json marker, no explanation, heading, or extra text;\n2. Every field must be present and its type must match the schema;\n3. Do not call any tools; output the final result directly.";
+    private static final String MSG_REFINE_HEADER = "\n\nThe previous output failed contract validation. Correct it strictly according to the validation errors below, then re-output a complete JSON object that conforms to the schema (same requirements: no code fence, no explanation, no tool calls):\n";
     private static final String ARTIFACT_TYPE_TASK_CONTRACT = "task_contract";
     private static final String PHASE_EXECUTE = "execute";
     private static final String PHASE_EXTRACT = "extract";
     private static final String PHASE_REFINE = "refine";
-    /** 回给业务方的失败原因（随 callback 的 remark 字段发出）。 */
-    private static final String REASON_LOOP_LIMIT = "任务执行轮次达到上限并在最后一轮被强制截断，模型未能完成收尾";
+    /** Failure reason returned to the caller (sent in the callback's remark field). */
+    private static final String REASON_LOOP_LIMIT = "The task reached the maximum number of execution turns and was forcibly truncated on the final turn; the model could not finalize";
 
     private final AgentTaskMapper taskMapper;
     private final AgentTaskArtifactMapper artifactMapper;
@@ -105,21 +106,25 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private Duration pollInterval;
 
     /**
-     * 任务超时兜底（秒）：业务方未指定 {@code taskTimeoutSeconds} 时使用（存量任务该列也为 NULL）。
-     * 业务方指定时以业务方为准，被 task_timeout_seconds 列覆盖。
+     * Task timeout fallback (seconds): used when the caller does not specify {@code taskTimeoutSeconds}
+     * (existing tasks also have NULL in that column).
+     * When the caller specifies a value, the caller's value wins and is persisted in the
+     * task_timeout_seconds column.
      */
     @Value("${hri-ai.tasks.max-poll-seconds:3600}")
     private long defaultMaxPollSeconds;
 
     /**
-     * 任务超时下限（秒）：业务方指定值低于此数时抬到下限。
+     * Task timeout lower bound (seconds): values below this are raised to the bound.
      *
-     * <p>为什么不能只调 max-poll-seconds：线上 158 个任务里 155 个由业务方<b>显式</b>传了
-     * taskTimeoutSeconds=3600，且已固化进 {@code task_timeout_seconds} 列 —— 改默认值只影响
-     * 3 个该列为 NULL 的任务。下限是唯一能在不动业务方调用代码的前提下抬高实际超时的位置。
+     * <p>Why not just adjust max-poll-seconds: 155 of 158 production tasks had the caller
+     * <b>explicitly</b> pass taskTimeoutSeconds=3600, already persisted in the {@code task_timeout_seconds}
+     * column — changing the default only affects the 3 tasks where that column is NULL. The lower bound is
+     * the only place that can raise the actual timeout without touching the caller's code.
      *
-     * <p>实测耗时（155 个任务）：均值 838s、最大 9818s(2h43m)，&gt;2h 仅 2 个、&gt;3h 为 0。
-     * 取 3h 覆盖全部观测值。默认 0 表示「不设下限」，未配置该键的环境行为完全不变。
+     * <p>Measured durations (155 tasks): mean 838s, max 9818s (2h43m); only 2 exceeded 2h and none
+     * exceeded 3h. A 3h value covers every observed case. The default 0 means "no lower bound", so
+     * environments without this key behave exactly as before.
      */
     @Value("${hri-ai.tasks.min-timeout-seconds:0}")
     private long minTimeoutSeconds;
@@ -128,8 +133,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     public TaskVO submit(CreateTaskDTO dto, CallerAuth auth) {
         ResolvedIdentityVO identity = resolveIdentity(auth);
         InstanceVO instance = resolveInstanceByBusinessType(auth.businessType(), identity.getUsername());
-        // 用解析出的调用方身份初始化当前上下文：task 关联的 session/run 归属为该用户，
-        // 使浏览器插件按用户名建立的任务连接能收到执行过程中的指令投递（而非 external-service）。
+        // Initialize the current context with the resolved caller identity: the task's session/run is owned
+        // by that user, so the browser extension's per-username task connection receives instruction
+        // deliveries during execution (instead of external-service).
         AuthContext.setUsername(identity.getUsername());
         AuthContext.setSuperAdmin(false);
         AuthContext.setPermissions(Set.of());
@@ -139,7 +145,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         task.setExpectedOutputJson(dto.getExpectedOutput() == null ? null : JsonUtils.toJson(dto.getExpectedOutput()));
         task.setConfig(dto.getConfig() == null ? null : JsonUtils.toJson(dto.getConfig()));
         task.setCallbackUrl(dto.getCallbackUrl());
-        // 与业务方签发的 MCP 凭证 TTL 共用同一个数（见 CreateTaskDTO#taskTimeoutSeconds）
+        // Shares the same value as the MCP credential TTL issued by the caller (see CreateTaskDTO#taskTimeoutSeconds)
         task.setTaskTimeoutSeconds(dto.getTaskTimeoutSeconds());
         task.setCreatedBy(identity.getUsername());
         task.setInstanceId(instance.getId());
@@ -152,9 +158,10 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             sessionDTO.setTitle(titleOf(dto.getGoal()));
             SessionVO session = sessionSpi.createSession(sessionDTO);
 
-            // 必须在 chat 之前登记：工具调用发生在 run 执行过程中，晚一步登记会导致
-            // 首个 MCP 调用就拿不到凭证（表现为「第一个候选人没查重，后面的都查了」）。
-            // TTL 按任务实际超时 + 余量：不能再用固定值，否则长任务（最长 4h）会先于任务过期。
+            // Must be registered before chat: tool calls happen while the run executes, and registering later
+            // means the first MCP call cannot obtain the credential (symptom: "the first candidate was not
+            // deduplicated, later ones were").
+            // TTL uses the task's actual timeout + margin: a fixed value would expire before long tasks (up to 4h).
             taskMcpCredentialStore.put(session.getId(), dto.getMcpCredential(),
                     CREDENTIAL_TTL_MARGIN.plusSeconds(effectiveTimeoutSeconds(dto.getTaskTimeoutSeconds())));
 
@@ -177,7 +184,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             task.setPolledAt(LocalDateTime.now());
             taskMapper.updateById(task);
 
-            // DB 化轮询：无需本地调度，由各副本的 @Scheduled sweep 认领（见 pollSweep）
+            // DB-backed polling: no local scheduling needed; each replica's @Scheduled sweep claims tasks (see pollSweep)
         } catch (Exception e) {
             log.warn("Task {} submit failed: {}", task.getId(), e.getMessage());
             markTaskFailed(task.getId(), e.getMessage());
@@ -197,7 +204,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         return vo;
     }
 
-    /** 增量拉取 run 的执行日志（LLM 交互 + 工具调用），按 createdAt 正序合并。 */
+    /** Incrementally fetches a run's execution logs (LLM interactions + tool calls), merged in ascending createdAt order. */
     private List<TaskExecutionLogVO> listExecutionLogs(AgentTask task, Integer logOffset, Integer toolLogOffset) {
         if (task.getRunId() == null) {
             return List.of();
@@ -251,7 +258,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         return vo;
     }
 
-    /** run 的 LLM 交互记录总条数（供调用方增量 offset 判断）。 */
+    /** Total LLM interaction records for the run (for caller-side incremental offset checks). */
     private long countLlmLogs(AgentTask task) {
         if (task.getRunId() == null) {
             return 0;
@@ -264,7 +271,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
     }
 
-    /** run 的工具调用记录总条数（供调用方增量 offset 判断）。 */
+    /** Total tool call records for the run (for caller-side incremental offset checks). */
     private long countToolLogs(AgentTask task) {
         if (task.getRunId() == null) {
             return 0;
@@ -358,9 +365,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (!TaskEnum.STATUS_RUNNING.equals(task.getStatus()) && !TaskEnum.STATUS_QUEUED.equals(task.getStatus())) {
             return;
         }
-        // 外部 API 无请求上下文（AuthInterceptor 对 /api/v1/api 前缀不设身份）：
-        // 以任务创建人身份取消 run，否则 ChatRuntimeService.assertSessionOwnership 会抛 FORBIDDEN
-        // 被吞掉后 Redis 取消集合未写入，run 无法停止。
+        // The external API has no request context (AuthInterceptor sets no identity for the /api/v1/api prefix):
+        // cancel the run as the task creator, otherwise ChatRuntimeService.assertSessionOwnership throws FORBIDDEN;
+        // once swallowed, the Redis cancel set is never written and the run cannot be stopped.
         AuthContext.setUsername(task.getCreatedBy());
         AuthContext.setSuperAdmin(false);
         AuthContext.setPermissions(Set.of());
@@ -373,23 +380,23 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         } finally {
             AuthContext.clear();
         }
-        // DB 化轮询：无需取消本地 future；条件更新保证单胜者
+        // DB-backed polling: no local future to cancel; a conditional update guarantees a single winner
         transitionToTerminal(task, TaskEnum.STATUS_CANCELLED, task.getResultJson());
     }
 
     private InstanceVO resolveInstanceByBusinessType(String businessType, String ownerUsername) {
         if (!StringUtils.hasText(businessType)) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "businessType 不能为空");
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "businessType must not be empty");
         }
         return instanceSpi.listInstances(null, null, null).stream()
                 .filter(i -> InstanceEnum.STATUS_ENABLED.equals(i.getStatus()))
                 .filter(i -> businessType.equals(i.getBusinessType()))
                 .filter(i -> ownerUsername == null || ownerUsername.equals(i.getCreatedBy()))
                 .findFirst()
-                .orElseThrow(() -> new BizException(CommonErrorCode.FORBIDDEN, "businessType 无可用实例"));
+                .orElseThrow(() -> new BizException(CommonErrorCode.FORBIDDEN, "no available instance for businessType"));
     }
 
-    /** 解析调用方身份：外部（code+subject）走 SSO 反查，内部（管理端）取 AuthContext；失败 → 401。 */
+    /** Resolves the caller identity: external (code+subject) is looked up via SSO, internal (admin UI) uses AuthContext; failure → 401. */
     private ResolvedIdentityVO resolveIdentity(CallerAuth auth) {
         if (StringUtils.hasText(auth.code()) && StringUtils.hasText(auth.subject())) {
             ResolvedIdentityVO identity = ssoIdentitySpi.resolveByCodeSubject(auth.code(), auth.subject());
@@ -405,7 +412,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         return ResolvedIdentityVO.of(AuthContext.getUserId(), username, AuthContext.getDisplayName());
     }
 
-    /** 外部调用方只能访问自己的任务，且任务所属实例的 businessType 需匹配；内部（admin）由 RBAC+租户管控。 */
+    /** External callers can only access their own tasks, and the task's instance businessType must match; internal (admin) access is governed by RBAC + tenant. */
     private void requireTaskAccess(AgentTask task, CallerAuth auth) {
         boolean external = StringUtils.hasText(auth.code());
         if (!external) {
@@ -424,7 +431,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
     }
 
-    /** 每副本 @Scheduled sweep：认领 RUNNING 且到期的任务，各执行一轮 pollOnce（DB 化，副本可互换）。 */
+    /** Per-replica @Scheduled sweep: claims due RUNNING tasks and runs one pollOnce for each (DB-backed, replicas are interchangeable). */
     @Scheduled(fixedDelayString = "${hri-ai.tasks.poll-interval:2s}")
     public void pollSweep() {
         LocalDateTime cutoff = LocalDateTime.now().minus(pollInterval);
@@ -434,10 +441,10 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                 .last("LIMIT 20"));
         for (AgentTask task : due) {
             if (!claimTask(task)) {
-                continue; // 其他副本已认领
+                continue; // another replica already claimed it
             }
             try {
-                // 后台调度线程无请求上下文：以任务创建人身份执行，满足归属校验
+                // The background scheduler thread has no request context: run as the task creator to satisfy ownership checks
                 AuthContext.setUsername(task.getCreatedBy());
                 AuthContext.setSuperAdmin(false);
                 AuthContext.setPermissions(Set.of());
@@ -450,7 +457,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
     }
 
-    /** 条件更新认领：仅当仍为 RUNNING 且 polled_at 过期时把 polled_at 前移；返回是否认领成功（单胜者）。 */
+    /** Conditional-update claim: moves polled_at forward only when the task is still RUNNING and polled_at is stale; returns whether the claim succeeded (single winner). */
     private boolean claimTask(AgentTask task) {
         LocalDateTime cutoff = LocalDateTime.now().minus(pollInterval);
         int updated = taskMapper.update(null, new LambdaUpdateWrapper<AgentTask>()
@@ -462,14 +469,16 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     /**
-     * 任务超时秒数：业务方指定值与配置下限取较大者；未指定时回落到配置默认值。
+     * Task timeout in seconds: the larger of the caller-provided value and the configured lower bound;
+     * falls back to the configured default when unspecified.
      *
-     * <p>口径变更：此前是「业务方指定优先、无条件生效」。现多一条下限保护 ——
-     * 业务方普遍传 3600，但实测确有跑到 2h43m 的任务，按原口径会被判 "task poll timeout"
-     * 并丢弃已完成的结构化产出。
+     * <p>Semantics changed: previously "caller value wins, unconditionally". A lower bound was added —
+     * callers commonly pass 3600, but tasks have been measured running for 2h43m; under the old rule they
+     * would be judged "task poll timeout" and their completed structured output discarded.
      *
-     * <p><b>下游共用</b>：本方法同时决定任务存活闸门（{@code pollOnce}）与 MCP 凭证 TTL
-     * （{@code submit} 签发），两者天然一致，不会出现「任务还在跑、凭证先过期」。
+     * <p><b>Shared downstream</b>: this method determines both the task liveness gate ({@code pollOnce})
+     * and the MCP credential TTL (issued in {@code submit}), so the two are naturally consistent and a task
+     * never keeps running after its credential expires.
      */
     long effectiveTimeoutSeconds(Integer taskTimeoutSeconds) {
         if (taskTimeoutSeconds == null) {
@@ -478,7 +487,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         return Math.max(taskTimeoutSeconds, minTimeoutSeconds);
     }
 
-    /** 单任务一轮轮询：超时/run 终态/阶段推进。 */
+    /** One polling round for a single task: timeout / run terminal state / phase advancement. */
     private void pollOnce(AgentTask task) {
         Long taskId = task.getId();
         long timeoutSeconds = effectiveTimeoutSeconds(task.getTaskTimeoutSeconds());
@@ -489,7 +498,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             return;
         }
         String phase = task.getPollPhase() == null ? PHASE_EXECUTE : task.getPollPhase();
-        // 每次从 DB 读最新 runId（execute→extract→refine 会更新）
+        // Read the latest runId from the DB each time (execute→extract→refine updates it)
         AgentTask fresh = taskMapper.selectById(taskId);
         if (fresh == null || fresh.getRunId() == null) {
             markTerminal(taskId, TaskEnum.STATUS_FAILED,
@@ -510,32 +519,35 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             return;
         }
         if (!TaskEnum.STATUS_COMPLETED.equals(rs)) {
-            return; // 仍在运行，等待下一轮
+            return; // still running; wait for the next round
         }
         handleCompletedPhase(fresh, phase, currentRunId, run);
     }
 
     /**
-     * 处理某阶段 run 完成。
+     * Handles completion of a phase's run.
      *
-     * @return true 表示任务已终态，调用方停止轮询
+     * @return true if the task is already terminal, so the caller should stop polling
      */
     private boolean handleCompletedPhase(AgentTask task, String phase, Long currentRunId, RunVO run) {
         switch (phase) {
             case PHASE_EXECUTE -> {
-                // 命中循环次数上限被<b>真截断</b>（最后一轮仍在调工具）→ 视为执行失败，不再进入提炼阶段。
-                // 注意 loopCapped 现在只在 SessionRunner 的工具轮收口分支置位；模型在最后一轮主动
-                // 交付答案（COMPLETE 分支）不再置位，否则会把正常完成误判成半成品而丢掉产出。
+                // Hit the loop cap and was <b>actually truncated</b> (still calling tools in the last round)
+                // → treat it as an execution failure and do not enter the extraction phase.
+                // Note that loopCapped is now only set in SessionRunner's tool-round finalization branch; the
+                // model delivering an answer in the last round (COMPLETE branch) no longer sets it, otherwise a
+                // normal completion would be misjudged as a partial result and its output discarded.
                 if (Boolean.TRUE.equals(run.getLoopCapped())) {
                     log.warn("Task {} execute run {} hit loop cap, failing task", task.getId(), currentRunId);
-                    // 必须带上 run 的实际产出：run 通常已经写出结构化结论（哪怕是
-                    // status=INCOMPLETE 的自陈中断），只回 {"error": ...} 会让业务方完全看不到
-                    // 模型干了什么、卡在哪一步 —— 线上 task 360/362 就是这样只收到一句无关错误串。
+                    // Must include the run's actual output: the run has usually written a structured conclusion
+                    // (even a self-declared interruption with status=INCOMPLETE), and returning only {"error": ...}
+                    // leaves the caller unable to see what the model did or where it got stuck — production tasks
+                    // 360/362 received only an unrelated error string exactly this way.
                     markTerminalWithRemark(task.getId(), TaskEnum.STATUS_FAILED,
                             replyJson(run), REASON_LOOP_LIMIT);
                     return true;
                 }
-                // 无契约（未配置 expectedOutput）→ 保持原有行为直接收尾
+                // No contract (expectedOutput not configured) → keep the previous behavior and finish directly
                 if (!StringUtils.hasText(task.getExpectedOutputJson())) {
                     markTerminal(task.getId(), TaskEnum.STATUS_COMPLETED, replyJson(run));
                     return true;
@@ -561,7 +573,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                     markTerminal(task.getId(), TaskEnum.STATUS_COMPLETED, content);
                     return true;
                 }
-                // 提炼阶段失败 → 第三轮修正一次；修正阶段失败 → 不再重试，兜底回退
+                // Extraction failed → one refine round; refine failed → no more retries, fall back
                 if (phase.equals(PHASE_EXTRACT)) {
                     log.warn("Task {} extract output invalid ({}), starting refine", task.getId(), errors.size());
                     startRefine(task, content, errors);
@@ -578,7 +590,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
     }
 
-    /** 发起第二轮「结构化提炼」run（同 session）。 */
+    /** Starts the second "structured extraction" run (same session). */
     private void startExtraction(AgentTask task, RunVO executeRun) {
         String message = buildExtractionPrompt(task.getExpectedOutputJson(), null);
         Long extractRunId = fireFollowUpRun(task, message);
@@ -593,7 +605,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         log.info("Task {} extraction run {} started", task.getId(), extractRunId);
     }
 
-    /** 发起第三轮「修正」run（注入校验错误详情）。 */
+    /** Starts the third "refine" run (injects validation error details). */
     private void startRefine(AgentTask task, String invalidContent, java.util.List<String> errors) {
         String message = buildExtractionPrompt(task.getExpectedOutputJson(), errors);
         Long refineRunId = fireFollowUpRun(task, message);
@@ -608,13 +620,13 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         log.info("Task {} refine run {} started", task.getId(), refineRunId);
     }
 
-    /** 在同 session 发起一条新 run（供提炼/修正），返回新 runId；异常返回 null。 */
+    /** Starts a new run in the same session (for extraction/refine), returning the new runId; null on error. */
     private Long fireFollowUpRun(AgentTask task, String message) {
         try {
             if (task.getSessionId() == null) {
                 return null;
             }
-            // 后台调度线程无请求上下文：以任务创建人身份发起，满足会话归属校验
+            // The background scheduler thread has no request context: start as the task creator to satisfy session ownership checks
             com.buukle.agent.common.context.AuthContext.setUsername(task.getCreatedBy());
             com.buukle.agent.common.context.AuthContext.setSuperAdmin(false);
             SendMessageDTO send = new SendMessageDTO();
@@ -636,7 +648,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
     }
 
-    /** 提炼/修正提示：强契约（无代码块、无解释、不调用工具）+ schema；refine 时附加校验错误详情。 */
+    /** Extraction/refine prompt: strict contract (no code blocks, no explanation, no tool calls) + schema; refine also appends validation error details. */
     private String buildExtractionPrompt(String schema, java.util.List<String> errors) {
         StringBuilder sb = new StringBuilder();
         sb.append(errors == null || errors.isEmpty() ? MSG_EXTRACT_HEADER : MSG_REFINE_HEADER);
@@ -644,14 +656,14 @@ public class AgentTaskServiceImpl implements AgentTaskService {
             sb.append(schema);
         }
         if (errors != null && !errors.isEmpty()) {
-            sb.append("\n\n【校验错误】\n");
+            sb.append("\n\n[VALIDATION ERRORS]\n");
             errors.forEach(e -> sb.append("- ").append(e).append('\n'));
         }
         sb.append(MSG_EXTRACT_RULES);
         return sb.toString();
     }
 
-    /** 落库契约 artifact（resultJson 直接取 content）。 */
+    /** Persists the contract artifact (resultJson takes content directly). */
     private void saveArtifact(Long taskId, String phase, String content, String schema, Long runId) {
         try {
             AgentTaskArtifact artifact = new AgentTaskArtifact();
@@ -686,8 +698,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     /**
-     * 终态 + 人话原因。{@code remark} 会随回调发给业务方（{@code TaskCallbackBody.remark}），
-     * 此前线上 153 个任务的 remark 全为空，业务方收不到任何可读的失败说明。
+     * Terminal state + human-readable reason. {@code remark} is sent to the caller with the callback
+     * ({@code TaskCallbackBody.remark}); previously all 153 production tasks had an empty remark, so the
+     * caller received no readable failure explanation.
      */
     private void markTerminalWithRemark(Long taskId, String status, String resultJson, String remark) {
         AgentTask task = taskMapper.selectById(taskId);
@@ -697,7 +710,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (isTerminal(task.getStatus())) {
             return;
         }
-        // 与 transitionToTerminal 同样的「条件更新保证多副本单胜者」语义
+        // Same "conditional update guarantees a single winner across replicas" semantics as transitionToTerminal
         int updated = taskMapper.update(null, new LambdaUpdateWrapper<AgentTask>()
                 .eq(AgentTask::getId, task.getId())
                 .in(AgentTask::getStatus, TaskEnum.STATUS_RUNNING, TaskEnum.STATUS_QUEUED)
@@ -716,7 +729,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         if (isTerminal(task.getStatus())) {
             return;
         }
-        // 条件更新保证多副本单胜者；仅获胜者触发一次 notifyTerminal
+        // Conditional update guarantees a single winner across replicas; only the winner triggers notifyTerminal once
         int updated = taskMapper.update(null, new LambdaUpdateWrapper<AgentTask>()
                 .eq(AgentTask::getId, task.getId())
                 .in(AgentTask::getStatus, TaskEnum.STATUS_RUNNING, TaskEnum.STATUS_QUEUED)
@@ -729,10 +742,10 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         }
     }
 
-    /** 终态后的收尾：清凭证 + 发回调。由 transitionToTerminal / markTerminalWithRemark 共用。 */
+    /** Post-terminal cleanup: evict the credential + send the callback. Shared by transitionToTerminal / markTerminalWithRemark. */
     private void afterTerminal(AgentTask task) {
-        // 任务已终态：凭证没有存在意义了，立刻清理而不是等 TTL。
-        // 放在 notifyTerminal 之前，保证即使回调方超时/异常也已完成清理。
+        // The task is terminal: the credential has no reason to exist, so evict it immediately instead of waiting for the TTL.
+        // Placed before notifyTerminal so cleanup completes even if the callback times out or throws.
         taskMcpCredentialStore.evict(task.getSessionId());
         taskCallbackService.notifyTerminal(task);
     }
@@ -753,20 +766,21 @@ public class AgentTaskServiceImpl implements AgentTaskService {
         return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) : title;
     }
 
-    /** 任务 run 的更高轮次上限（配置缺失则回落默认 maxLoopCount）。 */
+    /** Higher loop limit for task runs (falls back to the default maxLoopCount when the config is absent). */
     private Integer propertiesTaskLoopLimit() {
         return runtimeProperties.getRunner().getTaskMaxLoopCount();
     }
 
-    /** 组装任务 prompt：自主模式指令 + goal + 配置 + 期望输出 schema，禁止提问并要求严格按 schema 返回结构化结果。 */
+    /** Assembles the task prompt: autonomous-mode instruction + goal + config + expected-output schema; forbids questions and requires strict schema-conformant structured output. */
     private String buildPrompt(CreateTaskDTO dto) {
         StringBuilder sb = new StringBuilder(MSG_AUTONOMOUS_HEADER);
         if (dto.getGoal() != null) {
             sb.append(dto.getGoal());
         }
         if (dto.getConfig() != null && !dto.getConfig().isEmpty()) {
-            // 任务配置渲染为 Markdown 而非 JSON：config 里放的是给模型执行的指令，
-            // JSON 的花括号与引号会让模型把它当数据读，长句规则也更难被当作指令遵循。
+            // Task config is rendered as Markdown rather than JSON: config holds instructions for the model to
+            // execute, and JSON braces/quotes make the model read it as data; long-form rules are also harder to
+            // follow as instructions.
             sb.append(MSG_TASK_CONFIG_HEADER).append(MarkdownRenderer.renderConfig(dto.getConfig()));
         }
         if (dto.getExpectedOutput() != null && !dto.getExpectedOutput().isEmpty()) {
@@ -779,7 +793,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private AgentTask requireTask(Long id) {
         AgentTask task = taskMapper.selectById(id);
         if (task == null) {
-            throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND, "任务不存在: " + id);
+            throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND, "Task not found: " + id);
         }
         return task;
     }

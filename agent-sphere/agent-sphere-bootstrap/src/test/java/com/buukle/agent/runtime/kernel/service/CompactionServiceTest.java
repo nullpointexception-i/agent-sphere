@@ -32,9 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 /**
- * 压缩阈值必须计入工具 schema：线上 32k 路由（max_input=32000、10 个工具约 11.7k token）在
- * 实际请求 32,852 token 时报 400，而 messages 估算只有 19,953 —— 低于 0.7×32000=22,400，
- * 压缩从未触发。本测试用失败请求的真实字符数锁定「messages + tools × 1.1」。
+ * The compaction threshold must include tool schemas: a production 32k route (max_input=32000, 10 tools ≈ 11.7k tokens)
+ * returned 400 on an actual request of 32,852 tokens while the messages estimate was only 19,953 — below 0.7×32000=22,400,
+ * so compaction never triggered. This test locks in "messages + tools × 1.1" using the real character counts of the failing request.
  */
 class CompactionServiceTest {
 
@@ -60,7 +60,7 @@ class CompactionServiceTest {
         return route;
     }
 
-    /** 复现失败请求：messages 58,564 chars + tool args 1,295 chars；10 个工具的 JSON 约 35k chars。 */
+    /** Reproduce the failing request: messages 58,564 chars + tool args 1,295 chars; the JSON of 10 tools is about 35k chars. */
     private static List<ChatMessageDTO> failingMessages() {
         ToolCallDTO call = ToolCallDTO.builder()
                 .id("call-1").type("function")
@@ -95,7 +95,7 @@ class CompactionServiceTest {
         assertFalse(service.shouldCompact(messages, route, List.of()),
                 "只算 messages 时估算低于预算");
 
-        // tools 40,000 chars → ≈11,429 tokens（JSON 用 3.5 除数）；合计 ≈23,571 > 22,400
+        // tools 40,000 chars → ≈11,429 tokens (JSON uses the 3.5 divisor); total ≈23,571 > 22,400
         assertTrue(service.shouldCompact(messages, route, tools),
                 "工具 schema 必须计入阈值，否则实际 prompt 超 32k 才报错");
     }
@@ -103,7 +103,7 @@ class CompactionServiceTest {
     @Test
     void safetyFactorCatchesBorderlineCase() {
         ModelRouteFullVO route = route(101L, 32_000L);
-        // 38,000 chars → 21,111 tokens（无安全系数 < 22,400）；×1.1 ≈23,222 > 22,400
+        // 38,000 chars → 21,111 tokens (without the safety factor, < 22,400); ×1.1 ≈23,222 > 22,400
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("u".repeat(38_000)));
 
@@ -114,7 +114,7 @@ class CompactionServiceTest {
     @Test
     void chineseDensityTriggersCompactionWhereOldDivisorDidNot() {
         ModelRouteFullVO route = route(101L, 32_000L);
-        // 40,000 chars：旧除数 3 → 13,333×1.1≈14,667（不触发）；1.8 → 22,222×1.1≈24,444（触发）
+        // 40,000 chars: old divisor 3 → 13,333×1.1≈14,667 (not triggered); 1.8 → 22,222×1.1≈24,444 (triggered)
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("中".repeat(40_000)));
 
@@ -124,7 +124,7 @@ class CompactionServiceTest {
 
     @Test
     void infeasibleCompactionIsSkipped_whenFixedPartExceedsMaxInput() {
-        // 线上 route 4：max_input=20000；主 system（30k chars≈16.7k）+ 工具（35k chars≈19.4k）已超硬上限。
+        // Production route 4: max_input=20000; the main system (30k chars≈16.7k) + tools (35k chars≈19.4k) already exceed the hard cap.
         ModelRouteFullVO route = route(4L, 20_000L);
         List<ChatMessageDTO> messages = new ArrayList<>();
         messages.add(new ChatMessageDTO().setRole("system").setContent("s".repeat(30_000)));
@@ -143,7 +143,7 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = new ArrayList<>();
         messages.add(new ChatMessageDTO().setRole("system").setContent("s".repeat(6_000)));
         messages.add(new ChatMessageDTO().setRole("user").setContent("u".repeat(60_000)));
-        // 固定部分 ≈ 3,334+3,334=6,668 < max_input 20,000；历史仍可压 → 必须触发。
+        // Fixed part ≈ 3,334+3,334=6,668 < max_input 20,000; history can still be compacted → must trigger.
         List<ToolDefinitionDTO> tools = toolsWithJsonChars(6_000);
 
         assertTrue(service.shouldCompact(messages, route, tools),
@@ -163,7 +163,7 @@ class CompactionServiceTest {
                 .setRole("user")
                 .setContent(parts));
 
-        // 15 张图按每张 1,000 token 估；预算 14,000，×1.1 后 16,500 → 必须触发
+        // 15 images at 1,000 tokens each; budget 14,000, ×1.1 gives 16,500 → must trigger
         assertTrue(service.shouldCompact(messages, route, List.of()),
                 "图片不能漏算，否则多模态请求会晚于真实溢出才压缩");
     }
@@ -174,13 +174,13 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("u".repeat(21_000)));
 
-        // 预算 0.7×32000=22,400；21,000/1.8×1.1≈12,834 → 不触发（与输出上限无关）
+        // Budget 0.7×32000=22,400; 21,000/1.8×1.1≈12,834 → not triggered (independent of the output cap)
         assertFalse(service.shouldCompact(messages, route, List.of()));
     }
 
     @Test
     void requestMaxOutputShrinksToRemainingContext() {
-        // route 4：1M 上下文、384k 名义输出；margin = 5%
+        // route 4: 1M context, 384k nominal output; margin = 5%
         assertEquals(384_000, service.resolveRequestMaxOutput(1_000_000L, 200_000L, 384_000));
         assertEquals(384_000, service.resolveRequestMaxOutput(1_000_000L, 500_000L, 384_000));
         assertEquals(300_000, service.resolveRequestMaxOutput(1_000_000L, 650_000L, 384_000));
@@ -199,7 +199,7 @@ class CompactionServiceTest {
     void cursorStopsAtLastActuallyIncludedRun() {
         RunVO first = run(11L, "a".repeat(10_000));
         RunVO second = run(12L, "b".repeat(10_000));
-        // 单条 run 的正文先按 2,000 字符截断（≈1,112 token）；1,500 上限只够第一条
+        // Each run's body is truncated to 2,000 chars first (≈1,112 tokens); a 1,500 cap fits only the first
         CompactionService.CompactInput input = service.buildCompactInput(
                 1L, List.of(first, second), 1_500);
 
@@ -277,7 +277,7 @@ class CompactionServiceTest {
         List<ChatMessageDTO> messages = List.of(
                 new ChatMessageDTO().setRole("user").setContent("x".repeat(100_000)));
 
-        service.recordCalibration(202L, 10_000, 30_000); // ratio 3.0，异常
+        service.recordCalibration(202L, 10_000, 30_000); // ratio 3.0, abnormal
         assertTrue(service.shouldCompact(messages, route, List.of()),
                 "异常比例必须丢弃，不能把估算放大到离谱");
     }
@@ -292,7 +292,7 @@ class CompactionServiceTest {
     @Test
     void missingMaxInputFallsBackWithoutThrowing() {
         ModelRouteFullVO route = route(999L, null);
-        // 默认 1M → 预算 700k，这几条消息远低于阈值；只验证不抛异常
+        // Default 1M → budget 700k; these messages are far below the threshold; only verify no exception is thrown
         assertFalse(service.shouldCompact(failingMessages(), route, toolsWithJsonChars(100)));
     }
 

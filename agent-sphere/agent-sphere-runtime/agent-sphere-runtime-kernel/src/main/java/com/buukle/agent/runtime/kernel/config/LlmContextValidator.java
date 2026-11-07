@@ -36,7 +36,7 @@ public class LlmContextValidator {
         dumpConfig("", properties);
         log.info("=== end of configuration dump ===");
 
-        // === 严重校验（阻止启动） ===
+        // === Fatal checks (block startup) ===
         var t = properties.getTool();
         var session = properties.getSession();
         var runner = properties.getRunner();
@@ -160,12 +160,12 @@ public class LlmContextValidator {
         require(async.getAwaitTermination() != null && async.getAwaitTermination().getSeconds() >= 5,
                 "async.await-termination must be >= 5s, got: " + async.getAwaitTermination());
 
-        // === WebRead advanced 校验 ===
+        // === WebRead advanced checks ===
         var wrAdv = t.getWebReadAdvanced();
         if (wrAdv.isUseJinaFallback()
                 && (wrAdv.getJinaApiKey() == null || wrAdv.getJinaApiKey().isEmpty())) {
-            // jina-api-key 是运行时系统配置（agent_system_config），未配置时可回落 html-to-markdown，
-            // 仅在 key 为空时告警，不阻止启动。
+            // jina-api-key is a runtime system config (agent_system_config); when unset it can fall back to html-to-markdown,
+            // so warn only when the key is empty and do not block startup.
             log.warn("web-read-advanced.jina-api-key is empty while use-jina-fallback=true; "
                     + "jina fallback will be skipped until a key is configured in System Config");
         }
@@ -176,7 +176,7 @@ public class LlmContextValidator {
         require(wrAdv.getJinaReadTimeout() >= 5,
                 "web-read-advanced.jina-read-timeout must be >= 5s, got: " + wrAdv.getJinaReadTimeout());
 
-        // === WebFetch advanced 校验 ===
+        // === WebFetch advanced checks ===
         var wfAdv = t.getWebFetchAdvanced();
         require(wfAdv.getMaxRetries() >= 0,
                 "web-fetch-advanced.max-retries must be >= 0, got: " + wfAdv.getMaxRetries());
@@ -189,7 +189,7 @@ public class LlmContextValidator {
         require(wfAdv.getMaxResponseBytes() >= 1024,
                 "web-fetch-advanced.max-response-bytes must be >= 1024, got: " + wfAdv.getMaxResponseBytes());
 
-        // === 跨字段 WARN（不阻止启动） ===
+        // === Cross-field WARN (does not block startup) ===
         if (wrAdv.isUseJinaFallback()) {
             long htmlMax = wrAdv.getHtmlToMarkdown().getMaxContentLength();
             if (wfAdv.getMaxResponseBytes() > htmlMax) {

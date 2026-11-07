@@ -75,8 +75,8 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
     private final SsoIdentityMapper ssoIdentityMapper;
     private final SsoOidcClient ssoOidcClient;
     private final SsoProvisioningService provisioningService;
-    // ObjectProvider 延迟解析：UserResourceProvisioner -> Coordinator -> CompletionsService -> SsoIdentitySpi(SsoServiceImpl)
-    // 若直接注入会在构造期形成循环依赖，运行时才解析可避免。
+    // ObjectProvider resolves lazily: UserResourceProvisioner -> Coordinator -> CompletionsService -> SsoIdentitySpi(SsoServiceImpl)
+    // Injecting it directly would create a constructor-time circular dependency; resolving at runtime avoids that.
     private final ObjectProvider<UserResourceProvisioner> userResourceProvisionerProvider;
     private final UserSpi userSpi;
     private final RedissonClient redissonClient;
@@ -204,7 +204,8 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
                 identityProvider.getDefaultRoleId());
 
         if (provision.created()) {
-            // 首次开通：按身份源资源模板为用户生成私有资源副本（失败不影响登录，仅记录）
+            // First provisioning: create private user resource copies from the identity provider's resource template
+            // (failure does not affect login, it is only logged)
             provisionResourcesForNewUser(identityProvider, provision);
         }
 
@@ -221,8 +222,9 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
                     provision.username(), identityProvider.getCode());
             return;
         }
-        // 异步开通：回调立即返回并重定向，首次登录不等待资源创建；provision 内部自行管理
-        // TenantUtil（thread-local）并 try/catch，失败仅记录，不影响登录。
+        // Asynchronous provisioning: the callback returns and redirects immediately, so the first login does not
+        // wait for resource creation; provisioning manages TenantUtil (thread-local) and try/catch internally,
+        // logging failures without affecting login.
         Thread.startVirtualThread(() -> {
             try {
                 ResourceInitResult result = provisioner.provision(

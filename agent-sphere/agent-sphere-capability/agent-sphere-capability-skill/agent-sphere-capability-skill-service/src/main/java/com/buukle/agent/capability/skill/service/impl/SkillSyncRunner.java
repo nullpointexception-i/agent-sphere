@@ -29,19 +29,22 @@ import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
- * Skill Hub 自动同步的执行体（定时 + 手动共用）。
+ * Execution body of Skill Hub auto-sync (shared by the scheduled and manual triggers).
  *
- * <p><b>修掉的「没效果」根因</b>：原 {@code SkillAutoUpdateSweeper} 的扫描条件带
- * {@code created_at >= now - 7 天}，而副本的 created_at 是<b>安装时间</b> ——
- * 装得超过 7 天的副本<b>永远不再被扫描</b>。现在只按 {@code auto_update=true AND
- * origin_skill_id IS NOT NULL} 筛选，装多久都跟着源更新。
- * （索引 {@code idx_skill_auto_update(auto_update, origin_skill_id)} 正好完整命中。）
+ * <p><b>Root cause of the "no effect" bug that was fixed</b>: the original
+ * {@code SkillAutoUpdateSweeper} scan condition included {@code created_at >= now - 7 days}, but a
+ * copy's created_at is its <b>install time</b> - copies installed more than 7 days ago were
+ * <b>never scanned again</b>. The query now filters only on {@code auto_update=true AND
+ * origin_skill_id IS NOT NULL}, so copies follow their origin no matter how old they are.
+ * (The index {@code idx_skill_auto_update(auto_update, origin_skill_id)} covers it exactly.)
  *
- * <p><b>为什么必须有执行记录</b>：这个任务的 logger 被 logback 的
- * {@code com.buukle.agent.capability=WARN} 规则压住，而它唯一的成功日志是 log.info
- * —— 任务跑了还是没跑、扫到几条、同步了几条，光看日志永远无法回答。每轮写一行记录就是答案。
+ * <p><b>Why execution records are mandatory</b>: this task's logger is suppressed by logback's
+ * {@code com.buukle.agent.capability=WARN} rule, and its only success log is log.info - whether the
+ * task ran, how many copies were scanned and how many were synced can never be answered from the
+ * logs alone. One row per round is the answer.
  *
- * <p>锁与异常语义复用 {@link AbstractRecordedTask}，与会话清理同一套骨架。
+ * <p>Locking and exception semantics are reused from {@link AbstractRecordedTask}, the same
+ * skeleton as session cleanup.
  */
 @Slf4j
 @Component
@@ -49,7 +52,7 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
 
     private static final String LOCK_KEY = "scheduler:skill-auto-update";
     private static final int DEFAULT_LOG_RETENTION_DAYS = 30;
-    /** 跳过明细最多记多少条，避免源全下线时把 detail 撑成大 JSON */
+    /** Maximum number of skip details to record, so detail does not become a huge JSON blob when every origin is offline */
     private static final int MAX_DETAIL_ITEMS = 100;
     private static final String TASK_NAME = "Skill auto-update sync";
 
@@ -73,15 +76,15 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
     @Value("${buukle.agent.skill.auto-update-batch-size:100}")
     private int batchSize;
 
-    // ==================== 入口 ====================
+    // ==================== Entry points ====================
 
-    /** 定时入口：固定延迟 5 分钟（原先的间隔保留）。 */
+    /** Scheduled entry point: fixed delay of 5 minutes (the original interval is preserved). */
     @Scheduled(fixedDelayString = "${buukle.agent.skill.auto-update-interval:PT5M}")
     public void scheduledSync() {
         submitSync(SkillSyncTriggerEnum.TRIGGER_SCHEDULED);
     }
 
-    /** 异步提交一轮并立即返回初始记录；前端拿 id 去轮询 {@link #getRun(Long)}。 */
+    /** Submits one round asynchronously and returns the initial record immediately; the frontend polls {@link #getRun(Long)} with the id. */
     public SkillSyncRunVO submitSync(String trigger) {
         String operator = currentOperator();
         Long recordId = insertRunning(trigger, operator);
@@ -90,7 +93,7 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
         return row == null ? null : toRunVO(row);
     }
 
-    /** 同步执行一轮（单测走它，可直接断言扫描条件与记录终态）。 */
+    /** Runs one round synchronously (used by unit tests, which can then assert on the scan condition and terminal record state). */
     public SkillSyncRunVO runSync(String trigger) {
         String operator = currentOperator();
         Long recordId = insertRunning(trigger, operator);
@@ -110,7 +113,7 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
         return voPage;
     }
 
-    // ==================== 基类骨架 ====================
+    // ==================== Base-class skeleton ====================
 
     @Override
     protected String lockKey() {
@@ -153,7 +156,7 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
                 abbreviate(e.getMessage()), elapsedMillis, operator);
     }
 
-    // ==================== 真正的扫描 ====================
+    // ==================== Actual sweep ====================
 
     private SkillSyncRunVO sweep(Long recordId, String operator, long startedAtMillis) {
         int sizeLimit = Math.max(batchSize, 1);
@@ -167,8 +170,9 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
             Page<CapabilitySkill> page = capabilitySkillService.page(
                     new Page<>(pageNo, sizeLimit),
                     new LambdaQueryWrapper<CapabilitySkill>()
-                            // 注意：这里刻意没有时间窗口。原先的 created_at >= now-7d
-                            // 是本次修复的根因 —— 它按「安装时间」筛，装久了就永远扫不到。
+                            // Note: deliberately no time window here. The old created_at >= now-7d
+                            // was the root cause fixed here - it filtered by "install time", so
+                            // old copies were never scanned again.
                             .eq(CapabilitySkill::getAutoUpdate, true)
                             .isNotNull(CapabilitySkill::getOriginSkillId)
                             .orderByAsc(CapabilitySkill::getId));
@@ -189,7 +193,7 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
                         }
                     }
                 } catch (Exception e) {
-                    // 单个副本失败不影响其余；但必须留痕，否则「没效果」再次无从排查
+                    // One copy failing must not affect the rest; but it must be recorded, otherwise "no effect" is again undiagnosable
                     skipped++;
                     if (detail.size() < MAX_DETAIL_ITEMS) {
                         SkillSyncRunVO.SkippedCopy failed = toSkippedCopy(copy, SkillSyncOutcome.CONCURRENT_UPDATE);
@@ -206,7 +210,7 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
             pageNo++;
         }
 
-        // 记录表自身也只保留 N 天：5 分钟一轮，不清会一直涨
+        // The record table itself keeps only N days: one round every 5 minutes would grow forever otherwise
         long retentionDays = resolveLogRetentionDays();
         long pruned = skillSyncRunMapper.deleteOlderThan(
                 LocalDateTime.now().minusDays(retentionDays), recordId);
@@ -252,7 +256,7 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
         return vo;
     }
 
-    // ==================== 配置 ====================
+    // ==================== Configuration ====================
 
     private boolean isEnabled() {
         return parseBoolean(systemConfigSpi.get(SystemConfigKeys.SKILL_AUTO_UPDATE_ENABLED, "true"), true);
@@ -293,9 +297,9 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
         return fallback;
     }
 
-    // ==================== 常量 ====================
+    // ==================== Constants ====================
 
-    private static final String SKIP_DISABLED_REASON = "自动同步总开关 skill.auto-update-enabled 为 false，本次跳过";
+    private static final String SKIP_DISABLED_REASON = "Auto-sync master switch skill.auto-update-enabled is false; skipped this time";
 
     private static final TypeReference<List<SkillSyncRunVO.SkippedCopy>> SKIP_DETAIL_TYPE =
             new TypeReference<>() {

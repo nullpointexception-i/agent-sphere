@@ -11,10 +11,11 @@ import org.apache.ibatis.annotations.Update;
 public interface AgentUserTokenMapper extends BaseMapper<AgentUserToken> {
 
     /**
-     * 滑动续期 + last_used_at 节流：只有距上次使用超过 staleDays 才写一次库。
+     * Sliding renewal + last_used_at throttling: the database is written only when the last use is older than staleDays.
      *
-     * <p>调用点只在「token 缓存未命中、需要回源 DB」时，天然把写放大压到每个 token
-     * 每 5 分钟最多一次，再叠加 staleDays 后实际写频率极低。
+     * <p>Call sites only hit this when the token cache misses and the DB must be consulted, which
+     * inherently caps write amplification at one per token every 5 minutes at most; combined with
+     * staleDays the effective write frequency is very low.
      */
     @Update("UPDATE agent_user_token SET "
             + "last_used_at = now(), "
@@ -29,10 +30,12 @@ public interface AgentUserTokenMapper extends BaseMapper<AgentUserToken> {
               @Param("staleDays") int staleDays);
 
     /**
-     * 物理删除过期/已吊销且超过保留期的会话行。
+     * Physically delete expired/revoked session rows that are past their retention period.
      *
-     * <p>token 是临时凭证而非业务数据，必须物理删除；否则表只增不减，且已吊销的
-     * 历史凭证没有保留价值。这里与审计日志清理任务同类，不属于「业务数据禁止硬删」。
+     * <p>A token is a temporary credential, not business data, so it must be physically deleted;
+     * otherwise the table only grows and revoked historical credentials have no retention value.
+     * This is in the same category as the audit log cleanup task and is not covered by
+     * "never hard-delete business data".
      */
     @Delete("DELETE FROM agent_user_token WHERE "
             + "expires_at < now() - (#{retentionDays} * interval '1 day') "

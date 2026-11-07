@@ -139,11 +139,12 @@ export default function InfoEditDrawer({
           label={labelWithRule(
             intl.formatMessage({
               id: 'pages.instances.businessType',
-              defaultMessage: '业务域',
+              defaultMessage: 'Business Type',
             }),
             intl.formatMessage({
               id: 'pages.instances.businessType.extra',
-              defaultMessage: '任务按业务域匹配该实例，需与调用方一致',
+              defaultMessage:
+                'Tasks match this instance by businessType; must match the caller',
             }),
           )}
         >
@@ -154,11 +155,12 @@ export default function InfoEditDrawer({
           label={labelWithRule(
             intl.formatMessage({
               id: 'pages.instances.allowConsoleSession',
-              defaultMessage: '允许主站会话',
+              defaultMessage: 'Allow Console Session',
             }),
             intl.formatMessage({
               id: 'pages.instances.allowConsoleSession.extra',
-              defaultMessage: '关闭后主站（控制台）不能对该实例发起或继续会话',
+              defaultMessage:
+                'When off, the console (main site) cannot start or continue sessions on this instance',
             }),
           )}
           valuePropName="checked"
@@ -170,12 +172,12 @@ export default function InfoEditDrawer({
           label={labelWithRule(
             intl.formatMessage({
               id: 'pages.instances.allowWidgetSession',
-              defaultMessage: '允许 widget 会话',
+              defaultMessage: 'Allow Widget Session',
             }),
             intl.formatMessage({
               id: 'pages.instances.allowWidgetSession.extra',
               defaultMessage:
-                '关闭后嵌入式 widget 不能对该实例发起或继续会话（任务专用实例请保持关闭）',
+                'When off, the embedded widget cannot start or continue sessions on this instance (keep off for task-only instances)',
             }),
           )}
           valuePropName="checked"
@@ -187,19 +189,31 @@ export default function InfoEditDrawer({
           label={labelWithRule(
             intl.formatMessage({
               id: 'pages.instances.maxLoopCount',
-              defaultMessage: '最大循环次数',
+              defaultMessage: 'Max Loop Count',
             }),
             intl.formatMessage({
               id: 'pages.instances.maxLoopCount.extra',
-              defaultMessage: '单次 run 最大循环数；0=系统默认，>0=覆盖，必填',
+              defaultMessage:
+                'Max loops per run; 0=system default, >0=override, required',
             }),
           )}
-          rules={[{ required: true, message: '请输入最大循环次数' }]}
+          rules={[
+            {
+              required: true,
+              message: intl.formatMessage({
+                id: 'pages.instances.maxLoopCountRequired',
+                defaultMessage: 'Please enter the max loop count',
+              }),
+            },
+          ]}
         >
           <InputNumber
             min={0}
             max={2000}
-            placeholder="系统默认"
+            placeholder={intl.formatMessage({
+              id: 'pages.instances.systemDefault',
+              defaultMessage: 'System default',
+            })}
             style={{ width: '100%' }}
           />
         </Form.Item>
@@ -208,12 +222,12 @@ export default function InfoEditDrawer({
           label={labelWithRule(
             intl.formatMessage({
               id: 'pages.instances.completionProtocol',
-              defaultMessage: '完成协议',
+              defaultMessage: 'Completion Protocol',
             }),
             intl.formatMessage({
               id: 'pages.instances.completionProtocol.extra',
               defaultMessage:
-                '严格模式要求调用 finish；兼容模式允许工具后用最终文本收口',
+                'Follows the model route by default; task instances can force strict finish',
             }),
           )}
         >
@@ -223,21 +237,21 @@ export default function InfoEditDrawer({
                 value: 'MODEL_DEFAULT',
                 label: intl.formatMessage({
                   id: 'pages.instances.completionProtocol.inherit',
-                  defaultMessage: '跟随模型路由（推荐）',
+                  defaultMessage: 'Follow model route (recommended)',
                 }),
               },
               {
                 value: 'STRICT_FINISH',
                 label: intl.formatMessage({
                   id: 'pages.instances.completionProtocol.strict',
-                  defaultMessage: '强制严格 finish',
+                  defaultMessage: 'Force strict finish',
                 }),
               },
               {
                 value: 'IMPLICIT_TEXT',
                 label: intl.formatMessage({
                   id: 'pages.instances.completionProtocol.implicit',
-                  defaultMessage: '强制兼容普通文本',
+                  defaultMessage: 'Force implicit text completion',
                 }),
               },
             ]}
@@ -248,12 +262,12 @@ export default function InfoEditDrawer({
           label={labelWithRule(
             intl.formatMessage({
               id: 'pages.instances.config',
-              defaultMessage: '高级配置 (JSON)',
+              defaultMessage: 'Advanced Config (JSON)',
             }),
             intl.formatMessage({
               id: 'pages.instances.config.extra',
               defaultMessage:
-                '采样参数 JSON（与 Completions config 同形状）；留空 = 使用全局系统默认',
+                'Sampling params JSON (same shape as Completions config); empty = use global system default',
             }),
           )}
         >

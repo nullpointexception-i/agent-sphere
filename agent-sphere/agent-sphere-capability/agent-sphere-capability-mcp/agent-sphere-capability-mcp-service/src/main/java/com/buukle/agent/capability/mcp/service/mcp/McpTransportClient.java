@@ -31,9 +31,11 @@ public interface McpTransportClient extends AutoCloseable {
     String callTool(String toolName, String argumentsJson);
 
     /**
-     * 带调用上下文的工具调用：附加请求头（如任务级凭证）在这一次请求上生效。
+     * Tool call with call context: extra request headers (such as the task-level credential) apply
+     * to this single request.
      *
-     * <p>默认实现忽略上下文，保证既有实现方无需改动；需要注入任务凭证的传输实现覆写本方法。
+     * <p>The default implementation ignores the context so existing implementations need no change;
+     * transports that must inject task credentials override this method.
      */
     default String callTool(String toolName, String argumentsJson, McpCallContext callContext) {
         return callTool(toolName, argumentsJson);
@@ -45,7 +47,7 @@ public interface McpTransportClient extends AutoCloseable {
     boolean isConnected();
 
     /**
-     * 握手后协商的 MCP 协议版本；未初始化返回 null。
+     * MCP protocol version negotiated during the handshake; null when not initialized.
      */
     default String negotiatedProtocolVersion() {
         return null;

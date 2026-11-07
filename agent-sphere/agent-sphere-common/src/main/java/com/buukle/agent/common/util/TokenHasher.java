@@ -8,10 +8,12 @@ import java.util.Base64;
 import java.util.HexFormat;
 
 /**
- * 登录 token 的生成与摘要。
+ * Login token generation and hashing.
  *
- * <p>token 明文只在签发时返回给客户端，服务端仅保存 SHA-256 摘要。校验时对入参做同样摘要再比对，
- * 因此数据库泄露不能直接得到可用凭证。生成与摘要必须成对使用这里的实现，避免两处算法漂移。
+ * <p>The plaintext token is returned to the client only at issue time; the server stores only its
+ * SHA-256 digest. Verification hashes the input the same way and compares, so a database leak does
+ * not directly yield usable credentials. Generation and hashing must both use the implementation
+ * here so the algorithm cannot drift between two places.
  */
 public final class TokenHasher {
 
@@ -22,14 +24,14 @@ public final class TokenHasher {
     private TokenHasher() {
     }
 
-    /** 32 字节随机数 → base64url（无填充），43 个字符。 */
+    /** 32 random bytes → base64url (no padding), 43 characters. */
     public static String generate() {
         byte[] bytes = new byte[TOKEN_BYTES];
         RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    /** 小写 hex 的 SHA-256；用于落库与缓存 key。 */
+    /** Lowercase hex SHA-256; used for persistence and cache keys. */
     public static String sha256(String raw) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -39,7 +41,7 @@ public final class TokenHasher {
         }
     }
 
-    /** 排查用的前缀：允许支持同学用浏览器里的 token 前几位定位到具体会话行。 */
+    /** Diagnostic prefix: lets support staff use the first few characters of a browser token to locate the specific session row. */
     public static String prefix(String raw) {
         return raw.length() <= 8 ? raw : raw.substring(0, 8);
     }

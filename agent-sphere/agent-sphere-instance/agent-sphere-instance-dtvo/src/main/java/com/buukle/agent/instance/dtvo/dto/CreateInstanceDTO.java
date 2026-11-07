@@ -25,24 +25,25 @@ public class CreateInstanceDTO implements Serializable {
     private String businessType;
 
     /**
-     * 是否允许主站控制台发起/继续会话。
+     * Whether the console site may start/continue sessions.
      *
-     * <p>create 时留空走库默认值（放行）；update 时留空表示**不改动**（MyBatis-Plus 忽略 null 字段）。
+     * <p>On create, leaving it empty uses the database default (allowed); on update, leaving it
+     * empty means **do not change** (MyBatis-Plus ignores null fields).
      */
     private Boolean allowConsoleSession;
 
-    /** 是否允许嵌入式 widget 发起/继续会话。留空语义同 {@link #allowConsoleSession}（库默认禁止）。 */
+    /** Whether the embedded widget may start/continue sessions. Empty semantics are the same as {@link #allowConsoleSession} (database default is denied). */
     private Boolean allowWidgetSession;
-    /** 单次 run 最大循环次数；NULL=未配置，0=清除覆盖，>0 覆盖系统默认。 */
+    /** Maximum loop count for a single run; NULL = not configured, 0 = clear the override, >0 overrides the system default. */
     @Min(value = 0, message = "maxLoopCount must be >= 0 when configured")
     private Integer maxLoopCount;
     /** STRICT_FINISH by default; IMPLICIT_TEXT is for compatible conversational instances. */
     private String completionProtocol;
-    /** CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG；留空默认 CHAT。 */
+    /** CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG; empty defaults to CHAT. */
     private String instanceRole;
-    /** 系统托管实例；留空默认 false。 */
+    /** System-managed instance; empty defaults to false. */
     private Boolean systemManaged;
-    /** 采样/请求参数 JSON 配置（与 LlmSamplingConfigDTO 同形状）；NULL/空=未配置，更新时空字符串=清除。 */
+    /** Sampling/request parameter JSON configuration (same shape as LlmSamplingConfigDTO); NULL/empty = not configured, an empty string on update = clear. */
     @Size(max = 8000, message = "config must be <= 8000 chars")
     private String config;
 }

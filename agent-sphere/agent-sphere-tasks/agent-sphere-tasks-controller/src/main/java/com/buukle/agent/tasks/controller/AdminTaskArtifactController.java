@@ -1,5 +1,9 @@
 package com.buukle.agent.tasks.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
@@ -15,17 +19,17 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 任务产物（task artifact）查询（RBAC：admin:tasks:read）。
+ * Task artifact queries (RBAC: admin:tasks:read).
  */
 @WithTenant
 @RestController
-@RequestMapping("/api/v1/admin/task-artifacts")
+@RequestMapping(ApiPrefix.V1 + "/admin/task-artifacts")
 @RequiredArgsConstructor
 public class AdminTaskArtifactController extends BaseController {
 
     private final AgentTaskService taskService;
 
-    @RequirePermission("admin:tasks:read")
+    @RequirePermission(PermissionCodes.ADMIN_TASKS_READ)
     @GetMapping
     public ResponseEntity<Page<TaskArtifactVO>> list(
             @RequestParam(required = false) String keyword,
@@ -35,7 +39,7 @@ public class AdminTaskArtifactController extends BaseController {
         return ok(taskService.pageArtifacts(keyword, taskId, page, size));
     }
 
-    @RequirePermission("admin:tasks:read")
+    @RequirePermission(PermissionCodes.ADMIN_TASKS_READ)
     @GetMapping("/{id}")
     public ResponseEntity<TaskArtifactVO> detail(@PathVariable Long id) {
         return ok(taskService.getArtifact(id));

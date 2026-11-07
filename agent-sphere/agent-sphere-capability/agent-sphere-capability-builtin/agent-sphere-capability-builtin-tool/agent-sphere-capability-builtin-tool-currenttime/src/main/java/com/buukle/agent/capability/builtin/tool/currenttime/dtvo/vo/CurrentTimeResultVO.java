@@ -6,16 +6,16 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
-/** 当前系统时间（Asia/Shanghai）。 */
+/** Current system time (Asia/Shanghai). */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class CurrentTimeResultVO extends ExecuteResult {
-    /** ISO-8601 offset，例如 2026-10-29T12:34:56+08:00。 */
+    /** ISO-8601 offset, e.g. 2026-10-29T12:34:56+08:00. */
     private String time;
     private String timezone;
     private long epochMillis;
-    /** 星期几（MONDAY..SUNDAY），避免模型自行推算。 */
+    /** Day of week (MONDAY..SUNDAY), so the model does not have to derive it. */
     private String weekday;
 }

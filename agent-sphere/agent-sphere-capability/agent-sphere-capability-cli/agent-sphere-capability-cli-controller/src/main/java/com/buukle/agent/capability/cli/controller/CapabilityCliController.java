@@ -1,5 +1,9 @@
 package com.buukle.agent.capability.cli.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.capability.cli.dtvo.dto.CreateCliDTO;
 import com.buukle.agent.capability.cli.service.CapabilityCliService;
 import com.buukle.agent.common.annotation.AuditLog;
@@ -15,14 +19,14 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 
 @RestController
-@RequestMapping("/api/v1/capability/cli")
+@RequestMapping(ApiPrefix.V1 + "/capability/cli")
 @RequiredArgsConstructor
 @WithTenant
 public class CapabilityCliController extends BaseController {
     private final CapabilityCliService capabilityCliService;
 
     @AuditLog(action = "CREATE", resourceType = "Capability", resourceId = "#result?.body?.id")
-    @RequirePermission("capability:cli:create")
+    @RequirePermission(PermissionCodes.CAPABILITY_CLI_CREATE)
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateCliDTO dto) {
         return created(capabilityCliService.createCli(dto));
@@ -44,14 +48,14 @@ public class CapabilityCliController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:cli:update")
+    @RequirePermission(PermissionCodes.CAPABILITY_CLI_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateCliDTO dto) {
         return ok(capabilityCliService.updateCli(id, dto));
     }
 
     @AuditLog(action = "DELETE", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:cli:delete")
+    @RequirePermission(PermissionCodes.CAPABILITY_CLI_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         capabilityCliService.deleteCli(id);
@@ -59,7 +63,7 @@ public class CapabilityCliController extends BaseController {
     }
 
     @AuditLog(action = "BATCH_DELETE", resourceType = "Capability", resourceId = "#ids?.toString()")
-    @RequirePermission("capability:cli:delete")
+    @RequirePermission(PermissionCodes.CAPABILITY_CLI_DELETE)
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody java.util.List<Long> ids) {
         capabilityCliService.batchDeleteCli(ids);

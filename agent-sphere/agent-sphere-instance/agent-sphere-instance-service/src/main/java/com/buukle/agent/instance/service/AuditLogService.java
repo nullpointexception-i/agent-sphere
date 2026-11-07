@@ -70,7 +70,7 @@ public class AuditLogService {
         Long userId = AuthContext.getUserId();
         if (userId != null) {
             String key = FE_RATE_KEY_PREFIX + userId;
-            // 多副本共享限流：Redis INCR + EXPIRE（滑动窗口，10s）
+            // Rate limiting shared across replicas: Redis INCR + EXPIRE (sliding window, 10s)
             RAtomicLong counter = redissonClient.getAtomicLong(key);
             long count = counter.incrementAndGet();
             if (count == 1) {

@@ -1,21 +1,23 @@
 # ============================================================
-# 轻量日志栈：Loki(single-binary) + Alloy + Grafana
+# Lightweight logging stack: Loki (single binary) + Alloy + Grafana
 #
-# 设计约束（单节点 k3s，磁盘有限）：
-#   - 镜像走公网 Docker Hub，**按 digest 固定**（已在节点验证可拉取），不走 ACR。
-#   - 只采 agent-sphere 命名空间，避免把 k3s/cattle 的日志一起收。
-#   - Alloy 用 DaemonSet 读节点 /var/log/pods（tail_from_end，不回放历史）。
-#   - Loki 保留 7 天（retention + compactor），PVC 5Gi；采集器 WAL 限 128Mi。
-#   - Grafana 不挂持久卷（仪表盘/datasource 由 ConfigMap 预置）。
-#   - 全部 ClusterIP，不暴露公网；通过 Rancher 服务页 “Launch” 或 port-forward 访问。
+# Design constraints (single-node k3s, limited disk):
+#   - Images come from public Docker Hub, pinned by digest (verified on the node);
+#     they do not use ACR.
+#   - Scrape only the agent-sphere namespace, not k3s/cattle logs.
+#   - Alloy runs as a DaemonSet reading /var/log/pods (tail_from_end, no replay).
+#   - Loki retains 7 days (retention + compactor), PVC 5Gi; collector WAL capped at 128Mi.
+#   - Grafana has no persistent volume (dashboards/datasource are provisioned by ConfigMap).
+#   - Everything is ClusterIP, not exposed publicly; access via the Rancher service page
+#     "Launch" or port-forward.
 #
-# 前置（Secret 不入 git，apply 前必须先建，否则 Grafana 起不来）：
+# Prerequisite (the Secret is not in git; create it before apply or Grafana will not start):
 #   kubectl -n logging create secret generic grafana-admin \
-#     --from-literal=password='<强密码>'
+#     --from-literal=password='<strong-password>'
 #
-# 访问：
-#   kubectl -n logging port-forward svc/grafana 3000:3000   # 本地打开 http://localhost:3000
-#   或 Rancher → logging → Services → grafana → Launch
+# Access:
+#   kubectl -n logging port-forward svc/grafana 3000:3000   # open http://localhost:3000
+#   or Rancher -> logging -> Services -> grafana -> Launch
 # ============================================================
 apiVersion: v1
 kind: Namespace
@@ -23,7 +25,7 @@ metadata:
   name: logging
 ---
 # ------------------------------------------------------------------
-# Loki 配置：单副本、文件系统存储、TSDB 索引、7 天保留
+# Loki configuration: one replica, filesystem storage, TSDB index, 7-day retention
 # ------------------------------------------------------------------
 apiVersion: v1
 kind: ConfigMap
@@ -61,7 +63,8 @@ data:
             prefix: index_
             period: 24h
 
-    # 磁盘护栏：保留 7 天 + 单流/整体摄入限速，防止日志风暴写满盘
+    # Disk guardrail: keep 7 days and rate-limit per-stream/total ingestion so a
+    # log storm cannot fill the volume.
     limits_config:
       retention_period: 168h
       reject_old_samples: true
@@ -176,9 +179,9 @@ spec:
       targetPort: http
 ---
 # ------------------------------------------------------------------
-# Alloy：DaemonSet 读取节点 /var/log/pods（只采 agent-sphere）
-#   - 用 local.file_match 展开 glob：loki.source.file 本身不展开 *
-#   - tail_from_end=true：只跟新增日志，避免重启后把历史回放一遍
+# Alloy: DaemonSet reading node /var/log/pods (only agent-sphere)
+#   - Expand globs with local.file_match: loki.source.file does not expand *
+#   - tail_from_end=true: follow new logs only, do not replay history after restart
 # ------------------------------------------------------------------
 apiVersion: v1
 kind: ServiceAccount
@@ -274,7 +277,7 @@ data:
       }
     }
 
-    // loki.source.file 不做 glob 展开，必须先经 local.file_match
+    // loki.source.file does not expand globs; local.file_match must run first.
     local.file_match "pods" {
       path_targets = discovery.relabel.pods.output
     }
@@ -317,7 +320,7 @@ spec:
             - /etc/alloy/config.alloy
             - --server.http.listen-addr=0.0.0.0:12345
             - --storage.path=/tmp/alloy
-          # 节点上的 /var/log/pods/*.log 是 root:root 0640，需要 root 读
+          # /var/log/pods/*.log on the node is root:root 0640, so root is required.
           securityContext:
             runAsUser: 0
           resources:
@@ -348,7 +351,7 @@ spec:
             type: Directory
 ---
 # ------------------------------------------------------------------
-# Grafana：Loki 数据源预置，无持久卷，ClusterIP
+# Grafana: Loki datasource provisioned, no persistent volume, ClusterIP
 # ------------------------------------------------------------------
 apiVersion: v1
 kind: ConfigMap
@@ -407,13 +410,14 @@ spec:
               value: "false"
             - name: GF_ANALYTICS_CHECK_FOR_UPDATES
               value: "false"
-            # 公网子域：登录后的跳转与 Cookie 必须基于 https
+            # Public subdomain: post-login redirects and cookies must use https.
             - name: GF_SERVER_ROOT_URL
               value: https://grafana.buukle.top
             - name: GF_SECURITY_COOKIE_SECURE
               value: "true"
-            # Grafana 13 启动时会从 grafana.com 拉取预置插件列表；线上网络到不到
-            # grafana.com（实测超时），会让 HTTP 端口迟迟不监听、readiness 一直失败。
+            # Grafana 13 fetches the preinstalled plugin list from grafana.com at startup.
+            # The production network cannot reach it (observed timeout), which keeps the
+            # HTTP port from listening and makes readiness fail forever.
             - name: GF_PLUGINS_PREINSTALL_DISABLED
               value: "true"
             - name: GF_PLUGINS_PREINSTALL_SYNC
@@ -460,7 +464,7 @@ spec:
       port: 3000
       targetPort: http
 ---
-# 强制 HTTP → HTTPS（与 agent-sphere/bole/multica 命名空间同一写法）
+# Force HTTP -> HTTPS (same pattern as the agent-sphere/bole/multica namespaces).
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -472,8 +476,9 @@ spec:
     permanent: true
 ---
 # ------------------------------------------------------------------
-# 公网入口：grafana.buukle.top（泛解析已配，证书由 cert-manager 自动签发）
-# 认证用 Grafana 自带登录（anonymous/sign-up 均已关闭）
+# Public entry: grafana.buukle.top (wildcard DNS already configured; cert-manager
+# issues the certificate automatically)
+# Authentication uses Grafana's built-in login (anonymous/sign-up are disabled)
 # ------------------------------------------------------------------
 apiVersion: networking.k8s.io/v1
 kind: Ingress

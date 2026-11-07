@@ -3,7 +3,7 @@ package com.buukle.agent.sso.spi;
 import java.io.Serializable;
 
 /**
- * 外部能力开放接口的调用方认证信息：SSO code + subject（身份）+ businessType（资源匹配）。
+ * Caller authentication info for the external capability API: SSO code + subject (identity) + businessType (resource matching).
  */
 public record CallerAuth(String code, String subject, String businessType) implements Serializable {
 

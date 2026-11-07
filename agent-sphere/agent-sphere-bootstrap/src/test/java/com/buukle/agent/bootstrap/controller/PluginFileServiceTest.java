@@ -40,7 +40,7 @@ class PluginFileServiceTest {
 
     @BeforeEach
     void setUp() {
-        // SystemConfigServiceImpl 也实现 SystemConfigSpi：显式构造避免 @InjectMocks 类型注入歧义
+        // SystemConfigServiceImpl also implements SystemConfigSpi: construct explicitly to avoid @InjectMocks type-injection ambiguity
         pluginFileService = new PluginFileService(genericFileService, systemConfigSpi, systemConfigService);
     }
 

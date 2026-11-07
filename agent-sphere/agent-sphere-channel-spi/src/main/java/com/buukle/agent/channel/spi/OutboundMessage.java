@@ -2,7 +2,10 @@ package com.buukle.agent.channel.spi;
 
 import java.io.Serializable;
 
-/** 出站消息统一形状。targetMessageId 非空表示“更新已有消息”，由信道适配器决定是否支持。 */
+/**
+ * Unified shape of an outbound message. A non-null {@code targetMessageId} means "update an existing
+ * message"; the channel adapter decides whether that is supported.
+ */
 public record OutboundMessage(
         Long superAgentId,
         Long threadId,

@@ -23,22 +23,22 @@ interface ChatMainProps {
   onReasoningChange: (level: string) => void;
   sseConnected: boolean;
   messages: any[];
-  /** 统一 Timeline 打平行（替代旧多源拼装渲染）。 */
+  /** Flattened unified timeline rows (replaces the old multi-source assembly rendering). */
   timeline: any[];
   timelineHasMore: boolean;
   onLoadOlderTimeline: () => void;
   onRespondClarify: (row: any, response: string) => void;
   loadSubAgentSteps: (id: number) => Promise<SubAgentTimelineItem[]>;
-  /** 子 Agent 实时步骤（SSE 纯驱动，按 subAgentRunId 聚合）。 */
+  /** Sub-agent live steps (purely SSE-driven, aggregated by subAgentRunId). */
   subAgentLive?: SubAgentLiveMap;
-  /** 工具参数仍在生成时的即时提示。 */
+  /** Immediate hint while tool arguments are still being generated. */
   preparingTool?: { publishId?: string; name?: string } | null;
   hasMoreHistory: boolean;
   onLoadMoreHistory: () => void;
   inputValue: string;
   onInputValueChange: (v: string) => void;
   sending: boolean;
-  /** 运行态权威值（来源表聚合）：发送锁 / pending 判定唯一来源。 */
+  /** Authoritative runtime values (aggregated from source tables): the single source for the send lock / pending judgment. */
   runtimeState?: any;
   onSendMessage: () => void;
   onCancelSend: () => void;
@@ -46,7 +46,7 @@ interface ChatMainProps {
   onExpandOpen: () => void;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
-  /** 会话级用量聚合（聊天区最下方吸底悬浮展示）。 */
+  /** Session-level usage aggregation (shown as a floating bar at the bottom of the chat area). */
   runMode?: 'WRITE' | 'READ_ONLY';
   onRunModeChange?: (mode: 'WRITE' | 'READ_ONLY') => void;
   toolApprovalBatch?: ToolApprovalBatch | null;
@@ -120,10 +120,12 @@ export default function ChatMain({
     messages.some((m: any) => m.content && m.content !== '{}') ||
     timeline.length > 0;
 
-  // 单一滚动容器（.messages）接手消息滚动：
-  // - stickRef 在 scroll 事件持续记录「用户是否在底部附近」（增长前的位置，解决大块增长 >160px 不自滚）；
-  // - ResizeObserver 观察内容包裹层，任何内容高度变化（子 Agent 展开/异步步骤/SSE 流式/工具块展开/图片加载/大块合并）
-  //   都在「用户原本在底部」时滚到底，不打断向上回看 / 加载更早。
+  // A single scroll container (.messages) owns message scrolling:
+  // - stickRef continuously records "is the user near the bottom" on scroll (position before
+  //   growth, fixing large >160px growth that would not auto-scroll);
+  // - ResizeObserver watches the content wrapper: any content height change (sub-agent expand /
+  //   async steps / SSE streaming / tool block expand / image load / large merge) scrolls to the
+  //   bottom while "the user was already at the bottom", without interrupting scroll-up / older loads.
   const stickRef = useRef(true);
   const programmaticScrollRef = useRef(false);
   const lastScrollHeightRef = useRef(0);
@@ -154,7 +156,8 @@ export default function ChatMain({
       lastScrollHeightRef.current = height;
       lastScrollTopRef.current = scrollTop;
       const distance = height - scrollTop - el.clientHeight;
-      // 内容增长本身也会触发 scroll（滚动锚定/浏览器夹紧），不能据此判定用户离开底部
+      // Content growth itself also fires scroll (scroll anchoring / browser clamping), so it
+      // cannot be used to decide the user left the bottom
       if (grew && stickRef.current && !userScrolledUp) return;
       stickRef.current = distance < 160;
     };
@@ -172,7 +175,8 @@ export default function ChatMain({
     };
   }, [hasMessages]);
 
-  // 长消息 / 待办 / 截图等新行到达时，ResizeObserver 之外再补一次钉底。
+  // When new rows arrive (long messages / todos / screenshots), pin to the bottom once more
+  // in addition to the ResizeObserver.
   const lastTimelineKey = (() => {
     const last = timeline[timeline.length - 1];
     return `${timeline.length}:${last?.seq ?? ''}:${last?.state ?? ''}`;
@@ -194,11 +198,13 @@ export default function ChatMain({
     return () => cancelAnimationFrame(raf);
   }, [lastTimelineKey]);
 
-  // 输入锁只认运行态接口（来源表聚合）：timeline 只负责渲染，不参与判断
+  // The input lock trusts only the runtime-state API (aggregated from source tables):
+  // the timeline is only responsible for rendering and does not take part in decisions
   const hasPendingClarifications =
     Number(runtimeState?.pendingClarifications || 0) > 0;
 
-  // 实例未开放主站会话时禁用输入（服务端同样会拦，这里只为体验一致）
+  // Disable input when the instance has console sessions disabled (the server enforces this
+  // too; here it is only for consistent UX)
   const consoleBlocked =
     instances.find((i: any) => i.id === currentSession?.agentInstanceId)
       ?.allowConsoleSession === false;
@@ -321,7 +327,13 @@ export default function ChatMain({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  排队中：{item.text}
+                  {intl.formatMessage(
+                    {
+                      id: 'pages.chat.queued',
+                      defaultMessage: 'Queued: {text}',
+                    },
+                    { text: item.text },
+                  )}
                 </span>
                 <button
                   type="button"
@@ -333,7 +345,10 @@ export default function ChatMain({
                     cursor: 'pointer',
                   }}
                 >
-                  撤回
+                  {intl.formatMessage({
+                    id: 'pages.chat.withdraw',
+                    defaultMessage: 'Withdraw',
+                  })}
                 </button>
               </div>
             ))}

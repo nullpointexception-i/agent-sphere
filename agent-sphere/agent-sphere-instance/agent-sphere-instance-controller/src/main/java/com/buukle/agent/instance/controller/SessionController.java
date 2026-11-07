@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
@@ -17,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/instance/sessions")
+@RequestMapping(ApiPrefix.V1 + "/instance/sessions")
 @RequiredArgsConstructor
 @WithTenant
 public class SessionController extends BaseController {

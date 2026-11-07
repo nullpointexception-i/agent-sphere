@@ -12,20 +12,24 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * authConfig（登记时配置的出站鉴权头）的解析。
+ * Parsing of authConfig (the outbound auth headers configured at registration time).
  *
- * <p>集中到一处，是因为两个 transport（Streamable / Legacy SSE）此前各抄了一份**同样有缺陷**的实现：
+ * <p>Centralized here because both transports (Streamable / Legacy SSE) previously carried a copy
+ * of the same **defective** implementation:
  * <ol>
- *   <li>解析失败只打一条 warn 就继续 —— 请求会**不带任何鉴权头**发出去，
- *       下游报的是「缺少 Authorization / 401」，而根因在 AS 的登记配置，排查方向被彻底带偏；</li>
- *   <li>那条 warn 把 authConfig **原文**打进日志 —— 里面装的正是令牌；</li>
- *   <li>值不是 JSON 对象（例如只粘贴了一串 token）时同样被静默忽略。</li>
+ *   <li>a parse failure only logged a warn and continued - the request then went out with **no auth
+ *       header at all**, and the downstream reported "missing Authorization / 401" while the root
+ *       cause was AS's registration config, completely derailing troubleshooting;</li>
+ *   <li>that warn wrote the **raw** authConfig into the logs - which holds the token;</li>
+ *   <li>a value that was not a JSON object (for example a bare pasted token) was likewise silently ignored.</li>
  * </ol>
  *
- * <p>现在的语义：
+ * <p>Current semantics:
  * <ul>
- *   <li>为空 → 合法的「不需要鉴权」，返回空表，但会打一条 WARN 提示（这类问题当初就是"太安静"才难查）；</li>
- *   <li>非法（解析失败 / 不是对象 / 值不是标量）→ **直接抛错**，并在消息里给出形状提示，**不回显原文**。</li>
+ *   <li>blank -> a legal "no auth needed", returns an empty map, but logs a WARN (this kind of
+ *       problem was hard to diagnose precisely because it was "too quiet");</li>
+ *   <li>invalid (parse failure / not an object / non-scalar value) -> **throws immediately**, with a
+ *       shape hint in the message and **no echo of the raw value**.</li>
  * </ul>
  */
 @Slf4j
@@ -33,35 +37,37 @@ public final class McpAuthHeaders {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    /** 形状提示里用的示例，帮助使用者写出正确格式。 */
+    /** Example used in the shape hint, helping users write the correct format. */
     static final String EXPECTED_SHAPE = "{\"Authorization\":\"Bearer <token>\"}";
 
     private McpAuthHeaders() {
     }
 
     /**
-     * 解析为待注入的请求头。空白返回空表；非法抛 {@link CapabilityMcpErrorCode#MCP_AUTH_CONFIG_INVALID}。
-     * 结果不可变，可安全地长期持有（transport 按 mcpId 缓存复用）。
+     * Parses into headers to be injected. Blank returns an empty map; invalid input throws
+     * {@link CapabilityMcpErrorCode#MCP_AUTH_CONFIG_INVALID}. The result is immutable and safe to
+     * hold long-term (transports are cached and reused per mcpId).
      */
     public static Map<String, String> parse(String authConfigJson) {
         if (authConfigJson == null || authConfigJson.isBlank()) {
-            // 不报错：确实存在无需鉴权的 MCP Server。但必须留痕 —— 若对方其实要鉴权，
-            // 这条 WARN 就是唯一能把「下游 401」和「本侧漏配」连起来的线索。
-            log.warn("MCP authConfig 未配置：出站请求不携带任何鉴权头；若目标 MCP Server 需要鉴权，将返回鉴权相关错误");
+            // No error: MCP servers that need no auth really do exist. But leave a trace - if the
+            // server actually requires auth, this WARN is the only clue linking "downstream 401"
+            // to "missing config on our side".
+            log.warn("MCP authConfig is not configured: outbound requests carry no auth headers; if the target MCP Server requires auth it will return an auth-related error");
             return Collections.emptyMap();
         }
         JsonNode auth;
         try {
             auth = JSON.readTree(authConfigJson);
         } catch (Exception e) {
-            // 不回显原文（可能含令牌），只给出形状提示。
+            // Do not echo the raw value (may contain a token); only give the shape hint.
             throw new BizException(CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID,
-                    "authConfig 不是合法 JSON，期望形如 " + EXPECTED_SHAPE);
+                    "authConfig is not valid JSON; expected shape " + EXPECTED_SHAPE);
         }
         if (auth == null || !auth.isObject()) {
             throw new BizException(CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID,
-                    "authConfig 必须是 JSON 对象（键=请求头名，值=请求头值），期望形如 " + EXPECTED_SHAPE
-                            + "；若只填了一串 token，请补上 {\"Authorization\":\"Bearer <token>\"} 结构");
+                    "authConfig must be a JSON object (key = header name, value = header value); expected shape " + EXPECTED_SHAPE
+                            + "; if you only pasted a token, wrap it as {\"Authorization\":\"Bearer <token>\"}");
         }
         Map<String, String> headers = new LinkedHashMap<>();
         Iterator<String> fields = auth.fieldNames();
@@ -70,11 +76,11 @@ public final class McpAuthHeaders {
             JsonNode value = auth.get(key);
             if (key == null || key.isBlank()) {
                 throw new BizException(CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID,
-                        "authConfig 存在空的请求头名，期望形如 " + EXPECTED_SHAPE);
+                        "authConfig contains an empty header name; expected shape " + EXPECTED_SHAPE);
             }
             if (value == null || !value.isValueNode()) {
                 throw new BizException(CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID,
-                        "authConfig 的值必须是字符串标量（" + key + " 不是），期望形如 " + EXPECTED_SHAPE);
+                        "authConfig values must be string scalars (" + key + " is not); expected shape " + EXPECTED_SHAPE);
             }
             headers.put(key, value.asText());
         }

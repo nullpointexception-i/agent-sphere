@@ -67,7 +67,7 @@ class ChatAttachmentServiceTest {
         assertEquals("k1", result.get(0).fileKey());
         assertEquals("image/png", result.get(0).contentType());
         assertEquals("k2", result.get(1).fileKey());
-        // 校验阶段只读元数据：base64/字节读取延后到组模型消息时
+        // The validation phase reads metadata only: base64/byte reads are deferred until model messages are assembled
         verify(attachmentFileService, never()).toDataUrl(anyString());
     }
 

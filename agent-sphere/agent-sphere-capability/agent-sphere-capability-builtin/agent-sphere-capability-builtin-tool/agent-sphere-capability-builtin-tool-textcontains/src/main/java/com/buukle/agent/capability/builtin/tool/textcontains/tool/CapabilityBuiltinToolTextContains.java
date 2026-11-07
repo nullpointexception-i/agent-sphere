@@ -18,12 +18,13 @@ import org.springframework.stereotype.Component;
 import java.util.Locale;
 
 /**
- * 判断目标字符串 B 是否包含子串 A。
+ * Determines whether target string B contains substring A.
  *
- * <p><b>默认绑定</b>：{@link #needConfig()} 返回 {@code false}，因此被
- * {@code BuiltinToolService#listAutoIncludeBuiltinTools()} 收录，由 {@code ContextPreparer}
- * 在**每个实例**上无条件注册 —— 无需任何 DB 能力绑定或 seed。这与 Chrome / WebFetch / WebRead
- * 相反（那三个 {@code needConfig()==true}，必须在实例能力里显式绑定）。
+ * <p><b>Default binding</b>: {@link #needConfig()} returns {@code false}, so the tool is collected
+ * by {@code BuiltinToolService#listAutoIncludeBuiltinTools()} and registered unconditionally by
+ * {@code ContextPreparer} on **every instance** - no DB capability binding or seed required. This is
+ * the opposite of Chrome / WebFetch / WebRead (those return {@code needConfig()==true} and must be
+ * bound explicitly in the instance capabilities).
  */
 @Slf4j
 @Component
@@ -47,7 +48,7 @@ public class CapabilityBuiltinToolTextContains implements CapabilityBuiltinToolS
         return BuiltinToolEnum.TEXT_CONTAINS;
     }
 
-    /** false = 默认绑定：自动包含在所有实例上，无需实例能力绑定。 */
+    /** false = default binding: included automatically on all instances, no instance capability binding needed. */
     @Override
     public boolean needConfig() {
         return false;
@@ -87,7 +88,8 @@ public class CapabilityBuiltinToolTextContains implements CapabilityBuiltinToolS
             haystack = haystack.trim();
         }
         if (mode == TextMatchMode.IGNORE_CASE || mode == TextMatchMode.IGNORE_CASE_TRIMMED) {
-            // Locale.ROOT 而非默认 Locale：后者在土耳其语环境会把 I/i 映射错，产生语言相关的匹配结果
+            // Locale.ROOT instead of the default Locale: the latter maps I/i incorrectly in Turkish
+            // locales, producing locale-dependent match results
             needle = needle.toLowerCase(Locale.ROOT);
             haystack = haystack.toLowerCase(Locale.ROOT);
         }
@@ -95,23 +97,24 @@ public class CapabilityBuiltinToolTextContains implements CapabilityBuiltinToolS
     }
 
     /**
-     * 运行时守卫。
+     * Runtime guard.
      *
-     * <p>{@code @NotBlank} / {@code @NotNull} 只在 {@code parameterVerify} 里生效，而那条路径
-     * **不在运行链路上**（{@code ToolExecutor} 直接调 {@code executeBuiltinTool}）—— 光靠注解，
-     * 空 needle 会一路走到 {@code String.contains("")} 并静默返回 {@code true}。
+     * <p>{@code @NotBlank} / {@code @NotNull} only take effect in {@code parameterVerify}, and that
+     * path is **not on the execution chain** ({@code ToolExecutor} calls {@code executeBuiltinTool}
+     * directly) - relying on the annotations alone, an empty needle would reach
+     * {@code String.contains("")} and silently return {@code true}.
      */
     private static String requireNeedle(String needle) {
         if (needle == null || needle.isBlank()) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "needle 不能为空或纯空白");
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "needle must not be empty or whitespace-only");
         }
         return needle;
     }
 
-    /** haystack 允许为空串（空目标串不含任何子串，答案是 false），但缺失是调用错误。 */
+    /** haystack may be empty (an empty target contains no substring, so the answer is false), but missing it is a caller error. */
     private static String requireHaystack(String haystack) {
         if (haystack == null) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "haystack 不能为 null");
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "haystack must not be null");
         }
         return haystack;
     }

@@ -9,10 +9,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 工具/工具调用记录 artifact 中的浏览器截图引用解析：
- * artifact 形如 {"success":true,"data":{"screenshot":{"fileKey":"…","contentType":"image/jpeg",…}}}，
- * 提取 {fileKey, contentType} 供主/子 Agent 时间线回显图片。解析失败返回空列表（不阻断展示）。
- * 主 Agent（AgentTimelineServiceImpl TOOL 分支）与子 Agent（AgentSubAgentRunServiceImpl）共用。
+ * Parses browser screenshot references out of a tool/tool-call record artifact:
+ * the artifact looks like {"success":true,"data":{"screenshot":{"fileKey":"…","contentType":"image/jpeg",…}}},
+ * and {fileKey, contentType} is extracted so the main/sub-agent timeline can render the image.
+ * A parse failure returns an empty list (display is never blocked).
+ * Shared by the main Agent (AgentTimelineServiceImpl TOOL branch) and sub-agents (AgentSubAgentRunServiceImpl).
  */
 @Slf4j
 public final class ScreenshotRefParser {
@@ -20,7 +21,7 @@ public final class ScreenshotRefParser {
     private ScreenshotRefParser() {
     }
 
-    /** 从工具结果 artifact JSON 解析截图引用；无截图/解析失败返回空列表。 */
+    /** Parse screenshot references from a tool result artifact JSON; returns an empty list when there is no screenshot or parsing fails. */
     public static List<RunAttachment> extractScreenshotImages(String artifact) {
         if (artifact == null || artifact.isBlank()) {
             return Collections.emptyList();

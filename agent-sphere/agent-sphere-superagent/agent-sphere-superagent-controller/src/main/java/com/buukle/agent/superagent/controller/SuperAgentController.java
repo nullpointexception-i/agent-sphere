@@ -1,5 +1,9 @@
 package com.buukle.agent.superagent.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
@@ -20,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/super-agents")
+@RequestMapping(ApiPrefix.V1 + "/super-agents")
 @WithTenant
 @RequiredArgsConstructor
 public class SuperAgentController extends BaseController {
@@ -28,31 +32,31 @@ public class SuperAgentController extends BaseController {
     private final SuperAgentService superAgentService;
 
     @AuditLog(action = "CREATE", resourceType = "SuperAgent", resourceId = "#result?.body?.id")
-    @RequirePermission("super-agent:create")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_CREATE)
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateSuperAgentDTO dto) {
         return created(superAgentService.create(dto));
     }
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping
     public ResponseEntity<?> list(@RequestParam(required = false) Integer limit) {
         return ok(superAgentService.list(limit == null ? 0 : limit));
     }
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
         return ok(superAgentService.get(id));
     }
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping("/{id}/instances")
     public ResponseEntity<?> instances(@PathVariable Long id) {
         return ok(superAgentService.getInstances(id));
     }
 
-    @RequirePermission("super-agent:update")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_UPDATE)
     @PatchMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @Valid @RequestBody CreateSuperAgentDTO dto) {
@@ -60,7 +64,7 @@ public class SuperAgentController extends BaseController {
     }
 
     @AuditLog(action = "DELETE", resourceType = "SuperAgent", resourceId = "#id")
-    @RequirePermission("super-agent:delete")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         superAgentService.delete(id);
@@ -68,14 +72,14 @@ public class SuperAgentController extends BaseController {
     }
 
     @AuditLog(action = "PAUSE", resourceType = "SuperAgent", resourceId = "#id")
-    @RequirePermission("super-agent:update")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_UPDATE)
     @PostMapping("/{id}/pause")
     public ResponseEntity<?> pause(@PathVariable Long id) {
         return ok(superAgentService.pause(id));
     }
 
     @AuditLog(action = "RESUME", resourceType = "SuperAgent", resourceId = "#id")
-    @RequirePermission("super-agent:update")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_UPDATE)
     @PostMapping("/{id}/resume")
     public ResponseEntity<?> resume(@PathVariable Long id) {
         return ok(superAgentService.resume(id));

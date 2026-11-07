@@ -7,9 +7,9 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum AdminErrorCode implements ErrorCode {
-    PERMISSION_CODE_EXISTS("A0701", "权限标识已存在", "请更换权限标识"),
-    ROLE_CODE_EXISTS("A0702", "角色编码已存在", "请更换角色编码"),
-    USER_ALREADY_HAS_ROLE("A0703", "用户已拥有该角色", "请勿重复分配"),
+    PERMISSION_CODE_EXISTS("A0701", "Permission code already exists", "Choose a different permission code"),
+    ROLE_CODE_EXISTS("A0702", "Role code already exists", "Choose a different role code"),
+    USER_ALREADY_HAS_ROLE("A0703", "User already has this role", "Do not assign it twice"),
     ;
 
     private final String code;

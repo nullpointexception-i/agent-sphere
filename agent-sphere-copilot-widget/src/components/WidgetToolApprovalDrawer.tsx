@@ -9,10 +9,10 @@ interface Props {
 }
 
 const LABELS: Record<string, string> = {
-  DENY: '不允许执行',
-  ALLOW_ONCE: '允许执行一次',
-  ALLOW_RUN: '本条消息内允许',
-  ALLOW_SESSION: '本次会话内允许',
+  DENY: 'Deny',
+  ALLOW_ONCE: 'Allow once',
+  ALLOW_RUN: 'Allow for this message',
+  ALLOW_SESSION: 'Allow for this session',
 };
 
 function optionsFor(scope?: string) {
@@ -63,7 +63,7 @@ export function WidgetToolApprovalDrawer({
       }}
     >
         <div style={{ padding: '12px 16px', background: 'transparent', borderBottom: '1px solid #f0f0f0' }}>
-          <strong>需要确认工具调用</strong>
+          <strong>Tool call approval required</strong>
           <span style={{ marginLeft: 8, fontSize: 12, color: '#ad6800' }}>L2</span>
           <span style={{ float: 'right', fontSize: 12, color: '#8c8c8c' }}>
             {Object.keys(decisions).length}/{calls.length}
@@ -98,10 +98,10 @@ export function WidgetToolApprovalDrawer({
                 {current.action ? ` · ${current.action}` : ''}
               </div>
               <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 4 }}>
-                最多允许：{current.approvalScope === 'SESSION' ? '本次会话' : current.approvalScope === 'RUN' ? '本条消息' : '一次性'}
+                Max allowance: {current.approvalScope === 'SESSION' ? 'this session' : current.approvalScope === 'RUN' ? 'this message' : 'once'}
               </div>
               <details style={{ marginTop: 8 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 12 }}>参数</summary>
+                <summary style={{ cursor: 'pointer', fontSize: 12 }}>Arguments</summary>
                 <pre style={{ maxHeight: 160, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 6, fontSize: 11 }}>
                   {current.arguments || ''}
                 </pre>
@@ -135,7 +135,7 @@ export function WidgetToolApprovalDrawer({
             onClick={() => onResolve(calls.map((c) => ({ callId: c.callId, decision: 'DENY' })))}
             style={{ border: '1px solid #ffccc7', color: '#cf1322', background: '#fff', borderRadius: 6, padding: '6px 12px' }}
           >
-            全部拒绝
+            Deny all
           </button>
           <button
             type="button"
@@ -143,7 +143,7 @@ export function WidgetToolApprovalDrawer({
             onClick={() => onResolve(calls.map((c) => ({ callId: c.callId, decision: decisions[c.callId] })))}
             style={{ border: 'none', background: allSelected ? '#1677ff' : '#bfbfbf', color: '#fff', borderRadius: 6, padding: '6px 16px' }}
           >
-            {submitting ? '提交中...' : '提交'}
+            {submitting ? 'Submitting...' : 'Submit'}
           </button>
         </div>
     </div>

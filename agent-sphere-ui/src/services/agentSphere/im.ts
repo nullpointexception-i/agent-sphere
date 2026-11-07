@@ -1,6 +1,8 @@
 import { request } from '@umijs/max';
 
-const BASE = '/api/v1';
+import { API_BASE } from '@/constants/api';
+
+const BASE = API_BASE;
 
 export interface ImParticipant {
   id: number;

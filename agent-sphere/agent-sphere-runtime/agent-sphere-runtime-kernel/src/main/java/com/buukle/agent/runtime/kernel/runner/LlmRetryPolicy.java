@@ -7,36 +7,36 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * LLM 瞬时失败的梯度退避策略（V115）。
+ * Graded backoff policy for transient LLM failures (V115).
  *
- * <p>为什么不能只 sleep：上游 503/超时经常持续几十秒到几分钟，同轮 sleep 会把 run 一直挂在
- * RUNNING 上（虽然虚拟线程不占 OS 线程，但 run 与轮次预算都被占着）。因此前几档就地重试，
- * 后续档位改为**挂起**（WAITING + kind=LLM_RETRY），交给 wait 调度器到点唤醒。
+ * <p>Why not just sleep: upstream 503/timeouts often last tens of seconds to minutes, and sleeping within the same turn keeps the run pinned
+ * in RUNNING (virtual threads do not occupy OS threads, but the run and its loop budget stay occupied). So the first few steps retry in place,
+ * and later steps switch to **suspension** (WAITING + kind=LLM_RETRY), leaving the wait scheduler to wake the run when due.
  *
- * <p>判据只有一条：本轮**没有任何输出分片、没有任何 tool call** 才允许重试 —— 已产生副作用
- * 的轮次重跑会重复执行工具。
+ * <p>There is only one criterion: a retry is allowed only if this turn produced **no output chunks and no tool calls** — re-running a turn that
+ * already caused side effects would execute its tools twice.
  */
 public final class LlmRetryPolicy {
 
     private LlmRetryPolicy() {
     }
 
-    /** 错误分类 code（落 agent_pending_wait.reason，前端据此选文案）。 */
+    /** Error classification code (persisted to agent_pending_wait.reason; the frontend picks the message from it). */
     public static final String HINT_PROVIDER_BUSY = "provider_busy";
     public static final String HINT_CONNECT_TIMEOUT = "connect_timeout";
     public static final String HINT_RATE_LIMITED = "rate_limited";
     public static final String HINT_UNKNOWN = "unknown_transient";
 
-    /** 是否属于「瞬时、值得重试」的上游错误。 */
+    /** Whether this is a transient upstream error worth retrying. */
     public static boolean isTransient(Integer httpStatus, boolean retryable) {
         if (!retryable) {
             return false;
         }
-        // 无 HTTP 交互（连接超时/被重置）、408/429、5xx
+        // No HTTP interaction (connection timeout / reset), 408/429, 5xx
         return httpStatus == null || httpStatus == 408 || httpStatus == 429 || httpStatus >= 500;
     }
 
-    /** 错误分类 code。 */
+    /** Error classification code. */
     public static String hintOf(Integer httpStatus) {
         if (httpStatus == null) {
             return HINT_CONNECT_TIMEOUT;
@@ -53,17 +53,17 @@ public final class LlmRetryPolicy {
         return HINT_UNKNOWN;
     }
 
-    /** 梯度长度 = 最多尝试次数。 */
+    /** Ladder length = maximum number of attempts. */
     public static int maxAttempts(AgentRuntimeProperties.RunnerConfig cfg) {
         return Math.max(1, cfg.getLlmRetryLadder().size());
     }
 
-    /** 第 attempt 次失败（1 起）是否就地重试。 */
+    /** Whether to retry in place after failure number attempt (1-based). */
     public static boolean inline(AgentRuntimeProperties.RunnerConfig cfg, int attempt) {
         return attempt <= Math.max(0, cfg.getLlmRetryInlineRungs());
     }
 
-    /** 第 attempt 次失败（1 起）的退避时长；越界返回 0。 */
+    /** Backoff duration after failure number attempt (1-based); returns 0 when out of range. */
     public static long delayMs(AgentRuntimeProperties.RunnerConfig cfg, int attempt) {
         List<Duration> ladder = cfg.getLlmRetryLadder();
         if (ladder == null || ladder.isEmpty() || attempt < 1) {
@@ -80,9 +80,9 @@ public final class LlmRetryPolicy {
     }
 
     /**
-     * 累积到第 attempt 次失败（1 起）的理论总耗时，用于总窗口判断。
+     * Theoretical total elapsed time after accumulating up to failure number attempt (1-based), used for the overall window check.
      *
-     * <p>刻意用配置推导而不是记时间戳：挂起/恢复跨进程，多一个时间字段就多一处不一致。
+     * <p>Deliberately derived from config instead of recording timestamps: suspension/resume crosses processes, and every extra time field is another place to get out of sync.
      */
     public static long cumulativeMs(AgentRuntimeProperties.RunnerConfig cfg, int attempt) {
         long total = 0L;
@@ -96,7 +96,7 @@ public final class LlmRetryPolicy {
         return total;
     }
 
-    /** 是否已超过总重试窗口。 */
+    /** Whether the overall retry window has been exceeded. */
     public static boolean overTotalWindow(AgentRuntimeProperties.RunnerConfig cfg, int attempt) {
         long max = cfg.getLlmRetryMaxTotal() == null ? 0L : cfg.getLlmRetryMaxTotal().toMillis();
         return max > 0 && cumulativeMs(cfg, attempt) > max;

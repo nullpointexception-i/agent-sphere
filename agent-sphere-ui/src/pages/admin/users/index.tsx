@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import { App, Button, Checkbox, Modal, Space, Table, Tag } from 'antd';
 import { useEffect, useState } from 'react';
@@ -66,7 +67,7 @@ export default function AdminUsers() {
       message.success(
         intl.formatMessage({
           id: 'pages.save.success',
-          defaultMessage: '已保存',
+          defaultMessage: 'Saved',
         }),
       );
       setRoleModalUser(null);
@@ -74,7 +75,7 @@ export default function AdminUsers() {
       message.error(
         intl.formatMessage({
           id: 'pages.chat.saveFailed',
-          defaultMessage: '保存失败',
+          defaultMessage: 'Save failed',
         }),
       );
     } finally {
@@ -92,7 +93,7 @@ export default function AdminUsers() {
     {
       title: intl.formatMessage({
         id: 'pages.register.subtitle',
-        defaultMessage: '用户名',
+        defaultMessage: 'Create your account',
       }),
       dataIndex: 'username',
       key: 'username',
@@ -100,7 +101,7 @@ export default function AdminUsers() {
     {
       title: intl.formatMessage({
         id: 'pages.settings.nickname',
-        defaultMessage: '显示名',
+        defaultMessage: 'Nickname',
       }),
       dataIndex: 'displayName',
       key: 'displayName',
@@ -108,7 +109,7 @@ export default function AdminUsers() {
     {
       title: intl.formatMessage({
         id: 'pages.settings.englishName',
-        defaultMessage: '英文名',
+        defaultMessage: 'English Name',
       }),
       dataIndex: 'englishName',
       key: 'englishName',
@@ -126,7 +127,7 @@ export default function AdminUsers() {
     {
       title: intl.formatMessage({
         id: 'pages.table.status',
-        defaultMessage: '状态',
+        defaultMessage: 'Status',
       }),
       dataIndex: 'status',
       key: 'status',
@@ -137,7 +138,7 @@ export default function AdminUsers() {
     {
       title: intl.formatMessage({
         id: 'pages.table.created',
-        defaultMessage: '创建时间',
+        defaultMessage: 'Created',
       }),
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -146,11 +147,11 @@ export default function AdminUsers() {
     {
       title: intl.formatMessage({
         id: 'pages.table.actions',
-        defaultMessage: '操作',
+        defaultMessage: 'Actions',
       }),
       key: 'actions',
       render: (_: any, record: UserItem) => (
-        <Can code="admin:role:assign">
+        <Can code={PERM.adminRoleAssign}>
           <Button
             type="link"
             size="small"
@@ -158,7 +159,7 @@ export default function AdminUsers() {
           >
             {intl.formatMessage({
               id: 'pages.admin.users.assignRole',
-              defaultMessage: '分配角色',
+              defaultMessage: 'Assign Roles',
             })}
           </Button>
         </Can>
@@ -188,7 +189,7 @@ export default function AdminUsers() {
       <Modal
         title={intl.formatMessage({
           id: 'pages.admin.users.assignRole',
-          defaultMessage: '分配角色',
+          defaultMessage: 'Assign Roles',
         })}
         open={!!roleModalUser}
         onOk={handleSaveRoles}

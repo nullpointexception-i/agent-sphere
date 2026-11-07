@@ -5,7 +5,7 @@ import com.buukle.agent.completions.dtvo.CompletionsInput;
 import com.buukle.agent.sso.spi.CallerAuth;
 
 /**
- * 单次 LLM 能力（completions）SPI，供外部/其他模块复用。
+ * One-shot LLM capability (completions) SPI, reusable by external callers/other modules.
  */
 public interface CompletionsSpi {
     ChatCompletionsResp execute(CallerAuth auth, CompletionsInput input);

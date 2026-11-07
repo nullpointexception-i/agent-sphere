@@ -24,14 +24,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 内存唤醒线程的两条回归护栏：
+ * Two regression guards for the in-memory wake thread:
  *
  * <ol>
- *   <li><b>不得继承租户。</b>线程池是懒创建的长驻单线程，会继承第一次 schedule 时那个线程的
- *       {@code InheritableThreadLocal}。带着控制台用户的 {@code created_by} 去读等待记录，
- *       其他用户的记录会被 {@code DataPermissionInterceptor} 过滤成 null，恢复被静默跳过。</li>
- *   <li><b>claim 之后不得静默丢弃。</b>读不回记录时若不回置 PENDING，cron 永远捞不到，
- *       run 只能等对账任务兜底（线上表现为每次 wait 卡十几分钟）。</li>
+ *   <li><b>Must not inherit a tenant.</b> The pool is a lazily created long-lived single thread that inherits the
+ *       {@code InheritableThreadLocal} of the thread that first called schedule. Reading wait records with a console user's {@code created_by}
+ *       makes {@code DataPermissionInterceptor} filter other users' records to null, so the resume is silently skipped.</li>
+ *   <li><b>Must not silently drop after claim.</b> If the record cannot be read back and is not reset to PENDING, cron never picks it up,
+ *       and the run can only wait for the reconciler (in production each wait got stuck for 10+ minutes).</li>
  * </ol>
  */
 @ExtendWith(MockitoExtension.class)
@@ -62,7 +62,7 @@ class PendingWaitWakeSchedulerTest {
 
     @Test
     void wake_clearsInheritedTenantBeforeReadingRecord() {
-        // 模拟线上现场：唤醒线程是在带租户的请求线程上懒创建的（父线程可继承）。
+        // Simulate production: the wake thread is lazily created on a tenant-bearing request thread (inheritable from the parent).
         TenantUtil.start("leaked-user");
         PendingWaitVO vo = pendingWait(1L, 7L);
         AtomicReference<String> tenantSeenByRead = new AtomicReference<>("not-called");

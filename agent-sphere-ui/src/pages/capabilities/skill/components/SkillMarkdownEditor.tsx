@@ -1,6 +1,7 @@
 import { EditOutlined, EyeOutlined } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
+import { useIntl } from '@umijs/max';
 import { Segmented } from 'antd';
 import { useState } from 'react';
 
@@ -10,13 +11,20 @@ interface Props {
   placeholder?: string;
 }
 
-/** Skill promptTemplate 的 Markdown 编辑器（等宽源码编辑 + XMarkdown 全量预览）。 */
+/** Markdown editor for Skill promptTemplate (monospace source editing + full XMarkdown preview). */
 export default function SkillMarkdownEditor({
   value = '',
   onChange,
-  placeholder = '输入任务指令（支持 Markdown）…',
+  placeholder,
 }: Props) {
+  const intl = useIntl();
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
+  const effectivePlaceholder =
+    placeholder ??
+    intl.formatMessage({
+      id: 'pages.capabilities.skill.markdownPlaceholder',
+      defaultMessage: 'Enter the task instruction (Markdown supported)…',
+    });
 
   return (
     <div
@@ -36,7 +44,11 @@ export default function SkillMarkdownEditor({
         }}
       >
         <span style={{ fontSize: 12, color: '#8c8c8c' }}>
-          {'支持 Markdown 语法（标题、引用、列表、代码块、表格等）'}
+          {intl.formatMessage({
+            id: 'pages.capabilities.skill.markdownHint',
+            defaultMessage:
+              'Supports Markdown (headings, quotes, lists, code blocks, tables, etc.)',
+          })}
         </span>
         <div style={{ marginLeft: 'auto' }}>
           <Segmented
@@ -54,7 +66,7 @@ export default function SkillMarkdownEditor({
         <textarea
           className="aw-skill-md-textarea"
           value={value}
-          placeholder={placeholder}
+          placeholder={effectivePlaceholder}
           onChange={(e) => onChange?.(e.target.value)}
           style={{
             width: '100%',
@@ -81,7 +93,15 @@ export default function SkillMarkdownEditor({
             background: '#fff',
           }}
         >
-          <XMarkdown content={value || '（空）'} />
+          <XMarkdown
+            content={
+              value ||
+              intl.formatMessage({
+                id: 'pages.capabilities.skill.markdownEmpty',
+                defaultMessage: '(empty)',
+              })
+            }
+          />
         </div>
       )}
     </div>

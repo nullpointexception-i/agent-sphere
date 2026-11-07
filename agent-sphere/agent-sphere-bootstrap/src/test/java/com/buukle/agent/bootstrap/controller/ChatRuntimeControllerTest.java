@@ -100,7 +100,7 @@ class ChatRuntimeControllerTest {
         SendMessageDTO dto = new SendMessageDTO();
         dto.setMessage("");
         dto.setAttachmentKeys(List.of("k1"));
-        m.invoke(null, dto); // 不抛异常即通过
+        m.invoke(null, dto); // Passing means no exception is thrown
     }
 
     private static void invokedBiz(Method m, SendMessageDTO dto) throws Throwable {

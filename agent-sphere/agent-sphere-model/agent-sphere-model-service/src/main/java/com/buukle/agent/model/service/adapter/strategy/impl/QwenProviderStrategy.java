@@ -16,18 +16,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Qwen（通义千问）策略。
+ * Qwen (Tongyi Qianwen) strategy.
  *
- * <p>Qwen3 部署（vLLM / PAI-EAS 网关）对入参做**严格** schema 校验：assistant 消息的
- * {@code content}、{@code reasoning_content} 都是「键必须存在」的字段（值可为空串）。
- * 而 {@code ChatMessageDTO} 是类级 {@code @JsonInclude(NON_NULL)} —— 只带 tool_calls 的
- * assistant 消息因为 content 为 null，序列化时整个键被省略，网关直接 400：
+ * <p>Qwen3 deployments (vLLM / PAI-EAS gateways) apply **strict** schema validation to the request:
+ * the assistant message fields {@code content} and {@code reasoning_content} are both "key must exist"
+ * fields (the value may be an empty string). But {@code ChatMessageDTO} is class-level
+ * {@code @JsonInclude(NON_NULL)} — for an assistant message that only carries tool_calls, content is
+ * null, so the whole key is omitted during serialization and the gateway returns 400 directly:
  *
  * <pre>
  * {'type':'missing','loc':('body','messages',9,...,'content'),'msg':'Field required'}
  * </pre>
  *
- * <p><b>本策略只能用空串补齐，不能用 null</b>：NON_NULL 会把 null 再次省略，填 null 等于没改。
+ * <p><b>This strategy may only fill in an empty string, never null</b>: NON_NULL would omit null again,
+ * so setting null changes nothing.
  */
 @Component
 public class QwenProviderStrategy implements ProviderStrategy {
@@ -43,8 +45,10 @@ public class QwenProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
-        // Qwen3 是 OpenAI 兼容接口；thinking / tool_stream 是本系统给智谱/DeepSeek 用的内部字段
-        // Qwen 的思考开关用 enable_thinking，思考预算用 thinking_budget；统一档位在 reasoning_effort。
+        // Qwen3 is an OpenAI-compatible API; thinking / tool_stream are internal fields this system uses
+        // for Zhipu/DeepSeek.
+        // Qwen's thinking switch is enable_thinking and its thinking budget is thinking_budget; the unified
+        // effort tier goes in reasoning_effort.
         request.setThinking(null);
         request.setToolStream(null);
         if (request.getReasoningEffort() != null) {
@@ -68,24 +72,28 @@ public class QwenProviderStrategy implements ProviderStrategy {
             if (!hasToolCalls) {
                 continue;
             }
-            // content 键必须存在（空串即可满足；null 会被 NON_NULL 省略）
+            // The content key must exist (an empty string suffices; null is omitted by NON_NULL).
             if (m.getContent() == null) {
                 m.setContent("");
             }
-            // Qwen3 开启 thinking 时，多轮工具调用要求回传 assistant 的 reasoning_content。
-            // 消息层拿不到原始推理文本，这里只保证「键存在」——空串即可让模板正常读取。
+            // When thinking is enabled in Qwen3, multi-turn tool calling requires the assistant's
+            // reasoning_content to be sent back.
+            // The message layer has no access to the original reasoning text, so this only guarantees the key
+            // exists — an empty string lets the template read it normally.
             if (m.getReasoningContent() == null) {
                 m.setReasoningContent("");
             }
         }
 
-        // Qwen3 模板要求所有 system 消息必须在最前面，且网关只认 messages[0]：
+        // The Qwen3 template requires all system messages to come first, and the gateway only recognizes messages[0]:
         //   "System message must be at the beginning."
-        // 两类来源都要处理：
-        //   1) leading system：runner 的系统提示词 + HistoryLoader 注入的「上一轮被取消」/「压缩摘要」
-        //      → 必须合并成一条，否则第二条 leading system 同样 400；
-        //   2) trailing system：当前时间 / 待办 / loop 预算 / 静默追问 / 收口
-        //      → 降级为 user（保持位置与顺序），避免把每轮变化的内容挪到 messages[0]（保留前缀缓存）。
+        // Two sources must be handled:
+        //   1) leading system: the runner's system prompt + the "previous turn cancelled" / "compaction summary"
+        //      injected by HistoryLoader
+        //      → they must be merged into one, otherwise a second leading system also returns 400;
+        //   2) trailing system: current time / todo / loop budget / silent nudge / finalization
+        //      → demoted to user (keeping position and order), avoiding moving per-turn content to messages[0]
+        //      (which preserves the prefix cache).
         List<ChatMessageDTO> normalized = demoteTrailingSystem(mergeLeadingSystem(messages));
         if (normalized != messages) {
             request.setMessages(normalized);
@@ -93,13 +101,14 @@ public class QwenProviderStrategy implements ProviderStrategy {
     }
 
     /**
-     * 把开头连续的 system 消息合并成一条（保持顺序，空行分隔）。
+     * Merge consecutive leading system messages into a single one (preserving order, separated by blank lines).
      *
-     * <p>Qwen 模板只读取 {@code messages[0]} 作为 system，且网关要求非 0 位置不得出现 system；
-     * HistoryLoader 在「上一轮被取消」或「有压缩摘要」时会把 system 提示插到 history 最前，
-     * 与 runner 的系统提示词形成多条 leading system —— 合并后才能通过校验。
+     * <p>The Qwen template only reads {@code messages[0]} as system, and the gateway requires that system must
+     * not appear at any non-zero position; HistoryLoader inserts a system prompt at the very front of history
+     * when "the previous turn was cancelled" or "a compaction summary exists", forming multiple leading systems
+     * together with the runner's system prompt — only after merging does the validation pass.
      *
-     * <p>没有多条 leading system 时原样返回（快路径，不改列表引用）。
+     * <p>When there is no more than one leading system, return as-is (fast path, list reference unchanged).
      */
     private static List<ChatMessageDTO> mergeLeadingSystem(List<ChatMessageDTO> messages) {
         int leading = 0;
@@ -132,10 +141,11 @@ public class QwenProviderStrategy implements ProviderStrategy {
     }
 
     /**
-     * 把出现在首条非 system 消息之后的 system 消息降级为 user。
+     * Demote system messages that appear after the first non-system message to user.
      *
-     * <p><b>必须新建对象而不是原地改 role</b>：request 的 messages 是 runner 列表的浅拷贝
-     * （列表新、元素共享），原地改 role 会污染 runner 的历史消息。
+     * <p><b>Objects must be newly created instead of mutating the role in place</b>: the request's messages are
+     * a shallow copy of the runner list (new list, shared elements), so changing the role in place would pollute
+     * the runner's history messages.
      */
     private static List<ChatMessageDTO> demoteTrailingSystem(List<ChatMessageDTO> messages) {
         boolean seenNonSystem = false;
@@ -161,7 +171,7 @@ public class QwenProviderStrategy implements ProviderStrategy {
         return changed ? out : messages;
     }
 
-    /** system 消息只保留 role/content/name；不复制 tool_calls 等字段，避免污染 user 消息。 */
+    /** Keep only role/content/name for system messages; do not copy tool_calls and other fields to avoid polluting user messages. */
     private static ChatMessageDTO asUser(ChatMessageDTO source) {
         return new ChatMessageDTO()
                 .setRole(ROLE_USER)
@@ -179,7 +189,7 @@ public class QwenProviderStrategy implements ProviderStrategy {
         return ContentToolCallResult.EMPTY;
     }
 
-    /** 与 OpenAI 兼容流式解析一致（Qwen3 的 SSE delta 结构相同）。 */
+    /** Consistent with OpenAI-compatible streaming parsing (Qwen3's SSE delta structure is the same). */
     private void parseDeltaToolCalls(JsonNode choice, ToolStream toolStream) {
         if (!choice.has(LlmApiConstants.FIELD_DELTA)) {
             return;

@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * WebFetch 配置类 - 创建 FetchRetryPolicy Bean
+ * WebFetch configuration - creates the FetchRetryPolicy bean
  */
 @Configuration
 public class WebFetchConfiguration {

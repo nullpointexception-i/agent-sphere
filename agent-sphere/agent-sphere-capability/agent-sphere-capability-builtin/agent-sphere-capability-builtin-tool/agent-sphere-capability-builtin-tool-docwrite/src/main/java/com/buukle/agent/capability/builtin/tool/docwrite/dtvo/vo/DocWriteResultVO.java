@@ -15,7 +15,7 @@ import java.util.List;
 public class DocWriteResultVO extends ExecuteResult {
     private Long documentId;
     private String title;
-    /** 文档内容版本（V108；随结果返回给时间线展示）。 */
+    /** Document content version (V108; returned with the result for timeline display). */
     private Integer version;
     private String action;
     private String preview;

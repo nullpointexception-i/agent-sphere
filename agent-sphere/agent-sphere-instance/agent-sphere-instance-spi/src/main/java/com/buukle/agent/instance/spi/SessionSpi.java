@@ -29,10 +29,12 @@ public interface SessionSpi {
     void bindWorkItem(Long sessionId, Long workItemId);
 
     /**
-     * 校验**当前来源端**（主站 / widget，见 {@code SessionSurfaceHolder}）是否允许对该会话继续对话。
+     * Check whether the **current surface** (console / widget; see {@code SessionSurfaceHolder}) may
+     * continue the conversation of this session.
      *
-     * <p>实例级开关（{@code allow_console_session} / {@code allow_widget_session}）已关掉对应来源时抛
-     * {@code SESSION_SURFACE_DISABLED}。未携带来源（服务端内部调用）一律放行。
+     * <p>When the instance-level switches ({@code allow_console_session} / {@code allow_widget_session})
+     * have turned off the corresponding surface, {@code SESSION_SURFACE_DISABLED} is thrown. Requests
+     * without a surface (server-internal calls) are always allowed.
      */
     void assertSurfaceAllowed(Long sessionId);
 }

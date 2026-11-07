@@ -49,7 +49,7 @@ export function toProCurrentUser(user: UserVO): API.CurrentUser {
   };
 }
 
-/** 右上角展示名：SSO 用户显示 provider@subject（如 bole@elvin），否则回退英文名/姓名。 */
+/** Top-right display name: SSO users show provider@subject (e.g. bole@elvin), otherwise fall back to the English name / full name. */
 export function ssoDisplayName(
   user:
     | {

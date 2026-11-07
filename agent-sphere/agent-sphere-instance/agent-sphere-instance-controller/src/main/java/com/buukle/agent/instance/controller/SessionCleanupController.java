@@ -1,5 +1,9 @@
 package com.buukle.agent.instance.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -19,33 +23,38 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 历史会话清理的手动触发入口（运维用）。
+ * Manual trigger entry point for historical session cleanup (for operators).
  *
- * <p>定时任务默认在低峰期（04:30）跑；这个接口用于「现在就释放磁盘」或「先看清楚会删什么」。
+ * <p>The scheduled task runs during off-peak hours by default (04:30); this endpoint is for
+ * "free the disk now" or "see exactly what would be deleted first".
  *
- * <p><b>默认 dry-run</b>：清理是<b>不可逆硬删</b>，请求体必须显式传 {@code "dryRun": false} 才会落刀。
+ * <p><b>Dry-run by default</b>: cleanup is an <b>irreversible hard delete</b>, so the request body
+ * must explicitly pass {@code "dryRun": false} before anything is actually deleted.
  *
- * <p><b>异步</b>：提交即返回执行记录（status=RUNNING），前端拿其中的 id 轮询
- * {@link #run(Long)} 看进度与结果。一轮清理最多 200×50 个会话、耗时可达数分钟，
- * 让请求线程干等会拖垮连接池，前端也只能靠超时猜结果。
+ * <p><b>Asynchronous</b>: submission returns the execution record immediately (status=RUNNING);
+ * the frontend polls {@link #run(Long)} with its id to follow progress and results. A single
+ * cleanup round covers up to 200×50 sessions and can take minutes, so making the request thread
+ * wait would exhaust the connection pool and leave the frontend guessing from timeouts.
  */
 @RestController
-@RequestMapping("/api/v1/instance/session-cleanup")
+@RequestMapping(ApiPrefix.V1 + "/instance/session-cleanup")
 @RequiredArgsConstructor
 public class SessionCleanupController extends BaseController {
 
     private final SessionCleanupTask sessionCleanupTask;
 
     /**
-     * 提交一轮清理（异步）。
+     * Submit one cleanup round (asynchronous).
      *
-     * <p>权限复用 {@code admin:settings:update}：它已经是「改系统配置」的既有权限位，
-     * 而清理行为完全由系统配置（保留天数/开关）驱动，语义一致且不必新增权限种子。
+     * <p>Reuses the {@code admin:settings:update} permission: it is already the existing permission
+     * for "change system configuration", and cleanup behavior is entirely driven by system
+     * configuration (retention days / switch), so the semantics match and no new permission seed is
+     * needed.
      *
-     * @return 执行记录（含 id，供轮询）；不会返回清理结果，结果看轮询
+     * @return execution record (including the id, for polling); cleanup results are not returned here, poll for them
      */
     @AuditLog(action = "CLEANUP", resourceType = "Session")
-    @RequirePermission("admin:settings:update")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_UPDATE)
     @PostMapping
     public ResponseEntity<?> cleanup(@Valid @RequestBody(required = false) SessionCleanupRequestDTO dto) {
         boolean dryRun = dto == null || dto.isDryRun();
@@ -54,12 +63,13 @@ public class SessionCleanupController extends BaseController {
     }
 
     /**
-     * 轮询单条执行记录（含实时进度：已处理会话数 / 已清理行数 / 耗时）。
+     * Poll a single execution record (with live progress: processed sessions / deleted rows / elapsed time).
      *
-     * <p>进程崩了会让记录永远停在 RUNNING，SQL 里用 {@code stale} 标出来
-     * （finished_at 为空且开始超过 30 分钟），避免被误读成正在跑。
+     * <p>A crashed process leaves the record stuck in RUNNING forever; the SQL flags it with
+     * {@code stale} (finished_at is null and it started more than 30 minutes ago) so it is not
+     * mistaken for one still running.
      */
-    @RequirePermission("admin:settings:read")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_READ)
     @GetMapping("/runs/{id}")
     public ResponseEntity<?> run(@PathVariable Long id) {
         SessionCleanupRunVO run = sessionCleanupTask.getRun(id);
@@ -67,12 +77,13 @@ public class SessionCleanupController extends BaseController {
     }
 
     /**
-     * 执行记录分页。定时与手动两种触发都会出现在这里，预演与真实删除也在同一条时间线上
-     * （靠「类型」列区分），这样「谁在什么时候预演过、看到多少行」也能回溯。
+     * Execution record paging. Both scheduled and manual triggers show up here, and rehearsals and
+     * real deletions share the same timeline (distinguished by the "type" column), so
+     * "who rehearsed what, when, and how many rows they saw" stays traceable.
      *
-     * @param dryRun null = 不按预演/实删过滤
+     * @param dryRun null = do not filter by rehearsal/real deletion
      */
-    @RequirePermission("admin:settings:read")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_READ)
     @GetMapping("/runs")
     public ResponseEntity<?> runs(@RequestParam(required = false) String triggerType,
                                   @RequestParam(required = false) String status,

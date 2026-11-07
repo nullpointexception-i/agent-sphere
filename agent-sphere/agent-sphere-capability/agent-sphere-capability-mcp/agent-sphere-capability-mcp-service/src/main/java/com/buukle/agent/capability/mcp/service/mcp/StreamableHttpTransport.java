@@ -30,7 +30,7 @@ public class StreamableHttpTransport implements McpTransportClient {
 
     private final HttpClient httpClient;
     private final String endpointUrl;
-    /** 解析后的出站鉴权头；构造期一次性解析，避免每次请求重复解析与重复报错。 */
+    /** Parsed outbound auth headers; parsed once at construction time to avoid re-parsing and re-reporting errors on every request. */
     private final Map<String, String> authHeaders;
     private final Duration connectTimeout;
     private final Duration rpcTimeout;
@@ -51,12 +51,12 @@ public class StreamableHttpTransport implements McpTransportClient {
 
     static String resolveEndpoint(String serverUrl, String serverType) {
         if (serverUrl == null || serverUrl.isBlank()) {
-            throw new BizException(CapabilityMcpErrorCode.MCP_SERVER_UNREACHABLE, "MCP serverUrl 不能为空");
+            throw new BizException(CapabilityMcpErrorCode.MCP_SERVER_UNREACHABLE, "MCP serverUrl must not be empty");
         }
         String trimmed = serverUrl.trim();
         if (!trimmed.startsWith(SERVER_TYPE_HTTP + "://") && !trimmed.startsWith("https://")) {
             throw new BizException(CapabilityMcpErrorCode.MCP_SERVER_UNREACHABLE,
-                    "MCP serverUrl 需以 http:// 或 https:// 开头，当前: " + serverUrl);
+                    "MCP serverUrl must start with http:// or https://; current: " + serverUrl);
         }
         try {
             URI uri = URI.create(trimmed);
@@ -78,7 +78,7 @@ public class StreamableHttpTransport implements McpTransportClient {
     }
 
 
-    /** 单个响应体片段的最大长度，避免把整页 HTML 塞进错误消息。 */
+    /** Maximum length of a single response body snippet, so a whole HTML page does not end up in an error message. */
     private static final int MAX_ERROR_BODY_LENGTH = 300;
 
     private static String abbreviate(String body) {
@@ -92,8 +92,9 @@ public class StreamableHttpTransport implements McpTransportClient {
     }
 
     /**
-     * 构造 JSON-RPC 错误响应。用 Jackson 而非字符串拼接：响应体里可能含引号/换行/反斜杠，
-     * 手拼会产出非法 JSON，调用方解析失败后只剩一句"parse error"，比原问题更难查。
+     * Builds a JSON-RPC error response. Uses Jackson rather than string concatenation: the response
+     * body may contain quotes/newlines/backslashes, and manual assembly produces invalid JSON, leaving
+     * the caller with only "parse error" - harder to diagnose than the original problem.
      */
     private static String errorJson(int status, String body) {
         ObjectNode error = JSON.createObjectNode();
@@ -307,9 +308,10 @@ public class StreamableHttpTransport implements McpTransportClient {
 
             int status = response.statusCode();
             if (status >= 400) {
-                // 把响应体一并带出：MCP Server 的鉴权/参数错误说明就在这里（例如
-                // 「缺少 Authorization: Bearer <服务令牌>」）。原先只回 "HTTP 401"，
-                // 会让「本侧登记漏配 authConfig」与「下游拒绝」之间彻底断线。
+                // Include the response body: the MCP server's auth/parameter error explanation lives
+                // there (for example "missing Authorization: Bearer <service token>"). Returning only
+                // "HTTP 401" used to sever the link between "authConfig missing on our side" and
+                // "the downstream rejected us".
                 log.warn("MCP POST returned status {} body={}", status, abbreviate(response.body()));
                 return errorJson(status, response.body());
             }
@@ -356,11 +358,12 @@ public class StreamableHttpTransport implements McpTransportClient {
     }
 
     /**
-     * 叠加本次调用的附加请求头（任务级凭证）。
+     * Adds this call's extra request headers (task-level credential).
      *
-     * <p>放在 applyAuth 之后：authConfig 是登记 MCP 时管理员配的，任务级凭证是调用方给的，
-     * 两者名字空间不重叠（凭证头名由 agent-sphere 固定），因此覆盖顺序不影响语义，
-     * 但显式保证凭证一定被带上。
+     * <p>Applied after applyAuth: authConfig is configured by the admin when registering the MCP,
+     * while the task-level credential comes from the caller. Their namespaces do not overlap (the
+     * credential header name is fixed by agent-sphere), so the overwrite order does not affect
+     * semantics, but this makes sure the credential is always included.
      */
     private void applyCallContext(HttpRequest.Builder builder, McpCallContext callContext) {
         if (callContext == null || callContext.isEmpty()) return;

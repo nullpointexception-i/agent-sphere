@@ -1,5 +1,9 @@
 package com.buukle.agent.infrastructure.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.dict.SystemDicConstants;
@@ -21,7 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping(ApiPrefix.V1)
 @RequiredArgsConstructor
 public class SystemDicController extends BaseController {
 
@@ -35,7 +39,7 @@ public class SystemDicController extends BaseController {
         return ok(systemDicSpi.listActive(type));
     }
 
-    @RequirePermission("admin:dictionary:read")
+    @RequirePermission(PermissionCodes.ADMIN_DICTIONARY_READ)
     @GetMapping("/admin/dictionaries")
     public ResponseEntity<?> list(@RequestParam(required = false) String type,
                                   @RequestParam(required = false) String keyword) {
@@ -43,14 +47,14 @@ public class SystemDicController extends BaseController {
     }
 
     @AuditLog(action = "CREATE", resourceType = "SystemDic", resourceId = "#result?.body?.id")
-    @RequirePermission("admin:dictionary:create")
+    @RequirePermission(PermissionCodes.ADMIN_DICTIONARY_CREATE)
     @PostMapping("/admin/dictionaries")
     public ResponseEntity<?> create(@Valid @RequestBody SystemDicSaveDTO dto) {
         return created(systemDicService.create(dto));
     }
 
     @AuditLog(action = "UPDATE", resourceType = "SystemDic", resourceId = "#id")
-    @RequirePermission("admin:dictionary:update")
+    @RequirePermission(PermissionCodes.ADMIN_DICTIONARY_UPDATE)
     @PutMapping("/admin/dictionaries/{id}")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @Valid @RequestBody SystemDicSaveDTO dto) {
@@ -58,7 +62,7 @@ public class SystemDicController extends BaseController {
     }
 
     @AuditLog(action = "DELETE", resourceType = "SystemDic", resourceId = "#id")
-    @RequirePermission("admin:dictionary:delete")
+    @RequirePermission(PermissionCodes.ADMIN_DICTIONARY_DELETE)
     @DeleteMapping("/admin/dictionaries/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         systemDicService.delete(id);

@@ -11,8 +11,9 @@ interface Props {
 }
 
 /**
- * 聊天消息区底部的浮层。定位由父级 chatStage 的 absolute 容器负责：
- * 浮层底部贴着输入区顶部分割线（读写模式上方），只覆盖消息区。
+ * Floating layer at the bottom of the chat message area. Positioning is handled by the parent
+ * chatStage's absolute container: the layer's bottom sits on the input area's top divider
+ * (above the read/write mode switch) and covers only the message area.
  */
 export default function ChatBottomSheet({
   open,

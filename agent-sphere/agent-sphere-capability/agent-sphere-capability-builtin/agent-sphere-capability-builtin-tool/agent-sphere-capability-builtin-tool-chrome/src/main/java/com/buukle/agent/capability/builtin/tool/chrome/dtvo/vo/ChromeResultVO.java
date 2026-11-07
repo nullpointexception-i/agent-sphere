@@ -23,13 +23,13 @@ public class ChromeResultVO extends ExecuteResult {
     @Schema(example = "debugger", description = "Execution path used: isolated / inject-bridge / scripting-main / debugger / navigate / click / type / ...")
     private String method;
 
-    @Schema(example = "string", description = "executeJS结果的JS类型（void/string/number/object等）")
+    @Schema(example = "string", description = "JS type of the executeJS result (void/string/number/object etc.)")
     private String resultType;
 
-    @Schema(example = "code did not return a value; may not have executed", description = "executeJS执行的可疑提示（如可能被CSP拦截、值不可序列化），agent收到后不应盲目重试")
+    @Schema(example = "code did not return a value; may not have executed", description = "Suspicious hint from executeJS (e.g. possibly blocked by CSP or value not serializable); the agent must not blindly retry")
     private String warning;
 
-    @Schema(example = "0", description = "命令尝试的目标 frameId（0=主框架；null=全部广播）")
+    @Schema(example = "0", description = "Target frameId attempted by the command (0=top frame; null=broadcast to all)")
     private Integer attemptedFrameId;
 
     public static ChromeResultVO ok(Object data) {

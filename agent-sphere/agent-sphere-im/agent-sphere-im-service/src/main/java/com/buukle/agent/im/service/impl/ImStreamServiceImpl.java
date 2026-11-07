@@ -20,10 +20,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 用户级 IM SSE。
+ * User-level IM SSE.
  *
- * <p>本副本只持有本副本的连接；消息提交后发布到 Redis topic {@code im:user:{userId}}，
- * 各副本订阅后投递本地 emitter。SSE 只做“有新数据”的提示，权威数据走 REST 补拉。
+ * <p>Each replica only holds its own connections; once a message is submitted it is published to
+ * the Redis topic {@code im:user:{userId}}, and every replica delivers it to its local emitters.
+ * SSE only signals "new data"; authoritative data is fetched via REST catch-up.
  */
 @Slf4j
 @Service
@@ -72,14 +73,14 @@ public class ImStreamServiceImpl implements ImStreamService {
         try {
             topic(userId).publish(event);
         } catch (Exception e) {
-            // Redis 不可用时降级为本地投递，至少让当前副本的页面能刷新
+            // Fall back to local delivery when Redis is unavailable, so at least this replica's page can refresh
             log.warn("IM SSE publish failed, fallback to local: user={}, error={}", userId, e.getMessage());
             metrics.increment(AgentMetrics.IM_SSE_PUBLISH_FAILED);
             deliver(userId, event);
         }
     }
 
-    /** 心跳；同时清理死连接。 */
+    /** Heartbeat; also cleans up dead connections. */
     @Scheduled(fixedRate = 15_000)
     public void heartbeat() {
         ImStreamEvent ping = ImStreamEvent.builder()

@@ -63,13 +63,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 「沉默 ≠ 完成」的三层护栏（L0 截断信号 / L1 finish 工具 / L2 静默追问）。
+ * Three-layer guard for "silence ≠ completion" (L0 truncation signal / L1 finish tool / L2 silent-turn nudge).
  *
- * <p>L0：过去流结束一律上报 {@code finish_reason=stop}，于是被 max_tokens 截断（length）或
- * 被安全策略拦截（content_filter）的响应与「模型主动说完」无法区分，半截答案被标 COMPLETED。
- * 现在必须区分，且**没有工具调用**时不能再当完成。
+ * <p>L0: stream end used to always report {@code finish_reason=stop}, so responses truncated by max_tokens (length) or
+ * blocked by safety policy (content_filter) were indistinguishable from "the model finished on its own", and half answers were marked COMPLETED.
+ * They must now be distinguished, and **no tool call** can no longer count as completion.
  *
- * <p>L2：进入 agentic 流程（用过工具）之后，沉默只能靠 {@code finish} 收口；连续静默超限判失败。
+ * <p>L2: once in an agentic flow (tools used), silence can only be finalized by {@code finish}; consecutive silent turns beyond the limit fail the run.
  */
 @ExtendWith(MockitoExtension.class)
 class FinishProtocolTest {
@@ -107,13 +107,13 @@ class FinishProtocolTest {
 
     private final RunPromptBuilder runPromptBuilder = new RunPromptBuilder();
     private SessionRunner runner;
-    /** 本轮使用的路由：resolveRoutes 只在 ctx 带 modelRoute/fallbackRoutes 时才走 RouteListBuilder。 */
+    /** Route used by this turn: resolveRoutes only goes through RouteListBuilder when ctx has modelRoute/fallbackRoutes. */
     private ModelRouteFullVO route;
 
     @BeforeEach
     void setUp() {
         lenient().when(properties.getRunner()).thenReturn(new AgentRuntimeProperties.RunnerConfig());
-        // 取消检查走 Redisson RSet：不 stub 会 NPE（路由 lambda 第一件事就是查取消态）
+        // Cancellation checks go through a Redisson RSet: not stubbing it causes an NPE (the route lambda first checks cancellation)
         @SuppressWarnings("unchecked")
         RSet<Object> cancelSet = mock(RSet.class);
         lenient().when(cancelSet.contains(any())).thenReturn(false);
@@ -128,7 +128,7 @@ class FinishProtocolTest {
                 new com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver(new com.buukle.agent.common.config.AgentRuntimeProperties()));
     }
 
-    /** 让本轮固定产出给定的流式事件序列。 */
+    /** Make this turn emit a fixed streaming event sequence. */
     private void emit(LLMEvent... events) {
         route = new ModelRouteFullVO();
         route.setId(1L);
@@ -166,7 +166,7 @@ class FinishProtocolTest {
                 0, 0, 0, -1000, 0, 0);
     }
 
-    // ---------- L0：截断 / 内容过滤不能当完成 ----------
+    // ---------- L0: truncation / content filtering must not count as completion ----------
 
     @Test
     void truncatedAnswerWithoutToolCalls_isAnErrorNotCompletion() throws Exception {
@@ -191,7 +191,7 @@ class FinishProtocolTest {
 
     @Test
     void truncatedButToolCallsPresent_isStillAToolTurn() throws Exception {
-        // 工具参数已完整或本就不可用：正文截断不该阻断工具轮
+        // Tool arguments are complete or were never available: text truncation must not block a tool turn
         emit(new LLMEvent.TextDelta("partial"),
                 new LLMEvent.ToolCall("call-1", "builtin_5", "{}"),
                 new LLMEvent.Finish(FinishReason.LENGTH, null));
@@ -213,7 +213,7 @@ class FinishProtocolTest {
         assertEquals(FinishReason.STOP, result.finishReason());
     }
 
-    // ---------- 压缩重试耗尽：跳过压缩直接发超上下文 ----------
+    // ---------- Compaction retries exhausted: skip compaction and send over-context ----------
 
     @Test
     void skipCompactionFlagBypassesCompactionGate() throws Exception {
@@ -249,7 +249,7 @@ class FinishProtocolTest {
         assertEquals(1, result.rebuiltCurrentRunStart());
     }
 
-    // ---------- L2：静默追问消息的槽位语义 ----------
+    // ---------- L2: slot semantics of the silent-turn nudge message ----------
 
     @Test
     void silentTurnNudge_isReplacedInPlaceInsteadOfAccumulating() throws Exception {
@@ -279,7 +279,7 @@ class FinishProtocolTest {
         m.invoke(runner, messages, silentTurns);
     }
 
-    // ---------- finish.summary 作为助手正文（界面空白的修复） ----------
+    // ---------- finish.summary as the assistant body (fix for a blank UI) ----------
 
     @Test
     void finishToolCall_emitsSummaryAsContentWhenNoContent() throws Exception {

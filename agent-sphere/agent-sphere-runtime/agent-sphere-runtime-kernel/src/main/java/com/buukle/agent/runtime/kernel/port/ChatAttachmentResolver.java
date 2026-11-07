@@ -1,12 +1,12 @@
 package com.buukle.agent.runtime.kernel.port;
 
 /**
- * 附件字节回读端口：kernel 组模型消息（content parts）时按 fileKey
- * 惰性读取图片并拼 OpenAI 兼容 data URL。实现由 orchestration 层提供
- * （委托 infrastructure 文件存储），kernel 不依赖 infrastructure。
+ * Attachment byte read-back port: when the kernel assembles model messages (content parts) it lazily
+ * loads the image by fileKey and builds an OpenAI-compatible data URL. The implementation is provided by the orchestration layer
+ * (delegating to infrastructure file storage); the kernel does not depend on infrastructure.
  */
 public interface ChatAttachmentResolver {
 
-    /** 按 fileKey 回读图片字节并拼 data URL；不存在或非图片返回 null。 */
+    /** Reads image bytes back by fileKey and builds a data URL; returns null when missing or not an image. */
     String toDataUrl(String fileKey);
 }

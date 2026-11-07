@@ -1,6 +1,6 @@
 package com.buukle.agent.capability.skill.dtvo.enums;
 
-/** skill hub 可见性：PRIVATE=仅作者可见（默认），PUBLIC=hub 公开（直接公开，无审核）。 */
+/** Skill hub visibility: PRIVATE = author-only (default), PUBLIC = listed in the hub (published directly, no review). */
 public final class SkillVisibilityEnum {
     public static final String PRIVATE = "PRIVATE";
     public static final String PUBLIC = "PUBLIC";
@@ -8,10 +8,10 @@ public final class SkillVisibilityEnum {
     private SkillVisibilityEnum() {
     }
 
-    /** 校验可见性值，非法抛 IllegalArgumentException。 */
+    /** Validates the visibility value; throws IllegalArgumentException when invalid. */
     public static void assertValidVisibility(String visibility) {
         if (!PRIVATE.equals(visibility) && !PUBLIC.equals(visibility)) {
-            throw new IllegalArgumentException("非法 skill 可见性: " + visibility);
+            throw new IllegalArgumentException("Invalid skill visibility: " + visibility);
         }
     }
 }

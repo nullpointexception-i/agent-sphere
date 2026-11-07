@@ -24,11 +24,13 @@ import java.lang.reflect.Field;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * 任务超时的取值口径：业务方指定优先，未指定才回落到 AS 侧配置默认。
+ * Value semantics for task timeouts: the caller-specified value wins; only when unspecified does it fall
+ * back to the AS-side configured default.
  *
- * <p>这条边界很关键 —— 该值同时决定任务存活上限与业务方签发 MCP 凭证的 TTL。
- * 若把「任务级指定」错误地忽略成默认值，长任务会在凭证 TTL 之后仍在运行，
- * 中途 MCP 调用全部被拒（且表现为与真正根因相隔很远的「缺少凭证」）。
+ * <p>This boundary matters — the value determines both the task lifetime cap and the MCP credential TTL
+ * the caller issues. If the task-level value were mistakenly ignored in favor of the default, long tasks
+ * would keep running past the credential TTL and every MCP call midway would be rejected (surfacing as a
+ * "missing credential" error far removed from the real root cause).
  */
 @ExtendWith(MockitoExtension.class)
 class AgentTaskServiceImplTimeoutTest {
@@ -91,12 +93,13 @@ class AgentTaskServiceImplTimeoutTest {
         assertEquals(120L, service.effectiveTimeoutSeconds(120));
     }
 
-    // ---------- 超时下限（min-timeout-seconds） ----------
+    // ---------- Timeout lower bound (min-timeout-seconds) ----------
 
     @Test
     void businessValueBelowFloorIsRaisedToFloor() throws Exception {
-        // 线上 155/158 个任务由业务方显式传 3600，且已固化进 task_timeout_seconds 列。
-        // 改 max-poll-seconds 对它们无效，唯一能抬高实际超时的是这个下限。
+        // 155 of 158 production tasks had the caller explicitly pass 3600, already persisted in the
+        // task_timeout_seconds column. Changing max-poll-seconds has no effect on them; this lower bound is
+        // the only thing that can raise the actual timeout.
         setDefaultMaxPollSeconds(3600L);
         setMinTimeoutSeconds(10800L);
 
@@ -105,7 +108,7 @@ class AgentTaskServiceImplTimeoutTest {
 
     @Test
     void businessValueAboveFloorIsKept() throws Exception {
-        // 下限只兜底，不反过来压低业务方主动给的更大值
+        // The lower bound only compensates; it does not lower a larger value the caller deliberately supplied
         setDefaultMaxPollSeconds(3600L);
         setMinTimeoutSeconds(10800L);
 
@@ -114,7 +117,7 @@ class AgentTaskServiceImplTimeoutTest {
 
     @Test
     void nullTaskValueAlsoRespectsFloor() throws Exception {
-        // 下限高于默认值时，回落到默认值的任务同样要被抬起
+        // When the lower bound exceeds the default, tasks falling back to the default must be raised too
         setDefaultMaxPollSeconds(3600L);
         setMinTimeoutSeconds(10800L);
 
@@ -123,7 +126,7 @@ class AgentTaskServiceImplTimeoutTest {
 
     @Test
     void floorOfZeroKeepsLegacyBehaviourExactly() throws Exception {
-        // 未配置该键的环境必须完全不变：业务方给多少就是多少
+        // Environments without this key must be completely unchanged: whatever the caller gives is used
         setDefaultMaxPollSeconds(3600L);
         setMinTimeoutSeconds(0L);
 

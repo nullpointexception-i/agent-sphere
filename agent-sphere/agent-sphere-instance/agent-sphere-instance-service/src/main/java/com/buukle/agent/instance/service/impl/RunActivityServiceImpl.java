@@ -45,7 +45,7 @@ public class RunActivityServiceImpl implements RunActivityService {
     @Override
     public RunActivityVO getActivity(Long runId, Long sessionId, String activityType, Long id) {
         if (runId == null || sessionId == null || id == null || activityType == null) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "runId/sessionId/activityType/id 不能为空");
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "runId/sessionId/activityType/id must not be null");
         }
         RunActivityVO detail;
         if (RunActivitySummaryVO.ACTIVITY_TYPE_LLM.equals(activityType)) {
@@ -53,10 +53,10 @@ public class RunActivityServiceImpl implements RunActivityService {
         } else if (RunActivitySummaryVO.ACTIVITY_TYPE_TOOL.equals(activityType)) {
             detail = toolCallMapper.selectToolActivityDetail(runId, sessionId, id);
         } else {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "未知的 activityType: " + activityType);
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "Unknown activityType: " + activityType);
         }
         if (detail == null) {
-            throw new BizException(InstanceErrorCode.RUN_NOT_FOUND, "活动记录不存在");
+            throw new BizException(InstanceErrorCode.RUN_NOT_FOUND, "Activity record not found");
         }
         return detail;
     }

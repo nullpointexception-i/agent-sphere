@@ -66,16 +66,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * L1/L2 端到端：agentic run 只能用 `finish` 收口，沉默是异常。
+ * L1/L2 end-to-end: an agentic run can only finalize through `finish`; silence is an anomaly.
  *
- * <p>用户反馈的核心场景：小模型写一大段话就停下、一个工具也不调，旧循环把「没有工具调用」
- * 当成「做完了」，任务静默失败。现在的判据是三分支：
+ * <p>The core user-reported case: a small model writes a long paragraph and stops without calling a single tool; the old loop treated "no tool call"
+ * as "done", so the task failed silently. The criterion is now three-way:
  * <ul>
- *   <li>本轮含 finish → 完成（带声明的 summary）</li>
- *   <li>有其它工具调用 → 继续</li>
- *   <li>完全没有工具调用（且已用过工具）→ 追问，连续超限判 FAILED</li>
+ *   <li>This turn contains finish → complete (with the declared summary)</li>
+ *   <li>Other tool calls → continue</li>
+ *   <li>No tool call at all (and tools have been used) → nudge; consecutive overruns become FAILED</li>
  * </ul>
- * 纯聊天（从未用过工具）保持原语义：回文本即完成。
+ * Pure chat (tools never used) keeps the old semantics: returning text means done.
  */
 @ExtendWith(MockitoExtension.class)
 class FinishSilenceLoopTest {
@@ -120,11 +120,11 @@ class FinishSilenceLoopTest {
     private KernelContext context;
     private RMapCache<Long, KernelContext> contextCache;
 
-    /** 建好 RunVO + Redisson 上下文 + 路由，返回可执行的 SessionRunner。 */
+    /** Set up RunVO + Redisson context + routes and return an executable SessionRunner. */
     private SessionRunner newRunner(int maxLoopCount, String userMessage) {
         AgentRuntimeProperties.RunnerConfig runnerConfig = new AgentRuntimeProperties.RunnerConfig();
         runnerConfig.setMaxLoopCount(maxLoopCount);
-        // 测试里不做就地 sleep：第一个瞬时错误直接挂起，断言才稳定
+        // No inline sleep in tests: the first transient error suspends immediately, which keeps assertions stable
         runnerConfig.setLlmRetryInlineRungs(0);
         runnerConfig.setLlmRetryLadder(List.of(java.time.Duration.ofMillis(10)));
         lenient().when(properties.getRunner()).thenReturn(runnerConfig);
@@ -135,7 +135,7 @@ class FinishSilenceLoopTest {
         run.setSessionId(SESSION_ID);
         run.setStatus("RUNNING");
         lenient().when(runSpi.getRun(RUN_ID)).thenReturn(run);
-        // 条件状态更新是真实 DB 行为：mock 默认 false 会被误判为“run 已终态”而直接退出
+        // Conditional status updates are real DB behavior: a mock default of false is misread as "run already terminal" and exits immediately
         lenient().when(runSpi.markRunning(org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
                 .thenReturn(true);
@@ -192,7 +192,7 @@ class FinishSilenceLoopTest {
         }
         return runner;
     }
-    /** 按轮次脚本化模型输出，且不补 Finish（用于模拟流被截断）。 */
+    /** Script model output per turn without appending Finish (to simulate a truncated stream). */
     private void scriptModelWithoutFinish(java.util.function.IntFunction<LLMEvent[]> script) {
         AtomicInteger turns = new AtomicInteger();
         doAnswer(inv -> {
@@ -207,7 +207,7 @@ class FinishSilenceLoopTest {
         }).when(kernelLlmService).stream(anyString(), anyString(), any(), anyString(), any(), any(), any());
     }
 
-    /** 按轮次脚本化模型输出；turn 从 0 开始。 */
+    /** Script model output per turn; turn starts at 0. */
     private void scriptModel(java.util.function.IntFunction<LLMEvent[]> script) {
         AtomicInteger turns = new AtomicInteger();
         doAnswer(inv -> {
@@ -216,7 +216,7 @@ class FinishSilenceLoopTest {
             for (LLMEvent e : script.apply(turns.getAndIncrement())) {
                 onEvent.accept(e);
             }
-            // 正常流式结束必须带 finish；缺 Finish 现在会被判为截断。
+            // A normal stream end must carry finish; a missing Finish is now treated as truncation.
             onEvent.accept(new LLMEvent.Finish(FinishReason.STOP, null));
             CompletableFuture<Void> done = new CompletableFuture<>();
             done.complete(null);
@@ -302,7 +302,7 @@ class FinishSilenceLoopTest {
 
     @Test
     void finishTool_completesRunWithSummary_andIsNotLoopCapped() {
-        // maxLoopCount=2：第 2 轮（loopCount=1）就是「最后一轮」，验证 finish 不被当成 loop cap
+        // maxLoopCount=2: round 2 (loopCount=1) is the "last round"; verify finish is not treated as a loop cap
         SessionRunner runner = newRunner(2, "objective");
         scriptModel(turn -> turn == 0
                 ? new LLMEvent[]{tool("builtin_2")}
@@ -343,7 +343,7 @@ class FinishSilenceLoopTest {
     @Test
     void contextCacheExpiryAfterToolUse_failsWithContextLost_andRefreshesTtl() {
         SessionRunner runner = newRunner(25, "objective");
-        // topCtx 读取 + 第一轮循环能取到 context；之后模拟 Redis TTL 到期返回 null。
+        // topCtx reads and the first loop iteration get the context; afterwards simulate Redis TTL expiry returning null.
         when(contextCache.get(SESSION_ID)).thenReturn(context, context, (KernelContext) null);
         scriptModel(turn -> turn == 0 ? new LLMEvent[]{tool("builtin_2")} : new LLMEvent[]{text("bye")});
 
@@ -351,8 +351,8 @@ class FinishSilenceLoopTest {
 
         assertEquals("FAILED", run.getStatus(),
                 "context 过期后不能继续跑空工具集，否则会被误判为连续静默");
-        assertTrue(failedMessageContains("上下文"),
-                "失败原因必须明确是运行上下文丢失，而不是模型未调用工具");
+        assertTrue(failedMessageContains("context"),
+                "Failure reason must state that the run context was lost, not that the model did not call a tool");
         verify(contextCache, atLeastOnce()).put(
                 eq(SESSION_ID), eq(context), anyLong(), eq(TimeUnit.MILLISECONDS));
     }

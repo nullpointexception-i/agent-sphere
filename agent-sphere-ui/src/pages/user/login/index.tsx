@@ -73,8 +73,8 @@ const Login: React.FC = () => {
     agentApi.system
       .publicConfig(['plugin.download-url', 'plugin.store-url'])
       .then((res: Record<string, string>) => {
-        // 后端存 apiBase 相对路由（如 /system/config/plugin/download），
-        // 需叠加 BASE=/api/v1 前缀；外链（http/https）原样使用
+        // The backend stores apiBase as a relative route (e.g. /system/config/plugin/download),
+        // so prefix it with BASE=/api/v1; external links (http/https) are used as is
         const toAbs = (raw: string) => {
           if (!raw) return '';
           return /^https?:\/\//i.test(raw)
@@ -115,7 +115,7 @@ const Login: React.FC = () => {
     setStoredUser(user);
     const defaultLoginSuccessMessage = intl.formatMessage({
       id: 'pages.login.success',
-      defaultMessage: '登录成功！',
+      defaultMessage: 'Login successful!',
     });
     message.success(defaultLoginSuccessMessage);
     await fetchUserInfo();
@@ -149,7 +149,10 @@ const Login: React.FC = () => {
         body?.errorMessage ||
         body?.message ||
         error?.message ||
-        '登录失败，请重试！';
+        intl.formatMessage({
+          id: 'pages.login.failure',
+          defaultMessage: 'Login failed, please try again!',
+        });
       setErrorMessage(msg);
     }
   };
@@ -182,7 +185,10 @@ const Login: React.FC = () => {
         body?.errorMessage ||
         body?.message ||
         error?.message ||
-        '企业登录发起失败，请重试！';
+        intl.formatMessage({
+          id: 'pages.login.ssoFailed',
+          defaultMessage: 'Failed to start enterprise sign-in, please retry!',
+        });
       message.error(msg);
     }
   };
@@ -202,7 +208,10 @@ const Login: React.FC = () => {
         body?.errorMessage ||
         body?.message ||
         error?.message ||
-        '登录失败，请重试！';
+        intl.formatMessage({
+          id: 'pages.login.failure',
+          defaultMessage: 'Login failed, please try again!',
+        });
       setErrorMessage(msg);
     }
   };
@@ -213,7 +222,7 @@ const Login: React.FC = () => {
         <title>
           {intl.formatMessage({
             id: 'menu.login',
-            defaultMessage: '登录页',
+            defaultMessage: 'Login',
           })}
           {Settings.title && ` - ${Settings.title}`}
         </title>
@@ -257,7 +266,7 @@ const Login: React.FC = () => {
                 label={labelWithRule(
                   intl.formatMessage({
                     id: 'pages.login.username.placeholder',
-                    defaultMessage: '用户名',
+                    defaultMessage: 'Username',
                   }),
                   intl.formatMessage({ id: 'pages.hint.username' }),
                 )}
@@ -268,7 +277,7 @@ const Login: React.FC = () => {
                 }}
                 placeholder={intl.formatMessage({
                   id: 'pages.login.username.placeholder',
-                  defaultMessage: '用户名',
+                  defaultMessage: 'Username',
                 })}
                 rules={[
                   {
@@ -276,7 +285,7 @@ const Login: React.FC = () => {
                     message: (
                       <FormattedMessage
                         id="pages.login.username.required"
-                        defaultMessage="请输入用户名!"
+                        defaultMessage="Please input your username!"
                       />
                     ),
                   },
@@ -297,7 +306,7 @@ const Login: React.FC = () => {
                 label={labelWithRule(
                   intl.formatMessage({
                     id: 'pages.login.password.placeholder',
-                    defaultMessage: '密码',
+                    defaultMessage: 'Password',
                   }),
                   intl.formatMessage({ id: 'pages.hint.password' }),
                 )}
@@ -308,7 +317,7 @@ const Login: React.FC = () => {
                 }}
                 placeholder={intl.formatMessage({
                   id: 'pages.login.password.placeholder',
-                  defaultMessage: '密码',
+                  defaultMessage: 'Password',
                 })}
                 rules={[
                   {
@@ -316,7 +325,7 @@ const Login: React.FC = () => {
                     message: (
                       <FormattedMessage
                         id="pages.login.password.required"
-                        defaultMessage="请输入密码！"
+                        defaultMessage="Please input your password!"
                       />
                     ),
                   },
@@ -340,7 +349,7 @@ const Login: React.FC = () => {
                 <ProFormCheckbox noStyle name="autoLogin">
                   <FormattedMessage
                     id="pages.login.rememberMe"
-                    defaultMessage="自动登录"
+                    defaultMessage="Remember me"
                   />
                 </ProFormCheckbox>
               </div>
@@ -353,7 +362,7 @@ const Login: React.FC = () => {
                 <a onClick={() => history.push('/user/register')}>
                   <FormattedMessage
                     id="pages.login.register"
-                    defaultMessage="去注册"
+                    defaultMessage="Register"
                   />
                 </a>
               </div>
@@ -379,7 +388,7 @@ const Login: React.FC = () => {
                                   >
                                     {intl.formatMessage({
                                       id: 'pages.login.pluginStore',
-                                      defaultMessage: '从应用市场下载',
+                                      defaultMessage: 'From Chrome Web Store',
                                     })}
                                   </a>
                                 ),
@@ -398,7 +407,7 @@ const Login: React.FC = () => {
                                   >
                                     {intl.formatMessage({
                                       id: 'pages.login.pluginSiteDownload',
-                                      defaultMessage: '站内下载',
+                                      defaultMessage: 'Download here',
                                     })}
                                   </a>
                                 ),
@@ -414,7 +423,7 @@ const Login: React.FC = () => {
                     >
                       <FormattedMessage
                         id="pages.login.pluginDownload"
-                        defaultMessage="插件下载"
+                        defaultMessage="Plugin Download"
                       />
                       <DownOutlined style={{ marginLeft: 4, fontSize: 10 }} />
                     </a>
@@ -473,7 +482,7 @@ const Login: React.FC = () => {
                   >
                     {intl.formatMessage({
                       id: 'pages.login.sso.title',
-                      defaultMessage: 'SSO 统一认证登录',
+                      defaultMessage: 'Enterprise SSO Sign-in',
                     })}
                   </div>
                   <div
@@ -487,7 +496,8 @@ const Login: React.FC = () => {
                   >
                     {intl.formatMessage({
                       id: 'pages.login.sso.desc',
-                      defaultMessage: '使用企业身份源一键登录，无需注册账号',
+                      defaultMessage:
+                        'Sign in with your enterprise identity provider. No registration needed.',
                     })}
                   </div>
                   <Dropdown
@@ -509,7 +519,7 @@ const Login: React.FC = () => {
                     >
                       {intl.formatMessage({
                         id: 'pages.login.sso.choose',
-                        defaultMessage: '选择认证源',
+                        defaultMessage: 'Choose a provider',
                       })}
                     </Button>
                   </Dropdown>

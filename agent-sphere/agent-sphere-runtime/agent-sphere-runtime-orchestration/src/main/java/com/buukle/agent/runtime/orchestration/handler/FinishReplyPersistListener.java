@@ -10,11 +10,11 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * finish 收口后，把 run 的最终答复回填到该 run 最新一条空 {@code reply_content} 的交互记录。
+ * After finish finalization, backfill the run's final answer into that run's latest interaction record with an empty {@code reply_content}.
  *
- * <p>finish 的答案在 tool_calls 参数里，LLM 轮本身 content/reply 为空；时间线 ASSISTANT 行
- * （AgentTimelineServiceImpl）按 interaction.reply_content 渲染，不回填就会一直空白。
- * 只更新「最新一条且为空」的记录，正常轮次（reply 非空）不会被覆盖。
+ * <p>The finish answer lives in the tool_calls arguments, so the LLM turn itself has empty content/reply; the timeline ASSISTANT row
+ * (AgentTimelineServiceImpl) renders from interaction.reply_content, so it stays blank without this backfill.
+ * Only the latest empty record is updated; normal turns (non-empty reply) are never overwritten.
  */
 @Slf4j
 @Component

@@ -5,7 +5,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** 通用文件存储：基于数据库的二进制文件（biz_key + file_key 唯一，PG bytea）。 */
+/** Generic file store: database-backed binary files (biz_key + file_key unique, PG bytea). */
 @Data
 @TableName("agent_file_store")
 public class AgentFileStore {

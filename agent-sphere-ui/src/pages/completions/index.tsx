@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -30,7 +31,7 @@ import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
 
-/** 解析 completions 调用 usage 原始 JSON（供应商字段）→ 统一展示结构；失败返回 null。 */
+/** Parse the raw usage JSON of a completions call (provider fields) → unified display structure; returns null on failure. */
 function parseCallUsage(raw?: string): {
   promptTokens: number;
   completionTokens: number;
@@ -133,7 +134,7 @@ export default function CompletionsList() {
         return Promise.resolve();
       } catch {
         return Promise.reject(
-          new Error(t('pages.admin.completions.invalidJson', '无效 JSON')),
+          new Error(t('pages.admin.completions.invalidJson', 'Invalid JSON')),
         );
       }
     },
@@ -153,7 +154,7 @@ export default function CompletionsList() {
       ellipsis: true,
     },
     {
-      title: t('pages.admin.completions.modelRoute', '模型路由'),
+      title: t('pages.admin.completions.modelRoute', 'Model Route'),
       key: 'modelRouteId',
       width: 160,
       render: (_: any, record: any) =>
@@ -163,33 +164,33 @@ export default function CompletionsList() {
           </span>
         ) : (
           <Tag color="orange">
-            {t('pages.admin.completions.noRoute', '未绑定')}
+            {t('pages.admin.completions.noRoute', 'Not bound')}
           </Tag>
         ),
     },
     {
-      title: t('pages.admin.completions.activePrompt', '生效版本'),
+      title: t('pages.admin.completions.activePrompt', 'Active Prompt'),
       key: 'activePromptId',
       width: 90,
       render: (_: any, record: any) =>
         record.activePromptId ? `v${record.activePromptId}` : '-',
     },
     {
-      title: t('pages.admin.completions.status', '状态'),
+      title: t('pages.admin.completions.status', 'Status'),
       dataIndex: 'status',
       key: 'status',
       width: 90,
       render: (status: any) =>
         status === 'ACTIVE' ? (
           <Tag color="green">
-            {t('pages.admin.completions.statusActive', '启用')}
+            {t('pages.admin.completions.statusActive', 'Active')}
           </Tag>
         ) : (
           <Tag>{status}</Tag>
         ),
     },
     {
-      title: t('pages.admin.completions.remark', '备注'),
+      title: t('pages.admin.completions.remark', 'Remark'),
       dataIndex: 'remark',
       key: 'remark',
       width: 140,
@@ -214,7 +215,7 @@ export default function CompletionsList() {
             icon={<EyeOutlined />}
             onClick={() => openDetail(record)}
           />
-          <Can code="admin:completions:update">
+          <Can code={PERM.adminCompletionsUpdate}>
             <Button
               type="link"
               size="small"
@@ -235,7 +236,7 @@ export default function CompletionsList() {
               }}
             />
           </Can>
-          <Can code="admin:completions:delete">
+          <Can code={PERM.adminCompletionsDelete}>
             <Button
               type="link"
               danger
@@ -321,7 +322,7 @@ export default function CompletionsList() {
       setPrompts(promptList || []);
       loadCalls(record.id, 1);
     } catch {
-      message.error(t('pages.chat.loadFailed', '加载失败'));
+      message.error(t('pages.chat.loadFailed', 'Load failed'));
     } finally {
       setViewLoading(false);
     }
@@ -369,7 +370,7 @@ export default function CompletionsList() {
     modal.confirm({
       title: t(
         'pages.admin.completions.activatePromptConfirm',
-        '确认激活该版本？',
+        'Confirm activating this version?',
       ),
       onOk: async () => {
         setActivatingId(promptId);
@@ -396,7 +397,7 @@ export default function CompletionsList() {
 
   const promptColumns = [
     {
-      title: t('pages.admin.completions.promptVersion', '版本'),
+      title: t('pages.admin.completions.promptVersion', 'Version'),
       key: 'version',
       width: 70,
       render: (_: any, record: any) => `v${record.version}`,
@@ -431,21 +432,21 @@ export default function CompletionsList() {
             size="small"
             onClick={() => setPromptDetail(record)}
           >
-            {t('pages.table.detail', '详情')}
+            {t('pages.table.detail', 'Detail')}
           </Button>
           {viewRecord?.activePromptId === record.id ? (
             <Tag color="green">
-              {t('pages.admin.completions.active', '当前生效')}
+              {t('pages.admin.completions.active', 'Active')}
             </Tag>
           ) : (
-            <Can code="admin:completions:update">
+            <Can code={PERM.adminCompletionsUpdate}>
               <Button
                 type="link"
                 size="small"
                 loading={activatingId === record.id}
                 onClick={() => handleActivate(record.id)}
               >
-                {t('pages.admin.completions.activate', '激活')}
+                {t('pages.admin.completions.activate', 'Activate')}
               </Button>
             </Can>
           )}
@@ -462,14 +463,14 @@ export default function CompletionsList() {
       width: 60,
     },
     {
-      title: t('pages.admin.completions.calls.model', '模型'),
+      title: t('pages.admin.completions.calls.model', 'Model'),
       dataIndex: 'model',
       key: 'model',
       width: 140,
       render: (v: string) => v || '-',
     },
     {
-      title: t('pages.admin.completions.calls.caller', '调用方'),
+      title: t('pages.admin.completions.calls.caller', 'Caller'),
       dataIndex: 'caller',
       key: 'caller',
       width: 120,
@@ -491,7 +492,7 @@ export default function CompletionsList() {
       },
     },
     {
-      title: t('pages.admin.completions.calls.output', '输出'),
+      title: t('pages.admin.completions.calls.output', 'Output'),
       dataIndex: 'output',
       key: 'output',
       ellipsis: true,
@@ -509,7 +510,7 @@ export default function CompletionsList() {
       width: 80,
       render: (_: any, record: any) => (
         <Button type="link" size="small" onClick={() => setCallDetail(record)}>
-          {t('pages.table.detail', '详情')}
+          {t('pages.table.detail', 'Detail')}
         </Button>
       ),
     },
@@ -525,32 +526,32 @@ export default function CompletionsList() {
       value: viewRecord?.name,
     },
     {
-      label: t('pages.admin.completions.description', '描述'),
+      label: t('pages.admin.completions.description', 'Description'),
       value: viewRecord?.description || '-',
     },
     {
-      label: t('pages.admin.completions.modelRoute', '模型路由'),
+      label: t('pages.admin.completions.modelRoute', 'Model Route'),
       value: viewRecord?.modelRouteId
         ? routeMap.get(viewRecord.modelRouteId) || `#${viewRecord.modelRouteId}`
-        : t('pages.admin.completions.noRoute', '未绑定'),
+        : t('pages.admin.completions.noRoute', 'Not bound'),
     },
     {
-      label: t('pages.admin.completions.activePrompt', '生效版本'),
+      label: t('pages.admin.completions.activePrompt', 'Active Prompt'),
       value: viewRecord?.activePromptId ? `v${viewRecord.activePromptId}` : '-',
     },
     {
-      label: t('pages.admin.completions.status', '状态'),
+      label: t('pages.admin.completions.status', 'Status'),
       value:
         viewRecord?.status === 'ACTIVE'
-          ? t('pages.admin.completions.statusActive', '启用')
+          ? t('pages.admin.completions.statusActive', 'Active')
           : viewRecord?.status || '-',
     },
     {
-      label: t('pages.admin.completions.businessType', '业务域'),
+      label: t('pages.admin.completions.businessType', 'Business Type'),
       value: viewRecord?.businessType || '-',
     },
     {
-      label: t('pages.admin.completions.remark', '备注'),
+      label: t('pages.admin.completions.remark', 'Remark'),
       value: viewRecord?.remark || '-',
     },
     {
@@ -653,7 +654,7 @@ export default function CompletionsList() {
               actionRef.current?.reload();
             }}
           />,
-          <Can key="new" code="admin:completions:create">
+          <Can key="new" code={PERM.adminCompletionsCreate}>
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -670,8 +671,8 @@ export default function CompletionsList() {
       <Modal
         title={
           editing
-            ? t('pages.admin.completions.edit', '编辑 Completions')
-            : t('pages.admin.completions.create', '新建 Completions')
+            ? t('pages.admin.completions.edit', 'Edit Completions')
+            : t('pages.admin.completions.create', 'New Completions')
         }
         open={modalOpen}
         onOk={handleSubmit}
@@ -705,10 +706,10 @@ export default function CompletionsList() {
           <Form.Item
             name="modelRouteId"
             label={labelWithRule(
-              t('pages.admin.completions.modelRoute', '模型路由'),
+              t('pages.admin.completions.modelRoute', 'Model Route'),
               t(
                 'pages.admin.completions.modelRoute.extra',
-                '留空则该能力不可执行',
+                'Leave empty to make this capability non-executable',
               ),
             )}
           >
@@ -718,7 +719,7 @@ export default function CompletionsList() {
               optionFilterProp="label"
               placeholder={t(
                 'pages.admin.completions.modelRoute.placeholder',
-                '选择模型路由',
+                'Select a model route',
               )}
               options={routes.map((r) => ({
                 value: r.id,
@@ -760,7 +761,7 @@ export default function CompletionsList() {
                 <Tooltip
                   title={t(
                     'pages.admin.completions.config.help',
-                    '支持参数（可选）：\ntemperature: 数字，如 0.1\nmax_tokens: 数字\ntop_p: 数字\npresence_penalty / frequency_penalty: 数字\nstop: 字符串数组，如 ["END"]\nthinking / reasoning: false=关闭思考, true=开启, 或 "disabled"/"enabled"\n示例: temperature=0.1, thinking=false, max_tokens=1024',
+                    'Supported (optional):\ntemperature: number, e.g. 0.1\nmax_tokens: number\ntop_p: number\npresence_penalty / frequency_penalty: number\nstop: string array, e.g. ["END"]\nthinking / reasoning: false=disable thinking, true=enable, or "disabled"/"enabled"\nExample: temperature=0.1, thinking=false, max_tokens=1024',
                   )}
                 >
                   <QuestionCircleOutlined
@@ -778,17 +779,17 @@ export default function CompletionsList() {
           </Form.Item>
           <Form.Item
             name="businessType"
-            label={t('pages.admin.completions.businessType', '业务域')}
+            label={t('pages.admin.completions.businessType', 'Business Type')}
             extra={t(
               'pages.admin.completions.businessType.extra',
-              '外部 API 按 businessType 匹配该能力，需与调用方一致',
+              'External API matches this capability by businessType; must match the caller',
             )}
           >
             <Input maxLength={64} placeholder="sourcing" />
           </Form.Item>
           <Form.Item
             name="remark"
-            label={t('pages.admin.completions.remark', '备注')}
+            label={t('pages.admin.completions.remark', 'Remark')}
           >
             <Input.TextArea rows={2} maxLength={500} />
           </Form.Item>
@@ -806,7 +807,7 @@ export default function CompletionsList() {
           items={[
             {
               key: 'info',
-              label: t('pages.admin.completions.detail', '基本信息'),
+              label: t('pages.admin.completions.detail', 'Detail'),
               children: (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <tbody>
@@ -842,18 +843,18 @@ export default function CompletionsList() {
             },
             {
               key: 'prompts',
-              label: t('pages.admin.completions.prompts', 'Prompt 版本'),
+              label: t('pages.admin.completions.prompts', 'Prompt Versions'),
               children: (
                 <>
                   <div style={{ marginBottom: 8, textAlign: 'right' }}>
-                    <Can code="admin:completions:update">
+                    <Can code={PERM.adminCompletionsUpdate}>
                       <Button
                         size="small"
                         type="primary"
                         icon={<PlusOutlined />}
                         onClick={() => setPromptOpen(true)}
                       >
-                        {t('pages.admin.completions.addPrompt', '新增版本')}
+                        {t('pages.admin.completions.addPrompt', 'Add Version')}
                       </Button>
                     </Can>
                   </div>
@@ -870,7 +871,7 @@ export default function CompletionsList() {
             },
             {
               key: 'calls',
-              label: t('pages.admin.completions.calls', '调用记录'),
+              label: t('pages.admin.completions.calls', 'Call Records'),
               children: (
                 <Table
                   rowKey="id"
@@ -904,7 +905,10 @@ export default function CompletionsList() {
       </Drawer>
 
       <Modal
-        title={t('pages.admin.completions.promptDetail', 'Prompt 版本详情')}
+        title={t(
+          'pages.admin.completions.promptDetail',
+          'Prompt Version Detail',
+        )}
         open={!!promptDetail}
         onCancel={() => setPromptDetail(null)}
         footer={null}
@@ -916,7 +920,7 @@ export default function CompletionsList() {
             <tbody>
               {[
                 {
-                  label: t('pages.admin.completions.promptVersion', '版本'),
+                  label: t('pages.admin.completions.promptVersion', 'Version'),
                   value: promptDetail?.version,
                 },
                 {
@@ -931,7 +935,7 @@ export default function CompletionsList() {
                   value: promptDetail?.promptUser || '-',
                 },
                 {
-                  label: t('pages.admin.completions.remark', '备注'),
+                  label: t('pages.admin.completions.remark', 'Remark'),
                   value: promptDetail?.remark || '-',
                 },
                 {
@@ -981,7 +985,7 @@ export default function CompletionsList() {
       </Modal>
 
       <Modal
-        title={t('pages.admin.completions.callDetail', '调用记录详情')}
+        title={t('pages.admin.completions.callDetail', 'Call Record Detail')}
         open={!!callDetail}
         onCancel={() => setCallDetail(null)}
         footer={null}
@@ -997,11 +1001,11 @@ export default function CompletionsList() {
                   value: callDetail?.id,
                 },
                 {
-                  label: t('pages.admin.completions.calls.model', '模型'),
+                  label: t('pages.admin.completions.calls.model', 'Model'),
                   value: callDetail?.model || '-',
                 },
                 {
-                  label: t('pages.admin.completions.calls.caller', '调用方'),
+                  label: t('pages.admin.completions.calls.caller', 'Caller'),
                   value: callDetail?.caller || '-',
                 },
                 {
@@ -1057,11 +1061,11 @@ export default function CompletionsList() {
                   })(),
                 },
                 {
-                  label: t('pages.admin.completions.calls.input', '入参'),
+                  label: t('pages.admin.completions.calls.input', 'Input'),
                   value: callDetail?.input || '-',
                 },
                 {
-                  label: t('pages.admin.completions.calls.output', '输出'),
+                  label: t('pages.admin.completions.calls.output', 'Output'),
                   value: callDetail?.output || '-',
                 },
                 {
@@ -1104,7 +1108,7 @@ export default function CompletionsList() {
       </Modal>
 
       <Modal
-        title={t('pages.admin.completions.addPrompt', '新增 Prompt 版本')}
+        title={t('pages.admin.completions.addPrompt', 'Add Version')}
         open={promptOpen}
         onOk={handleAddPrompt}
         onCancel={() => {
@@ -1122,7 +1126,7 @@ export default function CompletionsList() {
               t('pages.admin.completions.promptSystem', 'System Prompt'),
               t(
                 'pages.admin.completions.promptPlaceholder',
-                '支持 input 与 field 占位符',
+                'Supports input and field placeholders',
               ),
             )}
           >

@@ -11,16 +11,18 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # 默认 6 小时；推送卡死时不该静默烧那么久。拆层后正常应在几分钟内完成。
+    # Default is 6 hours; a stuck push must not burn that silently. After splitting
+    # the build into layers, a normal run should finish in minutes.
     timeout-minutes: 60
 
     steps:
     - uses: actions/checkout@v4
       with:
-        # 必须构建「tag 指向的 commit」，不能 checkout main：
-        # 镜像 tag 用的是 GITHUB_SHA，如果这时 main 还没推进到该 commit（例如 main 推送失败后
-        # 先推了 tag），就会构建出「名字是 vN、内容还是旧版本」的镜像 —— 线上 run 2962 即因此
-        # 拿到了 169 的代码（V115 未执行）。
+        # Build the commit the tag points to, not main.
+        # The image tag uses GITHUB_SHA. If main has not advanced to that commit yet
+        # (for example, a tag was pushed after a failed main push), the build would
+        # produce an image named vN but containing the old code — production run 2962
+        # was built from the 169 code in exactly this way (V115 did not run).
         ref: ${{ github.sha }}
         fetch-depth: 0
 
@@ -57,8 +59,9 @@ jobs:
         provenance: false
         sbom: false
       env:
-        # buildx 默认折叠进度，推层时长时间只有一行动不了。plain 会打出逐层字节数，
-        # 用于区分「跨境推送慢」与「真的卡死」。
+        # buildx collapses progress by default, so layer pushes can sit on one line
+        # for a long time. plain prints per-layer byte counts, which distinguishes
+        # "slow cross-border push" from "genuinely stuck".
         BUILDKIT_PROGRESS: plain
 
     - name: Build & push frontend
@@ -73,8 +76,9 @@ jobs:
         provenance: false
         sbom: false
       env:
-        # buildx 默认折叠进度，推层时长时间只有一行动不了。plain 会打出逐层字节数，
-        # 用于区分「跨境推送慢」与「真的卡死」。
+        # buildx collapses progress by default, so layer pushes can sit on one line
+        # for a long time. plain prints per-layer byte counts, which distinguishes
+        # "slow cross-border push" from "genuinely stuck".
         BUILDKIT_PROGRESS: plain
 
     - name: Build & push widget
@@ -88,8 +92,9 @@ jobs:
         provenance: false
         sbom: false
       env:
-        # buildx 默认折叠进度，推层时长时间只有一行动不了。plain 会打出逐层字节数，
-        # 用于区分「跨境推送慢」与「真的卡死」。
+        # buildx collapses progress by default, so layer pushes can sit on one line
+        # for a long time. plain prints per-layer byte counts, which distinguishes
+        # "slow cross-border push" from "genuinely stuck".
         BUILDKIT_PROGRESS: plain
 
     - name: Update k8s manifests with new image tags
@@ -110,8 +115,9 @@ jobs:
         else
           git commit -m "chore: update image tags [skip ci]"
           git pull --rebase origin main
-          # checkout 用的是 tag 的 commit（detached HEAD），不能裸 git push ——
-          # 必须显式推到 main，否则报 "You are not currently on a branch"（v1.0.171 即因此失败）。
+          # checkout is at the tag commit (detached HEAD), so a plain git push fails.
+          # Push explicitly to main; otherwise Git reports
+          # "You are not currently on a branch" (the v1.0.171 release failed this way).
           git push origin HEAD:main
         fi
 
@@ -119,10 +125,12 @@ jobs:
       run: |
         mkdir -p output
         TAG="${{ github.ref_name }}"
-        VER="${TAG#v}"     # 去掉前缀 v
-        VER="${VER%-*}"    # 去掉 -alpha/-beta 后缀 → 纯数字点分段（Chrome 扩展版本要求）
+        VER="${TAG#v}"     # Strip the leading v.
+        VER="${VER%-*}"    # Strip the -alpha/-beta suffix to a numeric dotted version
+                           # (required by Chrome extension versioning).
         cd agent-sphere-chrome-extension
-        # 打包时自动将版本号替换为与 tag 数字版本一致（仅影响本次 checkout 产物，不提交回仓库）
+        # Replace the manifest/package version with the numeric tag version for this
+        # checkout only; the change is not committed back to the repository.
         sed -i "s|\"version\": *\"[^\"]*\"|\"version\": \"${VER}\"|" manifest.json package.json
         zip -r ../output/agent-sphere-chrome-extension-${TAG}.zip \
           manifest.json background.js lib content.js content-locator.js content-editors.js \

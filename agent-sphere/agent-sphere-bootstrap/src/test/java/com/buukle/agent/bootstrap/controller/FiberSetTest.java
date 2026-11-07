@@ -28,7 +28,7 @@ class FiberSetTest {
             return "done";
         });
 
-        // 等待任务真正开始执行后，传入返回 true 的取消检查器
+        // After the task has actually started, pass in a cancellation checker that returns true
         long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
         while (!started.get() && System.nanoTime() < deadline) {
             Thread.onSpinWait();

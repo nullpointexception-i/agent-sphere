@@ -9,10 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 采样/请求参数配置的共享 JSON 形状（与 provider wire 字段对齐）。
- * 三处共用：agent_instance.config（实例级）、agent_system_config llm.defaults-config（全局兜底）、
- * agent_completions.config（completions 层）。与 {@link com.buukle.agent.completions.dtvo.CompletionsConfigDTO} 对齐并扩展。
- * 未设置的字段保持 null，序列化时由请求 DTO 的 NON_NULL 策略剔除。
+ * Shared JSON shape for sampling/request parameter config (aligned with provider wire fields).
+ * Used in three places: agent_instance.config (instance level), agent_system_config llm.defaults-config
+ * (global fallback), and agent_completions.config (completions layer). Aligned with and extends
+ * {@link com.buukle.agent.completions.dtvo.CompletionsConfigDTO}.
+ * Unset fields stay null and are dropped by the request DTO's NON_NULL strategy during serialization.
  */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -27,9 +28,9 @@ public class LlmSamplingConfigDTO implements Serializable {
     @JsonProperty("frequency_penalty")
     private Double frequencyPenalty;
     private List<String> stop;
-    /** 思考开关：布尔（false/true）或字符串（"disabled"/"enabled"）。 */
+    /** Thinking switch: boolean (false/true) or string ("disabled"/"enabled"). */
     private String thinking;
-    /** reasoning 为 thinking 的兼容别名。 */
+    /** reasoning is a compatibility alias for thinking. */
     private String reasoning;
     private Long seed;
     @JsonProperty("reasoning_effort")
@@ -44,9 +45,9 @@ public class LlmSamplingConfigDTO implements Serializable {
     private Integer topLogprobs;
     @JsonProperty("logit_bias")
     private Map<String, Integer> logitBias;
-    /** 流式响应携带 usage（对应请求 stream_options.include_usage）。 */
+    /** Include usage in the streaming response (maps to request stream_options.include_usage). */
     @JsonProperty("include_usage")
     private Boolean includeUsage;
-    /** 调用方标识（审计/遥测）。 */
+    /** Caller identifier (audit/telemetry). */
     private String user;
 }

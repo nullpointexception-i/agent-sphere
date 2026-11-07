@@ -3,13 +3,13 @@ import { allowsWidgetSession, businessTypeOf } from './instance';
 import type { InstanceVO } from './types';
 
 /**
- * 回归：widget 端会话门控只看实例开关 `allowWidgetSession`。
+ * Regression: the widget-side session gate only looks at the instance switch `allowWidgetSession`.
  *
- * <p>后端该列是 `NOT NULL DEFAULT FALSE`，所以空值/缺省必须按**禁止**处理 ——
- * 反过来把 undefined 当允许，会在旧后端（还没返回该字段）或字段缺失时放开本应禁止的实例。
+ * <p>That backend column is `NOT NULL DEFAULT FALSE`, so null/missing must be treated as **denied** -
+ * treating undefined as allowed would open up instances that should be denied on an older backend (one that does not return the field yet) or when the field is missing.
  *
- * <p>业务域 `businessType` **不再**是判据，只作为占位文案的标签：管理员可以把一个没有业务域的
- * 普通实例的 widget 开关关掉，那时它同样必须被门控。
+ * <p>`businessType` is **no longer** the criterion, only a label for placeholder copy: an admin can turn the widget switch off for an ordinary
+ * instance with no business type, and it must still be gated.
  */
 function instance(overrides: Partial<InstanceVO> = {}): InstanceVO {
   return {
@@ -46,7 +46,7 @@ describe('allowsWidgetSession', () => {
   });
 
   it('没有业务域但开关关闭的实例同样被禁止', () => {
-    // 门控只看开关：这是从 businessType 判据切换过来的关键行为差异
+    // The gate only looks at the switch: this is the key behavioral difference from the old businessType criterion
     expect(allowsWidgetSession(instance({ businessType: null, allowWidgetSession: false }))).toBe(false);
   });
 });

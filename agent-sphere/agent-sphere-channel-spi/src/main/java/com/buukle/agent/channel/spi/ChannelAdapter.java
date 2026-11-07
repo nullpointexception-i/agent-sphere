@@ -1,26 +1,27 @@
 package com.buukle.agent.channel.spi;
 
 /**
- * 信道适配器契约。
+ * Channel adapter contract.
  *
- * <p>只做协议转换：验签、解析、线程识别、发送；不做业务判断。
+ * <p>Protocol conversion only: signature verification, parsing, thread identification and sending;
+ * no business decisions.
  */
 public interface ChannelAdapter {
 
-    /** IM_BUILTIN / WEBHOOK / CODE_HOST / MAIL。 */
+    /** IM_BUILTIN / WEBHOOK / CODE_HOST / MAIL. */
     String type();
 
     /**
-     * 解析入站请求。实现负责验签与字段校验。
+     * Parses an inbound request. Implementations own signature verification and field validation.
      *
-     * @return 规范化事件；无有效事件时返回空列表
+     * @return normalized events; an empty list when there is no valid event
      */
     java.util.List<NormalizedEvent> parse(InboundRequest request);
 
-    /** 发送出站消息。 */
+    /** Sends an outbound message. */
     SendResult send(OutboundMessage message);
 
-    /** 更新已发送的消息（如任务卡片状态变更）；默认不支持。 */
+    /** Updates an already sent message (e.g. a task card status change); unsupported by default. */
     default SendResult update(OutboundMessage message) {
         return SendResult.failed("update not supported by " + type());
     }

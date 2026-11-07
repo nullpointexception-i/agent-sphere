@@ -47,7 +47,7 @@ public class GlobalExceptionHandler {
         log.warn("Request body not readable: {}", e.getMessage());
         return ResponseEntity.badRequest()
                 .body(new ErrorResponse(CommonErrorCode.PARAM_INVALID.getCode(),
-                        CommonErrorCode.PARAM_INVALID.getMessage(), "请求体格式错误，请检查字段类型"));
+                        CommonErrorCode.PARAM_INVALID.getMessage(), "Malformed request body; check field types"));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

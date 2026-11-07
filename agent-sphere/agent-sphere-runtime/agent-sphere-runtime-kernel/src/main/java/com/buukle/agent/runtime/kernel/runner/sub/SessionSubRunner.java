@@ -68,9 +68,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * SubRun 嵌套 ReAct 执行器（通用）：主循环调用某一 sub-run 工具 时在会话内
- * 启动一个子 Agent，复用会话模型路由与策略（{@link SubRunPolicy}）给出的预算/白名单/命名，
- * 最终结果作为工具结果返回主循环。策略决定宿主差异，本类不做任何宿主耦合。
+ * SubRun nested ReAct executor (generic): when the main loop calls a sub-run tool, it starts a child agent
+ * inside the session, reusing the session's model route and the budget/whitelist/naming given by the policy ({@link SubRunPolicy}),
+ * and returns the final result to the main loop as a tool result. The policy owns host differences; this class has no host coupling.
  */
 @Slf4j
 @Component
@@ -88,13 +88,13 @@ public class SessionSubRunner {
     private final AgentRuntimeProperties properties;
     private final SubRunPolicy subRunPolicy;
     private final AgentSubAgentRunSpi subAgentRunSpi;
-    /** 可选：统一 Timeline 索引（无则跳过子 Agent 头行，不影响功能）。 */
+    /** Optional: unified Timeline index (when absent the sub-agent header row is skipped; functionality is unaffected). */
     private final ObjectProvider<AgentTimelineSpi> timelineSpiProvider;
     private final ChatAttachmentResolver attachmentResolver;
     private final LlmRequestConfigurer llmRequestConfigurer;
     private final ToolApprovalGrantSpi toolApprovalGrantSpi;
     private final ToolApprovalService toolApprovalService;
-    /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
+    /** Browser screenshot observation injection support (shared by main/sub agents, with shared ordering/count); depends on attachmentResolver and is initialized lazily. */
     private volatile ScreenshotObservationSupport screenshotObservationSupport;
 
     private ScreenshotObservationSupport screenshotSupport() {
@@ -106,7 +106,7 @@ public class SessionSubRunner {
         return support;
     }
 
-    /** ToolExecutor sub-run 分支入口。 */
+    /** ToolExecutor sub-run branch entry point. */
     public String execute(RuntimeTool subRunTool, String argsJson,
                           SubRunExecutionContext parentCtx, List<RuntimeTool> sessionTools) {
         SubRunPolicy policy = subRunPolicy;
@@ -145,8 +145,8 @@ public class SessionSubRunner {
                 rendered != null ? rendered.length() : 0,
                 StringUtils.hasText(contactEnvelope) ? contactEnvelope.length() : 0);
 
-        // 通用子 Agent 运行：进入时创建（agentType 由策略给出），结束更新状态；
-        // parent_run_id 写入当前上下文的 owner（顶层 null），实现嵌套子 Agent 链路。
+        // Generic sub-agent run: created on entry (agentType comes from the policy), status updated on exit;
+        // parent_run_id is set to the owner of the current context (null at top level), forming the nested sub-agent chain.
         AgentSubAgentRunVO subRun = null;
         try {
             subRun = subAgentRunSpi.start(childCtx.getSessionId(), childCtx.getRunId(),
@@ -156,11 +156,11 @@ public class SessionSubRunner {
             log.warn("Failed to start sub-agent run", e);
         }
         Long subAgentRunId = subRun != null ? subRun.getId() : null;
-        // 内层工具执行上下文：owner 指向当前子 run，使嵌套 delegate 的 parent_run_id 指向它
+        // Inner tool execution context: owner points to the current sub-run, so a nested delegate's parent_run_id points to it
         SubRunExecutionContext innerCtx = childCtx.child(childCtx.getDepth(), childCtx.getToolRefAncestry(),
                 childCtx.getParentToolCallId(), subAgentRunId);
 
-        // 统一 Timeline：子 Agent 头行（正文按 agent_sub_agent_run 懒解，此处仅标记 + 封口）
+        // Unified Timeline: sub-agent header row (body is lazily resolved from agent_sub_agent_run; here we only mark and seal it)
         try {
             AgentTimelineSpi ts = timelineSpiProvider.getIfAvailable();
             if (ts != null && subAgentRunId != null) {
@@ -178,7 +178,7 @@ public class SessionSubRunner {
                 ? timeout : Duration.ofMinutes(10));
         long turnTimeout = properties.getRunner().getTurnTimeout().getSeconds();
 
-        // 子 Agent 复用同一实例级循环上限（与主循环一致，最高优先）；未配置则按 delegate 配置回落，不继承任务提额
+        // Sub-agents reuse the same instance-level loop limit (same as the main loop, highest priority); when unset, fall back to the delegate config and do not inherit the task raise
         Integer instanceLoopLimit = childCtx.getKernelContext() != null
                 && childCtx.getKernelContext().getAgentInstance() != null
                 ? childCtx.getKernelContext().getAgentInstance().getMaxLoopCount() : null;
@@ -216,7 +216,7 @@ public class SessionSubRunner {
                 finishSubAgentRun(subAgentRunId, SubRunStatus.COMPLETED.name());
                 return truncate(allContent.toString(), policy.maxResultChars());
             }
-            // 记录本轮每个工具结果（截图观察在全部 tool 消息追加后再统一注入，避免打断 assistant.tool_calls ↔ tool 配对）
+            // Record each tool result of this turn (screenshot observations are injected after all tool messages are appended, so the assistant.tool_calls ↔ tool pairing is not broken)
             Map<String, String> toolResults = new java.util.HashMap<>();
             for (TurnToolCall tc : turn.toolCalls()) {
                 if (!containsTool(subTools, tc.name())) {
@@ -255,7 +255,7 @@ public class SessionSubRunner {
                             approvalDenied = true;
                         } else if (!toolApprovalGrantSpi.isGranted(childCtx.getSessionId(), childCtx.getRunId(),
                                 executed.getToolRef(), executed.getApprovalScope())) {
-                            // 子 Agent 是同步执行、没有挂起/恢复通道，不能向用户发起审批。
+                            // Sub-agents execute synchronously and have no suspend/resume channel, so they cannot request user approval.
                             approvalDenied = true;
                         }
                     }
@@ -298,7 +298,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id()).setContent(result));
                 toolResults.put(tc.id(), result);
             }
-            // 先追加全部 tool 结果消息，再统一注入截图观察，保证 tool 消息紧贴各自 assistant.tool_calls 且不互相打断
+            // Append all tool result messages first, then inject screenshot observations uniformly, so each tool message stays adjacent to its assistant.tool_calls and they do not interrupt each other
             for (TurnToolCall tc : turn.toolCalls()) {
                 screenshotSupport().injectScreenshotObservation(childCtx.getSessionId(), subAgentRunId, messages,
                         toolResults.getOrDefault(tc.id(), ""));
@@ -347,7 +347,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         if (routes.isEmpty()) {
             return TurnResult.errorResult("no model route available");
         }
-        // 图片附件/截图观察：无支持图片的路由 → 剥离图片降级为纯文本继续（与主 Agent 一致，不阻断）
+        // Image attachments/screenshot observations: no image-capable route → strip images and degrade to plain text (same as the main agent; do not block)
         if (ScreenshotObservationSupport.hasAttachmentImage(messages)) {
             boolean anyCapable = false;
             for (ModelRouteFullVO r : routes) {
@@ -367,7 +367,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 .runId(ctx.getRunId())
                                 .subAgentRunId(subAgentRunId)
                                 .parentToolCallId(ctx.getParentToolCallId())
-                                .response("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
+                                .response("⚠️ The current route does not support images; continuing with text only")
                                 .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                 .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                 .publishId(UUID.randomUUID().toString()).build()));
@@ -388,7 +388,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 if (!toolDefs.isEmpty()) {
                     request.setTools(toolDefs);
                 }
-                // 采样参数接线：全局兜底 + 实例 config 覆盖；思考强度沿用主 run 的 pin。
+                // Sampling parameter wiring: global fallback + instance config override; reasoning effort follows the main run's pin.
                 String instanceConfig = ctx.getKernelContext() != null
                         && ctx.getKernelContext().getAgentInstance() != null
                         ? ctx.getKernelContext().getAgentInstance().getConfig() : null;
@@ -408,7 +408,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                             switch (event) {
                                 case LLMEvent.TextDelta t -> {
                                     contentRef.updateAndGet(c -> c + t.text());
-                                    // 子 Agent model reply 实时流式发布（供前端子卡片展示回复）
+                                    // Publish sub-agent model replies as they stream (for the frontend sub-card to show the reply)
                                     eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
                                             RuntimeEventDataVO.builder()
                                                     .sessionId(ctx.getSessionId())
@@ -422,7 +422,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 case LLMEvent.ReasoningDelta r -> {
                                     boolean firstDelta = reasoningRef.get().isBlank();
                                     reasoningRef.updateAndGet(c -> c + r.text());
-                                    // 首帧加哨兵行，前端据此新建一个 sub-run 段；次帧原样追加到当前段
+                                    // Add a sentinel line on the first frame so the frontend starts a new sub-run segment; later frames are appended to the current segment as-is
                                     String responseText = r.text();
                                     if (firstDelta) {
                                         String name = displayName != null && !displayName.isBlank()
@@ -437,9 +437,9 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                             .publishId(UUID.randomUUID().toString())
                                             .subAgentRunId(subAgentRunId)
                                             .parentToolCallId(ctx.getParentToolCallId())
-                                            // 子 Agent thinking 全程打 sub-run 标记：前端按 nodeName 路由到子卡片
+                                            // Tag sub-agent thinking with the sub-run marker throughout: the frontend routes it to the sub-card by nodeName
                                             .nodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
-                                            // 首帧标记：前端据此刻新 LLM 轮（避免解析哨兵前缀）
+                                            // First-frame marker: the frontend starts a new LLM turn from it (no need to parse a sentinel prefix)
                                             .firstFrame(firstDelta)
                                             .response(responseText).build();
                                     eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN, data));
@@ -511,9 +511,9 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         if (policySystem != null && !policySystem.isBlank()) {
             sb.append("\n\n").append(policySystem);
         }
-        sb.append("\n\n允许使用的工具：\n");
+        sb.append("\n\nAvailable tools:\n");
         if (subTools.isEmpty()) {
-            sb.append("（本任务不允许调用任何工具）\n");
+            sb.append("(This task may not call any tools.)\n");
         } else {
             for (RuntimeTool t : subTools) {
                 sb.append("- ").append(t.getLlmToolName());
@@ -523,7 +523,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 sb.append("\n");
             }
         }
-        sb.append("\n请直接执行任务并返回最终结果；不要向用户提问，不要调用未列出的工具。");
+        sb.append("\nExecute the task directly and return the final result; do not ask the user questions and do not call tools that are not listed.");
         return sb.toString();
     }
 
@@ -541,7 +541,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 .arguments(ToolCallReason.strip(tc.arguments()))
                                 .build())
                         .build()));
-        // DeepSeek thinking 模式要求把上一轮的 reasoning_content 原样回传，否则 400
+        // DeepSeek thinking mode requires the previous turn's reasoning_content to be sent back verbatim, otherwise 400
         if (reasoning != null && !reasoning.isBlank()) {
             msg.setReasoningContent(reasoning);
         }
@@ -567,7 +567,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                         .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8)).build()));
     }
 
-    /** 子 Agent 工具集 = 父 tools 全集，剔除 ask_clarification 与 wait。 */
+    /** Sub-agent tool set = the parent's full tool set minus ask_clarification and wait. */
     private List<RuntimeTool> filterTools(List<RuntimeTool> sessionTools) {
         List<RuntimeTool> result = new ArrayList<>();
         if (sessionTools == null) {
@@ -578,18 +578,18 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 result.add(tool);
                 continue;
             }
-            // 嵌套 Sub run 禁止 ask_clarification：子 Agent 不得向用户提问
+            // Nested sub-runs must not use ask_clarification: a sub-agent must not ask the user questions
             if (tool.getToolRef().equals(ToolRefs.builtin(ChatClarification.INTERNAL_NAME))) {
                 continue;
             }
-            // 同样禁止 wait：挂起-恢复的 break 判定只存在于主 SessionRunner 循环，
-            // 子 Agent 路径没有那套检测。若放行，ToolExecutor 仍会建 pending 记录并返回
-            // {"status":"waiting"}，但没人去认领它 —— 变成一次静默的空等。
+            // wait is likewise forbidden: the suspend-resume break decision exists only in the main SessionRunner loop,
+            // and the sub-agent path has no such detection. If allowed, ToolExecutor would still create a pending row and return
+            // {"status":"waiting"}, but nobody would claim it — turning into a silent empty wait.
             if (tool.getToolRef().equals(ToolRefs.builtin(WaitConstants.INTERNAL_NAME))) {
                 continue;
             }
-            // 同理不接 finish：显式收口（COMPLETED + summary）的判定只存在于主 SessionRunner 循环，
-            // 子 Agent 放行会落到 ToolExecutor 的兜底分支，返回一个没人消费的 finished 结果。
+            // For the same reason finish is not wired in: the explicit finalization decision (COMPLETED + summary) exists only in the main SessionRunner loop,
+            // so allowing it in a sub-agent would fall through to ToolExecutor's fallback branch and return a finished result nobody consumes.
             if (tool.getToolRef().equals(ToolRefs.builtin(FinishConstants.INTERNAL_NAME))) {
                 continue;
             }
@@ -622,7 +622,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         }
     }
 
-    /** 两个输出上限都有效时取较小值；只有一个有效时用它；都无效返回 null。 */
+    /** Takes the smaller value when both output limits are valid; uses the only valid one when just one is; returns null when neither is. */
     private static Integer minPositive(Integer first, Long second) {
         boolean firstValid = first != null && first > 0;
         Integer secondInt = second != null && second > 0

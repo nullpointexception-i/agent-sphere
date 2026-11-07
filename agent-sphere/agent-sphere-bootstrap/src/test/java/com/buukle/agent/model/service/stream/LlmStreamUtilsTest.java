@@ -8,10 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * reasoning 字段名双兼容：vLLM/Qwen3 用 {@code reasoning}，DeepSeek/智谱用 {@code reasoning_content}。
+ * Dual-compatible reasoning field names: vLLM/Qwen3 use {@code reasoning}, DeepSeek/Zhipu use {@code reasoning_content}.
  *
- * <p>线上 54 个 Qwen3.8 分片里 {@code reasoning_content} 出现 0 次、{@code reasoning} 才是实际字段，
- * 旧代码只认前者，导致 reasoningLen 恒为 0、思考正文丢失。
+ * <p>In 54 production Qwen3.8 chunks, {@code reasoning_content} appeared 0 times and {@code reasoning} was the actual field;
+ * the old code only recognized the former, so reasoningLen stayed 0 and the reasoning text was lost.
  */
 class LlmStreamUtilsTest {
 

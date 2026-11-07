@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.Map;
 
-/** 打平 Timeline 行（读取侧组装：行元数据 + 已从 ref 解析好的正文）。 */
+/** Flattened Timeline row (assembled on the read side: row metadata + body already resolved from ref). */
 @Data
 public class AgentTimelineVO implements Serializable {
     private Long seq;
@@ -14,15 +14,15 @@ public class AgentTimelineVO implements Serializable {
     private String subtype;
     private String state;
     private Long groupId;
-    /** 快照标签（无正文）。 */
+    /** Snapshot title (no body). */
     private String title;
     private Long refRunId;
     private Long refInteractionId;
     private Long refToolCallId;
     private Long refSubAgentRunId;
     private Long refClarificationId;
-    /** 压缩记录 id（COMPACTION 行）。 */
+    /** Compaction record id (COMPACTION row). */
     private Long refCompactId;
-    /** kind 专属正文（user/assistant/tool/clarification/subagent/compaction/run_status），加载时从 ref 解析。 */
+    /** Kind-specific body (user/assistant/tool/clarification/subagent/compaction/run_status), resolved from ref on load. */
     private Map<String, Object> content;
 }

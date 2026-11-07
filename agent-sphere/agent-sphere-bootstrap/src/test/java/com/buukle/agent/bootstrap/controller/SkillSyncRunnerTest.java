@@ -45,9 +45,9 @@ import static org.mockito.Mockito.when;
 /**
  * {@link SkillSyncRunner}。
  *
- * <p>最要紧的一条是 {@code sweep_queryHasNoTimeWindow}：本次修复的根因就是扫描条件里
- * 那个按「安装时间」筛的 7 天窗口，它让装久了的副本永远扫不到。旧测试恰恰断言了这个
- * 窗口存在，必须反着锁死。
+ * <p>The most important one is {@code sweep_queryHasNoTimeWindow}: the root cause fixed here was the 7-day
+ * window filtered by "install time", which meant copies installed long ago were never scanned again. The old test actually asserted
+ * that the window existed, so it must now be locked down the other way.
  */
 @ExtendWith(MockitoExtension.class)
 class SkillSyncRunnerTest {
@@ -95,7 +95,7 @@ class SkillSyncRunnerTest {
         CapabilitySkill s = new CapabilitySkill();
         s.setId(id);
         s.setOriginSkillId(originId);
-        // 装得很久：正是本次修复要覆盖的场景
+        // Installed long ago: exactly the scenario this fix covers
         s.setCreatedAt(LocalDateTime.now().minusDays(400));
         return s;
     }
@@ -150,8 +150,8 @@ class SkillSyncRunnerTest {
     @Test
     @DisplayName("单个副本同步异常不影响其余，且进跳过明细")
     void sweep_isolatesPerCopyFailure() {
-        // 第二页必须是空页：Mockito 在桩用尽后会一直返回最后一个值，
-        // 满批 2 条会被当成「还有更多」而无限循环。
+        // The second page must be empty: once stubs run out, Mockito keeps returning the last value,
+        // and a full batch of 2 would be treated as "more to come", looping forever.
         given(capabilitySkillService.page(any(), any()))
                 .willReturn(pageOf(List.of(copy(1L, 10L), copy(2L, 10L))))
                 .willReturn(new Page<>());
@@ -191,7 +191,7 @@ class SkillSyncRunnerTest {
         runner.runSync(SkillSyncTriggerEnum.TRIGGER_SCHEDULED);
 
         verify(skillSyncRunMapper).markSkipped(eq(RECORD_ID), eq("SKIPPED"),
-                org.mockito.ArgumentMatchers.contains("正在运行"),
+                org.mockito.ArgumentMatchers.contains("already running"),
                 org.mockito.ArgumentMatchers.anyLong(), anyString());
         verify(skillSyncRunMapper, never()).markSuccess(any(), anyString(), anyInt(), anyInt(),
                 anyInt(), anyInt(), any(), any(), any(Long.class), anyString());

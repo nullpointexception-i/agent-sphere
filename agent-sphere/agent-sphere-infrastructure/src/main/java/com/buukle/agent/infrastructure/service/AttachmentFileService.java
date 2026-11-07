@@ -14,15 +14,16 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 聊天附件上传：图片经 {@link GenericFileService} 落库（PG bytea），返回 fileKey。
- * 现阶段仅支持图片（MIME 白名单 + 5MB 上限），backend 解析时拼 data URL 送模型。
+ * Chat attachment upload: images are persisted via {@link GenericFileService} (PG bytea) and a fileKey is
+ * returned. At this stage only images are supported (MIME whitelist + 5 MB cap); the backend builds a
+ * data URL when parsing and sends it to the model.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AttachmentFileService {
 
-    /** 见 {@link FileStoreBizKeys#CHAT_ATTACHMENT}；保留本字段以免改动既有调用点 */
+    /** See {@link FileStoreBizKeys#CHAT_ATTACHMENT}; this field is kept so existing call sites are unchanged */
     public static final String BIZ_KEY = FileStoreBizKeys.CHAT_ATTACHMENT;
     private static final long MAX_IMAGE_SIZE_BYTES = 5L * 1024 * 1024;
     private static final Set<String> ALLOWED_TYPES = Set.of(
@@ -32,14 +33,14 @@ public class AttachmentFileService {
 
     public AttachmentUploadResult upload(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("附件不能为空");
+            throw new IllegalArgumentException("attachment must not be empty");
         }
         String contentType = normalizeContentType(file.getContentType());
         if (contentType == null) {
-            throw new IllegalArgumentException("仅支持图片附件（jpeg/png/webp/gif）");
+            throw new IllegalArgumentException("only image attachments are supported (jpeg/png/webp/gif)");
         }
         if (file.getSize() > MAX_IMAGE_SIZE_BYTES) {
-            throw new IllegalArgumentException("附件超过 5MB 上限");
+            throw new IllegalArgumentException("attachment exceeds the 5 MB limit");
         }
         try {
             String fileKey = UUID.randomUUID().toString();
@@ -48,11 +49,11 @@ public class AttachmentFileService {
             log.info("Attachment stored: fileKey={}, contentType={}, size={}", fileKey, contentType, file.getSize());
             return new AttachmentUploadResult(fileKey, contentType, file.getSize());
         } catch (java.io.IOException e) {
-            throw new IllegalStateException("附件保存失败: " + e.getMessage());
+            throw new IllegalStateException("failed to save attachment: " + e.getMessage());
         }
     }
 
-    /** 读取附件原始字节并拼接为 OpenAI 兼容 data URL；不存在或非图片返回 null。 */
+    /** Reads the raw attachment bytes and assembles an OpenAI-compatible data URL; returns null if missing or not an image. */
     public String toDataUrl(String fileKey) {
         StoredFile stored = genericFileService.get(BIZ_KEY, fileKey);
         if (stored == null || stored.content() == null || stored.content().length == 0) {
@@ -65,7 +66,7 @@ public class AttachmentFileService {
         return "data:" + contentType + ";base64," + Base64.getEncoder().encodeToString(stored.content());
     }
 
-    /** 读取附件的 content-type；不存在返回 null。 */
+    /** Reads the attachment's content-type; returns null if it does not exist. */
     public String contentTypeOf(String fileKey) {
         StoredFile stored = genericFileService.get(BIZ_KEY, fileKey);
         return stored == null ? null : stored.contentType();
@@ -79,18 +80,18 @@ public class AttachmentFileService {
         return ALLOWED_TYPES.contains(normalized) ? normalized : null;
     }
 
-    /** 附件可用的 content-type；不存在或非图片返回 null（只读元数据，不载字节）。 */
+    /** Content-type available for the attachment; returns null if missing or not an image (metadata only, bytes not loaded). */
     public String supportedContentTypeOf(String fileKey) {
         String contentType = contentTypeOf(fileKey);
         return contentType != null && ALLOWED_TYPES.contains(contentType) ? contentType : null;
     }
 
-    /** 附件是否为可用的图片（仅看 content-type，不读字节；供发送侧即时校验）。 */
+    /** Whether the attachment is a usable image (content-type only, bytes not read; used for immediate validation on the send side). */
     public boolean isSupportedImage(String fileKey) {
         return supportedContentTypeOf(fileKey) != null;
     }
 
-    /** 读取附件原始文件；不存在返回 null（前端按 fileKey 拉字节回显用）。 */
+    /** Reads the raw attachment file; returns null if missing (used by the frontend to fetch bytes by fileKey for display). */
     public StoredFile load(String fileKey) {
         return genericFileService.get(BIZ_KEY, fileKey);
     }

@@ -1,5 +1,9 @@
 package com.buukle.agent.im.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
@@ -21,14 +25,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @ConditionalOnProperty(prefix = "buukle.agent.im", name = "enabled", havingValue = "true")
-@RequestMapping("/api/v1/im/conversations/{conversationId}/messages")
+@RequestMapping(ApiPrefix.V1 + "/im/conversations/{conversationId}/messages")
 @WithTenant
 @RequiredArgsConstructor
 public class ImMessageController extends BaseController {
 
     private final ImMessageService messageService;
 
-    @RequirePermission("im:conversation:read")
+    @RequirePermission(PermissionCodes.IM_CONVERSATION_READ)
     @GetMapping
     public ResponseEntity<?> list(@PathVariable Long conversationId,
                                   @RequestParam(required = false) Long beforeSeq,
@@ -37,7 +41,7 @@ public class ImMessageController extends BaseController {
         return ok(messageService.list(conversationId, beforeSeq, afterSeq, limit));
     }
 
-    @RequirePermission("im:conversation:read")
+    @RequirePermission(PermissionCodes.IM_CONVERSATION_READ)
     @GetMapping("/page")
     public ResponseEntity<?> page(@PathVariable Long conversationId,
                                   @RequestParam(required = false) Long beforeSeq,
@@ -46,7 +50,7 @@ public class ImMessageController extends BaseController {
         return ok(messageService.page(conversationId, beforeSeq, afterSeq, limit));
     }
 
-    @RequirePermission("im:conversation:read")
+    @RequirePermission(PermissionCodes.IM_CONVERSATION_READ)
     @GetMapping("/search")
     public ResponseEntity<?> search(@PathVariable Long conversationId,
                                     @RequestParam String keyword,
@@ -55,14 +59,14 @@ public class ImMessageController extends BaseController {
         return ok(messageService.search(conversationId, keyword, beforeSeq, limit));
     }
 
-    @RequirePermission("im:message:send")
+    @RequirePermission(PermissionCodes.IM_MESSAGE_SEND)
     @PostMapping
     public ResponseEntity<?> send(@PathVariable Long conversationId,
                                   @Valid @RequestBody SendMessageDTO dto) {
         return created(messageService.send(conversationId, dto));
     }
 
-    @RequirePermission("im:message:send")
+    @RequirePermission(PermissionCodes.IM_MESSAGE_SEND)
     @PutMapping("/{messageId}")
     public ResponseEntity<?> edit(@PathVariable Long conversationId,
                                   @PathVariable Long messageId,
@@ -70,7 +74,7 @@ public class ImMessageController extends BaseController {
         return ok(messageService.edit(conversationId, messageId, content));
     }
 
-    @RequirePermission("im:message:send")
+    @RequirePermission(PermissionCodes.IM_MESSAGE_SEND)
     @DeleteMapping("/{messageId}")
     public ResponseEntity<?> recall(@PathVariable Long conversationId,
                                     @PathVariable Long messageId) {

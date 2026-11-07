@@ -15,14 +15,14 @@
 
   // --- MAIN-world bridge: forward widget auth/session state to the content script ---
   // (content scripts run in an ISOLATED world and cannot read the page's storage)
-  // token 现在存在 localStorage（同一浏览器所有标签页共用一份），sessionId 仍按标签页区分。
+  // The token now lives in localStorage (one copy shared by all tabs of the same browser); sessionId is still scoped per tab.
   function forwardWidgetSession() {
     let sessionId = null;
     let user = null;
     try {
       sessionId = sessionStorage.getItem('agent-sphere-widget:active-session');
       user = localStorage.getItem('agent-sphere-widget:agent-user');
-      // 迁移期兜底：旧版本写在 sessionStorage
+      // Migration fallback: older versions wrote to sessionStorage
       if (!user) user = sessionStorage.getItem('agent-sphere-widget:agent-user');
     } catch (e) { /* storage blocked */ }
     window.postMessage({ type: 'agent-sphere:session-data', sessionId, user }, '*');
@@ -32,7 +32,7 @@
   window.addEventListener('agent-sphere:session-change', forwardWidgetSession);
 
   // Catch any direct storage write for the widget keys (robustness; setItem + removeItem).
-  // user 在 localStorage、active-session 在 sessionStorage —— 两个都要拦。
+  // user is in localStorage, active-session is in sessionStorage - both must be intercepted.
   const __asOrigSetItem = Storage.prototype.setItem;
   const __asOrigRemoveItem = Storage.prototype.removeItem;
   const __asIsWidgetStorage = (target) => target === window.localStorage || target === window.sessionStorage;

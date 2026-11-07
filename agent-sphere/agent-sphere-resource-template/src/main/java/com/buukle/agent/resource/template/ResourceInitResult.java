@@ -5,7 +5,7 @@ import lombok.Data;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 资源模板初始化汇总。 */
+/** Resource template initialization summary. */
 @Data
 public class ResourceInitResult {
     private int created;

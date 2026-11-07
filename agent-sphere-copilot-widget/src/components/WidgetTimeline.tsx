@@ -41,8 +41,8 @@ import type { SubAgentTimelineItemVO, TimelineRow } from '../types';
 import type { SubAgentLiveMap } from '../useTimelineStream';
 
 /**
- * 展示状态：优先后端按来源表覆盖的 content.state。
- * timeline 的快照 state 只在 content 缺失时兜底，不参与任何控制判断。
+ * Display state: prefer content.state overwritten by the backend from the source tables.
+ * The timeline snapshot state is only a fallback when content is missing and does not participate in any control decisions.
  */
 const displayState = (row: any): string | undefined =>
   row?.kind === 'run_status'
@@ -54,17 +54,17 @@ export interface WidgetTimelineProps {
   hasMore: boolean;
   loadingOlder: boolean;
   onLoadOlder: () => void;
-  /** 乐观插入、等待后端权威行替换的用户消息（渲染在末尾）。 */
+  /** Optimistically inserted user message awaiting replacement by the authoritative backend row (rendered at the end). */
   pendingUserRows?: TimelineRow[];
   subAgentLiveMap: SubAgentLiveMap;
   loadSubAgentSteps: (subAgentRunId: number) => Promise<SubAgentTimelineItemVO[]>;
-  /** 按 fileKey 拉附件字节转 objectURL（用户消息图片回显）。 */
+  /** Fetch attachment bytes by fileKey and convert to an objectURL (user message image replay). */
   loadFile: (fileKey: string) => Promise<string>;
   onRespondClarify: (runId: number, clarificationId: string, response: string) => void;
-  /** 取消当前会话待处理澄清（停止 run）。 */
+  /** Cancel the pending clarification of the current session (stop the run). */
   onCancelClarify?: () => void;
   preparingTool?: { publishId?: string; name?: string } | null;
-  /** LLM 重试读秒（来自 runtimeState，按 run 匹配 run_status 行）。 */
+  /** LLM retry countdown (from runtimeState, matched to the run_status row by run). */
   retryState?: {
     runId: number;
     attempt?: number | null;
@@ -75,10 +75,10 @@ export interface WidgetTimelineProps {
 
 // ---------------------------------------------------------------- utils
 
-// 内部协议工具：finish 的答案已作为助手正文展示，ask_clarification 由澄清行展示。
+// Internal protocol tools: the finish answer is already shown as assistant body text, and ask_clarification is shown by the clarification row.
 const FINISH_TOOL_NAME = 'builtin_12';
 const ASK_CLARIFICATION_TOOL_NAME = 'builtin_7';
-/** 超过该耗时视为慢工具（红色 + ⚠）。 */
+/** Above this duration a tool is considered slow (red + warning). */
 const SLOW_TOOL_MS = 5000;
 
 function isInternalToolRow(row: TimelineRow): boolean {
@@ -99,8 +99,8 @@ function isInternalToolRow(row: TimelineRow): boolean {
 function formatDuration(ms?: number | null): string {
   if (ms == null || ms < 0 || !Number.isFinite(ms)) return '';
   const sec = Math.round(ms / 1000);
-  if (sec < 60) return `${sec}秒`;
-  return `${Math.floor(sec / 60)}分${sec % 60}秒`;
+  if (sec < 60) return `${sec}s`;
+  return `${Math.floor(sec / 60)}m${sec % 60}s`;
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -156,15 +156,15 @@ function CopyBtn({ text }: { text: string }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      // 剪贴板不可用时静默
+      // Fail silently when the clipboard is unavailable
     }
   };
   return (
     <button
       type="button"
       className="aw-copy-btn"
-      title={copied ? '已复制' : '复制'}
-      aria-label={copied ? '已复制' : '复制'}
+      title={copied ? 'Copied' : 'Copy'}
+      aria-label={copied ? 'Copied' : 'Copy'}
       onClick={onCopy}
     >
       {copied ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
@@ -192,7 +192,7 @@ function AssistantRow({ row }: { row: TimelineRow }) {
       setThinkingOpen(false);
     }
   }, [reply, displayState(row), autoCollapsed]);
-  // 思考流式增长时贴底滚动
+  // Stay pinned to the bottom while thinking text streams in
   useEffect(() => {
     const el = thinkBoxRef.current;
     if (thinkingOpen && el) {
@@ -207,19 +207,19 @@ function AssistantRow({ row }: { row: TimelineRow }) {
           className="aw-tl-thinking-toggle"
           onClick={() => setThinkingOpen((o) => !o)}
         >
-          {thinkingOpen ? '▾' : '▸'} Model Reason{thinking ? '' : '（无）'}
+          {thinkingOpen ? '▾' : '▸'} Model Reason{thinking ? '' : ' (none)'}
         </button>
       </div>
       {thinkingOpen && (
         <div ref={thinkBoxRef} className="aw-tl-thinking">
-          {thinking || '（无推理内容）'}
+          {thinking || '(No reasoning content)'}
         </div>
       )}
       <div className="aw-tl-reply">
         {reply ? (
           <Md text={reply} />
         ) : (
-          <span style={{ color: '#9ca3af' }}>（流式中…）</span>
+          <span style={{ color: '#9ca3af' }}>(Streaming…)</span>
         )}
         <CopyBtn text={reply} />
         <UsageChip usage={c.usage ?? undefined} />
@@ -290,7 +290,7 @@ function ToolRowBody({
       ? 'timeout'
       : 'failed'
     : undefined;
-  // doc 卡自带 📄 标题行，避免与头部重复
+  // The doc card has its own 📄 title line, avoiding duplication with the header
   const hideHead = family === 'doc';
   return (
     <div>
@@ -348,7 +348,7 @@ function ToolRow(props: {
             whiteSpace: 'nowrap',
           }}
         >
-          理由：{reason.slice(0, 120)}
+          Reason: {reason.slice(0, 120)}
         </div>
       )}
       {durationText && (
@@ -406,7 +406,7 @@ function McpToolRow({ content, state }: { content: any; state?: string | null })
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <ToolIcon />
-        <TypographyStrong>{content.displayName || content.toolName || '工具'}</TypographyStrong>
+        <TypographyStrong>{content.displayName || content.toolName || 'Tool'}</TypographyStrong>
         {server ? <span style={{ fontSize: 11, color: '#9ca3af' }}>· {server}</span> : null}
         {action ? <span style={{ fontSize: 12, color: '#6b7280' }}>· {action}</span> : null}
         {resultStatus ? (
@@ -438,7 +438,7 @@ function McpToolRow({ content, state }: { content: any; state?: string | null })
       )}
       <div>
         <ContentPreview
-          title={content.displayName || content.toolName || '工具'}
+          title={content.displayName || content.toolName || 'Tool'}
           content={toolResultText(content)}
         />
       </div>
@@ -448,10 +448,10 @@ function McpToolRow({ content, state }: { content: any; state?: string | null })
 }
 
 const TEXT_MATCH_MODE_LABEL: Record<string, string> = {
-  EXACT: '精确匹配',
-  IGNORE_CASE: '忽略大小写',
-  TRIMMED: '去首尾空白',
-  IGNORE_CASE_TRIMMED: '忽略大小写 + 去空白',
+  EXACT: 'Exact match',
+  IGNORE_CASE: 'Ignore case',
+  TRIMMED: 'Trimmed',
+  IGNORE_CASE_TRIMMED: 'Ignore case + trim',
 };
 
 function prettyJsonSafe(raw?: string) {
@@ -487,7 +487,7 @@ function TextContainsRow({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <ToolIcon />
-        <TypographyStrong>文本包含判断</TypographyStrong>
+        <TypographyStrong>Text contains</TypographyStrong>
         <span
           style={{
             fontSize: 10,
@@ -498,7 +498,7 @@ function TextContainsRow({
             background: failed ? '#ffccc7' : matched ? '#d9f7be' : unknown ? '#d6e4ff' : '#f0f0f0',
           }}
         >
-          {failed ? '失败' : matched ? '命中' : unknown ? '无结果' : '未命中'}
+          {failed ? 'Failed' : matched ? 'Matched' : unknown ? 'No result' : 'Not matched'}
         </span>
         <span style={{ color: '#9ca3af', fontSize: 11 }}>
           {TEXT_MATCH_MODE_LABEL[view.mode] || view.mode}
@@ -524,7 +524,7 @@ function TextContainsRow({
         >
           {view.needle && (
             <>
-              <span style={{ flexShrink: 0 }}>查找</span>
+              <span style={{ flexShrink: 0 }}>Find</span>
               <span
                 title={view.needle}
                 style={{
@@ -542,7 +542,7 @@ function TextContainsRow({
           )}
           {view.haystackChars != null && (
             <span style={{ flexShrink: 0 }}>
-              · 目标 {view.haystackChars.toLocaleString()} 字符
+              · target {view.haystackChars.toLocaleString()} chars
             </span>
           )}
         </div>
@@ -560,14 +560,14 @@ function TextContainsRow({
             userSelect: 'none',
           }}
         >
-          查看原始数据
+          View raw data
           {formatToolDuration(content?.meta?.durationMs)
             ? ` · ${content.meta.durationMs >= 5000 ? '⚠ ' : ''}${formatToolDuration(content.meta.durationMs)}`
             : ''}
         </summary>
-        <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>参数</div>
+        <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>Arguments</div>
         <pre className="aw-tl-pre">{prettyJsonSafe(content.args)}</pre>
-        <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>结果</div>
+        <div style={{ marginTop: 4, fontSize: 10, color: '#a0a0a0' }}>Result</div>
         <pre className="aw-tl-pre">{prettyJsonSafe(content.artifact)}</pre>
       </details>
     </div>
@@ -591,7 +591,7 @@ function ProgressRow({ content, state }: { content: any; state?: string | null }
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <ToolIcon />
-        <TypographyStrong>报告进度</TypographyStrong>
+        <TypographyStrong>Progress</TypographyStrong>
         {view.percent != null && (
           <span
             style={{
@@ -614,7 +614,7 @@ function ProgressRow({ content, state }: { content: any; state?: string | null }
       )}
       {view.nextAction && (
         <div style={{ marginTop: 3, fontSize: 11, color: '#8c8c8c' }}>
-          下一步：{view.nextAction}
+          Next: {view.nextAction}
         </div>
       )}
       {view.percent != null && (
@@ -682,7 +682,7 @@ function WebPageRow({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <ToolIcon />
-        <TypographyStrong>{content.displayName || (kind === 'read' ? '网页读取' : '网页获取')}</TypographyStrong>
+        <TypographyStrong>{content.displayName || (kind === 'read' ? 'Web Read' : 'Web Fetch')}</TypographyStrong>
         {view.statusCode != null && (
           <span
             style={{
@@ -725,7 +725,7 @@ function WebPageRow({
       ) : (
         view.chars != null && (
           <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
-            正文 {view.chars.toLocaleString()} 字符
+            Body {view.chars.toLocaleString()} chars
           </div>
         )
       )}
@@ -749,10 +749,10 @@ function SkillRow({
   kind: 'library' | 'manage';
 }) {
   const view = skillView(content);
-  const title = content.displayName || (kind === 'library' ? '技能库' : '技能管理');
+  const title = content.displayName || (kind === 'library' ? 'Skill Library' : 'Skill Manage');
   const summary =
     kind === 'library' && view.total != null
-      ? `${view.total} 个技能`
+      ? `${view.total} skills`
       : view.action;
   return (
     <div
@@ -833,7 +833,7 @@ function ReadToolResultRow({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <ToolIcon />
-        <TypographyStrong>回读工具结果</TypographyStrong>
+        <TypographyStrong>Read tool result</TypographyStrong>
         {view.callId && (
           <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#8c8c8c' }}>
             {view.callId}
@@ -843,9 +843,9 @@ function ReadToolResultRow({
       </div>
       {view.totalChars != null ? (
         <div style={{ marginTop: 4, fontSize: 11, color: '#8c8c8c' }}>
-          字符 {view.offset ?? 0}–{end ?? view.totalChars} /{' '}
+          Chars {view.offset ?? 0}–{end ?? view.totalChars} /{' '}
           {view.totalChars.toLocaleString()}
-          {view.truncated ? ' · 已截断' : ''}
+          {view.truncated ? ' · truncated' : ''}
         </div>
       ) : (
         !view.error && (
@@ -880,7 +880,7 @@ function CliRow({ content, state }: { content: any; state?: string | null }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <ToolIcon />
-        <TypographyStrong>{content.displayName || '命令执行'}</TypographyStrong>
+        <TypographyStrong>{content.displayName || 'Command execution'}</TypographyStrong>
         {view.exitCode != null && (
           <span
             style={{
@@ -918,7 +918,7 @@ function CliRow({ content, state }: { content: any; state?: string | null }) {
         </div>
       )}
       <div>
-        <ContentPreview title={content.displayName || '命令输出'} content={output} />
+        <ContentPreview title={content.displayName || 'Command output'} content={output} />
       </div>
       <RawData content={content} />
     </div>
@@ -981,9 +981,9 @@ function BrowserRow({
       : '';
   const scopeLabel =
     args?.scope === 'full'
-      ? '整页'
+      ? 'Full page'
       : args?.scope === 'viewport'
-        ? '视口'
+        ? 'Viewport'
         : args?.scope;
   const screenshotImages =
     Array.isArray(content.images) && content.images.length > 0
@@ -1007,7 +1007,7 @@ function BrowserRow({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <ToolIcon />
-        <TypographyStrong>浏览器</TypographyStrong>
+        <TypographyStrong>Browser</TypographyStrong>
         {action && (
           <span
             style={{
@@ -1031,7 +1031,7 @@ function BrowserRow({
               padding: '0 5px',
             }}
           >
-            {brow.errorCategory || '失败'}
+            {brow.errorCategory || 'failed'}
           </span>
         ) : (
           !isSucceededState(state) && <StateTag state={state} />
@@ -1062,7 +1062,7 @@ function BrowserRow({
       {screenshotImages.length > 0 && (
         <div style={{ marginTop: 6 }}>
           <div style={{ marginBottom: 4, fontSize: 10.5, color: '#a0a0a0' }}>
-            {['截图', screenshotSize, scopeLabel].filter(Boolean).join(' · ')}
+            {['Screenshot', screenshotSize, scopeLabel].filter(Boolean).join(' · ')}
           </div>
           <UserImages
             images={screenshotImages}
@@ -1183,12 +1183,12 @@ function WaitRow({ content, state }: { content: any; state?: string | null }) {
       : null;
 
   const label = failed
-    ? '等待失败'
+    ? 'Wait failed'
     : cancelled
-      ? '等待已取消'
+      ? 'Wait cancelled'
       : completed
-        ? '等待完成'
-        : '等待中';
+        ? 'Wait completed'
+        : 'Waiting';
   const color = failed
     ? '#cf1322'
     : cancelled
@@ -1202,12 +1202,12 @@ function WaitRow({ content, state }: { content: any; state?: string | null }) {
   const elapsedText = formatWaitDuration(liveElapsedMs);
   const durationText = waiting
     ? remainingText && totalText
-      ? `剩余 ${remainingText} / 共 ${totalText}`
+      ? `Remaining ${remainingText} / ${totalText} total`
       : totalText
-        ? `共 ${totalText}`
+        ? `${totalText} total`
         : null
     : elapsedText
-      ? `实际 ${elapsedText}`
+      ? `${elapsedText} elapsed`
       : null;
   const resumedClock = completed
     ? formatWaitClock(view.resumedAtRaw, view.resumedAtMs)
@@ -1222,7 +1222,7 @@ function WaitRow({ content, state }: { content: any; state?: string | null }) {
           <span style={{ color: '#9ca3af', fontSize: 11 }}>{durationText}</span>
         ) : null}
         {resumedClock ? (
-          <span style={{ color: '#9ca3af', fontSize: 11 }}>· {resumedClock} 恢复</span>
+          <span style={{ color: '#9ca3af', fontSize: 11 }}>· resumed {resumedClock}</span>
         ) : null}
       </div>
       {waiting && progress != null ? (
@@ -1269,7 +1269,7 @@ function CurrentTimeRow({ content, state }: { content: any; state?: string | nul
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <ClockIcon />
-      <TypographyStrong>当前时间</TypographyStrong>
+      <TypographyStrong>Current Time</TypographyStrong>
       {display ? <span style={{ fontSize: 12 }}>· {display}</span> : null}
       {timezone ? <span style={{ color: '#9ca3af', fontSize: 11 }}>{timezone}</span> : null}
       <StateTag state={state} />
@@ -1278,10 +1278,10 @@ function CurrentTimeRow({ content, state }: { content: any; state?: string | nul
 }
 
 const APPROVAL_DECISION_LABEL: Record<string, string> = {
-  ALLOW_ONCE: '允许一次',
-  ALLOW_RUN: '本次消息内允许',
-  ALLOW_SESSION: '本次会话内允许',
-  DENY: '拒绝',
+  ALLOW_ONCE: 'Allow once',
+  ALLOW_RUN: 'Allow for this message',
+  ALLOW_SESSION: 'Allow for this session',
+  DENY: 'Deny',
 };
 
 function ToolApprovalRow({ row }: { row: TimelineRow }) {
@@ -1296,7 +1296,7 @@ function ToolApprovalRow({ row }: { row: TimelineRow }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <ApprovalIcon />
-        <TypographyStrong>{c.text || row.title || '工具授权'}</TypographyStrong>
+        <TypographyStrong>{c.text || row.title || 'Tool approval'}</TypographyStrong>
         <StateTag state={displayState(row)} />
       </div>
       <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1306,7 +1306,7 @@ function ToolApprovalRow({ row }: { row: TimelineRow }) {
             <div key={String(call.callId || index)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <ToolIcon />
               <span style={{ fontSize: 12 }}>
-                {call.displayName || call.toolName || '工具'}
+                {call.displayName || call.toolName || 'Tool'}
                 {call.action ? ` · ${call.action}` : ''}
               </span>
               {decision ? (
@@ -1322,7 +1322,7 @@ function ToolApprovalRow({ row }: { row: TimelineRow }) {
                   {APPROVAL_DECISION_LABEL[decision] || decision}
                 </span>
               ) : (
-                <span style={{ color: '#9ca3af', fontSize: 11 }}>等待处理</span>
+                <span style={{ color: '#9ca3af', fontSize: 11 }}>Pending</span>
               )}
             </div>
           );
@@ -1363,7 +1363,7 @@ function ClarifyRow({
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <MessageIcon />
-        <strong>{String(c.title || row.title || '澄清')}</strong>
+        <strong>{String(c.title || row.title || 'Clarification')}</strong>
         <StateTag state={displayState(row)} />
       </div>
       <div style={{ marginTop: 6, color: '#8c8c8c', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1371,7 +1371,7 @@ function ClarifyRow({
           <div style={{ whiteSpace: 'pre-wrap', color: '#4b5563', fontSize: 12 }}>{description}</div>
         ) : null}
         {displayState(row) === 'PENDING' ? (
-          '请在底部浮层中作答'
+          'Answer in the panel below'
         ) : (
           <>
             {options.length > 0 ? (
@@ -1401,9 +1401,9 @@ function ClarifyRow({
             ) : null}
             {text ? <span style={{ color: '#333' }}>{text}</span> : null}
             {cancelled ? (
-              <span>已取消</span>
+              <span>Cancelled</span>
             ) : selected.length === 0 && !text ? (
-              <span>已应答</span>
+              <span>Answered</span>
             ) : null}
           </>
         )}
@@ -1417,7 +1417,7 @@ function SubAgentLlmItem({ s }: { s: any }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <BrainIcon />
-        <strong style={{ fontSize: 12 }}>模型推理</strong>
+        <strong style={{ fontSize: 12 }}>Model reasoning</strong>
         {s.modelName ? (
           <span
             style={{
@@ -1444,11 +1444,11 @@ fontSize: 11,
       ) : null}
       {s.reply ? (
         <div>
-          <div className="aw-tl-thinking-toggle">回复</div>
+          <div className="aw-tl-thinking-toggle">Reply</div>
           <div style={{ fontSize: 12 }}>
             <Md text={s.reply} />
           </div>
-          {s.running && <span style={{ color: '#9ca3af', fontSize: 11 }}>正在生成…</span>}
+          {s.running && <span style={{ color: '#9ca3af', fontSize: 11 }}>Generating…</span>}
         </div>
       ) : null}
     </div>
@@ -1472,7 +1472,7 @@ function SubAgentToolItem({
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <ToolIcon />
         <TypographyStrong>
-          {s.displayNameCn || s.displayNameEn || s.toolName || '工具'}
+          {s.displayNameCn || s.displayNameEn || s.toolName || 'Tool'}
         </TypographyStrong>
         <StateTag state={s.toolStatus || s.status} />
       </div>
@@ -1489,7 +1489,7 @@ function SubAgentToolItem({
             whiteSpace: 'nowrap',
           }}
         >
-          理由：{reason.slice(0, 120)}
+          Reason: {reason.slice(0, 120)}
         </div>
       )}
       {Array.isArray(s.images) && s.images.length > 0 && (
@@ -1500,7 +1500,7 @@ function SubAgentToolItem({
         />
       )}
       <button className="aw-tl-detail-toggle" onClick={onDetailToggle}>
-        {detailOpen ? '▾' : '▸'} 详情
+        {detailOpen ? '▾' : '▸'} Details
       </button>
       {detailOpen ? (
         <div>
@@ -1607,21 +1607,21 @@ function SubAgentCard({
         <BrainIcon />
         <strong>
           {stripSubAgentMarkerPrefix(row.content?.displayName || row.title) ||
-            '子 Agent'}
+            'Sub-agent'}
         </strong>
         <StateTag state={displayState(row)} />
         {open && isRunning ? (
-          <span style={{ color: '#9ca3af', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}><RefreshIcon size={11} /> 实时更新中</span>
+          <span style={{ color: '#9ca3af', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}><RefreshIcon size={11} /> Live updates</span>
         ) : null}
       </div>
       <div style={{ marginTop: 4 }}>
         <button type="button" className="aw-subagent-expand" onClick={expand}>
-          {open ? '▾' : '▸'} {open ? '收起步骤' : '展开步骤'}
+          {open ? '▾' : '▸'} {open ? 'Collapse steps' : 'Expand steps'}
         </button>
         {open ? (
           <div ref={stepsBoxRef} className="aw-subagent-steps">
             {loading && steps === null ? (
-              <span className="aw-subagent-empty">加载中…</span>
+              <span className="aw-subagent-empty">Loading…</span>
             ) : list.length ? (
               list.map((s: any, i: number) => {
                 const isTool =
@@ -1646,7 +1646,7 @@ function SubAgentCard({
               })
             ) : (
               <span className="aw-subagent-empty">
-                {isRunning ? '（等待实时步骤…）' : '（无详细步骤）'}
+                {isRunning ? '(Waiting for live steps…)' : '(No detailed steps)'}
               </span>
             )}
           </div>
@@ -1668,14 +1668,14 @@ function UserImages({
   variant?: 'attachment' | 'screenshot';
 }) {
   const [urls, setUrls] = useState<Record<string, string>>({});
-  // loadFile 经 ref 读取：不进入 effect 依赖，避免上层内联函数身份变化引发无限重取
+  // loadFile is read through a ref: it stays out of the effect dependencies, avoiding an infinite refetch when an inline function identity changes upstream
   const loadFileRef = useRef(loadFile);
   loadFileRef.current = loadFile;
   const imagesKey = (images || [])
     .map((im) => im.fileKey || '')
     .join(',');
   useEffect(() => {
-    // 仅按 fileKey 集合变化响应式重取（objectURL 缓存由 fileCache 统一持有，组件不再 revoke）
+    // Refetch reactively only when the set of fileKeys changes (objectURLs are owned by fileCache; the component no longer revokes)
     const list = (images || []).filter((im) => im.fileKey);
     if (list.length === 0) return;
     let alive = true;
@@ -1694,7 +1694,7 @@ function UserImages({
       for (const [key, url] of entries) {
         if (url) next[key] = url;
       }
-      // 内容不变则不 setState，避免无谓重渲染
+      // Do not setState when the content is unchanged, avoiding needless re-renders
       setUrls((prev) => {
         const pk = Object.keys(prev);
         const nk = Object.keys(next);
@@ -1731,7 +1731,7 @@ function UserImages({
       {previewUrl ? (
         <div className="aw-tl-image-preview" onClick={() => setPreviewUrl(null)}>
           <img src={previewUrl} alt="preview" className="aw-tl-image-preview-img" />
-          <button type="button" className="aw-tl-image-preview-close" aria-label="关闭">
+          <button type="button" className="aw-tl-image-preview-close" aria-label="Close">
             ✕
           </button>
         </div>
@@ -1740,7 +1740,7 @@ function UserImages({
   );
 }
 
-/** LLM 重试读秒：targetAt 为绝对时间戳；归零显示“正在重试…”。 */
+/** LLM retry countdown: targetAt is an absolute timestamp; shows "retrying..." at zero. */
 function RetryCountdown({ targetAt }: { targetAt: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -1748,7 +1748,7 @@ function RetryCountdown({ targetAt }: { targetAt: number }) {
     return () => window.clearInterval(timer);
   }, []);
   const seconds = Math.max(0, Math.ceil((targetAt - now) / 1000));
-  return <span>{seconds > 0 ? `${seconds}s 后重试` : '正在重试…'}</span>;
+  return <span>{seconds > 0 ? `Retry in ${seconds}s` : 'Retrying…'}</span>;
 }
 
 function RowView({
@@ -1791,14 +1791,14 @@ function RowView({
           ) : (
             <RefreshIcon />
           )}
-          <span>{row.title || '上下文压缩'}</span>
+          <span>{row.title || 'Context compaction'}</span>
         </div>
         {text ? (
           <div className="aw-tl-compaction-body">
             <Md text={text} />
           </div>
         ) : running ? (
-          <div className="aw-tl-compaction-hint">（压缩中…）</div>
+          <div className="aw-tl-compaction-hint">(Compacting…)</div>
         ) : null}
       </div>
     );
@@ -1810,7 +1810,7 @@ function RowView({
       state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED';
     const duration = formatDuration(c.durationMs);
     const rawText = String(c.text || row.title || '');
-    // 剥离后端状态前缀（❌/⏹️/⏸️/⏳/▶️），失败用红叉表示
+    // Strip the backend status prefix (error/stop/pause/hourglass/play), using a red cross for failures
     const text = rawText.replace(/^[❌⏹️⏸️⏳▶️]\s*/u, '');
     const parts = [
       text,
@@ -1913,7 +1913,7 @@ function RowView({
   );
 }
 
-/** 并行子 Agent：同一 parentToolCallId 的多个 subagent 行合并为横向 Tab。 */
+/** Parallel sub-agents: merge multiple subagent rows sharing a parentToolCallId into horizontal tabs. */
 function ParallelSubAgentTabs({
   members,
   subAgentLiveMap,
@@ -1966,7 +1966,7 @@ export function WidgetTimeline({
   preparingTool,
   retryState,
 }: WidgetTimelineProps) {
-  // 同一 parentToolCallId 的多个 subagent 行（≥2）合并为并行 Tab
+  // Multiple subagent rows sharing a parentToolCallId (>=2) are merged into parallel tabs
   const items = useMemo(() => {
     const groups = new Map<string, TimelineRow[]>();
     for (const r of rows) {
@@ -1988,8 +1988,8 @@ export function WidgetTimeline({
     const emitted = new Set<string>();
     const out: ReactNode[] = [];
     for (const row of rows) {
-      // wait 的等待/恢复状态由 WaitRow 独立展示，run_status 再画一条会重复且带 run 级耗时误导。
-      // LLM 重试（subtype=LLM_RETRY）保留：这是用户唯一能看到失败原因 + 重试进度的行。
+      // The wait/suspend state is shown independently by WaitRow; drawing another run_status line would duplicate it and mislead with run-level elapsed time.
+      // LLM retries (subtype=LLM_RETRY) are kept: this is the only row where the user can see the failure reason and retry progress.
       if (
         row.kind === 'run_status' &&
         ['WAITING', 'RESUMED'].includes(String(row.state ?? '').toUpperCase()) &&
@@ -2042,11 +2042,11 @@ export function WidgetTimeline({
           disabled={loadingOlder}
           onClick={onLoadOlder}
         >
-          {loadingOlder ? '正在加载更早消息…' : '加载更早消息'}
+          {loadingOlder ? 'Loading earlier messages…' : 'Load earlier messages'}
         </button>
       ) : null}
       {rows.length === 0 && pendingUserRows.length === 0 ? (
-        <div className="aw-tl-empty">（暂无消息）</div>
+        <div className="aw-tl-empty">(No messages yet)</div>
       ) : (
         <>
           {items}
@@ -2076,7 +2076,7 @@ export function WidgetTimeline({
           }}
         >
           <RefreshIcon />
-          <span>{preparingTool.name || '工具'} · 正在生成调用参数…</span>
+          <span>{preparingTool.name || 'Tool'} · generating call arguments…</span>
         </div>
       ) : null}
     </div>

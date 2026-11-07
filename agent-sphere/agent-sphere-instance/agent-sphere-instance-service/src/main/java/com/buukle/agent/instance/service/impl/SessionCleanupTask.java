@@ -36,70 +36,80 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
- * 历史会话数据周期清理：释放磁盘。
+ * Periodic cleanup of historical session data: reclaim disk space.
  *
- * <p><b>为什么必须硬删：</b>session 子树里 {@code agent_llm_interaction_record} 的
- * request/response/reasoning 与 {@code agent_tool_call_record} 的参数、产物都是全量 TEXT，
- * {@code @TableLogic} 只把 DELETE 改写成 {@code UPDATE delete_flag=1}，行数据原样留在堆表里，
- * <b>一行磁盘都不会释放</b>。这是对「只做逻辑删除」约定的显式豁免，仅限本任务。
+ * <p><b>Why it must hard-delete:</b> inside the session subtree,
+ * {@code agent_llm_interaction_record}'s request/response/reasoning and
+ * {@code agent_tool_call_record}'s arguments and artifacts are all full TEXT, and
+ * {@code @TableLogic} merely rewrites DELETE into {@code UPDATE delete_flag=1}, leaving the row data
+ * in the heap table and <b>freeing not a single byte of disk</b>. This is the explicit exemption from
+ * the "logical delete only" convention, limited to this task.
  *
- * <p><b>过期判定</b>：{@code agent_session.created_at < cutoff AND updated_at < cutoff}，
- * 双条件是为了不误删「创建很久、今天仍在用」的会话；再叠加两个 NOT EXISTS 活跃守卫，
- * 保证 PENDING/RUNNING 的 run 与 QUEUED/RUNNING 的 task 所在会话一定不会被碰。
+ * <p><b>Expiry check</b>: {@code agent_session.created_at < cutoff AND updated_at < cutoff}; the
+ * double condition avoids deleting "created long ago but still in use today" sessions by mistake.
+ * Two NOT EXISTS active guards are added on top so that sessions owning a PENDING/RUNNING run or a
+ * QUEUED/RUNNING task are never touched.
  *
- * <p><b>刻意不把 AWAITING_USER 算作活跃</b>：等用户回复的澄清可能永远不回来，纳入守卫会让
- * 废弃会话永久挡在清理之外，正好抵消清理的意义。
+ * <p><b>AWAITING_USER is deliberately not counted as active</b>: a clarification waiting for a user
+ * reply may never come back, and including it in the guard would keep abandoned sessions out of
+ * cleanup forever, cancelling out the purpose of cleanup.
  *
- * <p><b>为什么落在 instance 模块而不是 infrastructure：</b>infrastructure 已依赖
- * instance-service，反向依赖会成环；session 本身也是 instance 域的实体。
- * {@code AuditLogCleanupTask} 留在 infrastructure —— 审计日志属基础设施域，无需搬迁。
+ * <p><b>Why this lives in the instance module instead of infrastructure:</b> infrastructure already
+ * depends on instance-service, so the reverse dependency would form a cycle; session is also an
+ * entity of the instance domain. {@code AuditLogCleanupTask} stays in infrastructure — audit logs
+ * belong to the infrastructure domain and do not need to move.
  *
- * <p>调度参数（cron/批大小）在 yml；保留天数与急停开关在系统配置表 {@code config_group='session'}，
- * 改完不必发版。
+ * <p>Scheduling parameters (cron/batch size) live in yml; retention days and the kill switch live in
+ * the system config table under {@code config_group='session'}, so no redeploy is needed after a
+ * change.
  */
 @Slf4j
 @Component
 public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupReportVO, Boolean> {
 
-    /** 多副本互斥锁：后端 replicas=2，不加锁两个副本会同时删。 */
+    /** Multi-replica mutex: the backend runs replicas=2, and without the lock both replicas would delete at the same time. */
     private static final String CLEANUP_LOCK_KEY = "scheduler:session-cleanup";
 
     private static final int DEFAULT_RETENTION_DAYS = 7;
     private static final int DEFAULT_FILE_RETENTION_DAYS = 7;
 
-    /** 活跃 run：正在跑，删了等于毁掉进行中的会话。
-     *  含 {@code WAITING}（wait 挂起，到点会自动续跑 —— 与 AWAITING_USER「等人可能永不回」不同，
-     *  它是真正在途的状态，必须守卫）。 */
+    /** Active runs: they are in flight, so deleting them would destroy an in-progress session.
+     *  Includes {@code WAITING} (suspended on the wait tool, it resumes automatically when the time
+     *  arrives — unlike AWAITING_USER "waiting for a person who may never reply", it is a genuinely
+     *  in-flight state and must be guarded). */
     private static final List<String> ACTIVE_RUN_STATUSES =
             List.of(RunEnum.STATUS_PENDING, RunEnum.STATUS_RUNNING, RunEnum.STATUS_WAITING);
 
-    /** 活跃 task：Bole 开放层长任务只更新 task/run 行、不更新 session 行，必须单独守卫。 */
+    /** Active tasks: Bole open-layer long-running tasks only update task/run rows and never the session row, so they need their own guard. */
     private static final List<String> ACTIVE_TASK_STATUSES =
             List.of(TaskEnum.STATUS_QUEUED, TaskEnum.STATUS_RUNNING);
 
-    /** 会话产物落库的桶（截图/附件），按时间独立清理。 */
+    /** Buckets where session artifacts are stored (screenshots/attachments), cleaned independently by time. */
     private static final List<String> CLEANUP_BIZ_KEYS =
             List.of(FileStoreBizKeys.BROWSER_SCREENSHOT, FileStoreBizKeys.CHAT_ATTACHMENT);
 
     /**
-     * 硬删只把空间还给 PG 内部复用，数据文件不会自动变小；要归还给操作系统必须低峰期手工
-     * VACUUM FULL（ACCESS EXCLUSIVE 锁，期间阻塞写入）。故只提示、不自动执行。
+     * A hard delete only returns space for reuse inside PG; the data files do not shrink
+     * automatically. Returning it to the operating system requires a manual VACUUM FULL during
+     * off-peak hours (ACCESS EXCLUSIVE lock, blocking writes while it runs). Hence this is only a
+     * hint, never executed automatically.
      */
     private static final String VACUUM_HINT =
-            "空间已回收至库内可复用，数据文件不会自动变小。如需归还磁盘请低峰期手工执行："
+            "Space has been reclaimed for reuse inside the database; data files do not shrink automatically. "
+                    + "To return it to the operating system, run this manually during off-peak hours: "
                     + "VACUUM (FULL, ANALYZE) agent_llm_interaction_record, agent_tool_call_record, agent_file_store; "
-                    + "（需 ACCESS EXCLUSIVE 锁，期间阻塞写入）";
+                    + "(requires an ACCESS EXCLUSIVE lock and blocks writes while it runs)";
 
-    private static final String SKIP_LOCK_REASON = "另一副本或另一次清理正在执行，本次跳过";
-    private static final String SKIP_DISABLED_REASON = "清理开关 session.cleanup-enabled 为 false，本次跳过";
+    static final String SKIP_LOCK_REASON = "Another replica or cleanup run is already executing; skipped this round";
+    static final String SKIP_DISABLED_REASON = "Cleanup switch session.cleanup-enabled is false; skipped this round";
 
-    /** 记录表保留天数默认值；实际值来自 session.cleanup-log-retention-days。 */
+    /** Default retention days for the record table; the effective value comes from session.cleanup-log-retention-days. */
     private static final int DEFAULT_LOG_RETENTION_DAYS = 90;
 
-    /** 报告里代表「执行记录表本身」的 key，便于前端一眼看出这一步动了多少行。 */
+    /** Key representing "the execution record table itself" in the report, so the frontend can see at a glance how many rows this step touched. */
     private static final String RUN_RECORD_TABLE = "agent_session_cleanup_run";
 
-    /** table_stats（jsonb 文本）→ Map 的解析类型。 */
+    /** Parse type for table_stats (jsonb text) → Map. */
     private static final TypeReference<Map<String, Long>> MAP_TYPE_REF = new TypeReference<>() {
     };
 
@@ -108,10 +118,13 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     private final SystemConfigSpi systemConfigSpi;
 
     /**
-     * 异步执行用的执行器（infrastructure 的 {@code runtimeAsyncExecutor}，虚拟线程 + 上下文传播）。
+     * Executor used for asynchronous execution (infrastructure's {@code runtimeAsyncExecutor},
+     * virtual threads + context propagation).
      *
-     * <p>这里按 bean 名注入而不是 {@code @Async}：{@code @Async} 在同类内部自调用不生效，
-     * 而本类既要异步提交（HTTP/cron 入口）又要同步执行（单测断言删除顺序），拆两个 Bean 反而绕。
+     * <p>It is injected by bean name rather than using {@code @Async}: {@code @Async} does not apply
+     * to same-class self-invocation, and this class needs both asynchronous submission (HTTP/cron
+     * entries) and synchronous execution (unit tests asserting delete order), so splitting into two
+     * beans would only add indirection.
      */
     private final Executor cleanupExecutor;
 
@@ -136,16 +149,16 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     @Value("${buukle.agent.session.cleanup-batch-sleep-ms:200}")
     private int batchSleepMs;
 
-    /** 定时入口：低峰期执行（默认 04:30）。与手动一样异步提交，只留下一条代码路径。 */
+    /** Scheduled entry point: runs during off-peak hours (04:30 by default). Submitted asynchronously like the manual path, leaving a single code path. */
     @Scheduled(cron = "${buukle.agent.session.cleanup-cron:0 30 4 * * ?}")
     public void scheduledCleanup() {
         submitCleanup(false, SessionCleanupTriggerEnum.TRIGGER_SCHEDULED);
     }
 
     /**
-     * 执行记录的列表查询（管理端「执行记录」抽屉）。
+     * Execution record list query (the admin "execution records" drawer).
      *
-     * @param dryRun null 表示不按预演/实删过滤（预演与真实执行都列出来，靠类型列区分）
+     * @param dryRun null means no filtering by rehearsal/real deletion (both rehearsals and real runs are listed, distinguished by the type column)
      */
     public IPage<SessionCleanupRunVO> listRuns(String triggerType, String status, Boolean dryRun,
                                                long page, long size) {
@@ -158,15 +171,17 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * 异步提交一轮清理，**立即返回**执行记录（status=RUNNING）。
+     * Submit one cleanup round asynchronously and <b>return the execution record immediately</b> (status=RUNNING).
      *
-     * <p>HTTP 入口用它而不是同步执行：一轮最多 200×50 个会话、耗时可达数分钟，
-     * 让请求线程干等既拖垮连接池，前端也只能靠超时猜结果。改为「提交即返回 + 轮询执行记录」。
+     * <p>The HTTP entry uses it instead of running synchronously: a round covers up to 200×50
+     * sessions and can take minutes; making the request thread wait would exhaust the connection pool
+     * and leave the frontend guessing from timeouts. Hence "submit and return + poll the execution record".
      *
-     * <p>记录在<b>请求线程</b>上插入（不是后台线程），这样前端拿到的 id 立刻可查；
-     * operator 也必须在提交前取 —— 手动执行记成 system 会丢掉「谁触发的」这条线索。
+     * <p>The record is inserted on the <b>request thread</b> (not a background thread) so the id handed
+     * to the frontend is immediately queryable; the operator must also be captured before submission —
+     * recording a manual run as system would lose the clue of "who triggered it".
      *
-     * @return 初始状态的执行记录，前端拿其中的 id 去轮询 {@link #getRun(Long)}
+     * @return the execution record in its initial state; the frontend polls {@link #getRun(Long)} with its id
      */
     public SessionCleanupRunVO submitCleanup(boolean dryRun, String trigger) {
         String operator = currentOperator();
@@ -182,17 +197,18 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
         return row == null ? null : toRunVO(row);
     }
 
-    /** 轮询单条执行记录（含实时进度）。 */
+    /** Poll a single execution record (with live progress). */
     public SessionCleanupRunVO getRun(Long id) {
         SessionCleanupRunRowVO row = sessionCleanupRunMapper.getRun(id, staleBefore());
         return row == null ? null : toRunVO(row);
     }
 
     /**
-     * 同步执行一轮清理（测试与内部同步调用走它）。
+     * Run one cleanup round synchronously (used by tests and internal synchronous calls).
      *
-     * <p>HTTP 与 cron 入口都用 {@link #submitCleanup} 异步提交，这里保留同步语义是为了让
-     * 单测能直接断言删除顺序与记录终态，不必去等虚拟线程。
+     * <p>The HTTP and cron entries both submit asynchronously via {@link #submitCleanup}; the
+     * synchronous semantics are kept here so unit tests can assert the delete order and terminal
+     * record state directly without waiting on a virtual thread.
      */
     public SessionCleanupReportVO runCleanup(boolean dryRun, String trigger) {
         String operator = currentOperator();
@@ -207,16 +223,19 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * insertRunning 需要的 trigger 只能从入口参数拿，而基类签名里没有它。
-     * 这里用字段搭桥是安全的：insertRunning 一定在入口线程内同步调用完（见两处 try/finally），
-     * 真正跨线程的 {@code runWithLock} 不再读这个字段。
+     * The trigger needed by insertRunning can only come from the entry parameter, and the base class
+     * signature does not have it. Bridging through a field is safe here: insertRunning is always
+     * called synchronously on the entry thread (see the two try/finally blocks), and the truly
+     * cross-thread {@code runWithLock} never reads this field.
      */
     private String currentTrigger;
 
     /**
-     * 真正的执行体：抢锁 → 清理 → 落终态，异常上抛前先留 FAILED 记录。
+     * The actual body: acquire the lock → clean up → write the terminal state; a FAILED record is
+     * written before any exception is propagated.
      *
-     * <p>记录先于锁：抢不到锁也是一种「发生过的事」，需要能查到。
+     * <p>The record comes before the lock: failing to acquire the lock is also "something that
+     * happened" and must be traceable.
      */
     @Override
     protected SessionCleanupReportVO doRun(Boolean dryRun, Long recordId, String operator, long startedAtMillis) {
@@ -246,7 +265,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
             report.setFileCutoff(fileCutoff);
             report.setSkippedActiveSessions(sessionCleanupMapper.countActiveBlockedSessions(
                     cutoff, ACTIVE_RUN_STATUSES, ACTIVE_TASK_STATUSES));
-            // 进度分母：算一次就固定下来（dry-run 期间一行不删，现场重算必然失真）
+            // Progress denominator: computed once and fixed (nothing is deleted during a dry-run, so recomputing live would inevitably drift)
             report.setTotalSessions((int) sessionCleanupMapper.countExpiredSessions(
                     cutoff, ACTIVE_RUN_STATUSES, ACTIVE_TASK_STATUSES));
 
@@ -264,10 +283,11 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * 记录表自身的保留策略。
+     * Retention policy for the record table itself.
      *
-     * <p>放在<b>最后</b>，且排除本轮刚写的记录（{@code id <> keepId}）：这张表量很小
-     * （每天至多一条自动记录），一次全量删即可，不需要像业务表那样分批。
+     * <p>Placed <b>last</b> and excluding the record just written by this round ({@code id <> keepId}):
+     * this table is very small (at most one automatic record per day), so a single full delete is
+     * enough and it does not need batching like the business tables.
      */
     private void cleanupOldRunRecords(int logRetentionDays, boolean dryRun,
                                       SessionCleanupReportVO report, Long currentRecordId) {
@@ -282,11 +302,13 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * 过期会话级联删除。
+     * Cascade delete of expired sessions.
      *
-     * <p>策略是「先用 {@code agent_session} 一张表选出目标 id 集合，再按 session_id 级联删子表」，
-     * 而不是给每张子表各跑一次时间过滤：子表的 session_id 索引齐全（V74 补齐了驱动表与
-     * agent_task），而逐表过滤会漏掉「会话很老、子行却是最近写的」这类数据。
+     * <p>The strategy is "first select the target id set from the single {@code agent_session} table,
+     * then cascade-delete child tables by session_id", rather than running a time filter on every
+     * child table: the child tables all have session_id indexes (V74 added the missing ones for the
+     * driving table and agent_task), while per-table filtering would miss data such as "a very old
+     * session whose child rows were written recently".
      */
     private void cleanupExpiredSessions(LocalDateTime cutoff, boolean dryRun, int sizeLimit,
                                         BatchBudget budget, SessionCleanupReportVO report,
@@ -295,12 +317,13 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
             List<Long> sessionIds = sessionCleanupMapper.selectExpiredSessionIds(
                     cutoff, ACTIVE_RUN_STATUSES, ACTIVE_TASK_STATUSES, sizeLimit);
             if (sessionIds.isEmpty()) {
-                // 取空 = 这一类已彻底清完，不存在「还有数据」
+                // Empty result = this category is completely cleaned up; there is no "more data left"
                 return;
             }
             budget.consume();
-            // batches 要在这里累加：它是「单轮批次数预算」的消耗量，也是给运维看的实际批数。
-            // 漏加会导致报告/记录里的批次数只统计到后面几个独立清理类别。
+            // batches must be accumulated here: it is the consumption of the "per-round batch budget"
+            // and the actual batch count shown to operators. Missing it would make the batch count in
+            // reports/records cover only the later standalone cleanup categories.
             report.setBatches(report.getBatches() + 1);
             report.setSessionCount(report.getSessionCount() + sessionIds.size());
 
@@ -312,20 +335,21 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
                 deleteTimelineSeqKeys(sessionIds);
                 sleepBetweenBatches();
             }
-            // 每批同步一次进度：前端进度条靠这个动起来（最多 max-batches 次）
+            // Sync progress once per batch: this is what keeps the frontend progress bar moving (at most max-batches times)
             markProgress(recordId, report, operator, startedAtMillis);
         }
-        // 因批次预算耗尽而退出，后面很可能还有数据
+        // Exited because the batch budget ran out; there is very likely more data left
         budget.markTruncated();
     }
 
     /**
-     * 不挂在 session 上的独立/孤儿数据：孤儿 task、session_id 为空的孤儿行、截图附件、completions 日志。
-     * 与级联路径共用同一个批次数预算（max-batches 是「单轮上限」而非「每个类别上限」）。
+     * Standalone/orphan data not tied to a session: orphan tasks, orphan rows with a null session_id,
+     * screenshots/attachments, and completions logs. Shares the same batch budget as the cascade path
+     * (max-batches is a "per-round cap", not a "per-category cap").
      */
     private void cleanupIndependent(LocalDateTime cutoff, LocalDateTime fileCutoff, boolean dryRun,
                                     int sizeLimit, BatchBudget budget, SessionCleanupReportVO report) {
-        // 孤儿 task：artifact 是 task 的真外键，必须先删 artifact 再删 task
+        // Orphan tasks: artifact holds the real foreign key to task, so artifacts must be deleted before tasks
         drain(limit -> sessionCleanupMapper.selectOrphanTaskIds(cutoff, ACTIVE_TASK_STATUSES, limit),
                 ids -> {
                     if (dryRun) {
@@ -382,7 +406,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
         }, dryRun, sizeLimit, budget);
     }
 
-    /** 反复取一批 id 处理掉，直到取空或批次数预算耗尽。 */
+    /** Repeatedly fetch and process a batch of ids until empty or the batch budget runs out. */
     private void drain(IdBatchLoader loader, Consumer<List<Long>> handler, boolean dryRun,
                        int sizeLimit, BatchBudget budget) {
         while (budget.hasNext()) {
@@ -404,14 +428,14 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
         List<Long> load(int limit);
     }
 
-    /** 两路合并：session_id 命中的 task ∪ 本批 run 的 task_id 指向的 task。 */
+    /** Merge two paths: tasks matched by session_id ∪ tasks referenced by this batch's run.task_id. */
     private List<Long> collectTaskIds(List<Long> sessionIds) {
         Set<Long> taskIds = new LinkedHashSet<>(sessionCleanupMapper.selectTaskIdsBySessionIds(sessionIds));
         taskIds.addAll(sessionCleanupMapper.selectTaskIdsByRunSessionIds(sessionIds));
         return new ArrayList<>(taskIds);
     }
 
-    /** dry-run：一条 UNION ALL 拿到这一批 14 张表的行数。 */
+    /** dry-run: a single UNION ALL query fetches the row counts of the 14 tables for this batch. */
     private void accumulateCounts(List<Long> sessionIds, List<Long> taskIds, SessionCleanupReportVO report) {
         for (Map<String, Object> row : sessionCleanupMapper.countCascadeBySessionIds(sessionIds, taskIds)) {
             Object name = row.get("table_name");
@@ -423,10 +447,10 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * 级联删除。<b>顺序即外键约束，不可调换</b>：
-     * {@code agent_run.session_id → agent_session} 与 {@code agent_task_artifact.task_id → agent_task}
-     * 是全库仅有的两条真外键，且都没有 ON DELETE CASCADE，顺序错了会直接
-     * violates foreign key constraint。
+     * Cascade delete. <b>The order is the foreign-key contract and cannot be changed</b>:
+     * {@code agent_run.session_id → agent_session} and {@code agent_task_artifact.task_id → agent_task}
+     * are the only two real foreign keys in the database and neither has ON DELETE CASCADE, so a wrong
+     * order fails outright with violates foreign key constraint.
      */
     private void deleteCascade(List<Long> sessionIds, List<Long> taskIds, SessionCleanupReportVO report) {
         addStat(report, "agent_timeline", sessionCleanupMapper.deleteTimelineBySessionIds(sessionIds));
@@ -449,7 +473,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
         addStat(report, "agent_session", sessionCleanupMapper.deleteSessionByIds(sessionIds));
     }
 
-    /** timeline 序号键没有 TTL，删会话必须一并删，否则永久残留。 */
+    /** The timeline sequence key has no TTL, so it must be deleted together with the session, otherwise it lingers forever. */
     private void deleteTimelineSeqKeys(List<Long> sessionIds) {
         for (Long sessionId : sessionIds) {
             redissonClient.getAtomicLong(DistributedRuntimeConstants.timelineSeqKey(sessionId)).delete();
@@ -460,7 +484,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
         report.getTableStats().merge(table, rows, Long::sum);
     }
 
-    /** 批间让位给 autovacuum：否则一轮几百 MB 的删除产生的死元组会一直堆着。 */
+    /** Yield to autovacuum between batches: otherwise the dead tuples produced by a few hundred MB of deletes keep piling up. */
     private void sleepBetweenBatches() {
         if (batchSleepMs <= 0) {
             return;
@@ -469,7 +493,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
             Thread.sleep(batchSleepMs);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("会话清理被中断", e);
+            throw new IllegalStateException("Session cleanup was interrupted", e);
         }
     }
 
@@ -495,9 +519,9 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
                 SystemConfigKeys.SESSION_CLEANUP_LOG_RETENTION_DAYS);
     }
 
-    /** 落 SUCCESS：把本轮的完整口径与结果写回记录。 */
+    /** Mark SUCCESS: write this round's full parameters and results back to the record. */
     private void markSuccess(Long recordId, SessionCleanupReportVO report, String operator) {
-        // VACUUM 建议写进 remark（该表由机器写入、没有人工备注场景，不值得为一句展示文案再开一个迁移）
+        // VACUUM advice goes into remark (this table is machine-written and has no manual-remark scenario, so a dedicated migration for one display string is not worth it)
         String remark = !report.isDryRun() && totalRows(report) > 0 ? VACUUM_HINT : null;
         sessionCleanupRunMapper.markSuccess(recordId, SessionCleanupRunStatusEnum.STATUS_SUCCESS,
                 report.getRetentionDays(), report.getFileRetentionDays(), report.getCutoff(), report.getFileCutoff(),
@@ -507,8 +531,9 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * 逐批同步进度：不改 status、不写 finished_at，记录仍是 RUNNING。
-     * 单轮最多 {@code cleanup-max-batches} 次 UPDATE，开销可忽略。
+     * Sync progress batch by batch: status is not changed and finished_at is not written, so the
+     * record is still RUNNING. At most {@code cleanup-max-batches} UPDATEs per round, negligible
+     * overhead.
      */
     private void markProgress(Long recordId, SessionCleanupReportVO report,
                               String operator, long startedAtMillis) {
@@ -520,7 +545,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
                 JsonUtils.toJson(report.getTableStats()), operator);
     }
 
-    /** 落 SKIPPED：锁被占用或急停开关关闭 —— 什么都没删也要有痕迹。 */
+    /** Mark SKIPPED: the lock was held or the kill switch was off — even doing nothing must leave a trace. */
     @Override
     protected void markSkipped(Long recordId, String reason, long elapsedMillis, String operator) {
         sessionCleanupRunMapper.markSkipped(recordId, SessionCleanupRunStatusEnum.STATUS_SKIPPED,
@@ -534,8 +559,9 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * 锁被别的副本/请求占用：仍要返回一份报告（调用方与接口需要知道「被跳过」而不是拿到 null），
-     * 所以这里覆写基类的默认 null 返回。
+     * The lock is held by another replica/request: a report must still be returned (callers and the
+     * API need to know it was "skipped" rather than getting null), so the base class's default null
+     * return is overridden here.
      */
     @Override
     protected SessionCleanupReportVO onLockBusy(Boolean dryRun, Long recordId,
@@ -564,7 +590,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
                 SessionCleanupRunStatusEnum.STATUS_RUNNING, operator);
     }
 
-    /** 行形态 → API 形态，顺带把 jsonb 文本解析成各表行数 Map。 */
+    /** Row shape → API shape, parsing the jsonb text into the per-table row count Map along the way. */
     private SessionCleanupRunVO toRunVO(SessionCleanupRunRowVO row) {
         SessionCleanupRunVO vo = new SessionCleanupRunVO();
         vo.setId(row.getId());
@@ -595,7 +621,7 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
         return vo;
     }
 
-    /** 配置非法（空串/非数字/非正数）时回退默认值并告警，不因配置写错而让清理停摆或删光数据。 */
+    /** Fall back to the default and warn when the configuration is invalid (blank/non-numeric/non-positive), so a bad config neither stalls cleanup nor deletes everything. */
     private int parsePositiveInt(String raw, int fallback, String key) {
         if (raw == null || raw.isBlank()) {
             return fallback;
@@ -605,9 +631,9 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
             if (value > 0) {
                 return value;
             }
-            log.warn("Session cleanup: {}={} 不是正数，回退默认值 {}", key, raw, fallback);
+            log.warn("Session cleanup: {}={} is not positive; falling back to the default {}", key, raw, fallback);
         } catch (NumberFormatException e) {
-            log.warn("Session cleanup: {}={} 不是合法整数，回退默认值 {}", key, raw, fallback);
+            log.warn("Session cleanup: {}={} is not a valid integer; falling back to the default {}", key, raw, fallback);
         }
         return fallback;
     }
@@ -623,16 +649,16 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
         if ("false".equalsIgnoreCase(value) || "0".equals(value)) {
             return false;
         }
-        log.warn("Session cleanup: 开关值 {} 不是合法布尔值，回退默认值 {}", value, fallback);
+        log.warn("Session cleanup: switch value {} is not a valid boolean; falling back to the default {}", value, fallback);
         return fallback;
     }
 
-    /** 报告里各表行数之和。 */
+    /** Sum of all per-table row counts in the report. */
     private long totalRows(SessionCleanupReportVO report) {
         return report.getTableStats().values().stream().mapToLong(Long::longValue).sum();
     }
 
-    /** 只在真有东西被删时才打 INFO（对齐 AuditLogCleanupTask，避免每轮刷屏）；dry-run 是人工请求，必打。 */
+    /** Log at INFO only when something was actually deleted (aligned with AuditLogCleanupTask to avoid log spam every round); a dry-run is a manual request and is always logged. */
     private void logSummary(SessionCleanupReportVO report) {
         long total = report.getTableStats().values().stream().mapToLong(Long::longValue).sum();
         if (!report.isDryRun() && total == 0) {
@@ -648,11 +674,14 @@ public class SessionCleanupTask extends AbstractRecordedTask<SessionCleanupRepor
     }
 
     /**
-     * 单轮批次数预算：级联路径与各独立清理类别<b>共用</b>同一预算，
-     * 保证一次运行最多处理 max-batches 批，不会因为类别多而失控跑很久。
+     * Per-round batch budget: the cascade path and the standalone cleanup categories <b>share</b> the
+     * same budget, ensuring a single run processes at most max-batches batches and does not run for a
+     * very long time because there are many categories.
      *
-     * <p>{@code truncated} 的语义是「可能还有数据没处理」：只有因预算耗尽而退出才会置位；
-     * 取空返回说明该类别已清完，不置位 —— 否则「最后一批刚好取满」会被误报成没清干净。
+     * <p>{@code truncated} means "there may still be unprocessed data": it is set only when the run
+     * exits because the budget ran out. Returning an empty batch means the category is fully cleaned
+     * and does not set it — otherwise "the last batch happened to be full" would be misreported as
+     * not fully cleaned.
      */
     private static final class BatchBudget {
 

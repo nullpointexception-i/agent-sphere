@@ -11,7 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-/** Worker 控制：停止指定 Worker 会话的当前 run。 */
+/** Worker control: stop the current run of the specified Worker session. */
 @Slf4j
 @Service
 @RequiredArgsConstructor

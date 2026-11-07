@@ -985,8 +985,9 @@ public class ImConversationServiceImpl implements ImConversationService {
     }
 
     /**
-     * IM 的可见性由 participant 决定，不依赖 created_by（Agent/其他成员写入的行
-     * created_by 不是当前用户）。因此内部读取统一绕过 DataPermission，再显式校验成员。
+     * IM visibility is determined by participants, not by created_by (rows written by the Agent or
+     * other members have a created_by that is not the current user). Internal reads therefore
+     * bypass DataPermission uniformly, then verify membership explicitly.
      */
     private <T> T systemRead(java.util.function.Supplier<T> supplier) {
         String tenant = TenantUtil.get();

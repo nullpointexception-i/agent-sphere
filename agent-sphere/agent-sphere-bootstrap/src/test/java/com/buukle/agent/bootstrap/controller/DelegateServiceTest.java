@@ -51,7 +51,7 @@ class DelegateServiceTest {
         return SubRunExecutionContext.root(1L, 2L, null);
     }
 
-    /** 构造符合 delegate-lane/v1 的 lane 输出；business 字段放顶层，框架字段只进 _meta。 */
+    /** Build lane output conforming to delegate-lane/v1; business fields at the top level, framework fields only in _meta. */
     private static String laneOk(String businessFieldsJson, String verdict, boolean withProbes) {
         StringBuilder sb = new StringBuilder("{\"_meta\":{\"contract\":\"delegate-lane/v1\",\"status\":\"OK\"");
         if (verdict != null) {
@@ -101,7 +101,7 @@ class DelegateServiceTest {
         JsonNode node = JSON.readTree(out);
         assertEquals("subagent", node.get("mode").asText());
         JsonNode lane = node.get("results").get(0);
-        // result 为纯业务 JSON（_meta 已剥离进 lane.meta）
+        // result is pure business JSON (_meta has been stripped into lane.meta)
         assertEquals("{\"result\":\"ok\"}", lane.get("result").toString());
         assertEquals("OK", lane.get("meta").get("status").asText());
         assertEquals(1, node.get("overall").get("ok").asInt());
@@ -182,7 +182,7 @@ class DelegateServiceTest {
         assertEquals("OK", node.get("results").get(1).get("status").asText());
         verify(subRunner, times(2)).execute(any(RuntimeTool.class), anyString(),
                 any(SubRunExecutionContext.class), anyList());
-        // 先验证 contact envelope 已注入 b（含 args + upstream），再验证单层 b 执行
+        // First verify the contact envelope was injected into b (args + upstream), then verify single-level b execution
         org.mockito.ArgumentCaptor<RuntimeTool> captor = org.mockito.ArgumentCaptor.forClass(RuntimeTool.class);
         verify(subRunner, times(2)).execute(captor.capture(), anyString(),
                 any(SubRunExecutionContext.class), anyList());
@@ -211,7 +211,7 @@ class DelegateServiceTest {
         JsonNode taskNode = node.get("results").get(0);
         assertEquals("a", taskNode.get("key").asText());
         assertEquals("UNCERTAIN", taskNode.get("meta").get("status").asText());
-        // 默认 maxDagRetries=1 → 首次 + 1 次重派发
+        // Default maxDagRetries=1 → first attempt + 1 redispatch
         verify(subRunner, times(2)).execute(any(RuntimeTool.class), anyString(),
                 any(SubRunExecutionContext.class), anyList());
     }
@@ -244,7 +244,7 @@ class DelegateServiceTest {
         String out = service.execute(
                 "{\"goal\":\"g\",\"mode\":\"subagent\",\"agentRef\":\"instance:999\"}", ctx(), List.of());
 
-        // 统一信封：错误落到 lane.meta，整体 failed=1
+        // Unified envelope: the error goes to lane.meta, overall failed=1
         JsonNode node = JSON.readTree(out);
         assertEquals(1, node.get("overall").get("failed").asInt());
         JsonNode lane = node.get("results").get(0);
@@ -264,7 +264,7 @@ class DelegateServiceTest {
         verify(subRunner, never()).execute(any(), anyString(), any(), anyList());
     }
 
-    // ---------------- P0/P1/P2/P3 新语义 ----------------
+    // ---------------- P0/P1/P2/P3 new semantics ----------------
 
     private String resultOf(String out, String key) throws Exception {
         JsonNode node = JSON.readTree(out);
@@ -277,7 +277,7 @@ class DelegateServiceTest {
         throw new IllegalStateException("no such lane: " + key);
     }
 
-    /** 读取聚合 lane 节点的框架元数据（`meta` 对象；`result` 内已无 _meta）。 */
+    /** Read framework metadata from the aggregate lane node (`meta` object; `result` no longer contains _meta). */
     private JsonNode laneMeta(String out, String key) throws Exception {
         JsonNode node = JSON.readTree(out);
         for (JsonNode r : node.get("results")) {
@@ -311,7 +311,7 @@ class DelegateServiceTest {
         JsonNode meta = laneMeta(out, "a");
         assertEquals("UNCERTAIN", meta.get("status").asText());
         assertEquals("FORMAT_VIOLATION", meta.get("errorCategory").asText());
-        // 默认 maxDagRetries=1 → 首次 + 1 次重派发
+        // Default maxDagRetries=1 → first attempt + 1 redispatch
         verify(subRunner, times(2)).execute(any(RuntimeTool.class), anyString(),
                 any(SubRunExecutionContext.class), anyList());
     }
@@ -323,7 +323,7 @@ class DelegateServiceTest {
                 .willAnswer(inv -> {
                     RuntimeTool t = inv.getArgument(0);
                     if ("agent:b".equals(t.getToolRef())) {
-                        // 有依赖但探针缺失：_meta 内缺 upstream_visible/upstream_raw
+                        // Dependency exists but the probe is missing: _meta lacks upstream_visible/upstream_raw
                         return "{\"_meta\":{\"contract\":\"delegate-lane/v1\",\"status\":\"OK\",\"verdict\":\"COMPUTED\"}}";
                     }
                     return laneOk("{}", null, false);
@@ -351,7 +351,7 @@ class DelegateServiceTest {
                   {"key":"a","goal":"ga"},
                   {"key":"b","goal":"gb","dependsOn":["a"]}]}""", ctx(), List.of());
 
-        // a 失败（首次+重试），b 从未被派发，直接记 UPSTREAM_MISSING
+        // a failed (first attempt + retry); b was never dispatched, recorded directly as UPSTREAM_MISSING
         List<String> refs = dispatchedToolRefs();
         assertEquals(2, refs.size(), "only a should run (initial + 1 retry)");
         assertTrue(refs.stream().allMatch("agent:a"::equals), "b must never be dispatched");
@@ -360,7 +360,7 @@ class DelegateServiceTest {
         assertEquals("UPSTREAM_MISSING", meta.get("errorCategory").asText());
     }
 
-    /** FIX-1 回归：上游首轮失败触发重试、随后恢复 → 下游不能搁浅，必须在后续 pass 补派成功。 */
+    /** FIX-1 regression: the upstream fails on the first round, retries and then recovers → the downstream must not be stranded and must be dispatched successfully in a later pass. */
     @Test
     void retry_recoversUpstream_downstreamDispatchedInNextPass() throws Exception {
         given(subRunnerProvider.getIfAvailable()).willReturn(subRunner);
@@ -369,13 +369,13 @@ class DelegateServiceTest {
                 .willAnswer(inv -> {
                     RuntimeTool t = inv.getArgument(0);
                     if ("agent:a".equals(t.getToolRef())) {
-                        // a：首轮内容失败（触发重试），第二次恢复成功
+                        // a: the first round fails on content (triggering a retry), the second attempt succeeds
                         return aCalls.getAndIncrement() == 0
                                 ? "I could not compute that"
                                 : laneOk("{\"value\":\"a-ok\"}", "COMPUTED", false);
                     }
                     if ("agent:b".equals(t.getToolRef())) {
-                        // b 依赖 a：补派时 a 已 OK，需带依赖探针（upstream_visible/upstream_raw）
+                        // b depends on a: a is OK at redispatch time, so the dependency probe must be included (upstream_visible/upstream_raw)
                         return laneOk("{\"value\":\"b-ok\"}", "COMPUTED", true);
                     }
                     return "{}";
@@ -386,12 +386,12 @@ class DelegateServiceTest {
                   {"key":"a","goal":"ga"},
                   {"key":"b","goal":"gb","dependsOn":["a"]}]}""", ctx(), List.of());
 
-        // a 重试成功、b 补齐——下游不再被 UPSTREAM_MISSING 搁浅
+        // a succeeds on retry and b is caught up — downstream is no longer stranded by UPSTREAM_MISSING
         JsonNode aMeta = laneMeta(out, "a");
         assertEquals("OK", aMeta.get("status").asText());
         JsonNode bMeta = laneMeta(out, "b");
         assertEquals("OK", bMeta.get("status").asText(), "下游必须在上游恢复后补齐，不得搁浅");
-        // 派发账：a=2（首轮+重试），b=1（首轮跳过、后续补派）
+        // Dispatch count: a=2 (first round + retry), b=1 (skipped in the first round, dispatched later)
         List<String> refs = dispatchedToolRefs();
         assertEquals(2, refs.stream().filter("agent:a"::equals).count());
         assertEquals(1, refs.stream().filter("agent:b"::equals).count());
@@ -541,7 +541,7 @@ class DelegateServiceTest {
                   {"key":"a","goal":"ga"},
                   {"key":"b","goal":"gb","dependsOn":["a"]}]}""", ctx(), List.of());
 
-        // b 未派发：失败包裹顶层带 key（对账），_meta 带分类（平台签发可辨）
+        // b was not dispatched: the failure envelope has a key at the top level (for reconciliation) and a category in _meta (identifiable as platform-issued)
         JsonNode lane = null;
         for (JsonNode r : JSON.readTree(out).get("results")) {
             if ("b".equals(r.get("key").asText())) {

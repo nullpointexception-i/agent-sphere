@@ -15,7 +15,7 @@ public class AddParticipantDTO implements Serializable {
     private String participantType;
     @NotNull
     private Long participantId;
-    /** OWNER / ADMIN / MEMBER / BOT；默认 MEMBER。 */
+    /** OWNER / ADMIN / MEMBER / BOT; defaults to MEMBER. */
     private String role;
     @Size(max = 128)
     private String displayName;

@@ -1,6 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.ActorType;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SuperAgentTraceContext;
@@ -53,9 +54,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 群级分派：按 thread 批量取未处理事件，调用 Group Router，一次决定投给哪些数字员工。
+ * Group-level dispatch: fetches unprocessed events in batches per thread, calls the Group Router, and
+ * decides in one pass which digital employees to deliver to.
  *
- * <p>同一 thread 用 Redis 锁串行；Group Router 只做分派，不执行任务。
+ * <p>Threads are serialized with a Redis lock; the Group Router only dispatches, it does not execute tasks.
  */
 @Slf4j
 @Service
@@ -63,7 +65,7 @@ import java.util.concurrent.TimeUnit;
 public class GroupRouterScheduler {
 
     private static final String LOCK_PREFIX = "superagent:group-router:";
-    private static final String ROLE_GROUP_ROUTER = "GROUP_ROUTER";
+    private static final String ROLE_GROUP_ROUTER = InstanceRole.GROUP_ROUTER.value();
 
     private final AgentEventMapper eventMapper;
     private final AgentThreadMapper threadMapper;
@@ -134,7 +136,6 @@ public class GroupRouterScheduler {
         }
     }
 
-    /** 显式配置优先；否则回落启动时自动创建的共享 GROUP_ROUTER 实例。 */
     /** Wait for a small batch window before calling the router. */
     private boolean batchReady(Long threadId) {
         long pending = eventMapper.countPending(threadId);
@@ -148,6 +149,7 @@ public class GroupRouterScheduler {
         return java.time.Duration.between(oldest, java.time.LocalDateTime.now()).toMillis() >= maxWaitMs;
     }
 
+    /** Explicit configuration wins; otherwise fall back to the shared GROUP_ROUTER instance created at startup. */
     private Long resolveInstanceId() {
         if (groupRouterInstanceId != null && groupRouterInstanceId > 0) {
             return groupRouterInstanceId;
@@ -299,7 +301,7 @@ public class GroupRouterScheduler {
                 break;
             }
         }
-        sb.append("[OUTPUT] 只输出 JSON：")
+        sb.append("[OUTPUT] Output JSON only: ")
                 .append("{\"deliver\":[{\"agentId\":1,\"reason\":\"...\"}],")
                 .append("\"ignore\":[],\"summary\":\"...\"}");
         return sb.length() > maxChars ? sb.substring(0, maxChars) : sb.toString();
@@ -383,11 +385,11 @@ public class GroupRouterScheduler {
         if (agent != null) {
             delivery.setCreatedBy(ownerUsername(agent.getOwnerUserId()));
         }
-        // delivered_at 由 AgentRouterScheduler 在创建 Work Item 后写入
+        // delivered_at is written by AgentRouterScheduler after the Work Item is created
         try {
             deliveryMapper.insert(delivery);
         } catch (DuplicateKeyException ignored) {
-            // 已投递过；幂等
+            // already delivered; idempotent
         }
     }
 

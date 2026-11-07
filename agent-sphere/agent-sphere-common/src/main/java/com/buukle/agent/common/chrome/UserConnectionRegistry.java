@@ -16,27 +16,29 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 用户级浏览器连接登记表（在线状态）。
+ * User-level browser connection registry (presence).
  *
- * <p>只存**临时在线状态**，不落库：连接由 SSE 维系，心跳 15s 刷新 {@code lastSeen}，
- * 超过 {@link #STALE_MILLIS} 即视为掉线。Redis 重启/淘汰后由心跳重写自动重建（≤15s）。
+ * <p>Holds <b>transient presence only</b>, never persisted: connections are kept alive by SSE, the
+ * heartbeat refreshes {@code lastSeen} every 15s, and anything older than {@link #STALE_MILLIS}
+ * counts as disconnected. After a Redis restart/eviction, heartbeat rewrites rebuild it
+ * automatically (≤15s).
  *
- * <p>为什么要跨副本：连接可能建立在任意 pod 上，而指令由任意 pod 发起，
- * 进程内 Map 在 replicas=2 下会随机失效。
+ * <p>Why it has to span replicas: a connection may be established on any pod and commands may be
+ * issued from any pod, so an in-process Map would fail randomly with replicas=2.
  */
 @Slf4j
 @Component
 public class UserConnectionRegistry {
 
-    /** 心跳间隔 15s，2 个周期内的 lastSeen 视为存活。 */
+    /** Heartbeat interval is 15s; a lastSeen within 2 cycles counts as alive. */
     public static final long STALE_MILLIS = 45_000L;
-    /** 登记表兜底 TTL：用户长期不来时自动清空，避免 key 堆积。 */
+    /** Fallback TTL for the registry: clears itself when a user stays away, preventing key buildup. */
     private static final Duration KEY_TTL = Duration.ofHours(1);
 
     private static final String CONN_KEY_PREFIX = "sse:conns:";
     private static final String PREFERRED_KEY_PREFIX = "sse:preferred:";
 
-    /** common 不依赖 agent-sphere-util（方向相反），这里自带一个最小 mapper。 */
+    /** common does not depend on agent-sphere-util (the dependency runs the other way), so it carries its own minimal mapper. */
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -46,20 +48,20 @@ public class UserConnectionRegistry {
         this.redissonClient = redissonClient;
     }
 
-    /** 一条在线连接。{@code connectedAt} 由建连时确定，心跳重写时沿用（Redis 重启后排序不乱）。 */
+    /** One live connection. {@code connectedAt} is fixed at connect time and preserved across heartbeat rewrites (so ordering survives a Redis restart). */
     public record ConnectionView(String connectionId, String deviceId, String deviceName,
                                  String source, long connectedAt, long lastSeen) {
     }
 
-    /** 选路结果。 */
+    /** Routing result. */
     public enum SelectionState {
-        /** 有可用连接，正常投递。 */
+        /** A usable connection exists; deliver normally. */
         OK,
-        /** 首选设备离线，已回退到最新连接。 */
+        /** The preferred device is offline; fell back to the newest connection. */
         DEGRADED,
-        /** 没有任何在线连接。 */
+        /** No live connection at all. */
         EMPTY,
-        /** 多台在线但用户尚未选择。 */
+        /** Multiple devices are online but the user has not chosen one yet. */
         NEEDS_SELECTION
     }
 
@@ -67,7 +69,7 @@ public class UserConnectionRegistry {
                             List<ConnectionView> live, String preferredDeviceId) {
     }
 
-    /** 建连登记。 */
+    /** Registers a connection. */
     public void register(String username, String connectionId, String deviceId, String deviceName,
                          String source, long connectedAt) {
         if (username == null || connectionId == null) {
@@ -75,14 +77,16 @@ public class UserConnectionRegistry {
         }
         write(username, new ConnectionView(connectionId, deviceId, deviceName, source,
                 connectedAt, System.currentTimeMillis()));
-        // 同一设备只保留一条连接：扩展重连会换 connectionId，旧连接可能还没被服务端判定断开
-        // （客户端 abort 后 TCP 半开，send 未必立刻抛错），不清理就会出现「一台设备多行」。
+        // Keep only one connection per device: an extension reconnect changes connectionId, and the
+        // old connection may not have been declared disconnected yet (after a client abort the TCP
+        // socket is half-open, so send does not necessarily fail immediately); without cleanup you
+        // end up with "one device, multiple rows".
         if (deviceId != null && !deviceId.isBlank()) {
             pruneOtherConnectionsOfDevice(username, deviceId, connectionId);
         }
     }
 
-    /** 心跳续期 + **重写整条记录**（Redis 重启/被淘汰后借此自愈）。 */
+    /** Heartbeat renewal + <b>rewrite the whole record</b> (this is how it self-heals after a Redis restart/eviction). */
     public void touch(String username, ConnectionView connection) {
         if (username == null || connection == null) {
             return;
@@ -107,7 +111,7 @@ public class UserConnectionRegistry {
         }
     }
 
-    /** 存活连接列表，按建连时间倒序（最新在前）；同一设备只保留最新一条。 */
+    /** Live connections, newest connect time first; only the newest entry per device is kept. */
     public List<ConnectionView> list(String username) {
         if (username == null) {
             return List.of();
@@ -122,7 +126,8 @@ public class UserConnectionRegistry {
                     continue;
                 }
                 if (view.deviceId() == null || view.deviceId().isBlank()) {
-                    // 老版本扩展没有 deviceId：无法去重，按连接保留（选择时也走回退逻辑）
+                    // Old extension versions have no deviceId: deduplication is impossible, so keep
+                    // them per connection (selection also uses the fallback path)
                     unidentified.add(view);
                     continue;
                 }
@@ -170,9 +175,10 @@ public class UserConnectionRegistry {
     }
 
     /**
-     * 选路：首选设备在线就用它；否则回退到最新连接；多台在线且从未选择 → 要求用户先选。
+     * Routing: use the preferred device when it is online; otherwise fall back to the newest
+     * connection; multiple online and never chosen → ask the user to choose first.
      *
-     * <p>只有一台连接时不打扰用户，直接投递。
+     * <p>With a single connection the user is not bothered; delivery happens directly.
      */
     public Selection pick(String username) {
         List<ConnectionView> live = list(username);
@@ -183,8 +189,9 @@ public class UserConnectionRegistry {
         if (live.size() == 1) {
             return new Selection(SelectionState.OK, live.get(0), live, preferredDeviceId);
         }
-        // 老版本扩展不上报 deviceId：用户无法在浮层里区分（也无法记住选择），
-        // 退回「最新连接」—— 与改动前行为一致，避免把这类客户端卡死在 device_selection_required。
+        // Old extension versions do not report deviceId: the user cannot distinguish them in the
+        // overlay (nor remember a choice), so fall back to "newest connection" — same behavior as
+        // before, avoiding getting such clients stuck on device_selection_required.
         boolean allIdentified = live.stream()
                 .allMatch(v -> v.deviceId() != null && !v.deviceId().isBlank());
         if (!allIdentified) {
@@ -196,7 +203,8 @@ public class UserConnectionRegistry {
                     return new Selection(SelectionState.OK, view, live, preferredDeviceId);
                 }
             }
-            // 首选设备离线：回退到最新连接，并标记降级，便于上层提示
+            // Preferred device is offline: fall back to the newest connection and mark it degraded
+            // so callers can show a hint
             return new Selection(SelectionState.DEGRADED, live.get(0), live, preferredDeviceId);
         }
         return new Selection(SelectionState.NEEDS_SELECTION, null, live, null);
@@ -211,7 +219,7 @@ public class UserConnectionRegistry {
         }
     }
 
-    /** 同一设备只保留 keepConnectionId 这一条，清掉扩展重连留下的旧连接。 */
+    /** Keeps only keepConnectionId for the same device, dropping stale connections left by extension reconnects. */
     private void pruneOtherConnectionsOfDevice(String username, String deviceId, String keepConnectionId) {
         try {
             RMap<String, String> map = connections(username);

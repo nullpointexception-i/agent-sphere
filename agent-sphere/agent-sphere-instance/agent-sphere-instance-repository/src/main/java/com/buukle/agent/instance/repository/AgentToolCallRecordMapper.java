@@ -13,7 +13,7 @@ import java.util.List;
 @Mapper
 public interface AgentToolCallRecordMapper extends BaseMapper<AgentToolCallRecord> {
 
-    /** Timeline 正文解析：按 run + stepId(publishId hash) 定位工具调用记录。 */
+    /** Timeline body resolution: locate the tool call record by run + stepId(publishId hash). */
     @Select("""
             SELECT * FROM agent_tool_call_record
             WHERE run_id = #{runId} AND session_id = #{sessionId} AND step_id = #{stepId} AND delete_flag = 0
@@ -60,7 +60,7 @@ public interface AgentToolCallRecordMapper extends BaseMapper<AgentToolCallRecor
                                                      @Param("limit") int limit,
                                                      @Param("offset") int offset);
 
-    /** 详情：按需读取完整 LLM 交互记录。 */
+    /** Details: read the full LLM interaction record on demand. */
     @Select("""
             SELECT id, 'llm_interaction' AS activity_type, created_at, session_id,
                    interaction_type, model_name, request_body, response_body, reasoning, reply_content, http_status,
@@ -75,7 +75,7 @@ public interface AgentToolCallRecordMapper extends BaseMapper<AgentToolCallRecor
                                           @Param("sessionId") Long sessionId,
                                           @Param("id") Long id);
 
-    /** 详情：按需读取完整工具调用记录。 */
+    /** Details: read the full tool call record on demand. */
     @Select("""
             SELECT id, 'tool_call' AS activity_type, created_at, session_id,
                    NULL AS interaction_type, NULL AS model_name, NULL AS request_body, NULL AS response_body,

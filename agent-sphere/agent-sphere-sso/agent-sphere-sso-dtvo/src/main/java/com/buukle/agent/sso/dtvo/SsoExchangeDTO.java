@@ -7,6 +7,6 @@ import java.io.Serializable;
 
 @Data
 public class SsoExchangeDTO implements Serializable {
-    @NotBlank(message = "otc 不能为空")
+    @NotBlank(message = "otc must not be blank")
     private String otc;
 }

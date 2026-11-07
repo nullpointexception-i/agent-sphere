@@ -6,42 +6,42 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-/** 技能库（builtin_8）入参：只包含发现/读取技能所需字段。 */
+/** Input of the skill library (builtin_8): only the fields needed to discover/read skills. */
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class SkillLibraryExecuteContext extends ExecuteContext {
 
     @NotBlank
     @Schema(
-            description = "操作类型",
+            description = "Operation type",
             allowableValues = {"list", "count", "search", "search_by_title", "get"}
     )
     private String action;
 
-    @Schema(description = "get 时按技能 id 读取")
+    @Schema(description = "For get: read by skill id")
     private Long skillId;
 
-    @Schema(description = "get 时按精确技能名读取")
+    @Schema(description = "For get: read by exact skill name")
     private String name;
 
-    @Schema(description = "get 时仅返回 promptTemplate 大纲")
+    @Schema(description = "For get: return only the promptTemplate outline")
     private Boolean structure;
 
-    @Schema(description = "get 时按标题读取某一节")
+    @Schema(description = "For get: read one section by heading")
     private String sectionHeading;
 
-    @Schema(description = "get 时起始行号")
+    @Schema(description = "For get: start line number")
     private Integer startLine;
 
-    @Schema(description = "get 时结束行号")
+    @Schema(description = "For get: end line number")
     private Integer endLine;
 
-    @Schema(description = "list / search 的名称关键字")
+    @Schema(description = "Name keyword for list / search")
     private String keyword;
 
-    @Schema(description = "list / search 页码", defaultValue = "1")
+    @Schema(description = "Page number for list / search", defaultValue = "1")
     private int page = 1;
 
-    @Schema(description = "list / search 每页条数", defaultValue = "20")
+    @Schema(description = "Page size for list / search", defaultValue = "20")
     private int pageSize = 20;
 }

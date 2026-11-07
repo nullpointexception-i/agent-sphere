@@ -11,9 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 梯度重试的判定与退避。这里锁死两件事：
- * 1) 哪些错误值得重试（4xx 终态不重试，避免把一次失败放大成多次）；
- * 2) 前几档就地重试、后续档挂起，且梯度/总窗口按配置推导。
+ * Graded-retry classification and backoff. Two things are locked down here:
+ * 1) which errors are worth retrying (4xx terminal errors are not retried, so one failure is not amplified into many);
+ * 2) the first rungs retry in place and later rungs suspend, with the ladder/total window derived from config.
  */
 class LlmRetryPolicyTest {
 
@@ -70,10 +70,10 @@ class LlmRetryPolicyTest {
         assertEquals(1_000L, LlmRetryPolicy.delayMs(cfg, 1));
         assertEquals(10_000L, LlmRetryPolicy.delayMs(cfg, 3));
         assertEquals(20_000L, LlmRetryPolicy.delayMs(cfg, 5));
-        // 锯齿：第 6 档回到 1s
+        // Sawtooth: rung 6 goes back to 1s
         assertEquals(1_000L, LlmRetryPolicy.delayMs(cfg, 6));
         assertEquals(20_000L, LlmRetryPolicy.delayMs(cfg, 25));
-        // 超过梯度长度时沿用最后一档
+        // Beyond the ladder length, the last rung is reused
         assertEquals(20_000L, LlmRetryPolicy.delayMs(cfg, 40));
     }
 

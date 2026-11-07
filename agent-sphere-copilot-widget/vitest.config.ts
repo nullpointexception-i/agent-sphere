@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
-// 纯函数单测（toolRenderers 等），node 环境即可，无需 jsdom。
+// Pure-function unit tests (toolRenderers, etc.) run in node; jsdom is not needed.
 export default defineConfig({
   test: {
     environment: 'node',

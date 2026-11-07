@@ -1,5 +1,9 @@
 package com.buukle.agent.superagent.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
@@ -14,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/super-agents/{superAgentId}/watchdog-runs")
+@RequestMapping(ApiPrefix.V1 + "/super-agents/{superAgentId}/watchdog-runs")
 @WithTenant
 @RequiredArgsConstructor
 public class SuperAgentWatchdogController extends BaseController {
@@ -23,7 +27,7 @@ public class SuperAgentWatchdogController extends BaseController {
 
     private final AgentWatchdogRunMapper runMapper;
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping
     public ResponseEntity<?> list(@PathVariable Long superAgentId) {
         return ok(runMapper.selectList(Wrappers.<AgentWatchdogRun>lambdaQuery()

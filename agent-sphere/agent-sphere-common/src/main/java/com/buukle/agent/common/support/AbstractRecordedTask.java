@@ -9,35 +9,42 @@ import org.redisson.api.RedissonClient;
 import java.time.LocalDateTime;
 
 /**
- * 「长耗时后台任务」的通用骨架：抢锁 → 执行 → 异常留痕 → 释放锁。
+ * Shared skeleton for long-running background tasks: acquire lock → execute → record failure →
+ * release lock.
  *
- * <p>抽出来是因为会话清理（{@code SessionCleanupTask}）与 Skill Hub 自动同步
- * （{@code SkillSyncRunner}）完全同构：都可能在多副本下重复执行、都耗时到分钟级、
- * 都需要执行记录回答「跑没跑、结果如何」。复制这套锁与异常语义，迟早在两处各自漂移。
+ * <p>Extracted because session cleanup ({@code SessionCleanupTask}) and Skill Hub auto-sync
+ * ({@code SkillSyncRunner}) are structurally identical: both may run concurrently on multiple
+ * replicas, both take minutes, and both need execution records to answer "did it run, and how did
+ * it go". Copying this lock and exception semantics would eventually drift in the two places.
  *
- * <p><b>记录先于锁写入</b>：「锁被占用」「急停开关关闭」这两种什么都没做的情况同样要留痕，
- * 否则事后无从解释「为什么这轮没跑」。所以插入记录由调用方在拿锁之前完成。
+ * <p><b>The record is written before the lock is taken</b>: "lock was busy" and "kill switch off"
+ * did nothing, but must still leave a trace, otherwise nobody can explain afterwards "why this
+ * round did not run". That is why inserting the record is done by the caller before acquiring the
+ * lock.
  *
- * <p>基类<b>不假设任何表结构</b>，子类只需实现记录读写与业务逻辑；但约定保持一致：
- * {@code trigger_type / status / started_at / finished_at / skip_reason / error_message}。
- * 这样前端的轮询面板也能按同一套形状写。
+ * <p>The base class <b>assumes no table structure</b>; subclasses only implement record read/write
+ * and business logic, but the convention stays consistent:
+ * {@code trigger_type / status / started_at / finished_at / skip_reason / error_message}. That way
+ * the frontend polling panel can be written against the same shape.
  *
- * @param <T> 一次执行的结果类型，由子类定义（会话清理是报告，同步是统计）
- * @param <C> 单次执行的上下文（会话清理是 {@code Boolean dryRun}）。
- *            <b>必须作为参数传递，不能存成字段</b>：执行体常跑在虚拟线程上，
- *            字段（哪怕 ThreadLocal）换个线程就读不到，会静默退化成默认值 ——
- *            对「预演 vs 真删」这种开关，退化方向是<b>真删</b>，后果不可逆。
+ * @param <T> result type of one execution, defined by the subclass (a report for session cleanup,
+ *            statistics for sync)
+ * @param <C> context of a single execution (for session cleanup it is {@code Boolean dryRun}).
+ *            <b>Must be passed as a parameter, never stored in a field</b>: the body usually runs on
+ *            a virtual thread, and a field (even a ThreadLocal) cannot be read from another thread
+ *            and silently degrades to its default — for a switch like "dry run vs actually delete",
+ *            the degraded direction is <b>actually delete</b>, and the consequence is irreversible.
  */
 @Slf4j
 public abstract class AbstractRecordedTask<T, C> {
 
-    /** 定时任务没有请求上下文，记为 system（与 {@code AuditMetaObjectHandler} 的兜底一致）。 */
+    /** Scheduled tasks have no request context, so they are recorded as system (matching the fallback in {@code AuditMetaObjectHandler}). */
     protected static final String SYSTEM_OPERATOR = "system";
 
-    /** 多副本互斥时的统一说辞。 */
-    protected static final String SKIP_LOCK_REASON = "另一副本或另一次执行正在运行，本次跳过";
+    /** Standard wording for multi-replica mutual exclusion. */
+    protected static final String SKIP_LOCK_REASON = "Another replica or execution is already running; skipped this round";
 
-    /** 超过此时长仍是 RUNNING 就标记 stale：进程崩了，别让运维误读成「还在跑」。 */
+    /** Still RUNNING after this long is marked stale: the process died, so do not let ops misread it as "still running". */
     public static final long STALE_THRESHOLD_MINUTES = 30L;
 
     private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
@@ -49,9 +56,12 @@ public abstract class AbstractRecordedTask<T, C> {
     }
 
     /**
-     * 持锁执行：抢不到锁走 {@link #onLockBusy}，执行中抛异常则先落 FAILED 再上抛。
+     * Runs while holding the lock: when the lock cannot be acquired it goes through
+     * {@link #onLockBusy}; an exception during execution is first recorded as FAILED and then
+     * rethrown.
      *
-     * <p>子类在 {@link #doRun} 内负责业务逻辑与落 SUCCESS/SKIPPED —— 它才持有判定所需的上下文。
+     * <p>The subclass owns the business logic and the SUCCESS/SKIPPED writes inside {@link #doRun} —
+     * it is the one holding the context needed to decide.
      */
     protected final T runWithLock(C context, Long recordId, String operator, long startedAtMillis) {
         long elapsedBeforeLock = System.currentTimeMillis() - startedAtMillis;
@@ -62,7 +72,7 @@ public abstract class AbstractRecordedTask<T, C> {
         try {
             return doRun(context, recordId, operator, startedAtMillis);
         } catch (Exception e) {
-            // 异步入口下没人接收异常，完整堆栈必须在这里落日志
+            // Nobody receives the exception on the async path, so the full stack trace must be logged here
             markFailed(recordId, e, System.currentTimeMillis() - startedAtMillis, operator);
             log.error("{} failed: recordId={}", taskName(), recordId, e);
             throw e;
@@ -71,38 +81,39 @@ public abstract class AbstractRecordedTask<T, C> {
         }
     }
 
-    /** 抢不到锁时的默认行为：落 SKIPPED 并返回 null。需要返回业务对象的子类可覆盖。 */
+    /** Default behavior when the lock cannot be acquired: record SKIPPED and return null. Subclasses that need to return a business object may override. */
     protected T onLockBusy(C context, Long recordId, String operator, long elapsedMillis) {
         markSkipped(recordId, SKIP_LOCK_REASON, elapsedMillis, operator);
         return null;
     }
 
-    // ==================== 子类必须实现 ====================
+    // ==================== subclasses must implement ====================
 
-    /** Redisson 锁键，建议落在 {@code scheduler:<name>} 命名空间下。 */
+    /** Redisson lock key; recommended under the {@code scheduler:<name>} namespace. */
     protected abstract String lockKey();
 
-    /** 插入 RUNNING 记录，返回主键。必须在拿锁之前调用。 */
+    /** Inserts the RUNNING record and returns the primary key. Must be called before taking the lock. */
     protected abstract Long insertRunning(C context, String operator);
 
-    /** 真正的业务逻辑（已持锁）。子类负责在合适时机落 SUCCESS / SKIPPED。 */
+    /** The actual business logic (already holding the lock). The subclass records SUCCESS / SKIPPED at the appropriate time. */
     protected abstract T doRun(C context, Long recordId, String operator, long startedAtMillis);
 
-    /** 落 SKIPPED：什么都没做，以及为什么。 */
+    /** Records SKIPPED: nothing was done, and why. */
     protected abstract void markSkipped(Long recordId, String reason, long elapsedMillis, String operator);
 
-    /** 落 FAILED：记录异常摘要；基类随后会把异常继续上抛。 */
+    /** Records FAILED: an exception summary; the base class then rethrows the exception. */
     protected abstract void markFailed(Long recordId, Exception e, long elapsedMillis, String operator);
 
-    /** 任务名，仅用于日志。 */
+    /** Task name, used only for logging. */
     protected abstract String taskName();
 
-    // ==================== 共用工具 ====================
+    // ==================== shared helpers ====================
 
     /**
-     * 记录里的 operator。优先级与 {@code AuditMetaObjectHandler.currentUser()} 一致
-     * （租户 → 登录用户 → system）。这里内联一份是因为那个 Handler 在 infrastructure，
-     * common 与业务模块都拿不到它。
+     * The operator recorded on the record. Priority matches
+     * {@code AuditMetaObjectHandler.currentUser()} (tenant → logged-in user → system). It is inlined
+     * here because that Handler lives in infrastructure, which neither common nor the business
+     * modules can reach.
      */
     protected String currentOperator() {
         String tenant = TenantUtil.get();
@@ -116,12 +127,12 @@ public abstract class AbstractRecordedTask<T, C> {
         return SYSTEM_OPERATOR;
     }
 
-    /** 「疑似中断」的判定时间线。 */
+    /** Cutoff for the "suspected interrupted" check. */
     protected LocalDateTime staleBefore() {
         return LocalDateTime.now().minusMinutes(STALE_THRESHOLD_MINUTES);
     }
 
-    /** 异常信息截断，避免超长描述把记录表撑大。 */
+    /** Truncates the error message so an over-long description does not bloat the record table. */
     protected String abbreviate(String message) {
         if (message == null) {
             return null;

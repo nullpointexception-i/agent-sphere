@@ -15,10 +15,11 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 当前系统时间查询。
+ * Current system time lookup.
  *
- * <p>默认绑定（needConfig=false），所有实例可用。时间不再注入 messages —— 需要时由模型主动调用，
- * 避免每轮携带动态时间破坏缓存。
+ * <p>Bound by default (needConfig=false), available to every instance. Time is no longer injected
+ * into messages - the model calls this when needed, so a per-turn dynamic timestamp does not break
+ * the cache.
  */
 @Component
 public class CapabilityBuiltinToolCurrentTime implements CapabilityBuiltinToolSpi {
@@ -50,7 +51,7 @@ public class CapabilityBuiltinToolCurrentTime implements CapabilityBuiltinToolSp
         info.setDescription(TOOL_DESCRIPTION);
         info.setDisplayNameCn("当前时间");
         info.setDisplayNameEn("Current Time");
-        // 无参数；手写 schema 避免 ExecuteContext 的 sessionId/runId 暴露给模型
+        // No parameters; a hand-written schema keeps ExecuteContext's sessionId/runId hidden from the model
         info.setParamSchema(EMPTY_PARAM_SCHEMA);
         info.setResponseSchema(EMPTY_PARAM_SCHEMA);
         return info;

@@ -43,7 +43,8 @@ public class AgentToolCallRecordServiceImpl implements AgentToolCallRecordSpi {
         vo.setExecSource(r.getExecSource());
         if (r.getCreatedAt() != null) {
             vo.setCreatedAt(r.getCreatedAt().format(DATE_FMT));
-            // 秒级字符串不足以配对（同一秒内可能有下一轮开始），另存毫秒值
+            // A second-level string is not precise enough for pairing (the next turn may start within
+            // the same second), so the millisecond value is stored separately
             vo.setCreatedAtMillis(TimeUtils.toEpochMillis(r.getCreatedAt()));
         }
         if (r.getUpdatedAt() != null) vo.setUpdatedAt(r.getUpdatedAt().format(DATE_FMT));

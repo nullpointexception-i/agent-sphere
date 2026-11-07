@@ -24,14 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Qwen 策略：补齐 assistant 消息里「键必须存在」的字段。
+ * Qwen strategy: fill in the fields that "must exist" on assistant messages.
  *
- * <p>线上 400 的原文：{@code messages[9] ... ChatCompletionMessageGenericParam ... 'content'
- * 'msg': 'Field required', 'input': {'role': 'assistant', 'tool_calls': [...]}} —— Qwen3 的
- * 网关要求 assistant 的 {@code content}（以及 thinking 场景下的 {@code reasoning_content}）字段
- * **必须存在**，而 {@code ChatMessageDTO} 的 {@code @JsonInclude(NON_NULL)} 会把 null 值整个省略。
+ * <p>The production 400 text: {@code messages[9] ... ChatCompletionMessageGenericParam ... 'content'
+ * 'msg': 'Field required', 'input': {'role': 'assistant', 'tool_calls': [...]}} — the Qwen3
+ * gateway requires the assistant {@code content} field (and {@code reasoning_content} in thinking scenarios)
+ * to **exist**, while {@code ChatMessageDTO}'s {@code @JsonInclude(NON_NULL)} omits null values entirely.
  *
- * <p>所以策略只能填空串：填 null 会被 NON_NULL 再次省略，等于没改。
+ * <p>The strategy can therefore only fill an empty string: null would be omitted by NON_NULL again, i.e. no change at all.
  */
 class QwenProviderStrategyTest {
 
@@ -59,7 +59,7 @@ class QwenProviderStrategyTest {
         return r;
     }
 
-    /** 复现线上请求体：只有 tool_calls 的 assistant 消息，content 键缺失。 */
+    /** Reproduce the production request body: an assistant message with only tool_calls, missing the content key. */
     @Test
     void beforeAdapt_assistantToolCallOmitsContent() {
         String json = JsonUtils.toJson(request(assistantToolCall()));
@@ -114,7 +114,7 @@ class QwenProviderStrategyTest {
         assertNull(req.getToolStream());
     }
 
-    /** 隔离性：其它策略不能跟着改动，否则等于全局改 DTO。 */
+    /** Isolation: other strategies must not change along with it, otherwise it is effectively a global DTO change. */
     @Test
     void otherStrategies_doNotFillContent() {
         ChatCompletionRequestDTO req = request(assistantToolCall());
@@ -159,8 +159,8 @@ class QwenProviderStrategyTest {
 
     @Test
     void deepseekStrategy_contentOnlyAssistantSerializesReasoningContentKey() {
-        // 线上 run 2794：重启恢复后消息列表被从 DB 重建，wait 恢复提示（合成 user）没有落库，
-        // 纯文本 assistant 落进「最后一条 user 之后」的校验窗口 → 400
+        // Production run 2794: after a restart the message list was rebuilt from the DB, and the wait-resume hint (a synthetic user message) was never persisted,
+        // so a plain-text assistant fell into the validation window "after the last user" → 400
         // The `reasoning_content` in the thinking mode must be passed back to the API.
         ChatMessageDTO plain = new ChatMessageDTO().setRole("assistant").setContent("先读取技能");
         ChatCompletionRequestDTO req = request(
@@ -186,7 +186,7 @@ class QwenProviderStrategyTest {
         assertNull(factory.getStrategy("unknown-vendor"));
     }
 
-    // ---- system 消息位置：Qwen3 要求 system 必须在最前，runner 的尾部 system 需降级为 user ----
+    // ---- system message position: Qwen3 requires system first; the runner's trailing system must be downgraded to user ----
 
     @Test
     void adaptRequest_demotesTrailingSystemMessagesToUserPreservingPosition() {
@@ -209,7 +209,7 @@ class QwenProviderStrategyTest {
         assertEquals("trailing system fixture: t", m.get(3).getContent());
         assertEquals("user", m.get(4).getRole());
         assertEquals("[LOOP BUDGET] Loop 1/300", m.get(4).getContent());
-        // 不能原地改：request 的 messages 与 runner 历史共享元素
+        // Cannot mutate in place: the request messages share elements with the runner history
         assertEquals("system", time.getRole(), "原对象不得被污染（runner 历史共享同一实例）");
         assertEquals("system", budget.getRole());
     }
@@ -238,7 +238,7 @@ class QwenProviderStrategyTest {
         assertEquals("user", req.getMessages().get(0).getRole());
     }
 
-    // ---- leading system：HistoryLoader 的取消提示/压缩摘要 + 系统提示词 → 必须合并成一条 ----
+    // ---- leading system: HistoryLoader's cancel hint/compaction summary + system prompt → must be merged into one ----
 
     @Test
     void adaptRequest_mergesLeadingSystemMessagesIntoOne() {
@@ -280,7 +280,7 @@ class QwenProviderStrategyTest {
         assertEquals("trailing system fixture: t", m.get(3).getContent());
     }
 
-    // ---- 统一思考强度：档位 → enable_thinking / thinking_budget ----
+    // ---- Unified reasoning effort: level → enable_thinking / thinking_budget ----
 
     @Test
     void adaptRequest_mapsNoneToDisabledThinking() {
@@ -327,7 +327,7 @@ class QwenProviderStrategyTest {
         assertEquals(8000, req.getThinkingBudget());
     }
 
-    // ---- DeepSeek：档位 → thinking 开关，强度仍走 reasoning_effort ----
+    // ---- DeepSeek: level → thinking switch; effort still goes through reasoning_effort ----
 
     @Test
     void deepseekStrategy_mapsLevelToThinkingSwitch() {

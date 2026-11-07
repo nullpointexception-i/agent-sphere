@@ -13,11 +13,11 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * HTML 清理工具类 - 移除不必要的标签和内容
+ * HTML cleaning utility - removes unnecessary tags and content
  * <p>
- * 采用分层清理策略：
- * 层级一：无条件移除绝对噪声标签（script, style, noscript, meta, link, iframe, embed, object）
- * 层级二：尝试移除结构标签（header, footer, nav），但若清空内容则回退到层级一结果
+ * Uses a layered strategy:
+ * Layer one: unconditionally remove absolute-noise tags (script, style, noscript, meta, link, iframe, embed, object)
+ * Layer two: try removing structural tags (header, footer, nav), but fall back to the layer-one result if that empties the content
  */
 @Slf4j
 @Component
@@ -33,11 +33,11 @@ public class HtmlCleaner {
     ));
 
     /**
-     * 清理 HTML - 移除指定的标签和脚本内容
+     * Cleans HTML - removes the given tags and script content
      *
-     * @param html        原始 HTML 内容
-     * @param excludeTags 要排除的标签列表（逗号分隔）
-     * @return 清理后的 HTML
+     * @param html        original HTML content
+     * @param excludeTags comma-separated list of tags to exclude
+     * @return cleaned HTML
      */
     public String clean(String html, String excludeTags) {
         if (html == null || html.trim().isEmpty()) {
@@ -47,11 +47,11 @@ public class HtmlCleaner {
         try {
             Document doc = Jsoup.parse(html);
 
-            // 层级一：无条件移除绝对噪声标签
+            // Layer one: unconditionally remove absolute-noise tags
             removeElements(doc.body(), ABSOLUTE_NOISE);
             String firstPass = doc.body().html();
 
-            // 层级二：尝试移除结构标签，但不允许把内容清空
+            // Layer two: try removing structural tags, but never empty the content
             Set<String> structuralSet = new HashSet<>(STRUCTURAL_TAGS);
             if (excludeTags != null && !excludeTags.trim().isEmpty()) {
                 String[] parts = excludeTags.split(",");
@@ -66,12 +66,12 @@ public class HtmlCleaner {
             cleanWhitespace(strippedDoc.body());
             String secondPass = strippedDoc.body().html();
 
-            // 如果层级二清理后不为空，使用层级二结果
+            // Use the layer-two result if it is not empty after cleaning
             if (secondPass != null && !secondPass.trim().isEmpty()) {
                 return secondPass;
             }
 
-            // 回退到层级一结果
+            // Fall back to the layer-one result
             cleanWhitespace(doc.body());
             return doc.body().html();
         } catch (Exception e) {
@@ -81,21 +81,21 @@ public class HtmlCleaner {
     }
 
     /**
-     * 使用默认标签列表清理 HTML
+     * Cleans HTML using the default tag list
      */
     public String clean(String html) {
         return clean(html, "");
     }
 
     /**
-     * 递归移除指定标签的所有元素
+     * Recursively removes all elements of the given tags
      */
     private void removeElements(Element element, Set<String> tagsToRemove) {
         element.select(String.join(",", tagsToRemove)).forEach(Element::remove);
     }
 
     /**
-     * 清理空白文本节点
+     * Cleans whitespace-only text nodes
      */
     private void cleanWhitespace(Element element) {
         var childNodes = element.childNodes();

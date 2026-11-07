@@ -1,6 +1,6 @@
 package com.buukle.agent.superagent.spi;
 
-/** 由 runtime-orchestration 实现：调用 Group Router 模型，返回原始 JSON 文本。 */
+/** Implemented by runtime-orchestration: calls the Group Router model and returns the raw JSON text. */
 public interface GroupRouterPort {
     String classify(GroupRouterRequest request);
 }

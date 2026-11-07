@@ -26,10 +26,10 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * L2 工具审批：底部抽屉 + 多工具 Tabs。
+ * L2 tool approval: bottom drawer + multi-tool tabs.
  *
- * <p>审批不再阻塞 SessionRunner 线程：创建审批记录后 run 进入 AWAITING_USER 并退出循环，
- * 用户提交后由 RuntimeOrchestrator 重新唤醒 run，SessionRunner 直接执行已批准的调用。
+ * <p>Approval no longer blocks the SessionRunner thread: after the approval record is created, the run enters AWAITING_USER and exits the loop;
+ * once the user submits, RuntimeOrchestrator wakes the run again and SessionRunner directly executes the approved call.
  */
 @Slf4j
 @Service
@@ -61,7 +61,7 @@ public class ToolApprovalService {
                         .runId(runId)
                         .approvalId(approvalId)
                         .toolCallsJson(callsJson)
-                        .prompt("需要确认工具调用").build()));
+                        .prompt("Tool call requires confirmation").build()));
         return approvalId;
     }
 

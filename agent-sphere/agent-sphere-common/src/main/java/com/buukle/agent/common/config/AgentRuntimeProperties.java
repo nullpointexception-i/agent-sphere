@@ -52,35 +52,38 @@ public class AgentRuntimeProperties {
     @Data
     public static class RunnerConfig {
         private int maxLoopCount = 25;
-        /** Agentic run 连续无工具回复的最大容错轮数；超过后终止，防止无界模型调用。 */
+        /** Maximum number of consecutive tool-less replies tolerated in an agentic run; the run is terminated beyond this to prevent unbounded model calls. */
         private int maxSilentTurns = 2;
-        /** 任务触发的 run 使用更高轮次上限（覆盖 maxLoopCount），缺省回落 maxLoopCount。 */
+        /** Task-triggered runs use a higher loop limit (overrides maxLoopCount); falls back to maxLoopCount when unset. */
         private Integer taskMaxLoopCount;
-        /** 单个 run 内允许注入的浏览器截图观察次数上限（防模型无限截图烧 token）。 */
+        /** Maximum number of browser screenshot observations injected into a single run (prevents the model from screenshotting forever and burning tokens). */
         private int maxScreenshotsPerRun = 20;
-        /** 恢复（wait/澄清/审批）时回放最近截图观察的条数上限；只回放当前 run。 */
+        /** Maximum number of recent screenshot observations replayed on resume (wait/clarification/approval); only the current run is replayed. */
         private int screenshotReplayMax = 2;
-        /** 恢复时回放截图的 data URL 总字节上限，超出则跳过。 */
+        /** Total byte cap for replayed screenshot data URLs on resume; skipped when exceeded. */
         private int screenshotReplayMaxBytes = 2_000_000;
-        /** 单 run 推理落库长度上限（数据完整兜底，默认 50 万字符）。 */
+        /** Maximum length of reasoning persisted per run (data-integrity fallback, 500k characters by default). */
         private int maxReasoningChars = 500000;
-        /** 必须大于 LLM 的 streamTimeout，否则单轮先被取消。 */
+        /** Must be greater than the LLM streamTimeout, otherwise a single turn is cancelled first. */
         private Duration turnTimeout = Duration.ofSeconds(660);
         /**
-         * 单轮 LLM 失败（非取消）时在同轮内重试次数（退避见
-         * {@code RunnerConstants.LLM_TURN_RETRY_BASE_MS}，指数递增）。
+         * Retry count within the same turn after a single-turn LLM failure (not cancellation); the
+         * backoff is defined by {@code RunnerConstants.LLM_TURN_RETRY_BASE_MS} and grows exponentially.
          *
-         * <p>默认 3 而非 1：模型端会突发性连续秒回错误，实测有 run 在 9 秒内连撞 3 次就耗尽
-         * 了 2 次尝试的预算而 FAILED，只有一个恰好只撞 2 次的活了下来。合计 4 次尝试可覆盖
-         * 大多数抖动窗口。
+         * <p>Defaults to 3 rather than 1: the model side fails in bursts of instant errors; in
+         * production a run hit 3 of them within 9 seconds and exhausted a budget of 2 attempts and
+         * FAILED, while only the run that happened to hit exactly 2 survived. A total of 4 attempts
+         * covers most jitter windows.
          */
         private int llmTurnMaxRetries = 3;
         /**
-         * LLM 瞬时失败（超时 / 5xx / 429）的梯度退避（V115）。
+         * Graded backoff for transient LLM failures (timeout / 5xx / 429) (V115).
          *
-         * <p>采用「短步多次、锯齿」：前几档就地重试，之后每隔几档回到 1s/3s，
-         * 让一次几十秒的上游抖动能被多次快速重试接住，而不是一路指数退避到几分钟。
-         * 前 {@link #llmRetryInlineRungs} 档在同轮内 sleep，其余档挂起（WAITING，kind=LLM_RETRY）。
+         * <p>"Many short steps, sawtooth": the first few rungs retry in place, then every few rungs
+         * the delay returns to 1s/3s, so a few tens of seconds of upstream jitter is caught by
+         * several quick retries instead of backing off exponentially to minutes. The first
+         * {@link #llmRetryInlineRungs} rungs sleep within the turn; the remaining rungs suspend the
+         * run (WAITING, kind=LLM_RETRY).
          */
         private java.util.List<java.time.Duration> llmRetryLadder = java.util.List.of(
                 java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
@@ -96,56 +99,56 @@ public class AgentRuntimeProperties {
                 java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(20),
                 java.time.Duration.ofSeconds(1), java.time.Duration.ofSeconds(3),
                 java.time.Duration.ofSeconds(15), java.time.Duration.ofSeconds(20));
-        /** 前几档就地 sleep 重试；超过则挂起。 */
+        /** The first few rungs retry in place with sleep; beyond them the run suspends. */
         private int llmRetryInlineRungs = 2;
-        /** 挂起档的抖动比例（±），避免多 run 同时唤醒打满上游。 */
+        /** Jitter ratio (±) for suspended rungs, so multiple runs do not wake at the same moment and saturate upstream. */
         private double llmRetryJitter = 0.2;
-        /** 从第一次失败起的总重试窗口；超过即 FAILED。 */
+        /** Total retry window measured from the first failure; exceeding it means FAILED. */
         private java.time.Duration llmRetryMaxTotal = java.time.Duration.ofMinutes(5);
-        /** live 非浏览器工具结果单条压缩上限。 */
+        /** Per-item compaction cap for live non-browser tool results. */
         private int liveToolResultMaxChars = 4000;
-        /** live 非浏览器工具结果总预算；超出后更旧的结果用省略标记。 */
+        /** Total budget for live non-browser tool results; older results are replaced with an omission marker once exceeded. */
         private int liveToolResultBudgetChars = 50000;
-        /** 非浏览器工具结果始终完整保留的最近条数。 */
+        /** Number of recent non-browser tool results always kept in full. */
         private int liveToolResultKeepRecent = 2;
-        /** 浏览器结果保留全文的单条字符上限；超过后改为 callId 引用（大页面）。 */
+        /** Per-item character cap for keeping browser results in full; larger ones become callId references (large pages). */
         private int liveBrowserFullMaxChars = 20000;
         private CompactionConfig compaction = new CompactionConfig();
 
         @Data
         public static class CompactionConfig {
-            /** 触发阈值（占 maxInputTokens 比例）。 */
+            /** Trigger threshold (fraction of maxInputTokens). */
             private double budgetRatio = 0.5;
-            /** 压缩后目标（含 messages + tools + fixed 的总估算）。 */
+            /** Post-compaction target (total estimate including messages + tools + fixed overhead). */
             private double targetRatio = 0.55;
-            /** 自适应目标：固定开销 + tail 放不下配置目标时自动抬高 target。 */
+            /** Adaptive target: raise the target automatically when the configured target cannot fit the fixed overhead + tail. */
             private boolean adaptiveTargetEnabled = true;
-            /** 自适应 target 至少为 tail 保留的 token 数。 */
+            /** Tokens the adaptive target reserves for the tail at minimum. */
             private long minTailTokens = 2000;
-            /** 压缩输入预算占 maxInput 的比例。 */
+            /** Compaction input budget as a fraction of maxInput. */
             private double inputRatio = 0.35;
-            /** run-local tail 预算占 maxInput 的比例。 */
+            /** run-local tail budget as a fraction of maxInput. */
             private double tailRatio = 0.25;
-            /** 摘要绝对上限（tokens）。 */
+            /** Absolute summary cap (tokens). */
             private long summaryMaxTokens = 10000;
-            /** 摘要超限时最多再压缩几轮（不含首轮）。 */
+            /** Maximum number of additional compression rounds when the summary exceeds the cap (excluding the first round). */
             private int summaryCompressRounds = 3;
-            /** 摘要上限占 maxInput 的比例（路由自适应）。 */
+            /** Summary cap as a fraction of maxInput (route-adaptive). */
             private double summaryMaxRatio = 0.12;
-            /** 压缩后至少间隔的轮数（硬上限超限时不受限）。 */
+            /** Minimum number of turns between compactions (not applied when the hard cap is exceeded). */
             private int cooldownTurns = 4;
-            /** 单 run run-local 压缩次数上限。 */
+            /** Maximum number of run-local compactions per run. */
             private int maxPerRun = 12;
-            /** 按上下文长度分档；为空时使用上面的 ratio 配置。 */
+            /** Buckets by context length; when empty, the ratio settings above are used. */
             private List<CompactionTier> tiers = new ArrayList<>();
         }
 
-        /** 一个上下文档位的绝对 token 预算。 */
+        /** Absolute token budget for one context tier. */
         @Data
         public static class CompactionTier {
-            /** 该档位适用的最大上下文长度（含）。 */
+            /** Maximum context length this tier applies to (inclusive). */
             private long maxInputTokens;
-            /** 触发压缩的输入 token 上限。 */
+            /** Input token threshold that triggers compaction. */
             private long triggerTokens;
         }
     }
@@ -209,36 +212,36 @@ public class AgentRuntimeProperties {
         private Duration connectTimeout = Duration.ofSeconds(30);
         private Duration readTimeout = Duration.ofSeconds(60);
         private Duration streamReadTimeout = Duration.ofSeconds(120);
-        /** 响应头/TLS 握手超时；与响应体读取超时分离，避免握手挂住等满 120s。 */
+        /** Response header / TLS handshake timeout, separate from the body read timeout so a stuck handshake does not wait the full 120s. */
         private Duration streamHeaderTimeout = Duration.ofSeconds(10);
         private Duration streamTimeout = Duration.ofSeconds(600);
-        /** 流式传输瞬时失败（EOF/断连等，chunks=0）重试次数，耗尽后显式报错。 */
+        /** Retry count for transient stream failures (EOF/disconnect, chunks=0); an explicit error is raised once exhausted. */
         private int streamMaxRetries = 2;
-        /** 流式重试固定退避时长（streamRetryDelays 未配置时的兜底）。 */
+        /** Fixed backoff for stream retries (fallback when streamRetryDelays is not configured). */
         private Duration streamRetryDelay = Duration.ofSeconds(1);
-        /** 流式重试退避梯度；第 N 次重试取第 N 项，超出后取最后一项。 */
+        /** Stream retry backoff ladder; attempt N uses entry N, and the last entry is reused beyond that. */
         private List<Duration> streamRetryDelays = new ArrayList<>(
                 List.of(Duration.ofMillis(300), Duration.ofSeconds(1)));
-        /** 统一思考强度配置：全局阈值 + 各厂商默认支持范围。 */
+        /** Unified reasoning-effort configuration: global thresholds + each provider's supported range. */
         private ReasoningConfig reasoning = new ReasoningConfig();
 
         @Data
         public static class ReasoningConfig {
-            /** 正文保留比例：answerReserve = max(minAnswerTokens, maxOutput * ratio)。 */
+            /** Answer retention ratio: answerReserve = max(minAnswerTokens, maxOutput * ratio). */
             private double answerReserveRatio = 0.25;
-            /** 正文至少保留的 token 数。 */
+            /** Minimum number of tokens reserved for the answer body. */
             private int minAnswerTokens = 1024;
-            /** Qwen 思考预算下限。 */
+            /** Lower bound of the Qwen thinking budget. */
             private int minThinkingBudget = 1024;
-            /** 强度从低到高，用于“最高可行档”排序。 */
+            /** Effort levels from low to high, used to rank the "highest feasible level". */
             private List<String> levelOrder = new ArrayList<>(ReasoningEffort.ORDER);
-            /** 档位默认阈值（厂商/路由未覆盖时使用）。 */
+            /** Default thresholds per level (used when neither provider nor route overrides them). */
             private Map<String, LevelConfig> levels = defaultLevels();
-            /** 厂商默认支持范围；key = ModelProviderCompany.value（由 application.yml 提供）。 */
+            /** Provider default supported ranges; key = ModelProviderCompany.value (supplied by application.yml). */
             private Map<String, ProviderReasoningConfig> providers = new LinkedHashMap<>();
-            /** 厂商未配置 levels 时的兜底档位。 */
+            /** Fallback levels when a provider has no levels configured. */
             private List<String> defaultLevels = new ArrayList<>(ReasoningEffort.DEFAULT_LEVELS);
-            /** 自动默认档的上限：无用户选择时不会超过该档（用户仍可手选更高档）。 */
+            /** Upper bound of the automatic default level: without a user choice the level will not exceed this (users can still pick higher manually). */
             private String defaultMaxLevel = ReasoningEffort.HIGH;
 
             private static Map<String, LevelConfig> defaultLevels() {
@@ -262,49 +265,49 @@ public class AgentRuntimeProperties {
 
         @Data
         public static class LevelConfig {
-            /** 该档位建议的最低输出预算（token）。 */
+            /** Recommended minimum output budget for this level (tokens). */
             private long minOutputTokens;
         }
 
         @Data
         public static class ProviderReasoningConfig {
-            /** 是否支持思考强度。 */
+            /** Whether reasoning effort is supported. */
             private boolean supported = false;
-            /** 统一使用 levels；保留字段便于以后扩展。 */
+            /** Always levels for now; the field is kept for future extension. */
             private String mode = ReasoningMode.LEVELS;
-            /** 支持档位；空则使用全局 default-levels。 */
+            /** Supported levels; empty means use the global default-levels. */
             private List<String> levels = new ArrayList<>();
-            /** 厂商级正文保留比例；空则继承全局。 */
+            /** Provider-level answer retention ratio; empty inherits the global value. */
             private Double answerReserveRatio;
-            /** 厂商级档位阈值覆盖。 */
+            /** Provider-level per-level threshold overrides. */
             private Map<String, Long> levelOverrides = new LinkedHashMap<>();
-            /** Qwen 网关是否支持 thinking_budget；false 时只发 enable_thinking。 */
+            /** Whether the Qwen gateway supports thinking_budget; when false only enable_thinking is sent. */
             private boolean thinkingBudgetSupported = true;
         }
     }
 
-    /** 统一 delegate 子 Agent 执行配置。 */
+    /** Unified execution configuration for delegate sub-agents. */
     @Data
     public static class DelegateConfig {
-        /** 是否启用 delegate 子 Agent 机制（feature flag，可一键回退）。 */
+        /** Whether the delegate sub-agent mechanism is enabled (feature flag, roll back with one switch). */
         private boolean enabled = true;
-        /** 子 Agent 最大嵌套深度。 */
+        /** Maximum sub-agent nesting depth. */
         private int maxNestedDepth = 3;
-        /** 子循环最大轮次。 */
+        /** Maximum number of sub-loop turns. */
         private int maxSubLoopCount = 8;
-        /** 单个子 Agent 执行总超时（外层工具 fiber 需容得下该预算）。 */
+        /** Total execution timeout for a single sub-agent (the outer tool fiber must accommodate this budget). */
         private Duration executionTimeout = Duration.ofMinutes(10);
-        /** 渲染后 prompt 最大长度。 */
+        /** Maximum rendered prompt length. */
         private int maxPromptChars = 20000;
-        /** 子 Agent 返回结果最大字符数。 */
+        /** Maximum number of characters returned by a sub-agent. */
         private int maxResultChars = 4000;
-        /** DAG 层内最大并行数。 */
+        /** Maximum parallelism within a DAG layer. */
         private int maxParallel = 4;
-        /** DAG 任务数上限。 */
+        /** Maximum number of DAG tasks. */
         private int maxDagTasks = 16;
-        /** 缺失/UNCERTAIN 泳道最多重派发轮数（P0 静默截断防御）。 */
+        /** Maximum number of re-dispatch rounds for missing/UNCERTAIN lanes (P0 silent-truncation defense). */
         private int maxDagRetries = 1;
-        /** 信封上游预算（字节）：超限时截断上游 value 并标 truncated，信封本身永不整体丢弃。 */
+        /** Upstream envelope budget (bytes): when exceeded, truncate upstream values and mark them truncated; the envelope itself is never dropped as a whole. */
         private int maxEnvelopeChars = 8000;
     }
 
@@ -342,12 +345,12 @@ public class AgentRuntimeProperties {
         private Duration otcTtl = Duration.ofSeconds(30);
     }
 
-    /** 多副本分布式运行态配置。 */
+    /** Distributed runtime state configuration for multiple replicas. */
     @Data
     public static class DistributedConfig {
-        /** session 执行者 owner 租约时长（过期后孤儿清扫接管）。 */
+        /** Session executor owner lease duration (orphan sweep takes over after it expires). */
         private Duration ownerLease = Duration.ofMinutes(5);
-        /** 孤儿 run 清扫间隔。 */
+        /** Orphan run sweep interval. */
         private Duration orphanSweepInterval = Duration.ofSeconds(30);
     }
 }

@@ -19,7 +19,8 @@ public class CheaperInferenceProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
-        // Cheaper Inference：OpenAI 兼容网关，thinking / tool_stream 是本系统给智谱/DeepSeek 的内部字段，剔除避免非预期行为
+        // Cheaper Inference: an OpenAI-compatible gateway. thinking / tool_stream are internal fields this
+        // system uses for Zhipu/DeepSeek, so strip them to avoid unexpected behavior.
         request.setThinking(null);
         request.setToolStream(null);
         request.setEnableThinking(null);

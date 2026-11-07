@@ -1,19 +1,20 @@
 package com.buukle.agent.instance.dtvo.enums;
 
 /**
- * 会话清理任务的执行状态（{@code agent_session_cleanup_run.status}）。
+ * Execution status of the session cleanup task ({@code agent_session_cleanup_run.status}).
  *
- * <p>刻意不用通用字段约定的 {@code 'ACTIVE'}：这是一次执行的生命周期，不是业务实体状态。
+ * <p>Deliberately not the generic field convention {@code 'ACTIVE'}: this is the lifecycle of one
+ * execution, not a business entity state.
  */
 public final class SessionCleanupRunStatusEnum {
 
-    /** 已开始，尚未落终态。若长时间停在这里（见 {@code stale} 判定）说明进程崩了 */
+    /** Started but not yet in a terminal state. Staying here for a long time (see the {@code stale} check) means the process crashed */
     public static final String STATUS_RUNNING = "RUNNING";
-    /** 正常结束（含预演） */
+    /** Finished normally (including rehearsals) */
     public static final String STATUS_SUCCESS = "SUCCESS";
-    /** 执行中抛异常 */
+    /** An exception was thrown during execution */
     public static final String STATUS_FAILED = "FAILED";
-    /** 什么都没做：锁被别的副本/请求占用，或急停开关关闭 */
+    /** Nothing was done: the lock is held by another replica/request, or the kill switch is off */
     public static final String STATUS_SKIPPED = "SKIPPED";
 
     private SessionCleanupRunStatusEnum() {

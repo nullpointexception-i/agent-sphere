@@ -1,5 +1,7 @@
 package com.buukle.agent.tasks.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.sso.spi.CallerAuth;
 import com.buukle.agent.tasks.dtvo.CreateTaskDTO;
@@ -17,10 +19,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 目标驱动多轮任务（外部开放接口，业务层以 code+subject+businessType 认证）。
+ * Goal-driven multi-turn tasks (external open API; the business layer authenticates with
+ * code+subject+businessType).
  */
 @RestController
-@RequestMapping("/api/v1/api/tasks")
+@RequestMapping(ApiPrefix.V1 + "/api/tasks")
 @RequiredArgsConstructor
 public class TaskController extends BaseController {
 

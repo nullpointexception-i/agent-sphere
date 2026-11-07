@@ -27,8 +27,8 @@ const commitHash =
   })();
 
 /**
- * @name 使用公共路径
- * @description 部署时的路径，如果部署在非根目录下，需要配置这个变量
+ * @name public path
+ * @description Deployment path. Configure this variable when deploying under a non-root directory.
  * @doc https://umijs.org/docs/api/config#publicpath
  */
 const PUBLIC_PATH: string = '/';
@@ -38,8 +38,8 @@ export default defineConfig({
     '@root': join(__dirname, '..'),
   },
   /**
-   * @name 开启 hash 模式
-   * @description 让 build 之后的产物包含 hash 后缀。通常用于增量发布和避免浏览器加载缓存。
+   * @name enable hash mode
+   * @description Append a hash suffix to build output. Commonly used for incremental releases and to avoid browser cache hits.
    * @doc https://umijs.org/docs/api/config#hash
    */
   hash: true,
@@ -47,65 +47,65 @@ export default defineConfig({
   publicPath: PUBLIC_PATH,
 
   /**
-   * @name 兼容性设置
-   * @description 设置 ie11 不一定完美兼容，需要检查自己使用的所有依赖
+   * @name compatibility settings
+   * @description Targeting ie11 is not guaranteed to work perfectly; verify every dependency you use.
    * @doc https://umijs.org/docs/api/config#targets
    */
   // targets: {
   //   ie: 11,
   // },
   /**
-   * @name 路由的配置，不在路由中引入的文件不会编译
-   * @description 只支持 path，component，routes，redirect，wrappers，title 的配置
+   * @name route configuration; files not referenced by routes are not compiled
+   * @description Only `path`, `component`, `routes`, `redirect`, `wrappers` and `title` are supported.
    * @doc https://umijs.org/docs/guides/routes
    */
   // umi routes: https://umijs.org/docs/routing
   routes,
   /**
-   * @name 主题的配置
-   * @description 虽然叫主题，但是其实只是 less 的变量设置
-   * @doc umi 的 theme 配置 https://umijs.org/docs/api/config#theme
+   * @name theme configuration
+   * @description Called a theme, but really just Less variable overrides.
+   * @doc umi theme configuration https://umijs.org/docs/api/config#theme
    */
   // theme: { '@primary-color': '#1DA57A' }
   /**
-   * @name moment 的国际化配置
-   * @description 如果对国际化没有要求，打开之后能减少js的包大小
+   * @name moment locale configuration
+   * @description If you do not need locales, enabling this reduces the JS bundle size.
    * @doc https://umijs.org/docs/api/config#ignoremomentlocale
    */
   ignoreMomentLocale: true,
   /**
-   * @name 代理配置
-   * @description 可以让你的本地服务器代理到你的服务器上，这样你就可以访问服务器的数据了
-   * @see 要注意以下 代理只能在本地开发时使用，build 之后就无法使用了。
-   * @doc 代理介绍 https://umijs.org/docs/guides/proxy
-   * @doc 代理配置 https://umijs.org/docs/api/config#proxy
+   * @name proxy configuration
+   * @description Lets your local server proxy requests to your backend server so you can access its data.
+   * @see Note: proxies only work during local development and are unavailable after build.
+   * @doc proxy guide https://umijs.org/docs/guides/proxy
+   * @doc proxy configuration https://umijs.org/docs/api/config#proxy
    */
   proxy: proxy[UMI_ENV as keyof typeof proxy],
   /**
-   * @name 快速热更新配置
-   * @description 一个不错的热更新组件，更新时可以保留 state
+   * @name fast refresh
+   * @description A solid hot-reload integration that preserves state across updates.
    */
   fastRefresh: true,
   /**
-   * @name 路由预加载
-   * @description 预加载路由资源，提升页面切换速度
+   * @name route prefetch
+   * @description Prefetch route resources to speed up page transitions.
    * @doc https://umijs.org/docs/api/config#routePrefetch
    */
   routePrefetch: {},
   /**
-   * @name manifest 配置
-   * @description 生成资源清单，配合 routePrefetch 使用
+   * @name manifest configuration
+   * @description Generate an asset manifest, used together with routePrefetch.
    */
   manifest: {},
-  //============== 以下都是max的插件配置 ===============
+  //============== max plugin configuration below ===============
   /**
-   * @name 数据流插件
+   * @name data flow plugin
    * @@doc https://umijs.org/docs/max/data-flow
    */
   model: {},
   initialState: {},
   /**
-   * @name layout 插件
+   * @name layout plugin
    * @doc https://umijs.org/docs/max/layout-menu
    */
   title: 'Agent Sphere',
@@ -114,8 +114,8 @@ export default defineConfig({
     ...defaultSettings,
   },
   /**
-   * @name moment2dayjs 插件
-   * @description 将项目中的 moment 替换为 dayjs
+   * @name moment2dayjs plugin
+   * @description Replace moment with dayjs across the project.
    * @doc https://umijs.org/docs/max/moment2dayjs
    */
   moment2dayjs: {
@@ -123,7 +123,7 @@ export default defineConfig({
     plugins: ['duration', 'relativeTime'],
   },
   /**
-   * @name 国际化插件
+   * @name i18n plugin
    * @doc https://umijs.org/docs/max/i18n
    */
   locale: {
@@ -134,8 +134,8 @@ export default defineConfig({
     baseNavigator: true,
   },
   /**
-   * @name antd 插件
-   * @description 内置了 babel import 插件
+   * @name antd plugin
+   * @description Bundles the babel import plugin.
    * @doc https://umijs.org/docs/max/antd#antd
    */
   antd: {
@@ -149,38 +149,38 @@ export default defineConfig({
     },
   },
   /**
-   * @name 网络请求配置
-   * @description 它基于 axios 和 ahooks 的 useRequest 提供了一套统一的网络请求和错误处理方案。
+   * @name network request configuration
+   * @description Unified network request and error handling built on axios and ahooks `useRequest`.
    * @doc https://umijs.org/docs/max/request
    */
   request: {},
   /**
-   * @name React Query 插件
-   * @description 使用 react-query 管理服务端状态
+   * @name React Query plugin
+   * @description Manage server state with react-query.
    * @doc https://umijs.org/docs/max/react-query
    */
   reactQuery: {},
   /**
-   * @name 权限插件
-   * @description 基于 initialState 的权限插件，必须先打开 initialState
+   * @name access plugin
+   * @description Access plugin based on initialState; initialState must be enabled first.
    * @doc https://umijs.org/docs/max/access
    */
   access: {},
   /**
    * @name Google Analytics
-   * @description 使用 GA4 (gtag.js) 进行站点分析
+   * @description Site analytics via GA4 (gtag.js).
    * @doc https://umijs.org/docs/max/analytics
    */
   analytics: {
     ga_v2: 'G-59NF1VHHPF',
   },
   /**
-   * @name <head> 中额外的 script
-   * @description 配置 <head> 中额外的 script
+   * @name extra script in <head>
+   * @description Configure extra scripts injected into <head>.
    */
   headScripts: [
     `var l=document.createElement('link');l.rel='icon';l.href='/favicon.svg';document.head.appendChild(l)`,
-    // 解决首次加载时白屏的问题
+    // Avoid a blank screen during the first load
     { src: join(PUBLIC_PATH, 'scripts/loading.js'), async: true },
   ],
 

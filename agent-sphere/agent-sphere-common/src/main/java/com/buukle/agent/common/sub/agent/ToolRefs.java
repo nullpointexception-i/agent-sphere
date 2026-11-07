@@ -1,7 +1,7 @@
 package com.buukle.agent.common.sub.agent;
 
 /**
- * 工具白名单引用（稳定标识，不使用易变的 displayName）。
+ * Tool allowlist reference (stable identifier; avoids the volatile displayName).
  *
  * <pre>
  * builtin:&lt;internalName&gt;
@@ -44,10 +44,10 @@ public final class ToolRefs {
         return TYPE_AGENT + SEPARATOR + key;
     }
 
-    /** 校验引用格式，非法时抛出描述性异常。 */
+    /** Validates the reference format; throws a descriptive exception when invalid. */
     public static void validate(String ref) throws InvalidSubRunDefinition {
         if (ref == null || ref.isBlank()) {
-            throw new InvalidSubRunDefinition("工具引用不能为空");
+            throw new InvalidSubRunDefinition("tool reference must not be blank");
         }
         if (WILDCARD.equals(ref.trim())) {
             return;
@@ -55,7 +55,7 @@ public final class ToolRefs {
         String r = ref.trim();
         if (r.startsWith(TYPE_BUILTIN + SEPARATOR)) {
             if (r.length() == TYPE_BUILTIN.length() + 1) {
-                throw new InvalidSubRunDefinition("builtin 引用缺少 internalName: " + ref);
+                throw new InvalidSubRunDefinition("builtin reference is missing internalName: " + ref);
             }
             return;
         }
@@ -69,19 +69,19 @@ public final class ToolRefs {
         }
         if (r.startsWith(TYPE_AGENT + SEPARATOR)) {
             if (r.length() == TYPE_AGENT.length() + 1) {
-                throw new InvalidSubRunDefinition("agent 引用缺少标识: " + ref);
+                throw new InvalidSubRunDefinition("agent reference is missing an identifier: " + ref);
             }
             return;
         }
         if (r.startsWith(TYPE_MCP + SEPARATOR)) {
             String[] parts = r.substring(TYPE_MCP.length() + 1).split(String.valueOf(SEPARATOR));
             if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
-                throw new InvalidSubRunDefinition("mcp 引用格式应为 mcp:<capabilityId>:<nativeToolName>: " + ref);
+                throw new InvalidSubRunDefinition("mcp reference must use mcp:<capabilityId>:<nativeToolName>: " + ref);
             }
             Long.parseLong(parts[0]);
             return;
         }
-        throw new InvalidSubRunDefinition("未知工具引用类型（应为 builtin/mcp/cli/skill/agent）: " + ref);
+        throw new InvalidSubRunDefinition("unknown tool reference type (expected builtin/mcp/cli/skill/agent): " + ref);
     }
 
     public static boolean matches(String allowRef, String toolRef, String toolName) {
@@ -99,13 +99,13 @@ public final class ToolRefs {
     private static String stripPrefix(String ref, String prefix) {
         String id = ref.substring(prefix.length() + 1).trim();
         if (id.isEmpty()) {
-            throw new InvalidSubRunDefinition("引用缺少 id: " + ref);
+            throw new InvalidSubRunDefinition("reference is missing an id: " + ref);
         }
         try {
             Long value = Long.parseLong(id);
             return String.valueOf(value);
         } catch (NumberFormatException e) {
-            throw new InvalidSubRunDefinition("引用 id 必须是数字: " + ref);
+            throw new InvalidSubRunDefinition("reference id must be numeric: " + ref);
         }
     }
 }

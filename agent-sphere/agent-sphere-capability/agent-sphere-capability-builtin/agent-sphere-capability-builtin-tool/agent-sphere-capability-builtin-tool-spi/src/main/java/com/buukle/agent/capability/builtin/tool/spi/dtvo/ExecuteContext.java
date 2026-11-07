@@ -8,6 +8,6 @@ import java.io.Serializable;
 public abstract class ExecuteContext implements Serializable {
     private Long sessionId;
     private Long runId;
-    /** 模型侧工具调用 id（回传回调、定位工具记录用）。 */
+    /** Model-side tool call id (used to correlate the callback and locate the tool record). */
     private String callId;
 }

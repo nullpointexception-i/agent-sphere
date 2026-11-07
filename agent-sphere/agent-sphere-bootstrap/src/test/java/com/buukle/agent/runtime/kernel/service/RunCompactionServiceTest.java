@@ -42,7 +42,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 单 run 压缩：保留当前 user + 最近 3 条作为 tail，旧消息摘要为 leading system。 */
+/** Run-local compaction: keep the current user + the latest 3 messages as the tail and summarize older messages into the leading system. */
 @ExtendWith(MockitoExtension.class)
 class RunCompactionServiceTest {
 
@@ -133,7 +133,7 @@ class RunCompactionServiceTest {
                 SESSION_ID, RUN_ID, null, messages(), 1, null);
 
         assertEquals(CompactionOutcome.COMPLETED, result.outcome());
-        // tail 预算只够最近一组：user + a6 + t7；更旧的 a2/t3/a4/t5 进入摘要
+        // The tail budget only fits the latest group: user + a6 + t7; older a2/t3/a4/t5 go into the summary
         assertEquals(5, result.messages().size());
         assertEquals(2, result.currentRunStart());
         assertTrue(result.messages().get(1).getContent().toString().contains("RUN-SUM"));
@@ -149,7 +149,7 @@ class RunCompactionServiceTest {
     @Test
     void compactRunPersistsTailJsonWithoutImages() {
         List<ChatMessageDTO> messages = messages();
-        // tail 内的图片 data URL 必须被替换
+        // Image data URLs inside the tail must be replaced
         messages.set(6, new ChatMessageDTO().setRole("assistant").setContent(List.of(
                 new com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO()
                         .setType("image_url")
@@ -195,7 +195,7 @@ class RunCompactionServiceTest {
 
     @Test
     void summaryCapIsRouteAware() {
-        // 32k 路由：min(10000, 32000*0.12)=3840；128k / 1M 路由都封顶 10000
+        // 32k route: min(10000, 32000*0.12)=3840; 128k / 1M routes both cap at 10000
         org.junit.jupiter.api.Assertions.assertEquals(3840, service.resolveSummaryCap(32_000L));
         org.junit.jupiter.api.Assertions.assertEquals(10000, service.resolveSummaryCap(128_000L));
         org.junit.jupiter.api.Assertions.assertEquals(10000, service.resolveSummaryCap(1_000_000L));

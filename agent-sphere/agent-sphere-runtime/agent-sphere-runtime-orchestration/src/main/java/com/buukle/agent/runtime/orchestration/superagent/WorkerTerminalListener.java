@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
-import com.buukle.agent.instance.dtvo.enums.SessionType;
+
+import com.buukle.agent.superagent.dtvo.enums.WorkItemStatus;import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -19,15 +20,15 @@ import org.springframework.core.Ordered;
 import org.springframework.stereotype.Component;
 
 /**
- * Worker Run 生命周期 → Work Item 终态回写。
+ * Worker Run lifecycle → Work Item terminal-state write-back.
  *
- * <p>只处理 {@code sessionType=WORKER} 的会话，普通聊天会话完全不受影响。
- * WAITING / AWAITING_USER 也回报，让任务板能看到「等输入」而不是一直 RUNNING。
+ * <p>Only {@code sessionType=WORKER} sessions are handled; ordinary chat sessions are completely unaffected.
+ * WAITING / AWAITING_USER are reported too, so the work item board can see "awaiting input" instead of staying RUNNING forever.
  *
- * <p><b>必须最先执行</b>：{@code RuntimeEventListener} 处理同一事件时会把
- * {@code data.assistantReply} 改写成 run_status 行的标题（时间戳）。事件对象在
- * 所有监听器间是同一个引用，若本监听器后执行，worker 报告正文就会变成时间戳。
- * 顺序只是防御，真正的数据来源是 {@link RunSpi#getRun} 的权威落库值。
+ * <p><b>Must run first</b>: while handling the same event, {@code RuntimeEventListener} rewrites
+ * {@code data.assistantReply} into the run_status row title (a timestamp). The event object is the same reference
+ * across all listeners, so if this listener ran later, the worker report body would become a timestamp.
+ * Ordering is only a defense; the real data source is the authoritative persisted value from {@link RunSpi#getRun}.
  */
 @Slf4j
 @Component
@@ -45,10 +46,10 @@ public class WorkerTerminalListener {
             return;
         }
         String reportStatus = switch (status) {
-            case COMPLETED -> "COMPLETED";
-            case FAILED -> "FAILED";
-            case CANCELLED -> "CANCELLED";
-            case WAITING, AWAITING_USER -> "WAITING";
+            case COMPLETED -> WorkItemStatus.COMPLETED;
+            case FAILED -> WorkItemStatus.FAILED;
+            case CANCELLED -> WorkItemStatus.CANCELLED;
+            case WAITING, AWAITING_USER -> WorkItemStatus.WAITING;
             case PENDING, RUNNING -> null;
         };
         if (reportStatus == null) {

@@ -1,5 +1,9 @@
 package com.buukle.agent.instance.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
@@ -15,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/artifacts/documents")
+@RequestMapping(ApiPrefix.V1 + "/artifacts/documents")
 @RequiredArgsConstructor
 @WithTenant
 public class DocumentController extends BaseController {
@@ -39,7 +43,7 @@ public class DocumentController extends BaseController {
         return vo != null ? ok(vo) : ResponseEntity.notFound().build();
     }
 
-    @RequirePermission("document:share")
+    @RequirePermission(PermissionCodes.DOCUMENT_SHARE)
     @PostMapping("/{id}/share")
     public ResponseEntity<?> createShare(@PathVariable Long id) {
         String token = documentSpi.createShareToken(id);
@@ -53,21 +57,21 @@ public class DocumentController extends BaseController {
         return vo != null ? ok(vo) : ResponseEntity.notFound().build();
     }
 
-    @RequirePermission("document:update")
+    @RequirePermission(PermissionCodes.DOCUMENT_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UpdateDocumentDTO dto) {
         documentSpi.update(id, dto.getTitle() != null ? dto.getTitle() : "", dto.getContent() != null ? dto.getContent() : "");
         return ok();
     }
 
-    @RequirePermission("document:delete")
+    @RequirePermission(PermissionCodes.DOCUMENT_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         documentSpi.delete(id);
         return ok();
     }
 
-    @RequirePermission("document:delete")
+    @RequirePermission(PermissionCodes.DOCUMENT_DELETE)
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody List<Long> ids) {
         documentSpi.batchDelete(ids);

@@ -7,9 +7,9 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import java.time.Duration;
 
 /**
- * 子 Agent ReAct 执行策略（delegate 等 sub-run 的宿主配置与语义）。
- * {@code SessionSubRunner} 只关心通用 ReAct 骨架，命中策略的差异全部收敛到该接口。
- * 子类需保证返回的命名/文案与协议（前端路由、事件总线）一致。
+ * Sub-agent ReAct execution policy (host configuration and semantics for sub-runs such as delegate).
+ * {@code SessionSubRunner} only cares about the generic ReAct skeleton; every policy-specific difference converges into this interface.
+ * Implementations must keep the returned naming/text consistent with the protocol (frontend routing, event bus).
  */
 public interface SubRunPolicy {
 
@@ -25,7 +25,7 @@ public interface SubRunPolicy {
 
     int maxResultChars();
 
-    /** 工具标识（分组/去重用），如 agent:&lt;key&gt; 的稳定 hash。 */
+    /** Tool identity (for grouping/dedup), e.g. the stable hash of agent:&lt;key&gt;. */
     long toolId(RuntimeTool tool);
 
     String nodeNamePrefix();
@@ -42,22 +42,22 @@ public interface SubRunPolicy {
 
     String displayName(RuntimeTool tool);
 
-    /** 子 Agent 专属系统提示（agentRef 的 systemPrompt+customInstructions）；无则 null。 */
+    /** Sub-agent-specific system prompt (agentRef's systemPrompt+customInstructions); null when absent. */
     default String systemPrompt(RuntimeTool tool) {
         return null;
     }
 
-    /** 渲染子 Agent 首轮用户 prompt（含 goal / 入参注入）。 */
+    /** Renders the sub-agent's first user prompt (including goal / input injection). */
     String renderPrompt(RuntimeTool tool, String argsJson, SubRunExecutionContext ctx) throws InvalidSubRunDefinition;
 
-    /** 子 Agent 的可结构化接触信封（escalated args + upstream 依赖结果）；无则 null/空串。 */
+    /** The sub-agent's structured contact envelope (escalated args + upstream dependency results); null/empty string when absent. */
     default String contactEnvelope(RuntimeTool tool, String argsJson) {
         return null;
     }
 
     /**
-     * 一次性完成“深度/递归校验 + 子上下文构建”（depth + ancestry 语义由策略负责，
-     * runner 不再触碰 depth/ancestry）。返回错误或就绪的子上下文。
+     * One-shot "depth/recursion validation + sub-context construction" (the policy owns depth + ancestry semantics;
+     * the runner no longer touches depth/ancestry). Returns either an error or a ready sub-context.
      */
     PreparedSubRun prepare(RuntimeTool tool, long toolId, SubRunExecutionContext parentCtx);
 

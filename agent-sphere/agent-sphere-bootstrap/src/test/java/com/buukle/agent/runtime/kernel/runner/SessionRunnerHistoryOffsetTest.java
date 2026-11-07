@@ -8,7 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** HistoryResult.currentRunStart 相对 history 列表；runner 必须加上已存在的 system prompt 偏移。 */
+/** HistoryResult.currentRunStart is relative to the history list; the runner must add the existing system prompt offset. */
 class SessionRunnerHistoryOffsetTest {
 
     @Test

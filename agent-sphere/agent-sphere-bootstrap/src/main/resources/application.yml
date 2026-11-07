@@ -1,5 +1,5 @@
 server:
-  port: 8080                                       # 服务端口 / Server port
+  port: 8080                                       # Server port
 
 spring:
   application:
@@ -10,106 +10,106 @@ spring:
     password: ${DB_PASSWORD:buukle123}
     driver-class-name: org.postgresql.Driver
   redis:
-    host: ${REDIS_HOST:127.0.0.1}                  # Redis 主机 / Redis host
-    port: ${REDIS_PORT:6379}                       # Redis 端口 / Redis port
+    host: ${REDIS_HOST:127.0.0.1}                  # Redis host
+    port: ${REDIS_PORT:6379}                       # Redis port
   threads:
     virtual:
-      enabled: ${ENABLE_VIRTUAL_THREADS:true}      # 启用虚拟线程（Java 21+）/ Enable virtual threads
+      enabled: ${ENABLE_VIRTUAL_THREADS:true}      # Enable virtual threads (Java 21+)
   flyway:
-    enabled: true                                  # 启用 Flyway 数据库迁移 / Enable Flyway migration
-    locations: classpath:db/migration               # 迁移脚本目录 / Migration scripts location
-    baseline-on-migrate: true                       # 自动基线已有数据库 / Auto-baseline existing DB
-    baseline-version: 0                             # 基线版本号 / Baseline version
-    # 允许补跑"已解析但历史缺失/乱序"的迁移（如线上 V47/V51 历史行波动的恢复场景）；
-    # V47(3 参归一化)/V51(setval+IF EXISTS 守卫)均幂等，补跑安全。迁移补齐后可考虑改回 false。
+    enabled: true                                  # Enable Flyway migration
+    locations: classpath:db/migration               # Migration scripts location
+    baseline-on-migrate: true                       # Auto-baseline an existing DB
+    baseline-version: 0                             # Baseline version
+    # Allow re-running migrations that were resolved but are missing or out of order in history (for example, recovering from V47/V51 history-row drift in production);
+    # V47 (3-arg normalization) / V51 (setval + IF EXISTS guard) are idempotent, so re-running is safe. Once the history is repaired, consider switching back to false.
     out-of-order: true
   jackson:
-    date-format: yyyy-MM-dd HH:mm:ss               # JSON 日期格式 / JSON date format
-    time-zone: Asia/Shanghai                        # 时区 / Time zone
+    date-format: yyyy-MM-dd HH:mm:ss               # JSON date format
+    time-zone: Asia/Shanghai                        # Time zone
     serialization:
-      fail-on-empty-beans: false                    # 空对象不报错 / Don't fail on empty beans
+      fail-on-empty-beans: false                    # Don't fail on empty beans
   servlet:
     multipart:
-      max-file-size: 110MB                          # 单文件上传上限 / Max single file upload size
-      max-request-size: 120MB                       # 请求体上限 / Max request size
+      max-file-size: 110MB                          # Max single file upload size
+      max-request-size: 120MB                       # Max request size
 
 mybatis-plus:
   type-handlers-package: com.buukle.agent.infrastructure.handler
   configuration:
-    map-underscore-to-camel-case: true              # 下划线转驼峰 / Underscore to camel case
+    map-underscore-to-camel-case: true              # Underscore to camel case
   global-config:
     db-config:
-      logic-delete-field: delete_flag               # 逻辑删除字段名 / Logical delete field
-      logic-delete-value: 1                         # 已删除值 / Deleted value
-      logic-not-delete-value: 0                     # 未删除值 / Not deleted value
-      id-type: auto                                 # 主键策略：自增 / ID strategy: auto-increment
+      logic-delete-field: delete_flag               # Logical delete field
+      logic-delete-value: 1                         # Deleted value
+      logic-not-delete-value: 0                     # Not deleted value
+      id-type: auto                                 # ID strategy: auto-increment
 
 logging:
   level:
-    com.buukle: DEBUG                              # 框架日志级别 / Framework log level
-    com.buukle.agent.instance.repository: WARN      # SQL 日志级别（生产建议 WARN）/ SQL log level
-    com.buukle.agent.model.repository: WARN         # Model SQL 日志级别 / Model SQL log level
-    com.buukle.agent.capability: WARN               # 能力组件日志级别 / Capability log level
-    com.buukle.agent.tasks.repository: WARN         # tasks SQL 日志级别 / Tasks SQL log level
-    com.buukle.agent.completions.repository: WARN   # completions SQL 日志级别 / Completions SQL log level
-    com.buukle.agent.sso.repository: WARN           # SSO SQL 日志级别 / SSO SQL log level
-    com.buukle.agent.admin.repository: WARN         # Admin SQL 日志级别 / Admin SQL log level
+    com.buukle: DEBUG                              # Framework log level
+    com.buukle.agent.instance.repository: WARN      # SQL log level (WARN recommended in production)
+    com.buukle.agent.model.repository: WARN         # Model SQL log level
+    com.buukle.agent.capability: WARN               # Capability log level
+    com.buukle.agent.tasks.repository: WARN         # Tasks SQL log level
+    com.buukle.agent.completions.repository: WARN   # Completions SQL log level
+    com.buukle.agent.sso.repository: WARN           # SSO SQL log level
+    com.buukle.agent.admin.repository: WARN         # Admin SQL log level
     com.buukle.agent.superagent.repository.AgentEventDeliveryMapper: INFO
     com.buukle.agent.superagent.repository.AgentOutboundMessageMapper: INFO
     com.buukle.agent.superagent.repository.AgentWorkItemMapper: INFO
     com.buukle.agent.superagent.repository.AgentEventMapper: INFO
-    org.springframework: INFO                       # Spring 框架日志 / Spring framework log
+    org.springframework: INFO                       # Spring framework log
 
 buukle:
   agent:
     # ============================================================
-    # Super-Agent / 群级分派
-    # 默认关闭；配置 group-router.instance-id 后才会消费 agent_event。
+    # Super-Agent / group-level dispatch
+    # Disabled by default; agent_event is only consumed after group-router.instance-id is configured.
     # ============================================================
     super-agent:
       enabled: true
       group-router:
         enabled: true
-        auto-create: true                          # 启动时自动创建共享 GROUP_ROUTER 实例
-        instance-id: 0                             # 共享 GROUP_ROUTER instance id；0=按角色查找
-        model-route-id: 0                          # 自动创建时使用的模型路由；0=回落 router 默认
+        auto-create: true                          # Automatically create the shared GROUP_ROUTER instance on startup
+        instance-id: 0                             # Shared GROUP_ROUTER instance id; 0 = look up by role
+        model-route-id: 0                          # Model route used when auto-creating; 0 = fall back to the router default
         batch:
-          interval-ms: 3000                        # 调度间隔
-          max-events: 20                           # 单批最大事件数
-          max-wait-ms: 3000                        # 攒批等待窗口
-          max-chars: 12000                         # 单批最大字符
-          max-tokens: 2000                         # Group Router 输出上限
+          interval-ms: 3000                        # Scheduling interval
+          max-events: 20                           # Max events per batch
+          max-wait-ms: 3000                        # Batch accumulation wait window
+          max-chars: 12000                         # Max characters per batch
+          max-tokens: 2000                         # Group Router output cap
         retry:
           max-attempts: 5
           base-backoff-ms: 3000
       agent-router:
         enabled: true
-        interval-ms: 5000                          # 兜底轮询间隔（主路径是事务提交事件的毫秒级唤醒，本值只兜底事件丢失/重启悬挂）
-        batch-size: 20                             # 单批投递数
-        max-loop-count: 64                         # Agent Router 单 run 循环上限
+        interval-ms: 5000                          # Fallback polling interval (the main path is millisecond wake-up on transaction-commit events; this only covers lost events / work left hanging by a restart)
+        batch-size: 20                             # Deliveries per batch
+        max-loop-count: 64                         # Agent Router loop limit per run
       router:
         default-model-route-id: 0
         stream:
-          enabled: true                            # runtime → IM SSE 实时流总开关
-          thinking-enabled: true                   # 是否推送模型 thinking 分片
-          coalesce-ms: 50                          # 分片合并窗口
-          max-chunk-chars: 256                     # 单个合并分片最大字符数
-          session-cache-ttl-seconds: 600           # sessionId → Router 会话缓存
-          target-cache-ttl-seconds: 300            # threadId → 聊天目标缓存
-          buffer-ttl-seconds: 600                  # 无终态 run 的 buffer 泄漏回收
+          enabled: true                            # Master switch for runtime → IM SSE real-time streaming
+          thinking-enabled: true                   # Whether to push model thinking chunks
+          coalesce-ms: 50                          # Chunk coalescing window
+          max-chunk-chars: 256                     # Max characters per coalesced chunk
+          session-cache-ttl-seconds: 600           # sessionId → Router session cache
+          target-cache-ttl-seconds: 300            # threadId → chat target cache
+          buffer-ttl-seconds: 600                  # Reclaim buffers leaked by runs with no terminal state
         reply:
-          auto-final-enabled: true                 # 普通问答最终正文自动落 outbound
-          final-max-chars: 8000                    # 自动 final 的最大字符数
+          auto-final-enabled: true                 # Automatically write the final answer text of normal Q&A to outbound
+          final-max-chars: 8000                    # Max characters for automatic final replies
       worker:
         enabled: true
-        interval-ms: 3000                          # 调度间隔
-        max-concurrent: 5                          # 同时在途 Worker 数
-        max-concurrent-scope: REPLICA              # REPLICA | GLOBAL（集群总配额）
-        max-active-per-agent: 8                    # 单员工在途上限
-        queue-capacity: 200                        # 队列容量
-        default-loop-limit: 128                    # Worker 默认循环上限
-        batch-size: 5                              # 单批领取数
-        dispatch-timeout-minutes: 10               # DISPATCHING 卡死回收阈值
+        interval-ms: 3000                          # Scheduling interval
+        max-concurrent: 5                          # Concurrent in-flight Workers
+        max-concurrent-scope: REPLICA              # REPLICA | GLOBAL (cluster-wide quota)
+        max-active-per-agent: 8                    # In-flight cap per employee
+        queue-capacity: 200                        # Queue capacity
+        default-loop-limit: 128                    # Default Worker loop limit
+        batch-size: 5                              # Claims per batch
+        dispatch-timeout-minutes: 10               # Reclaim threshold for stuck DISPATCHING
       event:
         retention-days: 30
         retention-cron: "0 30 3 * * ?"
@@ -119,11 +119,11 @@ buukle:
         batch-sleep-ms: 200
       outbound:
         enabled: true
-        interval-ms: 5000                          # 兜底轮询间隔（主路径是 outbound 插入事件的毫秒级唤醒）
-        batch-size: 20                             # 单批发送数
-        max-attempts: 8                            # 最大重试次数
-        retry-base-ms: 2000                        # 退避基数
-        lease-seconds: 900                         # 发送租约，必须大于渠道最大发送耗时
+        interval-ms: 5000                          # Fallback polling interval (the main path is millisecond wake-up on outbound-insert events)
+        batch-size: 20                             # Messages sent per batch
+        max-attempts: 8                            # Max retry attempts
+        retry-base-ms: 2000                        # Backoff base
+        lease-seconds: 900                         # Send lease; must exceed the maximum channel send time
       watchdog:
         enabled: true
         interval-ms: 60000
@@ -132,7 +132,7 @@ buukle:
         max-batches: 20
         batch-sleep-ms: 100
     # ============================================================
-    # 内置 IM
+    # Built-in IM
     # ============================================================
     im:
       enabled: true
@@ -142,64 +142,64 @@ buukle:
       max-attachment-mb: 20
       rate-limit-per-minute: 30
     # ============================================================
-    # 会话配置 / Session Config
-    # cleanup-* 是历史会话清理（SessionCleanupTask）的技术参数。
-    # 保留天数与急停开关在系统配置表（config_group='session'，见 SystemConfigKeys），改完不必发版。
-    # 清理是硬删、不可逆：逻辑删除不释放磁盘，大字段仍留在堆表里。
+    # Session Config
+    # cleanup-* are tuning parameters for historical session cleanup (SessionCleanupTask).
+    # Retention days and the kill switch live in the system config table (config_group='session', see SystemConfigKeys), so changes need no redeploy.
+    # Cleanup hard-deletes and is irreversible: logical delete frees no disk space, and large columns stay in the heap table.
     # ============================================================
     session:
-      idle-timeout: 30m                            # 会话空闲超时 / Session idle timeout
-      max-concurrent-runs: 10                      # 最大并发执行数 / Max concurrent runs
-      cache-ttl: 60m                               # 上下文缓存存活时间 / Context cache TTL
-      cleanup-cron: "0 30 4 * * ?"                 # 历史会话清理cron（低峰期）/ Session cleanup cron
-      cleanup-batch-size: 200                      # 清理每批处理的会话数 / Sessions per cleanup batch
-      cleanup-max-batches: 50                      # 清理单轮批次上限（级联与独立清理共用）/ Max batches per cleanup run
-      cleanup-batch-sleep-ms: 200                  # 清理批间休眠，让位给 autovacuum / Sleep between cleanup batches
+      idle-timeout: 30m                            # Session idle timeout
+      max-concurrent-runs: 10                      # Max concurrent runs
+      cache-ttl: 60m                               # Context cache TTL
+      cleanup-cron: "0 30 4 * * ?"                 # Session cleanup cron (off-peak)
+      cleanup-batch-size: 200                      # Sessions per cleanup batch
+      cleanup-max-batches: 50                      # Max batches per cleanup run (shared by cascade and standalone cleanup)
+      cleanup-batch-sleep-ms: 200                  # Sleep between cleanup batches, yielding to autovacuum
 
     # ============================================================
-    # 步骤配置 / Step Config
+    # Step Config
     # ============================================================
     step:
-      max-retries: 3                               # 步骤最大重试次数 / Step max retries
-      execution-timeout: 5m                        # 步骤执行超时 / Step execution timeout
+      max-retries: 3                               # Step max retries
+      execution-timeout: 5m                        # Step execution timeout
 
     # ============================================================
-    # SSE 推送配置 / SSE Config
+    # SSE Config
     # ============================================================
     sse:
-      buffer-size: 1024                            # SSE 缓冲区大小（字节）/ SSE buffer size (bytes)
-      cache-ttl: 30s                               # SSE 事件缓存 TTL / SSE event cache TTL
-      heartbeat-interval: 15s                      # SSE 心跳间隔 / SSE heartbeat interval
+      buffer-size: 1024                            # SSE buffer size (bytes)
+      cache-ttl: 30s                               # SSE event cache TTL
+      heartbeat-interval: 15s                      # SSE heartbeat interval
 
     # ============================================================
-    # Chrome 浏览器工具 / Chrome Tool (写动作统一走 CDP 受信输入，无执行模式开关)
+    # Chrome Tool (all write actions go through CDP trusted input; no execution-mode switch)
     # ============================================================
     chrome:
       extension-token: ""
 
     # ============================================================
-    # LLM 模型配置 / LLM Config
+    # LLM Config
     # ============================================================
     llm:
-      log-body-max-length: 128                     # LLM 请求体日志截断长度 / LLM request body log truncation
-      connect-timeout: 30s                         # LLM API 连接超时 / LLM API connect timeout
-      read-timeout: 60s                            # LLM API 读取超时 / LLM API read timeout
-      stream-read-timeout: 120s                    # 流式读取超时 / Stream read timeout
-      stream-header-timeout: 10s                   # 响应头/TLS 握手超时 / Stream header + TLS handshake timeout
-      stream-timeout: 600s                         # 流式总超时（含思考）；长文/大输出需要更长预算 / Stream total timeout
-      stream-max-retries: 2                        # 流式瞬时失败(chunks=0)重试次数 / Stream transient retries
-      stream-retry-delay: 1s                       # 流式重试固定退避兜底 / Stream retry fixed backoff fallback
-      stream-retry-delays:                         # 流式重试退避梯度 / Stream retry backoff ladder
+      log-body-max-length: 128                     # LLM request body log truncation
+      connect-timeout: 30s                         # LLM API connect timeout
+      read-timeout: 60s                            # LLM API read timeout
+      stream-read-timeout: 120s                    # Stream read timeout
+      stream-header-timeout: 10s                   # Stream header + TLS handshake timeout
+      stream-timeout: 600s                         # Stream total timeout (including thinking); long documents / large outputs need a bigger budget
+      stream-max-retries: 2                        # Stream transient-failure (chunks=0) retry count
+      stream-retry-delay: 1s                       # Stream retry fixed backoff fallback
+      stream-retry-delays:                         # Stream retry backoff ladder
         - 300ms
         - 1s
-      # 统一思考强度：全局阈值 + 各厂商默认支持范围。
-      # 厂商/路由配置只做覆盖；默认档位按实际 max_tokens 动态计算。
+      # Unified reasoning effort: global thresholds + per-provider supported ranges.
+      # Provider/route config only overrides; the default level is derived from the actual max_tokens.
       reasoning:
-        answer-reserve-ratio: 0.25                 # 正文保留比例 / Answer reserve ratio
-        min-answer-tokens: 1024                    # 正文至少保留 token / Min answer tokens
-        min-thinking-budget: 1024                  # Qwen thinking_budget 下限 / Min Qwen thinking budget
-        default-max-level: high                    # 自动默认档上限（用户仍可手选更高）/ Default level ceiling
-        level-order:                               # 强度从低到高 / Level order
+        answer-reserve-ratio: 0.25                 # Answer reserve ratio
+        min-answer-tokens: 1024                    # Min answer tokens
+        min-thinking-budget: 1024                  # Min Qwen thinking_budget
+        default-max-level: high                    # Default level ceiling (users can still pick a higher level)
+        level-order:                               # Level order (low to high)
           - none
           - minimal
           - low
@@ -207,7 +207,7 @@ buukle:
           - high
           - xhigh
           - max
-        levels:                                    # 全局档位阈值（最低输出预算）
+        levels:                                    # Global level thresholds (minimum output budget)
           none:
             min-output-tokens: 0
           minimal:
@@ -223,7 +223,7 @@ buukle:
           max:
             min-output-tokens: 65536
         default-levels: [low, medium, high, max]
-        providers:                                 # 厂商默认支持范围 / Provider defaults
+        providers:                                 # Provider defaults
           deepseek:
             supported: true
             mode: levels
@@ -251,17 +251,17 @@ buukle:
             levels: [low, medium, high]
 
     # ============================================================
-    # Runner 执行引擎配置 / Runner Config
+    # Runner Config
     # ============================================================
     runner:
-      max-loop-count: 128                          # 单次 run 最大循环次数 / Max loop count per run
-      task-max-loop-count: 2000                     # 任务触发 run 的更高轮次上限（长任务寻访/收藏） / Task run max loop count
-      max-reasoning-chars: 500000                   # 单 run 推理落库长度上限（字符） / Max persisted reasoning chars
-      turn-timeout: 660s                           # 单轮 LLM 调用超时；必须大于 llm.stream-timeout / Single LLM turn timeout
-      llm-turn-max-retries: 3                      # 单轮 LLM 失败(非取消)重试次数(指数退避 1s→2s→4s) / Per-turn LLM retries (exp. backoff 1s→2s→4s)
-      # LLM 瞬时失败（连接超时 / 5xx / 429）的梯度退避：前 N 档就地重试，其余档挂起（WAITING）
-      # 后用 wait 调度器唤醒重跑同一轮，不占执行资源。/ Graded retry: first N rungs inline, the rest suspend.
-      # 锯齿设计：1,3,10,15,20 后回到 1,3,15,20，共 25 档（累计约 244s）。
+      max-loop-count: 128                          # Max loop count per run
+      task-max-loop-count: 2000                     # Higher loop limit for task-triggered runs (long sourcing/collect tasks)
+      max-reasoning-chars: 500000                   # Max persisted reasoning length per run (characters)
+      turn-timeout: 660s                           # Single LLM turn timeout; must be greater than llm.stream-timeout
+      llm-turn-max-retries: 3                      # Per-turn LLM retry count on failure (not cancellation), exponential backoff 1s→2s→4s
+      # Graded backoff for transient LLM failures (connect timeout / 5xx / 429): the first N rungs retry in place, the rest suspend (WAITING)
+      # and are later woken by the wait scheduler to re-run the same turn, using no execution resources.
+      # Sawtooth design: 1,3,10,15,20 then back to 1,3,15,20; 25 rungs in total (about 244s cumulative).
       llm-retry-ladder:
         - 1s
         - 3s
@@ -288,29 +288,29 @@ buukle:
         - 3s
         - 15s
         - 20s
-      llm-retry-inline-rungs: 2                    # 前几档就地 sleep，之后挂起 / Inline rung count before suspending
-      llm-retry-jitter: 0.2                        # 挂起档抖动 ±20%，避免多 run 同时唤醒 / Jitter for suspended rungs
-      llm-retry-max-total: 5m                      # 从第一次失败起的总重试窗口 / Total retry window
-      max-screenshots-per-run: 20                  # 单 run 浏览器截图观察注入上限（防烧 token） / Max screenshot observations per run
-      live-tool-result-max-chars: 4000              # live 非浏览器工具结果单条压缩上限 / Live non-browser per-message cap
-      live-tool-result-budget-chars: 50000          # live 非浏览器工具结果总预算 / Live non-browser tool result budget
-      live-tool-result-keep-recent: 2               # 非浏览器结果始终保留的最近条数 / Recent non-browser results kept
-      live-browser-full-max-chars: 20000            # 浏览器单条结果保留全文的上限；超过才转 callId 引用 / Browser result full-text cap
+      llm-retry-inline-rungs: 2                    # Inline rung count before suspending
+      llm-retry-jitter: 0.2                        # Jitter (±20%) for suspended rungs so runs are not woken at the same time
+      llm-retry-max-total: 5m                      # Total retry window from the first failure
+      max-screenshots-per-run: 20                  # Max browser screenshot observations injected per run (to avoid burning tokens)
+      live-tool-result-max-chars: 4000              # Per-message cap for live non-browser tool results
+      live-tool-result-budget-chars: 50000          # Total budget for live non-browser tool results
+      live-tool-result-keep-recent: 2               # Recent non-browser results always kept
+      live-browser-full-max-chars: 20000            # Full-text cap for a single browser result; larger results become callId references
       compaction:
-        budget-ratio: 0.85                          # 压缩触发阈值（占 maxInputTokens 比例）/ Compaction trigger ratio
-        target-ratio: 0.25                          # 压缩后目标（含 tools/fixed）/ Post-compaction target
-        adaptive-target-enabled: true               # 固定开销+tail 放不下 target 时自动抬高 / Adaptive target
-        min-tail-tokens: 2000                       # 自适应 target 至少为 tail 保留的 token / Min tail reserve
-        input-ratio: 0.35                           # 压缩输入预算比例 / Compaction input ratio
-        tail-ratio: 0.25                            # run-local tail 预算比例 / Run-local tail ratio
-        summary-max-tokens: 10000                   # 摘要绝对上限（tokens） / Summary absolute cap
-        summary-compress-rounds: 3                  # 超限时最多再压缩轮数 / Max summary re-compression rounds
-        summary-max-ratio: 0.12                     # 摘要上限占 maxInput 比例 / Summary cap ratio
-        cooldown-turns: 4                           # 压缩冷却轮数 / Compaction cooldown turns
-        max-per-run: 12                             # 单 run 压缩次数上限 / Max compactions per run
-        # 按上下文档位只定义「何时压缩」；输出上限由模型路由 / 实例配置决定。
-        # trigger = maxInput - max(512, 5%) - 8000，保证触发点仍有 8k 输出空间。
-        # 档位之间线性插值，超出最后一档按最后一档比例外推。
+        budget-ratio: 0.85                          # Compaction trigger ratio (fraction of maxInputTokens)
+        target-ratio: 0.25                          # Post-compaction target (including tools/fixed overhead)
+        adaptive-target-enabled: true               # Raise the target automatically when fixed overhead + tail cannot fit
+        min-tail-tokens: 2000                       # Minimum tokens the adaptive target reserves for the tail
+        input-ratio: 0.35                           # Compaction input budget ratio
+        tail-ratio: 0.25                            # Run-local tail budget ratio
+        summary-max-tokens: 10000                   # Summary absolute cap (tokens)
+        summary-compress-rounds: 3                  # Max summary re-compression rounds when over the cap
+        summary-max-ratio: 0.12                     # Summary cap as a fraction of maxInput
+        cooldown-turns: 4                           # Compaction cooldown turns
+        max-per-run: 12                             # Max compactions per run
+        # Context tiers only define "when to compact"; the output cap comes from the model route / instance config.
+        # trigger = maxInput - max(512, 5%) - 8000, leaving 8k of output headroom at the trigger point.
+        # Linear interpolation between tiers; beyond the last tier, extrapolate using its ratio.
         tiers:
           - max-input-tokens: 32000
             trigger-tokens: 22400
@@ -326,142 +326,142 @@ buukle:
             trigger-tokens: 942000
 
     # ============================================================
-    # 工具执行配置 / Tool Config
+    # Tool Config
     # ============================================================
     tool:
-      max-parallel: 3                              # 工具最大并行数 / Max parallel tool executions
-      submit-timeout: 30s                          # 工具提交超时 / Tool submit timeout
-      execution-timeout: 60s                       # 工具执行超时 / Tool execution timeout
-      cli-timeout: 30s                             # CLI 工具超时 / CLI tool timeout
-      call-reason-enabled: true                    # 注入工具调用理由 _reason / Inject tool call reason
+      max-parallel: 3                              # Max parallel tool executions
+      submit-timeout: 30s                          # Tool submit timeout
+      execution-timeout: 60s                       # Tool execution timeout
+      cli-timeout: 30s                             # CLI tool timeout
+      call-reason-enabled: true                    # Inject the tool call reason as _reason
 
-      # 以下 web-read / web-fetch / web-read-advanced / web-fetch-advanced / js-render
-      # 绑定到 ToolConfig.webRead 等字段。此前它们被误缩进到 wait: 之下，而 wait 没有对应的
-      # @ConfigurationProperties 目标，导致这些键被静默忽略、代码一直走类内默认值（两者恰好相同，
-      # 所以没有暴露）。改这里的值时务必确认它在 tool: 之下。
-      # ---- 网页读取工具 / Web Read Tool ----
+      # The web-read / web-fetch / web-read-advanced / web-fetch-advanced / js-render blocks below
+      # bind to fields such as ToolConfig.webRead. They were once mis-indented under wait:, which has no
+      # matching @ConfigurationProperties target, so the keys were silently ignored and the code used
+      # the in-class defaults — identical then, so nothing surfaced. When changing values here, confirm they are under tool:.
+      # ---- Web Read Tool ----
       web-read:
-        connect-timeout: 10s                       # 连接超时 / Connect timeout
-        read-timeout: 30s                          # 读取超时 / Read timeout
+        connect-timeout: 10s                       # Connect timeout
+        read-timeout: 30s                          # Read timeout
       web-fetch:
-        connect-timeout: 10s                       # 连接超时 / Connect timeout
-        read-timeout: 30s                          # 读取超时 / Read timeout
+        connect-timeout: 10s                       # Connect timeout
+        read-timeout: 30s                          # Read timeout
 
-      # ---- Jina AI 高级网页读取 / Jina AI Advanced Web Read ----
+      # ---- Jina AI Advanced Web Read ----
       web-read-advanced:
-        use-jina-fallback: true                     # 启用 Jina Reader 降级 / Enable Jina Reader fallback
-        jina-reader-url: "https://r.jina.ai/"      # Jina Reader 服务地址 / Jina Reader service URL
+        use-jina-fallback: true                     # Enable Jina Reader fallback
+        jina-reader-url: "https://r.jina.ai/"      # Jina Reader service URL
         jina-api-key: ""
-        jina-engine: "direct"                      # Jina 引擎模式（direct/browser）/ Jina engine mode
-        jina-connect-timeout: 30                   # Jina 连接超时（秒）/ Jina connect timeout (s)
-        jina-read-timeout: 30                      # Jina 读取超时（秒）/ Jina read timeout (s)
-        jina-timeout-buffer: 10                    # Jina 超时缓冲（秒）/ Jina timeout buffer (s)
+        jina-engine: "direct"                      # Jina engine mode (direct/browser)
+        jina-connect-timeout: 30                   # Jina connect timeout (s)
+        jina-read-timeout: 30                      # Jina read timeout (s)
+        jina-timeout-buffer: 10                    # Jina timeout buffer (s)
         html-to-markdown:
-          max-content-length: 2097152              # HTML 转 Markdown 最大长度（字节）/ Max HTML→Markdown length (bytes)
+          max-content-length: 2097152              # Max HTML→Markdown length (bytes)
           exclude-tags: "script,style,noscript,meta,link,header,footer,nav,iframe,embed,object"
 
-      # ---- Web Fetch 高级配置 / Web Fetch Advanced ----
+      # ---- Web Fetch Advanced ----
       web-fetch-advanced:
-        max-retries: 3                             # 最大重试次数 / Max retries
-        retry-backoff-multiplier: 2                # 退避倍率 / Retry backoff multiplier
-        retry-delay-ms: 1000                       # 初始重试延迟（毫秒）/ Initial retry delay (ms)
-        max-redirects: 5                           # 最大重定向次数 / Max redirects
-        max-response-bytes: 5242880                # 最大响应体大小（字节）/ Max response body (bytes)
+        max-retries: 3                             # Max retries
+        retry-backoff-multiplier: 2                # Retry backoff multiplier
+        retry-delay-ms: 1000                       # Initial retry delay (ms)
+        max-redirects: 5                           # Max redirects
+        max-response-bytes: 5242880                # Max response body (bytes)
 
-      # ---- JS 渲染配置 / JS Render Config ----
+      # ---- JS Render Config ----
       js-render:
-        enabled: true                              # 启用 JS 渲染 / Enable JS rendering
-        max-wait-millis: 10000                     # 最大等待时间（毫秒）/ Max wait time (ms)
-        background-js-timeout: 3000                # 后台 JS 超时（毫秒）/ Background JS timeout (ms)
-        max-pool-size: 3                           # 浏览器池最大大小 / Browser pool max size
+        enabled: true                              # Enable JS rendering
+        max-wait-millis: 10000                     # Max wait time (ms)
+        background-js-timeout: 3000                # Background JS timeout (ms)
+        max-pool-size: 3                           # Browser pool max size
 
     # ============================================================
-    # wait 工具（挂起-恢复）/ Wait Tool (suspend-resume)
-    # 仅 wake-cron / reconcile-* 三项（由 @Value / @Scheduled 直接读取，不经 @ConfigurationProperties）
+    # Wait Tool (suspend-resume)
+    # Only the three keys wake-cron / reconcile-* (read directly via @Value / @Scheduled, not through @ConfigurationProperties)
     # ============================================================
     wait:
-      # 唤醒补偿扫描 cron。主路径是每条等待记录一个内存定时器；
-      # 副本重启/发布会让定时器全丢，这一层按 wake_at 兜底（CAS 保证不重复恢复）。
-      wake-cron: "*/10 * * * * ?"                   # 唤醒补偿扫描 / Wait wake compensation sweep
-      # 「卡住 WAITING」对账：扫描超时仍 WAITING 且名下无 PENDING 记录的 run，直接再推进；失败置终态。
-      reconcile-interval: "PT30S"                   # 对账扫描间隔 / Stuck-WAITING reconcile interval
-      reconcile-stale-minutes: 11                   # 判定"卡住"的阈值(分钟，需 > MAX_WAIT_MS=10) / Stale threshold (min)
+      # Wake compensation sweep cron. The main path is one in-memory timer per wait record;
+      # replica restarts/deploys lose every timer, so this layer falls back to wake_at (CAS prevents duplicate resumes).
+      wake-cron: "*/10 * * * * ?"                   # Wait wake compensation sweep
+      # Stuck-WAITING reconcile: find runs still WAITING past the threshold with no PENDING record and push them forward again; set a terminal state on failure.
+      reconcile-interval: "PT30S"                   # Stuck-WAITING reconcile interval
+      reconcile-stale-minutes: 11                   # Stale threshold in minutes (must be > MAX_WAIT_MS=10)
 
     # ============================================================
-    # Controller 日志截断配置 / Controller Log Config
+    # Controller Log Config
     # ============================================================
     controller-log:
-      max-param-length: 200                         # 请求参数日志截断长度 / Request param log truncation
-      max-result-length: 300                        # 响应结果日志截断长度 / Response result log truncation
-      full-prefixes: /api/v1/api                    # 命中这些前缀的请求，参数与结果不打全（不截断），逗号分隔 / Path prefixes logged in full (no truncation), comma separated
+      max-param-length: 200                         # Request param log truncation
+      max-result-length: 300                        # Response result log truncation
+      full-prefixes: /api/v1/api                    # Requests matching these prefixes log params/results in full (no truncation); comma separated
 
     # ============================================================
-    # MCP 协议配置 / MCP Config
+    # MCP Config
     # ============================================================
     mcp:
-      connect-timeout: 30s                         # MCP 连接超时 / MCP connect timeout
-      sse-init-timeout: 30s                        # MCP SSE 初始化超时 / MCP SSE init timeout
-      sse-read-timeout: 30s                        # MCP SSE 读取超时 / MCP SSE read timeout
-      rpc-timeout: 30s                             # MCP RPC 超时 / MCP RPC timeout
-      detection-timeout: 10s                       # MCP 服务发现超时 / MCP service detection timeout
-      direct-read-timeout: 30s                     # MCP 直接读取超时 / MCP direct read timeout
-      direct-connect-timeout: 10s                  # MCP 直接连接超时 / MCP direct connect timeout
+      connect-timeout: 30s                         # MCP connect timeout
+      sse-init-timeout: 30s                        # MCP SSE init timeout
+      sse-read-timeout: 30s                        # MCP SSE read timeout
+      rpc-timeout: 30s                             # MCP RPC timeout
+      detection-timeout: 10s                       # MCP service detection timeout
+      direct-read-timeout: 30s                     # MCP direct read timeout
+      direct-connect-timeout: 10s                  # MCP direct connect timeout
 
     # ============================================================
-    # 分布式锁配置 / Lock Config
+    # Lock Config
     # ============================================================
     # ============================================================
-    # Chrome 扩展配置 / Chrome Extension Config
+    # Chrome Extension Config
     # ============================================================
 
 
     # ============================================================
-    # 加密配置 / Crypto Config
+    # Crypto Config
     # ============================================================
     crypto:
       aes-key: ""
 
     lock:
       capability:
-        wait-time: 5s                              # 获取锁等待超时 / Lock acquire wait timeout
-        lease-time: 10s                            # 锁持有时间 / Lock lease duration
+        wait-time: 5s                              # Lock acquire wait timeout
+        lease-time: 10s                            # Lock lease duration
 
     # ============================================================
-    # 审计日志配置 / Audit Config
+    # Audit Config
     # ============================================================
     audit:
-      frontend-retention-days: 7                    # 前端事件保留天数 / Frontend event retention days
-      backend-retention-days: 90                    # 后端事件保留天数 / Backend event retention days
-      cleanup-cron: "0 0 3 * * ?"                   # 清理定时任务cron / Cleanup cron expression
+      frontend-retention-days: 7                    # Frontend event retention days
+      backend-retention-days: 90                    # Backend event retention days
+      cleanup-cron: "0 0 3 * * ?"                   # Cleanup cron expression
 
     # ============================================================
-    # 多副本分布式运行态 / Distributed runtime
+    # Distributed runtime (multi-replica)
     # ============================================================
     distributed:
-      owner-lease: 5m                              # session 执行者 owner 租约 / Owner lease duration
-      orphan-sweep-interval: 30s                    # 孤儿 run 清扫间隔 / Orphan sweep interval
+      owner-lease: 5m                              # Session executor owner lease
+      orphan-sweep-interval: 30s                    # Orphan run sweep interval
 
     # ============================================================
-    # 卡住 RUNNING 的 run 对账 / Stale RUNNING reconcile
-    # 按 DB updated_at 扫：超时仍 RUNNING 且 session 无 owner（无副本在跑）→ FAILED。
-    # 兜住「循环异常退出未写终态」—— 此时 Redis state 已是 IDLE，orphan-sweep 扫不到。
-    # 阈值必须大于单轮最坏耗时（LLM 4 次重试 + 压缩调用），默认 30m。
+    # Stale RUNNING reconcile
+    # Scan by DB updated_at: still RUNNING past the threshold and the session has no owner (no replica running) → FAILED.
+    # Catches "loop exited abnormally without writing a terminal state" — Redis state is already IDLE then, so orphan-sweep cannot see it.
+    # The threshold must exceed the worst-case single turn (4 LLM retries + a compaction call); default 30m.
     # ============================================================
     run:
-      stale-reconcile-minutes: 30                  # 判定卡住的门槛（分钟）/ Stale threshold in minutes
-      stale-reconcile-interval: PT1M               # 对账间隔 / Reconcile interval
+      stale-reconcile-minutes: 30                  # Stale threshold in minutes
+      stale-reconcile-interval: PT1M               # Reconcile interval
 
 # ============================================================
-# 能力开放层配置 / Capability Open Platform
+# Capability Open Platform
 # ============================================================
 hri-ai:
   completions:
-    call-timeout: 60s                              # 单次 completions 调用超时 / Completions call timeout
+    call-timeout: 60s                              # Completions call timeout
   tasks:
-    poll-interval: 2s                              # task 状态轮询间隔 / Task poll interval
-    max-poll-seconds: 3600                         # 业务方未指定时的兜底秒数 / Fallback when caller omits
-    min-timeout-seconds: 10800                     # 超时下限(3h)：业务方显式传值低于此数时抬到下限 / Timeout floor
-                                                 # 业务方普遍传 3600 且已落库，改 max-poll-seconds 无效；实测最大耗时 9818s it
+    poll-interval: 2s                              # Task poll interval
+    max-poll-seconds: 3600                         # Fallback seconds when the caller does not specify
+    min-timeout-seconds: 10800                     # Timeout floor (3h): explicit caller values below this are raised to the floor
+                                                 # Callers typically pass 3600 and it is already persisted, so changing max-poll-seconds has no effect; observed max duration 9818s
     callback:
-      max-attempts: 3                              # 终态回调最大尝试次数 / Task callback max attempts
-      initial-delay: 2s                            # 回调退避初始间隔 / Task callback retry initial delay
+      max-attempts: 3                              # Max terminal-state callback attempts
+      initial-delay: 2s                            # Task callback retry initial delay

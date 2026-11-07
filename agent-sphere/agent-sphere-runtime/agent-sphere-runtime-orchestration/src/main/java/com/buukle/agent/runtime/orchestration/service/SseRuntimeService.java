@@ -25,7 +25,7 @@ public class SseRuntimeService {
         return sseManager.register(sessionId);
     }
 
-    /** 用户级 task 指令流（浏览器插件永久连接，不依赖 session）。 */
+    /** User-level task command stream (persistent browser extension connection, independent of any session). */
     public SseEmitter streamUser(String deviceId, String deviceName) {
         String username = AuthContext.getUsername();
         if (username == null || username.isBlank()) {
@@ -34,7 +34,7 @@ public class SseRuntimeService {
         return sseManager.registerUser(username, deviceId, deviceName, resolveSource(AuthContext.getToken()));
     }
 
-    /** 连接的来源端（CONSOLE/WIDGET）：用于设备列表展示，按 token hash 反查。 */
+    /** Connection source surface (CONSOLE/WIDGET): shown in the device list, looked up by token hash. */
     private String resolveSource(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
             return null;

@@ -1,6 +1,6 @@
 package com.buukle.agent.common.constant;
 
-/** 单次 run 的执行模式；默认写模式。 */
+/** Execution mode of a single run; write mode by default. */
 public enum RunMode {
     WRITE,
     READ_ONLY;

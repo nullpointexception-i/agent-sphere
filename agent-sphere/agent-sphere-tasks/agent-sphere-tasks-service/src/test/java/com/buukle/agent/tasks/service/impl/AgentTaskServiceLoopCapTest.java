@@ -39,16 +39,18 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * loop cap 任务守卫的回归护栏。
+ * Regression guard for the loop-cap task check.
  *
- * <p>线上 task 362 / 360：run 其实是 COMPLETED，且都产出了 1300+ 字符的合规结构化结果
- * （run 1575 甚至是 {@code status=empty / stopReason=POOL_EXHAUSTED} 的完整结论），
- * 却因 {@code loopCapped=true} 被一票否决，业务方只收到一句
- * {@code {"error":"run loop limit reached"}}，模型写的东西全被丢弃。
+ * <p>Production tasks 362 / 360: the runs were actually COMPLETED and both produced 1300+ characters of
+ * schema-conformant structured output (run 1575 was even a complete conclusion with
+ * {@code status=empty / stopReason=POOL_EXHAUSTED}), yet were vetoed because of {@code loopCapped=true};
+ * the caller received only {@code {"error":"run loop limit reached"}} and everything the model wrote was
+ * discarded.
  *
- * <p>根因：{@code loopCapped} 在 SessionRunner 的 COMPLETE 分支也被置位，把「恰好在最后一轮
- * 正常收工」误判成「被截断出半成品」。现在 COMPLETE 分支不再置位，守卫只对真截断生效 ——
- * 但真截断时<b>仍必须</b>把 run 的产出带回去，否则业务方依然看不到现场。
+ * <p>Root cause: {@code loopCapped} was also set in SessionRunner's COMPLETE branch, misjudging "finished
+ * normally in the last round" as "truncated into a partial result". The COMPLETE branch no longer sets it,
+ * so the guard only applies to real truncation — but on real truncation it <b>must still</b> carry the
+ * run's output back, otherwise the caller still cannot see what happened.
  */
 @ExtendWith(MockitoExtension.class)
 class AgentTaskServiceLoopCapTest {
@@ -86,8 +88,8 @@ class AgentTaskServiceLoopCapTest {
 
     @BeforeAll
     static void initMybatisLambdaCache() {
-        // LambdaUpdateWrapper 靠 TableInfo 解析列名；纯 Mockito 环境没有 MyBatis 启动过程，
-        // 不预热就会抛 "can not find lambda cache"。
+        // LambdaUpdateWrapper resolves column names via TableInfo; a pure Mockito environment has no MyBatis
+        // startup, so without pre-warming it throws "can not find lambda cache".
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), "fixture"), AgentTask.class);
     }
@@ -132,7 +134,7 @@ class AgentTaskServiceLoopCapTest {
 
         assertTrue(invokeHandleCompletedPhase(task, "execute", RUN_ID, run));
 
-        // 终态快照经回调发给业务方，从这里断言它拿到的内容
+        // The terminal snapshot is sent to the caller via the callback; assert what it receives here
         ArgumentCaptor<AgentTask> cap = ArgumentCaptor.forClass(AgentTask.class);
         verify(taskMapper).update(any(), any());
         verify(taskCallbackService).notifyTerminal(cap.capture());
@@ -154,17 +156,17 @@ class AgentTaskServiceLoopCapTest {
 
         invokeHandleCompletedPhase(task, "execute", RUN_ID, completedRun(true));
 
-        // 真截断仍不进入结构化提炼（这是守卫存在的意义）——不发起 extract 轮
+        // Real truncation still does not enter structured extraction (that is the point of the guard) — no extract round is started
         verify(chatRuntimeService, never()).chat(anyLong(), any());
         verify(taskMapper, never()).updateById(any(AgentTask.class));
     }
 
     @Test
     void notLoopCappedRun_proceedsToExtraction() throws Exception {
-        // 改动后的关键分支：模型在最后一轮主动交付答案（loopCapped=false）时，
-        // 必须正常进入结构化提炼，而不是被一票否决
+        // The key branch after the change: when the model delivers an answer in the last round (loopCapped=false),
+        // it must proceed to structured extraction normally instead of being vetoed
         AgentTask task = runningTask();
-        // fireFollowUpRun 会读 runner.taskMaxLoopCount；mock 默认返回 null 会 NPE 提前跳出
+        // fireFollowUpRun reads runner.taskMaxLoopCount; a mock returning null by default would NPE and exit early
         when(runtimeProperties.getRunner()).thenReturn(new AgentRuntimeProperties.RunnerConfig());
         ChatMessageResponseVO resp = new ChatMessageResponseVO();
         resp.setRunId(999L);

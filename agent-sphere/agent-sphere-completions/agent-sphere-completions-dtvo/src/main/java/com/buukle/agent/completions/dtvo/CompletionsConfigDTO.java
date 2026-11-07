@@ -7,8 +7,8 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * agent_completions.config 支持的请求参数（与 ChatCompletionRequestDTO 对齐）。
- * 未知字段忽略；未设置的字段保持 null。
+ * Request parameters supported by agent_completions.config (aligned with ChatCompletionRequestDTO).
+ * Unknown fields are ignored; unset fields stay null.
  */
 @Data
 public class CompletionsConfigDTO implements Serializable {
@@ -22,7 +22,7 @@ public class CompletionsConfigDTO implements Serializable {
     @JsonProperty("frequency_penalty")
     private Double frequencyPenalty;
     private List<String> stop;
-    /** 思考开关：支持布尔（false/true）或字符串（"disabled"/"enabled"），Jackson 布尔会强转成 "false"/"true" */
+    /** Thinking switch: accepts a boolean (false/true) or a string ("disabled"/"enabled"); Jackson coerces booleans to "false"/"true". */
     private String thinking;
     private String reasoning;
 }

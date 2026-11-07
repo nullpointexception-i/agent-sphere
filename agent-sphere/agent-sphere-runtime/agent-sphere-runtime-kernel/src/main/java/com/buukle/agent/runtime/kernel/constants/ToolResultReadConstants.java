@@ -1,6 +1,6 @@
 package com.buukle.agent.runtime.kernel.constants;
 
-/** read_tool_result：按 callId 分页回读被上下文预算省略的历史工具结果。 */
+/** read_tool_result: page back through historical tool results omitted by the context budget, keyed by callId. */
 public final class ToolResultReadConstants {
     public static final String INTERNAL_NAME = "read_tool_result";
     public static final String DISPLAY_NAME = "Read tool result";

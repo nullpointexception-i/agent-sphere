@@ -12,29 +12,32 @@ import org.apache.ibatis.annotations.Update;
 import java.time.LocalDateTime;
 
 /**
- * 会话清理的执行记录读写（{@code agent_session_cleanup_run}）。
+ * Read/write access to session cleanup execution records ({@code agent_session_cleanup_run}).
  *
- * <p>刻意用裸 SQL 而不是 Entity + BaseMapper：
+ * <p>Raw SQL is used deliberately instead of an Entity + BaseMapper:
  * <ul>
- *   <li>{@code table_stats} 是 jsonb，走 MyBatis-Plus 要么塞 {@code String} 被 PG 拒绝
- *       （列类型不匹配），要么依赖 infrastructure 的 {@code JsonbTypeHandler} —— 而
- *       infrastructure 已依赖 instance-service，反向引用会成环；</li>
- *   <li>本表只在清理任务里用，字段少，不需要 MP 的 CRUD 能力。</li>
+ *   <li>{@code table_stats} is jsonb; going through MyBatis-Plus either sends a {@code String} that
+ *       PG rejects (column type mismatch), or depends on infrastructure's {@code JsonbTypeHandler} —
+ *       and infrastructure already depends on instance-service, so the reverse reference would form a cycle;</li>
+ *   <li>this table is only used by the cleanup task, has few fields, and does not need MP CRUD.</li>
  * </ul>
- * 写入用 {@code CAST(#{x} AS jsonb)}，读取用 {@code CAST(table_stats AS text)}。
+ * Writes use {@code CAST(#{x} AS jsonb)}, reads use {@code CAST(table_stats AS text)}.
  *
- * <p>记录本身也参与清理（{@link #deleteOlderThan}），由 {@code session.cleanup-log-retention-days} 驱动。
+ * <p>The records themselves are cleaned up too ({@link #deleteOlderThan}), driven by
+ * {@code session.cleanup-log-retention-days}.
  */
 @Mapper
 public interface SessionCleanupRunMapper {
 
     /**
-     * 开一条 RUNNING 记录。
+     * Open a RUNNING record.
      *
-     * <p>用 {@code INSERT … RETURNING id} 而不是 generated keys：单参数 {@code @Insert} 拿不到自增主键。
+     * <p>Uses {@code INSERT … RETURNING id} rather than generated keys: a single-parameter
+     * {@code @Insert} cannot retrieve the auto-increment primary key.
      *
-     * <p><b>必须在抢清理锁之前调用</b>——「锁被占用」「急停开关关闭」这两种什么都没做的情况
-     * 也要留痕，否则事后无法解释「为什么昨晚磁盘没降下来」。
+     * <p><b>Must be called before taking the cleanup lock</b> — the two "did nothing" cases,
+     * "lock is held" and "kill switch off", must also leave a trace; otherwise nobody can explain
+     * afterwards why the disk did not shrink last night.
      */
     @Select("""
             INSERT INTO agent_session_cleanup_run (trigger_type, dry_run, status, created_by, updated_by)
@@ -46,7 +49,7 @@ public interface SessionCleanupRunMapper {
                        @Param("statusRunning") String statusRunning,
                        @Param("createdBy") String createdBy);
 
-    /** 落 SUCCESS：回填口径、命中量、耗时与各表明细。 */
+    /** Mark SUCCESS: backfill the parameters used, hit counts, elapsed time and per-table details. */
     @Update("""
             UPDATE agent_session_cleanup_run
             SET status = #{statusSuccess}, retention_days = #{retentionDays}, file_retention_days = #{fileRetentionDays},
@@ -77,10 +80,10 @@ public interface SessionCleanupRunMapper {
                     @Param("updatedBy") String updatedBy);
 
     /**
-     * 渐进式进度：每处理完一批就更新一次，让前端进度条能动起来。
+     * Incremental progress: update once after each batch so the frontend progress bar can move.
      *
-     * <p>不写 {@code finished_at}，也不改 {@code status} —— 记录仍在 RUNNING。
-     * 单轮最多 50 次（cleanup-max-batches），开销可忽略。
+     * <p>Does not write {@code finished_at} and does not change {@code status} — the record is still
+     * RUNNING. At most 50 times per round (cleanup-max-batches), so the overhead is negligible.
      */
     @Update("""
             UPDATE agent_session_cleanup_run
@@ -102,7 +105,7 @@ public interface SessionCleanupRunMapper {
                      @Param("tableStatsJson") String tableStatsJson,
                      @Param("updatedBy") String updatedBy);
 
-    /** 轮询用：取单条记录（含进度字段）。 */
+    /** For polling: fetch a single record (including the progress fields). */
     @Select("""
             <script>
             SELECT id, trigger_type, dry_run, status, retention_days, file_retention_days,
@@ -118,7 +121,7 @@ public interface SessionCleanupRunMapper {
     SessionCleanupRunRowVO getRun(@Param("id") Long id,
                                   @Param("staleBefore") LocalDateTime staleBefore);
 
-    /** 落 SKIPPED：锁被占用或急停开关关闭，什么都没删。 */
+    /** Mark SKIPPED: the lock was held or the kill switch was off, so nothing was deleted. */
     @Update("""
             UPDATE agent_session_cleanup_run
             SET status = #{statusSkipped}, skip_reason = #{skipReason},
@@ -132,7 +135,7 @@ public interface SessionCleanupRunMapper {
                     @Param("elapsedMs") long elapsedMs,
                     @Param("updatedBy") String updatedBy);
 
-    /** 落 FAILED：记录异常摘要；清理异常照常向上抛，不在这里吞掉。 */
+    /** Mark FAILED: record the exception summary; the cleanup exception is still propagated and is not swallowed here. */
     @Update("""
             UPDATE agent_session_cleanup_run
             SET status = #{statusFailed}, error_message = #{errorMessage},
@@ -146,7 +149,7 @@ public interface SessionCleanupRunMapper {
                    @Param("elapsedMs") long elapsedMs,
                    @Param("updatedBy") String updatedBy);
 
-    /** 执行记录分页（默认按开始时间倒序）。{@code staleBefore} 决定何时算「疑似中断」。 */
+    /** Execution record paging (descending by start time by default). {@code staleBefore} decides when a record counts as "suspected interruption". */
     @Select("""
             <script>
             SELECT id, trigger_type, dry_run, status, retention_days, file_retention_days,
@@ -170,14 +173,14 @@ public interface SessionCleanupRunMapper {
                                            @Param("dryRun") Boolean dryRun,
                                            @Param("staleBefore") LocalDateTime staleBefore);
 
-    /** 记录表自身的保留策略：删掉过期记录，避免清理机制自己变成新垃圾。 */
+    /** Retention policy for the record table itself: delete expired records so the cleanup mechanism does not become new garbage. */
     @Delete("""
             DELETE FROM agent_session_cleanup_run
             WHERE created_at < #{cutoff} AND id <> #{keepId}
             """)
     int deleteOlderThan(@Param("cutoff") LocalDateTime cutoff, @Param("keepId") Long keepId);
 
-    /** dry-run 用：只数不删。 */
+    /** dry-run only: count, do not delete. */
     @Select("""
             SELECT count(*) FROM agent_session_cleanup_run
             WHERE created_at < #{cutoff} AND id <> #{keepId}

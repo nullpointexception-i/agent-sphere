@@ -1,4 +1,6 @@
+import { PERM } from '@/constants/permissions';
 import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
+import { useIntl } from '@umijs/max';
 import {
   Badge,
   Button,
@@ -39,6 +41,7 @@ export function ConversationList({
   onCreate,
   labels,
 }: Props) {
+  const intl = useIntl();
   return (
     <div
       style={{
@@ -55,7 +58,7 @@ export function ConversationList({
         }}
       >
         <Typography.Text strong>{labels.conversations}</Typography.Text>
-        <Can code="im:conversation:create">
+        <Can code={PERM.imConversationCreate}>
           <Button
             size="small"
             type="primary"
@@ -102,10 +105,22 @@ export function ConversationList({
                           {conversation.type === 'GROUP'
                             ? conversation.remark ||
                               conversation.title ||
-                              `群聊 #${conversation.id}`
+                              intl.formatMessage(
+                                {
+                                  id: 'pages.im.groupWithId',
+                                  defaultMessage: 'Group #{id}',
+                                },
+                                { id: conversation.id },
+                              )
                             : conversation.displayName ||
                               conversation.title ||
-                              `单聊 #${conversation.id}`}
+                              intl.formatMessage(
+                                {
+                                  id: 'pages.im.dmWithId',
+                                  defaultMessage: 'Direct chat #{id}',
+                                },
+                                { id: conversation.id },
+                              )}
                         </span>
                         <Tag>{conversation.type}</Tag>
                         <Badge count={conversation.unread ?? 0} size="small" />
@@ -126,7 +141,10 @@ export function ConversationList({
                 onClick={onLoadMore}
                 style={{ marginTop: 8 }}
               >
-                加载更多
+                {intl.formatMessage({
+                  id: 'pages.im.loadMore',
+                  defaultMessage: 'Load more',
+                })}
               </Button>
             ) : null}
           </>

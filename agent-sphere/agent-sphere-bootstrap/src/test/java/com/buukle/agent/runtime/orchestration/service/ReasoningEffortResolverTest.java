@@ -17,9 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 思考强度解析：配置优先级 + 动态默认档 + Qwen 思考预算。
+ * Reasoning-effort resolution: config priority + dynamic default level + Qwen thinking budget.
  *
- * <p>厂商支持范围在 application.yml 提供；这里按同一份默认值装配，避免测试依赖 Spring 绑定。
+ * <p>Provider support ranges live in application.yml; this assembles the same defaults to avoid depending on Spring binding.
  */
 class ReasoningEffortResolverTest {
 
@@ -71,7 +71,7 @@ class ReasoningEffortResolverTest {
 
     @Test
     void dynamicDefault_picksHighestFeasibleLevel() {
-        // 16000 输出上限：正文保留 4000；deepseek 支持 [low, high, max]，high/max 都不可行。
+        // 16000 output cap: reserve 4000 for the answer; deepseek supports [low, high, max], and neither high nor max is feasible.
         ReasoningEffortResolver.Resolved resolved =
                 resolver.resolve(route("deepseek"), null, 16000, null);
 
@@ -105,7 +105,7 @@ class ReasoningEffortResolverTest {
 
     @Test
     void defaultIsCappedAtHighEvenWhenMaxIsFeasible() {
-        // route 4：384k 名义输出，max 也可行；自动默认仍封顶 high。
+        // route 4: 384k nominal output, max is feasible too; the automatic default still caps at high.
         ReasoningEffortResolver.Resolved resolved =
                 resolver.resolve(route("deepseek"), null, 384_000, null);
 
@@ -163,7 +163,7 @@ class ReasoningEffortResolverTest {
 
     @Test
     void providerConfigJson_overridesYamlThresholds() {
-        // 把 high 的阈值降到 8000，16000 上限下 high 就可行了。
+        // Lower the high threshold to 8000; with a 16000 cap, high becomes feasible.
         String providerConfig = "{\"reasoning\":{\"levelOverrides\":{\"high\":8000}}}";
 
         ReasoningEffortResolver.Resolved resolved =
@@ -188,7 +188,7 @@ class ReasoningEffortResolverTest {
 
     @Test
     void qwenLevel_mapsToThinkingBudgetWithinOutputLimit() {
-        // 24000 输出上限：high 可行（16384 + 6000 ≤ 24000），预算 = 档位阈值 16384。
+        // 24000 output cap: high is feasible (16384 + 6000 ≤ 24000); budget = the level threshold 16384.
         ReasoningEffortResolver.Resolved resolved =
                 resolver.resolve(route("qwen"), null, 24_000, "high");
 
@@ -199,7 +199,7 @@ class ReasoningEffortResolverTest {
 
     @Test
     void infeasibleHigh_downgradesPerTurnAndShrinksQwenBudget() {
-        // 16000 输出上限：high 不可行 → 本轮降到 medium，预算取 medium 阈值 8192。
+        // 16000 output cap: high is infeasible → this turn drops to medium, with budget = medium threshold 8192.
         ReasoningEffortResolver.Resolved resolved =
                 resolver.resolve(route("qwen"), null, 16_000, "high");
 

@@ -1,12 +1,12 @@
 /**
- * 用量显示（自 UmiJS 主站 Usage.tsx 移植，去除 antd）。
- * 千分位缩写 + 缓存命中率 + 悬浮明细（用 title 属性代替 Tooltip）。
+ * Usage display (ported from the main site's UmiJS Usage.tsx, with antd removed).
+ * Thousands abbreviation + cache hit rate + hover details (title attribute instead of Tooltip).
  */
 import type { UsageData } from '../types';
 
 export type { UsageData };
 
-/** 千分位缩写：1234 → 1.2k；不足千显示原文。 */
+/** Thousands abbreviation: 1234 -> 1.2k; below one thousand shows the original value. */
 export function formatTokens(n?: number | null): string {
   if (n == null) return '-';
   if (n >= 1000) {
@@ -16,7 +16,7 @@ export function formatTokens(n?: number | null): string {
   return String(n);
 }
 
-/** 缓存命中率(%)：hit / (hit+miss)；无基数返回 null。 */
+/** Cache hit rate (%): hit / (hit+miss); returns null when there is no denominator. */
 export function cacheHitRate(u?: UsageData): number | null {
   if (!u) return null;
   const hit = u.cacheHitTokens || 0;
@@ -26,7 +26,7 @@ export function cacheHitRate(u?: UsageData): number | null {
   return Math.round((hit * 1000) / denom) / 10;
 }
 
-/** 用量小标；无用量时不渲染。 */
+/** Usage badge; renders nothing when there is no usage. */
 export default function UsageChip({ usage }: { usage?: UsageData }) {
   if (!usage || !usage.totalTokens) return null;
   const rate = cacheHitRate(usage);

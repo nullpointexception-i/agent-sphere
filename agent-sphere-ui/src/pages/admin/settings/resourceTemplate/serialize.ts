@@ -6,7 +6,7 @@ import {
   TYPE_SCHEMAS,
 } from './types';
 
-/** 将配置文本解析为模板项数组（空串视为空模板）。解析失败抛 Error。 */
+/** Parse configuration text into a template item array (empty string means an empty template). Throws Error on parse failure. */
 export function parseTemplate(text: string): TemplateItem[] {
   const trimmed = (text ?? '').trim();
   if (!trimmed) return [];
@@ -14,29 +14,29 @@ export function parseTemplate(text: string): TemplateItem[] {
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    throw new Error('JSON 解析失败');
+    throw new Error('Failed to parse JSON');
   }
   if (!Array.isArray(parsed)) {
-    throw new Error('配置值必须是 JSON 数组');
+    throw new Error('Configuration must be a JSON array');
   }
   return parsed
     .filter((item) => item && typeof item === 'object')
     .map((item) => ({ ...(item as object) })) as TemplateItem[];
 }
 
-/** 将模板项数组序列化为格式化 JSON 文本。 */
+/** Serialize a template item array into formatted JSON text. */
 export function stringifyTemplate(items: TemplateItem[]): string {
   return JSON.stringify(items, null, 2);
 }
 
-/** 项的主名称字段值（api_key 用 alias、document 用 title 等）。 */
+/** Value of the item's primary name field (api_key uses alias, document uses title, etc.). */
 export function itemName(item: TemplateItem): string {
   const field = TYPE_NAME_FIELD[item.type];
   const value = field ? item[field] : undefined;
   return typeof value === 'string' ? value : '';
 }
 
-/** 类型聚合统计，用于列表展示。 */
+/** Aggregated counts per type, used for list display. */
 export function summarizeItems(items: TemplateItem[]): {
   type: string;
   count: number;
@@ -48,7 +48,7 @@ export function summarizeItems(items: TemplateItem[]): {
   return Array.from(map.entries()).map(([type, count]) => ({ type, count }));
 }
 
-/** 模板内已有的 provider 名 / route 名（供下拉引用）。 */
+/** Existing provider names / route names in the template (for dropdown references). */
 export function providerNames(items: TemplateItem[]): string[] {
   return namesOf(items, 'model_provider', 'name');
 }
@@ -73,20 +73,20 @@ export interface ItemIssue {
   message: string;
 }
 
-/** 收集模板级问题（未知类型 / 主名称缺失 / provider·route 悬空引用）。 */
+/** Collect template-level issues (unknown type / missing primary name / dangling provider or route reference). */
 export function collectIssues(items: TemplateItem[]): ItemIssue[] {
   const issues: ItemIssue[] = [];
   const providers = providerNames(items);
   const routes = routeNames(items);
   items.forEach((item) => {
     if (!TEMPLATE_TYPES.includes(item.type as TemplateItemType)) {
-      issues.push({ item, message: `未知类型: ${item.type}` });
+      issues.push({ item, message: `Unknown type: ${item.type}` });
       return;
     }
     if (!itemName(item)) {
       issues.push({
         item,
-        message: `缺少名称字段(${TYPE_NAME_FIELD[item.type]})`,
+        message: `Missing name field (${TYPE_NAME_FIELD[item.type]})`,
       });
     }
     const provider = item.provider;
@@ -95,17 +95,23 @@ export function collectIssues(items: TemplateItem[]): ItemIssue[] {
       provider &&
       !providers.includes(provider)
     ) {
-      issues.push({ item, message: `引用的模型供应商不存在: ${provider}` });
+      issues.push({
+        item,
+        message: `Referenced model provider does not exist: ${provider}`,
+      });
     }
     const route = item.route;
     if (typeof route === 'string' && route && !routes.includes(route)) {
-      issues.push({ item, message: `引用的模型路由不存在: ${route}` });
+      issues.push({
+        item,
+        message: `Referenced model route does not exist: ${route}`,
+      });
     }
   });
   return issues;
 }
 
-/** 将表单 values 规整为模板项（剔除空字符串；数字/布尔原样保留）。 */
+/** Normalize form values into a template item (drop empty strings; keep numbers/booleans as is). */
 export function normalizeItem(
   type: string,
   values: Record<string, unknown>,

@@ -2,7 +2,7 @@ package com.buukle.agent.channel.spi;
 
 import java.io.Serializable;
 
-/** 事件入库结果。 */
+/** Result of persisting an event. */
 public record IngestResult(boolean accepted, Long eventId, Long threadId, boolean duplicate)
         implements Serializable {
 

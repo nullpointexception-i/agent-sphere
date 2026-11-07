@@ -14,8 +14,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 任务契约校验：用 expectedOutput JSON Schema 校验提炼阶段输出的结构化 JSON。
- * 基于 com.networknt:json-schema-validator（draft 2020-12，与契约 schema 版本一致）。
+ * Task contract validation: validates the structured JSON produced by the extraction phase against
+ * the expectedOutput JSON Schema.
+ * Based on com.networknt:json-schema-validator (draft 2020-12, matching the contract schema version).
  */
 @Slf4j
 @Component
@@ -25,9 +26,9 @@ public class TaskContractValidator {
             JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 
     /**
-     * 校验 content 是否符合 schema。
+     * Validates content against the schema.
      *
-     * @return 校验错误列表；为空表示通过
+     * @return list of validation errors; empty means it passed
      */
     public List<String> validate(String schemaJson, String contentJson) {
         if (schemaJson == null || schemaJson.isBlank()) {
@@ -41,11 +42,11 @@ public class TaskContractValidator {
             return errors.stream().map(ValidationMessage::getMessage).toList();
         } catch (Exception e) {
             log.warn("Task contract validation failed to run: {}", e.getMessage());
-            return List.of("校验执行失败: " + e.getMessage());
+            return List.of("Validation execution failed: " + e.getMessage());
         }
     }
 
-    /** 是否通过。 */
+    /** Whether it passes. */
     public boolean isValid(String schemaJson, String contentJson) {
         return validate(schemaJson, contentJson).isEmpty();
     }

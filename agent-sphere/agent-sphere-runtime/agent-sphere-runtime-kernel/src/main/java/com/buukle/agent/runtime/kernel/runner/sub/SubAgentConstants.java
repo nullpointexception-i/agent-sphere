@@ -1,10 +1,10 @@
 package com.buukle.agent.runtime.kernel.runner.sub;
 
 /**
- * 统一 delegate 子 Agent 机制的常量（工具名、capabilityType、执行模式、入参 schema、输出契约）。
+ * Constants for the unified delegate sub-agent mechanism (tool name, capabilityType, execution mode, input schema, output contract).
  *
- * <p>lane 输出契约（{@code delegate-lane/v1}）：子 Agent 的业务字段全部位于顶层，
- * 框架字段全部位于顶层 {@code _meta} 对象内，框架永不读写顶层业务键：
+ * <p>lane output contract ({@code delegate-lane/v1}): all business fields of the sub-agent sit at the top level,
+ * while all framework fields live inside the top-level {@code _meta} object; the framework never reads or writes top-level business keys:
  * <pre>{@code
  * {"<business fields...>": "...",
  *  "_meta": {"contract":"delegate-lane/v1", "status":"OK|ERROR|UNCERTAIN",
@@ -12,56 +12,56 @@ package com.buukle.agent.runtime.kernel.runner.sub;
  *            "errorCategory":"...", "upstream_visible":true, "upstream_raw":"...",
  *            "retryCount":0, "reason":"..."}}
  * }</pre>
- * <p>交付门控只看 {@code _meta.status=="OK"}；无 {@code _meta} 按 UNCERTAIN 处理
- * （严格模式，不兼容“裸业务 JSON 即交付”的旧假设）。
+ * <p>Delivery gating looks only at {@code _meta.status=="OK"}; without {@code _meta} it is treated as UNCERTAIN
+ * (strict mode, incompatible with the old assumption that "bare business JSON means delivered").
  */
 public final class SubAgentConstants {
 
-    /** 唯一执行入口工具名（pseudo-tool）。 */
+    /** Name of the single execution entry tool (pseudo-tool). */
     public static final String DELEGATE_TOOL = "delegate";
-    /** RuntimeTool.capabilityType 标识（区别于 builtin/mcp/cli/skill）。 */
+    /** RuntimeTool.capabilityType marker (distinct from builtin/mcp/cli/skill). */
     public static final String CAPABILITY_TYPE_SUB_AGENT = "sub_agent";
 
-    /** 执行模式：主循环内直接执行（不隔离、不建子 run、不增 depth）。 */
+    /** Execution mode: run directly inside the main loop (no isolation, no sub-run, no depth increase). */
     public static final String MODE_MAIN = "main";
-    /** 执行模式：隔离子 Agent。 */
+    /** Execution mode: isolated sub-agent. */
     public static final String MODE_SUBAGENT = "subagent";
 
-    /** lane 输出契约版本（`_meta.contract`；未知版本判违例，防止静默漂移）。 */
+    /** lane output contract version (`_meta.contract`; an unknown version is a violation, preventing silent drift). */
     public static final String LANE_CONTRACT = "delegate-lane/v1";
-    /** lane 输出顶层的框架命名空间。 */
+    /** Framework namespace at the top level of the lane output. */
     public static final String META_KEY = "_meta";
-    /** 框架失败包裹的关联 key（顶层，便于父级对账）。 */
+    /** Correlation key of a framework failure wrapper (top level, for parent reconciliation). */
     public static final String META_WRAPPER_KEY = "key";
-    /** 框架失败包裹的原文证据（顶层，截断）。 */
+    /** Raw-text evidence of a framework failure wrapper (top level, truncated). */
     public static final String META_WRAPPER_RAW = "raw";
 
-    // ---- 统一聚合信封（单车道与 DAG 同形）----
-    /** 聚合总览节点。 */
+    // ---- Unified aggregation envelope (same shape for single lane and DAG) ----
+    /** Aggregation summary node. */
     public static final String ENV_OVERALL = "overall";
     public static final String ENV_TOTAL = "total";
     public static final String ENV_OK = "ok";
     public static final String ENV_FAILED = "failed";
     public static final String ENV_FAILED_KEYS = "failedKeys";
     public static final String ENV_FENCED_KEYS = "fencedKeys";
-    /** lane 节点字段。 */
+    /** lane node fields. */
     public static final String LANE_RESULT = "result";
     public static final String LANE_META = "meta";
     public static final String LANE_RAW = "raw";
     public static final String LANE_FENCED = "fenced";
     public static final String LANE_DURATION_MS = "durationMs";
     public static final String LANE_RETRY_COUNT = "retryCount";
-    /** 失败阶段归类（区分 未派发/上游搁浅/无输出/工具错误/内容降级），供父级做拓扑级判定。 */
+    /** Failure stage classification (not dispatched / upstream stranded / no output / tool error / content downgraded) for parent-side topology decisions. */
     public static final String META_FAILED_STAGE = "failedStage";
-    /** 上游搁浅时未交付的依赖 key 列表。 */
+    /** List of dependency keys not delivered when an upstream is stranded. */
     public static final String META_DEPENDS_NOT_DELIVERED = "dependsOnNotDelivered";
-    /** 框架内容审定（对比自报 meta.status），用于透明化“结构合法但内容为空”的 OK 掩盖。 */
+    /** Framework content review (compared with the self-reported meta.status) to expose an OK that masks "structurally valid but empty content". */
     public static final String META_CONTENT_VERDICT = "contentVerdict";
-    /** 非致命告警（B1：围栏被剥离但不及改判）。 */
+    /** Non-fatal warning (B1: the fence was stripped but not enough to change the verdict). */
     public static final String META_WARNINGS = "warnings";
     public static final String WARNING_FENCED = "fenced";
 
-    /** delegate 入参 schema。 */
+    /** delegate input schema. */
     public static final String DELEGATE_SCHEMA = """
             {"type":"object","properties":{
               "goal":{"type":"string","description":"本次委派要达成的目标（必填）"},

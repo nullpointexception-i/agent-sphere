@@ -1,5 +1,7 @@
 package com.buukle.agent.sso.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfaceResolver;
 import com.buukle.agent.common.util.BaseController;
@@ -24,7 +26,7 @@ import java.net.URI;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/auth/sso")
+@RequestMapping(ApiPrefix.V1 + "/auth/sso")
 @RequiredArgsConstructor
 public class SsoAuthController extends BaseController {
 
@@ -53,7 +55,8 @@ public class SsoAuthController extends BaseController {
 
     @PostMapping("/exchange")
     public ResponseEntity<UserVO> exchange(@Valid @RequestBody SsoExchangeDTO dto, HttpServletRequest request) {
-        // exchange 在 SKIP_PATHS 内，拦截器不解析来源端；这里显式识别 widget，签发对应 source 的会话
+        // exchange is in SKIP_PATHS, so the interceptor does not resolve the client surface;
+        // resolve widget explicitly here and issue a session for the matching source
         SessionSurfaceHolder.set(
                 SessionSurfaceResolver.fromHeader(request.getHeader(SessionSurfaceHolder.HEADER)));
         try {

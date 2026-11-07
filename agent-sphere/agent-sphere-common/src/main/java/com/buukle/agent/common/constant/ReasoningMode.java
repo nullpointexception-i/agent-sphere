@@ -1,9 +1,9 @@
 package com.buukle.agent.common.constant;
 
-/** 思考强度的配置模式。 */
+/** Configuration mode for reasoning effort. */
 public final class ReasoningMode {
 
-    /** 统一档位（所有厂商对外一致，底层再映射）。 */
+    /** Unified levels (identical externally for every provider; mapped to the underlying field internally). */
     public static final String LEVELS = "levels";
 
     private ReasoningMode() {

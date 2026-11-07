@@ -3,14 +3,17 @@ package com.buukle.agent.resource.template;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * 资源模板初始化器：一种资源类型对应一个实现。
- * 新增资源类型时，只需新增一个 {@link ResourceInitializer} bean，无需改动协调器。
+ * Resource template initializer: one implementation per resource type.
+ * To add a resource type, add a single {@link ResourceInitializer} bean; the coordinator needs no changes.
  */
 public interface ResourceInitializer {
 
-    /** 资源类型标识，对应模板 descriptor 的 "type" 字段。 */
+    /** Resource type identifier, matching the "type" field of the template descriptor. */
     String type();
 
-    /** 执行初始化；资源已存在时应抛出 {@link ResourceExistsException} 以计入 skipped。 */
+    /**
+     * Performs initialization; throw {@link ResourceExistsException} when the resource already exists,
+     * so it is counted as skipped.
+     */
     void initialize(JsonNode descriptor, ResourceInitContext ctx);
 }

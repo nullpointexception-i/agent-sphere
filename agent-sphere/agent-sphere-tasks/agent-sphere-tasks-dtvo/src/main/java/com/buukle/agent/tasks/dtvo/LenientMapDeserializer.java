@@ -10,8 +10,9 @@ import java.io.IOException;
 import java.util.Map;
 
 /**
- * Map 字段容错反序列化器：同时接受 JSON 对象与 JSON 字符串两种入参形式。
- * 兼容 as 管理端（发对象）与外部调用方（把整个参数编码为字符串，如 Bole 的 config）。
+ * Lenient deserializer for Map fields: accepts both a JSON object and a JSON string as input.
+ * Compatible with the AS admin UI (sends an object) and external callers (encode the whole parameter
+ * as a string, e.g. Bole's config).
  */
 public class LenientMapDeserializer extends JsonDeserializer<Map<String, Object>> {
 

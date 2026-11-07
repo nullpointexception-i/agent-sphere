@@ -17,9 +17,9 @@ public class SkillVO implements Serializable {
     private Integer version;
     private Integer originVersion;
     private Boolean autoUpdate;
-    /** 最后一次与源头对齐的时间（展示快照）；安装时即为安装时间 */
+    /** Last time the copy was aligned with its origin (display snapshot); equals the install time right after installation */
     private String syncedAt;
-    /** 最后一次同步到的源头版本号（展示快照） */
+    /** Origin version the copy was last synced to (display snapshot) */
     private Integer syncedFromVersion;
     private String createdAt;
     private String createdBy;

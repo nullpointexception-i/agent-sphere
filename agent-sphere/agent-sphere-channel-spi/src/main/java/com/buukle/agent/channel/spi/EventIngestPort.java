@@ -1,6 +1,6 @@
 package com.buukle.agent.channel.spi;
 
-/** 统一事件入口。IM / Webhook / 外部系统都走这里。 */
+/** Unified event entry point. IM / Webhook / external systems all go through here. */
 public interface EventIngestPort {
 
     IngestResult ingest(NormalizedEvent event);

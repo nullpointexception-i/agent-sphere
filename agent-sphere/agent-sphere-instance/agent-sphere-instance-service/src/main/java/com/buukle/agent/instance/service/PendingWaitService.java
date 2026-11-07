@@ -58,7 +58,7 @@ public class PendingWaitService implements PendingWaitSpi {
         AgentPendingWait entity = new AgentPendingWait();
         entity.setSessionId(sessionId);
         entity.setRunId(runId);
-        // 重试没有工具调用：callId/waitMs 留空，唤醒方按 kind 走不同分支
+        // A retry has no tool call: callId/waitMs stay empty and the waker takes a different branch by kind
         entity.setWaitMs(0);
         entity.setWakeAt(wakeAt);
         entity.setStatus(WaitConstants.PENDING_STATUS);
@@ -82,8 +82,9 @@ public class PendingWaitService implements PendingWaitSpi {
         if (waitId == null) {
             return false;
         }
-        // CAS：只有把 PENDING 抢成 RESUMED 成功的一方才允许唤醒。
-        // 内存定时器与 cron 补偿会同时命中同一条记录，不做这一步就会重复恢复同一个 run。
+        // CAS: only the party that successfully flips PENDING to RESUMED may wake the run.
+        // The in-memory timer and the cron compensation can hit the same record at the same time;
+        // without this step the same run would be resumed twice.
         int updated = waitMapper.update(null, new LambdaUpdateWrapper<AgentPendingWait>()
                 .eq(AgentPendingWait::getId, waitId)
                 .eq(AgentPendingWait::getStatus, WaitConstants.PENDING_STATUS)
@@ -102,7 +103,7 @@ public class PendingWaitService implements PendingWaitSpi {
             return -1;
         }
         int attempts = (p.getAttempts() == null ? 0 : p.getAttempts()) + 1;
-        // RESUMED → PENDING：让 cron（listDue/claimForResume 只认 PENDING）能再次尝试。
+        // RESUMED → PENDING: lets cron (listDue/claimForResume only accept PENDING) try again.
         int updated = waitMapper.update(null, new LambdaUpdateWrapper<AgentPendingWait>()
                 .eq(AgentPendingWait::getId, waitId)
                 .eq(AgentPendingWait::getStatus, WaitConstants.RESUMED_STATUS)
@@ -117,7 +118,8 @@ public class PendingWaitService implements PendingWaitSpi {
         if (waitId == null) {
             return false;
         }
-        // 单条原子 UPDATE：回读失败（本方法要救的正是这种情况）也照样能把记录放回队列。
+        // Single atomic UPDATE: even when the read-back fails (exactly the case this method exists
+        // for) the record can still be put back on the queue.
         int updated = waitMapper.update(null, new LambdaUpdateWrapper<AgentPendingWait>()
                 .eq(AgentPendingWait::getId, waitId)
                 .eq(AgentPendingWait::getStatus, WaitConstants.RESUMED_STATUS)
@@ -153,8 +155,8 @@ public class PendingWaitService implements PendingWaitSpi {
         if (runId == null) {
             return 0;
         }
-        // PENDING → CANCELLED：waker 的 listDue / claimForResume 只认 PENDING，
-        // 置为 CANCELLED 后该 run 不会被恢复。
+        // PENDING → CANCELLED: the waker's listDue / claimForResume only accept PENDING, so once set to
+        // CANCELLED this run will not be resumed.
         return waitMapper.update(null, new LambdaUpdateWrapper<AgentPendingWait>()
                 .eq(AgentPendingWait::getRunId, runId)
                 .eq(AgentPendingWait::getStatus, WaitConstants.PENDING_STATUS)

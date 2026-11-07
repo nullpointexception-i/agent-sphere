@@ -1,5 +1,9 @@
 package com.buukle.agent.completions.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -31,18 +35,18 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * completions 能力管理（RBAC：admin:completions:*）。
+ * Completions capability management (RBAC: admin:completions:*).
  */
 @WithTenant
 @RestController
-@RequestMapping("/api/v1/admin/completions")
+@RequestMapping(ApiPrefix.V1 + "/admin/completions")
 @RequiredArgsConstructor
 public class AdminCompletionsController extends BaseController {
 
     private final CompletionsService completionsService;
     private final CompletionsPromptService completionsPromptService;
 
-    @RequirePermission("admin:completions:read")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_READ)
     @GetMapping
     public ResponseEntity<Page<CompletionsVO>> list(
             @RequestParam(required = false) String keyword,
@@ -54,27 +58,27 @@ public class AdminCompletionsController extends BaseController {
     }
 
     @AuditLog(action = "CREATE", resourceType = "Completions", resourceId = "#result?.body?.id")
-    @RequirePermission("admin:completions:create")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_CREATE)
     @PostMapping
     public ResponseEntity<CompletionsVO> create(@Valid @RequestBody CreateCompletionsDTO dto) {
         return created(completionsService.create(dto));
     }
 
-    @RequirePermission("admin:completions:read")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_READ)
     @GetMapping("/{id}")
     public ResponseEntity<CompletionsVO> detail(@PathVariable Long id) {
         return ok(completionsService.detail(id));
     }
 
     @AuditLog(action = "UPDATE", resourceType = "Completions", resourceId = "#id")
-    @RequirePermission("admin:completions:update")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<CompletionsVO> update(@PathVariable Long id, @Valid @RequestBody CreateCompletionsDTO dto) {
         return ok(completionsService.update(id, dto));
     }
 
     @AuditLog(action = "DELETE", resourceType = "Completions", resourceId = "#id")
-    @RequirePermission("admin:completions:delete")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         completionsService.delete(id);
@@ -82,27 +86,27 @@ public class AdminCompletionsController extends BaseController {
     }
 
     @AuditLog(action = "ADD_PROMPT", resourceType = "Completions", resourceId = "#id")
-    @RequirePermission("admin:completions:update")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_UPDATE)
     @PostMapping("/{id}/prompts")
     public ResponseEntity<CompletionsPromptVO> addPrompt(@PathVariable Long id, @Valid @RequestBody CreatePromptDTO dto) {
         return created(completionsPromptService.addVersion(id, dto));
     }
 
-    @RequirePermission("admin:completions:read")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_READ)
     @GetMapping("/{id}/prompts")
     public ResponseEntity<List<CompletionsPromptVO>> listPrompts(@PathVariable Long id) {
         return ok(completionsPromptService.listByCompletions(id));
     }
 
     @AuditLog(action = "ACTIVATE_PROMPT", resourceType = "Completions", resourceId = "#id")
-    @RequirePermission("admin:completions:update")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_UPDATE)
     @PutMapping("/{id}/activate")
     public ResponseEntity<?> activate(@PathVariable Long id, @Valid @RequestBody ActivatePromptDTO dto) {
         completionsPromptService.activate(id, dto.getPromptId());
         return ok();
     }
 
-    @RequirePermission("admin:completions:read")
+    @RequirePermission(PermissionCodes.ADMIN_COMPLETIONS_READ)
     @GetMapping("/{id}/calls")
     public ResponseEntity<Page<CompletionsCallVO>> listCalls(
             @PathVariable Long id,

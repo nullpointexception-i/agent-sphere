@@ -56,7 +56,7 @@ class ChatMessageDTOTest {
 
     @Test
     void partsArray_deserializesAsRawMaps() throws Exception {
-        // content 字段无类型信息：反序列化时 parts 元素回落为通用 Map（消息仅朝外发送，读侧不依赖它）
+        // The content field has no type info: parts elements fall back to a generic Map on deserialize (messages are outbound only; the read side does not rely on it)
         String json = "{\"role\":\"user\",\"content\":["
                 + "{\"type\":\"text\",\"text\":\"看图\"},"
                 + "{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AAAA\"}}]}";

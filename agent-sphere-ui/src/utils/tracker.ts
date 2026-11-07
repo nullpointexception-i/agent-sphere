@@ -166,7 +166,8 @@ class UserTracker {
     const batch = this.buffer.splice(0);
     const token = getToken();
     try {
-      // 用原生 fetch 而非全局 request：埋点失败/401 不应触发全局错误处理（避免登录页整页刷新）
+      // Use native fetch instead of the global request: a tracking failure/401 should not trigger
+      // global error handling (avoiding a full-page reload on the login page)
       await fetch('/api/v1/track/frontend', {
         method: 'POST',
         headers: {

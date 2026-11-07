@@ -6,8 +6,8 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 子 Agent 运行时间线条目：LLM interaction（含 reasoning/reply）或 tool_call，
- * 按 created_at 排序后由前端时序渲染。
+ * Sub-agent run timeline item: an LLM interaction (with reasoning/reply) or a tool_call,
+ * rendered chronologically by the frontend after sorting by created_at.
  */
 @Data
 public class SubAgentTimelineItemVO implements Serializable {
@@ -16,8 +16,8 @@ public class SubAgentTimelineItemVO implements Serializable {
     private Long interactionId;
     private String interactionType;
     private String modelName;
-    private String reasoning;      // 该次 LLM 调用的 thinking 全文
-    private String reply;          // 该次调用的回复正文
+    private String reasoning;      // Full thinking text of this LLM call
+    private String reply;          // Reply body of this call
     private Boolean success;
     private Long stepId;
     private String toolName;
@@ -27,6 +27,6 @@ public class SubAgentTimelineItemVO implements Serializable {
     private String artifact;
     private String toolStatus;
     private String toolErrorMessage;
-    /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），容器卡片回显用。 */
+    /** Browser screenshot references in the tool result ([{fileKey, contentType}]), echoed by the container card. */
     private List<RunAttachment> images;
 }

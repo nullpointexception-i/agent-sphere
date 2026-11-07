@@ -4,15 +4,15 @@ import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 
 /**
- * 全局 finish 工具的常量 —— agentic run 的**唯一合法结束方式**。
+ * Constants for the global finish tool — the **only legal way** for an agentic run to end.
  *
- * <p>为什么需要它：「模型没有调用工具」是一个二义信号 —— 既可能是「任务做完了」，也可能是
- * 「模型只说了几句就放弃」。旧循环把沉默当成完成，于是未完成被记成成功，属于静默失败。
- * finish 把「我完成了」变成一次显式工具调用，沉默因此只剩「异常」一种含义。
+ * <p>Why it exists: "the model did not call a tool" is an ambiguous signal — it may mean "the task is done", or
+ * "the model gave up after a couple of sentences". The old loop treated silence as completion, so unfinished work was recorded as success — a silent failure.
+ * finish turns "I am done" into an explicit tool call, so silence is left with only one meaning: abnormal.
  *
- * <p>形态照 {@link WaitConstants} / {@link ChatClarification}：无独立 maven 模块、无 SPI bean，
- * 常量 + 手写 schema + {@code ContextPreparer} 显式注册 + {@code ToolExecutor} 拦截 +
- * {@code SessionRunner} 循环内收口。
+ * <p>Shaped after {@link WaitConstants} / {@link ChatClarification}: no separate Maven module, no SPI bean —
+ * constants + hand-written schema + explicit registration in {@code ContextPreparer} + interception in {@code ToolExecutor} +
+ * finalization inside the {@code SessionRunner} loop.
  */
 public final class FinishConstants {
 
@@ -22,16 +22,16 @@ public final class FinishConstants {
 
     public static final String TOOL_NAME = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.FINISH.getId();
 
-    /** 工具返回的 status；仅供工具记录/历史展示，收口判定由 SessionRunner 直接读入参。 */
+    /** Status returned by the tool; used only for tool records/history display — finalization is decided by SessionRunner reading the input directly. */
     public static final String STATUS_FINISHED = "finished";
 
-    // ---- 入参/出参字段名 ----
+    // ---- Input/output field names ----
     public static final String JSON_STATUS = "status";
     public static final String JSON_SUMMARY = "summary";
-    /** 工具回执里回显模型声明的结束状态（工具返回的 status 固定为 finished）。 */
+    /** Echoes the end state declared by the model in the tool receipt (the status returned by the tool is always finished). */
     public static final String JSON_FINISH_STATUS = "finish_status";
 
-    // ---- 模型可声明的结束状态 ----
+    // ---- End states the model can declare ----
     public static final String RESULT_SUCCESS = "success";
     public static final String RESULT_FAILED = "failed";
     public static final String RESULT_BLOCKED = "blocked";

@@ -13,7 +13,7 @@ public record TurnResult(String content, List<TurnToolCall> toolCalls, TurnOutco
         toolCalls = toolCalls != null ? toolCalls : List.of();
     }
 
-    /** 携带本次流式响应的真实 finish_reason（stop/length/content_filter/tool_calls）。 */
+    /** Carries the real finish_reason of this streaming response (stop/length/content_filter/tool_calls). */
     public TurnResult withFinishReason(String reason) {
         return new TurnResult(content, toolCalls, outcome, errorMessage, reason, compactionOutcome,
                 rebuiltMessages, rebuiltCurrentRunStart, httpStatus, retryHint, retryAttempt);
@@ -45,9 +45,9 @@ public record TurnResult(String content, List<TurnToolCall> toolCalls, TurnOutco
     }
 
     /**
-     * LLM 瞬时失败：挂起并在退避窗口后重跑同一轮。
+     * Transient LLM failure: suspend and re-run the same turn after the backoff window.
      *
-     * @param attempt 第几次失败（1 起，跨挂起累计）
+     * @param attempt which failure this is (1-based, accumulated across suspensions)
      */
     public static TurnResult retryLater(String message, Integer httpStatus, String retryHint, int attempt) {
         return new TurnResult(null, List.of(), TurnOutcome.RETRY_LATER, message, null, null, null, null,

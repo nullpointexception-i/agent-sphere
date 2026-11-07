@@ -12,7 +12,7 @@ public interface InstanceSpi {
 
     InstanceVO getInstance(Long id);
 
-    /** 按实例角色查一个启用中的系统实例（如 GROUP_ROUTER）。 */
+    /** Find an enabled system instance by its role (e.g. GROUP_ROUTER). */
     InstanceVO findByRole(String instanceRole);
 
     InstanceVO updateInstance(Long id, CreateInstanceDTO dto);

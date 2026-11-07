@@ -9,8 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * 基于数据库的通用文件服务：按 (bizKey, fileKey) 唯一 upsert/读取/逻辑删除。
- * PG 共享库存储二进制，多副本天然一致；供插件安装包等需要落库字节的场景复用。
+ * Database-backed generic file service: upsert/read/logical-delete by unique (bizKey, fileKey).
+ * The shared PG database stores the binary, so multiple replicas are consistent by nature; reusable for
+ * scenarios that need bytes persisted, such as plugin installers.
  */
 @Slf4j
 @Service
@@ -21,14 +22,14 @@ public class GenericFileService {
 
     private final AgentFileStoreMapper fileStoreMapper;
 
-    /** 保存/覆盖文件：同一 (bizKey, fileKey) 已存在则更新内容，否则插入。 */
+    /** Saves/overwrites a file: if the same (bizKey, fileKey) already exists, update the content; otherwise insert. */
     public StoredFile save(String bizKey, String fileKey, String fileName,
                            String contentType, byte[] content) {
         if (!StringUtils.hasText(bizKey) || !StringUtils.hasText(fileKey)) {
-            throw new IllegalArgumentException("bizKey/fileKey 不能为空");
+            throw new IllegalArgumentException("bizKey/fileKey must not be blank");
         }
         if (content == null || content.length == 0) {
-            throw new IllegalArgumentException("文件内容不能为空");
+            throw new IllegalArgumentException("file content must not be empty");
         }
         AgentFileStore existing = findIdOnly(bizKey, fileKey);
         AgentFileStore entity = new AgentFileStore();
@@ -49,7 +50,7 @@ public class GenericFileService {
                 entity.getContentType(), entity.getSizeBytes(), content);
     }
 
-    /** 读取文件；不存在返回 null。 */
+    /** Reads a file; returns null if it does not exist. */
     public StoredFile get(String bizKey, String fileKey) {
         AgentFileStore entity = findOne(bizKey, fileKey);
         if (entity == null) {
@@ -65,7 +66,7 @@ public class GenericFileService {
                 .eq(AgentFileStore::getFileKey, fileKey)) > 0;
     }
 
-    /** 逻辑删除（@TableLogic → delete_flag）。 */
+    /** Logical delete (@TableLogic → delete_flag). */
     public void delete(String bizKey, String fileKey) {
         fileStoreMapper.delete(new LambdaQueryWrapper<AgentFileStore>()
                 .eq(AgentFileStore::getBizKey, bizKey)

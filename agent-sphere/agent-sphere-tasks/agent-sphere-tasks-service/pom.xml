@@ -22,7 +22,7 @@
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-common</artifactId>
         </dependency>
-        <!-- 任务 prompt 组装需要 MarkdownRenderer（config 渲染为 Markdown） -->
+        <!-- Task prompt assembly needs MarkdownRenderer (renders config as Markdown) -->
         <dependency>
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-util</artifactId>

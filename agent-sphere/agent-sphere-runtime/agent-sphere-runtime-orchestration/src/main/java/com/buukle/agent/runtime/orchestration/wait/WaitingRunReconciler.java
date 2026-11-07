@@ -18,12 +18,12 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 「卡住 WAITING」对账任务（安全网）。
+ * "Stuck in WAITING" reconciliation task (safety net).
  *
- * <p>唤醒路径都是「先 CAS 置 RESUMED、再恢复」；任何静默失败（恢复抛异常、事件丢失、
- * 副本重启丢内存定时器、cron 也恰好失败）都可能让 run 永久停在 WAITING。这里周期扫描
- * 「超时仍 WAITING 且名下已无 PENDING 挂起记录」的 run，直接再推进一次；失败则置终态事件，
- * 保证 run 不会永远卡在「执行中」。
+ * <p>Wake paths always "CAS to RESUMED first, then resume"; any silent failure (resume throws, event lost,
+ * replica restart losing in-memory timers, cron failing as well) can leave a run in WAITING forever. This task periodically scans
+ * for runs "still WAITING past the timeout with no PENDING wait record left" and pushes each one once more; on failure it emits a terminal event,
+ * guaranteeing a run never stays stuck "running" forever.
  */
 @Slf4j
 @Component
@@ -38,7 +38,7 @@ public class WaitingRunReconciler {
     private final ChatRuntimeService chatRuntimeService;
     private final RedissonClient redissonClient;
 
-    /** 判定"卡住"的阈值：大于 MAX_WAIT_MS(10min)，避免抢救正常的长 wait。 */
+    /** "Stuck" threshold: greater than MAX_WAIT_MS (10min), so a legitimately long wait is not rescued prematurely. */
     @Value("${buukle.agent.wait.reconcile-stale-minutes:11}")
     private long staleMinutes;
 
@@ -52,7 +52,7 @@ public class WaitingRunReconciler {
 
     @Scheduled(fixedDelayString = "${buukle.agent.wait.reconcile-interval:PT30S}")
     public void reconcile() {
-        // 对账是后台动作：清掉调度线程可能残留的租户，否则 findStaleByStatus 会被 created_by 过滤。
+        // Reconciliation is a background action: clear tenant context possibly left on the scheduling thread, otherwise findStaleByStatus gets filtered by created_by.
         PendingWaitWakeScheduler.clearInheritedContext();
         boolean locked = false;
         try {
@@ -70,7 +70,7 @@ public class WaitingRunReconciler {
                 try {
                     List<PendingWaitVO> pending = pendingWaitSpi.listPendingByRunId(run.getId());
                     if (!pending.isEmpty()) {
-                        continue; // 仍有待唤醒记录 → 正常路径会处理
+                        continue; // pending wake-ups remain -> the normal path will handle them
                     }
                     rescue(run);
                 } catch (Exception e) {
@@ -94,14 +94,14 @@ public class WaitingRunReconciler {
         }
     }
 
-    /** 记录已被消费但 run 没恢复 → 直接再推进一次（不依赖 PENDING 记录）；失败则置终态。 */
+    /** The record was consumed but the run did not resume → push it once more (without relying on a PENDING record); on failure mark it terminal. */
     private void rescue(RunVO run) {
         PendingWaitVO synthetic = new PendingWaitVO();
         synthetic.setSessionId(run.getSessionId());
         synthetic.setRunId(run.getId());
         synthetic.setWaitMs(0);
         synthetic.setStatus(RunStatus.WAITING.name());
-        // 保留原挂起类型：LLM_RETRY 不能走 wait 的合成消息恢复路径
+        // Keep the original suspension kind: LLM_RETRY must not take wait's synthetic-message resume path
         synthetic.setKind(run.getWaitKind());
         ChatRuntimeService.ResumeOutcome outcome = chatRuntimeService.resumeFromWait(synthetic);
         if (outcome != ChatRuntimeService.ResumeOutcome.RESUMED) {

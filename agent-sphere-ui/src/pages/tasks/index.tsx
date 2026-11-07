@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   EyeOutlined,
@@ -57,7 +58,7 @@ export default function TaskList() {
         return Promise.resolve();
       } catch {
         return Promise.reject(
-          new Error(t('pages.admin.completions.invalidJson', '无效 JSON')),
+          new Error(t('pages.admin.completions.invalidJson', 'Invalid JSON')),
         );
       }
     },
@@ -80,27 +81,27 @@ export default function TaskList() {
       width: 60,
     },
     {
-      title: t('pages.admin.tasks.goal', '目标'),
+      title: t('pages.admin.tasks.goal', 'Goal'),
       dataIndex: 'goal',
       key: 'goal',
       ellipsis: true,
     },
     {
-      title: t('pages.admin.tasks.status', '状态'),
+      title: t('pages.admin.tasks.status', 'Status'),
       dataIndex: 'status',
       key: 'status',
       width: 110,
       render: statusRender,
     },
     {
-      title: t('pages.admin.tasks.instanceId', '实例'),
+      title: t('pages.admin.tasks.instanceId', 'Instance'),
       dataIndex: 'instanceId',
       key: 'instanceId',
       width: 70,
       render: (v: any) => (v ? `#${v}` : '-'),
     },
     {
-      title: t('pages.admin.tasks.sessionId', '会话'),
+      title: t('pages.admin.tasks.sessionId', 'Session'),
       dataIndex: 'sessionId',
       key: 'sessionId',
       width: 80,
@@ -114,7 +115,7 @@ export default function TaskList() {
       render: (v: any) => (v ? `#${v}` : '-'),
     },
     {
-      title: t('pages.admin.tasks.callbackUrl', '回调地址'),
+      title: t('pages.admin.tasks.callbackUrl', 'Callback URL'),
       dataIndex: 'callbackUrl',
       key: 'callbackUrl',
       width: 180,
@@ -141,7 +142,7 @@ export default function TaskList() {
             onClick={() => openDetail(record)}
           />
           {(record.status === 'RUNNING' || record.status === 'QUEUED') && (
-            <Can code="admin:tasks:update">
+            <Can code={PERM.adminTasksUpdate}>
               <Button
                 type="link"
                 danger
@@ -196,7 +197,7 @@ export default function TaskList() {
       const d = await agentApi.admin.tasks.get(record.id);
       setViewRecord(d);
     } catch {
-      message.error(t('pages.chat.loadFailed', '加载失败'));
+      message.error(t('pages.chat.loadFailed', 'Load failed'));
     } finally {
       setViewLoading(false);
     }
@@ -204,7 +205,7 @@ export default function TaskList() {
 
   const handleStop = (record: any) => {
     modal.confirm({
-      title: t('pages.admin.tasks.stopConfirm', '确认停止该任务？'),
+      title: t('pages.admin.tasks.stopConfirm', 'Confirm stopping this task?'),
       okType: 'danger',
       onOk: async () => {
         setStoppingId(record.id);
@@ -230,9 +231,9 @@ export default function TaskList() {
       label: intl.formatMessage({ id: 'pages.table.id' }),
       value: viewRecord?.id,
     },
-    { label: t('pages.admin.tasks.goal', '目标'), value: viewRecord?.goal },
+    { label: t('pages.admin.tasks.goal', 'Goal'), value: viewRecord?.goal },
     {
-      label: t('pages.admin.tasks.status', '状态'),
+      label: t('pages.admin.tasks.status', 'Status'),
       value: viewRecord?.status
         ? STATUS_TAG[viewRecord.status]
           ? t(STATUS_TAG[viewRecord.status].label, viewRecord.status)
@@ -240,11 +241,11 @@ export default function TaskList() {
         : '-',
     },
     {
-      label: t('pages.admin.tasks.instanceId', '实例'),
+      label: t('pages.admin.tasks.instanceId', 'Instance'),
       value: viewRecord?.instanceId ? `#${viewRecord.instanceId}` : '-',
     },
     {
-      label: t('pages.admin.tasks.sessionId', '会话'),
+      label: t('pages.admin.tasks.sessionId', 'Session'),
       value: viewRecord?.sessionId ? `#${viewRecord.sessionId}` : '-',
     },
     {
@@ -252,15 +253,15 @@ export default function TaskList() {
       value: viewRecord?.runId ? `#${viewRecord.runId}` : '-',
     },
     {
-      label: t('pages.admin.tasks.callbackUrl', '回调地址'),
+      label: t('pages.admin.tasks.callbackUrl', 'Callback URL'),
       value: viewRecord?.callbackUrl || '-',
     },
     {
-      label: t('pages.admin.tasks.context', '上下文'),
+      label: t('pages.admin.tasks.context', 'Context'),
       value: viewRecord?.contextJson || '-',
     },
     {
-      label: t('pages.admin.tasks.expectedOutput', '预期输出'),
+      label: t('pages.admin.tasks.expectedOutput', 'Expected Output'),
       value: viewRecord?.expectedOutputJson || '-',
     },
     {
@@ -268,11 +269,11 @@ export default function TaskList() {
       value: viewRecord?.config || '-',
     },
     {
-      label: t('pages.admin.tasks.result', '结果'),
+      label: t('pages.admin.tasks.result', 'Result'),
       value: viewRecord?.resultJson || '-',
     },
     {
-      label: t('pages.admin.tasks.remark', '备注'),
+      label: t('pages.admin.tasks.remark', 'Remark'),
       value: viewRecord?.remark || '-',
     },
     {
@@ -328,7 +329,10 @@ export default function TaskList() {
         toolBarRender={() => [
           <Input.Search
             key="search"
-            placeholder={t('pages.admin.tasks.search.placeholder', '搜索目标')}
+            placeholder={t(
+              'pages.admin.tasks.search.placeholder',
+              'Search by goal',
+            )}
             style={{ width: 200 }}
             onSearch={(value) => setKeyword(value)}
             allowClear
@@ -338,7 +342,10 @@ export default function TaskList() {
           <Select
             key="status"
             allowClear
-            placeholder={t('pages.admin.tasks.filterStatus', '状态筛选')}
+            placeholder={t(
+              'pages.admin.tasks.filterStatus',
+              'Filter by status',
+            )}
             style={{ width: 130 }}
             value={status}
             onChange={(v) => setStatus(v)}
@@ -378,7 +385,7 @@ export default function TaskList() {
               actionRef.current?.reload();
             }}
           />,
-          <Can key="new" code="admin:tasks:create">
+          <Can key="new" code={PERM.adminTasksCreate}>
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -392,7 +399,7 @@ export default function TaskList() {
       />
 
       <Modal
-        title={t('pages.admin.tasks.create', '新建任务')}
+        title={t('pages.admin.tasks.create', 'New Task')}
         open={modalOpen}
         onOk={handleSubmit}
         onCancel={() => {
@@ -406,7 +413,7 @@ export default function TaskList() {
           <Form.Item
             name="goal"
             label={labelWithRule(
-              t('pages.admin.tasks.goal', '目标'),
+              t('pages.admin.tasks.goal', 'Goal'),
               intl.formatMessage({ id: 'pages.hint.text' }),
             )}
             rules={[{ required: true }]}
@@ -416,10 +423,10 @@ export default function TaskList() {
           <Form.Item
             name="businessType"
             label={labelWithRule(
-              t('pages.admin.tasks.businessType', '业务域'),
+              t('pages.admin.tasks.businessType', 'Business Type'),
               t(
                 'pages.admin.tasks.businessType.extra',
-                '按业务域匹配可用实例，需与实例的 businessType 一致',
+                'Matching available instance by businessType; must match the instance businessType',
               ),
             )}
             rules={[{ required: true }]}
@@ -429,7 +436,7 @@ export default function TaskList() {
           <Form.Item
             name="context"
             label={labelWithRule(
-              t('pages.admin.tasks.context', '上下文 (JSON)'),
+              t('pages.admin.tasks.context', 'Context'),
               intl.formatMessage({ id: 'pages.hint.text' }),
             )}
             rules={[jsonRule]}
@@ -439,7 +446,7 @@ export default function TaskList() {
           <Form.Item
             name="expectedOutput"
             label={labelWithRule(
-              t('pages.admin.tasks.expectedOutput', '预期输出 (JSON)'),
+              t('pages.admin.tasks.expectedOutput', 'Expected Output'),
               intl.formatMessage({ id: 'pages.hint.text' }),
             )}
             rules={[jsonRule]}
@@ -455,7 +462,7 @@ export default function TaskList() {
           </Form.Item>
           <Form.Item
             name="callbackUrl"
-            label={t('pages.admin.tasks.callbackUrl', '回调地址')}
+            label={t('pages.admin.tasks.callbackUrl', 'Callback URL')}
           >
             <Input maxLength={500} placeholder="https://..." />
           </Form.Item>
@@ -463,7 +470,7 @@ export default function TaskList() {
       </Modal>
 
       <Modal
-        title={`${t('pages.admin.tasks.detail', '任务详情')}${viewRecord ? ` (ID: ${viewRecord.id})` : ''}`}
+        title={`${t('pages.admin.tasks.detail', 'Task Detail')}${viewRecord ? ` (ID: ${viewRecord.id})` : ''}`}
         open={!!viewRecord}
         onCancel={() => setViewRecord(null)}
         footer={null}

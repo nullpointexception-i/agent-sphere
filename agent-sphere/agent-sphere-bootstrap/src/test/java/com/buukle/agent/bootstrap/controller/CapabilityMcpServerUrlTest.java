@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-/** MCP serverUrl 录入校验：必须 http/https 开头，避免 transport 抛裸 IAE。 */
+/** MCP serverUrl validation: must start with http/https so the transport does not throw a raw IAE. */
 @ExtendWith(MockitoExtension.class)
 class CapabilityMcpServerUrlTest {
 

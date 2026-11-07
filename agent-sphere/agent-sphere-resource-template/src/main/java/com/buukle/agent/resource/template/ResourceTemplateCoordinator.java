@@ -11,8 +11,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 资源模板协调器：解析模板 JSON 数组，按 type 分发给对应 {@link ResourceInitializer}。
- * 依赖 Spring 自动收集所有 ResourceInitializer bean，新增资源类型零改动。
+ * Resource template coordinator: parses the template JSON array and dispatches each entry by type
+ * to the matching {@link ResourceInitializer}.
+ * Relies on Spring to collect all ResourceInitializer beans automatically, so new resource types need no changes.
  */
 @Slf4j
 @Component
@@ -25,10 +26,11 @@ public class ResourceTemplateCoordinator {
     }
 
     /**
-     * 执行资源模板初始化。
+     * Runs resource template initialization.
      *
-     * @param templateJson 资源描述符 JSON 数组；空则返回空结果（默认模板由调用方决定是否传入）
-     * @param ctx          上下文（身份源信息 + 已建资源缓存）
+     * @param templateJson resource descriptor JSON array; empty returns an empty result
+     *                     (the caller decides whether to pass the default template)
+     * @param ctx          context (identity provider info + cache of created resources)
      */
     public ResourceInitResult initialize(String templateJson, ResourceInitContext ctx) {
         ResourceInitResult result = new ResourceInitResult();

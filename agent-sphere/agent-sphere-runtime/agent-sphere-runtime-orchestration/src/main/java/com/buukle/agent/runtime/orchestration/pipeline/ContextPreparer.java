@@ -79,8 +79,8 @@ public class ContextPreparer {
             (long) BuiltinToolEnum.ASK_CLARIFICATION.getId(),
             (long) BuiltinToolEnum.CURRENT_TIME.getId(),
             (long) BuiltinToolEnum.READ_TOOL_RESULT.getId(),
-            // L2 write tools: Router DM 会话可现场触发（docwrite / skill_manage），
-            // 落入 SessionRunner 的 L2 审批拦截 → TOOL_APPROVAL_PENDING → ROUTER_APPROVAL 卡片投 IM。
+            // L2 write tools: can be triggered live in a Router DM session (docwrite / skill_manage),
+            // hitting SessionRunner's L2 approval interceptor → TOOL_APPROVAL_PENDING → ROUTER_APPROVAL card delivered to IM.
             (long) BuiltinToolEnum.DOCWRITE.getId(),
             (long) BuiltinToolEnum.SKILL_MANAGE.getId());
     private final InstanceCapabilitySpi capabilitySpi;
@@ -271,21 +271,21 @@ public class ContextPreparer {
                     .approvalScope(tool.getApprovalScope())
                     .build());
         }
-        // 启用 delegate 时注册唯一执行入口 pseudo-tool：skill 本体不再注册为 tool，
-        // 由主 agent 通过 delegate 自行决定内联执行（main）或隔离子 Agent（subagent）。
+        // When delegate is enabled, register it as the single execution-entry pseudo-tool: skill bodies are no longer registered as tools;
+        // the main agent decides through delegate whether to execute inline (main) or in an isolated sub-agent (subagent).
         if (properties.getDelegate().isEnabled()) {
             result.add(RuntimeTool.builder()
                     .capabilityType(SubAgentConstants.CAPABILITY_TYPE_SUB_AGENT)
                     .llmToolName(SubAgentConstants.DELEGATE_TOOL)
                     .toolRef(ToolRefs.agent(SubAgentConstants.DELEGATE_TOOL))
-                    .displayName("委派子 Agent").displayNameCn("委派子 Agent").displayNameEn("Delegate")
+                    .displayName("Delegate sub-agent").displayNameCn("委派子 Agent").displayNameEn("Delegate")
                     .description("The only execution entry for delegated work. Use mode=main to execute inline in the current loop "
                             + "(no sub-agent), or mode=subagent to isolate work in a sub-agent. Provide optional agentRef=instance:<id> "
                             + "to prefix the sub-agent system prompt, or tasks[] for a DAG of parallel sub-agents (requires mode=subagent).")
                     .parametersSchemaJson(SubAgentConstants.DELEGATE_SCHEMA)
                     .execBinding(Map.of()).build());
         }
-        // 默认注册 ask_clarification；自主任务（noClarification）场景剔除，禁止模型向用户提问
+        // Register ask_clarification by default; removed for autonomous tasks (noClarification) so the model cannot ask the user questions
         if (!noClarification) {
             long clarificationId = BuiltinToolEnum.ASK_CLARIFICATION.getId();
             String clarificationLlmName = LLM_PREFIX_BUILTIN + clarificationId;
@@ -303,8 +303,8 @@ public class ContextPreparer {
                     .parametersSchemaJson(CLARIFICATION_PARAM_SCHEMA)
                     .execBinding(clarificationBinding).build());
         }
-        // 默认注册 wait：挂起-恢复型工具，全局可用（不需要用户在场，故无 noClarification 豁免）。
-        // 形态照 ask_clarification：无 SPI bean、无 DB seed，直接注册。
+        // Register wait by default: a suspend-resume tool available globally (no user presence needed, hence no noClarification exemption).
+        // Shaped like ask_clarification: no SPI bean, no DB seed, registered directly.
         {
             long waitId = BuiltinToolEnum.WAIT.getId();
             Map<String, Object> waitBinding = new HashMap<>();
@@ -321,7 +321,7 @@ public class ContextPreparer {
                     .parametersSchemaJson(WAIT_PARAM_SCHEMA)
                     .execBinding(waitBinding).build());
         }
-        // 默认注册 read_tool_result：回读被上下文预算省略的历史浏览器/工具结果。
+        // Register read_tool_result by default: read back historical browser/tool results omitted by the context budget.
         if (capabilities != null && !capabilities.isEmpty()) {
             long readId = BuiltinToolEnum.READ_TOOL_RESULT.getId();
             Map<String, Object> readBinding = new HashMap<>();
@@ -338,7 +338,7 @@ public class ContextPreparer {
                     .parametersSchemaJson(ToolResultReadConstants.PARAM_SCHEMA)
                     .execBinding(readBinding).build());
         }
-        // 默认注册 progress：显式报告中间进度，避免模型用普通文本伪装中间轮次。
+        // Register progress by default: report intermediate progress explicitly, so the model does not disguise intermediate turns as plain text.
         {
             long progressId = BuiltinToolEnum.PROGRESS.getId();
             Map<String, Object> progressBinding = new HashMap<>();
@@ -355,14 +355,14 @@ public class ContextPreparer {
                     .parametersSchemaJson(PROGRESS_PARAM_SCHEMA)
                     .execBinding(progressBinding).build());
         }
-        // 默认注册 finish：agentic run 的唯一合法结束方式。
-        // 「没有工具调用」既可能是做完、也可能是放弃，只靠沉默无法区分 —— finish 让它变成显式声明。
-        // 纯聊天实例（无任何真实能力且非自主任务）不下发，避免模型用 terse summary 顶替正常回答；
-        // 运行期还会用「是否真的用过工具」再兜一层（SessionRunner）。
+        // Register finish by default: the only legal way to end an agentic run.
+        // "No tool call" may mean done or may mean giving up; silence alone cannot distinguish them — finish turns it into an explicit declaration.
+        // Pure chat instances (no real capabilities and not autonomous) do not get it, so the model cannot replace a normal answer with a terse summary;
+        // at runtime, "were tools actually used" adds another layer of protection (SessionRunner).
         //
-        // 合同要求 finish 时无条件下发：STRICT_FINISH 的 run 若拿不到 finish 就没有任何
-        // 合法收口方式（恢复路径曾因 noClarification 丢失而漏发 finish，worker 因此空转
-        // 直到被手动停止）。这条判据不能依赖 noClarification / capabilities 是否成立。
+        // The contract requires finish to be registered unconditionally: a STRICT_FINISH run without finish has no
+        // legal way to finalize (a resume path once missed finish because noClarification was lost, leaving the worker spinning
+        // until it was stopped manually). This criterion must not depend on whether noClarification / capabilities hold.
         boolean strictFinish = CompletionProtocol.from(
                 run == null ? null : run.getCompletionProtocol()) == CompletionProtocol.STRICT_FINISH;
         if (noClarification || (capabilities != null && !capabilities.isEmpty()) || strictFinish) {

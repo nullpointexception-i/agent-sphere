@@ -299,7 +299,7 @@ class ParallelSearchAgentLoopTest {
                         String answer = selectedUrl.get() + "\n" + text.substring(0, Math.min(240, text.length()));
                         finalAnswer.set(answer);
                         events.accept(new LLMEvent.TextDelta(answer));
-                        // agentic 流程只能用 finish 显式收口：只回文本会被判为「静默」并追问/失败
+                        // An agentic flow can only finalize explicitly through finish: text-only replies are treated as "silent" and get a nudge/failure
                         events.accept(new LLMEvent.ToolCall(FINISH_CALL, FinishConstants.TOOL_NAME,
                                 JSON.createObjectNode().put("status", "success").put("summary", answer).toString()));
                     } else {
@@ -354,8 +354,8 @@ class ParallelSearchAgentLoopTest {
 
     private static String toolResult(ChatCompletionRequestDTO request, String callId, String toolName) throws Exception {
         List<ChatMessageDTO> messages = request.getMessages();
-        // 找最后一条 tool 结果而不是取 getLast()：尾部还会挂 loop 预算预告（system 段）。
-        // 真正要守的不变式是「assistant(tool_calls) 紧跟其 tool 结果」，与尾部挂什么无关。
+        // Find the last tool result instead of getLast(): the tail may also carry the loop budget preview (a system block).
+        // The invariant that matters is "assistant(tool_calls) immediately followed by its tool result", regardless of what hangs at the tail.
         int toolIdx = -1;
         for (int i = messages.size() - 1; i >= 0; i--) {
             if ("tool".equals(messages.get(i).getRole())) {

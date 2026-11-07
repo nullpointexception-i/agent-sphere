@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.chrome;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.chrome.ChromeCallbackDTO;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
@@ -17,7 +19,7 @@ import java.util.Objects;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/chrome")
+@RequestMapping(ApiPrefix.V1 + "/chrome")
 @RequiredArgsConstructor
 public class ChromeCallbackController extends BaseController {
 
@@ -33,7 +35,7 @@ public class ChromeCallbackController extends BaseController {
                 && !Objects.equals(token, request.getHeader("X-Extension-Token"))) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        // 多副本：执行副本的 pending future 可能在别的副本上，经事件总线广播完成（去掉本地 contains 门禁）
+        // Multi-replica: the pending future may live on another replica than the executing one; complete it via event-bus broadcast (local contains gate removed)
         eventBus.publish(DistributedRuntimeConstants.TOPIC_CHROME_CALLBACK, body);
 
         if (!body.isSuccess()) {

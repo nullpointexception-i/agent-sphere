@@ -51,12 +51,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 「claim 之后绝不能停在 RESUMED」的回归护栏。
+ * Regression guard for "never stay in RESUMED after claim".
  *
- * <p>唤醒是「先 CAS 把挂起记录改成 RESUMED、再恢复 run」。恢复一旦抛异常或静默 no-op，
- * {@code listDue}/{@code claimForResume} 只认 PENDING 就再也捞不到这条记录，run 永久卡在
- * WAITING（前端显示"执行中"、停止按钮无效）。三条兜底：ERROR 回置重试、超限置终态、
- * 超时对账抢救。
+ * <p>Waking is "CAS the wait record to RESUMED, then resume the run". If the resume throws or silently no-ops,
+ * {@code listDue}/{@code claimForResume} only accept PENDING and never find the record again, so the run is stuck forever in
+ * WAITING (the frontend shows "running" and stop does nothing). Three fallbacks: reset to PENDING and retry on ERROR, set a terminal state past the limit,
+ * and rescue via timeout reconciliation.
  */
 @ExtendWith(MockitoExtension.class)
 class WaitResumeOutcomeTest {
@@ -125,8 +125,8 @@ class WaitResumeOutcomeTest {
 
     @Test
     void resumeFromWait_clearsInheritedTenantBeforeReadingRun() {
-        // 对账任务也会直接调 resumeFromWait；无论从哪条后台路径进来都必须无租户，
-        // 否则数据权限会把 run 读成 null（→ 误判 SKIPPED）。
+        // The reconcile task also calls resumeFromWait directly; whichever background path enters, there must be no tenant,
+        // otherwise data permissions read the run as null (→ misjudged as SKIPPED).
         TenantUtil.start("leaked-user");
         AtomicReference<String> tenantSeenByRead = new AtomicReference<>("not-called");
         when(runSpi.claimForResume(7L)).thenAnswer(inv -> {
@@ -179,7 +179,7 @@ class WaitResumeOutcomeTest {
                 "重试耗尽必须发终态事件，否则前端永久停在「执行中」");
     }
 
-    /** 未加 @Spring 的单元测试里 @Value 不生效，必须显式设阈值。 */
+    /** @Value does not apply in unit tests without @Spring, so the threshold must be set explicitly. */
     private WaitingRunReconciler reconciler() {
         WaitingRunReconciler reconciler = new WaitingRunReconciler(runSpi, pendingWaitSpi, service, redissonClient);
         ReflectionTestUtils.setField(reconciler, "staleMinutes", 15L);
@@ -212,14 +212,14 @@ class WaitResumeOutcomeTest {
         when(pendingWaitSpi.listPendingByRunId(8L)).thenReturn(List.of());
         when(runSpi.claimForResume(8L)).thenReturn(runWithStatus(RunStatus.RUNNING.name()));
         when(runSpi.getRun(8L)).thenReturn(stuck);
-        // 抢救走 resumeFromWait：先置 RUNNING 再异步续跑，这里让续跑抛异常 → ERROR → failStuckWait
+        // The rescue goes through resumeFromWait: set RUNNING then continue asynchronously; here the continuation throws → ERROR → failStuckWait
         doThrow(new IllegalStateException("boom")).when(sessionSpi).touchSession(1L);
 
         reconciler().reconcile();
 
-        // run 7 名下仍有 PENDING 记录 → 属正常路径，绝不能被对账抢先恢复
+        // run 7 still has a PENDING record → normal path; reconciliation must never preempt the resume
         verify(runSpi, never()).updateRun(withPending);
-        // run 8 抢救失败 → 置 FAILED 并发终态
+        // run 8 rescue fails → set FAILED and publish the terminal state
         verify(runSpi, atLeastOnce()).updateRun(stuck);
         assertEquals(RunStatus.FAILED.name(), stuck.getStatus());
         ArgumentCaptor<RuntimeEventVO> cap = ArgumentCaptor.forClass(RuntimeEventVO.class);
@@ -236,16 +236,16 @@ class WaitResumeOutcomeTest {
 
         reconciler().reconcile();
 
-        // k8s replicas=2：抢不到锁就整轮跳过，两个副本同时抢救会重复恢复同一个 run
+        // k8s replicas=2: without the lock the whole round is skipped, since two replicas rescuing at once would resume the same run twice
         verify(runSpi, never()).findStaleByStatus(anyString(), any(LocalDateTime.class), anyInt());
     }
 
     @Test
     void resumeFromWait_afterAsyncSubmit_ignoresToolRecordFailureAndKeepsRunning() {
-        // 回归护栏（两个不变量）：
-        // 1) 补记 tool 成功只是展示事件，抛异常不得把已成功的恢复降级成 ERROR；
-        // 2) 任何情况下都不能把 run 退回 WAITING —— 一旦退回，wait 记录会回置 PENDING，
-        //    被 cron 再次 claim 并再提交一次异步执行，两个循环并发写同一个 run。
+        // Regression guard (two invariants):
+        // 1) Recording the tool success afterwards is only a display event; an exception must not downgrade a successful resume to ERROR;
+        // 2) Never put the run back to WAITING under any circumstance — if it is, the wait record is reset to PENDING,
+        //    claimed again by cron and submitted for another async execution, with two loops writing the same run concurrently.
         when(runSpi.claimForResume(7L)).thenReturn(runWithStatus(RunStatus.RUNNING.name()));
         doThrow(new IllegalStateException("timeline blew up"))
                 .when(eventPublisher).publishEvent(any(RuntimeEventVO.class));
@@ -259,7 +259,7 @@ class WaitResumeOutcomeTest {
 
     @Test
     void resumeFromWait_beforeSubmit_rollsBackToWaitingSoRetryCanWork() {
-        // 反向护栏：提交前失败必须回退，否则 run 卡在 RUNNING 却没有任何循环在跑
+        // Inverse guard: a failure before submission must roll back, otherwise the run sits in RUNNING with no loop running
         when(runSpi.claimForResume(7L)).thenReturn(runWithStatus(RunStatus.RUNNING.name()));
         doThrow(new IllegalStateException("session touch failed"))
                 .when(sessionSpi).touchSession(1L);

@@ -4,16 +4,16 @@ import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
 import com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum;
 
 /**
- * 全局 wait 工具的常量。
+ * Constants for the global wait tool.
  *
- * <p>wait 不走「睡 N 秒再返回」的常规工具语义，而是**挂起-恢复**：工具只写一条
- * {@code agent_pending_wait} 并立即返回，SessionRunner 判定后 break 退出循环，
- * 到点再由 {@code PendingWaitWakeScheduler} 唤醒。这样等待不占用虚拟线程、
- * 不占 maxParallel 槽位，也不受 tool.execution-timeout / step.execution-timeout 约束 ——
- * 后两者正是「等超过 60s」在常规工具语义下会被掐断的原因。
+ * <p>wait does not follow the usual "sleep N seconds then return" tool semantics; it is **suspend-resume**: the tool writes only one
+ * {@code agent_pending_wait} row and returns immediately, then SessionRunner decides and breaks out of the loop,
+ * and {@code PendingWaitWakeScheduler} wakes the run when due. This way the wait occupies no virtual thread,
+ * no maxParallel slot, and is not bound by tool.execution-timeout / step.execution-timeout —
+ * those two are exactly why "waiting more than 60s" gets cut off under normal tool semantics.
  *
- * <p>形态刻意照抄 {@link ChatClarification}（无独立 maven 模块、无 SPI bean）：
- * 常量 + 手写 schema + ContextPreparer 显式注册 + ToolExecutor 拦截。
+ * <p>The shape deliberately follows {@link ChatClarification} (no separate Maven module, no SPI bean):
+ * constants + hand-written schema + explicit registration in ContextPreparer + interception in ToolExecutor.
  */
 public final class WaitConstants {
 
@@ -23,26 +23,26 @@ public final class WaitConstants {
 
     public static final String TOOL_NAME = InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId();
 
-    /** 工具返回的 status；SessionRunner 循环外靠它判定「本次应挂起而非继续回模型」。 */
+    /** Status returned by the tool; outside the loop SessionRunner uses it to decide "this turn should suspend rather than go back to the model". */
     public static final String STATUS_WAITING = "waiting";
 
     public static final String JSON_STATUS = "status";
     public static final String JSON_WAIT_MS = "wait_ms";
 
     /**
-     * 单次 wait 上限（10 分钟）。挂起本身不受 tool/step 超时约束，但模型可以反复挂起，
-     * 没有上限就等于给了无限长的空转窗口。
+     * Single wait cap (10 minutes). Suspension itself is not bound by tool/step timeouts, but the model can suspend repeatedly,
+     * and without a cap that would hand it an unbounded idle window.
      */
     public static final int MAX_WAIT_MS = 600_000;
 
     public static final int MIN_WAIT_MS = 100;
 
     /**
-     * 唤醒时喂回模型的前缀。
+     * Prefix fed back to the model on wake.
      *
-     * <p>措辞上的重点是**禁止把「等过了」当成「已就绪」**：等待只给了页面时间，
-     * 不保证任何状态变化。若模型醒来直接假设渲染完成就会基于陈旧页面做动作，
-     * 这正是 getContent(mode:ready) 一套反复强调「等完必须复核」的同一条经验。
+     * <p>The wording matters: **never treat "waited" as "ready"**: waiting only gives the page time,
+     * it guarantees no state change. If the model wakes up and assumes rendering finished, it will act on a stale page —
+     * the same lesson repeatedly emphasized by the getContent(mode:ready) flow: "always re-check after waiting".
      */
     public static final String WAIT_RESUME_PREFIX =
             "[Waited the requested time. The page had time to settle but you do NOT know its current state — "
@@ -58,20 +58,20 @@ public final class WaitConstants {
                     + "check `ready`. Waiting never guarantees the page is ready: after waking you MUST re-read the "
                     + "current state before acting, and must NOT repeat the same wait if it already elapsed.";
 
-    /** agent_pending_wait.status 落库值。 */
+    /** Value persisted in agent_pending_wait.status. */
     public static final String PENDING_STATUS = "PENDING";
     public static final String RESUMED_STATUS = "RESUMED";
-    /** run 被停止时取消挂起：置此状态后，waker（listDue/claimForResume 只认 PENDING）不再恢复该 run。 */
+    /** Cancel a suspension when the run is stopped: once set, the waker (listDue/claimForResume only accept PENDING) will not resume the run. */
     public static final String CANCELLED_STATUS = "CANCELLED";
-    /** 恢复重试超限：置此状态并发 run 终态事件，避免永久卡 WAITING。 */
+    /** Resume retry limit exceeded: set this status and emit the run terminal event so the run is not stuck in WAITING forever. */
     public static final String FAILED_STATUS = "FAILED";
 
-    /** 挂起类型：wait 内置工具（唤醒时补工具结果 + 追加合成 user）。 */
+    /** Suspension kind: the wait builtin tool (on wake, append the tool result + a synthetic user message). */
     public static final String KIND_WAIT = com.buukle.agent.common.constant.PendingWaitKind.WAIT;
-    /** 挂起类型：LLM 瞬时失败后的梯度重试（唤醒时不补工具结果、不追加合成 user）。 */
+    /** Suspension kind: graded retry after a transient LLM failure (on wake, no tool result and no synthetic user message). */
     public static final String KIND_LLM_RETRY = com.buukle.agent.common.constant.PendingWaitKind.LLM_RETRY;
 
-    /** 单条等待记录的恢复重试上限（cron 每 10s 一轮，约 50s 内重试 5 次）。 */
+    /** Resume retry limit for a single wait record (the cron runs every 10s, so about 5 retries within ~50s). */
     public static final int MAX_RESUME_ATTEMPTS = 5;
 
     private WaitConstants() {

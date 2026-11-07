@@ -1,6 +1,6 @@
 package com.buukle.agent.common.constant;
 
-/** L2 工具的审批范围。 */
+/** Approval scope of L2 tools. */
 public enum ToolApprovalScope {
     SESSION,
     RUN,

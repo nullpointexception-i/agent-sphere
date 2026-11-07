@@ -1,6 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
-import com.buukle.agent.common.error.CommonErrorCode;
+
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class GroupRouterTemplateServiceImpl implements GroupRouterTemplateService {
 
-    private static final String ROLE_GROUP_ROUTER = "GROUP_ROUTER";
+    private static final String ROLE_GROUP_ROUTER = InstanceRole.GROUP_ROUTER.value();
 
     private final InstanceSpi instanceSpi;
 

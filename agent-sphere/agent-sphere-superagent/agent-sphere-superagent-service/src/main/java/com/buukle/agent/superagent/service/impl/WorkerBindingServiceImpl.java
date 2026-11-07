@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
-/** Worker 会话绑定：只写 worker_session_id，不改终态，交由调度器/终态回报推进状态。 */
+/** Worker session binding: writes only worker_session_id and does not change the terminal state; the scheduler/terminal report advances the status. */
 @Service
 @RequiredArgsConstructor
 public class WorkerBindingServiceImpl implements WorkerBindingPort {

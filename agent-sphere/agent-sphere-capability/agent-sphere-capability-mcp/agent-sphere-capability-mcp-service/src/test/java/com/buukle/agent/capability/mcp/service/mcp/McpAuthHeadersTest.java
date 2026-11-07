@@ -12,17 +12,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * authConfig 解析：合法则给出鉴权头，非法则**显式报错**（而不是静默不带鉴权）。
+ * authConfig parsing: valid input yields auth headers, invalid input **fails loudly** (instead of
+ * silently sending no auth).
  *
- * <p>这组断言直接对应一次真实事故：解析失败只打 warn 就继续，请求不带 Authorization 发出去，
- * 下游报「缺少 Authorization / 401」，而根因在 AS 的登记配置 —— 排查方向被带偏得很远。
- * 另外那条 warn 还把 authConfig 原文（含令牌）写进了日志。
+ * <p>These assertions map directly to a real incident: a parse failure only logged a warn and
+ * continued, so the request went out without Authorization and the downstream reported
+ * "missing Authorization / 401" while the root cause was AS's registration config - sending
+ * troubleshooting far in the wrong direction. That warn also wrote the raw authConfig (token
+ * included) to the logs.
  */
 class McpAuthHeadersTest {
 
     @Test
     void blankAuthConfigYieldsNoHeaders() {
-        // 空白是合法的「不需要鉴权」，不能报错，但也意味着请求不会带任何鉴权头。
+        // Blank is a legal "no auth needed" value and must not error, but it also means the request carries no auth header at all.
         assertEquals(Map.of(), McpAuthHeaders.parse(null));
         assertEquals(Map.of(), McpAuthHeaders.parse(""));
         assertEquals(Map.of(), McpAuthHeaders.parse("   "));
@@ -42,13 +45,13 @@ class McpAuthHeadersTest {
     void invalidJsonFailsLoudly() {
         BizException e = assertThrows(BizException.class, () -> McpAuthHeaders.parse("not-json"));
         assertEquals(CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID.getCode(), e.getErrorCode());
-        // 必须给出形状提示，否则使用者不知道该填什么
+        // Must include the shape hint, otherwise the user has no idea what to enter
         assertTrue(e.getMessage().contains(McpAuthHeaders.EXPECTED_SHAPE), e.getMessage());
     }
 
     @Test
     void bareTokenIsRejectedWithHint() {
-        // 最常见的误配：只粘贴了一串 token。此前会被静默忽略（不是 JSON 对象）。
+        // The most common misconfiguration: only a bare token was pasted. Previously it was silently ignored (not a JSON object).
         BizException e = assertThrows(BizException.class,
                 () -> McpAuthHeaders.parse("human-resource-intermediary-mcp-service-token-2024"));
         assertEquals(CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID.getCode(), e.getErrorCode());
@@ -63,7 +66,7 @@ class McpAuthHeadersTest {
 
     @Test
     void errorMessageMustNotLeakTheRawValue() {
-        // 脱敏要求：异常消息里不得回显 authConfig 原文（可能含令牌）。
+        // Redaction requirement: the exception message must not echo the raw authConfig (it may contain a token).
         String secret = "super-secret-token-value-12345";
         BizException e = assertThrows(BizException.class,
                 () -> McpAuthHeaders.parse("{\"Authorization\":\"" + secret + "\", \"bad\": {} }"));

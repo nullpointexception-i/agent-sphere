@@ -6,45 +6,45 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-/** 技能管理（builtin_9）入参：只包含创建/追加/更新所需字段。 */
+/** Input of skill management (builtin_9): only the fields needed to create/append/update. */
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class SkillManageExecuteContext extends ExecuteContext {
 
     @NotBlank
     @Schema(
-            description = "操作类型",
+            description = "Operation type",
             allowableValues = {"create", "append", "update"}
     )
     private String action;
 
-    @Schema(description = "append / update 的目标技能 id")
+    @Schema(description = "Target skill id for append / update")
     private Long skillId;
 
-    @Schema(description = "create 的技能名称")
+    @Schema(description = "Skill name for create")
     private String name;
 
-    @Schema(description = "技能描述")
+    @Schema(description = "Skill description")
     private String description;
 
-    @Schema(description = "create / update(full) 提交的 definition JSON")
+    @Schema(description = "definition JSON submitted by create / update(full)")
     private String definition;
 
     @Schema(
-            description = "update(patch) 的 Markdown 操作类型",
+            description = "Markdown operation type for update(patch)",
             allowableValues = {"replace_section", "insert_after", "replace_text"}
     )
     private String operation;
 
-    @Schema(description = "patch 时用于定位的标题")
+    @Schema(description = "Heading used to locate the target when patching")
     private String headingSearch;
 
-    @Schema(description = "replace_text 时被替换的文本")
+    @Schema(description = "Text to replace for replace_text")
     private String searchText;
 
-    @Schema(description = "replace_text 时的替换文本")
+    @Schema(description = "Replacement text for replace_text")
     private String replaceText;
 
-    @Schema(description = "append 追加内容 / patch 替换内容")
+    @Schema(description = "Content to append for append / replacement content for patch")
     private String content;
 }

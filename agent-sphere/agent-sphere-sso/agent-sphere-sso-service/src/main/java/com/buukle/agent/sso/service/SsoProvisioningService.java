@@ -39,7 +39,7 @@ public class SsoProvisioningService {
                         .eq(SsoIdentity::getSubject, subject)
                         .last("LIMIT 1"));
         if (existing != null) {
-            // 每次登录刷新第三方用户名（displaySubject），用户改名后下次登录自动同步
+            // Refresh the third-party username (displaySubject) on every login, so a renamed user syncs automatically on the next login
             String displaySubject = resolveDisplaySubject(preferredUsername, displayName, subject);
             if (!java.util.Objects.equals(existing.getDisplaySubject(), displaySubject)) {
                 existing.setDisplaySubject(displaySubject);
@@ -71,7 +71,7 @@ public class SsoProvisioningService {
         return ProvisionResult.of(user.getId(), user.getUsername(), true);
     }
 
-    /** 开通结果：userId + username + 是否首次开通（首次需要生成用户资源副本）。 */
+    /** Provisioning result: userId + username + whether this is the first provisioning (the first one creates private user resource copies). */
     public record ProvisionResult(Long userId, String username, boolean created) {
         public static ProvisionResult of(Long userId, String username, boolean created) {
             return new ProvisionResult(userId, username, created);

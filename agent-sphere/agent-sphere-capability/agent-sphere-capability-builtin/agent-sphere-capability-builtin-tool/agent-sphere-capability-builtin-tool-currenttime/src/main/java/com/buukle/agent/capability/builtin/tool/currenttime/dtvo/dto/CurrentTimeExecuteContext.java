@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-/** 当前时间工具无参数；保留空 context 以便 ToolExecutor 反序列化。 */
+/** The current-time tool takes no parameters; an empty context is kept so ToolExecutor can deserialize it. */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @JsonIgnoreProperties(ignoreUnknown = true)

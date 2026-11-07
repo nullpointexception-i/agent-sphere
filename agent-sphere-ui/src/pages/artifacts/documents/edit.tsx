@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   ArrowLeftOutlined,
   BoldOutlined,
@@ -269,7 +270,7 @@ export default function DocumentEdit() {
                   defaultMessage: 'Outline',
                 })}
               </Button>
-              <Can code="document:update">
+              <Can code={PERM.documentUpdate}>
                 <Button
                   type="primary"
                   size="small"

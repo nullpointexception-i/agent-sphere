@@ -7,49 +7,52 @@ import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import java.util.List;
 
 public interface AgentLlmInteractionRecordSpi {
-    /** 落库一次 LLM 调用记录，返回自增主键 id（供 Timeline 按轮次引用）。 */
+    /** Persist one LLM call record and return the auto-increment id (for the Timeline to reference by turn). */
     Long createRecord(AgentLlmInteractionRecordVO vo);
 
     /**
-     * 主 Agent 轮次开始：为本次调用分配一条独立记录（V117）。
+     * Main Agent turn start: allocate an independent record for this call (V117).
      *
-     * <p>同一 {@code (runId, turnNo, attemptNo)} 下已有 RUNNING 行时复用（进程中断重入）；
-     * 否则分配新的 {@code retryNo} 插入，保证上一次成功/失败的记录不被覆盖。
-     * attemptNo=0 为主路由，1..N 为 fallback。
+     * <p>When a RUNNING row already exists under the same {@code (runId, turnNo, attemptNo)} it is
+     * reused (re-entry after a process interruption); otherwise a new {@code retryNo} is allocated
+     * and inserted, ensuring the previous success/failure record is not overwritten.
+     * attemptNo=0 is the primary route, 1..N are fallbacks.
      */
     Long createOrGetRunning(AgentLlmInteractionRecordVO vo);
 
-    /** 主 Agent 轮次结束：仅更新仍为 RUNNING 的记录，避免旧 attempt 覆盖新 attempt。 */
+    /** Main Agent turn end: update only records that are still RUNNING, so an old attempt does not overwrite a new one. */
     void complete(Long id, AgentLlmInteractionRecordVO vo);
 
-    /** 按 (runId, turnNo) 取当前应展示的 attempt id（优先 RUNNING，其次最新）。 */
+    /** Get the attempt id currently to be displayed for (runId, turnNo) (prefer RUNNING, then the latest). */
     Long findByRunAndTurn(Long runId, Integer turnNo);
 
-    /** 兜底：超过阈值仍 RUNNING 的记录置 FAILED（进程中断留下的僵死记录）。 */
+    /** Fallback: set records still RUNNING past the threshold to FAILED (zombie records left by a process interruption). */
     int failStaleRunning(int staleMinutes);
 
     List<AgentLlmInteractionRecordVO> listByRunId(Long runId, int offset, int limit);
 
-    /** 当前 run 的全部 LLM 交互（按 id 升序；resume 恢复逐轮 assistant 正文用）。 */
+    /** All LLM interactions of the current run (ascending id; used by resume to restore per-turn assistant bodies). */
     List<AgentLlmInteractionRecordVO> listByRunIdAsc(Long runId);
 
     long countByRunId(Long runId);
 
     AgentLlmInteractionRecordVO getById(Long id);
 
-    /** 会话级用量聚合（聊天区最下方吸底展示用）。 */
+    /** Session-level usage aggregation (for the bottom-docked display in the chat area). */
     SessionUsageVO usageSummary(Long sessionId);
 
     /** Aggregate one Super-Agent usage by day and session type. */
     List<SuperAgentUsageVO> usageBySuperAgent(Long superAgentId, int days);
 
     /**
-     * 回填该 run 最新一条 {@code reply_content} 为空的 CHAT_REPLY 记录（finish 的 summary 作为该轮回复）。
+     * Backfill this run's latest CHAT_REPLY record whose {@code reply_content} is empty (finish's
+     * summary becomes that turn's reply).
      *
-     * <p>finish 的答案在 tool_calls 参数里，LLM 轮本身的 reply 为空；时间线 ASSISTANT 行按
-     * interaction.reply_content 渲染，不回填就会一直空白。
+     * <p>The finish answer lives in the tool_calls arguments, so the LLM turn's own reply is empty;
+     * the timeline ASSISTANT row is rendered from interaction.reply_content and would stay blank
+     * forever without this backfill.
      *
-     * @return true 表示确实更新了一条空 reply 的记录
+     * @return true means a record with an empty reply was actually updated
      */
     boolean updateLatestBlankReply(Long runId, String reply);
 }

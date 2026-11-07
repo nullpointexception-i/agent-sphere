@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -12,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Read-only user directory for the C-end workspace. */
 @RestController
-@RequestMapping("/api/v1/workspace/contacts")
+@RequestMapping(ApiPrefix.V1 + "/workspace/contacts")
 @RequiredArgsConstructor
 @WithTenant
 public class WorkspaceContactController extends BaseController {

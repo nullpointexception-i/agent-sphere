@@ -11,41 +11,45 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 历史会话清理 SQL。
+ * Historical session cleanup SQL.
  *
- * <p>刻意<b>不</b>继承 {@code BaseMapper}、也不引用任何 Entity：清理是跨域的
- * （tasks / completions / file_store 三张表分别属于其他模块），用裸 SQL 才能在不引入
- * 那些模块依赖的前提下操作它们，Mapper 因此可以待在 instance 模块内。
+ * <p>Deliberately does <b>not</b> extend {@code BaseMapper} and references no Entity: cleanup is
+ * cross-domain (the tasks / completions / file_store tables each belong to other modules), and raw
+ * SQL is the only way to operate on them without pulling in those module dependencies, which is why
+ * this mapper can live inside the instance module.
  *
- * <p><b>为什么全部是硬删（DELETE）而不是 MyBatis-Plus 的 remove()：</b>
- * session 子树里有 request/response/reasoning 等 TEXT 大字段，{@code @TableLogic} 会把 DELETE
- * 改写成 {@code UPDATE ... SET delete_flag = 1}，行数据原封不动留在堆表里，
- * <b>不会释放任何磁盘</b>。这是本 Mapper 对「只做逻辑删除」约定的显式豁免，仅用于清理场景。
+ * <p><b>Why everything is a hard delete (DELETE) instead of MyBatis-Plus remove():</b>
+ * the session subtree contains large TEXT fields such as request/response/reasoning, and
+ * {@code @TableLogic} would rewrite DELETE into {@code UPDATE ... SET delete_flag = 1}, leaving the
+ * row data untouched in the heap table and <b>releasing no disk space</b>. This is the mapper's
+ * explicit exemption from the "logical delete only" convention, used for cleanup only.
  *
- * <p><b>删除顺序不可调换：</b>全库只有两条真外键且都没有 ON DELETE CASCADE ——
- * {@code agent_run.session_id → agent_session} 与 {@code agent_task_artifact.task_id → agent_task}，
- * PG 默认 NO ACTION，顺序错了会直接 violates foreign key constraint。方法顺序即删除顺序。
+ * <p><b>The delete order cannot be changed:</b> the whole database has only two real foreign keys
+ * and neither has ON DELETE CASCADE — {@code agent_run.session_id → agent_session} and
+ * {@code agent_task_artifact.task_id → agent_task}. PG defaults to NO ACTION, so a wrong order
+ * fails outright with violates foreign key constraint. Method order equals delete order.
  *
- * <p><b>不加 delete_flag 条件：</b>已逻辑删除的行同样占磁盘，必须一并清掉。
+ * <p><b>No delete_flag condition:</b> logically deleted rows occupy disk too and must be cleaned up
+ * as well.
  */
 @Mapper
 public interface SessionCleanupMapper {
 
-    // ==================== 驱动查询 ====================
+    // ==================== Driving queries ====================
 
     /**
-     * 过期会话 id（按 id 升序分批）。
+     * Expired session ids (batched in ascending id order).
      *
-     * <p>过期判定用 created_at <b>和</b> updated_at 双条件：只判 created_at 会把「创建很久、
-     * 今天仍在用」的会话整棵删掉。
+     * <p>Expiry uses both created_at <b>and</b> updated_at: checking created_at alone would delete
+     * the whole tree of sessions "created long ago but still in use today".
      *
-     * <p>两个 NOT EXISTS 是活跃守卫：
+     * <p>The two NOT EXISTS clauses are the active guards:
      * <ul>
-     *   <li>run 处于 PENDING/RUNNING —— 正在跑，删了等于毁掉进行中的会话；</li>
-     *   <li>task 处于 QUEUED/RUNNING —— Bole 开放层长任务只更新 task/run 行、不会更新
-     *       session 行，因此光靠上面的 updated_at 条件仍会误删。</li>
+     *   <li>a run is PENDING/RUNNING — it is in flight, so deleting it would destroy an in-progress session;</li>
+     *   <li>a task is QUEUED/RUNNING — Bole open-layer long-running tasks only update task/run rows
+     *       and never the session row, so the updated_at condition above alone would still delete them by mistake.</li>
      * </ul>
-     * 状态值由调用方从 RunEnum / TaskEnum 传入（不在 SQL 里写字面量）。
+     * Status values are passed in by the caller from RunEnum / TaskEnum (no literals in SQL).
      */
     @Select("""
             <script>
@@ -73,12 +77,13 @@ public interface SessionCleanupMapper {
                                         @Param("limit") int limit);
 
     /**
-     * 过期会话<b>总数</b>：进度条的分母。
+     * <b>Total</b> number of expired sessions: the denominator of the progress bar.
      *
-     * <p>WHERE 条件与 {@link #selectExpiredSessionIds} 完全一致，必须一致 ——
-     * 否则分母和实际处理量对不上，进度条会虚高或到不了 100%。
-     * 必须在执行开始时算一次并存进执行记录：dry-run 期间一行都不删，
-     * 现场重算分母会随已完成数一起变，百分比必然失真。
+     * <p>The WHERE conditions are identical to {@link #selectExpiredSessionIds} and must stay
+     * identical — otherwise the denominator and the actual processed count disagree and the progress
+     * bar either overshoots or never reaches 100%. It must be computed once at the start of the run
+     * and stored on the execution record: during a dry-run nothing is deleted, so recomputing the
+     * denominator live would drift with the completed count and the percentage would be meaningless.
      */
     @Select("""
             <script>
@@ -102,9 +107,10 @@ public interface SessionCleanupMapper {
                               @Param("activeTaskStatuses") Collection<String> activeTaskStatuses);
 
     /**
-     * 过了时间线、但因活跃守卫被挡住的会话数（诊断用）。
+     * Number of sessions past the time threshold but blocked by the active guard (for diagnostics).
      *
-     * <p>这个值偏大说明保留期相对业务节奏太激进、数据没降下来，运维需要知道是被什么挡住的。
+     * <p>A large value means the retention period is too aggressive for the business cadence and the
+     * data is not shrinking; operators need to know what is blocking it.
      */
     @Select("""
             <script>
@@ -126,7 +132,7 @@ public interface SessionCleanupMapper {
                                     @Param("activeRunStatuses") Collection<String> activeRunStatuses,
                                     @Param("activeTaskStatuses") Collection<String> activeTaskStatuses);
 
-    /** session_id 命中的 task（第一路）。 */
+    /** Task matched by session_id (first path). */
     @Select("""
             <script>
             SELECT id FROM agent_task WHERE session_id IN
@@ -136,11 +142,12 @@ public interface SessionCleanupMapper {
     List<Long> selectTaskIdsBySessionIds(@Param("sessionIds") Collection<Long> sessionIds);
 
     /**
-     * 被本批 run 的 task_id 指向的 task（第二路）。
+     * Tasks referenced by this batch's run.task_id (second path).
      *
-     * <p>{@code agent_task.session_id} 可空，且与 {@code agent_run.session_id} 可能不一致
-     * （AgentTaskServiceImpl 先建 session 再写 task，artifact 的 run_id 又是另一轮回填的）。
-     * 只按 session_id 删会留下悬挂的 task 及其 artifact。
+     * <p>{@code agent_task.session_id} is nullable and may disagree with
+     * {@code agent_run.session_id} (AgentTaskServiceImpl creates the session before writing the
+     * task, and the artifact's run_id is backfilled in yet another round). Deleting only by
+     * session_id would leave dangling tasks and their artifacts.
      */
     @Select("""
             <script>
@@ -151,7 +158,7 @@ public interface SessionCleanupMapper {
             """)
     List<Long> selectTaskIdsByRunSessionIds(@Param("sessionIds") Collection<Long> sessionIds);
 
-    /** dry-run 用：一批 session 将连带删除的各表行数（顺序与实际删除一致）。 */
+    /** dry-run only: per-table row counts a batch of sessions would cascade-delete (order matches the actual deletion). */
     @Select("""
             <script>
             SELECT 'agent_timeline' AS table_name, count(*) AS row_count FROM agent_timeline WHERE session_id IN
@@ -197,9 +204,9 @@ public interface SessionCleanupMapper {
     List<Map<String, Object>> countCascadeBySessionIds(@Param("sessionIds") Collection<Long> sessionIds,
                                                        @Param("taskIds") Collection<Long> taskIds);
 
-    // ==================== 级联删除（顺序不可调换） ====================
+    // ==================== Cascade deletes (order cannot change) ====================
 
-    /** 1. timeline 是 read-model，ref_* 软引用下面所有表，先删最干净。 */
+    /** 1. timeline is a read-model; ref_* soft-references every table below, so delete it first for the cleanest state. */
     @Delete("""
             <script>
             DELETE FROM agent_timeline WHERE session_id IN
@@ -208,7 +215,7 @@ public interface SessionCleanupMapper {
             """)
     int deleteTimelineBySessionIds(@Param("sessionIds") Collection<Long> sessionIds);
 
-    /** 2. LLM 交互记录：磁盘占用第一大户（request/response/reasoning 全量 TEXT）。 */
+    /** 2. LLM interaction records: the biggest disk consumer (full TEXT for request/response/reasoning). */
     @Delete("""
             <script>
             DELETE FROM agent_llm_interaction_record WHERE session_id IN
@@ -281,7 +288,7 @@ public interface SessionCleanupMapper {
             """)
     int deleteDocumentBySessionIds(@Param("sessionIds") Collection<Long> sessionIds);
 
-    /** 11. 必须在 agent_session 之前：唯一指向 session 的真外键。 */
+    /** 11. Must come before agent_session: the only real foreign key pointing at a session. */
     @Delete("""
             <script>
             DELETE FROM agent_run WHERE session_id IN
@@ -290,7 +297,7 @@ public interface SessionCleanupMapper {
             """)
     int deleteRunBySessionIds(@Param("sessionIds") Collection<Long> sessionIds);
 
-    /** 12. agent_task_artifact 无 delete_flag 列（只能硬删），且是 task 的真外键持有者。 */
+    /** 12. agent_task_artifact has no delete_flag column (hard delete only) and holds the real foreign key to task. */
     @Delete("""
             <script>
             DELETE FROM agent_task_artifact WHERE task_id IN
@@ -299,7 +306,7 @@ public interface SessionCleanupMapper {
             """)
     int deleteTaskArtifactByTaskIds(@Param("taskIds") Collection<Long> taskIds);
 
-    /** 13. task 必须在 artifact 之后、session 之后（软引用，无 FK）。 */
+    /** 13. task must come after artifact and after session (soft reference, no FK). */
     @Delete("""
             <script>
             DELETE FROM agent_task WHERE id IN
@@ -308,7 +315,7 @@ public interface SessionCleanupMapper {
             """)
     int deleteTaskByIds(@Param("taskIds") Collection<Long> taskIds);
 
-    /** 14. 根表最后：此时已无任何 run 引用。 */
+    /** 14. Root table last: at this point nothing references it any more. */
     @Delete("""
             <script>
             DELETE FROM agent_session WHERE id IN
@@ -317,13 +324,15 @@ public interface SessionCleanupMapper {
             """)
     int deleteSessionByIds(@Param("sessionIds") Collection<Long> sessionIds);
 
-    // ==================== 独立/孤儿清理（不挂在 session 上，按时间清） ====================
+    // ==================== Standalone/orphan cleanup (not tied to a session, cleaned by time) ====================
 
     /**
-     * 孤儿 task：session_id 为空或指向已不存在的 session，且非活跃状态。
+     * Orphan tasks: session_id is null or points to a session that no longer exists, and the task is
+     * not active.
      *
-     * <p>活跃守卫在级联路径上生效，这条独立路径也必须同样排除 QUEUED/RUNNING，
-     * 否则会出现「主路径不删活跃任务、孤儿路径却删掉」的漏洞。
+     * <p>The active guard applies on the cascade path, and this standalone path must likewise exclude
+     * QUEUED/RUNNING — otherwise there would be a hole where "the main path does not delete active
+     * tasks but the orphan path does".
      */
     @Select("""
             <script>
@@ -349,7 +358,7 @@ public interface SessionCleanupMapper {
             """)
     long countArtifactsByTaskIds(@Param("taskIds") Collection<Long> taskIds);
 
-    /** LLM 交互孤儿：session_id 为空的行（idx_llm_interaction_created 已建）。 */
+    /** Orphan LLM interactions: rows with a null session_id (idx_llm_interaction_created already exists). */
     @Select("""
             <script>
             SELECT id FROM agent_llm_interaction_record
@@ -372,7 +381,7 @@ public interface SessionCleanupMapper {
     List<Long> selectOrphanMemoryIds(@Param("cutoff") LocalDateTime cutoff,
                                      @Param("limit") int limit);
 
-    /** 过期截图/附件（biz_key 白名单，BYTEA 是磁盘占用绝对大头）。 */
+    /** Expired screenshots/attachments (biz_key whitelist; BYTEA is by far the largest disk consumer). */
     @Select("""
             <script>
             SELECT id FROM agent_file_store

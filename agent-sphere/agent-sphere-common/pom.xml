@@ -12,11 +12,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- 任务级 MCP 凭证需要跨副本共享（backend replicas=2），故 common 需要 Redis。
-             只引 Redisson 核心库（仅用 RedissonClient 类型），不引 spring-boot-starter-data-redis：
-             本项目的 Redis 连接统一由 infrastructure 的 RedisConfig 手工创建，
-             配置写在旧前缀 spring.redis.* 下 —— Spring Boot 3 的自动装配只认 spring.data.redis.*，
-             用它会导致连接回落到 localhost:6379 而静默失效（曾导致任务凭证从未写入）。 -->
+        <!-- Task-level MCP credentials must be shared across replicas (backend replicas=2), so common needs Redis.
+             Only the Redisson core library is pulled in (we only use the RedissonClient type), not
+             spring-boot-starter-data-redis: this project's Redis connections are created manually by
+             RedisConfig in infrastructure, and the config sits under the legacy prefix spring.redis.*
+             — Spring Boot 3 auto-configuration only binds spring.data.redis.*, so using it would make
+             the connection fall back to localhost:6379 and fail silently (this once meant task
+             credentials were never written). -->
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson</artifactId>

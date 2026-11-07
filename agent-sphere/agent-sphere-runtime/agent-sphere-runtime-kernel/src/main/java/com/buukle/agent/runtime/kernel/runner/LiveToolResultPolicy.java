@@ -15,15 +15,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 构造 LLM 请求时的工具结果预算投影。
+ * Projection of the tool result budget used when building the LLM request.
  *
- * <p>注意：只投影请求副本，<b>绝不修改</b> SessionRunner 的 canonical messages。
- * canonical 保留完整工具结果，run-local 压缩/挂起快照才能看到原文，而不是占位符。
+ * <p>Note: this only projects a copy of the request and <b>never modifies</b> SessionRunner's canonical messages.
+ * canonical keeps the full tool results so run-local compaction / suspension snapshots see the original text, not placeholders.
  *
  * <ul>
- *   <li>浏览器结果：默认保留全文；仅单条超过 browserFullMaxChars（大页面）时替换为带
- *       callId 的引用，可用 read_tool_result 回读。</li>
- *   <li>非浏览器结果：按单条上限压缩，最近 N 条始终保留，其余在总预算内尽量保留。</li>
+ *   <li>Browser results: full text is kept by default; only a single result exceeding browserFullMaxChars (large pages) is replaced by a
+ *       callId reference that can be read back with read_tool_result.</li>
+ *   <li>Non-browser results: compressed under a per-item limit, the most recent N are always kept, and the rest are kept as far as the total budget allows.</li>
  * </ul>
  */
 public final class LiveToolResultPolicy {
@@ -108,7 +108,7 @@ public final class LiveToolResultPolicy {
         return out;
     }
 
-    /** 超过全文阈值：只留引用卡片，模型可调用 read_tool_result 回读全文。 */
+    /** Exceeds the full-text threshold: keep only a reference card; the model can read the full text back with read_tool_result. */
     public static String browserReference(String callId, String content) {
         int chars = content != null ? content.length() : 0;
         return "[Browser result omitted from context: callId=" + safeCallId(callId)

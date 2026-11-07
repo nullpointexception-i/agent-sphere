@@ -237,7 +237,11 @@ export default function ImPage() {
                     seq: event.seq || 0,
                     senderType: '',
                     type: 'TEXT',
-                    content: { text: event.previewText || '新消息' },
+                    content: {
+                      text:
+                        event.previewText ||
+                        t('pages.im.newMessage', 'New message'),
+                    },
                     createdAt: event.createdAt,
                   },
                 }
@@ -281,7 +285,7 @@ export default function ImPage() {
                   content: {
                     text:
                       type === 'message_recalled'
-                        ? '[消息已撤回]'
+                        ? t('pages.im.messageWithdrawn', '[Message withdrawn]')
                         : event.previewText || '',
                   },
                 },
@@ -384,7 +388,7 @@ export default function ImPage() {
     loadConversations();
   }, []);
 
-  // IM 用户级 SSE：按事件类型增量更新，不再在事件到达时全量刷新。
+  // IM user-level SSE: incremental updates by event type instead of a full refresh on each event.
   useReconnectingSse('/api/v1/im/stream', (type, event) => {
     void handleStreamEvent(type, event).catch(() => {});
   });
@@ -474,7 +478,9 @@ export default function ImPage() {
       await loadMessages(activeId, true);
       loadConversations();
     } catch {
-      toast.error('附件发送失败');
+      toast.error(
+        t('pages.im.attachmentSendFailed', 'Failed to send attachment'),
+      );
     } finally {
       setSending(false);
     }
@@ -505,7 +511,7 @@ export default function ImPage() {
     const workItemId = Number(content.workItemId);
     if (!Number.isFinite(agentId) || !Number.isFinite(workItemId)) return;
     await superAgentApi.retryWorkItem(agentId, workItemId);
-    toast.success(t('pages.superAgent.retried', '已重新排队'));
+    toast.success(t('pages.superAgent.retried', 'Queued again'));
     await refreshActive();
   };
 
@@ -516,11 +522,11 @@ export default function ImPage() {
     modalApi.confirm({
       title: t(
         'pages.superAgent.cancelConfirm',
-        '取消后 Worker Run 会停止，确认取消？',
+        'Worker Run will be stopped after cancelling. Continue?',
       ),
       onOk: async () => {
         await superAgentApi.cancelWorkItem(agentId, workItemId);
-        toast.success(t('pages.superAgent.cancelled', '任务已取消'));
+        toast.success(t('pages.superAgent.cancelled', 'Task cancelled'));
         await refreshActive();
       },
     });
@@ -539,7 +545,7 @@ export default function ImPage() {
   const recallMessage = async (messageId: number) => {
     if (!activeId) return;
     await imApi.recall(activeId, messageId);
-    toast.success('已撤回');
+    toast.success(t('pages.im.withdrawn', 'Withdrawn'));
     await loadMessages(activeId, true);
   };
 
@@ -554,7 +560,7 @@ export default function ImPage() {
     setEditSaving(true);
     try {
       await imApi.edit(activeId, editMessageId, { text: editText });
-      toast.success('已更新');
+      toast.success(t('pages.im.updated', 'Updated'));
       setEditOpen(false);
       await loadMessages(activeId, true);
     } finally {
@@ -572,7 +578,11 @@ export default function ImPage() {
           : participant,
       ),
     );
-    toast.success(muted ? '已免打扰' : '已取消免打扰');
+    toast.success(
+      muted
+        ? t('pages.im.muted', 'Notifications muted')
+        : t('pages.im.unmuted', 'Notifications unmuted'),
+    );
   };
 
   const saveGate = async () => {
@@ -586,7 +596,7 @@ export default function ImPage() {
           purpose: groupPurpose,
         }),
       ]);
-      toast.success(t('pages.im.gateSaved', '群触发规则已保存'));
+      toast.success(t('pages.im.gateSaved', 'Group trigger rule saved'));
       setGateOpen(false);
       await loadConversations();
     } finally {
@@ -610,7 +620,7 @@ export default function ImPage() {
         displayName: `Agent #${agentId}`,
       });
     }
-    toast.success(t('pages.im.created', '会话已创建'));
+    toast.success(t('pages.im.created', 'Conversation created'));
     setCreateOpen(false);
     createForm.resetFields();
     await loadConversations();
@@ -630,9 +640,9 @@ export default function ImPage() {
           onSelect={setActiveId}
           onCreate={() => setCreateOpen(true)}
           labels={{
-            conversations: t('pages.im.conversations', '会话'),
-            newConversation: t('pages.im.newConversation', '新建'),
-            noConversation: t('pages.im.noConversation', '暂无会话'),
+            conversations: t('pages.im.conversations', 'Conversations'),
+            newConversation: t('pages.im.newConversation', 'New'),
+            noConversation: t('pages.im.noConversation', 'No conversations'),
           }}
         />
 
@@ -654,7 +664,7 @@ export default function ImPage() {
                     onClick={openGate}
                     style={{ marginLeft: 8 }}
                   >
-                    {t('pages.im.groupSettings', '群设置')}
+                    {t('pages.im.groupSettings', 'Group Settings')}
                   </Button>
                 ) : null}
                 <Input.Search
@@ -662,12 +672,18 @@ export default function ImPage() {
                   onChange={(event) => setSearchInput(event.target.value)}
                   onSearch={runSearch}
                   allowClear
-                  placeholder="搜索消息"
+                  placeholder={t('pages.im.searchMessages', 'Search messages')}
                   style={{ width: 220, marginLeft: 8 }}
                 />
                 {searchKeyword ? (
                   <Tag closable onClose={clearSearch} style={{ marginLeft: 8 }}>
-                    搜索: {searchKeyword}
+                    {intl.formatMessage(
+                      {
+                        id: 'pages.im.searchPrefix',
+                        defaultMessage: 'Search: {keyword}',
+                      },
+                      { keyword: searchKeyword },
+                    )}
                   </Tag>
                 ) : null}
               </div>
@@ -685,8 +701,8 @@ export default function ImPage() {
                 onCancelCard={cancelCard}
                 onTimeline={openCardTimeline}
                 labels={{
-                  noMessage: t('pages.im.noMessage', '还没有消息'),
-                  reply: t('pages.im.reply', '回复'),
+                  noMessage: t('pages.im.noMessage', 'No messages yet'),
+                  reply: t('pages.im.reply', 'Reply'),
                 }}
               />
               <Composer
@@ -703,18 +719,21 @@ export default function ImPage() {
                 labels={{
                   placeholder: t(
                     'pages.im.placeholder',
-                    '输入消息，Enter 发送，Shift+Enter 换行',
+                    'Type a message. Enter to send, Shift+Enter for a new line',
                   ),
-                  mention: t('pages.im.mention', '@数字员工'),
-                  send: t('pages.im.send', '发送'),
-                  replying: t('pages.im.replying', '回复'),
-                  attachment: '附件',
+                  mention: t('pages.im.mention', '@Agent'),
+                  send: t('pages.im.send', 'Send'),
+                  replying: t('pages.im.replying', 'Reply'),
+                  attachment: t('pages.im.attachment', 'Attachment'),
                 }}
               />
             </>
           ) : (
             <Empty
-              description={t('pages.im.selectConversation', '请选择会话')}
+              description={t(
+                'pages.im.selectConversation',
+                'Select a conversation',
+              )}
             />
           )}
         </div>
@@ -722,7 +741,7 @@ export default function ImPage() {
 
       <Modal
         open={createOpen}
-        title={t('pages.im.newConversation', '新建会话')}
+        title={t('pages.im.newConversation', 'New')}
         onCancel={() => setCreateOpen(false)}
         onOk={createConversation}
         destroyOnHidden
@@ -734,7 +753,7 @@ export default function ImPage() {
         >
           <Form.Item
             name="type"
-            label={t('pages.im.type', '类型')}
+            label={t('pages.im.type', 'Type')}
             rules={[{ required: true }]}
           >
             <Select
@@ -744,20 +763,26 @@ export default function ImPage() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="title" label={t('pages.im.title', '标题')}>
+          <Form.Item name="title" label={t('pages.im.title', 'Title')}>
             <Input maxLength={256} />
           </Form.Item>
           <Form.Item
             name="participantUserIds"
-            label={t('pages.im.userIds', '成员用户 ID')}
-            tooltip={t('pages.im.userIdsHint', '逗号分隔或回车添加')}
+            label={t('pages.im.userIds', 'Member User IDs')}
+            tooltip={t(
+              'pages.im.userIdsHint',
+              'Separate with commas or press Enter',
+            )}
           >
             <Select mode="tags" tokenSeparators={[',']} />
           </Form.Item>
           <Form.Item
             name="agentIds"
-            label={t('pages.im.agentIds', '数字员工 ID')}
-            tooltip={t('pages.im.agentIdsHint', '创建后会把对应数字员工加入群')}
+            label={t('pages.im.agentIds', 'Super Agent IDs')}
+            tooltip={t(
+              'pages.im.agentIdsHint',
+              'Add groups already bound to these Super Agents',
+            )}
           >
             <Select mode="tags" tokenSeparators={[',']} />
           </Form.Item>
@@ -766,41 +791,58 @@ export default function ImPage() {
 
       <Modal
         open={gateOpen}
-        title={t('pages.im.groupSettings', '群设置')}
+        title={t('pages.im.groupSettings', 'Group Settings')}
         confirmLoading={gateSaving}
         onCancel={() => setGateOpen(false)}
         onOk={saveGate}
         destroyOnHidden
       >
         <Form layout="vertical">
-          <Form.Item label="群名称">
+          <Form.Item label={t('pages.im.groupName', 'Group name')}>
             <Input
               value={groupTitle}
               onChange={(event) => setGroupTitle(event.target.value)}
             />
           </Form.Item>
-          <Form.Item label="群目的 / 规则">
+          <Form.Item
+            label={t('pages.im.groupPurpose', 'Group purpose / rules')}
+          >
             <Input.TextArea
               value={groupPurpose}
               onChange={(event) => setGroupPurpose(event.target.value)}
               autoSize={{ minRows: 3, maxRows: 8 }}
             />
           </Form.Item>
-          <Form.Item label={t('pages.im.trigger', '触发规则')}>
+          <Form.Item label={t('pages.im.trigger', 'Trigger Rule')}>
             <Select
               value={gateTrigger}
               onChange={setGateTrigger}
               options={[
-                { value: 'MENTION', label: 'MENTION - 仅 @数字员工 时触发' },
+                {
+                  value: 'MENTION',
+                  label: t(
+                    'pages.im.triggerMention',
+                    'MENTION - only when @Super Agent',
+                  ),
+                },
                 {
                   value: 'RELEVANCE',
-                  label: 'RELEVANCE - 每条消息都交给 Group Router 判断',
+                  label: t(
+                    'pages.im.triggerRelevance',
+                    'RELEVANCE - Group Router judges every message',
+                  ),
                 },
-                { value: 'ALL', label: 'ALL - 每条消息都触发' },
+                {
+                  value: 'ALL',
+                  label: t(
+                    'pages.im.triggerAll',
+                    'ALL - triggered by every message',
+                  ),
+                },
               ]}
             />
           </Form.Item>
-          <Form.Item label="Agent 免打扰">
+          <Form.Item label={t('pages.im.agentMute', 'Agent mute')}>
             <Listy
               items={participants.filter(
                 (participant) => participant.participantType === 'AGENT',
@@ -835,7 +877,7 @@ export default function ImPage() {
 
       <Modal
         open={editOpen}
-        title="编辑消息"
+        title={t('pages.im.editMessage', 'Edit message')}
         confirmLoading={editSaving}
         onOk={saveEdit}
         onCancel={() => setEditOpen(false)}
@@ -852,7 +894,7 @@ export default function ImPage() {
         open={timelineOpen}
         width={900}
         footer={null}
-        title="Worker 时间线"
+        title={t('pages.im.workerTimeline', 'Worker timeline')}
         onCancel={() => {
           setTimelineOpen(false);
           setTimelineRows([]);

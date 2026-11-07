@@ -1,5 +1,9 @@
 package com.buukle.agent.tasks.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -24,24 +28,24 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDateTime;
 
 /**
- * tasks 能力管理（RBAC：admin:tasks:*）。
+ * Tasks capability management (RBAC: admin:tasks:*).
  */
 @WithTenant
 @RestController
-@RequestMapping("/api/v1/admin/tasks")
+@RequestMapping(ApiPrefix.V1 + "/admin/tasks")
 @RequiredArgsConstructor
 public class AdminTasksController extends BaseController {
 
     private final AgentTaskService taskService;
 
     @AuditLog(action = "CREATE", resourceType = "Task", resourceId = "#result?.body?.id")
-    @RequirePermission("admin:tasks:create")
+    @RequirePermission(PermissionCodes.ADMIN_TASKS_CREATE)
     @PostMapping
     public ResponseEntity<TaskVO> create(@Valid @RequestBody CreateTaskDTO dto) {
         return created(taskService.submit(dto, CallerAuth.of(null, null, dto.getBusinessType())));
     }
 
-    @RequirePermission("admin:tasks:read")
+    @RequirePermission(PermissionCodes.ADMIN_TASKS_READ)
     @GetMapping
     public ResponseEntity<Page<TaskVO>> list(
             @RequestParam(required = false) String keyword,
@@ -53,14 +57,14 @@ public class AdminTasksController extends BaseController {
         return ok(taskService.page(keyword, status, startTime, endTime, page, size));
     }
 
-    @RequirePermission("admin:tasks:read")
+    @RequirePermission(PermissionCodes.ADMIN_TASKS_READ)
     @GetMapping("/{id}")
     public ResponseEntity<TaskVO> detail(@PathVariable Long id) {
         return ok(taskService.get(id, null, null, CallerAuth.of(null, null, null)));
     }
 
     @AuditLog(action = "STOP_TASK", resourceType = "Task", resourceId = "#id")
-    @RequirePermission("admin:tasks:update")
+    @RequirePermission(PermissionCodes.ADMIN_TASKS_UPDATE)
     @PostMapping("/{id}/stop")
     public ResponseEntity<?> stop(@PathVariable Long id) {
         taskService.stop(id, CallerAuth.of(null, null, null));

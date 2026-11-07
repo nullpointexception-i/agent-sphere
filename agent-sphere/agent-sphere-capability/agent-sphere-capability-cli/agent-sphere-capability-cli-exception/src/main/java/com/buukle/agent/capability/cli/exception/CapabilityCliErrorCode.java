@@ -7,8 +7,8 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum CapabilityCliErrorCode implements ErrorCode {
-    CLI_NOT_FOUND("A0023", "CLI工具不存在", "请检查CLI ID"),
-    CLI_EXECUTION_FAILED("B0012", "CLI执行失败", "CLI命令执行异常，请稍后重试");
+    CLI_NOT_FOUND("A0023", "CLI tool not found", "Check the CLI ID"),
+    CLI_EXECUTION_FAILED("B0012", "CLI execution failed", "The CLI command failed; retry later");
 
     private final String code;
     private final String message;

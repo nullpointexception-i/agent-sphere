@@ -20,10 +20,10 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 会话运行协调器（分布式）：
- * - 状态机（IDLE / RUNNING / RUNNING_WITH_PENDING）与 owner 租约落 Redis，副本可互换；
- * - run 执行锚定单一副本（owner），执行中每 60s 续约租约；
- * - in-flight loop 瞬态留在执行副本（决策 A），输入队列/取消语义存活，可被接管。
+ * Session run coordinator (distributed):
+ * - state machine (IDLE / RUNNING / RUNNING_WITH_PENDING) and owner lease live in Redis, so replicas are interchangeable;
+ * - run execution is anchored to a single replica (owner), which renews the lease every 60s;
+ * - the in-flight loop's transient state stays on the executing replica (decision A); input queue/cancel semantics survive and can be taken over.
  */
 @Slf4j
 @Component
@@ -89,7 +89,7 @@ public class SessionRunCoordinator {
                 RLock lock = lock(sessionId);
                 lock.lock();
                 try {
-                    // 已取消：丢弃排队消息并转 IDLE，不再为 pending 重启主循环
+                    // Already cancelled: drop queued messages and go to IDLE; do not restart the main loop for pending input
                     if (inputManager.hasPending(sessionId) && !sessionRunner.isSessionCancelled(sessionId)) {
                         stateBucket(sessionId).set(State.RUNNING.name());
                         setOwner(sessionId);

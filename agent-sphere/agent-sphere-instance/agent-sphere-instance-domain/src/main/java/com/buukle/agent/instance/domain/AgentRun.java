@@ -25,43 +25,47 @@ public class AgentRun {
     /** Snapshot of the instance completion contract for this run. */
     private String completionProtocol;
     /**
-     * 创建时快照：自主任务（Worker / 任务型 run）禁止向用户澄清。
+     * Snapshot taken at creation: autonomous tasks (Worker / task-type runs) may not ask the user
+     * for clarification.
      *
-     * <p>必须落库（V100）。此前只写在内存的 RunVO 上，任何恢复路径
-     * （claimForResume / getRun / 审批或等待恢复）从 DB 重建 run 时都会丢，
-     * 导致 ContextPreparer 判定 noClarification=false：finish 不再注册、
-     * ask_clarification 反而注册，STRICT_FINISH 的 worker 因此没有收口工具而空转。
+     * <p>This must be persisted (V100). It used to live only on the in-memory RunVO, so any recovery
+     * path (claimForResume / getRun / approval or wait recovery) that rebuilt the run from the DB
+     * lost it, making ContextPreparer decide noClarification=false: finish was no longer registered
+     * while ask_clarification was, leaving the STRICT_FINISH worker without a finalization tool and
+     * spinning in place.
      */
     private Boolean noClarification;
-    /** 聊天图片附件引用 JSON（[{"fileKey","contentType"}]）；Timeline USER 行回显用。 */
+    /** Chat image attachment reference JSON ([{"fileKey","contentType"}]); echoed by the Timeline USER row. */
     private String attachments;
-    /** 命中循环次数上限被强收口（任务守卫据此判失败，避免"半成品"冒充完成）。 */
+    /** Loop cap hit and forced finalization applied (the task guard fails the task on this, so a "half-finished" result cannot pass as done). */
     private Boolean loopCapped;
-    /** 已消耗的 agent 循环轮次；跨挂起恢复递增，使 maxLoopCount 真正成为 per-run 预算。 */
+    /** Consumed agent loop turns; incremented across suspend/resume so maxLoopCount is a true per-run budget. */
     private Integer loopCount;
     /**
-     * 本 run 生效的轮次上限（V88 起固化）。
+     * Loop limit in effect for this run (pinned since V88).
      *
-     * <p>此前每次进入循环都重新解析上限，而 run 有 5 个重入入口、只有首次在任务请求线程上
-     * （持有 TaskLoopLimitHolder），其余入口在调度线程上会丢失 TASK 层而回落到较小值。
-     * 固化为 null 时才重新解析。
+     * <p>Previously the limit was re-resolved on every loop entry, while a run has 5 re-entry points
+     * and only the first one runs on the task request thread (holding TaskLoopLimitHolder); the other
+     * entries run on scheduler threads, lose the TASK layer and fall back to a smaller value.
+     * Only re-resolved when this is null.
      */
     private Integer loopLimit;
     /**
-     * 失败原因（V87 起）。此前 run 挂了不留任何原因，事件里的 errorMessage 被丢弃、
-     * 表上又没有对应列，导致「为什么失败」事后完全无法回答。
+     * Failure reason (since V87). Previously a failed run kept no reason at all: the errorMessage in
+     * the event was dropped and there was no matching column, so "why did it fail" could never be
+     * answered afterwards.
      */
     private String errorMessage;
-    /** 挂起类型（V115）：WAIT=wait 工具；LLM_RETRY=上游瞬时失败重试。 */
+    /** Suspend type (V115): WAIT=wait tool; LLM_RETRY=retry after a transient upstream failure. */
     @TableField(updateStrategy = com.baomidou.mybatisplus.annotation.FieldStrategy.ALWAYS)
     private String waitKind;
-    /** 当前已发生的 LLM 瞬时失败次数（V115），用于梯度退避；成功一轮后归零。 */
+    /** Number of LLM transient failures so far (V115), used for graded backoff; reset to zero after a successful turn. */
     private Integer retryAttempt;
-    /** 本 run 实际使用的主模型路由（V116）；挂起恢复时用它，避免从实例重新解析导致换模型。 */
+    /** Primary model route actually used by this run (V116); resume uses it to avoid re-resolving from the instance and switching models. */
     private Long modelRouteId;
-    /** 本 run 固化的思考强度（V118）。 */
+    /** Reasoning effort pinned for this run (V118). */
     private String reasoningEffort;
-    /** 本 run 固化的思考预算（Qwen thinking_budget，V118）。 */
+    /** Reasoning budget pinned for this run (Qwen thinking_budget, V118). */
     private Integer reasoningBudgetTokens;
     @TableLogic
     private Boolean deleteFlag;

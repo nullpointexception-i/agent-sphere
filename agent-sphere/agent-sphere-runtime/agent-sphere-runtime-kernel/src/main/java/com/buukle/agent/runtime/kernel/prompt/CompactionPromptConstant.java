@@ -27,7 +27,7 @@ public final class CompactionPromptConstant {
                     + "Now process the following. Stay within the token limit and produce a COMPLETE summary:\n";
 
 
-    /** 摘要超过目标预算时，把上一轮摘要作为输入再压缩。 */
+    /** When the summary exceeds the target budget, feed the previous summary back in and compress again. */
     public static String buildReducePrompt(String existingSummary, long maxSummaryTokens) {
         return "You are compressing an existing conversation summary. Output ONLY the compressed summary, no extra text.\n\n"
                 + "Keep the exact section format: ## Goal, ## Progress, ## Decisions, ## Next Steps, ## Key Context.\n"

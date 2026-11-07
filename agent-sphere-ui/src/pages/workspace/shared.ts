@@ -20,7 +20,7 @@ export function displayName(user: any) {
     user?.englishName ||
     user?.username ||
     user?.name ||
-    tw('common.unnamed', '未命名')
+    tw('common.unnamed', 'Unnamed')
   );
 }
 

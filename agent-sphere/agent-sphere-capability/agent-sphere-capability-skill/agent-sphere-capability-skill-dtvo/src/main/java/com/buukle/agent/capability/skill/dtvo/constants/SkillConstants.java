@@ -3,7 +3,8 @@ package com.buukle.agent.capability.skill.dtvo.constants;
 public final class SkillConstants {
 
     /**
-     * skill definition 的最大字符数。列类型为 JSONB，无长度上限，此处仅为拒绝异常巨大的报文。
+     * Maximum character count for a skill definition. The column is JSONB with no length limit;
+     * this bound only exists to reject absurdly large payloads.
      */
     public static final int MAX_DEFINITION_LENGTH = 100000;
 

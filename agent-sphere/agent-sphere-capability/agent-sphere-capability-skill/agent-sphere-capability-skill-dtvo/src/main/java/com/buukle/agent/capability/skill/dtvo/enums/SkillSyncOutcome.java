@@ -1,29 +1,30 @@
 package com.buukle.agent.capability.skill.dtvo.enums;
 
 /**
- * 单个副本在一轮自动同步中的结果。
+ * Outcome of a single copy in one auto-sync round.
  *
- * <p>存在的意义：自动同步「没效果」时最需要回答的是「为什么这个技能没跟上」，
- * 而原先 {@code syncFromOrigin} 对所有情况只返回 boolean（true=同步、false=跳过），
- * 源被删、取消公开、版本未领先、条件更新失败这四种完全不同的原因在日志里长得一模一样。
+ * <p>Why this exists: when auto-sync "has no effect", the question that matters is "why did this
+ * skill not keep up?", yet the old {@code syncFromOrigin} returned only a boolean for every case
+ * (true=synced, false=skipped), so source deleted, unpublished, version not ahead and conditional
+ * update failed - four completely different causes - all looked identical in the logs.
  *
- * <p>非 UPDATED 的取值会原样写进 {@code capability_skill_sync_run.detail}，
- * 管理端可直接看到「哪个副本因为什么没同步」。
+ * <p>Every non-UPDATED value is written verbatim into {@code capability_skill_sync_run.detail},
+ * so the admin console can see which copy was not synced and why.
  */
 public enum SkillSyncOutcome {
 
-    /** 已把源内容同步到副本 */
+    /** Origin content was synced into the copy */
     UPDATED,
 
-    /** 源 skill 已被删除（逻辑删），副本永远停在旧内容 */
+    /** The origin skill was deleted (logical delete); the copy stays on old content forever */
     SOURCE_GONE,
 
-    /** 源 skill 已取消公开，副本不再跟随 */
+    /** The origin skill is no longer public; the copy no longer follows it */
     NOT_PUBLIC,
 
-    /** 源版本没有领先于副本已同步的版本，无需同步（这是绝大多数副本的常态） */
+    /** The origin version is not ahead of the version already synced, nothing to do (the normal case for most copies) */
     VERSION_NOT_AHEAD,
 
-    /** 条件 UPDATE 影响 0 行：origin_version 被并发改动，本轮按未同步计 */
+    /** Conditional UPDATE affected 0 rows: origin_version changed concurrently, counted as not synced this round */
     CONCURRENT_UPDATE
 }

@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -86,7 +87,7 @@ export default function McpList() {
           intl.formatMessage(
             {
               id: 'pages.capabilities.mcp.testSuccess',
-              defaultMessage: '连接成功，发现 {count} 个工具',
+              defaultMessage: 'Connected, found {count} tools',
             },
             { count: res.toolCount ?? 0 },
           ),
@@ -97,7 +98,10 @@ export default function McpList() {
         );
       }
     } catch (e: any) {
-      message.error(e?.message || '连接测试失败');
+      message.error(
+        e?.message ||
+          intl.formatMessage({ id: 'pages.capabilities.mcp.testFailed' }),
+      );
     }
   };
 
@@ -111,7 +115,10 @@ export default function McpList() {
       const res = await agentApi.mcp.listTools(record.id);
       setTools(Array.isArray(res) ? res : []);
     } catch (e: any) {
-      setToolsError(e?.message || '获取工具列表失败');
+      setToolsError(
+        e?.message ||
+          intl.formatMessage({ id: 'pages.capabilities.mcp.toolsError' }),
+      );
     } finally {
       setToolsLoading(false);
     }
@@ -156,7 +163,9 @@ export default function McpList() {
       setCallToolState((s) => ({
         ...s,
         loading: false,
-        error: e?.message || '工具调用失败',
+        error:
+          e?.message ||
+          intl.formatMessage({ id: 'pages.capabilities.mcp.callFailed' }),
       }));
     }
   };
@@ -217,7 +226,7 @@ export default function McpList() {
             icon={<EyeOutlined />}
             onClick={() => setViewRecord(record)}
           />
-          <Can code="capability:mcp:update">
+          <Can code={PERM.capabilityMcpUpdate}>
             <Button
               type="link"
               size="small"
@@ -230,7 +239,7 @@ export default function McpList() {
               }}
             />
           </Can>
-          <Can code="capability:mcp:delete">
+          <Can code={PERM.capabilityMcpDelete}>
             <Button
               type="link"
               danger
@@ -263,7 +272,7 @@ export default function McpList() {
               }}
             />
           </Can>
-          <Can code="capability:mcp:test">
+          <Can code={PERM.capabilityMcpTest}>
             <Dropdown
               menu={{
                 items: [
@@ -439,7 +448,7 @@ export default function McpList() {
               actionRef.current?.reload();
             }}
           />,
-          <Can key="new" code="capability:mcp:create">
+          <Can key="new" code={PERM.capabilityMcpCreate}>
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -509,7 +518,7 @@ export default function McpList() {
                     new Error(
                       intl.formatMessage({
                         id: 'pages.capabilities.mcp.serverUrlInvalid',
-                        defaultMessage: '以 http:// 或 https:// 开头',
+                        defaultMessage: 'Must start with http:// or https://',
                       }),
                     ),
                   );
@@ -728,7 +737,7 @@ export default function McpList() {
       <Drawer
         title={`${toolsRecord?.name || ''} — ${intl.formatMessage({
           id: 'pages.capabilities.mcp.toolsTitle',
-          defaultMessage: '工具列表',
+          defaultMessage: 'Tools',
         })}`}
         open={toolsOpen}
         onClose={() => setToolsOpen(false)}
@@ -744,7 +753,7 @@ export default function McpList() {
             showIcon
             message={intl.formatMessage({
               id: 'pages.capabilities.mcp.toolsError',
-              defaultMessage: '获取工具列表失败',
+              defaultMessage: 'Failed to list tools',
             })}
             description={toolsError}
             action={
@@ -780,7 +789,7 @@ export default function McpList() {
                   >
                     {intl.formatMessage({
                       id: 'pages.capabilities.mcp.tryCall',
-                      defaultMessage: '试调用',
+                      defaultMessage: 'Try call',
                     })}
                   </Button>
                 </Space>
@@ -822,7 +831,7 @@ export default function McpList() {
       <Modal
         title={`${callToolState.toolName} — ${intl.formatMessage({
           id: 'pages.capabilities.mcp.tryCallTitle',
-          defaultMessage: '试调用',
+          defaultMessage: 'Try call',
         })}`}
         open={callToolState.open}
         onCancel={() =>
@@ -841,7 +850,7 @@ export default function McpList() {
           <Form.Item
             label={intl.formatMessage({
               id: 'pages.capabilities.mcp.args',
-              defaultMessage: '参数 (JSON)',
+              defaultMessage: 'Arguments (JSON)',
             })}
           >
             <Input.TextArea

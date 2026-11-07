@@ -25,7 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * finish.summary 回填：只更新「最新一条且 reply_content 为空」的 CHAT_REPLY，绝不覆盖正常轮次正文。
+ * finish.summary backfill: update only the "latest CHAT_REPLY with an empty reply_content" and never overwrite a normal turn body.
  */
 @ExtendWith(MockitoExtension.class)
 class AgentLlmInteractionRecordServiceImplTest {
@@ -38,7 +38,7 @@ class AgentLlmInteractionRecordServiceImplTest {
 
     @BeforeAll
     static void initMybatisLambdaCache() {
-        // LambdaUpdateWrapper 靠 TableInfo 解析列名；纯 Mockito 环境没有 MyBatis 启动过程，不预热会抛 lambda cache 找不到
+        // LambdaUpdateWrapper resolves column names via TableInfo; a pure Mockito environment has no MyBatis startup, so without warm-up it throws lambda cache not found
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), "fixture"),
                 AgentLlmInteractionRecord.class);

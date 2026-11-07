@@ -1,19 +1,21 @@
 package com.buukle.agent.instance.dtvo.enums;
 
 /**
- * 统一 Timeline 行展示状态。
+ * Display state of a unified Timeline row.
  *
- * <p>只用于渲染，<b>不参与任何流程控制</b>；控制判定一律读来源表
- * （{@code agent_run} / {@code agent_llm_interaction_record} / 工具 / 澄清 / 审批）。
+ * <p>Used for rendering only and <b>does not participate in any flow control</b>; control decisions
+ * always read the source tables ({@code agent_run} / {@code agent_llm_interaction_record} / tool /
+ * clarification / approval).
  *
- * <p>每个 kind 只允许一个子集，见 {@link TimelineKind#allowedStates()}。
- * 词表统一为大写，不再接受 {@code started} / {@code succeeded} 等历史写法。
+ * <p>Each kind allows only one subset, see {@link TimelineKind#allowedStates()}.
+ * The vocabulary is uniformly upper-case and no longer accepts historical spellings such as
+ * {@code started} / {@code succeeded}.
  */
 public enum TimelineState {
     PENDING("PENDING"),
     RUNNING("RUNNING"),
     WAITING("WAITING"),
-    /** wait 到点已恢复：用于把「等待中」行改成过去式，同时仍允许终态另起一行。 */
+    /** wait elapsed and resumed: turns the "waiting" row into past tense while still allowing a terminal row to be opened separately. */
     RESUMED("RESUMED"),
     AWAITING_USER("AWAITING_USER"),
     IN_PROGRESS("IN_PROGRESS"),
@@ -34,20 +36,20 @@ public enum TimelineState {
         return code;
     }
 
-    /** 该状态是否允许出现在指定 kind 上。 */
+    /** Whether this state is allowed on the given kind. */
     public boolean isValidFor(TimelineKind kind) {
         return kind != null && kind.allowedStates().contains(this);
     }
 
-    /** 终态判定（展示用）。 */
+    /** Terminal-state check (for display). */
     public boolean isTerminal() {
         return this == COMPLETED || this == FAILED || this == CANCELLED
                 || this == TIMEOUT || this == ANSWERED || this == SUCCEEDED;
     }
 
     /**
-     * 严格解析：只认枚举 code，大小写不一致或历史写法一律返回 null。
-     * 历史数据由 V111 迁移一次性归一。
+     * Strict parsing: only the enum code is accepted; mismatched casing or legacy spellings return null.
+     * Historical data is normalized once by the V111 migration.
      */
     public static TimelineState from(String code) {
         if (code == null) {

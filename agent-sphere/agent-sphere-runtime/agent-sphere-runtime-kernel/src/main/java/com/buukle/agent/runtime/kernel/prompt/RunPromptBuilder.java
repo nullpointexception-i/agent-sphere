@@ -28,7 +28,7 @@ public class RunPromptBuilder {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
-    /** 是否给工具 schema 注入 `_reason`；关闭后历史数据仍可展示。 */
+    /** Whether to inject `_reason` into tool schemas; when disabled, historical data is still displayed. */
     @Value("${buukle.agent.tool.call-reason-enabled:true}")
     private boolean callReasonEnabled = true;
 
@@ -39,8 +39,8 @@ public class RunPromptBuilder {
                     ? ctx.getAgentInstance().getSystemPrompt() : "");
         }
         List<RuntimeTool> tools = ctx != null ? ctx.getTools() : null;
-        // 只列工具名：完整 description/schema 已在请求 `tools` 里各出现一次，
-        // 再拼进 system prompt 会让每个工具（尤其浏览器/技能工具）的说明重复发送。
+        // List tool names only: the full description/schema already appears once each in the request's `tools`,
+        // and concatenating them into the system prompt again would resend every tool's description (especially browser/skill tools).
         if (tools != null && !tools.isEmpty()) {
             List<RuntimeTool> sorted = new ArrayList<>(tools);
             sorted.sort(java.util.Comparator.comparing(RuntimeTool::getLlmToolName, String::compareTo));
@@ -69,10 +69,10 @@ public class RunPromptBuilder {
     }
 
     /**
-     * 待办列表尾部小段（系统消息），由组装侧追加到消息最末（不晚于 FINAL_TURN），
-     * 保证 messages[0] 与历史前缀字节稳定命中缓存。todolist 每次变更只原位替换该槽内容。
+     * Small todo-list tail segment (system message), appended by the assembly side to the very end of messages (no later than FINAL_TURN),
+     * keeping messages[0] and the history prefix byte-stable for cache hits. Each todolist change only replaces the content of this slot in place.
      *
-     * @return 待办后缀文本；todolistText 为空时返回 null（调用方应移除已有槽位）
+     * @return the todo suffix text; null when todolistText is empty (the caller should remove the existing slot)
      */
     public String buildTodolistSuffix(String todolistText) {
         if (todolistText == null || todolistText.isBlank()) {
@@ -83,22 +83,22 @@ public class RunPromptBuilder {
                 + RunnerConstants.PROMPT_TODOLIST_INSTRUCTION;
     }
 
-    /** 判断消息是否待办槽（以 header marker 开头，用于原位定位/删除）。 */
+    /** Decides whether a message is the todo slot (starts with the header marker; used for in-place location/removal). */
     public boolean isTodolistSlot(String content) {
         return content != null && content.startsWith(RunnerConstants.PROMPT_TODOLIST_HEADER);
     }
 
     /**
-     * 每轮 loop 预算预告：告诉模型「当前第几轮 / 还剩几轮（含本轮）」。
+     * Per-loop budget notice: tells the model "which loop this is / how many loops remain (including this one)".
      *
-     * <p>{@code current} 与 {@code remaining} 均以 1 起算（remaining = 最后一轮时的 1），
-     * 所以文案里永远不会出现「剩 0 轮」这种自相矛盾的说法。
-     * 剩余轮数逼近上限时追加紧迫提醒 —— 模型对「还剩 100 轮」天然无感，
-     * 不提示就会一直不收口，最后被 loop cap 硬截断成半成品。
+     * <p>Both {@code current} and {@code remaining} are 1-based (remaining = 1 on the last loop),
+     * so the text can never say something self-contradictory like "0 loops left".
+     * When remaining loops approach the limit an urgency reminder is appended — models are naturally indifferent to "100 loops left",
+     * and without the nudge they never finalize and end up hard-truncated by the loop cap into a half-finished result.
      *
-     * @param current   当前轮序号（1 起算）
-     * @param remaining 剩余轮数（1 起算，含本轮）
-     * @param total     生效的轮次上限（实例/任务/系统配置覆盖后的真实值）
+     * @param current   current loop number (1-based)
+     * @param remaining remaining loops (1-based, including this one)
+     * @param total     effective loop limit (the real value after instance/task/system config overrides)
      */
     public String buildLoopBudget(int current, int remaining, int total) {
         String text = RunnerConstants.LOOP_BUDGET_PREFIX
@@ -111,14 +111,14 @@ public class RunPromptBuilder {
         return text;
     }
 
-    /** 判断消息是否 loop 预算预告（以 marker 开头，用于跨轮定位并清除上一轮副本）。 */
+    /** Decides whether a message is the loop budget notice (starts with the marker; used to locate and clear the previous loop's copy across turns). */
     public boolean isLoopBudget(String content) {
         return content != null && content.startsWith(RunnerConstants.LOOP_BUDGET_PREFIX);
     }
 
     public List<ToolDefinitionDTO> buildToolDefinitions(List<RuntimeTool> tools) {
         if (tools == null) tools = List.of();
-        // 稳定排序：tools 数组参与请求前缀缓存，名称排序可避免能力遍历顺序变动导致的缓存失效
+        // Stable ordering: the tools array participates in the request prefix cache, so sorting by name avoids cache misses caused by capability iteration order changes
         List<RuntimeTool> sorted = new ArrayList<>(tools);
         sorted.sort(java.util.Comparator.comparing(RuntimeTool::getLlmToolName, String::compareTo));
         List<ToolDefinitionDTO> defs = new ArrayList<>();
@@ -143,7 +143,7 @@ public class RunPromptBuilder {
         return defs;
     }
 
-    /** 给工具 schema 注入非必填的 `_reason`，不覆盖工具已有同名字段。 */
+    /** Injects an optional `_reason` into tool schemas without overwriting an existing field of the same name. */
     @SuppressWarnings("unchecked")
     private static void injectCallReason(Map<String, Object> params) {
         if (params == null) {

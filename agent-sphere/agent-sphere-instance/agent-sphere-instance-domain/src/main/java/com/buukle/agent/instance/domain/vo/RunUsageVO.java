@@ -4,11 +4,11 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-/** 单个 run 的用量聚合（agent_llm_interaction_record 冗余标量列求和）。 */
+/** Usage aggregation for a single run (sum of the redundant scalar columns in agent_llm_interaction_record). */
 @Data
 public class RunUsageVO implements Serializable {
     private Long runId;
-    /** 该 run 的 LLM 调用次数。 */
+    /** Number of LLM calls in this run. */
     private Long interactionCount;
     private Long promptTokens;
     private Long completionTokens;
@@ -16,7 +16,7 @@ public class RunUsageVO implements Serializable {
     private Long cacheHitTokens;
     private Long cacheMissTokens;
 
-    /** 空摘要（无任何调用数据时）。 */
+    /** Empty summary (when there is no call data at all). */
     public static RunUsageVO empty(Long runId) {
         RunUsageVO vo = new RunUsageVO();
         vo.setRunId(runId);

@@ -3,67 +3,67 @@ package com.buukle.agent.instance.spi;
 import com.buukle.agent.instance.dtvo.dto.TimelineRefQuery;
 
 /**
- * 统一 Timeline（打平展示索引）契约：
- * 会话级 seq 分配、行记录/封口、keyset 分页读取（正文解析）。
+ * Unified Timeline (flattened display index) contract:
+ * session-level seq allocation, row recording/closing, keyset paged reads (body resolution).
  */
 public interface AgentTimelineSpi {
 
-    /** 分配会话级单调 seq（Redis INCR，不重置）。 */
+    /** Allocate a session-level monotonic seq (Redis INCR, never reset). */
     long nextSeq(Long sessionId);
 
     /**
-     * 记录一行 timeline（返回分配的 seq）。
+     * Record one timeline row (returns the allocated seq).
      */
     long record(Long sessionId, Long runId, String kind, String subtype, String state, String title,
                 Long refRunId, Long refInteractionId, Long refToolCallId,
                 Long refSubAgentRunId, Long refClarificationId);
 
-    /** 记录工具授权行（refApprovalId 指向 agent_tool_approval.id）。 */
+    /** Record a tool approval row (refApprovalId points to agent_tool_approval.id). */
     long recordApproval(Long sessionId, Long runId, String kind, String subtype, String state, String title,
                         Long refRunId, Long refApprovalId);
 
     /**
-     * 更新行状态/标题（幂等；state 为空则跳过）。
+     * Update a row's state/title (idempotent; skipped when state is empty).
      */
     void update(Long sessionId, Long seq, String state, String subtype, String title);
 
-    /** 回填行引用的 LLM 交互记录 id（每轮 LLM 调用落库后由 recorder 补引用，一轮一行）。 */
+    /** Backfill the LLM interaction record id referenced by a row (the recorder fills it in after each turn's LLM call is persisted; one row per turn). */
     void updateRefInteractionId(Long sessionId, Long seq, Long interactionId);
 
-    /** 回填 COMPACTION 行的压缩记录 id（正文从 agent_compact_record.summary_after 解析）。 */
+    /** Backfill the compaction record id of a COMPACTION row (body resolved from agent_compact_record.summary_after). */
     void updateRefCompactId(Long sessionId, Long seq, Long compactRecordId);
 
     /**
-     * 按 run + kind + ref 查最近一行的 seq；不存在返回 null。
+     * Find the seq of the most recent row by run + kind + ref; returns null when absent.
      *
-     * <p>供 TimelineRecorder 在进程内 Map 未命中时做 DB 兜底：
-     * 跨副本/重启后仍能把 PENDING→ANSWERED、RUNNING→COMPLETED 收敛到同一行。
+     * <p>Used by TimelineRecorder as a DB fallback when the in-process Map misses: across
+     * replicas/restarts it still converges PENDING→ANSWERED and RUNNING→COMPLETED onto the same row.
      */
     Long findLatestSeq(TimelineRefQuery query);
 
-    /** 按 run + kind + ref 查最近一行的 state；不存在返回 null。 */
+    /** Find the state of the most recent row by run + kind + ref; returns null when absent. */
     String findLatestState(TimelineRefQuery query);
 
-    /** 按子 Agent 运行 id 更新其头行状态（sub_agent_run 结束封口）。 */
+    /** Update the header row state for a sub-agent run id (closes it when sub_agent_run ends). */
     void updateBySubAgentRun(Long subAgentRunId, String state);
 
     /**
-     * 按 LLM 交互记录建/复用 assistant 行。
+     * Create or reuse the assistant row for an LLM interaction record.
      *
-     * <p>(ref_run_id, ref_interaction_id) 唯一：重启/跨副本后命中同一轮直接复用，
-     * 不再新建第二条空气泡。
+     * <p>(ref_run_id, ref_interaction_id) is unique: after a restart/across replicas the same turn is
+     * reused directly instead of creating a second empty bubble.
      */
     long recordAssistantByInteraction(Long sessionId, Long runId, Long interactionId);
 
-    /** 关闭该 run 所有仍 RUNNING 的 assistant 行（终态兜底）。 */
+    /** Close all assistant rows of this run that are still RUNNING (terminal-state fallback). */
     int closeRunningAssistant(Long sessionId, Long runId, String state);
 
-    /** 按 ref_interaction_id 找 assistant 行 seq；不存在返回 null。 */
+    /** Find the seq of the assistant row by ref_interaction_id; returns null when absent. */
     Long findSeqByInteraction(Long runId, Long interactionId);
 
     /**
-     * keyset 分页读取：beforeSeq=向上翻（更早）、afterSeq=断线补档（更新）、均空=最近一页；
-     * 返回页（含从 ref 解析好的正文）。
+     * Keyset paging read: beforeSeq=scroll back (older), afterSeq=reconnect catch-up (newer), both empty=latest page;
+     * returns the page (with bodies already resolved from ref).
      */
     com.buukle.agent.instance.dtvo.vo.SessionTimelinePageVO page(Long sessionId, Long beforeSeq, Long afterSeq, int limit);
 }

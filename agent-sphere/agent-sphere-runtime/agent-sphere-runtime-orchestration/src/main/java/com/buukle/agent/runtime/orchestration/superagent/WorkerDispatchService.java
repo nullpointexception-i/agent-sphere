@@ -21,12 +21,12 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
- * Worker 派发：为 Work Item 创建独立 Worker Session，并启动一次 run。
+ * Worker dispatch: create a dedicated Worker Session for a Work Item and start one run.
  *
- * <p>superagent-service 只依赖 {@link WorkerDispatchPort}；本类在 orchestration 内
- * 复用 {@link ChatRuntimeService} 的会话/运行能力。Worker 会话是系统内部会话
- * （{@code sessionType=WORKER}），创建与启动期间显式清空请求上下文，避免把调度线程
- * 继承来的用户身份带进后台任务。
+ * <p>superagent-service depends only on {@link WorkerDispatchPort}; this class, inside orchestration,
+ * reuses {@link ChatRuntimeService}'s session/run capabilities. A Worker session is a system-internal session
+ * ({@code sessionType=WORKER}); the request context is explicitly cleared while creating and starting it, so user identity
+ * inherited by the scheduling thread is not carried into the background task.
  */
 @Slf4j
 @Service

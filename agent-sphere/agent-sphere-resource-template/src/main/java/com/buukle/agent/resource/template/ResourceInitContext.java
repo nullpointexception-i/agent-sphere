@@ -7,7 +7,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 资源模板初始化上下文：携带身份源信息 + 已建资源缓存（供跨类型引用，如 completions/instance 引用 route id）。
+ * Resource template initialization context: carries identity provider info + a cache of created
+ * resources (for cross-type references, e.g. completions/instance referencing a route id).
  */
 @Getter
 @Setter

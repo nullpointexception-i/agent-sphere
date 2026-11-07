@@ -19,13 +19,13 @@ public interface UserSpi {
 
     void logout();
 
-    /** 退出所有设备：吊销当前用户的全部有效会话。 */
+    /** Sign out of all devices: revoke all valid sessions of the current user. */
     void logoutAll();
 
-    /** 当前用户的有效登录会话（设备管理）。 */
+    /** Valid login sessions of the current user (device management). */
     List<UserSessionVO> listSessions();
 
-    /** 吊销当前用户的一条指定会话。 */
+    /** Revoke one specified session of the current user. */
     void revokeSession(Long sessionId);
 
     void updateProfile(Long userId, String displayName, String englishName, String avatar);

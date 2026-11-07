@@ -6,8 +6,9 @@ import com.buukle.agent.model.dtvo.dto.complete.ThinkingDTO;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * LlmSamplingConfigDTO → ChatCompletionRequestDTO 的共享映射工具（纯静态，无 Spring 依赖）。
- * 供 agent 主/子链路、completions 层与全局兜底共用，保证同一套 config JSON 语义一致。
+ * Shared mapping utility from LlmSamplingConfigDTO to ChatCompletionRequestDTO (pure static, no Spring dependencies).
+ * Used by the agent main/sub chains, the completions layer and the global fallback so that the same config JSON
+ * keeps consistent semantics.
  */
 public final class LlmSamplingConfigMapper {
 
@@ -19,7 +20,7 @@ public final class LlmSamplingConfigMapper {
     private LlmSamplingConfigMapper() {
     }
 
-    /** 解析 config JSON；空/非法返回 null。 */
+    /** Parse config JSON; returns null when empty or invalid. */
     public static LlmSamplingConfigDTO fromJson(String configJson) {
         if (configJson == null || configJson.isBlank()) return null;
         try {
@@ -29,7 +30,7 @@ public final class LlmSamplingConfigMapper {
         }
     }
 
-    /** 字段级合并：global 为基底，instance 非空字段覆盖（实例优先，全局兜底）；两者皆空返回 null。 */
+    /** Field-level merge: global is the base, non-null instance fields override it (instance wins, global is the fallback); returns null when both are empty. */
     public static LlmSamplingConfigDTO merge(String globalConfigJson, String instanceConfigJson) {
         LlmSamplingConfigDTO merged = fromJson(globalConfigJson);
         LlmSamplingConfigDTO instance = fromJson(instanceConfigJson);
@@ -57,7 +58,7 @@ public final class LlmSamplingConfigMapper {
         return merged;
     }
 
-    /** 将配置映射到请求（仅设置非空字段）。 */
+    /** Map the config onto the request (only non-null fields are set). */
     public static void apply(ChatCompletionRequestDTO request, LlmSamplingConfigDTO cfg) {
         if (request == null || cfg == null) return;
         if (cfg.getTemperature() != null) request.setTemperature(cfg.getTemperature());
@@ -87,7 +88,7 @@ public final class LlmSamplingConfigMapper {
         if (cfg.getUser() != null) request.setUser(cfg.getUser());
     }
 
-    /** 归一化 thinking 取值：/"enabled"/true/开 → "enabled"；/"disabled"/关 → "disabled"；其余不设置。 */
+    /** Normalize the thinking value: "enabled"/true/on → "enabled"; "disabled"/false/off → "disabled"; anything else is left unset. */
     public static String resolveThinkingType(String value) {
         if (value == null || value.isBlank()) return null;
         if (THINKING_ENABLED.equalsIgnoreCase(value)

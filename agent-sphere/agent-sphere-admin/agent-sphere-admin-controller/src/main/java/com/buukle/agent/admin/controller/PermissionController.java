@@ -1,5 +1,8 @@
 package com.buukle.agent.admin.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.admin.dtvo.vo.SysPermissionVO;
 import com.buukle.agent.admin.spi.PermissionSpi;
@@ -21,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/admin/permissions")
+@RequestMapping(ApiPrefix.V1 + "/admin/permissions")
 @RequiredArgsConstructor
 public class PermissionController extends BaseController {
 
@@ -50,21 +53,21 @@ public class PermissionController extends BaseController {
     }
 
     @AuditLog(action = "CREATE", resourceType = "Permission", resourceId = "#result?.body?.id")
-    @RequirePermission("admin:permission:create")
+    @RequirePermission(PermissionCodes.ADMIN_PERMISSION_CREATE)
     @PostMapping
     public ResponseEntity<SysPermissionVO> create(@RequestBody SysPermissionVO vo) {
         return ok(permissionSpi.create(vo));
     }
 
     @AuditLog(action = "UPDATE", resourceType = "Permission", resourceId = "#id")
-    @RequirePermission("admin:permission:update")
+    @RequirePermission(PermissionCodes.ADMIN_PERMISSION_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<SysPermissionVO> update(@PathVariable Long id, @RequestBody SysPermissionVO vo) {
         return ok(permissionSpi.update(id, vo));
     }
 
     @AuditLog(action = "DELETE", resourceType = "Permission", resourceId = "#id")
-    @RequirePermission("admin:permission:delete")
+    @RequirePermission(PermissionCodes.ADMIN_PERMISSION_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         permissionSpi.delete(id);

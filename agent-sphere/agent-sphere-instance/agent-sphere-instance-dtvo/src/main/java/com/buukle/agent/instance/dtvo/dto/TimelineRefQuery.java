@@ -8,10 +8,12 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 
 /**
- * Timeline 行去重查询条件：同一 run 下按 kind + ref 定位“应该被复用的那一行”。
+ * Timeline row deduplication query: locates "the row that should be reused" within the same run by
+ * kind + ref.
  *
- * <p>为什么需要它：TimelineRecorder 的进程内 Map 只在单副本有效；PENDING 与 RESPONDED /
- * RUNNING 与 COMPLETED 可能落在不同副本或进程重启之后，必须回 DB 找旧行，而不是新插一行。
+ * <p>Why it is needed: TimelineRecorder's in-process Map is only valid within a single replica;
+ * PENDING vs RESPONDED / RUNNING vs COMPLETED may land on different replicas or after a process
+ * restart, so the old row must be looked up in the DB instead of inserting a new one.
  */
 @Data
 @Builder
@@ -24,15 +26,15 @@ public class TimelineRefQuery implements Serializable {
     /** TimelineKind code: clarification / tool / tool_approval / run_status / compaction / assistant。 */
     private String kind;
 
-    /** CLARIFICATION 行使用。 */
+    /** Used by CLARIFICATION rows. */
     private Long refClarificationId;
 
-    /** TOOL 行使用。 */
+    /** Used by TOOL rows. */
     private Long refToolCallId;
 
-    /** TOOL_APPROVAL 行使用。 */
+    /** Used by TOOL_APPROVAL rows. */
     private Long refApprovalId;
 
-    /** COMPACTION 行使用。 */
+    /** Used by COMPACTION rows. */
     private Long refCompactId;
 }

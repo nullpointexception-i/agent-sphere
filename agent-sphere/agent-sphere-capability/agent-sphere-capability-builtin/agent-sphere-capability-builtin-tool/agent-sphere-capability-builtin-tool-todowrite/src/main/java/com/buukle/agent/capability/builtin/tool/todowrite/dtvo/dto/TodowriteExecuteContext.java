@@ -27,12 +27,13 @@ public class TodowriteExecuteContext extends ExecuteContext {
         @NotNull
         private String priority;
 
-        @Schema(description = "来源技能 id（skill_library 返回的 skillId）。仅当该条目来自某技能的步骤时填写；"
-                + "执行前据此与 stepId 一起回查正文，否则留空。")
+        @Schema(description = "Source skill id (the skillId returned by skill_library). Fill this only when the item "
+                + "comes from a skill step; before executing, use it with stepId to re-read the body, otherwise leave blank.")
         private Long skillId;
 
-        @Schema(description = "来源技能步骤的标题标识，如 step1 / step1.1（取自技能大纲标题的首个词）。"
-                + "执行该条目时用 skill_library(action=get, skillId=<skillId>, sectionHeading=<stepId>) 读取该节正文。")
+        @Schema(description = "Heading identifier of the source skill step, e.g. step1 / step1.1 (the first word of "
+                + "the skill outline heading). When executing this item, read that section body via "
+                + "skill_library(action=get, skillId=<skillId>, sectionHeading=<stepId>).")
         private String stepId;
     }
 }

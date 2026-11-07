@@ -27,7 +27,7 @@ public class AuditLogCleanupTask {
 
     @Scheduled(cron = "${buukle.agent.audit.cleanup-cron:0 0 3 * * ?}")
     public void cleanup() {
-        // 多副本：同一时刻仅一个副本执行清扫，其余跳过
+        // Multi-replica: only one replica performs the sweep at any moment, the rest skip
         RLock lock = redissonClient.getLock(CLEANUP_LOCK_KEY);
         if (!lock.tryLock()) {
             return;

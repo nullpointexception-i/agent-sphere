@@ -1,6 +1,6 @@
 package com.buukle.agent.common.constant;
 
-/** 工具安全级别：L1 直接调用，L2 需用户确认。 */
+/** Tool security level: L1 is called directly, L2 requires user confirmation. */
 public enum ToolSecurityLevel {
     L1,
     L2;

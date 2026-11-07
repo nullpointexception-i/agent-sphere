@@ -5,36 +5,36 @@ import com.buukle.agent.instance.dtvo.vo.AgentCompactRecordVO;
 public interface AgentCompactRecordSpi {
     AgentCompactRecordVO createRecord(Long sessionId);
 
-    /** 创建 run-local 压缩记录（run_id 非空，不参与 session 游标）。 */
+    /** Create a run-local compaction record (run_id non-null; does not participate in the session cursor). */
     AgentCompactRecordVO createRunRecord(Long sessionId, Long runId);
 
-    /** 压缩调用开始（PENDING → RUNNING）；失败/崩溃的 RUNNING 可被对账任务收口。 */
+    /** Compaction call started (PENDING → RUNNING); a failed/crashed RUNNING record can be finalized by the reconciliation task. */
     void updateRunning(Long id);
 
     void updateCompleted(Long id, String summaryBefore, String summaryAfter, Long tokenCount, Long compactedUptoRunId);
 
-    /** 完成 run-local 压缩：摘要 + 未摘要尾部（tail_json），不动 session 游标。 */
+    /** Complete run-local compaction: summary + un-summarized tail (tail_json); the session cursor is left untouched. */
     void completeRunCompact(Long id, String summaryBefore, String summaryAfter, Long tokenCount, String tailJson);
 
     /**
-     * wait/澄清挂起时更新当前 run 的未摘要尾部快照。
-     * 只更新最近一条 COMPLETED run-local 记录的 tail_json；没有记录时 no-op。
+     * Update the un-summarized tail snapshot of the current run while a wait/clarification is suspended.
+     * Only the tail_json of the most recent COMPLETED run-local record is updated; no-op when there is none.
      */
     void updateRunTail(Long runId, String tailJson);
 
-    /** 把超过阈值的 PENDING/RUNNING 记录置 FAILED（进程崩溃/重启遗留），返回影响行数。 */
+    /** Set PENDING/RUNNING records older than the threshold to FAILED (left over from a crash/restart); returns the affected row count. */
     int failStalePending(java.time.LocalDateTime olderThan);
 
     void updateFailed(Long id, String errorMessage);
 
     AgentCompactRecordVO getLatestBySessionId(Long sessionId);
 
-    /** 最近完成的 session 级压缩（run_id IS NULL）。 */
+    /** Most recent completed session-level compaction (run_id IS NULL). */
     AgentCompactRecordVO getLatestCompleted(Long sessionId);
 
-    /** 当前 run 最近完成的 run-local 压缩（resume 恢复 summary + tail 用）。 */
+    /** Most recent completed run-local compaction of the current run (used by resume to restore summary + tail). */
     AgentCompactRecordVO getLatestCompletedByRunId(Long runId);
 
-    /** 当前 run 已完成的 run-local 压缩次数（per-run 上限用）。 */
+    /** Number of run-local compactions already completed for the current run (for the per-run cap). */
     long countCompletedByRunId(Long runId);
 }

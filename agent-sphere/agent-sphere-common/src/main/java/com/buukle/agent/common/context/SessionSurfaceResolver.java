@@ -1,11 +1,12 @@
 package com.buukle.agent.common.context;
 
 /**
- * 请求头 → {@link SessionSurface} 的解析。
+ * Parses the request header into a {@link SessionSurface}.
  *
- * <p>抽成无 servlet 依赖的静态方法，是因为两条入口都需要它，但依赖方向不同：
- * {@code AuthInterceptor} 在 infrastructure，登录/SSO 控制器在 instance-controller，
- * 两者不能互相依赖。调用方各自从 {@code HttpServletRequest} 取头，再交给这里判定。
+ * <p>Extracted as a static method without a servlet dependency because two entry points need it but
+ * sit on opposite sides of the dependency graph: {@code AuthInterceptor} lives in infrastructure and
+ * the login/SSO controllers live in instance-controller, so neither may depend on the other. Each
+ * caller reads the header from its own {@code HttpServletRequest} and hands it here.
  */
 public final class SessionSurfaceResolver {
 
@@ -13,9 +14,11 @@ public final class SessionSurfaceResolver {
     }
 
     /**
-     * 缺省（未带头）按主站处理；只有显式声明 {@code widget} 才判为 widget。
+     * Absent header (or no header at all) counts as the main site; only an explicit {@code widget}
+     * is treated as the widget.
      *
-     * <p>这是策略信号而非安全边界，与 {@link SessionSurfaceHolder} 的约定一致。
+     * <p>This is a policy signal rather than a security boundary, consistent with the
+     * {@link SessionSurfaceHolder} convention.
      */
     public static SessionSurface fromHeader(String rawHeader) {
         return SessionSurface.WIDGET.name().equalsIgnoreCase(rawHeader == null ? null : rawHeader.trim())

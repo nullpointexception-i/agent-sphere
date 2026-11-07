@@ -1,5 +1,9 @@
 package com.buukle.agent.im.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.file.StoredFile;
@@ -23,21 +27,21 @@ import java.nio.charset.StandardCharsets;
 
 @RestController
 @ConditionalOnProperty(prefix = "buukle.agent.im", name = "enabled", havingValue = "true")
-@RequestMapping("/api/v1/im/conversations/{conversationId}/attachments")
+@RequestMapping(ApiPrefix.V1 + "/im/conversations/{conversationId}/attachments")
 @WithTenant
 @RequiredArgsConstructor
 public class ImAttachmentController extends BaseController {
 
     private final ImAttachmentService attachmentService;
 
-    @RequirePermission("im:message:send")
+    @RequirePermission(PermissionCodes.IM_MESSAGE_SEND)
     @PostMapping
     public ResponseEntity<?> upload(@PathVariable Long conversationId,
                                     @RequestParam("file") MultipartFile file) {
         return created(attachmentService.upload(conversationId, file));
     }
 
-    @RequirePermission("im:conversation:read")
+    @RequirePermission(PermissionCodes.IM_CONVERSATION_READ)
     @GetMapping("/{fileKey}")
     public ResponseEntity<byte[]> download(@PathVariable Long conversationId,
                                            @PathVariable String fileKey) {

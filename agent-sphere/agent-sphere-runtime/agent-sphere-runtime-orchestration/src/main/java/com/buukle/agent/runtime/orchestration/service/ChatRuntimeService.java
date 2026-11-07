@@ -73,7 +73,7 @@ public class ChatRuntimeService {
     private final SessionRunner sessionRunner;
     private final TimelineRecorder timelineRecorder;
     private final ChatAttachmentService chatAttachmentService;
-    /** 停止 WAITING 停车态的 run 时，取消其名下未唤醒的挂起记录，避免 waker 恢复已停止的 run。 */
+    /** When stopping a run parked in WAITING, cancel its un-woken wait records so the waker cannot resume a run that was already stopped. */
     private final PendingWaitSpi pendingWaitSpi;
     private final ToolApprovalService toolApprovalService;
     private final SessionInputManager inputManager;
@@ -105,7 +105,7 @@ public class ChatRuntimeService {
         RunVO run = createRun(sessionId, dto);
         startRun(run, sessionId, dto, false);
 
-        // 统一 Timeline：记录用户消息行（正文在读取时按 run 解析）
+        // Unified Timeline: record the user message row (the body is resolved per run at read time)
         try {
             timelineRecorder.record(sessionId, run.getId(), TimelineKind.USER.getCode(), null,
                 TimelineState.COMPLETED.getCode(), null, run.getId(), null, null, null, null);
@@ -120,12 +120,12 @@ public class ChatRuntimeService {
     }
 
     /**
-     * 创建 run（含交付方式/会话归属校验），不发事件；由调用方拿到 runId 完成流注册后再 {@link #startRun}。
+     * Create a run (including delivery mode / session ownership checks) without emitting events; the caller uses the returned runId to register the stream, then calls {@link #startRun}.
      */
     public RunVO createRun(Long sessionId, SendMessageDTO dto) {
         assertSessionOwnership(sessionId);
-        // 来源端（主站 / widget）开关：实例已关掉该来源时禁止继续对话。
-        // 任务路径是服务端内部调用、不携带来源，SessionSurfaceHolder.current() 返回 INTERNAL → 放行。
+        // Source surface (console / widget) switch: stop the conversation when the instance has disabled that source.
+        // The task path is an internal server call without a source; SessionSurfaceHolder.current() returns INTERNAL → allowed.
         sessionSpi.assertSurfaceAllowed(sessionId);
         sessionSpi.touchSession(sessionId);
         SessionVO session = sessionSpi.getSession(sessionId);
@@ -147,7 +147,7 @@ public class ChatRuntimeService {
         return run;
     }
 
-    /** 附件引用随 run 落库（仅 fileKey+contentType，字节留 agent_file_store），Timeline 回显用。 */
+    /** Attachment references persisted with the run (only fileKey+contentType; bytes stay in agent_file_store) for Timeline display. */
     private List<RunAttachment> resolveRunAttachments(SendMessageDTO dto) {
         if (dto.getAttachmentKeys() == null || dto.getAttachmentKeys().isEmpty()) {
             return java.util.Collections.emptyList();
@@ -157,17 +157,17 @@ public class ChatRuntimeService {
                 .toList();
     }
 
-    /** 消息与附件不可同时为空（纯图片发送允许空文本）。 */
+    /** Message and attachments cannot both be empty (image-only sends allow empty text). */
     private static void assertMessageOrAttachment(SendMessageDTO dto) {
         boolean blankMessage = dto.getMessage() == null || dto.getMessage().isBlank();
         boolean hasAttachment = dto.getAttachmentKeys() != null && !dto.getAttachmentKeys().isEmpty();
         if (blankMessage && !hasAttachment) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID, "消息内容和附件不能同时为空");
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "Message and attachments cannot both be empty");
         }
     }
 
     /**
-     * 发布 RUN_STARTED（PENDING）并异步启动 runner。
+     * Publish RUN_STARTED (PENDING) and start the runner asynchronously.
      */
     public void startRun(RunVO run, Long sessionId, SendMessageDTO dto, boolean isClarificationResume) {
         eventPublisher.publishEvent(new RuntimeEventVO(
@@ -183,56 +183,56 @@ public class ChatRuntimeService {
     }
 
     /**
-     * wait 等待到期：把那次 wait 的工具结果补成「已等待」，并恢复原 run。
+     * Wait due: fill in that wait tool call's result as "waited" and resume the original run.
      *
-     * <p>不复用 {@link #resumeFromClarification}，因为两者恢复语义不同：澄清恢复要
-     * 带用户应答文本并重建澄清行；这里没有用户输入，只是把一个已经返回
-     * {@code {"status":"waiting"}} 的工具调用补上最终结果，然后重新推进循环。
+     * <p>Does not reuse {@link #resumeFromClarification}, because the resume semantics differ: clarification resume
+     * carries the user's answer text and rebuilds the clarification row; here there is no user input, it just completes
+     * the final result for a tool call that already returned {@code {"status":"waiting"}}, then pushes the loop forward again.
      *
-     * <p>调用方必须已用 {@code PendingWaitSpi#claimForResume} 抢占成功 —— 内存定时器与
-     * cron 补偿会同时命中同一条记录，没有抢占就会把同一个 run 恢复两次。
+     * <p>The caller must have won the {@code PendingWaitSpi#claimForResume} claim — the in-memory timer and
+     * the cron compensation can hit the same record at once; without the claim the same run would be resumed twice.
      */
-    /** wait 唤醒结果，供唤醒路径决定"完成 / 终态化 / 回置重试"。 */
+    /** Wait wake outcome, used by the wake path to decide "done / mark terminal / requeue for retry". */
     public enum ResumeOutcome { RESUMED, SKIPPED, ERROR }
 
     /**
-     * wait 等待到期：把那次 wait 的工具结果补成「已等待」，并恢复原 run。
+     * Wait due: fill in that wait tool call's result as "waited" and resume the original run.
      *
-     * <p><b>不再吞异常</b>：返回 {@link ResumeOutcome}，由调用方决定失败时回置 PENDING 重试
-     * （见 {@code requeueForRetry}）—— 否则「claim 后恢复失败」会永久卡 WAITING。
+     * <p><b>No longer swallows exceptions</b>: returns {@link ResumeOutcome} so the caller can decide to restore PENDING and retry on failure
+     * (see {@code requeueForRetry}) — otherwise "resume failure after claim" leaves the run stuck in WAITING forever.
      *
-     * <p>调用方必须已用 {@code PendingWaitSpi#claimForResume} 抢占成功。
+     * <p>The caller must have won the {@code PendingWaitSpi#claimForResume} claim.
      */
     public ResumeOutcome resumeFromWait(PendingWaitVO wait) {
-        // 只被后台唤醒/对账路径调用：清掉线程可能继承来的租户，
-        // 否则 DataPermission 会用别人的 created_by 过滤，run 直接读成 null。
+        // Only called by background wake/reconcile paths: clear tenant possibly inherited by the thread,
+        // otherwise DataPermission filters by someone else's created_by and the run reads as null.
         TenantUtil.stop();
         AuthContext.clear();
         Long sessionId = wait.getSessionId();
         Long runId = wait.getRunId();
         boolean submitted = false;
         try {
-            // 取消可能刚好落在唤醒前：先看取消标志，再 CAS 抢占 WAITING -> RUNNING。
+            // Cancel may land just before the wake: check the cancel flag first, then CAS WAITING -> RUNNING.
             if (sessionRunner.isRunCancelled(runId) || sessionRunner.isSessionCancelled(sessionId)) {
                 log.info("Wait resume skipped: runId={} cancelled", runId);
                 return ResumeOutcome.SKIPPED;
             }
             RunVO run = runSpi.claimForResume(runId);
             if (run == null) {
-                // 已被取消/收口，或已被另一条路径唤醒：无从恢复，交给调用方终态化
+                // Already cancelled/finalized, or woken by another path: nothing to resume; let the caller mark it terminal
                 log.info("Wait resume skipped: runId={} not WAITING", runId);
                 return ResumeOutcome.SKIPPED;
             }
-            // CAS 之后再确认一次：取消与 claim 竞争时，以取消为准（claim 已把 run 置 RUNNING，需要收回）
+            // Re-check after the CAS: when cancel races with claim, cancel wins (the claim already set the run to RUNNING and must be reverted)
             if (sessionRunner.isRunCancelled(runId) || sessionRunner.isSessionCancelled(sessionId)) {
                 runSpi.cancelIfActive(runId);
                 log.info("Wait resume aborted after claim: runId={} cancelled", runId);
                 return ResumeOutcome.SKIPPED;
             }
 
-            // 恢复线程（定时器/cron）无租户上下文：补 username 供审计/归属。
-            // 刻意不设 TenantUtil —— DataPermissionInterceptor 用租户当 created_by 过滤，
-            // 设了反而可能把系统表（模型/实例）行滤掉。
+            // The resume thread (timer/cron) has no tenant context: fill in the username for audit/ownership.
+            // Deliberately does not set TenantUtil — DataPermissionInterceptor filters by tenant as created_by,
+            // and setting it could instead filter out system table (model/instance) rows.
             String createdBy = run.getCreatedBy();
             boolean ctx = createdBy != null && !createdBy.isBlank();
             boolean llmRetry = WaitConstants.KIND_LLM_RETRY.equals(wait.getKind());
@@ -240,7 +240,7 @@ public class ChatRuntimeService {
             try {
                 sessionSpi.touchSession(sessionId);
                 if (llmRetry) {
-                    // 上游瞬时失败的重试：不追加合成 user、不补 wait 工具结果，直接重入循环
+                    // Retry of a transient upstream failure: no synthetic user message, no wait tool result, just re-enter the loop
                     orchestrator.asyncResumeForRetry(run, sessionId);
                 } else {
                     orchestrator.asyncHandleUserMessage(run, sessionId,
@@ -253,17 +253,17 @@ public class ChatRuntimeService {
             }
 
             if (!llmRetry) {
-                // 恢复已提交后才补 wait 那条 tool call 的结果（避免"工具已记成功但 run 没恢复"）。
-                // 这只是展示层事件，**绝不能让它有能力让恢复失败** —— 一旦它抛异常而把状态退回
-                // WAITING，异步循环其实已经在跑，等于凭空造出第二个循环（见 rollbackToWaiting）。
+                // Only after the resume is submitted, complete that wait tool call's result (avoiding "tool recorded as succeeded but the run did not resume").
+                // This is a display-only event and **must never be able to fail the resume** — if it threw and pushed the state back to
+                // WAITING while the async loop is already running, it would create a second loop out of nowhere (see rollbackToWaiting).
                 recordWaitToolSucceeded(wait, sessionId, runId);
                 long waitedMs = wait.getWaitMs() == null ? 0L : wait.getWaitMs();
                 timelineRecorder.markWaitResumed(sessionId, runId, waitedMs);
                 log.info("Wait resumed: waitId={} runId={} sessionId={} waitedMs={}",
                         wait.getId(), runId, sessionId, wait.getWaitMs());
             } else {
-                // 重试已提交：把「重试中（k/N）」行改回「执行中」，避免整段重试窗口都停在旧文案。
-                // 事件回填同一行的 seq/title，前端就地更新，不必等下一次挂起或终态。
+                // Retry submitted: change the "retrying (k/N)" row back to "running", so the whole retry window does not stay on stale text.
+                // The event backfills the same row's seq/title so the frontend updates in place, without waiting for the next suspension or terminal state.
                 TimelineRecorder.RunStatusRow row = timelineRecorder.markRetryResumed(sessionId, runId);
                 if (row != null) {
                     eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.RUNNING,
@@ -283,8 +283,8 @@ public class ChatRuntimeService {
         } catch (Exception e) {
             log.warn("Wait resume failed: waitId={} runId={} submitted={}", wait.getId(), runId, submitted, e);
             if (submitted) {
-                // 异步续跑已提交：循环正在跑。此时回退状态会让 wait 记录重回 PENDING、被 cron 再次
-                // claim 并<b>再提交一次</b>，两个循环并发写同一个 run。只能记 ERROR 让调用方重试/终态化。
+                // Async continuation already submitted: the loop is running. Rolling back the state now would put the wait record back to PENDING, let the cron
+                // claim it and <b>submit again</b>, with two loops writing the same run concurrently. Only log ERROR and let the caller retry/mark terminal.
                 log.warn("Wait resume failed after async submit; not rolling back run {} to avoid duplicate execution", runId);
             } else {
                 rollbackToWaiting(runId);
@@ -293,7 +293,7 @@ public class ChatRuntimeService {
         }
     }
 
-    /** 补记 wait 那次工具调用的成功结果；失败只告警，不影响恢复结果。 */
+    /** Record the success result of that wait tool call; failures only warn and do not affect the resume outcome. */
     private void recordWaitToolSucceeded(PendingWaitVO wait, Long sessionId, Long runId) {
         if (wait.getCallId() == null || wait.getCallId().isBlank()) {
             return;
@@ -318,16 +318,16 @@ public class ChatRuntimeService {
     }
 
     /**
-     * 恢复失败时把 run 改回 WAITING。
+     * Put the run back to WAITING when resume fails.
      *
-     * <p>{@code resumeFromWait} 先把 run 置 RUNNING 再提交异步续跑；一旦后面抛异常，
-     * run 就停在 RUNNING 却没有任何 loop 在跑。下一次重试会因状态不是 WAITING 被判 SKIPPED，
-     * {@code failStuckWait} 也因状态不匹配直接返回 —— 结果是 run 既没恢复也没失败，
-     * 永久停在「执行中」。所以失败路径必须自己把状态退回去。
+     * <p>{@code resumeFromWait} sets the run to RUNNING before submitting the async continuation; if it then throws,
+     * the run stays RUNNING with no loop running. The next retry is judged SKIPPED because the state is not WAITING,
+     * and {@code failStuckWait} returns immediately on the same mismatch — so the run neither resumes nor fails
+     * and stays "running" forever. The failure path must therefore roll the state back itself.
      */
     private void rollbackToWaiting(Long runId) {
         try {
-            // 条件回滚：只有仍为 RUNNING 的 run 才退回 WAITING，避免覆盖已取消/已终态
+            // Conditional rollback: only a run still RUNNING goes back to WAITING, so cancelled/terminal states are not overwritten
             runSpi.markWaiting(runId);
         } catch (Exception e) {
             log.warn("Wait resume rollback failed: runId={}", runId, e);
@@ -335,8 +335,8 @@ public class ChatRuntimeService {
     }
 
     /**
-     * 把一条卡住的 WAITING run 置 FAILED 并发终态事件（重试超限 / 对账抢救失败时调用），
-     * 避免前端永久停在「执行中」。
+     * Mark a stuck WAITING run FAILED and emit the terminal event (called when retries are exhausted / reconciliation rescue fails),
+     * so the frontend does not stay on "running" forever.
      */
     public void failStuckWait(Long sessionId, Long runId, String reason) {
         RunVO run = runSpi.getRun(runId);
@@ -349,13 +349,13 @@ public class ChatRuntimeService {
                 RuntimeEventDataVO.builder()
                         .sessionId(sessionId)
                         .runId(runId)
-                        .assistantReply("等待恢复失败：" + reason)
+                        .assistantReply("Failed to resume wait: " + reason)
                         .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId).build()));
     }
 
     /**
-     * 处理一次唤醒结果：<b>claim 之后绝不让记录停在 RESUMED</b>。
-     * SKIPPED → 终态化 CANCELLED；ERROR → 回置 PENDING 重试，超限则置 FAILED 并把卡住的 run 置终态。
+     * Handle one wake outcome: <b>never leave a record at RESUMED after a claim</b>.
+     * SKIPPED → mark terminal CANCELLED; ERROR → restore PENDING and retry, and once exhausted mark FAILED and finalize the stuck run.
      */
     public void onResumeOutcome(PendingWaitVO wait, ResumeOutcome outcome) {
         if (outcome == ResumeOutcome.RESUMED) {
@@ -388,8 +388,8 @@ public class ChatRuntimeService {
         AgentPendingClarification pending = clarificationMapper.selectOne(
                 query.last(ChatClarification.CLARIFYING_SQL_LIMIT));
         if (pending == null) {
-            // 幂等：澄清可能已被应答（重复提交）或 run 已推进。不再抛错，
-            // 否则前端重复提交被吞后拿不到终态，会永久卡在「执行中」。
+            // Idempotency: the clarification may already be answered (duplicate submit) or the run may have moved on. Do not throw,
+            // otherwise a swallowed duplicate submit leaves the frontend without a terminal state and stuck on "running".
             AgentPendingClarification latest = clarificationMapper.selectOne(
                     new LambdaQueryWrapper<AgentPendingClarification>()
                             .eq(AgentPendingClarification::getRunId, runId)
@@ -606,9 +606,9 @@ public class ChatRuntimeService {
     }
 
     /**
-     * 会话运行态：发送锁与 pending 判定的唯一权威来源。
+     * Session run state: the single authoritative source for send-lock and pending decisions.
      *
-     * <p>全部字段来自来源表；不读 {@code agent_timeline}。
+     * <p>All fields come from source tables; {@code agent_timeline} is not read.
      */
     public SessionRuntimeStateVO getState(Long sessionId) {
         assertSessionOwnership(sessionId);
@@ -618,7 +618,7 @@ public class ChatRuntimeService {
         int queueSize = pendingQueue(sessionId).size();
         SessionVO session = sessionSpi.getSession(sessionId);
 
-        // 只有活动 run 名下的待办才可以被用户响应；没有活动 run 时，历史残留不应继续锁输入
+        // Only pending items belonging to the active run can be answered by the user; with no active run, historical leftovers must not keep the input locked
         int pendingClarificationCount = active == null ? 0 : clarifications.size();
         int pendingApprovalCount = active != null && approval != null
                 && active.getId().equals(approval.getRunId()) ? 1 : 0;
@@ -633,7 +633,7 @@ public class ChatRuntimeService {
         vo.setPendingClarifications(pendingClarificationCount);
         vo.setPendingToolApprovals(pendingApprovalCount);
         vo.setPendingQueue(queueSize);
-        // LLM 重试读秒：RunVO 已由 fillRetryState 补全（WAITING + LLM_RETRY 时）
+        // LLM retry countdown: RunVO is already enriched by fillRetryState (when WAITING + LLM_RETRY)
         if (active != null) {
             vo.setWaitKind(active.getWaitKind());
             vo.setRetryAttempt(active.getRetryAttempt());
@@ -654,10 +654,10 @@ public class ChatRuntimeService {
     }
 
     /**
-     * 会话的思考强度能力：动态默认档位 + 各档可行性。
+     * Session reasoning-effort capability: dynamic default level + feasibility per level.
      *
-     * <p>不可行档位照常返回（前端展示并警告），只有“是否支持”会决定整块是否展示。
-     * 路由/密钥未就绪时不报错，返回 supported=false，避免对话页因能力接口失败。
+     * <p>Infeasible levels are still returned (the frontend shows and warns about them); only "supported" decides whether the whole block is displayed.
+     * When the route/key is not ready, do not error; return supported=false so the chat page does not fail because of a capability call.
      */
     public ReasoningCapabilityVO reasoningCapability(Long sessionId, Long modelRouteId) {
         assertSessionOwnership(sessionId);
@@ -666,7 +666,7 @@ public class ChatRuntimeService {
         vo.setRunning(active != null);
         vo.setRunId(active == null ? null : active.getId());
 
-        // 运行中只认 run 固化的路由；空闲时按用户当前选中的路由（尚未发送的覆盖）。
+        // While running, use only the route pinned on the run; when idle, use the route the user currently selected (an unsent override).
         Long routeId = active != null && active.getModelRouteId() != null
                 ? active.getModelRouteId() : modelRouteId;
         ValidationResult validated;
@@ -681,8 +681,8 @@ public class ChatRuntimeService {
 
         Integer instanceMaxOutput = llmRequestConfigurer.resolveMaxOutputTokens(
                 validated.getAgentInstance().getConfig());
-        // 与 SessionRunner 同源：实例 config.max_tokens 优先，其次路由 max_output_tokens。
-        // 单轮实际 max_tokens 还会按上下文余量收缩，这里展示的是名义上限。
+        // Same source as SessionRunner: instance config.max_tokens first, then the route's max_output_tokens.
+        // The actual per-turn max_tokens is further shrunk by remaining context; this is the nominal cap.
         int nominal = compactionService.resolveNominalChatMaxOutput(
                 instanceMaxOutput, validated.getModelRoute().getMaxOutputTokens());
         ReasoningEffortResolver.Resolved resolved = reasoningEffortResolver.resolve(
@@ -741,32 +741,32 @@ public class ChatRuntimeService {
     }
 
     /**
-     * session 级停止：不依赖 runId。运行中的 run 由 SessionRunner 循环按 CANCELLED_SESSIONS
-     * 直接终止；停车态（AWAITING_USER）与无活动 run 的边界在此处理。
+     * Session-level stop: does not depend on a runId. A running run is terminated by the SessionRunner loop via CANCELLED_SESSIONS;
+     * the boundaries for parked states (AWAITING_USER) and for no active run are handled here.
      */
     public void stopSession(Long sessionId) {
         assertSessionOwnership(sessionId);
         sessionRunner.cancelSession(sessionId);
         RunVO active = runSpi.findActiveRun(sessionId);
         if (active == null) {
-            // 无活动 run：清除标志，避免误杀之后新发起的 run；
-            // 但该 session 仍可能残留未应答澄清（run 已终态/被清扫），显式下发 dismissed，
-            // 否则前端会一直定格在待澄清/「执行中」。
+            // No active run: clear the flag so a newly started run is not killed by mistake;
+            // but the session may still have unanswered clarifications (the run is terminal/cleaned up), so emit dismissed explicitly,
+            // otherwise the frontend stays frozen on pending clarification / "running".
             sessionRunner.clearSessionCancelled(sessionId);
             dismissPendingClarifications(sessionId);
         } else if (RunStatus.AWAITING_USER.name().equals(active.getStatus())
                 || RunStatus.WAITING.name().equals(active.getStatus())) {
-            // 停车态（等人 / 等时间）：loop 已退出，标志不会生效 → 复用 stopRun 的停车态
-            // 收口（置 CANCELLED + 清挂起 + 发终态）后清除标志。
+            // Parked state (waiting for a person / for time): the loop has exited and the flag would not take effect → reuse stopRun's parked-state
+            // finalization (CANCELLED + cancel waits + emit terminal event), then clear the flag.
             stopRun(sessionId, active.getId());
             sessionRunner.clearSessionCancelled(sessionId);
         } else {
-            // RUNNING/PENDING → 先用 stopRun 写 run 级取消标志并条件置终态，
-            // 覆盖「loop 恰好在取消前退出并挂起」的窗口；再清 session 标志。
+            // RUNNING/PENDING → first use stopRun to write the run-level cancel flag and conditionally mark terminal,
+            // covering the window where "the loop exits and suspends just before the cancel"; then clear the session flag.
             stopRun(sessionId, active.getId());
             sessionRunner.clearSessionCancelled(sessionId);
         }
-        // RUNNING/PENDING → loop 检查 CANCELLED_SESSIONS 终止，收口处消费标志并发布终态
+        // RUNNING/PENDING → the loop checks CANCELLED_SESSIONS to terminate; the finalization point consumes the flag and publishes the terminal state
     }
 
     public void stopRun(Long sessionId, Long runId) {
@@ -776,11 +776,11 @@ public class ChatRuntimeService {
 
         if (RunStatus.AWAITING_USER.name().equals(run.getStatus())
                 || RunStatus.WAITING.name().equals(run.getStatus())) {
-            // 停车态（等人 / 等时间）：loop 已退出，取消标志无消费者 → 直接置终态。
-            // 仍要写 run 级取消标志：若 loop 恰好在收尾，唤醒/恢复路径必须看到取消；
-            // 否则取消后新插入的 wait 仍可能被唤醒（线上 run 2999 14:58:39 第一次取消未生效）。
+            // Parked state (waiting for a person / for time): the loop has exited, so nothing consumes the cancel flag → mark terminal directly.
+            // Still write the run-level cancel flag: if the loop happens to be wrapping up, the wake/resume path must see the cancel;
+            // otherwise a wait inserted after the cancel could still be woken (production run 2999 at 14:58:39: the first cancel did not take effect).
             sessionRunner.cancelRun(runId);
-            // 条件更新：已被其它路径终态化时不重复收口。
+            // Conditional update: do not finalize again when another path already did.
             if (!runSpi.cancelIfActive(runId)) {
                 pendingWaitSpi.cancelPendingByRunId(runId);
                 toolApprovalService.cancelByRunId(runId);
@@ -809,8 +809,8 @@ public class ChatRuntimeService {
             toolApprovalService.cancelByRunId(runId);
             publishCancelled(sessionId, runId);
         } else {
-            // RUNNING/PENDING：先写 run 级取消标志（活着的 loop 会在下一个检查点退出），
-            // 再条件置 CANCELLED，覆盖「loop 已退出但还停在 WAITING/RUNNING」的窗口。
+            // RUNNING/PENDING: write the run-level cancel flag first (a live loop exits at its next checkpoint),
+            // then conditionally set CANCELLED, covering the window where "the loop has exited but the run is still WAITING/RUNNING".
             sessionRunner.cancelRun(runId);
             boolean cancelled = runSpi.cancelIfActive(runId);
             pendingWaitSpi.cancelPendingByRunId(runId);
@@ -832,8 +832,8 @@ public class ChatRuntimeService {
     }
 
     /**
-     * 无活动 run 时兜底下发该 session 未应答澄清的 dismissed 事件：
-     * run 可能已终态/被清扫，但澄清行仍停留在 PENDING，会让前端锁在「执行中」。
+     * With no active run, emit dismissed events as a fallback for this session's unanswered clarifications:
+     * the run may be terminal/cleaned up, but the clarification row is still PENDING, which locks the frontend on "running".
      */
     private void dismissPendingClarifications(Long sessionId) {
         List<AgentPendingClarification> pendingList = clarificationMapper.selectList(

@@ -6,7 +6,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 当前用户的一条登录会话（用于「设备管理 / 退出所有设备」）。
+ * One login session of the current user (used by "device management / sign out all devices").
  */
 @Data
 public class UserSessionVO implements Serializable {
@@ -18,6 +18,6 @@ public class UserSessionVO implements Serializable {
     private LocalDateTime expiresAt;
     private LocalDateTime lastUsedAt;
     private LocalDateTime createdAt;
-    /** 是否当前请求正在使用的会话。 */
+    /** Whether this is the session used by the current request. */
     private Boolean current;
 }

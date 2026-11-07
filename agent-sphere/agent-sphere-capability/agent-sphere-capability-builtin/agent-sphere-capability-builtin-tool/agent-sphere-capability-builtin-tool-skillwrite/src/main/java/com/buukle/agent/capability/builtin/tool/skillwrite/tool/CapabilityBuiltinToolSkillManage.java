@@ -46,18 +46,18 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
     static final String MARKDOWN_FENCE = "```json";
 
     private static final String TOOL_DESCRIPTION = """
-            创建/追加/更新绑定到当前实例的技能。
-            仅支持 action = create / append / update。
-            查询/列出/读取技能请使用 builtin_8（技能库），不要对本工具传 list。
+            Create/append/update a skill bound to the current instance.
+            Only action = create / append / update is supported.
+            To query/list/read skills use builtin_8 (skill library); do not pass list to this tool.
 
-            definition 为 JSON：{"version":1,"parameters":{JSON Schema},"promptTemplate":"<Markdown>"}。
-            promptTemplate 必须遵循固定的标题结构；保存前会**前置校验**（UI 表单与 agent 工具共用同一校验），不合规直接报错并回带模板：
-            - `# <技能名>`：有且仅有一个 H1；
-            - `## stepN <步骤名>`：步骤，至少一个（N 为数字，如 step1）；
-            - `### stepN.M <子步骤名>`：子步骤，必须挂在其上方最近的、同编号的 `## stepN` 之下；
-            - 非步骤的 H2（如 概述 / 收尾对账）不要带 `stepN` 前缀。
+            definition is JSON: {"version":1,"parameters":{JSON Schema},"promptTemplate":"<Markdown>"}.
+            promptTemplate must follow a fixed heading structure; saving performs **pre-validation** (the UI form and the agent tool share the same validation), and non-compliant input fails immediately and returns the template:
+            - `# <skill name>`: exactly one H1;
+            - `## stepN <step name>`: a step, at least one (N is a number, e.g. step1);
+            - `### stepN.M <sub-step name>`: a sub-step, which must sit under the nearest same-numbered `## stepN` above it;
+            - non-step H2 headings (e.g. Overview / Wrap-up reconciliation) must not carry a `stepN` prefix.
 
-            标准模板：
+            Standard template:
             """ + SkillTemplateValidator.SKILL_TEMPLATE;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -207,7 +207,7 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         ObjectNode rebuilt = root.deepCopy();
         String appended = prompt.endsWith("\n") ? prompt + ctx.getContent().trim() : prompt + "\n\n" + ctx.getContent().trim();
         rebuilt.put("promptTemplate", appended);
-        // 追加后同样要合规：否则 append 会成为绕过结构校验的后门。
+        // The appended result must also be valid: otherwise append would become a back door around the structure validation.
         String appendValidation = validateDefinition(rebuilt.toString());
         if (appendValidation != null) {
             return error(SkillManageAction.APPEND.value(), appendValidation);
@@ -280,7 +280,7 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         return r;
     }
 
-    /** 复用 doc 模块的 Markdown 工具编辑 skill definition 内嵌的 promptTemplate，保留其它未知键。 */
+    /** Reuses the doc module's Markdown helpers to edit the promptTemplate embedded in the skill definition, preserving other unknown keys. */
     private PatchedDefinition applyMarkdownPatch(String definition, SkillManageExecuteContext ctx) {
         if (definition == null || definition.isBlank()) {
             return PatchedDefinition.error("definition is empty; cannot patch");
@@ -360,7 +360,7 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         return false;
     }
 
-    /** 校验 definition：JSON 形状 + promptTemplate 结构；委托 common 的共用校验（UI 表单/工具口径一致）。 */
+    /** Validates definition: JSON shape + promptTemplate structure; delegates to the shared validation in common (same rules for the UI form and the tool). */
     private String validateDefinition(String definition) {
         return SkillTemplateValidator.validate(definition);
     }
@@ -399,7 +399,7 @@ public class CapabilityBuiltinToolSkillManage implements CapabilityBuiltinToolSp
         return text.length() > PREVIEW_LENGTH ? text.substring(0, PREVIEW_LENGTH) + "..." : text;
     }
 
-    /** 解出 definition 内嵌的 promptTemplate 文本；非对象 JSON / 无文本 promptTemplate 时返回 null。 */
+    /** Extracts the promptTemplate text embedded in definition; returns null for non-object JSON or a non-textual promptTemplate. */
     private String extractPromptTemplate(String definition) {
         if (definition == null || definition.isBlank()) return null;
         try {

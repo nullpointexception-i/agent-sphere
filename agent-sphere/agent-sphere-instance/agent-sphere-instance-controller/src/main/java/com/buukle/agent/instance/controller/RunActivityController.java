@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.service.RunActivityService;
@@ -9,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @WithTenant
 @RestController
-@RequestMapping("/api/v1/instance/runs")
+@RequestMapping(ApiPrefix.V1 + "/instance/runs")
 @RequiredArgsConstructor
 public class RunActivityController extends BaseController {
 
@@ -24,7 +26,7 @@ public class RunActivityController extends BaseController {
         return ok(runActivityService.listByRun(runId, sessionId, offset, limit));
     }
 
-    /** 最近 300 条 LLM 交互的 token 序列；afterId 支持 5s 增量刷新。 */
+    /** Token series of the most recent 300 LLM interactions; afterId supports 5s incremental refresh. */
     @GetMapping("/{runId}/usage-series")
     public ResponseEntity<?> usageSeries(
             @PathVariable Long runId,
@@ -34,7 +36,8 @@ public class RunActivityController extends BaseController {
         return ok(runActivityService.listUsageSeries(runId, sessionId, afterId, limit));
     }
 
-    /** 列表只返回元数据；完整 request/response/args/artifact 在点击详情时按需拉取。 */
+    /** The list returns metadata only; full request/response/args/artifact are fetched on demand
+     * when the details view is opened. */
     @GetMapping("/{runId}/activities/{activityType}/{id}")
     public ResponseEntity<?> getActivity(
             @PathVariable Long runId,

@@ -2,7 +2,7 @@ package com.buukle.agent.superagent.spi;
 
 import java.io.Serializable;
 
-/** 启动 Worker Run 的命令。 */
+/** Command to start a Worker Run. */
 public record WorkerDispatchCommand(
         Long workItemId,
         Long superAgentId,

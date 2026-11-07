@@ -1,6 +1,6 @@
 package com.buukle.agent.superagent.spi;
 
-/** 由 superagent-service 实现：接收 Worker 终态并回写 Work Item。 */
+/** Implemented by superagent-service: receives the Worker terminal state and writes it back to the Work Item. */
 public interface WorkerReportPort {
     void onWorkerTerminal(WorkerReport report);
 }

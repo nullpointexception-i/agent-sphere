@@ -35,11 +35,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 停止按钮的回归护栏 —— 重点是 WAITING 停车态。
+ * Stop-button regression guard — focused on the WAITING parked state.
  *
- * <p>WAITING（wait 工具挂起）的 loop 已经退出，取消标志没有消费者，所以停止必须
- * 「直接置终态 + 取消挂起记录 + 发 run_cancelled」，否则：run 关不掉、到点还会被
- * waker 恢复、前端因收不到终态事件而永久锁在“执行中/停止无效”。
+ * <p>The loop of a WAITING run (suspended by the wait tool) has already exited, so nothing consumes the cancel flag; stop must therefore
+ * "set the terminal state directly + cancel the pending record + publish run_cancelled"; otherwise the run cannot be stopped, the
+ * waker resumes it when due, and the frontend stays locked in "running / stop has no effect" because no terminal event arrives.
  */
 @ExtendWith(MockitoExtension.class)
 class ChatRuntimeServiceStopTest {
@@ -73,7 +73,7 @@ class ChatRuntimeServiceStopTest {
                 mock(com.buukle.agent.runtime.kernel.service.ReasoningEffortResolver.class),
                 mock(com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer.class),
                 mock(com.buukle.agent.runtime.kernel.service.CompactionService.class));
-        AuthContext.setSuperAdmin(true); // 跳过会话归属校验（本测试只关心停止逻辑）
+        AuthContext.setSuperAdmin(true); // Skip the session ownership check (this test only cares about stop logic)
         lenient().when(clarificationMapper.selectList(any())).thenReturn(List.of());
     }
 
@@ -104,7 +104,7 @@ class ChatRuntimeServiceStopTest {
         ArgumentCaptor<RuntimeEventVO> cap = ArgumentCaptor.forClass(RuntimeEventVO.class);
         verify(eventPublisher).publishEvent(cap.capture());
         assertEquals(RunStatus.CANCELLED, cap.getValue().getEventType(), "必须发 run_cancelled 终态");
-        // 停车态也要写取消标志：唤醒/恢复路径必须看到取消，避免取消后新 wait 又被唤醒
+        // The parked state must also set the cancel flag: wake/resume paths must see the cancellation, otherwise a new wait after cancel gets woken again
         verify(sessionRunner).cancelRun(7L);
     }
 
@@ -128,7 +128,7 @@ class ChatRuntimeServiceStopTest {
 
         service.stopRun(1L, 7L);
 
-        // 运行中：先交给 loop 消费取消标志；同时条件置终态覆盖「loop 已退出」的竞争窗口
+        // Running: let the loop consume the cancel flag first; also conditionally set the terminal state to cover the race where "the loop already exited"
         verify(sessionRunner).cancelRun(7L);
         verify(runSpi).cancelIfActive(7L);
         verify(pendingWaitSpi).cancelPendingByRunId(7L);
@@ -144,7 +144,7 @@ class ChatRuntimeServiceStopTest {
 
         service.stopSession(1L);
 
-        // findActiveRun 必须能查到 WAITING（否则会走“无活动 run”分支：清标志、什么也不取消）
+        // findActiveRun must find WAITING runs (otherwise it takes the "no active run" branch: clear the flag and cancel nothing)
         verify(runSpi).findActiveRun(1L);
         verify(runSpi).cancelIfActive(7L);
         verify(pendingWaitSpi).cancelPendingByRunId(7L);

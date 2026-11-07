@@ -1,18 +1,18 @@
 package com.buukle.agent.runtime.kernel.contract;
 
 /**
- * 一次压缩尝试的真实结果。
+ * The real outcome of one compaction attempt.
  *
- * <p>{@link #COMPLETED} 仅表示「摘要已生成且游标前进」；调用方只有在这种情况才应重新组装历史。
- * 旧实现把「触发过压缩」当成成功，导致无历史/无进展/失败时也反复按同一阈值重试。
+ * <p>{@link #COMPLETED} means only "the summary was produced and the cursor advanced"; only in that case should the caller reassemble the history.
+ * The old implementation treated "compaction was triggered" as success, so it kept retrying at the same threshold even with no history / no progress / failure.
  */
 public enum CompactionOutcome {
-    /** 摘要落库、游标前进。 */
+    /** Summary persisted, cursor advanced. */
     COMPLETED,
-    /** 没有可压缩的已结束历史（例如只有当前 run）。 */
+    /** No finished history to compact (for example only the current run). */
     NO_HISTORY,
-    /** 有历史但没有写入任何内容（无法裁剪或模型无输出）。 */
+    /** There is history but nothing was written (cannot trim, or the model produced no output). */
     NO_PROGRESS,
-    /** 压缩调用/落库异常。 */
+    /** The compaction call or persistence failed. */
     FAILED
 }

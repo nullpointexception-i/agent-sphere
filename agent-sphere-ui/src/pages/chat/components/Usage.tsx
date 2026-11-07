@@ -10,7 +10,7 @@ export interface UsageData {
   cacheMissTokens?: number | null;
 }
 
-/** 千分位缩写：1234 → 1.2k；不足千显示原文。 */
+/** Thousands abbreviation: 1234 → 1.2k; under a thousand shows the raw value. */
 export function formatTokens(n?: number | null): string {
   if (n == null) return '-';
   if (n >= 1000) {
@@ -20,7 +20,7 @@ export function formatTokens(n?: number | null): string {
   return String(n);
 }
 
-/** 当前上下文占模型上行比例(%)：最近 prompt / maxInputTokens；无有效分母返回 null。 */
+/** Current context usage as a share of the model's input limit (%): latest prompt / maxInputTokens; null when there is no valid denominator. */
 export function contextUsagePercent(
   latestPrompt?: number | null,
   maxInput?: number | null,
@@ -29,7 +29,7 @@ export function contextUsagePercent(
   return Math.round((latestPrompt * 1000) / maxInput) / 10;
 }
 
-/** 缓存命中率(%)：hit / (hit+miss)；无基数返回 null。 */
+/** Cache hit rate (%): hit / (hit+miss); null when there is no base. */
 export function cacheHitRate(u?: UsageData): number | null {
   if (!u) return null;
   const hit = u.cacheHitTokens || 0;
@@ -48,7 +48,7 @@ const row = (label: string, value?: number | null) => (
   </div>
 );
 
-/** 用量小标（聊天区 iteration / run 行、run 记录等共用）；无用量时不渲染。 */
+/** Usage chip (shared by chat-area iteration / run rows, run records, etc.); renders nothing when there is no usage. */
 export default function UsageChip({ usage }: { usage?: UsageData }) {
   if (!usage || !usage.totalTokens) return null;
   const rate = cacheHitRate(usage);

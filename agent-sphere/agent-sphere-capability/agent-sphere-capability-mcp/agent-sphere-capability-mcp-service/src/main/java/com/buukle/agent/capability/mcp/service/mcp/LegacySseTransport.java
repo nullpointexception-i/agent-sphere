@@ -30,7 +30,7 @@ public class LegacySseTransport implements McpTransportClient {
 
     private final HttpClient httpClient;
     private final String sseUrl;
-    /** 解析后的出站鉴权头；构造期一次性解析。 */
+    /** Parsed outbound auth headers; parsed once at construction time. */
     private final Map<String, String> authHeaders;
     private final Duration connectTimeout;
     private final Duration sseInitTimeout;
@@ -42,11 +42,11 @@ public class LegacySseTransport implements McpTransportClient {
 
     public LegacySseTransport(String serverUrl, String authConfig, AgentRuntimeProperties.McpConfig config) {
         if (serverUrl == null || serverUrl.trim().isBlank()) {
-            throw new BizException(CapabilityMcpErrorCode.MCP_SERVER_UNREACHABLE, "MCP serverUrl 不能为空");
+            throw new BizException(CapabilityMcpErrorCode.MCP_SERVER_UNREACHABLE, "MCP serverUrl must not be empty");
         }
         if (!serverUrl.trim().startsWith("http://") && !serverUrl.trim().startsWith("https://")) {
             throw new BizException(CapabilityMcpErrorCode.MCP_SERVER_UNREACHABLE,
-                    "MCP serverUrl 需以 http:// 或 https:// 开头，当前: " + serverUrl);
+                    "MCP serverUrl must start with http:// or https://; current: " + serverUrl);
         }
         this.connectTimeout = config.getConnectTimeout();
         this.sseInitTimeout = config.getSseInitTimeout();
@@ -60,7 +60,7 @@ public class LegacySseTransport implements McpTransportClient {
     }
 
 
-    /** 单个响应体片段的最大长度，避免把整页 HTML 塞进错误消息。 */
+    /** Maximum length of a single response body snippet, so a whole HTML page does not end up in an error message. */
     private static final int MAX_ERROR_BODY_LENGTH = 300;
 
     private static String abbreviate(String body) {
@@ -254,7 +254,7 @@ public class LegacySseTransport implements McpTransportClient {
             HttpResponse<String> response = httpClient.send(builder.build(),
                     HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {
-                // 同 Streamable：带上响应体，鉴权/参数错误说明都在里面。
+                // Same as Streamable: include the response body; auth/parameter errors are explained there.
                 throw new BizException(CapabilityMcpErrorCode.MCP_EXECUTE_FAILED,
                         "Legacy SSE POST returned " + response.statusCode() + ": " + abbreviate(response.body()));
             }
@@ -267,7 +267,7 @@ public class LegacySseTransport implements McpTransportClient {
         }
     }
 
-    /** 叠加本次调用的附加请求头（任务级凭证），与 Streamable 传输保持同一语义。 */
+    /** Adds this call's extra request headers (task-level credential), with the same semantics as the Streamable transport. */
     private void applyCallContext(HttpRequest.Builder builder, McpCallContext callContext) {
         if (callContext == null || callContext.isEmpty()) return;
         String credential = callContext.header(McpProtocolConstants.HEADER_TASK_MCP_CREDENTIAL);

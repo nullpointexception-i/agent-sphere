@@ -4,18 +4,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
- * 工具调用理由（保留参数 {@link #REASON_KEY}）的读取与剥离。
+ * Reads and strips the tool-call reason (the reserved argument {@link #REASON_KEY}).
  *
- * <p>模型在 tool_call.arguments 里额外携带 {@code _reason}，用于前端展示「为什么调用」。
- * 该字段不是任何业务工具的入参，必须在执行前剥离；同时保留在原始 arguments_json 中供审计。
+ * <p>The model carries an extra {@code _reason} in tool_call.arguments, which the frontend uses to
+ * show "why this tool was called". That field is not an input of any business tool, so it must be
+ * stripped before execution; it is also kept in the original arguments_json for auditing.
  */
 public final class ToolCallReason {
 
-    /** 工具 schema 中的保留参数名，避免与 MCP/业务工具自己的 reason 参数冲突。 */
+    /** Reserved argument name in tool schemas, so it cannot collide with an MCP/business tool's own reason parameter. */
     public static final String REASON_KEY = "_reason";
-    /** 理由最大长度（字符）。 */
+    /** Maximum reason length (characters). */
     public static final int MAX_REASON_CHARS = 200;
-    /** 注入到每个工具 schema 的描述。 */
+    /** Description injected into every tool schema. */
     public static final String SCHEMA_DESCRIPTION =
             "Short user-visible reason for calling this tool now. "
                     + "Do not include hidden chain-of-thought or sensitive data.";
@@ -23,7 +24,7 @@ public final class ToolCallReason {
     private ToolCallReason() {
     }
 
-    /** 提取并规范化理由；缺失/非法 JSON 返回 null。 */
+    /** Extracts and normalizes the reason; returns null when it is missing or the JSON is invalid. */
     public static String extract(String argsJson) {
         JsonNode node = parse(argsJson);
         if (node == null || !node.isObject()) {
@@ -36,7 +37,7 @@ public final class ToolCallReason {
         return normalize(reason.asText());
     }
 
-    /** 去掉保留参数；没有该字段或 JSON 非法时原样返回。 */
+    /** Removes the reserved argument; returns the input unchanged when the field is absent or the JSON is invalid. */
     public static String strip(String argsJson) {
         JsonNode node = parse(argsJson);
         if (node == null || !node.isObject() || !node.has(REASON_KEY)) {
@@ -51,7 +52,7 @@ public final class ToolCallReason {
         }
     }
 
-    /** 压成单行、去首尾空白并截断；空白返回 null。 */
+    /** Collapses to a single line, trims and truncates; returns null when blank. */
     public static String normalize(String text) {
         if (text == null) {
             return null;

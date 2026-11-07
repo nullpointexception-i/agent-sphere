@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 任务终态回调请求体。
+ * Task terminal-state callback request body.
  */
 @Data
 public class TaskCallbackBody implements Serializable {

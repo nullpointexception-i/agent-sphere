@@ -20,23 +20,24 @@ public class AgentInstance {
     private String businessType;
 
     /**
-     * 是否允许**主站控制台**对该实例发起/继续会话（V89）。
+     * Whether the **console site** may start/continue sessions against this instance (V89).
      *
-     * <p>与 {@link #allowWidgetSession} 一起按来源端控制；由 {@code SessionSurfacePolicy} 统一判定。
+     * <p>Together with {@link #allowWidgetSession} it controls access by client surface; the decision
+     * is made centrally by {@code SessionSurfacePolicy}.
      */
     private Boolean allowConsoleSession;
 
-    /** 是否允许**嵌入式 widget** 对该实例发起/继续会话（V89）。 */
+    /** Whether the **embedded widget** may start/continue sessions against this instance (V89). */
     private Boolean allowWidgetSession;
-    /** 单次 run 最大循环次数（覆盖系统 runner/task 上限；NULL/0=未配置走系统默认）。 */
+    /** Maximum loop count for a single run (overrides the system runner/task limits; NULL/0 = not configured, use the system default). */
     private Integer maxLoopCount;
     /** Completion contract for tool-using runs; defaults to STRICT_FINISH. */
     private String completionProtocol;
-    /** Super-Agent 角色：CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG。 */
+    /** Super-Agent role: CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG. */
     private String instanceRole;
-    /** 系统托管实例（如 Group Router），普通实例列表应隐藏。 */
+    /** System-managed instance (e.g. Group Router); it should be hidden from ordinary instance lists. */
     private Boolean systemManaged;
-    /** 采样/请求参数配置（JSON，与 LlmSamplingConfigDTO 同形状；NULL=走全局兜底）。 */
+    /** Sampling/request parameter configuration (JSON, same shape as LlmSamplingConfigDTO; NULL = use the global fallback). */
     private String config;
     @TableLogic
     private Boolean deleteFlag;

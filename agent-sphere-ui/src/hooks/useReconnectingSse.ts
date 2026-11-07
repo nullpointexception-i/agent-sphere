@@ -17,7 +17,7 @@ export interface ImStreamPayload {
   pinned?: boolean;
   muted?: boolean;
   remark?: string;
-  // agent_stream（Router 实时流）字段
+  // agent_stream (Router live stream) fields
   threadId?: number;
   runId?: number;
   agentId?: number;
@@ -30,7 +30,7 @@ export interface ImStreamPayload {
   displayName?: string;
   errorMessage?: string;
   streamSeq?: number;
-  // message_created 附带的发送方信息
+  // Sender info carried by message_created
   senderType?: string;
   senderId?: number;
   clientMsgId?: string;

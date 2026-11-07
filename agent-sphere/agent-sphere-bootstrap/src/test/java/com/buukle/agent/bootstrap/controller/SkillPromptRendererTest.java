@@ -22,10 +22,10 @@ class SkillPromptRendererTest {
 
     @Test
     void render_missingFieldIsMarkedNotFatal() {
-        // 缺字段不再中止整个 skill：回填显式标记，供 skill 结合 {{input}} 自抽取。
+        // A missing field no longer aborts the whole skill: fill in an explicit marker so the skill can self-extract from {{input}}.
         String result = SkillPromptRenderer.render(
                 "```json\n{{input}}\n``` 频道={{channel_url}}", "{\"other\":1}");
-        assertTrue(result.contains("[缺参数:channel_url]"));
+        assertTrue(result.contains("[missing argument: channel_url]"));
         assertTrue(result.contains("\"other\":1"));
     }
 

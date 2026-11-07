@@ -11,19 +11,20 @@ import org.apache.ibatis.annotations.Update;
 import java.time.LocalDateTime;
 
 /**
- * Skill 自动同步的执行记录读写（{@code capability_skill_sync_run}）。
+ * Read/write of skill auto-sync execution records ({@code capability_skill_sync_run}).
  *
- * <p>裸 SQL 而非 Entity：{@code detail} 是 jsonb，MP 实体要么塞 String 被 PG 拒绝，
- * 要么依赖 infrastructure 的 JsonbTypeHandler（而 infrastructure 已依赖 instance-service，
- * 业务模块不能反向引它）。写入用 {@code CAST(#{x} AS jsonb)}，读取用 {@code CAST(detail AS text)}。
+ * <p>Raw SQL rather than an Entity: {@code detail} is jsonb, and an MP entity would either bind it
+ * as a String (rejected by PG) or depend on infrastructure's JsonbTypeHandler (and infrastructure
+ * already depends on instance-service, so business modules must not reference it back). Writes use
+ * {@code CAST(#{x} AS jsonb)}, reads use {@code CAST(detail AS text)}.
  *
- * <p>这张表同时是「任务到底跑没跑」的唯一证据：sweeper 的 logger 被 logback 的
- * {@code com.buukle.agent.capability=WARN} 规则压住，log.info 永不落盘。
+ * <p>This table is also the only evidence that the task actually ran: the sweeper's logger is
+ * suppressed by logback's {@code com.buukle.agent.capability=WARN} rule, so log.info never reaches disk.
  */
 @Mapper
 public interface SkillSyncRunMapper {
 
-    /** 插一条 RUNNING。id 由 {@code INSERT … RETURNING id} 取回。 */
+    /** Inserts a RUNNING row. The id is fetched back via {@code INSERT … RETURNING id}. */
     @Select("""
             INSERT INTO capability_skill_sync_run (trigger_type, status, created_by, updated_by)
             VALUES (#{triggerType}, #{statusRunning}, #{createdBy}, #{createdBy})
@@ -33,7 +34,7 @@ public interface SkillSyncRunMapper {
                        @Param("statusRunning") String statusRunning,
                        @Param("createdBy") String createdBy);
 
-    /** 落 SUCCESS，回填本轮统计与跳过明细。 */
+    /** Marks SUCCESS and writes back this round's statistics and skip details. */
     @Update("""
             UPDATE capability_skill_sync_run
             SET status = #{statusSuccess}, scanned_count = #{scannedCount}, handled = #{handled},
@@ -54,7 +55,7 @@ public interface SkillSyncRunMapper {
                     @Param("elapsedMs") long elapsedMs,
                     @Param("updatedBy") String updatedBy);
 
-    /** 落 SKIPPED：什么都没做（锁被占用 / 总开关关闭）。 */
+    /** Marks SKIPPED: nothing was done (lock busy / global switch off). */
     @Update("""
             UPDATE capability_skill_sync_run
             SET status = #{statusSkipped}, skip_reason = #{skipReason},
@@ -68,7 +69,7 @@ public interface SkillSyncRunMapper {
                     @Param("elapsedMs") long elapsedMs,
                     @Param("updatedBy") String updatedBy);
 
-    /** 落 FAILED；异常随后照常上抛。 */
+    /** Marks FAILED; the exception is still rethrown afterwards as usual. */
     @Update("""
             UPDATE capability_skill_sync_run
             SET status = #{statusFailed}, error_message = #{errorMessage},
@@ -114,7 +115,7 @@ public interface SkillSyncRunMapper {
                                       @Param("status") String status,
                                       @Param("staleBefore") LocalDateTime staleBefore);
 
-    /** 记录表自身的保留策略：排除本轮刚写的记录。 */
+    /** Retention policy of the record table itself: excludes the row just written in this round. */
     @Delete("""
             DELETE FROM capability_skill_sync_run
             WHERE created_at < #{cutoff} AND id <> #{keepId}

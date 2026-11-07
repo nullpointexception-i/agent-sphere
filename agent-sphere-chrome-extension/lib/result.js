@@ -1,8 +1,8 @@
 export const ErrorCategory = {
   NOT_FOUND: 'not_found',
-  // 目标存在但当前不可操作（disabled / 隐藏 / 已从文档脱离）。
-  // 与 not_found 分开：前者该「等它可用或换目标」，后者是「找不到，去别处找」。
-  // （工具描述的 Rules 早已声明这个分类，但此前没有任何地方真的产出过。）
+  // The target exists but is currently not actionable (disabled / hidden / detached from the document).
+  // Kept separate from not_found: the former means "wait for it to become usable or switch targets", the latter means "not found, look elsewhere".
+  // (The tool description's Rules already declared this category, but nothing actually produced it before.)
   NOT_INTERACTABLE: 'not_interactable',
   CSP_BLOCKED: 'csp_blocked',
   DETACHED: 'detached',
@@ -11,8 +11,8 @@ export const ErrorCategory = {
   NO_TAB: 'no_tab',
   WRONG_SITE: 'wrong_site',
   AMBIGUOUS: 'ambiguous',
-  // 点击/悬停坐标处命中的是别的元素（sticky header、弹层、透明遮罩）。
-  // 与 not_found 区分开：换 selector/scope 或先关弹层，而不是等元素出现。
+  // The click/hover coordinate hit a different element (sticky header, overlay, transparent mask).
+  // Kept distinct from not_found: change the selector/scope or close the overlay first, rather than waiting for the element to appear.
   OCCLUDED: 'occluded',
   UNKNOWN: 'unknown',
 };

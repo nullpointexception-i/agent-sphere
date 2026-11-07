@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -105,7 +106,7 @@ export default function CliList() {
             icon={<EyeOutlined />}
             onClick={() => setViewRecord(record)}
           />
-          <Can code="capability:cli:update">
+          <Can code={PERM.capabilityCliUpdate}>
             <Button
               type="link"
               size="small"
@@ -118,7 +119,7 @@ export default function CliList() {
               }}
             />
           </Can>
-          <Can code="capability:cli:delete">
+          <Can code={PERM.capabilityCliDelete}>
             <Button
               type="link"
               danger
@@ -302,7 +303,7 @@ export default function CliList() {
               actionRef.current?.reload();
             }}
           />,
-          <Can key="new" code="capability:cli:create">
+          <Can key="new" code={PERM.capabilityCliCreate}>
             <Button
               type="primary"
               icon={<PlusOutlined />}

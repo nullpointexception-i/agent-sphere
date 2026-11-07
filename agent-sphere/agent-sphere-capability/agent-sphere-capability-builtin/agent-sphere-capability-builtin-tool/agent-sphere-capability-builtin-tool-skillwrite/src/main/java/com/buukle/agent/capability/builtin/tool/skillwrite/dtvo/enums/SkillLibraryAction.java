@@ -1,6 +1,6 @@
 package com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.enums;
 
-/** 技能库工具（builtin_8）支持的 action。 */
+/** Actions supported by the skill library tool (builtin_8). */
 public enum SkillLibraryAction {
     LIST("list"),
     COUNT("count"),

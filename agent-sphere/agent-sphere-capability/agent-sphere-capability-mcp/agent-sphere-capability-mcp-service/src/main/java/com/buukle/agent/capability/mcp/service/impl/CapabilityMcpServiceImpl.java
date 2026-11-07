@@ -148,7 +148,7 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                     .serverType(mcp.getServerType())
                     .protocolVersion(client.negotiatedProtocolVersion())
                     .toolCount(tools.size())
-                    .message("连接成功")
+                    .message("Connection succeeded")
                     .build();
         } catch (BizException e) {
             log.error("MCP connect test failed for mcpId={}: {}", mcpId, e.getMessage());
@@ -186,8 +186,9 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                 .last(SQL_LIMIT_ONE)
                 .one();
 
-        // 凭证只落在本次请求上，不挂在缓存的 transport 实例上：transport 按 mcpId 复用，
-        // 挂实例会让并发任务互相覆盖凭证。
+        // The credential applies only to this request and is never attached to the cached transport
+        // instance: transports are reused per mcpId, so attaching it to the instance would let
+        // concurrent tasks overwrite each other's credentials.
         McpCallContext callContext = McpCallContext.ofTaskCredential(taskMcpCredential);
 
         if (mcp == null) {
@@ -200,8 +201,9 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                     mcp.getId(), mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig());
             return client.callTool(toolName, argumentsJson, callContext);
         } catch (BizException e) {
-            // 配置类错误（如 authConfig 非法）必须原样抛出：直连兜底打的是另一个 URL 且不带鉴权，
-            // 走兜底只会把「配置写错了」伪装成「网络/协议不通」，把根因埋掉。
+            // Configuration errors (such as an invalid authConfig) must be rethrown as-is: the
+            // direct-HTTP fallback targets a different URL and carries no auth, so falling back
+            // would disguise "the config is wrong" as "network/protocol unreachable" and bury the root cause.
             if (CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID.getCode().equals(e.getErrorCode())) {
                 throw e;
             }
@@ -225,8 +227,9 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                     .header(HEADER_CONTENT_TYPE, APPLICATION_JSON)
                     .timeout(directReadTimeout)
                     .POST(java.net.http.HttpRequest.BodyPublishers.ofString(argumentsJson));
-            // 兜底路径同样要带凭证：否则 MCP 客户端一挂，任务凭证就静默失效，
-            // 表现为「偶发地不查重」，极难排查。
+            // The fallback path must carry the credential too: otherwise, as soon as the MCP client
+            // breaks, task credentials silently stop working and surface as "deduplication
+            // intermittently skipped" - extremely hard to diagnose.
             if (callContext != null) {
                 String credential = callContext.header(McpProtocolConstants.HEADER_TASK_MCP_CREDENTIAL);
                 if (credential != null && !credential.isBlank()) {
@@ -253,17 +256,18 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
     }
 
     /**
-     * serverUrl 必须为 http/https 开头，否则 MCP transport 的 URI.create 会因无 scheme
-     * 抛裸 IllegalArgumentException；这里在录入/更新时提前给出可读错误。
+     * serverUrl must start with http/https; otherwise the MCP transport's URI.create throws a raw
+     * IllegalArgumentException for the missing scheme. Validate at create/update time to surface a
+     * readable error early.
      */
     private void validateServerUrl(String serverUrl) {
         if (serverUrl == null || serverUrl.isBlank()) {
-            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID, "serverUrl 不能为空");
+            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID, "serverUrl must not be empty");
         }
         String url = serverUrl.trim();
         if (!url.startsWith(HTTP_PREFIX) && !url.startsWith(HTTPS_PREFIX)) {
             throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID,
-                    "serverUrl 需以 http:// 或 https:// 开头，当前: " + serverUrl);
+                    "serverUrl must start with http:// or https://; current: " + serverUrl);
         }
     }
 }

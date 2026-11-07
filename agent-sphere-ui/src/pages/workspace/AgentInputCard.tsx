@@ -30,11 +30,11 @@ export const ROUTER_APPROVAL = 'ROUTER_APPROVAL';
 function taskInputStatusLabel(status?: string) {
   switch (status) {
     case 'ANSWERED':
-      return tw('chat.inputStatus.answered', '已回复');
+      return tw('chat.inputStatus.answered', 'Answered');
     case 'CANCELLED':
-      return tw('chat.inputStatus.cancelled', '已取消');
+      return tw('chat.inputStatus.cancelled', 'Cancelled');
     default:
-      return status || tw('chat.taskStatus.unknown', '未知');
+      return status || tw('chat.taskStatus.unknown', 'Unknown');
   }
 }
 
@@ -81,13 +81,13 @@ const DECISIONS = ['DENY', 'ALLOW_ONCE', 'ALLOW_RUN', 'ALLOW_SESSION'] as const;
 function decisionLabel(decision: string) {
   switch (decision) {
     case 'DENY':
-      return tw('chat.inputDecision.deny', '拒绝');
+      return tw('chat.inputDecision.deny', 'Deny');
     case 'ALLOW_ONCE':
-      return tw('chat.inputDecision.allowOnce', '允许一次');
+      return tw('chat.inputDecision.allowOnce', 'Allow once');
     case 'ALLOW_RUN':
-      return tw('chat.inputDecision.allowRun', '本次任务');
+      return tw('chat.inputDecision.allowRun', 'This run');
     case 'ALLOW_SESSION':
-      return tw('chat.inputDecision.allowSession', '本会话');
+      return tw('chat.inputDecision.allowSession', 'This session');
     default:
       return decision;
   }
@@ -128,7 +128,8 @@ export function AgentInputCard({
       <div className={styles.taskCard}>
         <div className={styles.taskCardTop}>
           <span className={styles.taskCardTitle}>
-            {card.title || tw('chat.inputFallback', '数字分身需要你的输入')}
+            {card.title ||
+              tw('chat.inputFallback', 'Your avatar needs your input')}
           </span>
           <span
             className={`${styles.taskCardStatus} ${
@@ -186,7 +187,8 @@ export function AgentInputCard({
     if (list.length !== toolCalls.length) return;
     setBusy(true);
     try {
-      // 成功后按钮收起由 PENDING→非PENDING 的权威更新触发，这里只保证请求期防重复。
+      // On success the button collapses via the authoritative PENDING→non-PENDING update; this only
+      // guards against duplicate requests while in flight.
       await onApprove(conversationId, card.inputId, list);
     } finally {
       setBusy(false);
@@ -197,12 +199,13 @@ export function AgentInputCard({
     <div className={styles.taskCard}>
       <div className={styles.taskCardTop}>
         <span className={styles.taskCardTitle}>
-          {card.title || tw('chat.inputFallback', '数字分身需要你的输入')}
+          {card.title ||
+            tw('chat.inputFallback', 'Your avatar needs your input')}
         </span>
         <span
           className={`${styles.taskCardStatus} ${styles.taskCardStatusRunning}`}
         >
-          {tw('chat.taskStatus.pending', '待回复')}
+          {tw('chat.taskStatus.pending', 'Awaiting reply')}
         </span>
       </div>
       {card.description ? (
@@ -243,7 +246,7 @@ export function AgentInputCard({
                 submitOption(picked.map((index) => options[index]).join(', '))
               }
             >
-              {tw('chat.inputSubmitAnswer', '提交回答')}
+              {tw('chat.inputSubmitAnswer', 'Submit answer')}
             </button>
           ) : null}
         </>
@@ -303,15 +306,15 @@ export function AgentInputCard({
               onClick={submitApproval}
             >
               {busy
-                ? tw('chat.inputSubmitting', '提交中…')
-                : tw('chat.inputSubmitDecisions', '提交审批')}
+                ? tw('chat.inputSubmitting', 'Submitting…')
+                : tw('chat.inputSubmitDecisions', 'Submit decisions')}
             </button>
           </>
         ) : (
           <div className={styles.agentInputDoneHint}>
             {tw(
               'chat.inputToolCallsMissing',
-              '工具调用明细不可用，请到控制台处理',
+              'Tool call details unavailable; handle it in the console',
             )}
           </div>
         )

@@ -2,7 +2,7 @@ package com.buukle.agent.common.event;
 
 import lombok.Data;
 
-/** 自助注册用户创建完成事件（SSO 开通走 defaultRoleId 路径不发布） */
+/** Published when a self-service registered user has been created (SSO provisioning via defaultRoleId does not publish it) */
 @Data
 public class UserRegisteredEvent {
     private Long userId;

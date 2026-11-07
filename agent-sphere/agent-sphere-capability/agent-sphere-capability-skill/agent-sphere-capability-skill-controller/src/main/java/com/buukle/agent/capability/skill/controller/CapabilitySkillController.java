@@ -1,5 +1,9 @@
 package com.buukle.agent.capability.skill.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.capability.skill.dtvo.dto.BatchUpdateSkillStatusDTO;
 import com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO;
 import com.buukle.agent.capability.skill.dtvo.dto.UpdateSkillStatusDTO;
@@ -19,7 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 
 @RestController
-@RequestMapping("/api/v1/capability/skill")
+@RequestMapping(ApiPrefix.V1 + "/capability/skill")
 @RequiredArgsConstructor
 @WithTenant
 public class CapabilitySkillController extends BaseController {
@@ -27,19 +31,19 @@ public class CapabilitySkillController extends BaseController {
     private final SkillSyncRunner skillSyncRunner;
 
     @AuditLog(action = "CREATE", resourceType = "Capability", resourceId = "#result?.body?.id")
-    @RequirePermission("capability:skill:create")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_CREATE)
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateSkillDTO dto) {
         return created(capabilitySkillService.createSkill(dto));
     }
 
-    @RequirePermission("capability:skill:read")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_READ)
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
         return ok(capabilitySkillService.getSkill(id));
     }
 
-    @RequirePermission("capability:skill:read")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_READ)
     @GetMapping
     public ResponseEntity<?> list(
             @RequestParam(defaultValue = "1") int page,
@@ -51,14 +55,14 @@ public class CapabilitySkillController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:skill:update")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateSkillDTO dto) {
         return ok(capabilitySkillService.updateSkill(id, dto));
     }
 
     @AuditLog(action = "DELETE", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:skill:delete")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         capabilitySkillService.deleteSkill(id);
@@ -66,7 +70,7 @@ public class CapabilitySkillController extends BaseController {
     }
 
     @AuditLog(action = "BATCH_DELETE", resourceType = "Capability", resourceId = "#ids?.toString()")
-    @RequirePermission("capability:skill:delete")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_DELETE)
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody java.util.List<Long> ids) {
         capabilitySkillService.batchDeleteSkill(ids);
@@ -74,21 +78,21 @@ public class CapabilitySkillController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE_STATUS", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:skill:update")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_UPDATE)
     @PutMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(@PathVariable Long id, @Valid @RequestBody UpdateSkillStatusDTO dto) {
         return ok(capabilitySkillService.updateStatus(id, dto.getStatus()));
     }
 
     @AuditLog(action = "BATCH_UPDATE_STATUS", resourceType = "Capability", resourceId = "#dto?.ids?.toString()")
-    @RequirePermission("capability:skill:update")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_UPDATE)
     @PostMapping("/batch/status")
     public ResponseEntity<?> batchUpdateStatus(@Valid @RequestBody BatchUpdateSkillStatusDTO dto) {
         capabilitySkillService.batchUpdateStatus(dto.getIds(), dto.getStatus());
         return ok();
     }
 
-    @RequirePermission("capability:skill:read")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_READ)
     @GetMapping("/hub")
     public ResponseEntity<?> hub(
             @RequestParam(defaultValue = "1") int page,
@@ -98,37 +102,39 @@ public class CapabilitySkillController extends BaseController {
     }
 
     @AuditLog(action = "PUBLISH", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:skill:publish")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_PUBLISH)
     @PutMapping("/{id}/visibility")
     public ResponseEntity<?> setVisibility(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
         return ok(capabilitySkillService.setVisibility(id, body != null ? body.get("visibility") : null));
     }
 
     @AuditLog(action = "INSTALL", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:skill:install")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_INSTALL)
     @PostMapping("/{id}/install")
     public ResponseEntity<?> install(@PathVariable Long id, @RequestBody(required = false) java.util.Map<String, String> body) {
         return created(capabilitySkillService.installSkill(id, body != null ? body.get("name") : null));
     }
 
     /**
-     * 手动触发一轮「从 Skill Hub 同步最新版本」，异步提交、立即返回执行记录。
+     * Manually triggers one "sync the latest version from the Skill Hub" round; submitted
+     * asynchronously and returns the execution record immediately.
      *
-     * <p>不阻塞：一轮会扫所有开启自动更新的副本，前端用返回的 id 轮询
-     * {@code GET /sync-runs/{id}} 看进度与结果。
+     * <p>Non-blocking: a round scans every copy with auto-update enabled, so the frontend polls
+     * {@code GET /sync-runs/{id}} with the returned id for progress and results.
      *
-     * <p>入口在「系统设置」页而不是技能列表 —— 它是系统级定时任务的手动触发，
-     * 行为完全由 {@code agent_system_config} 的 {@code skill} 组驱动（总开关 + 记录保留天数）。
+     * <p>The entry point lives on the "System Settings" page rather than the skill list - it is the
+     * manual trigger for a system-level scheduled task, and its behavior is driven entirely by the
+     * {@code skill} group in {@code agent_system_config} (global switch + record retention days).
      */
     @AuditLog(action = "SYNC", resourceType = "Capability")
-    @RequirePermission("admin:settings:update")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_UPDATE)
     @PostMapping("/sync-now")
     public ResponseEntity<?> syncNow() {
         return ok(skillSyncRunner.submitSync(SkillSyncTriggerEnum.TRIGGER_MANUAL));
     }
 
-    /** 轮询单条同步执行记录（含实时统计与跳过明细）。 */
-    @RequirePermission("admin:settings:read")
+    /** Polls a single sync execution record (with live statistics and skip details). */
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_READ)
     @GetMapping("/sync-runs/{id}")
     public ResponseEntity<?> syncRun(@PathVariable Long id) {
         var run = skillSyncRunner.getRun(id);
@@ -136,12 +142,12 @@ public class CapabilitySkillController extends BaseController {
     }
 
     /**
-     * 同步执行记录分页。定时与手动两种触发都在这条时间线上。
+     * Pages sync execution records. Both scheduled and manual triggers appear on this timeline.
      *
-     * <p>这张表也是「自动同步到底跑没跑」的唯一证据：任务 logger 被压到 WARN，
-     * 光看日志无法回答。
+     * <p>This table is also the only evidence of whether auto-sync actually ran: the task logger is
+     * pinned to WARN, so the logs alone cannot answer that.
      */
-    @RequirePermission("admin:settings:read")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_READ)
     @GetMapping("/sync-runs")
     public ResponseEntity<?> syncRuns(@RequestParam(required = false) String triggerType,
                                       @RequestParam(required = false) String status,
@@ -151,7 +157,7 @@ public class CapabilitySkillController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE_AUTO_UPDATE", resourceType = "Capability", resourceId = "#id")
-    @RequirePermission("capability:skill:update")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_UPDATE)
     @PutMapping("/{id}/auto-update")
     public ResponseEntity<?> setAutoUpdate(@PathVariable Long id, @RequestBody java.util.Map<String, Boolean> body) {
         return ok(capabilitySkillService.setAutoUpdate(id, body != null && Boolean.TRUE.equals(body.get("autoUpdate"))));

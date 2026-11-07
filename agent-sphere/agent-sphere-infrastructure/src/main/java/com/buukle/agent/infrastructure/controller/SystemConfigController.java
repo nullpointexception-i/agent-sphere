@@ -1,5 +1,8 @@
 package com.buukle.agent.infrastructure.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.config.SystemConfigKeys;
@@ -21,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/system/config")
+@RequestMapping(ApiPrefix.V1 + "/system/config")
 @RequiredArgsConstructor
 public class SystemConfigController extends BaseController {
 
@@ -31,8 +34,9 @@ public class SystemConfigController extends BaseController {
     private final ApiKeyMapper apiKeyMapper;
 
     /**
-     * 公开配置读取（免鉴权，AuthInterceptor 白名单）：仅返回 {@link SystemConfigKeys#PUBLIC_KEYS}
-     * 白名单内的非敏感键。登录页 / widget 据此拉取插件下载地址。未知/非白名单键忽略。
+     * Public config read (no auth, AuthInterceptor whitelist): returns only non-sensitive keys inside
+     * {@link SystemConfigKeys#PUBLIC_KEYS}. The login page / widget uses it to fetch the plugin download
+     * URL. Unknown/non-whitelisted keys are ignored.
      */
     @GetMapping("/public")
     public ResponseEntity<?> publicConfig(@RequestParam("keys") List<String> keys) {
@@ -45,7 +49,7 @@ public class SystemConfigController extends BaseController {
         return ok(result);
     }
 
-    @RequirePermission("admin:settings:read")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_READ)
     @GetMapping
     public ResponseEntity<?> listConfigs() {
         var configs = systemConfigService.listAll().stream()
@@ -64,16 +68,16 @@ public class SystemConfigController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE", resourceType = "Settings", resourceId = "#key")
-    @RequirePermission("admin:settings:update")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_UPDATE)
     @PutMapping("/{key}")
     public ResponseEntity<?> updateConfig(@PathVariable String key, @Valid @RequestBody UpdateConfigDTO dto) {
         systemConfigSpi.set(key, dto.getValue());
         systemConfigService.invalidateCache(key);
-        return ok(new ConfigUpdateResult("已更新"));
+        return ok(new ConfigUpdateResult("Updated"));
     }
 
     @AuditLog(action = "REGENERATE", resourceType = "Settings", resourceId = "'aes-key'")
-    @RequirePermission("admin:settings:regenerate-aes")
+    @RequirePermission(PermissionCodes.ADMIN_SETTINGS_REGENERATE_AES)
     @PostMapping("/crypto.aes-key/regenerate")
     public ResponseEntity<ConfigUpdateResult> regenerateAesKey() {
         String oldBase64Key = systemConfigSpi.get(SystemConfigKeys.AES_KEY);
@@ -121,7 +125,7 @@ public class SystemConfigController extends BaseController {
 
         log.info("AES key regenerated, re-encrypted {} API key(s)", reEncrypted);
 
-        return ok(new ConfigUpdateResult("AES 密钥已重新生成，已重新加密 " + reEncrypted + " 个 API Key"));
+        return ok(new ConfigUpdateResult("AES key regenerated; re-encrypted " + reEncrypted + " API key(s)"));
     }
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(SystemConfigController.class);

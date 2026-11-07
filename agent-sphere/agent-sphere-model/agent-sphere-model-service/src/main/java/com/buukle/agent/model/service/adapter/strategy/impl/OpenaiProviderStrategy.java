@@ -20,10 +20,11 @@ public class OpenaiProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
-        // OpenAI：无 thinking / tool_stream 参数（推理强度用 reasoning_effort），剔除避免非预期行为
+        // OpenAI: no thinking / tool_stream parameters (reasoning strength uses reasoning_effort); strip them
+        // to avoid unexpected behavior.
         request.setThinking(null);
         request.setToolStream(null);
-        // enable_thinking 是 Qwen 专用字段，其它厂商收到会 400。
+        // enable_thinking is a Qwen-only field; other providers return 400 when they receive it.
         request.setEnableThinking(null);
         // OpenAI Chat Completions does not accept assistant.reasoning_content.
         if (request.getMessages() != null) {

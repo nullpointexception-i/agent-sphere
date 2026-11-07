@@ -3,20 +3,20 @@ package com.buukle.agent.runtime.kernel.port;
 import java.util.List;
 
 /**
- * 子 Agent 嵌套执行的显式上下文（禁止经 ThreadLocal 传递）。
- * 主 Agent 创建 root（depth=0、ancestry 空、ownerSubAgentRunId=null）；
- * 进入子 Agent 时创建 child，用 toolRefAncestry 记录调用链以检测递归。
+ * Explicit context for nested sub-agent execution (passing it via ThreadLocal is forbidden).
+ * The main agent creates root (depth=0, empty ancestry, ownerSubAgentRunId=null);
+ * entering a sub-agent creates a child, recording the call chain in toolRefAncestry to detect recursion.
  */
 public class SubRunExecutionContext {
 
     private final Long sessionId;
     private final Long runId;
     private final KernelContext kernelContext;
-    /** 当前子 Agent 嵌套深度（主循环为 0）。 */
+    /** Current sub-agent nesting depth (0 in the main loop). */
     private final int depth;
-    /** 当前子 Agent 调用链（toolRef），用于递归检测。 */
+    /** Current sub-agent call chain (toolRef), used for recursion detection. */
     private final List<String> toolRefAncestry;
-    /** 拥有当前执行上下文的 sub_agent_run id；顶层为 null。 */
+    /** Id of the sub_agent_run owning the current execution context; null at top level. */
     private final Long ownerSubAgentRunId;
     private final String parentToolCallId;
 

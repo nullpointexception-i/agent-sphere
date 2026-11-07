@@ -1,5 +1,9 @@
 package com.buukle.agent.model.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -12,14 +16,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/model/api-keys")
+@RequestMapping(ApiPrefix.V1 + "/model/api-keys")
 @RequiredArgsConstructor
 @WithTenant
 public class ApiKeyController extends BaseController {
     private final ApiKeyService apiKeyService;
 
     @AuditLog(action = "CREATE", resourceType = "ApiKey", resourceId = "#result?.body?.id")
-    @RequirePermission("model:apikey:create")
+    @RequirePermission(PermissionCodes.MODEL_APIKEY_CREATE)
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateApiKeyDTO dto) {
         return created(apiKeyService.createApiKey(dto));
@@ -37,14 +41,14 @@ public class ApiKeyController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE", resourceType = "ApiKey", resourceId = "#id")
-    @RequirePermission("model:apikey:update")
+    @RequirePermission(PermissionCodes.MODEL_APIKEY_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateApiKeyDTO dto) {
         return ok(apiKeyService.updateApiKey(id, dto));
     }
 
     @AuditLog(action = "DELETE", resourceType = "ApiKey", resourceId = "#id")
-    @RequirePermission("model:apikey:delete")
+    @RequirePermission(PermissionCodes.MODEL_APIKEY_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         apiKeyService.deleteApiKey(id);

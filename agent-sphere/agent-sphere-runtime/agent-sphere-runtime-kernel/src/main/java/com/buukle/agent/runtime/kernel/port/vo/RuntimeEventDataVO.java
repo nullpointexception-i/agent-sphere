@@ -4,15 +4,15 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import lombok.Builder;
 
 /**
- * 不可变运行时事件负载。
+ * Immutable runtime event payload.
  *
- * <p>事件对象在 Spring 同步分发时由所有监听器共享同一引用；可变 POJO 允许某个
- * 监听器就地改写字段（历史上 {@code stampRunStatus} 把 assistantReply 改成时间戳，
- * 污染了后续 worker 报告）。改成 record 后任何改写都无法编译，派生字段只能用
- * {@code toBuilder()} 生成副本。
+ * <p>Event objects are shared by all listeners during Spring's synchronous dispatch; a mutable POJO lets one
+ * listener rewrite fields in place (historically {@code stampRunStatus} turned assistantReply into a timestamp,
+ * polluting the later worker report). With a record, any such rewrite fails to compile, so derived fields can only be
+ * produced as a copy via {@code toBuilder()}.
  *
- * <p>Bean 风格 getter 仅为兼容既有读取点。序列化用 {@code @JsonAutoDetect} 只读字段，
- * 因此 JSON 结构与改造前完全一致（不会有 getXxx 产生的重复键）。
+ * <p>Bean-style getters exist only for compatibility with existing read sites. Serialization uses {@code @JsonAutoDetect} on fields only,
+ * so the JSON structure is exactly the same as before (no duplicate keys produced by getXxx).
  */
 @Builder(toBuilder = true)
 @JsonAutoDetect(
@@ -38,7 +38,7 @@ public record RuntimeEventDataVO(
         Boolean passed,
         String status,
         String assistantReply,
-        /** 状态行（run_status / compaction）展示标题；与 assistantReply（正文）语义分离。 */
+        /** Title shown on the status row (run_status / compaction); semantically separate from assistantReply (body). */
         String statusTitle,
         String artifact,
         /** Whether this tool result is allowed to be compressed in live/history projection. */
@@ -46,38 +46,38 @@ public record RuntimeEventDataVO(
         String reasoningType,
         String reasoningSubType,
         String publishId,
-        /** 子 Agent LLM 轮首帧 reasoning 标记（前端据此切新 LLM 轮，替代解析 ▶ 哨兵）。 */
+        /** Reasoning marker of the first frame of a sub-agent LLM turn (the frontend uses it to start a new LLM turn instead of parsing the ▶ sentinel). */
         Boolean firstFrame,
         String screenshot,
         String clarificationId,
         /** Choice clarification: whether multiple options may be selected. */
         Boolean multiple,
-        /** 归属的子 Agent 运行（NULL=主 Agent）。 */
+        /** Owning sub-agent run (NULL = main agent). */
         Long subAgentRunId,
-        /** 产生该工具调用的 LLM 轮次（= run.loop_count / interaction.turn_no），用于恢复时精确配对。 */
+        /** LLM turn that produced this tool call (= run.loop_count / interaction.turn_no), used for exact pairing on resume. */
         Integer turnNo,
-        /** 触发该子 Agent 的父工具调用 id（同批次并行子 Agent 共享，用于前端成组展示）。 */
+        /** Id of the parent tool call that triggered this sub-agent (shared by parallel sub-agents in the same batch, used for grouped display in the frontend). */
         String parentToolCallId,
-        /** 统一 Timeline 行 seq（会话级单调）——SSE 打字机/打平渲染的目标键。 */
+        /** Unified Timeline row seq (session-level monotonic) — the target key for SSE typewriter / flattened rendering. */
         Long seq,
-        /** 统一 Timeline 行展示类型（user|assistant|tool|clarification|subagent|run_status|compaction|error）。 */
+        /** Unified Timeline row display type (user|assistant|tool|clarification|subagent|run_status|compaction|error). */
         String kind,
-        /** 压缩记录 id（CompactionStatus 事件携带；timeline 行据此回填 ref_compact_id）。 */
+        /** Compaction record id (carried by CompactionStatus events; timeline rows backfill ref_compact_id from it). */
         Long compactRecordId,
         /** L2 tool approval id (drawer key). */
         String approvalId,
         /** L2 tool approval calls JSON (toolCallId/toolName/displayName/action/arguments/scope). */
         String toolCallsJson,
-        /** 挂起类型（V115）：WAIT / LLM_RETRY。 */
+        /** Suspension kind (V115): WAIT / LLM_RETRY. */
         String waitKind,
-        /** 重试进度：第 k 次 / 共 N 次（V115）。 */
+        /** Retry progress: attempt k of N (V115). */
         Integer retryAttempt,
         Integer retryMax,
-        /** 下次重试时间（epoch ms）。 */
+        /** Next retry time (epoch ms). */
         Long nextRetryAt,
-        /** 错误分类 code（provider_busy / connect_timeout / rate_limited / unknown_transient）。 */
+        /** Error classification code (provider_busy / connect_timeout / rate_limited / unknown_transient). */
         String retryHint,
-        /** 触发重试的上游 HTTP 状态码。 */
+        /** Upstream HTTP status code that triggered the retry. */
         Integer retryHttpStatus) {
 
     // ---- Bean-style read accessors kept for existing call sites (serialization ignores them). ----

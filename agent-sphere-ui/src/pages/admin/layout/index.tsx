@@ -159,7 +159,7 @@ export default function AdminLayout() {
           >
             {intl.formatMessage({
               id: 'pages.admin.backToMain',
-              defaultMessage: '返回主站',
+              defaultMessage: 'Back to Main',
             })}
           </Button>
           <LangDropdown />

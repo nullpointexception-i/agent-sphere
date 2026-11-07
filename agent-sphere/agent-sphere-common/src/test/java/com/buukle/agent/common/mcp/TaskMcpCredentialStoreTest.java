@@ -23,16 +23,18 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 任务级凭证存储。
+ * Task-level credential store.
  *
- * <p>这组断言守护两件曾经出过事的事情：
+ * <p>These assertions guard two things that have gone wrong before:
  * <ol>
- *   <li><b>连接必须走 Redisson</b>。此前用 {@code StringRedisTemplate}，而本项目的 Redis 配置写在旧前缀
- *       {@code spring.redis.*}（Spring Boot 3 的自动装配只认 {@code spring.data.redis.*}），
- *       结果连接静默回落到 {@code localhost:6379}，凭证从未写入 —— 表现为下游报
- *       「缺少 X-Task-Mcp-Credential」，与真正的根因相隔极远。</li>
- *   <li><b>失败不得外抛</b>。Redis 抖动不该让寻访任务失败（MCP 只是增强），
- *       但必须留下 ERROR 级日志，不能像之前那样静默。</li>
+ *   <li><b>Connections must go through Redisson</b>. Previously {@code StringRedisTemplate} was used,
+ *       while this project's Redis config sits under the legacy prefix {@code spring.redis.*}
+ *       (Spring Boot 3 auto-configuration binds only {@code spring.data.redis.*}), so the connection
+ *       silently fell back to {@code localhost:6379} and the credential was never written —
+ *       surfacing downstream as "missing X-Task-Mcp-Credential", very far from the real root cause.</li>
+ *   <li><b>Failures must not propagate</b>. Redis jitter should not fail a visiting task (MCP is
+ *       only an enhancement), but it must leave an ERROR-level log instead of staying silent as
+ *       before.</li>
  * </ol>
  */
 @ExtendWith(MockitoExtension.class)
@@ -63,8 +65,9 @@ class TaskMcpCredentialStoreTest {
     }
 
     /**
-     * 任务链路按「任务超时 + 余量」传入 TTL；若被忽略退回固定 2h，长任务（上限 4h）
-     * 会出现「任务还在跑、Redis 里的凭证先没了」。
+     * The task path passes a TTL of "task timeout + margin"; if that were ignored and fell back to
+     * the fixed 2h, long tasks (up to 4h) would hit "the task is still running but the credential in
+     * Redis is already gone".
      */
     @Test
     void put_withExplicitTtl_usesThatTtl() {
@@ -98,7 +101,7 @@ class TaskMcpCredentialStoreTest {
         when(redissonClient.<String>getBucket(anyString()))
                 .thenThrow(new IllegalStateException("Unable to connect to Redis server: localhost/127.0.0.1:6379"));
 
-        // 取不到就返回 null（调用方按「无凭证」处理），绝不让异常打断任务
+        // when it cannot be read, return null (callers treat that as "no credential"); never let the exception interrupt the task
         assertNull(store.get(SESSION_ID));
     }
 
@@ -119,8 +122,9 @@ class TaskMcpCredentialStoreTest {
     }
 
     /**
-     * 防回归：只允许依赖 Redisson，不得再出现 Spring Data Redis 类型。
-     * 一旦有人改回 {@code StringRedisTemplate}，这条会立刻失败并指向上面的类注释。
+     * Regression guard: only Redisson may be depended on; Spring Data Redis types must not reappear.
+     * If someone switches back to {@code StringRedisTemplate}, this fails immediately and points to
+     * the class comment above.
      */
     @Test
     void dependsOnRedissonOnly() {

@@ -29,12 +29,12 @@ public sealed interface LLMEvent {
     }
 
     /**
-     * 调用失败事件。
+     * Call failure event.
      *
-     * @param message   给上层/用户看的错误文案
-     * @param httpStatus 上游 HTTP 状态码（无 HTTP 交互时为 null，如连接超时）
-     * @param retryable 是否值得在同一轮内重试：4xx（408/429 除外）属于终态错误，
-     *                  反复重试只会把一次失败放大成 4 次（线上 400 被重试 3 次）
+     * @param message    error text shown to the caller/user
+     * @param httpStatus upstream HTTP status code (null when no HTTP exchange happened, e.g. connect timeout)
+     * @param retryable whether a retry within the same turn is worthwhile: 4xx (except 408/429) are terminal errors,
+     *                  and retrying only multiplies one failure into four (a production 400 was retried 3 times)
      */
     record Error(String message, Integer httpStatus, boolean retryable) implements LLMEvent {
         public Error(String message) {

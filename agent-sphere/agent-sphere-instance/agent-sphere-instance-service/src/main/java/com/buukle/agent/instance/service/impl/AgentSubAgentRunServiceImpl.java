@@ -26,9 +26,9 @@ import java.util.List;
 public class AgentSubAgentRunServiceImpl implements AgentSubAgentRunSpi {
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    /** agent_type 缺省值（调用方通常显式传入）。 */
+    /** Default agent_type value (callers normally pass it explicitly). */
     private static final String DEFAULT_AGENT_TYPE = "AGENT";
-    /** 与 agent_sub_agent_run 列宽对齐的防御性上限（display_name VARCHAR(200) / agent_ref VARCHAR(100) / parent_tool_call_id VARCHAR(100)）。 */
+    /** Defensive limits aligned with the agent_sub_agent_run column widths (display_name VARCHAR(200) / agent_ref VARCHAR(100) / parent_tool_call_id VARCHAR(100)). */
     private static final int DISPLAY_NAME_MAX = 200;
     private static final int AGENT_REF_MAX = 100;
     private static final int PARENT_TOOL_CALL_ID_MAX = 100;

@@ -6,40 +6,40 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 会话的思考强度能力视图。
+ * Reasoning-effort capability view for a session.
  *
- * <p>不可行档位照常返回（前端展示并警告），不隐藏。
+ * <p>Infeasible levels are still returned (the frontend displays them with a warning) rather than hidden.
  */
 @Data
 public class ReasoningCapabilityVO implements Serializable {
 
-    /** 当前会话所走模型是否支持思考强度。 */
+    /** Whether the model used by the current session supports reasoning effort. */
     private boolean supported;
-    /** 统一模式：levels。 */
+    /** Unified mode: levels. */
     private String mode;
-    /** 本次请求实际生效的输出上限（max_tokens）。 */
+    /** Output cap actually in effect for this request (max_tokens). */
     private Long effectiveMaxOutputTokens;
-    /** 正文保留的 token 数。 */
+    /** Number of tokens reserved for answer content. */
     private Long answerReserveTokens;
-    /** 动态默认档位。 */
+    /** Dynamic default level. */
     private String defaultLevel;
-    /** 当前选中档位；无活动 run 时为 null（发送时按默认）。 */
+    /** Currently selected level; null when no run is active (the default is used on send). */
     private String selectedLevel;
-    /** 本轮实际会使用的档位（手选不可行时降级）；运行中为当前轮解析值。 */
+    /** Level actually used for this turn (downgraded when the manual choice is infeasible); while running, the value resolved for the current turn. */
     private String effectiveLevel;
-    /** 可选档位（含不可行项，带 feasible 标记）。 */
+    /** Selectable levels (including infeasible ones, marked by feasible). */
     private List<Level> levels;
-    /** 会话是否有活动 run；运行中不可修改。 */
+    /** Whether the session has an active run; cannot be changed while running. */
     private boolean running;
-    /** 活动 run id。 */
+    /** Active run id. */
     private Long runId;
 
     @Data
     public static class Level implements Serializable {
         private String value;
-        /** 该档位建议的最低输出预算。 */
+        /** Minimum output budget recommended for this level. */
         private long minOutputTokens;
-        /** 在当前输出上限下是否可行。 */
+        /** Whether this level is feasible under the current output cap. */
         private boolean feasible;
     }
 }

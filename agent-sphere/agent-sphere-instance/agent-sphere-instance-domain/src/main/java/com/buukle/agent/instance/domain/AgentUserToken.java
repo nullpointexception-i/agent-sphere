@@ -11,10 +11,12 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 登录会话（一个用户可同时持有多个有效 token）。
+ * Login session (a single user may hold several valid tokens at once).
  *
- * <p>替代 {@code agent_user.token} 单列：旧实现登录即覆盖，主站与 widget 会互相踢下线。
- * 这里只存 token 的 SHA-256 摘要，明文只在签发响应里出现一次。
+ * <p>Replaces the single {@code agent_user.token} column: the old implementation overwrote it on
+ * login, so the console site and the widget kept kicking each other offline.
+ * Only the SHA-256 digest of the token is stored here; the plaintext appears only once in the
+ * issuance response.
  */
 @Data
 @TableName("agent_user_token")
@@ -27,9 +29,9 @@ public class AgentUserToken {
     private Long id;
     private Long userId;
     private String tokenHash;
-    /** token 前 8 位，仅供排查；不参与鉴权。 */
+    /** First 8 characters of the token, for troubleshooting only; not used for authentication. */
     private String tokenPrefix;
-    /** 签发来源：CONSOLE / WIDGET / INTERNAL / LEGACY。 */
+    /** Issuing surface: CONSOLE / WIDGET / INTERNAL / LEGACY. */
     private String source;
     private String userAgent;
     private String loginIp;

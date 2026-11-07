@@ -1,35 +1,35 @@
 /**
- * 工具卡友好渲染的纯函数判别/摘要逻辑（自 UmiJS 主站移植）。
- * 不依赖 React / antd，便于 vitest 单测。
+ * Pure discrimination/summary logic for friendly tool card rendering (ported from the UmiJS main site).
+ * No React / antd dependency, so it is easy to unit test with vitest.
  *
- * 依据后端 AgentTimelineVO.content（tool 行）字段：
- *   displayName, status, args(JSON 字符串), artifact(JSON 字符串)
- * - todo 工具 args: { "todos": [{ "content","status","priority" }] }
+ * Based on the backend AgentTimelineVO.content (tool rows) fields:
+ *   displayName, status, args(JSON string), artifact(JSON string)
+ * - todo tool args: { "todos": [{ "content","status","priority" }] }
  *   status ∈ pending|in_progress|completed|cancelled; priority ∈ high|medium|low
- * - doc 工具 args: { "action","title","content","documentId", ... }  action ∈ create|update|read|...
+ * - doc tool args: { "action","title","content","documentId", ... }  action ∈ create|update|read|...
  */
 
 export interface TodoItem {
   content: string;
   status?: string;
   priority?: string;
-  /** 来源技能 id；非技能条目为 undefined/null。 */
+  /** Source skill id; undefined/null for non-skill entries. */
   skillId?: number | null;
-  /** 来源技能步骤标识，如 step1 / step1.1。 */
+  /** Source skill step identifier, such as step1 / step1.1. */
   stepId?: string | null;
 }
 
 export interface ToolContent {
   displayName?: string;
-  /** 工具名（后端字段名） */
+  /** Tool name (backend field name) */
   toolName?: string;
-  /** 工具状态/结果状态 */
+  /** Tool status/result status */
   status?: string;
-  /** 调用参数，JSON 字符串 */
+  /** Call arguments, JSON string */
   args?: string;
-  /** 执行产物，JSON 字符串 */
+  /** Execution artifact, JSON string */
   artifact?: string;
-  /** 后端 ToolMetaResolver 下发的标准化展示字段。 */
+  /** Normalized display fields delivered by the backend ToolMetaResolver. */
   meta?: Record<string, any>;
 }
 
@@ -47,7 +47,7 @@ function safeParseJson(s?: string): any {
   }
 }
 
-/** 从 content 的 args / artifact 解析出原始对象（已 JSON.parse）。 */
+/** Parse the raw objects out of content's args / artifact (already JSON.parse'd). */
 function parsePayload(content: ToolContent): any {
   const args = safeParseJson(content?.args);
   if (args) return args;
@@ -55,9 +55,9 @@ function parsePayload(content: ToolContent): any {
 }
 
 /**
- * 后端 ToolResultCompressor 会把 JSON 数组压缩成对象
- * { "_count": N, "_showing": N, "items": [前 N 项] }（空数组 → items:[]）。
- * 此函数将压缩后的数组形态还原为真实数组。
+ * The backend ToolResultCompressor compresses JSON arrays into an object
+ * { "_count": N, "_showing": N, "items": [first N items] } (empty array -> items:[]).
+ * This function restores the compressed array form to a real array.
  */
 function asArray(v: any): any[] | null {
   if (Array.isArray(v)) return v;
@@ -65,7 +65,7 @@ function asArray(v: any): any[] | null {
   return null;
 }
 
-/** 提取 todos 列表（优先 args，其次 artifact）。兼容压缩数组形态。 */
+/** Extract the todos list (args first, then artifact). Compatible with the compressed array form. */
 export function extractTodos(content: ToolContent): TodoItem[] {
   const payload = parsePayload(content);
   if (!payload) return [];
@@ -77,7 +77,7 @@ export function extractTodos(content: ToolContent): TodoItem[] {
         ? t.content
         : typeof t === 'string'
           ? t
-          : '未命名任务',
+          : 'Untitled task',
     status: t?.status,
     priority: t?.priority,
     skillId: t?.skillId ?? null,
@@ -86,10 +86,10 @@ export function extractTodos(content: ToolContent): TodoItem[] {
 }
 
 /**
- * 判别工具家族：
- * - args 含 todos 数组 → todo
- * - args 含 action + (title | documentId | content) → doc（或 displayName 提示文档）
- * - 其余 → other
+ * Discriminate the tool family:
+ * - args contain a todos array -> todo
+ * - args contain action + (title | documentId | content) -> doc (or displayName suggests a document)
+ * - everything else -> other
  */
 export function toolFamily(
   content: ToolContent,
@@ -107,7 +107,7 @@ export function toolFamily(
   return 'other';
 }
 
-/** 文档工具摘要：`create document <title>`；标题优先 meta/artifact，缺失回退 #documentId。 */
+/** Document tool summary: `create document <title>`; title prefers meta/artifact and falls back to #documentId. */
 export function docSummary(content: ToolContent): string {
   const args = safeParseJson(content?.args) || {};
   const artifact = safeParseJson(content?.artifact) || {};
@@ -119,7 +119,7 @@ export function docSummary(content: ToolContent): string {
   return title ? `${label} ${title}` : label;
 }
 
-/** 文档摘要里的标题：meta > artifact > args > #documentId。 */
+/** Title in the document summary: meta > artifact > args > #documentId. */
 function docTitle(args: any, artifact: any, meta: any): string {
   const title = [meta?.title, artifact?.title, args?.title].find(
     (value) => typeof value === 'string' && value.trim(),
@@ -138,10 +138,10 @@ function firstNonBlank(...values: any[]): string {
   return value ? value.trim() : '';
 }
 
-/** 通用工具摘要：基于 args 关键字段推导动作；无规则时回退显示工具名。 */
+/** Generic tool summary: derive the action from key args fields; fall back to the tool name when no rule matches. */
 export function genericSummary(content: ToolContent): string {
   const payload = parsePayload(content);
-  if (!payload) return content?.displayName || '工具';
+  if (!payload) return content?.displayName || 'Tool';
   const actionKey =
     payload.action ||
     payload.operation ||
@@ -159,22 +159,22 @@ export function genericSummary(content: ToolContent): string {
     return `${actionKey.trim()}${sub}`;
   }
   if (typeof subject === 'string' && subject.trim()) {
-    return `查询 ${subject.trim()}`;
+    return `Search ${subject.trim()}`;
   }
-  return content?.displayName || content?.toolName || '工具';
+  return content?.displayName || content?.toolName || 'Tool';
 }
 
 export interface TextContainsView {
-  /** true=命中，false=未命中，null=结果缺失/无法解析。 */
+  /** true=hit, false=miss, null=result missing/unparsable. */
   hit: boolean | null;
   needle: string;
   mode: string;
   haystackChars: number | null;
-  /** 工具返回的错误（例如 needle 为空）；非空时 hit 不可信。 */
+  /** Error returned by the tool (for example an empty needle); hit is unreliable when non-empty. */
   error: string | null;
 }
 
-/** 文本包含判断工具的可读摘要（builtin_11）。 */
+/** Readable summary of the text-contains tool (builtin_11). */
 export function textContainsView(content: ToolContent): TextContainsView {
   const args = safeParseJson(content?.args) || {};
   const artifact = safeParseJson(content?.artifact) || {};
@@ -224,7 +224,7 @@ export interface WebPageView {
   error: string | null;
 }
 
-/** 网页读取 / 网页获取的摘要；正文只给长度，避免把整篇 markdown 塞进卡片。 */
+/** Summary for web page read / web fetch; the body is shown only as a length, so a whole markdown page is not crammed into the card. */
 export function webPageView(content: ToolContent): WebPageView {
   const args = safeParseJson(content?.args) || {};
   const artifact = safeParseJson(content?.artifact) || {};
@@ -279,7 +279,7 @@ export interface SkillView {
   error: string | null;
 }
 
-/** 技能库 / 技能管理的摘要（两者共用 SkillWriteResultVO）。 */
+/** Summary for skill hub / skill management (both share SkillWriteResultVO). */
 export function skillView(content: ToolContent): SkillView {
   const args = safeParseJson(content?.args) || {};
   const artifact = safeParseJson(content?.artifact) || {};
@@ -330,7 +330,7 @@ export interface ReadToolResultView {
   error: string | null;
 }
 
-/** read_tool_result：只展示回读范围，不展示正文。 */
+/** read_tool_result: show only the read-back range, not the body. */
 export function readToolResultView(content: ToolContent): ReadToolResultView {
   const args = safeParseJson(content?.args) || {};
   const artifact = safeParseJson(content?.artifact) || {};
@@ -377,7 +377,7 @@ export interface ProgressView {
   percent: number | null;
 }
 
-/** progress 工具：summary / nextAction / percent。 */
+/** progress tool: summary / nextAction / percent. */
 export function progressView(content: ToolContent): ProgressView {
   const args = safeParseJson(content?.args) || {};
   const artifact = safeParseJson(content?.artifact) || {};
@@ -418,7 +418,7 @@ export interface CliView {
   error: string | null;
 }
 
-/** CLI 工具：显示退出码和输出首行，完整输出进原始数据。 */
+/** CLI tool: show the exit code and the first line of output; full output goes into the raw data. */
 export function cliView(content: ToolContent): CliView {
   const artifact = safeParseJson(content?.artifact) || {};
   const meta = content?.meta || {};
@@ -441,27 +441,16 @@ export function cliView(content: ToolContent): CliView {
   };
 }
 
-/** 中文文档动作摘要；保留 docSummary 的英文行为给测试/英文界面。 */
+/**
+ * English document action summary for the doc card.
+ *
+ * @deprecated Kept as a thin alias of {@link docSummary} for existing callers; it no longer localizes to Chinese.
+ */
 export function docSummaryZh(content: ToolContent): string {
-  const args = safeParseJson(content?.args) || {};
-  const artifact = safeParseJson(content?.artifact) || {};
-  const meta = content?.meta || {};
-  const action =
-    firstNonBlank(args.action, artifact.action, meta.action) || '';
-  const title = docTitle(args, artifact, meta);
-  const actionZh: Record<string, string> = {
-    create: '创建文档',
-    update: '更新文档',
-    read: '读取文档',
-    delete: '删除文档',
-    list: '文档列表',
-    search: '搜索文档',
-  };
-  const label = actionZh[action] || action || '文档操作';
-  return title ? `${label} ${title}` : label;
+  return docSummary(content);
 }
 
-/** 已完成计数，例如 { done: 2, total: 3 }。 */
+/** Completed count, for example { done: 2, total: 3 }. */
 export function todoProgress(todos: TodoItem[]): {
   done: number;
   total: number;
@@ -472,8 +461,8 @@ export function todoProgress(todos: TodoItem[]): {
 }
 
 /**
- * 后端 ToolResultCompressor 会记录数组真实总数。
- * 返回压缩对象里的 `_count`；取不到则回退为已解析明细条数。
+ * The backend ToolResultCompressor records the real total of an array.
+ * Returns `_count` from the compressed object; falls back to the number of parsed detail entries when unavailable.
  */
 export function todoTotal(content: ToolContent): number {
   const payload = parsePayload(content);
@@ -484,10 +473,10 @@ export function todoTotal(content: ToolContent): number {
   return extractTodos(content).length;
 }
 
-/** 浏览器（Chrome）工具名特征。 */
+/** Browser (Chrome) tool name characteristics. */
 const BROWSER_KEYWORD = /chrome|browse|浏览器/i;
 
-/** 浏览器工具是否命中。 */
+/** Whether a browser tool is matched. */
 export function isBrowserTool(
   content: ToolContent,
   displayName?: string,
@@ -506,16 +495,16 @@ export interface BrowserResult {
 }
 
 /**
- * 浏览器工具的真实成败，来自 artifact（而非后端 row.state，后者对浏览器恒为 SUCCEEDED）。
- * 后端把超时/失败编码成返回 JSON（ChromeResultVO：success:false + errorCategory）供 LLM 重试。
- * 这里以后端 timeline artifact 数据为准解析出失败标记。
+ * The real success/failure of browser tools comes from artifact (not the backend row.state, which is always SUCCEEDED for browsers).
+ * The backend encodes timeouts/failures into the returned JSON (ChromeResultVO: success:false + errorCategory) for the LLM to retry.
+ * Here the failure flag is parsed from the backend timeline artifact data.
  */
 export function browserResult(
   content: ToolContent,
   displayName?: string,
 ): BrowserResult {
   if (!isBrowserTool(content, displayName)) return { failed: false };
-  // 成败标记在 artifact（结果产物）里，不能走 args 优先的 parsePayload。
+  // The success/failure flag lives in artifact (the result payload), so it cannot go through the args-first parsePayload.
   const payload = safeParseJson(content?.artifact);
   const meta = content?.meta || {};
   const text = (v: any) =>
@@ -576,7 +565,7 @@ function isTextPart(value: any): boolean {
   );
 }
 
-/** 递归展开 MCP 的 content[].text（部分服务端把搜索结果再包一层 JSON 字符串）。 */
+/** Recursively unwrap MCP content[].text (some servers wrap search results in another JSON string). */
 function findResultArray(payload: any, depth = 0): any[] {
   if (depth > 4 || payload == null) return [];
   const value = parseJsonText(payload);
@@ -599,7 +588,7 @@ function findResultArray(payload: any, depth = 0): any[] {
   return [];
 }
 
-/** MCP 结果正文：优先取 content[].text，避免预览弹窗里全是 RPC 包装 JSON。 */
+/** MCP result body: prefer content[].text, so the preview modal is not full of RPC wrapper JSON. */
 export function toolResultText(content: ToolContent): string {
   const payload = safeParseJson(content?.artifact);
   if (payload && typeof payload === 'object') {
@@ -613,7 +602,7 @@ export function toolResultText(content: ToolContent): string {
   return typeof content?.artifact === 'string' ? content.artifact : '';
 }
 
-/** 工具调用理由：后端 meta 优先，旧数据回退解析 args._reason。 */
+/** Tool call reason: backend meta first, falling back to parsing args._reason for old data. */
 export function toolCallReason(content: ToolContent): string {
   const meta = content?.meta || {};
   if (typeof meta.reason === 'string' && meta.reason.trim()) {
@@ -624,7 +613,7 @@ export function toolCallReason(content: ToolContent): string {
   return typeof reason === 'string' ? reason.replace(/\s+/g, ' ').trim() : '';
 }
 
-/** MCP 搜索类工具的数组结果：标题 + 域名 + 摘要。 */
+/** Array results of MCP search tools: title + domain + summary. */
 export function searchResultView(content: ToolContent): SearchResultView[] {
   const payload = safeParseJson(content?.artifact);
   const list = findResultArray(payload);

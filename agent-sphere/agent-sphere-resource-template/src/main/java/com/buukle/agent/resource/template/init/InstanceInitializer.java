@@ -71,7 +71,10 @@ public class InstanceInitializer implements ResourceInitializer {
         bindBuiltinBrowser(vo.getId());
     }
 
-    /** 为模板创建的实例绑定内置浏览器工具（未注册时跳过，不影响开通）。 */
+    /**
+     * Binds the built-in browser tool to instances created from the template
+     * (skipped when it is not registered; does not affect provisioning).
+     */
     private void bindBuiltinBrowser(Long instanceId) {
         BuiltinToolVO chrome = capabilityBuiltinSpi.listBuiltinTools().stream()
                 .filter(t -> t.getId() != null && t.getId().longValue() == BuiltinToolEnum.CHROME.getId())

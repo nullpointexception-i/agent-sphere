@@ -11,13 +11,13 @@ export interface UserVO {
   ssoSubject?: string;
 }
 
-/** GET /sso/me 返回的第三方身份（subject 为 displaySubject）。 */
+/** Third-party identity returned by GET /sso/me (subject is displaySubject). */
 export interface SsoIdentityVO {
   providerCode?: string;
   subject?: string;
 }
 
-/** token 用量（tooltip / 会话吸底条共用）。 */
+/** Token usage (shared by tooltip / session sticky footer). */
 export interface UsageData {
   promptTokens?: number | null;
   completionTokens?: number | null;
@@ -64,13 +64,13 @@ export interface InstanceVO {
   image: string;
   status: string;
   /**
-   * 业务域（`agent_instance.business_type`）。非空表示这是**任务专用实例** ——
-   * 外部 API 按 businessType 匹配它来跑目标驱动任务，因此不允许在 widget 里手动发起对话。
+   * Business domain (`agent_instance.business_type`). Non-empty means a **task-dedicated instance** -
+   * the external API matches it by businessType to run goal-driven tasks, so conversations cannot be started manually in the widget.
    */
   businessType?: string | null;
   /**
-   * 是否允许从 widget 端发起/继续会话（`agent_instance.allow_widget_session`）。
-   * 后端列 `NOT NULL DEFAULT FALSE` —— 缺省/空值按禁止处理。
+   * Whether starting/continuing a session from the widget is allowed (`agent_instance.allow_widget_session`).
+   * The backend column is `NOT NULL DEFAULT FALSE` - missing/null counts as denied.
    */
   allowWidgetSession?: boolean | null;
   createdAt: string;
@@ -111,11 +111,11 @@ export interface SubAgentTimelineItemVO {
   artifact?: string | null;
   toolStatus?: string;
   toolErrorMessage?: string;
-  /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），子 Agent 卡片回显用。 */
+  /** Browser screenshot references in the tool result ([{fileKey, contentType}]), replayed by the sub-agent card. */
   images?: { fileKey: string; contentType?: string }[];
 }
 
-/** GET /instance/sessions/{sid}/timeline 单行（AgentTimelineVO，content 已在后端 resolve）。 */
+/** One row of GET /instance/sessions/{sid}/timeline (AgentTimelineVO, content already resolved by the backend). */
 export interface TimelineRow {
   seq: number;
   runId?: number | null;
@@ -135,13 +135,13 @@ export interface TimelineRow {
     reply?: string;
     displayName?: string;
     status?: string;
-    /** 子 Agent 类型（统一 delegate 后为 AGENT；历史数据可能为 SKILL）。 */
+    /** Sub-agent type (AGENT after the unified delegate refactor; historical data may be SKILL). */
     agentType?: string;
-    /** 子 Agent 引用/标识（delegate 的 agentRef，形如 instance:<id>）。 */
+    /** Sub-agent reference/identifier (the delegate's agentRef, shaped like instance:<id>). */
     agentRef?: string;
     args?: string;
     artifact?: string;
-    /** 后端 ToolMetaResolver 下发的标准化展示字段。 */
+    /** Normalized display fields delivered by the backend ToolMetaResolver. */
     meta?: Record<string, any>;
     clarificationId?: string;
     approvalId?: string;
@@ -153,9 +153,9 @@ export interface TimelineRow {
     startedAt?: string;
     durationMs?: number;
     modelName?: string;
-    /** 用户消息附图（[{fileKey, contentType}]，按 fileKey 拉字节回显）。 */
+    /** Images attached to a user message ([{fileKey, contentType}], bytes fetched by fileKey for replay). */
     images?: { fileKey: string; contentType?: string }[];
-    /** 用量（assistant / run_status 行）。 */
+    /** Usage (assistant / run_status rows). */
     usage?: {
       promptTokens?: number | null;
       completionTokens?: number | null;
@@ -163,13 +163,13 @@ export interface TimelineRow {
       cacheHitTokens?: number | null;
       cacheMissTokens?: number | null;
     } | null;
-    /** 同批次并行子 Agent 共享的分组键（工具调用 id），用于并行 Tab 分组。 */
+    /** Group key shared by parallel sub-agents in the same batch (tool call id), used to group them into parallel tabs. */
     parentToolCallId?: string | null;
     [key: string]: unknown;
   };
 }
 
-/** GET /instance/sessions/{sid}/timeline 分页响应。 */
+/** Pagination response for GET /instance/sessions/{sid}/timeline. */
 export interface SessionTimelinePageVO {
   rows: TimelineRow[];
   hasMore: boolean;

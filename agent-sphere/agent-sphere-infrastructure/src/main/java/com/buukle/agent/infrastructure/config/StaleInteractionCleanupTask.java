@@ -10,10 +10,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 清理进程中断留下的僵死 LLM 轮次记录。
+ * Cleans up LLM turn records left stale by a process interruption.
  *
- * <p>主 Agent 轮次在调用前预建为 RUNNING；若 Pod 在调用结束前被杀，记录会一直停在 RUNNING。
- * 这里把超过阈值的记录置 FAILED，既能保证 timeline 的展示状态收敛，也能作为「有轮次没跑完」的告警信号。
+ * <p>Main Agent turns are pre-created as RUNNING before the call; if the Pod is killed before the call
+ * completes, the record stays RUNNING forever. This marks records past the threshold as FAILED, which both
+ * keeps the timeline's display state converged and serves as an alert signal that a turn did not finish.
  */
 @Slf4j
 @Component

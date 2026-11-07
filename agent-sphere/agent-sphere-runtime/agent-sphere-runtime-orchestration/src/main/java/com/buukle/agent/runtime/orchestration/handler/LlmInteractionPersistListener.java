@@ -90,7 +90,7 @@ public class LlmInteractionPersistListener {
 
         Long recordId;
         if (meta.getRecordId() != null) {
-            // 主 Agent 轮次：记录在调用前已预建为 RUNNING，这里补结果
+            // Main Agent turn: the record was pre-created as RUNNING before the call; fill in the result here
             interactionRecordSpi.complete(meta.getRecordId(), vo);
             recordId = meta.getRecordId();
         } else {
@@ -104,8 +104,8 @@ public class LlmInteractionPersistListener {
     }
 
     /**
-     * 主 Agent 问答轮次：interaction 落库即封口对应 Timeline 助手行并补引用（LLM 调用结束 = 该轮正文行边界）。
-     * 过滤：子 Agent（subAgentRunId）与标题/压合/契约修复等非可见轮次（非 CHAT_REPLY）不产生主助手行。
+     * Main Agent Q&A turn: once the interaction is persisted, close the matching Timeline assistant row and attach the reference (LLM call end = boundary of that turn's content row).
+     * Filter: sub-agent (subAgentRunId) and non-visible turns such as title/compaction/contract-repair (not CHAT_REPLY) produce no main assistant row.
      */
     private void afterPersist(LlmInteractionMeta meta, Long recordId, boolean success) {
         if (recordId == null || meta.getRunId() == null || meta.getSubAgentRunId() != null

@@ -1,11 +1,11 @@
 package com.buukle.agent.common.skill;
 
 /**
- * Skill V1 定义（解析后的 typed model）。
+ * Skill V1 definition (parsed typed model).
  *
- * @param version               定义版本（当前 1）
- * @param parametersSchemaJson  LLM 调用 skill 工具时的入参 JSON Schema
- * @param promptTemplate        子 Agent 的任务指令模板
+ * @param version               definition version (currently 1)
+ * @param parametersSchemaJson  JSON Schema for the arguments when the LLM calls the skill tool
+ * @param promptTemplate        task instruction template for the sub-agent
  */
 public record SkillDefinition(
         int version,

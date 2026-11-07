@@ -9,7 +9,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** 任务契约 artifact（两阶段提炼的结构化输出，可扩展 artifact_type）。 */
+/** Task contract artifact (structured output of the two-phase extraction; artifact_type is extensible). */
 @Data
 @TableName("agent_task_artifact")
 public class AgentTaskArtifact {

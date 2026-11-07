@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -37,24 +38,24 @@ import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
 import SkillMarkdownEditor from './components/SkillMarkdownEditor';
 
-/** promptTemplate 规范模板：与后端 CapabilityBuiltinToolSkillManage.SKILL_TEMPLATE 保持一致。 */
-const SKILL_TEMPLATE = `# <技能名称>
+/** Canonical promptTemplate template: keep in sync with the backend CapabilityBuiltinToolSkillManage.SKILL_TEMPLATE. */
+const SKILL_TEMPLATE = `# <Skill name>
 
-## 概述
-<何时使用 / 输入·输出 / 成功标准>
+## Overview
+<When to use / input and output / success criteria>
 
-## step0 <准备>
-### step0.1 <子步骤>
-### step0.2 <子步骤>
+## step0 <Preparation>
+### step0.1 <Sub-step>
+### step0.2 <Sub-step>
 
-## step1 <主步骤>
-### step1.1 <子步骤>
-### step1.2 <子步骤>
+## step1 <Main step>
+### step1.1 <Sub-step>
+### step1.2 <Sub-step>
 
-## step2 <主步骤>
+## step2 <Main step>
 
-## 收尾对账
-<完成前必须核对的收尾条件；输出格式 / 验收标准>`;
+## Wrap-up checklist
+<Closing checks that must pass before completion; output format / acceptance criteria>`;
 
 const SAMPLE_DEFINITION = `{
   "version": 1,
@@ -81,11 +82,11 @@ interface SkillRecord {
   installCount?: number;
   version?: number;
   autoUpdate?: boolean;
-  /** 已同步到源头版本（后端一直在返回，前端此前没声明，列表也拿它显示） */
+  /** Already synced to the origin version (the backend has always returned it; the frontend previously did not declare it, and the list also displays it) */
   originVersion?: number;
-  /** 最后一次与源头对齐的时间；安装时即为安装时间 */
+  /** Time of the last alignment with the origin; equals the install time for installs */
   syncedAt?: string;
-  /** 最后一次同步到的源头版本号 */
+  /** Origin version number of the last sync */
   syncedFromVersion?: number;
   createdAt?: string;
   createdBy?: string;
@@ -93,7 +94,7 @@ interface SkillRecord {
   updatedAt?: string;
 }
 
-/** 解析 definition 回填结构化字段（兼容遗留 {"prompt": "..."}）。 */
+/** Parse definition back into structured fields (tolerates the legacy {"prompt": "..."}). */
 function parseDefinition(def?: string): {
   promptTemplate: string;
   parameters: string;
@@ -114,7 +115,7 @@ function parseDefinition(def?: string): {
   }
 }
 
-/** 用结构化字段组装 definition V1；parameters 非法时抛出异常。 */
+/** Assemble definition V1 from structured fields; throws when parameters are invalid. */
 function buildDefinition(values: {
   promptTemplate: string;
   parameters: string;
@@ -124,7 +125,7 @@ function buildDefinition(values: {
     try {
       parameters = JSON.parse(values.parameters);
     } catch {
-      throw new Error('parameters 不是合法 JSON');
+      throw new Error('parameters is not valid JSON');
     }
   }
   return JSON.stringify(
@@ -202,14 +203,25 @@ export default function SkillList() {
         canUpdate ? (
           <Switch
             checked={record.status === 'ENABLED'}
-            checkedChildren="启用"
-            unCheckedChildren="禁用"
+            checkedChildren={intl.formatMessage({
+              id: 'pages.capabilities.skill.enabled',
+              defaultMessage: 'On',
+            })}
+            unCheckedChildren={intl.formatMessage({
+              id: 'pages.capabilities.skill.disabled',
+              defaultMessage: 'Off',
+            })}
             onChange={(checked) => {
               const status = checked ? 'ENABLED' : 'DISABLED';
               agentApi.skill
                 .updateStatus(record.id, status)
                 .then(() => {
-                  message.success('已更新');
+                  message.success(
+                    intl.formatMessage({
+                      id: 'pages.capabilities.skill.statusUpdated',
+                      defaultMessage: 'Updated',
+                    }),
+                  );
                   actionRef.current?.reload();
                 })
                 .catch(() => {
@@ -235,7 +247,7 @@ export default function SkillList() {
     {
       title: intl.formatMessage({
         id: 'pages.capabilities.skill.visibility',
-        defaultMessage: '可见性',
+        defaultMessage: 'Visibility',
       }),
       dataIndex: 'visibility',
       key: 'visibility',
@@ -245,14 +257,14 @@ export default function SkillList() {
           <Tag color="gold">
             {intl.formatMessage({
               id: 'pages.capabilities.skill.visibilityPublic',
-              defaultMessage: '公开',
+              defaultMessage: 'Public',
             })}
           </Tag>
         ) : (
           <Tag>
             {intl.formatMessage({
               id: 'pages.capabilities.skill.visibilityPrivate',
-              defaultMessage: '私有',
+              defaultMessage: 'Private',
             })}
           </Tag>
         ),
@@ -260,12 +272,13 @@ export default function SkillList() {
     {
       title: intl.formatMessage({
         id: 'pages.capabilities.skill.version',
-        defaultMessage: '版本',
+        defaultMessage: 'Version',
       }),
       dataIndex: 'version',
       key: 'version',
       width: 80,
-      // 副本的 version 不随同步自增（只推进 originVersion），所以列名强调是「本地版本」
+      // A replica's version does not increment on sync (only originVersion advances), so the
+      // column name emphasizes "local version"
       render: (v: any, row: SkillRecord) =>
         row.originSkillId ? (
           <span>
@@ -273,7 +286,7 @@ export default function SkillList() {
             <Tag style={{ marginLeft: 6 }} color="default">
               {intl.formatMessage({
                 id: 'pages.capabilities.skill.localVersionTag',
-                defaultMessage: '本地',
+                defaultMessage: 'local',
               })}
             </Tag>
           </span>
@@ -284,22 +297,22 @@ export default function SkillList() {
     {
       title: intl.formatMessage({
         id: 'pages.capabilities.skill.syncedVersion',
-        defaultMessage: '已同步源头版本',
+        defaultMessage: 'Synced origin version',
       }),
       dataIndex: 'syncedFromVersion',
       key: 'syncedFromVersion',
       width: 120,
-      // 原生技能没有源头，这个列对它无意义
+      // Native skills have no origin, so this column is meaningless for them
       render: (v: any, row: SkillRecord) =>
         row.originSkillId ? (
           <span>
             {intl.formatMessage(
               {
                 id: 'pages.capabilities.skill.syncedVersionValue',
-                defaultMessage: '源头 v{v}',
+                defaultMessage: 'origin v{v}',
               },
-              // values 必须是第二个位置参数：塞进 descriptor 里 react-intl 会忽略它，
-              // {v} 会原样渲染出来。
+              // values must be the second positional argument: nest it into the descriptor and
+              // react-intl will ignore it, rendering {v} literally.
               { v: v ?? row.originVersion ?? 1 },
             )}
           </span>
@@ -310,7 +323,7 @@ export default function SkillList() {
     {
       title: intl.formatMessage({
         id: 'pages.capabilities.skill.syncedAt',
-        defaultMessage: '同步时间',
+        defaultMessage: 'Last synced',
       }),
       dataIndex: 'syncedAt',
       key: 'syncedAt',
@@ -321,7 +334,7 @@ export default function SkillList() {
     {
       title: intl.formatMessage({
         id: 'pages.capabilities.skill.autoUpdate',
-        defaultMessage: '自动更新',
+        defaultMessage: 'Auto update',
       }),
       dataIndex: 'autoUpdate',
       key: 'autoUpdate',
@@ -367,7 +380,7 @@ export default function SkillList() {
             icon={<EyeOutlined />}
             onClick={() => setViewRecord(record)}
           />
-          <Can code="capability:skill:update">
+          <Can code={PERM.capabilitySkillUpdate}>
             <Button
               type="link"
               size="small"
@@ -385,7 +398,7 @@ export default function SkillList() {
               }}
             />
           </Can>
-          <Can code="capability:skill:publish">
+          <Can code={PERM.capabilitySkillPublish}>
             <Button
               type="link"
               size="small"
@@ -394,15 +407,15 @@ export default function SkillList() {
               {record.visibility === 'PUBLIC'
                 ? intl.formatMessage({
                     id: 'pages.capabilities.skill.unpublish',
-                    defaultMessage: '取消公开',
+                    defaultMessage: 'Unpublish',
                   })
                 : intl.formatMessage({
                     id: 'pages.capabilities.skill.publish',
-                    defaultMessage: '公开',
+                    defaultMessage: 'Publish',
                   })}
             </Button>
           </Can>
-          <Can code="capability:skill:delete">
+          <Can code={PERM.capabilitySkillDelete}>
             <Button
               type="link"
               danger
@@ -448,7 +461,13 @@ export default function SkillList() {
       try {
         definition = buildDefinition(values);
       } catch (e: any) {
-        message.error(e?.message || 'definition 格式错误');
+        message.error(
+          e?.message ||
+            intl.formatMessage({
+              id: 'pages.capabilities.skill.definitionInvalid',
+              defaultMessage: 'Invalid definition format',
+            }),
+        );
         return;
       }
       const payload = {
@@ -479,20 +498,21 @@ export default function SkillList() {
         ? intl.formatMessage(
             {
               id: 'pages.capabilities.skill.publishConfirm',
-              defaultMessage: '公开「{name}」到技能 Hub？',
+              defaultMessage: 'Publish "{name}" to the Skill Hub?',
             },
             { name: record.name },
           )
         : intl.formatMessage(
             {
               id: 'pages.capabilities.skill.unpublishConfirm',
-              defaultMessage: '取消公开「{name}」？已安装的副本不受影响。',
+              defaultMessage:
+                'Unpublish "{name}"? Installed copies are unaffected.',
             },
             { name: record.name },
           ),
       okText: intl.formatMessage({
         id: 'pages.modal.ok',
-        defaultMessage: '确认',
+        defaultMessage: 'Confirm',
       }),
       onOk: async () => {
         await agentApi.skill.publish(
@@ -515,24 +535,25 @@ export default function SkillList() {
       title: intl.formatMessage(
         {
           id: 'pages.capabilities.skill.installConfirm',
-          defaultMessage: '安装「{name}」到我的技能？',
+          defaultMessage: 'Install "{name}" to my skills?',
         },
         { name: record.name },
       ),
       content: intl.formatMessage({
         id: 'pages.capabilities.skill.installConfirmContent',
-        defaultMessage: '将复制一份到你的技能列表（默认私有），可独立编辑。',
+        defaultMessage:
+          'A copy will be added to your skills (private by default) and can be edited independently.',
       }),
       okText: intl.formatMessage({
         id: 'pages.modal.ok',
-        defaultMessage: '确认',
+        defaultMessage: 'Confirm',
       }),
       onOk: async () => {
         await agentApi.skill.install(record.id);
         message.success(
           intl.formatMessage({
             id: 'pages.capabilities.skill.installSuccess',
-            defaultMessage: '已安装到我的技能',
+            defaultMessage: 'Installed to my skills',
           }),
         );
         actionRef.current?.reload();
@@ -569,7 +590,7 @@ export default function SkillList() {
     {
       title: intl.formatMessage({
         id: 'pages.capabilities.skill.author',
-        defaultMessage: '作者',
+        defaultMessage: 'Author',
       }),
       dataIndex: 'createdBy',
       key: 'createdBy',
@@ -580,7 +601,7 @@ export default function SkillList() {
     {
       title: intl.formatMessage({
         id: 'pages.capabilities.skill.installCount',
-        defaultMessage: '安装数',
+        defaultMessage: 'Installs',
       }),
       dataIndex: 'installCount',
       key: 'installCount',
@@ -600,7 +621,7 @@ export default function SkillList() {
             icon={<EyeOutlined />}
             onClick={() => setViewRecord(record)}
           />
-          <Can code="capability:skill:install">
+          <Can code={PERM.capabilitySkillInstall}>
             {record.createdBy !== currentUsername && (
               <Button
                 type="link"
@@ -609,7 +630,7 @@ export default function SkillList() {
               >
                 {intl.formatMessage({
                   id: 'pages.capabilities.skill.install',
-                  defaultMessage: '安装',
+                  defaultMessage: 'Install',
                 })}
               </Button>
             )}
@@ -622,14 +643,38 @@ export default function SkillList() {
   const handleBatchStatus = (status: string) => {
     if (selectedRowKeys.length === 0) return;
     const enabled = status === 'ENABLED';
-    const label = enabled ? '启用' : '禁用';
     modal.confirm({
-      title: `${label}选中的 ${selectedRowKeys.length} 个技能？`,
-      okText: '确认',
+      title: intl.formatMessage(
+        {
+          id: enabled
+            ? 'pages.capabilities.skill.batchEnableTitle'
+            : 'pages.capabilities.skill.batchDisableTitle',
+          defaultMessage: enabled
+            ? 'Enable {count} selected skills?'
+            : 'Disable {count} selected skills?',
+        },
+        { count: selectedRowKeys.length },
+      ),
+      okText: intl.formatMessage({
+        id: 'pages.modal.ok',
+        defaultMessage: 'Confirm',
+      }),
       okButtonProps: enabled ? { type: 'primary' } : { danger: true },
       onOk: async () => {
         await agentApi.skill.batchUpdateStatus(selectedRowKeys, status);
-        message.success(`${selectedRowKeys.length} 个技能已${label}`);
+        message.success(
+          intl.formatMessage(
+            {
+              id: enabled
+                ? 'pages.capabilities.skill.batchEnabledSuccess'
+                : 'pages.capabilities.skill.batchDisabledSuccess',
+              defaultMessage: enabled
+                ? 'Enabled {count} skills'
+                : 'Disabled {count} skills',
+            },
+            { count: selectedRowKeys.length },
+          ),
+        );
         setSelectedRowKeys([]);
         actionRef.current?.reload();
       },
@@ -678,14 +723,14 @@ export default function SkillList() {
             key: 'mine',
             label: intl.formatMessage({
               id: 'pages.capabilities.skill.tabs.mine',
-              defaultMessage: '我的技能',
+              defaultMessage: 'My Skills',
             }),
           },
           {
             key: 'hub',
             label: intl.formatMessage({
               id: 'pages.capabilities.skill.tabs.hub',
-              defaultMessage: '技能 Hub',
+              defaultMessage: 'Skill Hub',
             }),
           },
         ]}
@@ -782,7 +827,13 @@ export default function SkillList() {
                 icon={<LikeOutlined />}
                 onClick={() => handleBatchStatus('ENABLED')}
               >
-                启用 ({selectedRowKeys.length})
+                {intl.formatMessage(
+                  {
+                    id: 'pages.capabilities.skill.batchEnable',
+                    defaultMessage: 'Enable ({count})',
+                  },
+                  { count: selectedRowKeys.length },
+                )}
               </Button>
             ),
             selectedRowKeys.length > 0 && (
@@ -792,7 +843,13 @@ export default function SkillList() {
                 icon={<DislikeOutlined />}
                 onClick={() => handleBatchStatus('DISABLED')}
               >
-                禁用 ({selectedRowKeys.length})
+                {intl.formatMessage(
+                  {
+                    id: 'pages.capabilities.skill.batchDisable',
+                    defaultMessage: 'Disable ({count})',
+                  },
+                  { count: selectedRowKeys.length },
+                )}
               </Button>
             ),
             selectedRowKeys.length > 0 && (
@@ -854,7 +911,7 @@ export default function SkillList() {
                 actionRef.current?.reload();
               }}
             />,
-            <Can key="new" code="capability:skill:create">
+            <Can key="new" code={PERM.capabilitySkillCreate}>
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
@@ -913,18 +970,38 @@ export default function SkillList() {
           <Form.Item
             name="promptTemplate"
             label={labelWithRule(
-              '任务指令 (promptTemplate)',
-              '支持 Markdown 与 {{字段}} 占位符',
+              intl.formatMessage({
+                id: 'pages.admin.settings.template.skill.promptTemplate',
+                defaultMessage: 'Task instruction (promptTemplate)',
+              }),
+              intl.formatMessage({
+                id: 'pages.admin.settings.template.skill.promptTemplateHint',
+                defaultMessage: 'Supports Markdown and {{field}} placeholders',
+              }),
             )}
-            rules={[{ required: true, message: '任务指令不能为空' }]}
+            rules={[
+              {
+                required: true,
+                message: intl.formatMessage({
+                  id: 'pages.admin.settings.template.skill.promptTemplateRequired',
+                  defaultMessage: 'Task instruction is required',
+                }),
+              },
+            ]}
           >
             <SkillMarkdownEditor placeholder={SKILL_TEMPLATE} />
           </Form.Item>
           <Form.Item
             name="parameters"
             label={labelWithRule(
-              '入参 JSON Schema (parameters)',
-              '可留空=空对象',
+              intl.formatMessage({
+                id: 'pages.admin.settings.template.skill.parameters',
+                defaultMessage: 'Input JSON Schema (parameters)',
+              }),
+              intl.formatMessage({
+                id: 'pages.admin.settings.template.skill.parametersHint',
+                defaultMessage: 'May be empty (empty object)',
+              }),
             )}
           >
             <Input.TextArea
@@ -933,12 +1010,18 @@ export default function SkillList() {
             />
           </Form.Item>
           <Button type="link" size="small" onClick={() => setSampleOpen(true)}>
-            查看样例
+            {intl.formatMessage({
+              id: 'pages.capabilities.skill.viewSample',
+              defaultMessage: 'View sample',
+            })}
           </Button>
         </Form>
       </Modal>
       <Modal
-        title="Skill definition 样例"
+        title={intl.formatMessage({
+          id: 'pages.capabilities.skill.sampleTitle',
+          defaultMessage: 'Skill definition sample',
+        })}
         open={sampleOpen}
         onCancel={() => setSampleOpen(false)}
         footer={null}
@@ -983,7 +1066,10 @@ export default function SkillList() {
                   {intl.formatMessage({ id: 'pages.table.id' })}:{' '}
                   <b style={{ color: 'rgba(0,0,0,0.88)' }}>{viewRecord?.id}</b>
                 </span>
-                <span>状态: {viewRecord?.status || '-'}</span>
+                <span>
+                  {intl.formatMessage({ id: 'pages.table.status' })}:{' '}
+                  {viewRecord?.status || '-'}
+                </span>
                 <span>
                   {intl.formatMessage({ id: 'pages.table.created' })}:{' '}
                   {formatTime(viewRecord?.createdAt)}
@@ -995,20 +1081,20 @@ export default function SkillList() {
                   })}
                   : {formatTime(viewRecord?.updatedAt)}
                 </span>
-                {/* 安装副本才有源头，原生技能这两项无意义 */}
+                {/* Only installed replicas have an origin; these two fields are meaningless for native skills */}
                 {viewRecord?.originSkillId ? (
                   <>
                     <span>
                       {intl.formatMessage({
                         id: 'pages.capabilities.skill.syncedVersion',
-                        defaultMessage: '已同步源头版本',
+                        defaultMessage: 'Synced origin version',
                       })}
                       :{' '}
                       <b style={{ color: 'rgba(0,0,0,0.88)' }}>
                         {intl.formatMessage(
                           {
                             id: 'pages.capabilities.skill.syncedVersionValue',
-                            defaultMessage: '源头 v{v}',
+                            defaultMessage: 'origin v{v}',
                           },
                           {
                             v:
@@ -1022,7 +1108,7 @@ export default function SkillList() {
                     <span>
                       {intl.formatMessage({
                         id: 'pages.capabilities.skill.syncedAt',
-                        defaultMessage: '同步时间',
+                        defaultMessage: 'Last synced',
                       })}
                       :{' '}
                       <b style={{ color: 'rgba(0,0,0,0.88)' }}>
@@ -1032,7 +1118,7 @@ export default function SkillList() {
                     <span>
                       {intl.formatMessage({
                         id: 'pages.capabilities.skill.originSkill',
-                        defaultMessage: '源技能',
+                        defaultMessage: 'Origin skill',
                       })}
                       : {viewRecord.originSkillId}
                     </span>
@@ -1040,14 +1126,14 @@ export default function SkillList() {
                       <Tag color="blue">
                         {intl.formatMessage({
                           id: 'pages.capabilities.skill.autoUpdateOn',
-                          defaultMessage: '自动更新已开启',
+                          defaultMessage: 'Auto update on',
                         })}
                       </Tag>
                     ) : (
                       <Tag>
                         {intl.formatMessage({
                           id: 'pages.capabilities.skill.autoUpdateOff',
-                          defaultMessage: '自动更新未开启',
+                          defaultMessage: 'Auto update off',
                         })}
                       </Tag>
                     )}
@@ -1066,7 +1152,10 @@ export default function SkillList() {
                 </div>
               ) : null}
               <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                任务指令 (promptTemplate)
+                {intl.formatMessage({
+                  id: 'pages.admin.settings.template.skill.promptTemplate',
+                  defaultMessage: 'Task instruction (promptTemplate)',
+                })}
               </div>
               <div
                 style={{
@@ -1078,12 +1167,23 @@ export default function SkillList() {
                   overflow: 'auto',
                 }}
               >
-                <XMarkdown content={parsed.promptTemplate || '（未设置）'} />
+                <XMarkdown
+                  content={
+                    parsed.promptTemplate ||
+                    intl.formatMessage({
+                      id: 'pages.capabilities.skill.notSet',
+                      defaultMessage: '(not set)',
+                    })
+                  }
+                />
               </div>
               {parsed.parameters ? (
                 <>
                   <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                    入参 JSON Schema (parameters)
+                    {intl.formatMessage({
+                      id: 'pages.admin.settings.template.skill.parameters',
+                      defaultMessage: 'Input JSON Schema (parameters)',
+                    })}
                   </div>
                   <pre
                     style={{

@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   DeleteOutlined,
   DownloadOutlined,
@@ -112,7 +113,7 @@ export default function DocumentList() {
             icon={<FileTextOutlined />}
             onClick={() => history.push(`/artifacts/documents/${record.id}`)}
           />
-          <Can code="document:update">
+          <Can code={PERM.documentUpdate}>
             <Button
               type="link"
               size="small"
@@ -122,7 +123,7 @@ export default function DocumentList() {
               }
             />
           </Can>
-          <Can code="document:share">
+          <Can code={PERM.documentShare}>
             <Button
               type="link"
               size="small"
@@ -178,7 +179,7 @@ export default function DocumentList() {
               }
             }}
           />
-          <Can code="document:delete">
+          <Can code={PERM.documentDelete}>
             <Button
               type="link"
               danger
@@ -278,7 +279,7 @@ export default function DocumentList() {
         }}
         toolBarRender={() => [
           selectedRowKeys.length > 0 && (
-            <Can code="document:delete">
+            <Can code={PERM.documentDelete}>
               <Button
                 key="batchDelete"
                 danger

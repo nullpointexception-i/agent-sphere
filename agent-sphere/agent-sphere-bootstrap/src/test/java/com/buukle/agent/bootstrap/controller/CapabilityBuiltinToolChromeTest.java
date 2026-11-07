@@ -41,8 +41,8 @@ class CapabilityBuiltinToolChromeTest {
         doAnswer(inv -> {
             ChromeCommandDTO cmd = inv.getArgument(0);
             ChromeCallbackDTO result = callbacks.poll();
-            // 工具在 publishEvent 之后才把 future 放进 ChromePendingStore：
-            // 异步完成（延迟 20ms），确保 put 先于 complete。
+            // The tool puts the future into ChromePendingStore only after publishEvent:
+            // complete asynchronously (20ms delay) so the put happens before complete.
             new Thread(() -> {
                 try {
                     Thread.sleep(20);
@@ -76,10 +76,10 @@ class CapabilityBuiltinToolChromeTest {
     }
 
     /**
-     * executeJS 只读闸：所有导航写操作必须在**工具层**被拒，且**不发命令**。
+     * executeJS read-only gate: all navigation writes must be rejected at the **tool layer** without **sending any command**.
      *
-     * <p>这是线上风控的直接对策 —— 脚本式跳转（尤其 location.href 与 history.back）
-     * 绕过真实点击链路，是一些站点判异常触发风控验证页的主因。
+     * <p>This directly counters production risk-control triggers — script-driven navigation (especially location.href and history.back)
+     * bypasses the real click path and is a major reason some sites flag the session as abnormal and serve a risk-control challenge page.
      */
     @Test
     void executeJs_navigationWrites_allBlockedWithoutPublish() {
@@ -103,11 +103,11 @@ class CapabilityBuiltinToolChromeTest {
             assertFalse(vo.isSuccess(), "应被拒: " + code);
             assertEquals("js_navigation_blocked", vo.getErrorCategory(), "错误类别: " + code);
         }
-        // 一律不发生命令下发（浏览器命令唯一出口是 buildCommand）
+        // No command may be dispatched at all (the only browser command exit is buildCommand)
         verify(publisher, never()).publishEvent(any(ChromeCommandDTO.class));
     }
 
-    /** 只读代码必须放行 —— 不能把正常的读取（含读 location 属性、或 == 比较）误判为导航写。 */
+    /** Read-only code must pass — normal reads (reading location properties, or == comparisons) must not be mistaken for navigation writes. */
     @Test
     void executeJs_readOnly_allowed() {
         String[] okCodes = {
@@ -134,7 +134,7 @@ class CapabilityBuiltinToolChromeTest {
             assertFalse(vo.isSuccess());
             assertEquals("not_found", vo.getErrorCategory());
         }
-        // 第 3 次：未再发布命令，直接 repeated_failure（护栏前移：连续 2 次即停）
+        // Third attempt: no further command is published, straight to repeated_failure (guard moved up: stop after 2 consecutive failures)
         callbacks.add(fail("not_found"));
         ChromeResultVO vo = (ChromeResultVO) tool.execute(exec("click", ".degree-item"));
         assertFalse(vo.isSuccess());
@@ -150,7 +150,7 @@ class CapabilityBuiltinToolChromeTest {
         assertTrue(((ChromeResultVO) tool.execute(exec("click", ".a"))).isSuccess());
         callbacks.add(fail("not_found"));
         assertFalse(((ChromeResultVO) tool.execute(exec("click", ".a"))).isSuccess());
-        // 成功重置计数后，下一次单个失败仍只记 not_found（护栏前移到 2 次，1 次不触发）
+        // After success resets the count, a single later failure still records only not_found (guard is 2 failures; 1 does not trigger)
         callbacks.add(ChromeCallbackDTO.ok("cmd", "ok"));
         assertTrue(((ChromeResultVO) tool.execute(exec("click", ".a"))).isSuccess());
         callbacks.add(fail("not_found"));
@@ -160,8 +160,8 @@ class CapabilityBuiltinToolChromeTest {
 
     @Test
     void injectFailed_returnsImmediatelyWithoutRetry() {
-        // 工具层已去掉 inject_failed 自动重发：单发一条命令，如实回报注入失败。
-        // 第二条（ok）回调故意留着：若仍会自动重发，它会被消费并让结果变为成功。
+        // The tool layer no longer auto-resends on inject_failed: send one command and report the injection failure as-is.
+        // The second (ok) callback is left on purpose: if auto-resend still existed, it would be consumed and turn the result into success.
         callbacks.add(fail("inject_failed"));
         callbacks.add(ChromeCallbackDTO.ok("cmd", "should-not-be-used"));
 
@@ -209,14 +209,14 @@ class CapabilityBuiltinToolChromeTest {
 
         assertFalse(vo.isSuccess());
         assertEquals("timeout", vo.getErrorCategory());
-        assertTrue(vo.getWarning() != null && vo.getWarning().contains("先 getContent"));
+        assertTrue(vo.getWarning() != null && vo.getWarning().contains("getContent first"));
     }
 
     @Test
     void timeoutDoesNotAdvanceRepeatedFailureCounter() {
         AtomicBoolean silent = new AtomicBoolean(false);
         doAnswer(inv -> {
-            if (silent.get()) return null; // 不完成 future → 触发超时
+            if (silent.get()) return null; // Never complete the future → trigger a timeout
             ChromeCommandDTO cmd = inv.getArgument(0);
             ChromeCallbackDTO result = callbacks.poll();
             new Thread(() -> {
@@ -230,14 +230,14 @@ class CapabilityBuiltinToolChromeTest {
             return null;
         }).when(publisher).publishEvent(any(ChromeCommandDTO.class));
 
-        // 两次 timeout：慢页面下操作可能已生效，不应计入连续失败
+        // Two timeouts: on slow pages the action may have taken effect, so they must not count as consecutive failures
         silent.set(true);
         for (int i = 0; i < 2; i++) {
             ChromeExecuteContext t = exec("click", ".slow-city");
             t.setTimeout(2);
             assertFalse(((ChromeResultVO) tool.execute(t)).isSuccess());
         }
-        // 随后真实失败累计到 2 次即触发 repeated_failure（timeout 不计入，护栏前移验证）
+        // Subsequent real failures hit repeated_failure at 2 (timeouts excluded; verifies the moved-up guard)
         silent.set(false);
         for (int i = 0; i < 3; i++) {
             callbacks.add(fail("not_found"));

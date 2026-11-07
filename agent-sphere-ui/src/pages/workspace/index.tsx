@@ -70,7 +70,6 @@ import {
   ROUTER_CLARIFICATION,
 } from './AgentInputCard';
 import { AgentStreamBubble } from './AgentStreamBubble';
-import { MessageMarkdown } from './MessageMarkdown';
 import {
   applyAgentStreamEvent,
   beginAgentStream,
@@ -79,6 +78,7 @@ import {
   useAgentStream,
 } from './agentStreamStore';
 import { tw } from './i18n';
+import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
 
@@ -87,13 +87,13 @@ type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'me';
 function statusLabel(status?: string) {
   switch (status) {
     case 'ACTIVE':
-      return tw('status.active', '运行中');
+      return tw('status.active', 'Active');
     case 'PAUSED':
-      return tw('status.paused', '已停用');
+      return tw('status.paused', 'Paused');
     case 'ARCHIVED':
-      return tw('status.archived', '已归档');
+      return tw('status.archived', 'Archived');
     default:
-      return status || tw('status.unknown', '未知');
+      return status || tw('status.unknown', 'Unknown');
   }
 }
 
@@ -159,36 +159,38 @@ function conversationDisplayName(conversation: ImConversation, me: any) {
     return (
       conversation.remark ||
       conversation.title ||
-      tw('conversation.unnamedGroup', '未命名群聊')
+      tw('conversation.unnamedGroup', 'Untitled group')
     );
   }
   if (isSelfConversation(conversation, me)) {
-    return tw('conversation.self', '自己');
+    return tw('conversation.self', 'Myself');
   }
   const other = otherUserParticipant(conversation, me);
   return (
     conversation.displayName ||
     other?.displayName ||
     conversation.title ||
-    tw('conversation.dm', '单聊')
+    tw('conversation.dm', 'Direct chat')
   );
 }
 
 function conversationPreview(conversation: ImConversation) {
   const lastMessage = (conversation as any).lastMessage;
   if (!lastMessage) {
-    return conversation.purpose || tw('conversation.noMessages', '暂无消息');
+    return conversation.purpose || tw('conversation.noMessages', 'No messages');
   }
   const card = taskCardOf(lastMessage);
   if (card) {
     return (
       card.title ||
       card.summary ||
-      tw('chat.taskFallback', '任务') ||
-      tw('conversation.noMessages', '暂无消息')
+      tw('chat.taskFallback', 'Task') ||
+      tw('conversation.noMessages', 'No messages')
     );
   }
-  return messageText(lastMessage) || tw('conversation.noMessages', '暂无消息');
+  return (
+    messageText(lastMessage) || tw('conversation.noMessages', 'No messages')
+  );
 }
 
 function conversationAvatar(conversation: ImConversation, me: any) {
@@ -230,10 +232,10 @@ function listTime(value?: string) {
   const now = dayjs();
   if (time.isSame(now, 'day')) return time.format('HH:mm');
   if (time.isSame(now.subtract(1, 'day'), 'day')) {
-    return tw('time.yesterday', '昨天');
+    return tw('time.yesterday', 'Yesterday');
   }
   if (time.isSame(now, 'year')) {
-    return tw('time.monthDay', '{month}月{day}日', {
+    return tw('time.monthDay', '{month}/{day}', {
       month: time.month() + 1,
       day: time.date(),
     });
@@ -276,26 +278,26 @@ function taskCardOf(message: ImMessage): TaskCardView | null {
 function taskStatusLabel(status?: string) {
   switch (status) {
     case 'QUEUED':
-      return tw('chat.taskStatus.queued', '排队中');
+      return tw('chat.taskStatus.queued', 'Queued');
     case 'DISPATCHING':
-      return tw('chat.taskStatus.dispatching', '准备执行');
+      return tw('chat.taskStatus.dispatching', 'Preparing');
     case 'RUNNING':
-      return tw('chat.taskStatus.running', '执行中');
+      return tw('chat.taskStatus.running', 'Running');
     case 'WAITING':
-      return tw('chat.taskStatus.waiting', '等待中');
+      return tw('chat.taskStatus.waiting', 'Waiting');
     case 'COMPLETED':
     case 'DONE':
-      return tw('chat.taskStatus.completed', '已完成');
+      return tw('chat.taskStatus.completed', 'Completed');
     case 'FAILED':
-      return tw('chat.taskStatus.failed', '失败');
+      return tw('chat.taskStatus.failed', 'Failed');
     case 'CANCELLED':
-      return tw('chat.taskStatus.cancelled', '已取消');
+      return tw('chat.taskStatus.cancelled', 'Cancelled');
     case 'PENDING':
-      return tw('chat.taskStatus.pending', '待回复');
+      return tw('chat.taskStatus.pending', 'Awaiting reply');
     case 'ANSWERED':
-      return tw('chat.taskStatus.answered', '已回复');
+      return tw('chat.taskStatus.answered', 'Answered');
     default:
-      return status || tw('chat.taskStatus.unknown', '未知');
+      return status || tw('chat.taskStatus.unknown', 'Unknown');
   }
 }
 
@@ -383,7 +385,7 @@ function TopBar({ me }: { me: any }) {
           </button>
         </Dropdown>
         <span className={styles.online}>
-          <span className={styles.dot} /> {tw('app.online', '在线')}
+          <span className={styles.dot} /> {tw('app.online', 'Online')}
         </span>
         <Avatar size={30} src={me?.avatar} style={avatarStyle(displayName(me))}>
           {initials(displayName(me))}
@@ -405,19 +407,19 @@ function SideRail({
   styles: any;
 }) {
   const items: { key: Tab; label: string; icon: ReactNode }[] = [
-    { key: 'home', label: tw('nav.home', '首页'), icon: <HomeOutlined /> },
+    { key: 'home', label: tw('nav.home', 'Home'), icon: <HomeOutlined /> },
     {
       key: 'avatars',
-      label: tw('nav.avatars', '数字分身'),
+      label: tw('nav.avatars', 'Avatars'),
       icon: <TeamOutlined />,
     },
-    { key: 'chat', label: tw('nav.chat', '聊天'), icon: <MessageOutlined /> },
+    { key: 'chat', label: tw('nav.chat', 'Chats'), icon: <MessageOutlined /> },
     {
       key: 'contacts',
-      label: tw('nav.contacts', '联系人'),
+      label: tw('nav.contacts', 'Contacts'),
       icon: <ContactsOutlined />,
     },
-    { key: 'me', label: tw('nav.me', '我的'), icon: <UserOutlined /> },
+    { key: 'me', label: tw('nav.me', 'Me'), icon: <UserOutlined /> },
   ];
   return (
     <div className={styles.rail}>
@@ -495,12 +497,12 @@ function HomeTab({
     <div className={styles.page}>
       <div className={styles.hero}>
         <div className={styles.heroTitle}>
-          {tw('home.heroTitle', '开启你的 AI 数字员工之旅')}
+          {tw('home.heroTitle', 'Start your AI digital employee journey')}
         </div>
         <div className={styles.heroText}>
           {tw(
             'home.heroDesc',
-            '创建数字分身，参与沟通、回答问题、协助完成任务。',
+            'Create digital avatars to chat, answer questions and help complete work.',
           )}
         </div>
         <Button
@@ -509,7 +511,7 @@ function HomeTab({
           icon={<PlusOutlined />}
           onClick={onOpenAvatars}
         >
-          {tw('home.create', '创建我的数字分身')}
+          {tw('home.create', 'Create my avatar')}
         </Button>
         <div className={styles.heroBot}>
           <UserOutlined />
@@ -521,17 +523,17 @@ function HomeTab({
         <div className={styles.section}>
           <div className={styles.sectionHead}>
             <span className={styles.sectionTitle}>
-              {tw('home.myAvatars', '我的数字分身')}
+              {tw('home.myAvatars', 'My avatars')}
             </span>
             <span className={styles.sectionMore} onClick={onOpenAvatars}>
-              {tw('home.viewAll', '查看全部 ›')}
+              {tw('home.viewAll', 'View all ›')}
             </span>
           </div>
           <div className={styles.listCard}>
             {agents.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={tw('home.noAvatars', '还没有数字分身')}
+                description={tw('home.noAvatars', 'No avatars yet')}
               />
             ) : (
               agents.slice(0, 3).map((agent) => (
@@ -563,8 +565,8 @@ function HomeTab({
                     </div>
                     <div className={styles.rowDesc}>
                       {positionLabel(agent)
-                        ? `${positionLabel(agent)} · ${agent.description || tw('common.noDescription', '暂无描述')}`
-                        : agent.description || tw('nav.avatars', '数字分身')}
+                        ? `${positionLabel(agent)} · ${agent.description || tw('common.noDescription', 'No description')}`
+                        : agent.description || tw('nav.avatars', 'Avatars')}
                     </div>
                   </div>
                 </div>
@@ -576,17 +578,17 @@ function HomeTab({
         <div className={styles.section}>
           <div className={styles.sectionHead}>
             <span className={styles.sectionTitle}>
-              {tw('home.recent', '最近会话')}
+              {tw('home.recent', 'Recent chats')}
             </span>
             <span className={styles.sectionMore} onClick={onOpenChatList}>
-              {tw('home.all', '全部 ›')}
+              {tw('home.all', 'All ›')}
             </span>
           </div>
           <div className={styles.listCard}>
             {recent.length === 0 ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={tw('home.noConversations', '暂无会话')}
+                description={tw('home.noConversations', 'No conversations')}
               />
             ) : (
               recent.map((conversation) => (
@@ -629,7 +631,7 @@ function ConversationRow({
         <div className={styles.rowTitle}>
           <span className={styles.conversationNameText}>{title}</span>
           {isSelfConversation(conversation, me) ? (
-            <span className={styles.selfTag}>{tw('common.meTag', '我')}</span>
+            <span className={styles.selfTag}>{tw('common.meTag', 'Me')}</span>
           ) : null}
           <span className={styles.rowTime}>
             {listTime(conversation.lastMessageAt)}
@@ -695,7 +697,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
         description: values.description,
         positionCode: values.positionCode,
       });
-      message.success(tw('avatars.created', '创建成功'));
+      message.success(tw('avatars.created', 'Created'));
       setCreateOpen(false);
       form.resetFields();
       load();
@@ -722,7 +724,12 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
   const startChat = async () => {
     if (!editingAgent || startingChat) return;
     if (editingAgent.status !== 'ACTIVE') {
-      message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
+      message.warning(
+        tw(
+          'avatars.chatPaused',
+          'This avatar is paused. Resume it before chatting.',
+        ),
+      );
       return;
     }
     setStartingChat(true);
@@ -731,7 +738,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
       setEditingAgent(null);
       onOpenChat(conversation.id);
     } catch {
-      message.error(tw('avatars.chatFailed', '发起对话失败'));
+      message.error(tw('avatars.chatFailed', 'Failed to start chat'));
     } finally {
       setStartingChat(false);
     }
@@ -747,7 +754,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
         description: values.description,
         positionCode: values.positionCode,
       });
-      message.success(tw('avatars.saved', '已保存'));
+      message.success(tw('avatars.saved', 'Saved'));
       setEditingAgent(updated);
       setAgentModalMode('view');
       load();
@@ -767,14 +774,17 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
   const remove = (agent: SuperAgent) => {
     modal.confirm({
-      title: tw('avatars.deleteTitle', '删除 {name}', { name: agent.name }),
-      content: tw('avatars.deleteContent', '删除后数字分身将归档，确认继续？'),
-      okText: tw('common.delete', '删除'),
-      cancelText: tw('avatars.keep', '再想想'),
+      title: tw('avatars.deleteTitle', 'Delete {name}', { name: agent.name }),
+      content: tw(
+        'avatars.deleteContent',
+        'The avatar will be archived after deletion. Continue?',
+      ),
+      okText: tw('common.delete', 'Delete'),
+      cancelText: tw('avatars.keep', 'Keep it'),
       okType: 'danger',
       onOk: async () => {
         await superAgentApi.delete(agent.id);
-        message.success(tw('avatars.deleted', '已删除'));
+        message.success(tw('avatars.deleted', 'Deleted'));
         setEditingAgent(null);
         load();
       },
@@ -786,10 +796,10 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
       <div className={styles.pageHead}>
         <div>
           <div className={styles.pageTitle}>
-            {tw('avatars.title', '我的数字分身')}
+            {tw('avatars.title', 'My avatars')}
           </div>
           <div className={styles.pageSubtitle}>
-            {tw('avatars.subtitle', '创建分身，参与沟通和协作')}
+            {tw('avatars.subtitle', 'Create avatars to chat and collaborate')}
           </div>
         </div>
         <Button
@@ -798,7 +808,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
           icon={<PlusOutlined />}
           onClick={() => setCreateOpen(true)}
         >
-          {tw('avatars.create', '创建分身')}
+          {tw('avatars.create', 'Create avatar')}
         </Button>
       </div>
 
@@ -808,7 +818,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
             <div className={styles.emptyBlock}>
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={tw('home.noAvatars', '还没有数字分身')}
+                description={tw('home.noAvatars', 'No avatars yet')}
               />
             </div>
           ) : (
@@ -838,7 +848,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                     ) : null}
                   </div>
                   <div className={styles.rowDesc}>
-                    {agent.description || tw('nav.avatars', '数字分身')}
+                    {agent.description || tw('nav.avatars', 'Avatars')}
                   </div>
                 </div>
               </div>
@@ -866,12 +876,12 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
           </button>
           <div className={styles.createHeroText}>
             <div className={styles.createTitle}>
-              {tw('avatars.createTitle', '创建数字分身')}
+              {tw('avatars.createTitle', 'Create avatar')}
             </div>
             <div className={styles.createSubtitle}>
               {tw(
                 'avatars.createSubtitle',
-                '给它一个名字和职责，让它开始为你工作',
+                'Give it a name and responsibility to start working for you',
               )}
             </div>
           </div>
@@ -892,7 +902,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
         <Form form={form} layout="vertical" className={styles.createBody}>
           <div className={styles.fieldBlock}>
             <div className={styles.fieldLabel}>
-              {tw('avatars.name', '分身名称')}{' '}
+              {tw('avatars.name', 'Name')}{' '}
               <span className={styles.required}>*</span>
             </div>
             <Form.Item
@@ -903,17 +913,20 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
               <Input
                 className={styles.softField}
                 maxLength={32}
-                placeholder={tw('avatars.namePlaceholder', '例如：产品助手')}
+                placeholder={tw(
+                  'avatars.namePlaceholder',
+                  'e.g. Product assistant',
+                )}
               />
             </Form.Item>
             <div className={styles.fieldHint}>
-              {tw('avatars.nameHint', '最多 32 个字符')}
+              {tw('avatars.nameHint', 'Up to 32 characters')}
             </div>
           </div>
 
           <div className={styles.fieldBlock}>
             <div className={styles.fieldLabel}>
-              {tw('avatars.position', '角色')}{' '}
+              {tw('avatars.position', 'Role')}{' '}
               <span className={styles.required}>*</span>
             </div>
             <Form.Item
@@ -921,14 +934,14 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
               rules={[
                 {
                   required: true,
-                  message: tw('avatars.positionRequired', '请选择角色'),
+                  message: tw('avatars.positionRequired', 'Select a role'),
                 },
               ]}
               style={{ marginBottom: 0 }}
             >
               <Select
                 className={styles.softField}
-                placeholder={tw('avatars.positionPlaceholder', '请选择角色')}
+                placeholder={tw('avatars.positionPlaceholder', 'Select a role')}
                 options={positionOptions}
               />
             </Form.Item>
@@ -936,9 +949,9 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
           <div className={styles.fieldBlock} style={{ marginBottom: 20 }}>
             <div className={styles.fieldLabel}>
-              {tw('avatars.desc', '职责描述')}{' '}
+              {tw('avatars.desc', 'Responsibility')}{' '}
               <span className={styles.optional}>
-                {tw('common.optional', '可选')}
+                {tw('common.optional', 'Optional')}
               </span>
             </div>
             <Form.Item name="description" style={{ marginBottom: 0 }}>
@@ -949,7 +962,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                 showCount
                 placeholder={tw(
                   'avatars.descPlaceholder',
-                  '简单描述它擅长什么、负责什么',
+                  'Briefly describe what it is good at',
                 )}
               />
             </Form.Item>
@@ -960,7 +973,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
             <span>
               {tw(
                 'avatars.createNote',
-                '创建后立即生效，可随时暂停、修改或删除',
+                'Takes effect immediately. Pause, edit or delete it anytime.',
               )}
             </span>
           </div>
@@ -971,7 +984,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
             className={styles.ghostPill}
             onClick={() => setCreateOpen(false)}
           >
-            {tw('common.cancel', '取消')}
+            {tw('common.cancel', 'Cancel')}
           </Button>
           <Button
             type="primary"
@@ -979,7 +992,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
             loading={submitting}
             onClick={submit}
           >
-            {tw('avatars.createAction', '创建分身')}
+            {tw('avatars.createAction', 'Create avatar')}
           </Button>
         </div>
       </Modal>
@@ -1018,13 +1031,16 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
             <div className={styles.avatarDetailHeadText}>
               <div className={styles.avatarDetailName}>
                 {agentModalMode === 'view'
-                  ? editingAgent?.name || tw('nav.avatars', '数字分身')
-                  : tw('avatars.editTitle', '编辑数字分身')}
+                  ? editingAgent?.name || tw('nav.avatars', 'Avatars')
+                  : tw('avatars.editTitle', 'Edit avatar')}
               </div>
               <div className={styles.avatarDetailSub}>
                 {agentModalMode === 'view'
-                  ? tw('avatars.detailTitle', '数字分身详情')
-                  : tw('avatars.editSubtitle', '修改名称和职责')}
+                  ? tw('avatars.detailTitle', 'Avatar details')
+                  : tw(
+                      'avatars.editSubtitle',
+                      'Change the name and responsibility',
+                    )}
               </div>
             </div>
             <button
@@ -1040,27 +1056,27 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
             <>
               <div className={styles.avatarDetailSection}>
                 <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.position', '角色')}
+                  {tw('avatars.position', 'Role')}
                 </div>
                 <span className={styles.avatarRoleTag}>
                   {positionLabel(editingAgent) ||
-                    tw('avatars.positionUnset', '未设置')}
+                    tw('avatars.positionUnset', 'Not set')}
                 </span>
               </div>
 
               <div className={styles.avatarDetailSection}>
                 <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.desc', '职责描述')}
+                  {tw('avatars.desc', 'Responsibility')}
                 </div>
                 <div className={styles.avatarDetailValue}>
                   {editingAgent?.description ||
-                    tw('common.noDescription', '暂无描述')}
+                    tw('common.noDescription', 'No description')}
                 </div>
               </div>
 
               <div className={styles.avatarDetailSection}>
                 <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.status', '状态')}
+                  {tw('avatars.status', 'Status')}
                 </div>
                 <div className={styles.avatarStatusRow}>
                   <span
@@ -1076,7 +1092,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
               <div className={styles.avatarDetailSection}>
                 <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.createdAtLabel', '创建时间')}
+                  {tw('avatars.createdAtLabel', 'Created')}
                 </div>
                 <div className={styles.avatarDetailValue}>
                   {fullTime(editingAgent?.createdAt)}
@@ -1085,7 +1101,10 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
               {editingAgent?.status !== 'ACTIVE' ? (
                 <div className={styles.avatarPausedHint}>
-                  {tw('avatars.chatPaused', '分身已暂停，请恢复后再对话')}
+                  {tw(
+                    'avatars.chatPaused',
+                    'This avatar is paused. Resume it before chatting.',
+                  )}
                 </div>
               ) : null}
 
@@ -1099,7 +1118,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   className={styles.avatarDetailPrimary}
                   onClick={startChat}
                 >
-                  {tw('avatars.startChat', '开始对话')}
+                  {tw('avatars.startChat', 'Start chat')}
                 </Button>
                 <div className={styles.avatarSecondaryActions}>
                   <button
@@ -1108,7 +1127,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                     onClick={startEdit}
                   >
                     <EditOutlined />
-                    {tw('avatars.editProfile', '编辑资料')}
+                    {tw('avatars.editProfile', 'Edit profile')}
                   </button>
                   <button
                     type="button"
@@ -1121,8 +1140,8 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                       <PlayCircleOutlined />
                     )}
                     {editingAgent?.status === 'ACTIVE'
-                      ? tw('avatars.pause', '暂停分身')
-                      : tw('avatars.resume', '恢复分身')}
+                      ? tw('avatars.pause', 'Pause avatar')
+                      : tw('avatars.resume', 'Resume avatar')}
                   </button>
                   <button
                     type="button"
@@ -1130,7 +1149,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                     onClick={() => editingAgent && remove(editingAgent)}
                   >
                     <DeleteOutlined />
-                    {tw('avatars.delete', '删除分身')}
+                    {tw('avatars.delete', 'Delete avatar')}
                   </button>
                 </div>
               </div>
@@ -1144,7 +1163,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
               >
                 <div className={styles.fieldBlock}>
                   <div className={styles.fieldLabel}>
-                    {tw('avatars.name', '分身名称')}{' '}
+                    {tw('avatars.name', 'Name')}{' '}
                     <span className={styles.required}>*</span>
                   </div>
                   <Form.Item
@@ -1157,7 +1176,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                       maxLength={32}
                       placeholder={tw(
                         'avatars.namePlaceholder',
-                        '例如：产品助手',
+                        'e.g. Product assistant',
                       )}
                     />
                   </Form.Item>
@@ -1165,7 +1184,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
                 <div className={styles.fieldBlock}>
                   <div className={styles.fieldLabel}>
-                    {tw('avatars.position', '角色')}{' '}
+                    {tw('avatars.position', 'Role')}{' '}
                     <span className={styles.required}>*</span>
                   </div>
                   <Form.Item
@@ -1173,7 +1192,10 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                     rules={[
                       {
                         required: true,
-                        message: tw('avatars.positionRequired', '请选择角色'),
+                        message: tw(
+                          'avatars.positionRequired',
+                          'Select a role',
+                        ),
                       },
                     ]}
                     style={{ marginBottom: 0 }}
@@ -1182,7 +1204,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                       className={styles.softField}
                       placeholder={tw(
                         'avatars.positionPlaceholder',
-                        '请选择角色',
+                        'Select a role',
                       )}
                       options={positionOptions}
                     />
@@ -1191,9 +1213,9 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
                 <div className={styles.fieldBlock} style={{ marginBottom: 10 }}>
                   <div className={styles.fieldLabel}>
-                    {tw('avatars.desc', '职责描述')}{' '}
+                    {tw('avatars.desc', 'Responsibility')}{' '}
                     <span className={styles.optional}>
-                      {tw('common.optional', '可选')}
+                      {tw('common.optional', 'Optional')}
                     </span>
                   </div>
                   <Form.Item name="description" style={{ marginBottom: 14 }}>
@@ -1204,12 +1226,15 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                       showCount
                       placeholder={tw(
                         'avatars.descPlaceholder',
-                        '简单描述它擅长什么、负责什么',
+                        'Briefly describe what it is good at',
                       )}
                     />
                   </Form.Item>
                   <div className={styles.fieldHint}>
-                    {tw('avatars.editHint', '修改后会在下一次运行时生效')}
+                    {tw(
+                      'avatars.editHint',
+                      'Changes take effect on the next run',
+                    )}
                   </div>
                 </div>
               </Form>
@@ -1219,7 +1244,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   className={styles.avatarCancelButton}
                   onClick={() => setAgentModalMode('view')}
                 >
-                  {tw('common.cancel', '取消')}
+                  {tw('common.cancel', 'Cancel')}
                 </Button>
                 <Button
                   type="primary"
@@ -1227,7 +1252,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   loading={editSubmitting}
                   onClick={saveEdit}
                 >
-                  {tw('avatars.saveEdit', '保存修改')}
+                  {tw('avatars.saveEdit', 'Save changes')}
                 </Button>
               </div>
             </>
@@ -1324,7 +1349,8 @@ function ChatTab({
                     type: 'TEXT',
                     content: {
                       text:
-                        event.previewText || tw('chat.newMessage', '新消息'),
+                        event.previewText ||
+                        tw('chat.newMessage', 'New message'),
                     },
                     createdAt: event.createdAt,
                   },
@@ -1377,7 +1403,7 @@ function ChatTab({
                   content: {
                     text:
                       type === 'message_recalled'
-                        ? tw('chat.messageRecalled', '[消息已撤回]')
+                        ? tw('chat.messageRecalled', '[Message recalled]')
                         : event.previewText || '',
                   },
                 },
@@ -1437,22 +1463,22 @@ function ChatTab({
         ),
       );
     } catch {
-      message.error(tw('chat.actionFailed', '操作失败'));
+      message.error(tw('chat.actionFailed', 'Operation failed'));
     }
   };
 
   const removeConversation = (conversation: ImConversation) => {
     modal.confirm({
-      title: tw('conversation.deleteTitle', '删除「{name}」？', {
+      title: tw('conversation.deleteTitle', 'Delete "{name}"?', {
         name: conversationDisplayName(conversation, me),
       }),
       content: tw(
         'conversation.deleteContent',
-        '删除后该会话会从你的聊天列表移除，聊天记录不会影响其他成员。',
+        'This only removes the chat from your list. Other members are not affected.',
       ),
-      okText: tw('common.delete', '删除'),
+      okText: tw('common.delete', 'Delete'),
       okType: 'danger',
-      cancelText: tw('common.cancel', '取消'),
+      cancelText: tw('common.cancel', 'Cancel'),
       onOk: async () => {
         await imApi.deleteConversation(conversation.id);
         setConversations((previous) =>
@@ -1461,7 +1487,7 @@ function ChatTab({
         if (activeIdRef.current === conversation.id) {
           onCloseChat();
         }
-        message.success(tw('conversation.deleted', '已删除'));
+        message.success(tw('conversation.deleted', 'Deleted'));
       },
     });
   };
@@ -1493,7 +1519,9 @@ function ChatTab({
   const createGroup = async () => {
     if (creatingRef.current) return;
     if (groupMembers.length === 0) {
-      message.warning(tw('chat.selectMembersWarning', '请选择群成员'));
+      message.warning(
+        tw('chat.selectMembersWarning', 'Select at least one member'),
+      );
       return;
     }
     creatingRef.current = true;
@@ -1502,7 +1530,7 @@ function ChatTab({
         .filter((user) => groupMembers.includes(user.id))
         .map(displayName)
         .join('、')
-        .slice(0, 64) || tw('chat.groupDefaultName', '群聊');
+        .slice(0, 64) || tw('chat.groupDefaultName', 'Group');
     setCreatingGroup(true);
     try {
       const conversation = await imApi.createConversation({
@@ -1516,7 +1544,7 @@ function ChatTab({
       openConversation(conversation.id, conversation.lastSeq);
       reloadList();
     } catch {
-      message.error(tw('chat.createFailed', '创建群聊失败'));
+      message.error(tw('chat.createFailed', 'Failed to create group'));
     } finally {
       creatingRef.current = false;
       setCreatingGroup(false);
@@ -1665,14 +1693,14 @@ function ChatTab({
           <div className={styles.searchRow}>
             <Input.Search
               allowClear
-              placeholder={tw('chat.searchPlaceholder', '搜索聊天')}
+              placeholder={tw('chat.searchPlaceholder', 'Search chats')}
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
             />
             <button
               type="button"
               className={styles.addCircle}
-              title={tw('chat.newGroupTitle', '发起群聊')}
+              title={tw('chat.newGroupTitle', 'New group')}
               onClick={openGroupCreate}
             >
               <PlusOutlined />
@@ -1699,8 +1727,8 @@ function ChatTab({
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   normalizedKeyword
-                    ? tw('conversation.noResults', '没有找到相关聊天')
-                    : tw('conversation.empty', '暂无聊天')
+                    ? tw('conversation.noResults', 'No matching chats')
+                    : tw('conversation.empty', 'No chats')
                 }
               />
             ) : (
@@ -1715,13 +1743,13 @@ function ChatTab({
                         {
                           key: conversation.pinned ? 'unpin' : 'pin',
                           label: conversation.pinned
-                            ? tw('conversation.unpin', '取消置顶')
-                            : tw('conversation.pin', '置顶'),
+                            ? tw('conversation.unpin', 'Unpin')
+                            : tw('conversation.pin', 'Pin'),
                         },
                         { type: 'divider' },
                         {
                           key: 'delete',
-                          label: tw('common.delete', '删除'),
+                          label: tw('common.delete', 'Delete'),
                           danger: true,
                         },
                       ],
@@ -1760,7 +1788,7 @@ function ChatTab({
                           </span>
                           {isSelfConversation(conversation, me) ? (
                             <span className={styles.selfTag}>
-                              {tw('common.meTag', '我')}
+                              {tw('common.meTag', 'Me')}
                             </span>
                           ) : null}
                           <span className={styles.rowTime}>
@@ -1783,7 +1811,7 @@ function ChatTab({
             )}
             {loadingMore ? (
               <div className={styles.loadMoreHint}>
-                {tw('common.loading', '加载中...')}
+                {tw('common.loading', 'Loading...')}
               </div>
             ) : null}
           </Spin>
@@ -1799,7 +1827,7 @@ function ChatTab({
           />
         ) : (
           <div className={styles.chatEmpty}>
-            {tw('conversation.select', '选择一个聊天开始')}
+            {tw('conversation.select', 'Select a chat to start')}
           </div>
         )}
       </div>
@@ -1819,7 +1847,7 @@ function ChatTab({
               <Input
                 allowClear
                 value={groupKeyword}
-                placeholder={tw('common.search', '搜索')}
+                placeholder={tw('common.search', 'Search')}
                 suffix={<AudioOutlined />}
                 onChange={(event) => setGroupKeyword(event.target.value)}
               />
@@ -1831,15 +1859,15 @@ function ChatTab({
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={
                       groupKeywordValue
-                        ? tw('chat.noMatchedContacts', '没有找到联系人')
-                        : tw('chat.noContacts', '暂无联系人')
+                        ? tw('chat.noMatchedContacts', 'No matching contacts')
+                        : tw('chat.noContacts', 'No contacts')
                     }
                   />
                 ) : (
                   contactGroups.map((key) => (
                     <div key={key}>
                       <div className={styles.groupSectionLabel}>
-                        {key === '#' ? tw('chat.other', '其他') : key}
+                        {key === '#' ? tw('chat.other', 'Other') : key}
                       </div>
                       {groupedContacts[key].map((user) => {
                         const selected = groupMembers.includes(user.id);
@@ -1879,12 +1907,12 @@ function ChatTab({
           </div>
           <div className={styles.groupRight}>
             <div className={styles.groupRightTitle}>
-              {tw('chat.newGroupTitle', '发起群聊')}
+              {tw('chat.newGroupTitle', 'New group')}
             </div>
             <div className={styles.groupSelectedList}>
               {selectedContacts.length === 0 ? (
                 <div className={styles.groupRightEmpty}>
-                  {tw('chat.selectMembers', '请选择群成员')}
+                  {tw('chat.selectMembers', 'Select group members')}
                 </div>
               ) : (
                 selectedContacts.map((user) => (
@@ -1917,13 +1945,13 @@ function ChatTab({
                 loading={creatingGroup}
                 onClick={createGroup}
               >
-                {tw('chat.done', '完成')}
+                {tw('chat.done', 'Done')}
               </Button>
               <Button
                 className={styles.groupCancel}
                 onClick={() => setGroupOpen(false)}
               >
-                {tw('common.cancel', '取消')}
+                {tw('common.cancel', 'Cancel')}
               </Button>
             </div>
           </div>
@@ -1972,7 +2000,7 @@ function ChatDetail({
   const load = (silent = false) => {
     if (!silent) {
       setLoading(true);
-      // 切会话的历史游标要在首载时重置，避免串会话的 beforeSeq。
+      // The history cursor must be reset on first load when switching sessions, to avoid a beforeSeq from another session.
       setHasOlder(true);
       setOlderCursor(undefined);
     }
@@ -2068,7 +2096,7 @@ function ChatDetail({
     load(!first);
   }, [conversationId, refreshKey]);
 
-  // 普通用户会话没有数字分身参与者：清理可能残留的流式气泡状态。
+  // Regular user sessions have no digital-avatar participant: clean up any residual streaming bubble state.
   useEffect(() => {
     if (participants.length === 0) return;
     const hasAgent = participants.some(
@@ -2193,7 +2221,7 @@ function ChatDetail({
     }
   }, [streamEvent, conversationId]);
 
-  // 权威消息兜底：流已 completed 但 message_created 迟到/丢失时，补拉一次增量。
+  // Authoritative message fallback: fetch one incremental batch when the stream is completed but message_created arrives late / is lost.
   useEffect(() => {
     if (agentStream?.phase !== 'done' || !agentStream.finalized) {
       return;
@@ -2217,7 +2245,7 @@ function ChatDetail({
     return () => window.clearTimeout(timer);
   }, [agentStream?.phase, agentStream?.finalized, conversationId]);
 
-  // 等待态兜底：事件丢失时避免“正在处理”气泡永久停留。
+  // Waiting-state fallback: avoid the "processing" bubble staying forever when an event is lost.
   useEffect(() => {
     if (agentStream?.phase !== 'waiting' || agentStream.runId) {
       return;
@@ -2240,17 +2268,22 @@ function ChatDetail({
   const sendText = async (value: string, clientMsgId?: string) => {
     if (!value || sending) return;
     if (agentPaused) {
-      message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
+      message.warning(
+        tw(
+          'avatars.chatPaused',
+          'This avatar is paused. Resume it before chatting.',
+        ),
+      );
       return;
     }
-    // 只有与数字分身的 DM 才显示“正在处理”气泡；普通用户/群聊会话不显示。
+    // Only DMs with a digital avatar show the "processing" bubble; regular user/group sessions do not.
     const shouldStream = Boolean(chatAgentId);
     setSending(true);
     // Sending is an explicit jump-to-bottom intent even if the user had
     // scrolled up to read history.
     stickToBottomRef.current = true;
     if (shouldStream) {
-      // 立即显示“正在处理”气泡：Router 调度已在毫秒级，但模型首字仍需等待。
+      // Show the "processing" bubble immediately: Router dispatch is already millisecond-level, but the model's first token still takes time.
       beginAgentStream(conversationId);
     }
     try {
@@ -2264,7 +2297,7 @@ function ChatDetail({
       if (shouldStream) {
         resetAgentStream(conversationId);
       }
-      message.error(tw('chat.sendFailed', '发送失败'));
+      message.error(tw('chat.sendFailed', 'Failed to send'));
     } finally {
       setSending(false);
     }
@@ -2282,11 +2315,16 @@ function ChatDetail({
         inputId,
         decisions,
       );
-      message.success(tw('chat.inputApproved', '审批已提交'));
+      message.success(tw('chat.inputApproved', 'Approval submitted'));
       load(true);
       return true;
     } catch {
-      message.error(tw('chat.inputApproveFailed', '审批提交失败，请重试'));
+      message.error(
+        tw(
+          'chat.inputApproveFailed',
+          'Failed to submit the approval, please retry',
+        ),
+      );
       return false;
     }
   };
@@ -2314,10 +2352,10 @@ function ChatDetail({
       setConversation((previous) =>
         previous ? { ...previous, ...updated } : updated,
       );
-      message.success(tw('common.saved', '已保存'));
+      message.success(tw('common.saved', 'Saved'));
       onChanged();
     } catch {
-      message.error(tw('common.saveFailed', '保存失败'));
+      message.error(tw('common.saveFailed', 'Save failed'));
     } finally {
       setSavingMeta(false);
     }
@@ -2347,7 +2385,7 @@ function ChatDetail({
       );
       onChanged();
     } catch {
-      message.error(tw('common.saveFailed', '保存失败'));
+      message.error(tw('common.saveFailed', 'Save failed'));
     } finally {
       setSavingSetting(false);
     }
@@ -2357,10 +2395,10 @@ function ChatDetail({
     try {
       const updated = await imApi.pinMessage(conversationId, messageId);
       setConversation(updated);
-      message.success(tw('chat.pinned', '已置顶'));
+      message.success(tw('chat.pinned', 'Pinned'));
       onChanged();
     } catch {
-      message.error(tw('chat.pinFailed', '置顶失败'));
+      message.error(tw('chat.pinFailed', 'Failed to pin'));
     }
   };
 
@@ -2368,26 +2406,26 @@ function ChatDetail({
     try {
       const updated = await imApi.unpinMessage(conversationId);
       setConversation(updated);
-      message.success(tw('chat.unpinned', '已取消置顶'));
+      message.success(tw('chat.unpinned', 'Unpinned'));
       onChanged();
     } catch {
-      message.error(tw('chat.unpinFailed', '取消置顶失败'));
+      message.error(tw('chat.unpinFailed', 'Failed to unpin'));
     }
   };
 
   const deleteMessage = (item: ImMessage) => {
     modal.confirm({
-      title: tw('chat.deleteMessageTitle', '删除这条消息？'),
+      title: tw('chat.deleteMessageTitle', 'Delete this message?'),
       content: tw(
         'chat.deleteMessageContent',
-        '删除后群内其他成员也将看不到这条消息。',
+        'Other members will no longer see this message.',
       ),
-      okText: tw('common.delete', '删除'),
+      okText: tw('common.delete', 'Delete'),
       okType: 'danger',
-      cancelText: tw('common.cancel', '取消'),
+      cancelText: tw('common.cancel', 'Cancel'),
       onOk: async () => {
         await imApi.recall(conversationId, item.id);
-        message.success(tw('chat.deleteMessageSuccess', '已删除'));
+        message.success(tw('chat.deleteMessageSuccess', 'Deleted'));
         load(true);
         onChanged();
       },
@@ -2422,20 +2460,20 @@ function ChatDetail({
       Number(member.participantId) !== Number(me?.id),
   );
   const conversationTitle = (() => {
-    if (!conversation) return tw('conversation.chat', '聊天');
+    if (!conversation) return tw('conversation.chat', 'Chat');
     if (conversation.type === 'GROUP') {
       return (
         conversation.remark ||
         conversation.title ||
-        tw('conversation.unnamedGroup', '群聊')
+        tw('conversation.unnamedGroup', 'Untitled group')
       );
     }
-    if (selfConversation) return tw('conversation.self', '自己');
+    if (selfConversation) return tw('conversation.self', 'Myself');
     return (
       otherParticipant?.displayName ||
       agentParticipant?.displayName ||
       conversation.title ||
-      tw('conversation.dm', '单聊')
+      tw('conversation.dm', 'Direct chat')
     );
   })();
 
@@ -2462,23 +2500,23 @@ function ChatDetail({
               <div className={styles.chatTitle}>{conversationTitle}</div>
               {selfConversation ? (
                 <span className={styles.selfTag}>
-                  {tw('common.meTag', '我')}
+                  {tw('common.meTag', 'Me')}
                 </span>
               ) : null}
               {!isGroup && agentParticipant ? (
                 <span className={styles.agentTag}>
-                  {tw('chat.agentTag', '数字分身')}
+                  {tw('chat.agentTag', 'Digital avatar')}
                 </span>
               ) : null}
             </div>
             <div className={styles.chatMembers}>
               {isGroup
-                ? tw('chat.groupMeta', '群聊 · {count} 人', {
+                ? tw('chat.groupMeta', 'Group · {count} members', {
                     count: memberCount,
                   })
                 : selfConversation
-                  ? tw('chat.onlySelf', '仅自己可见')
-                  : tw('chat.dmMeta', '单聊')}
+                  ? tw('chat.onlySelf', 'Only visible to you')
+                  : tw('chat.dmMeta', 'Direct chat')}
             </div>
           </div>
         </div>
@@ -2486,7 +2524,7 @@ function ChatDetail({
           <button
             type="button"
             className={styles.headerIconButton}
-            title={tw('chat.settings', '群聊设置')}
+            title={tw('chat.settings', 'Group settings')}
             onClick={openSettings}
           >
             <SettingOutlined />
@@ -2499,12 +2537,12 @@ function ChatDetail({
           <PushpinOutlined />
           <span className={styles.pinnedText}>
             {messageText(conversation.pinnedMessage) ||
-              tw('chat.pinnedFallback', '[消息]')}
+              tw('chat.pinnedFallback', '[Message]')}
           </span>
           <button
             type="button"
             className={styles.pinnedClose}
-            title={tw('conversation.unpin', '取消置顶')}
+            title={tw('conversation.unpin', 'Unpin')}
             onClick={unpinMessage}
           >
             <CloseOutlined />
@@ -2536,7 +2574,7 @@ function ChatDetail({
           {messages.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={tw('conversation.noMessages', '暂无消息')}
+              description={tw('conversation.noMessages', 'No messages')}
             />
           ) : (
             messages.map((item) => {
@@ -2553,10 +2591,10 @@ function ChatDetail({
               const senderName =
                 sender?.displayName ||
                 (item.senderType === 'AGENT'
-                  ? tw('chat.agent', '数字分身')
+                  ? tw('chat.agent', 'Digital avatar')
                   : item.senderType === 'SYSTEM'
-                    ? tw('chat.system', '系统')
-                    : tw('chat.unknownUser', '未知用户'));
+                    ? tw('chat.system', 'System')
+                    : tw('chat.unknownUser', 'Unknown user'));
               const avatarName = self ? displayName(me) : senderName;
               const card = taskCardOf(item);
               const pinned = conversation?.pinnedMessage?.id === item.id;
@@ -2564,15 +2602,15 @@ function ChatDetail({
                 pinned
                   ? {
                       key: 'unpin',
-                      label: tw('conversation.unpin', '取消置顶'),
+                      label: tw('conversation.unpin', 'Unpin'),
                     }
-                  : { key: 'pin', label: tw('conversation.pin', '置顶') },
+                  : { key: 'pin', label: tw('conversation.pin', 'Pin') },
               ];
               if (self) {
                 menuItems.push({ type: 'divider' });
                 menuItems.push({
                   key: 'delete',
-                  label: tw('common.delete', '删除'),
+                  label: tw('common.delete', 'Delete'),
                   danger: true,
                 });
               }
@@ -2601,7 +2639,7 @@ function ChatDetail({
                       <div
                         className={`${styles.messageMeta} ${self ? styles.messageMetaSelf : ''}`}
                       >
-                        {self ? tw('chat.me', '我') : senderName}
+                        {self ? tw('chat.me', 'Me') : senderName}
                         {' · '}
                         {messageTime(item.createdAt)}
                       </div>
@@ -2619,7 +2657,7 @@ function ChatDetail({
                           <div className={styles.taskCard}>
                             <div className={styles.taskCardTop}>
                               <span className={styles.taskCardTitle}>
-                                {card.title || tw('chat.taskFallback', '任务')}
+                                {card.title || tw('chat.taskFallback', 'Task')}
                               </span>
                               <span
                                 className={`${styles.taskCardStatus} ${
@@ -2641,7 +2679,10 @@ function ChatDetail({
                               </div>
                             ) : (
                               <div className={styles.taskCardSummary}>
-                                {tw('chat.taskCreated', '任务已创建，正在处理')}
+                                {tw(
+                                  'chat.taskCreated',
+                                  'Task created and in progress',
+                                )}
                               </div>
                             )}
                           </div>
@@ -2657,7 +2698,7 @@ function ChatDetail({
                           className={`${styles.bubble} ${self ? styles.bubbleSelf : ''}`}
                         >
                           {messageText(item) ||
-                            tw('chat.messageFallback', '[消息]')}
+                            tw('chat.messageFallback', '[Message]')}
                         </div>
                       )}
                     </div>
@@ -2684,7 +2725,10 @@ function ChatDetail({
 
       {agentPaused ? (
         <div className={styles.agentPausedBanner}>
-          {tw('avatars.chatPaused', '分身已暂停，请恢复后再对话')}
+          {tw(
+            'avatars.chatPaused',
+            'This avatar is paused. Resume it before chatting.',
+          )}
         </div>
       ) : null}
 
@@ -2695,7 +2739,7 @@ function ChatDetail({
           rows={1}
           value={text}
           disabled={agentPaused}
-          placeholder={tw('chat.inputPlaceholder', '输入消息...')}
+          placeholder={tw('chat.inputPlaceholder', 'Type a message...')}
           onChange={(event) => {
             setText(event.target.value);
             const element = event.target;
@@ -2719,7 +2763,7 @@ function ChatDetail({
           onClick={send}
         >
           <SendOutlined />
-          <span style={{ marginLeft: 6 }}>{tw('chat.send', '发送')}</span>
+          <span style={{ marginLeft: 6 }}>{tw('chat.send', 'Send')}</span>
         </button>
       </div>
 
@@ -2731,7 +2775,7 @@ function ChatDetail({
           />
           <div className={styles.settingsPanel}>
             <div className={styles.settingsPanelHeader}>
-              <span>{tw('chat.settings', '群聊设置')}</span>
+              <span>{tw('chat.settings', 'Group settings')}</span>
               <button
                 type="button"
                 className={styles.settingsClose}
@@ -2743,13 +2787,13 @@ function ChatDetail({
             <div className={styles.settingsPanelBody}>
               <div className={styles.settingSection}>
                 <div className={styles.settingLabel}>
-                  {tw('chat.groupName', '群名称')}
+                  {tw('chat.groupName', 'Group name')}
                 </div>
                 <div className={styles.inlineField}>
                   <Input
                     value={groupName}
                     maxLength={64}
-                    placeholder={tw('chat.groupNamePlaceholder', '群名称')}
+                    placeholder={tw('chat.groupNamePlaceholder', 'Group name')}
                     onChange={(event) => setGroupName(event.target.value)}
                   />
                   <Button
@@ -2758,14 +2802,14 @@ function ChatDetail({
                     loading={savingMeta}
                     onClick={() => saveMeta({ title: groupName.trim() })}
                   >
-                    {tw('common.save', '保存')}
+                    {tw('common.save', 'Save')}
                   </Button>
                 </div>
               </div>
 
               <div className={styles.settingSection}>
                 <div className={styles.settingLabel}>
-                  {tw('chat.announcement', '群公告')}
+                  {tw('chat.announcement', 'Announcement')}
                 </div>
                 <Input.TextArea
                   value={announcement}
@@ -2773,7 +2817,7 @@ function ChatDetail({
                   maxLength={500}
                   placeholder={tw(
                     'chat.announcementPlaceholder',
-                    '设置群公告，让成员了解群规则',
+                    'Set an announcement so members know the group rules',
                   )}
                   onChange={(event) => setAnnouncement(event.target.value)}
                 />
@@ -2783,34 +2827,34 @@ function ChatDetail({
                     loading={savingMeta}
                     onClick={() => saveMeta({ purpose: announcement })}
                   >
-                    {tw('chat.saveAnnouncement', '保存公告')}
+                    {tw('chat.saveAnnouncement', 'Save announcement')}
                   </Button>
                 </div>
               </div>
 
               <div className={styles.settingSection}>
                 <div className={styles.settingLabel}>
-                  {tw('chat.membersLabel', '群成员 · {count}', {
+                  {tw('chat.membersLabel', 'Members · {count}', {
                     count: memberCount,
                   })}
                 </div>
                 <Input.Search
                   allowClear
-                  placeholder={tw('chat.searchMembers', '搜索群成员')}
+                  placeholder={tw('chat.searchMembers', 'Search members')}
                   value={memberKeyword}
                   onChange={(event) => setMemberKeyword(event.target.value)}
                 />
                 <div className={styles.memberList}>
                   {memberRows.length === 0 ? (
                     <div className={styles.settingHint}>
-                      {tw('chat.noMatchedMembers', '没有匹配的成员')}
+                      {tw('chat.noMatchedMembers', 'No matching members')}
                     </div>
                   ) : (
                     memberRows.map((member) => {
                       const name =
                         member.displayName ||
                         member.username ||
-                        tw('common.unnamedMember', '未命名成员');
+                        tw('common.unnamedMember', 'Unnamed member');
                       return (
                         <div
                           key={`${member.participantType}-${member.participantId}`}
@@ -2827,10 +2871,10 @@ function ChatDetail({
                             <div className={styles.memberName}>{name}</div>
                             <div className={styles.memberRole}>
                               {member.role === 'OWNER'
-                                ? tw('chat.owner', '群主')
+                                ? tw('chat.owner', 'Owner')
                                 : member.participantType === 'AGENT'
-                                  ? tw('chat.agent', '数字分身')
-                                  : tw('chat.member', '成员')}
+                                  ? tw('chat.agent', 'Digital avatar')
+                                  : tw('chat.member', 'Member')}
                             </div>
                           </div>
                         </div>
@@ -2842,7 +2886,7 @@ function ChatDetail({
 
               <div className={styles.settingSection}>
                 <div className={styles.settingLabel}>
-                  {tw('chat.remark', '群备注')}
+                  {tw('chat.remark', 'Group alias')}
                 </div>
                 <div className={styles.inlineField}>
                   <Input
@@ -2850,7 +2894,7 @@ function ChatDetail({
                     maxLength={64}
                     placeholder={tw(
                       'chat.remarkPlaceholder',
-                      '给自己看的群名称',
+                      'A name only you can see',
                     )}
                     onChange={(event) => setRemarkValue(event.target.value)}
                   />
@@ -2859,13 +2903,13 @@ function ChatDetail({
                     loading={savingSetting}
                     onClick={() => saveSetting({ remark: remarkValue })}
                   >
-                    {tw('common.save', '保存')}
+                    {tw('common.save', 'Save')}
                   </Button>
                 </div>
                 <div className={styles.settingHint}>
                   {tw(
                     'chat.remarkHint',
-                    '备注只对自己可见，会优先显示在聊天列表。',
+                    'Only visible to you, and preferred in the chat list.',
                   )}
                 </div>
               </div>
@@ -2873,10 +2917,10 @@ function ChatDetail({
               <div className={styles.settingSwitchRow}>
                 <div>
                   <div className={styles.settingLabel}>
-                    {tw('chat.mute', '消息免打扰')}
+                    {tw('chat.mute', 'Mute notifications')}
                   </div>
                   <div className={styles.settingHint}>
-                    {tw('chat.muteHint', '开启后不再提醒新消息')}
+                    {tw('chat.muteHint', 'Stop notifying about new messages')}
                   </div>
                 </div>
                 <Switch
@@ -2889,10 +2933,10 @@ function ChatDetail({
               <div className={styles.settingSwitchRow}>
                 <div>
                   <div className={styles.settingLabel}>
-                    {tw('chat.pinChat', '置顶聊天')}
+                    {tw('chat.pinChat', 'Pin chat')}
                   </div>
                   <div className={styles.settingHint}>
-                    {tw('chat.pinHint', '在聊天列表顶部显示')}
+                    {tw('chat.pinHint', 'Show at the top of the chat list')}
                   </div>
                 </div>
                 <Switch
@@ -2971,25 +3015,30 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
     try {
       const conversation = await imApi.createConversation({
         type: 'DM',
-        title: self ? tw('conversation.self', '自己') : displayName(user),
+        title: self ? tw('conversation.self', 'Myself') : displayName(user),
         participantUserIds: [user.id],
       });
       onOpenChat(conversation.id);
     } catch {
-      message.error(tw('contacts.createDmFailed', '创建会话失败'));
+      message.error(tw('contacts.createDmFailed', 'Failed to create chat'));
     }
   };
 
   const openAgentChat = async (agent: SuperAgent) => {
     if (agent.status !== 'ACTIVE') {
-      message.warning(tw('avatars.chatPaused', '分身已暂停，请恢复后再对话'));
+      message.warning(
+        tw(
+          'avatars.chatPaused',
+          'This avatar is paused. Resume it before chatting.',
+        ),
+      );
       return;
     }
     try {
       const conversation = await imApi.createAgentDm(agent.id);
       onOpenChat(conversation.id);
     } catch {
-      message.error(tw('contacts.createDmFailed', '创建会话失败'));
+      message.error(tw('contacts.createDmFailed', 'Failed to create chat'));
     }
   };
 
@@ -2998,16 +3047,22 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
       <div className={styles.pageHead}>
         <div>
           <div className={styles.pageTitle}>
-            {tw('contacts.title', '联系人')}
+            {tw('contacts.title', 'Contacts')}
           </div>
           <div className={styles.pageSubtitle}>
-            {tw('contacts.subtitle', '找到同事或数字分身，开始聊天')}
+            {tw(
+              'contacts.subtitle',
+              'Find a colleague or avatar and start chatting',
+            )}
           </div>
         </div>
       </div>
       <Input.Search
         allowClear
-        placeholder={tw('contacts.searchPlaceholder', '搜索联系人或群聊')}
+        placeholder={tw(
+          'contacts.searchPlaceholder',
+          'Search contacts or groups',
+        )}
         value={keyword}
         onChange={(event) => setKeyword(event.target.value)}
         style={{ marginBottom: 14 }}
@@ -3016,9 +3071,9 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
       <div className={styles.contactsGrid}>
         <div className={styles.contactsPanel}>
           <div className={styles.contactsPanelHead}>
-            <span>{tw('contacts.agents', '数字分身')}</span>
+            <span>{tw('contacts.agents', 'Digital avatars')}</span>
             <span className={styles.sectionMore}>
-              {tw('contacts.agentCount', '{count} 位', {
+              {tw('contacts.agentCount', '{count}', {
                 count: filteredAgents.length,
               })}
             </span>
@@ -3030,8 +3085,8 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={
                     normalizedKeyword
-                      ? tw('contacts.noMatchedAgents', '没有匹配的数字分身')
-                      : tw('contacts.noAgents', '暂无数字分身')
+                      ? tw('contacts.noMatchedAgents', 'No matching avatars')
+                      : tw('contacts.noAgents', 'No avatars')
                   }
                 />
               ) : (
@@ -3066,7 +3121,7 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                         {[positionLabel(agent), agent.description]
                           .filter(Boolean)
                           .join(' · ') ||
-                          tw('common.noDescription', '暂无描述')}
+                          tw('common.noDescription', 'No description')}
                       </div>
                     </div>
                     <MessageOutlined style={{ color: '#a7a2b8' }} />
@@ -3078,9 +3133,9 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
         </div>
         <div className={styles.contactsPanel}>
           <div className={styles.contactsPanelHead}>
-            <span>{tw('contacts.groups', '群聊')}</span>
+            <span>{tw('contacts.groups', 'Groups')}</span>
             <span className={styles.sectionMore}>
-              {tw('contacts.groupCount', '{count} 个', {
+              {tw('contacts.groupCount', '{count}', {
                 count: filteredGroups.length,
               })}
             </span>
@@ -3091,8 +3146,8 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   normalizedKeyword
-                    ? tw('contacts.noMatchedGroups', '没有匹配的群聊')
-                    : tw('contacts.noGroups', '暂无群聊')
+                    ? tw('contacts.noMatchedGroups', 'No matching groups')
+                    : tw('contacts.noGroups', 'No groups')
                 }
               />
             ) : (
@@ -3128,9 +3183,9 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
         <div className={styles.contactsPanel}>
           <div className={styles.contactsPanelHead}>
-            <span>{tw('contacts.users', '用户')}</span>
+            <span>{tw('contacts.users', 'Users')}</span>
             <span className={styles.sectionMore}>
-              {tw('contacts.userCount', '{count} 位', {
+              {tw('contacts.userCount', '{count}', {
                 count: users.length,
               })}
             </span>
@@ -3142,8 +3197,8 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={
                     normalizedKeyword
-                      ? tw('contacts.noMatchedUsers', '没有匹配的用户')
-                      : tw('contacts.noUsers', '暂无用户')
+                      ? tw('contacts.noMatchedUsers', 'No matching users')
+                      : tw('contacts.noUsers', 'No users')
                   }
                 />
               ) : (
@@ -3168,7 +3223,7 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                         </span>
                         {isSelfUser(user, me) ? (
                           <span className={styles.selfTag}>
-                            {tw('common.meTag', '我')}
+                            {tw('common.meTag', 'Me')}
                           </span>
                         ) : null}
                       </div>
@@ -3255,11 +3310,11 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
         selectedProvider.id,
         created.id,
       );
-      message.success(tw('me.keySaved', 'API Key 已保存'));
+      message.success(tw('me.keySaved', 'API Key saved'));
       setKeyModalOpen(false);
       load();
     } catch {
-      message.error(tw('common.saveFailed', '保存失败'));
+      message.error(tw('common.saveFailed', 'Save failed'));
     } finally {
       setSavingKey(false);
     }
@@ -3274,7 +3329,7 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
         isDefault: route.id === defaultRouteId,
       })),
     );
-    message.success(tw('me.defaultUpdated', '默认模型已更新'));
+    message.success(tw('me.defaultUpdated', 'Default model updated'));
     setModelModalOpen(false);
     load();
   };
@@ -3305,7 +3360,9 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
         <div>
           <div className={styles.meName}>{displayName(me)}</div>
           <div className={styles.meBio}>
-            {me?.email || me?.username || tw('me.bio', '数字员工工作台')}
+            {me?.email ||
+              me?.username ||
+              tw('me.bio', 'Digital employee workspace')}
           </div>
         </div>
       </div>
@@ -3313,17 +3370,17 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
       <Spin spinning={loading}>
         <div className={styles.sectionHead}>
           <span className={styles.sectionTitle}>
-            {tw('me.aiConfig', 'AI 模型配置')}
+            {tw('me.aiConfig', 'AI model configuration')}
           </span>
           <span className={styles.sectionMore}>
-            {tw('me.fillKey', '填写 API Key')}
+            {tw('me.fillKey', 'Enter API Key')}
           </span>
         </div>
         <div className={styles.menuCard} style={{ marginBottom: 18 }}>
           {providers.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={tw('me.noProviders', '暂无供应商')}
+              description={tw('me.noProviders', 'No providers')}
             />
           ) : (
             providers.map((provider) => (
@@ -3339,8 +3396,8 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
                   className={provider.apiKeyId ? styles.tagOk : styles.tagMuted}
                 >
                   {provider.apiKeyId
-                    ? tw('me.configured', '已配置')
-                    : tw('me.notConfigured', '未配置')}
+                    ? tw('me.configured', 'Configured')
+                    : tw('me.notConfigured', 'Not configured')}
                 </span>
                 <Button
                   size="small"
@@ -3348,8 +3405,8 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
                   onClick={() => openKeyModal(provider)}
                 >
                   {provider.apiKeyId
-                    ? tw('me.updateKey', '更新 Key')
-                    : tw('me.fillKeyAction', '填写 Key')}
+                    ? tw('me.updateKey', 'Update Key')
+                    : tw('me.fillKeyAction', 'Enter Key')}
                 </Button>
               </div>
             ))
@@ -3363,12 +3420,12 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
             </div>
             <div className={styles.menuBody}>
               <div className={styles.menuTitle}>
-                {tw('me.defaultModel', '默认模型设置')}
+                {tw('me.defaultModel', 'Default model')}
               </div>
               <div className={styles.menuDesc}>
                 {defaultRoute
                   ? `${defaultRoute.providerName || defaultRoute.provider || ''} ${defaultRoute.modelName || ''}`.trim()
-                  : tw('me.notSet', '未设置')}
+                  : tw('me.notSet', 'Not set')}
               </div>
             </div>
             <span className={styles.sectionMore}>›</span>
@@ -3379,10 +3436,10 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
             </div>
             <div className={styles.menuBody}>
               <div className={styles.menuTitle}>
-                {tw('me.avatarSettings', '数字分身设置')}
+                {tw('me.avatarSettings', 'Avatar settings')}
               </div>
               <div className={styles.menuDesc}>
-                {tw('me.avatarSettingsDesc', '在数字分身页管理')}
+                {tw('me.avatarSettingsDesc', 'Manage on the avatars page')}
               </div>
             </div>
             <span className={styles.sectionMore}>›</span>
@@ -3399,10 +3456,10 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
               </div>
               <div className={styles.menuBody}>
                 <div className={styles.menuTitle}>
-                  {tw('me.admin', '管理后台')}
+                  {tw('me.admin', 'Admin console')}
                 </div>
                 <div className={styles.menuDesc}>
-                  {tw('me.adminDesc', '进入后台管理页面')}
+                  {tw('me.adminDesc', 'Open the admin console')}
                 </div>
               </div>
               <span className={styles.sectionMore}>›</span>
@@ -3414,7 +3471,7 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
       <div className={styles.logoutRow}>
         <button type="button" className={styles.logoutButton} onClick={logout}>
           <LogoutOutlined />
-          <span>{tw('me.logout', '退出登录')}</span>
+          <span>{tw('me.logout', 'Sign out')}</span>
         </button>
       </div>
 
@@ -3424,29 +3481,32 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
         title={tw('me.apiKeyTitle', '{name} API Key', {
           name: selectedProvider?.name || '',
         })}
-        okText={tw('common.save', '保存')}
-        cancelText={tw('common.cancel', '取消')}
+        okText={tw('common.save', 'Save')}
+        cancelText={tw('common.cancel', 'Cancel')}
         confirmLoading={savingKey}
         onOk={saveKey}
         onCancel={() => setKeyModalOpen(false)}
         destroyOnHidden
       >
         <Typography.Paragraph type="secondary">
-          {tw('me.keyNote', 'Key 只会保存，不会在页面上明文展示。')}
+          {tw(
+            'me.keyNote',
+            'The key is stored securely and never displayed in plain text.',
+          )}
         </Typography.Paragraph>
         <Input.Password
           value={keyValue}
           onChange={(event) => setKeyValue(event.target.value)}
-          placeholder={tw('me.keyPlaceholder', '请输入 API Key')}
+          placeholder={tw('me.keyPlaceholder', 'Enter API Key')}
         />
       </Modal>
 
       <Modal
         className={styles.softModal}
         open={modelModalOpen}
-        title={tw('me.defaultModel', '默认模型设置')}
-        okText={tw('common.save', '保存')}
-        cancelText={tw('common.cancel', '取消')}
+        title={tw('me.defaultModel', 'Default model')}
+        okText={tw('common.save', 'Save')}
+        cancelText={tw('common.cancel', 'Cancel')}
         onOk={saveDefaultModel}
         onCancel={() => setModelModalOpen(false)}
         destroyOnHidden
@@ -3458,7 +3518,7 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
           options={routes.map((route) => ({
             value: route.id,
             label: `${route.providerName ? `${route.providerName} · ` : ''}${route.modelName}${
-              route.isDefault ? tw('me.currentDefault', '（当前默认）') : ''
+              route.isDefault ? tw('me.currentDefault', ' (current)') : ''
             }`,
           }))}
         />

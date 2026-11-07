@@ -17,7 +17,7 @@ class TextSanitizerTest {
     @Test
     void sanitize_keepsNormalTextAndOtherControls() {
         assertEquals("流程管理", TextSanitizer.sanitize("流程管理"));
-        // 其它控制符（如 \n）保留，仅 NUL 被剥
+        // Other control characters (e.g. \n) are preserved; only NUL is stripped
         assertEquals("a\nb\tc", TextSanitizer.sanitize("a\nb\tc"));
     }
 

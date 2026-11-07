@@ -21,9 +21,9 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * 选路规则：首选设备在线 → 用它；离线 → 回退最新；多台在线且未选择 → 要求先选。
+ * Routing rules: preferred device online → use it; offline → fall back to the newest; multiple online and none selected → require a selection first.
  *
- * <p>这条规则决定了浏览器指令会不会跑错机器，必须锁死。
+ * <p>This rule determines whether browser commands run on the wrong machine, so it must be locked down.
  */
 @ExtendWith(MockitoExtension.class)
 class UserConnectionRegistryTest {
@@ -120,7 +120,7 @@ class UserConnectionRegistryTest {
 
     @Test
     void connectionsWithoutDeviceIdFallBackToLatest() {
-        // 老版本扩展不上报 deviceId：无法让用户选择，按最新连接投递（与改动前一致）
+        // Older extensions do not report deviceId: the user cannot choose, so deliver to the newest connection (same as before)
         addConnection("c1", null, 1000L);
         addConnection("c2", null, 2000L);
 

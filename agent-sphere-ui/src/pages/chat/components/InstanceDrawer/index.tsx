@@ -70,7 +70,8 @@ export default function InstanceDrawer({
                       message.warning(
                         intl.formatMessage({
                           id: 'pages.landing.noModelRoute',
-                          defaultMessage: '请先为该实例配置默认模型路由',
+                          defaultMessage:
+                            'Please configure a default model route for this instance first',
                         }),
                       );
                       return;

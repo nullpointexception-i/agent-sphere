@@ -29,12 +29,14 @@ public interface CapabilityMcpSpi {
     String executeTool(String serverUrl, String toolName, String argumentsJson);
 
     /**
-     * 带任务级凭证的工具调用。
+     * Tool call with a task-level credential.
      *
-     * <p>凭证会被注入为 {@code X-Task-Mcp-Credential} 请求头，让 MCP 服务端识别本次调用归属
-     * （Bole 用它区分「哪个用户的哪个寻访任务」）。为 null 时与三参版本完全等价。
+     * <p>The credential is injected as the {@code X-Task-Mcp-Credential} header so the MCP server can
+     * identify the owner of this call (Bole uses it to tell which user's research task it belongs to).
+     * When null it is fully equivalent to the three-argument version.
      *
-     * <p>新增重载而非改三参签名：既有实现方与调用方（ToolExecutor 之外的路径）无需改动。
+     * <p>Added as an overload instead of changing the three-argument signature: existing
+     * implementations and callers (paths outside ToolExecutor) need no change.
      */
     default String executeTool(String serverUrl, String toolName, String argumentsJson, String taskMcpCredential) {
         return executeTool(serverUrl, toolName, argumentsJson);
@@ -50,13 +52,14 @@ public interface CapabilityMcpSpi {
     }
 
     /**
-     * 连接测试：对登记的服务端做 initialize 握手，返回可达性、协议版本与工具数。
+     * Connection test: performs an initialize handshake against the registered server and returns
+     * reachability, protocol version and tool count.
      */
     McpTestResultVO testConnection(Long mcpId);
 
     /**
-     * 按 mcpId 直接调用该 MCP 的某个工具（用于前端「试调用」）。
-     * serverUrl 版本见 {@link #executeTool(String, String, String)}。
+     * Calls one tool of the MCP identified by mcpId (used by the frontend "try it" action).
+     * See {@link #executeTool(String, String, String)} for the serverUrl variant.
      */
     String callToolByMcpId(Long mcpId, String toolName, String argumentsJson);
 }

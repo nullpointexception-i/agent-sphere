@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** LlmSamplingConfigDTO 的共享映射层：merge（实例覆盖全局）与 apply 到请求。 */
+/** Shared mapping layer for LlmSamplingConfigDTO: merge (instance overrides global) and apply to the request. */
 class LlmSamplingConfigMapperTest {
 
     @Test
@@ -35,7 +35,7 @@ class LlmSamplingConfigMapperTest {
     @Test
     void apply_mapsAllFields() {
         ChatCompletionRequestDTO request = new ChatCompletionRequestDTO();
-        // 存量配置里的 budget_tokens 已废弃，必须被忽略而不是让整份配置解析失败。
+        // budget_tokens in legacy config is deprecated; it must be ignored rather than failing the whole config parse.
         LlmSamplingConfigDTO cfg = LlmSamplingConfigMapper.fromJson(
                 "{\"temperature\":0.1,\"max_tokens\":2048,\"top_p\":0.9," +
                         "\"presence_penalty\":0.3,\"frequency_penalty\":0.2,\"stop\":[\"END\"]," +

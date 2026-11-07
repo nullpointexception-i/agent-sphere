@@ -137,7 +137,7 @@ public class RuntimeEventListener {
                 .clarificationId(src.getClarificationId())
                 .multiple(src.getMultiple())
                 .prompt(src.getPrompt())
-                // 重试/状态行元数据：前端据此就地更新 run_status 行，不必再轮询
+                // Retry/status-row metadata: the frontend updates the run_status row in place from this, without polling again
                 .waitKind(src.getWaitKind())
                 .retryAttempt(src.getRetryAttempt())
                 .retryMax(src.getRetryMax())
@@ -176,17 +176,17 @@ public class RuntimeEventListener {
         Long sessionId = data != null ? data.getSessionId() : null;
         if (sessionId != null) {
             RuntimeEventVO frontendEvent = transformForFrontend(event, data);
-            // 新 run 开始时清空该 session 缓存，避免重连后重放旧 run 事件
+            // Clear the session cache when a new run starts, so reconnects do not replay old run events
             if (event.getEventType() instanceof RunStatus s && s == RunStatus.PENDING) {
                 eventCache.clearSessionEvents(sessionId);
             }
-            // 单写者（本执行副本）：先写缓存、再发布，保证跨副本重连可回放且无重复
+            // Single writer (this executing replica): append to the cache before publishing, so cross-replica reconnects replay without duplicates
             eventCache.appendSessionEvent(sessionId, frontendEvent);
             eventBus.publish(DistributedRuntimeConstants.TOPIC_EVENTS, frontendEvent);
         }
     }
 
-    /** 浏览器指令：按 session 归属用户投递到用户级 task 连接（浏览器插件），经事件总线广播。 */
+    /** Browser command: deliver to the user-level task connection (browser extension) of the user owning the session, broadcast through the event bus. */
     @EventListener
     public void onChromeCommand(ChromeCommandEvent chromeEvent) {
         Long sessionId = chromeEvent.sessionId();
@@ -200,7 +200,7 @@ public class RuntimeEventListener {
                         new ChromeCommandEnvelope(session.getCreatedBy(), chromeEvent.command()));
             }
         } catch (Exception e) {
-            // session 不存在/无归属：仅按 session 投递前端，忽略
+            // Session missing / no owner: frontend delivery is session-scoped only; ignore
         }
     }
 
@@ -210,7 +210,7 @@ public class RuntimeEventListener {
         if (run == null) return data;
         switch (status) {
             case PENDING, RUNNING -> {
-                // 条件更新：终态 run 不能被迟到的 PENDING/RUNNING 事件拉回执行中
+                // Conditional update: a terminal run must not be pulled back to running by a late PENDING/RUNNING event
                 runSpi.updateStatusIfActive(run.getId(), status.value());
             }
             case COMPLETED -> {
@@ -225,10 +225,11 @@ public class RuntimeEventListener {
             }
             case FAILED -> {
                 run.setStatus(status.value());
-                // 失败原因必须落库（V87）：此前这里只写 status、丢弃事件里的 errorMessage，
-                // 而 run 表又没有对应列 —— run 挂了不留任何原因，事后无法定位。
-                // 所有 FAILED 发布方（SessionRunner 单轮失败 / RuntimeOrchestrator 提交期失败 /
-                // OrphanRunSweeper / failStuckWait）都已把原因放进事件，这里是唯一收口点。
+                // Failure reason must be persisted (V87): this used to write only status and drop the
+                // event's errorMessage, while the run table had no matching column — a dead run left
+                // no reason at all and could not be diagnosed afterwards.
+                // Every FAILED publisher (SessionRunner single-turn failure / RuntimeOrchestrator submit-time failure /
+                // OrphanRunSweeper / failStuckWait) already puts the reason in the event; this is the only finalization point.
                 if (data.getErrorMessage() != null && !data.getErrorMessage().isBlank()) {
                     run.setErrorMessage(data.getErrorMessage());
                 }
@@ -247,14 +248,14 @@ public class RuntimeEventListener {
                         data.getSessionId(), run.getId(), status), status);
             }
             case AWAITING_USER -> {
-                // 条件更新：已取消/已终态的 run 不能被迟到的暂停事件降级
+                // Conditional update: a cancelled/terminal run must not be downgraded by a late pause event
                 runSpi.updateStatusIfActive(run.getId(), status.value());
                 data = stampRunStatus(data, timelineRecorder.recordRunTerminal(
                         data.getSessionId(), run.getId(), status), status);
             }
             case WAITING -> {
-                // wait 挂起：与 AWAITING_USER 同属停车态 —— 更新 run 状态 + 记 timeline“等待中”行；
-                // 之后同一个 run 到点续跑，行会原位更新。
+                // wait suspension: a parked state like AWAITING_USER — update the run status and record a "waiting" timeline row;
+                // when the same run resumes later, the row is updated in place.
                 runSpi.updateStatusIfActive(run.getId(), status.value());
                 data = stampRunStatus(data, timelineRecorder.recordRunTerminal(data.getSessionId(), run.getId(), status,
                         retryTitle(data)), status);
@@ -263,20 +264,20 @@ public class RuntimeEventListener {
         return data;
     }
 
-    /** LLM 重试的等待行文案；非重试挂起返回 null（沿用默认「等待中」）。 */
+    /** Waiting-row text for an LLM retry; returns null for non-retry suspensions (falls back to the default "waiting"). */
     private static String retryTitle(RuntimeEventDataVO data) {
         if (!com.buukle.agent.common.constant.PendingWaitKind.LLM_RETRY.equals(data.getWaitKind())) {
             return null;
         }
         String hint = switch (String.valueOf(data.getRetryHint())) {
-            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_PROVIDER_BUSY -> "上游模型服务繁忙";
-            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_CONNECT_TIMEOUT -> "连接模型服务超时";
-            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_RATE_LIMITED -> "请求过于频繁";
-            default -> "模型调用异常";
+            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_PROVIDER_BUSY -> "Upstream model service is busy";
+            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_CONNECT_TIMEOUT -> "Timed out connecting to the model service";
+            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_RATE_LIMITED -> "Too many requests";
+            default -> "Model call failed";
         };
-        StringBuilder sb = new StringBuilder("⚠ ").append(hint).append("，正在自动重试");
+        StringBuilder sb = new StringBuilder("⚠ ").append(hint).append(", retrying automatically");
         if (data.getRetryAttempt() != null && data.getRetryMax() != null) {
-            sb.append("（").append(data.getRetryAttempt()).append("/").append(data.getRetryMax()).append("）");
+            sb.append(" (").append(data.getRetryAttempt()).append("/").append(data.getRetryMax()).append(")");
         }
         if (data.getNextRetryAt() != null) {
             sb.append(" · ")
@@ -284,7 +285,7 @@ public class RuntimeEventListener {
                                     java.time.Instant.ofEpochMilli(data.getNextRetryAt()),
                                     java.time.ZoneId.of("Asia/Shanghai"))
                             .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")))
-                    .append(" 重试");
+                    .append(" retry");
         }
         if (data.getRetryHttpStatus() != null) {
             sb.append(" · HTTP ").append(data.getRetryHttpStatus());
@@ -292,8 +293,8 @@ public class RuntimeEventListener {
         return sb.toString();
     }
 
-    /** 把 run_status 行的 seq/title/state 带回 SSE 事件：前端无需再盲等一次 afterSeq 刷新。 */
-    /** 把 run_status 行的 seq/title/state 带回 SSE 事件：前端无需再盲等一次 afterSeq 刷新。 */
+    /** Carry the run_status row's seq/title/state back on the SSE event: the frontend no longer has to blindly wait for an afterSeq refresh. */
+    /** Carry the run_status row's seq/title/state back on the SSE event: the frontend no longer has to blindly wait for an afterSeq refresh. */
     private static RuntimeEventDataVO stampRunStatus(RuntimeEventDataVO data,
                                                      TimelineRecorder.RunStatusRow row,
                                                      RunStatus status) {
@@ -301,15 +302,15 @@ public class RuntimeEventListener {
         if (row != null && row.seq() > 0) {
             builder.seq(row.seq())
                     .kind(com.buukle.agent.instance.dtvo.enums.TimelineKind.RUN_STATUS.getCode())
-                    // 行标题走独立字段，不再覆盖 assistantReply（正文）
+                    // Use a dedicated field for the row title; do not overwrite assistantReply (the content)
                     .statusTitle(row.title());
         }
         return builder.build();
     }
 
-    /** 累积该 run 的模型推理（thinking）文本：仅 llm 类型，排除系统状态行；终态一次性写入 run。
-     *  同时：主 Agent 首 token 打开统一 Timeline 助手容器行并回填 seq（打字机目标）。
-     *  返回带 seq/kind 的副本（事件对象本身不可变）。 */
+    /** Accumulate this run's model reasoning (thinking) text: llm type only, excluding system status rows; written to the run once at terminal state.
+     *  Also: the main Agent's first token opens the unified Timeline assistant container row and backfills seq (typewriter target).
+     *  Returns a copy carrying seq/kind (the event object itself is immutable). */
     private RuntimeEventDataVO handleFlow(RuntimeEventDataVO data, FlowEventType flow) {
         Long runId = data.getRunId();
         if (runId == null) {
@@ -320,12 +321,12 @@ public class RuntimeEventListener {
         if (!isReasoning && !isContent) {
             return data;
         }
-        // 压缩模型的流式输出：打到 compaction 行，绝不能落到 assistant 容器（会污染本轮回复/推理）。
+        // Streaming output of the compaction model: goes to the compaction row and must never land in the assistant container (it would pollute this turn's reply/reasoning).
         if (isContent && RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_OUTPUT
                 .equals(data.getReasoningSubType())) {
             return timelineRecorder.stampCompactionSeq(data);
         }
-        // 主 Agent 流式容器：仅主 agent（子 Agent 与其头行由 SkillReActExecutor 管理，卡内按 sub_agent_run_id 实时订阅）
+        // Main Agent streaming container: main agent only (sub-agents and their header rows are managed by SkillReActExecutor, subscribed live per sub_agent_run_id inside the card)
         if (data.getSubAgentRunId() == null
                 && (isContent || RuntimeEventTypeConstant.REASONING_TYPE_LLM.equals(data.getReasoningType()))) {
             data = timelineRecorder.stampStreamingSeq(data.getSessionId(), runId, data);
@@ -345,9 +346,9 @@ public class RuntimeEventListener {
     }
 
     /**
-     * 压缩状态落 timeline（kind=compaction）。RUNNING 建行并回填 seq/kind，
-     * 前端据此本地插行、随后把 compaction_output 的流式正文打在分割线下；
-     * COMPLETED/FAILED 原地更新，刷新后正文从 agent_compact_record.summary_after 解析。
+     * Compaction status recorded to the timeline (kind=compaction). RUNNING creates the row and backfills seq/kind;
+     * the frontend inserts the row locally and then renders the streaming compaction_output body below the divider;
+     * COMPLETED/FAILED update it in place; after a refresh the body is parsed from agent_compact_record.summary_after.
      */
     private RuntimeEventDataVO handleCompaction(RuntimeEventDataVO data, CompactionStatus status) {
         if (data.getSessionId() == null) {
@@ -361,7 +362,7 @@ public class RuntimeEventListener {
         long seq = timelineRecorder.recordCompaction(data.getSessionId(), data.getRunId(),
                 data.getPublishId(), data.getCompactRecordId(), state, data.getAssistantReply());
         if (seq > 0) {
-            // 前端按 statusTitle 本地插行，必须是完整标题（含状态前缀 + 轮次数）
+            // The frontend inserts the row locally from statusTitle, so it must be the complete title (status prefix + turn counts)
             return data.toBuilder()
                     .seq(seq)
                     .kind(TimelineKind.COMPACTION.getCode())
@@ -398,9 +399,9 @@ public class RuntimeEventListener {
             case TOOL_APPROVAL_DISMISSED -> TimelineState.CANCELLED.getCode();
         };
         String title = switch (status) {
-            case TOOL_APPROVAL_PENDING -> "等待工具授权";
-            case TOOL_APPROVAL_RESPONDED -> "已处理工具授权";
-            case TOOL_APPROVAL_DISMISSED -> "已取消工具授权";
+            case TOOL_APPROVAL_PENDING -> "Waiting for tool approval";
+            case TOOL_APPROVAL_RESPONDED -> "Tool approval handled";
+            case TOOL_APPROVAL_DISMISSED -> "Tool approval cancelled";
         };
         timelineRecorder.recordToolApproval(data.getSessionId(), data.getRunId(),
                 data.getApprovalId(), approval.getId(), state, title);
@@ -415,11 +416,11 @@ public class RuntimeEventListener {
         if (reasoning.length() > maxChars) {
             reasoning = reasoning.substring(0, maxChars);
         }
-        // 落库防御：剥 NUL，避免 PG text 列拒绝导致 run 收口更新抛异常
+        // Persistence guard: strip NUL, otherwise the PG text column rejects it and the run finalization update throws
         run.setReasoning(TextSanitizer.sanitize(reasoning));
     }
 
-    /** 判断工具名是否为 todo 工具（其 args 需完整保留以便前端勾线展示）。 */
+    /** Whether the tool name is the todo tool (its args must be kept intact for the frontend checklist rendering). */
     private boolean isTodoArgs(String toolName) {
         return toolName != null && toolName.equals(
                 InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());

@@ -24,13 +24,16 @@ public class AgentTask {
     private Long runId;
     private String status;
     private String resultJson;
-    /** 当前轮询阶段（execute → extract → refine），DB 化轮询用，防重复推进。 */
+    /** Current polling phase (execute → extract → refine); used by DB-backed polling to prevent duplicate advancement. */
     private String pollPhase;
-    /** 上次轮询时间（DB 化轮询认领条件）。 */
+    /** Last poll time (claim condition for DB-backed polling). */
     private LocalDateTime polledAt;
-    /** 任务开始时间（超时兜底基准）。 */
+    /** Task start time (reference point for the timeout fallback). */
     private LocalDateTime startedAt;
-    /** 任务超时时间（秒）；为空时由 AS 侧配置兜底。业务方（Bole）传入则以业务方为准。 */
+    /**
+     * Task timeout in seconds; when null, the AS-side config provides the fallback. If the caller
+     * (Bole) provides it, the caller's value wins.
+     */
     private Integer taskTimeoutSeconds;
     private String remark;
     private String callbackUrl;

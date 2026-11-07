@@ -23,13 +23,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.BDDMockito.given;
 
 /**
- * 建会话的来源开关拦截（V89）。
+ * Session-creation surface switch interception (V89).
  *
- * <p>策略真值表本身在 {@code SessionSurfacePolicyTest}；这里锁的是**接线** ——
- * `createSession` 必须真的调用它。少一行调用不会有编译错误，只会在某一端悄悄放行。
+ * <p>The policy truth table itself lives in {@code SessionSurfacePolicyTest}; what is locked here is
+ * the **wiring** — `createSession` must actually call it. A missing call would not break compilation;
+ * it would only silently let one surface through.
  *
- * <p>用「实例未配模型路由」作为落在后面的必经校验来判定「来源开关已放行」：
- * 若来源被拦，抛的是 SESSION_SURFACE_DISABLED；否则才会走到 INSTANCE_NO_MODEL_ROUTE。
+ * <p>"Instance has no model route configured" is used as the later mandatory check to determine that
+ * "the surface switch already passed": if the surface were blocked, it would throw
+ * SESSION_SURFACE_DISABLED; otherwise execution reaches INSTANCE_NO_MODEL_ROUTE.
  */
 @ExtendWith(MockitoExtension.class)
 class SessionServiceImplSurfaceTest {
@@ -48,7 +50,8 @@ class SessionServiceImplSurfaceTest {
 
     @BeforeEach
     void setUp() {
-        // widget 禁止、主站放行；且刻意不配 modelRouteId，让「来源放行」时能落到后一个校验
+        // widget denied, console allowed; modelRouteId is deliberately left unset so that when the
+        // surface is allowed execution falls through to the later check
         AgentInstance instance = new AgentInstance();
         instance.setId(INSTANCE_ID);
         instance.setAllowWidgetSession(false);
@@ -83,14 +86,14 @@ class SessionServiceImplSurfaceTest {
     void console_passesSurfaceCheck() {
         SessionSurfaceHolder.set(SessionSurface.CONSOLE);
 
-        // 来源放行 → 落到后面的模型路由校验
+        // Surface allowed → execution falls through to the later model route check
         BizException ex = assertThrows(BizException.class, () -> service.createSession(dto()));
         assertEquals(InstanceErrorCode.INSTANCE_NO_MODEL_ROUTE.getCode(), errorCodeOf(ex));
     }
 
     @Test
     void noSurface_internalCall_isAllowed() {
-        // 任务路径：不经过 HTTP 拦截器，holder 未设置 → INTERNAL → 必须放行
+        // Task path: no HTTP interceptor, holder is unset → INTERNAL → must be allowed
         SessionSurfaceHolder.clear();
 
         BizException ex = assertThrows(BizException.class, () -> service.createSession(dto()));

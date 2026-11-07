@@ -60,7 +60,7 @@ public class ControllerLogAspect {
         String className = sig.getDeclaringType().getSimpleName();
         String methodName = sig.getName();
 
-        // 跳过 SSE 流式端点的日志（心跳频繁）
+        // Skip logging for SSE streaming endpoints (frequent heartbeats)
         if ("stream".equals(methodName)) {
             return pjp.proceed();
         }

@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.chrome.UserConnectionRegistry;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.error.CommonErrorCode;
@@ -17,19 +19,19 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 浏览器插件连接管理：多台设备在线时由用户选择「用哪台执行」。
+ * Browser extension connection management: when multiple devices are online, the user chooses which one executes.
  *
- * <p>选路本身在 {@code SseEventRelay} 里完成：首选设备在线则定向投递，
- * 离线回退到最新连接，多台在线且未选择则要求先选。
+ * <p>Routing itself happens in {@code SseEventRelay}: if the preferred device is online, deliver directly to it;
+ * if it is offline, fall back to the newest connection; if several are online and none is selected, require a selection first.
  */
 @RestController
-@RequestMapping("/api/v1/runtime/user/connections")
+@RequestMapping(ApiPrefix.V1 + "/runtime/user/connections")
 @RequiredArgsConstructor
 public class UserConnectionController extends BaseController {
 
     private final UserConnectionRegistry userConnectionRegistry;
 
-    /** 在线设备列表；current 标记发起本次请求的设备。 */
+    /** Online device list; current marks the device that issued this request. */
     @GetMapping
     public ResponseEntity<ConnectionsVO> list(
             @RequestHeader(value = SseRuntimeController.HEADER_DEVICE_ID, required = false) String deviceId) {
@@ -42,7 +44,7 @@ public class UserConnectionController extends BaseController {
         return ok(new ConnectionsVO(userConnectionRegistry.preferred(username), devices));
     }
 
-    /** 选定执行设备（按 deviceId，跨重连保持）。 */
+    /** Select the executing device (by deviceId, preserved across reconnects). */
     @PutMapping("/preferred")
     public ResponseEntity<?> setPreferred(@RequestBody PreferredDeviceDTO dto) {
         String username = requireUsername();

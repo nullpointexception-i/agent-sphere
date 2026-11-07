@@ -47,7 +47,7 @@ export class AgentCursor {
         visible: true,
         x: point.x,
         y: point.y,
-        // 没有渲染器（隐藏/受限时）就瞬移，不空跑动画
+        // Without a renderer (hidden/restricted) teleport instead of running the animation for nothing
         animateMovement: !(opts && opts.instant),
         moveSequence: seq,
         sessionId: this.sessionId,
@@ -57,8 +57,8 @@ export class AgentCursor {
       // No content script / restricted page — the click still proceeds, just without a visual.
       return;
     }
-    // content script 没接管就立刻放弃屏障，不要让每个动作白等 1.5s
-    // （对齐 Codex：publish 失败即 cancel，而不是照等 Vf 超时）
+    // If the content script never took over, drop the barrier immediately; do not make every action wait 1.5s for nothing
+    // (matching Codex: cancel as soon as publish fails instead of waiting for the Vf timeout)
     if (!ack || ack.ok !== true || ack.rendered === false) return;
     await this.waitArrival(seq);
   }

@@ -1,11 +1,11 @@
 package com.buukle.agent.runtime.kernel.config;
 
 /**
- * 单条路由尝试失败。
+ * A single route attempt failed.
  *
- * <p>携带 HTTP 状态与可重试标记，供 {@link FallbackRouteExecutor} 判断是否值得切到备用路由：
- * 4xx（408/429 除外）通常换模型也无济于事，直接失败并保留原始错误，避免被下一条路由的
- * 二次错误掩盖。
+ * <p>Carries the HTTP status and a retryable flag so {@link FallbackRouteExecutor} can decide whether switching to a fallback route is worthwhile:
+ * 4xx (except 408/429) usually cannot be fixed by switching models, so fail directly and keep the original error instead of letting the
+ * next route's secondary error mask it.
  */
 public class RouteAttemptException extends RuntimeException {
 
@@ -26,13 +26,13 @@ public class RouteAttemptException extends RuntimeException {
         return retryable;
     }
 
-    /** 是否应该继续尝试备用路由。 */
+    /** Whether a fallback route should still be tried. */
     public boolean shouldFallback() {
         if (!retryable) {
             return false;
         }
         if (httpStatus == null) {
-            return true; // 超时 / 连接失败
+            return true; // timeout / connection failure
         }
         if (httpStatus == 408 || httpStatus == 429) {
             return true;

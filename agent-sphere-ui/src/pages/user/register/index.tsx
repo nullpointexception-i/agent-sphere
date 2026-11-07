@@ -53,12 +53,14 @@ const Register: React.FC = () => {
       message.success(
         intl.formatMessage({
           id: 'pages.register.success',
-          defaultMessage: '注册成功！',
+          defaultMessage: 'Registration successful!',
         }),
       );
-      // 整页刷新让 getInitialState 重新执行并拉取 /auth/me：
-      // 注册响应已含 permissions，但 SPA push 不会触发重新初始化，
-      // 需重载才能让菜单按新用户的权限正常展示（与登录流程一致）。
+      // A full page reload re-runs getInitialState and fetches /auth/me:
+      // the register response already contains permissions, but a SPA push does not trigger
+      // re-initialization,
+      // so a reload is required for the menu to render correctly with the new user's permissions
+      // (same as the login flow).
       window.location.href = '/chat';
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
@@ -120,7 +122,7 @@ const Register: React.FC = () => {
             label={labelWithRule(
               intl.formatMessage({
                 id: 'pages.login.username.placeholder',
-                defaultMessage: '用户名',
+                defaultMessage: 'Username',
               }),
               intl.formatMessage({ id: 'pages.hint.username' }),
             )}
@@ -188,7 +190,7 @@ const Register: React.FC = () => {
             label={labelWithRule(
               intl.formatMessage({
                 id: 'pages.login.password.placeholder',
-                defaultMessage: '密码',
+                defaultMessage: 'Password',
               }),
               intl.formatMessage({ id: 'pages.hint.password' }),
             )}
@@ -226,7 +228,7 @@ const Register: React.FC = () => {
             label={labelWithRule(
               intl.formatMessage({
                 id: 'pages.register.repeatPassword',
-                defaultMessage: '确认密码',
+                defaultMessage: 'Repeat password',
               }),
               intl.formatMessage({ id: 'pages.hint.password' }),
             )}

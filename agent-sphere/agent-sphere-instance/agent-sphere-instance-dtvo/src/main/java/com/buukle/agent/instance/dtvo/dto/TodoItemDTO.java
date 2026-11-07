@@ -7,8 +7,8 @@ public class TodoItemDTO {
     private String content;
     private String status;
     private String priority;
-    /** 来源技能 id（见 agent_session_todo.skill_id）。 */
+    /** Source skill id (see agent_session_todo.skill_id). */
     private Long skillId;
-    /** 来源技能步骤标识，如 step1 / step1.1（见 agent_session_todo.step_id）。 */
+    /** Source skill step id, e.g. step1 / step1.1 (see agent_session_todo.step_id). */
     private String stepId;
 }

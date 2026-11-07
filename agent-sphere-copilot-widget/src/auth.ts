@@ -2,7 +2,7 @@ import type { UserVO } from './types';
 
 const STORAGE_KEY = 'agent-sphere-widget:agent-user';
 
-/** widget 主包可以安全清理的 sessionStorage key。OIDC iframe key 由 auth-main 自己管理。 */
+/** sessionStorage keys the widget bundle may safely clear. The OIDC iframe keys are managed by auth-main itself. */
 export const WIDGET_SESSION_KEYS = {
   user: 'agent-sphere-widget:agent-user',
   autoLoginTried: 'agent-sphere-widget:auto-login-tried',
@@ -23,7 +23,7 @@ function writeRaw(storage: Storage | undefined, key: string, value: string): voi
   try {
     storage?.setItem(key, value);
   } catch {
-    // storage unavailable / quota — 内存缓存仍然可用
+    // storage unavailable / quota - the in-memory cache is still usable
   }
 }
 
@@ -36,11 +36,11 @@ function removeRaw(storage: Storage | undefined, key: string): void {
 }
 
 /**
- * 读取用户 token。
+ * Read the user token.
  *
- * <p>**主存储是 localStorage**：同一浏览器的所有标签页共用一份 token，登录态只有一个。
- * 旧版本写在 sessionStorage（按标签页隔离，会出现「开第二个标签页又登一次」），
- * 读到旧值时顺手迁移到 localStorage 并清掉旧副本。
+ * <p>**localStorage is the primary store**: every tab of the same browser shares one token, so there is a single login state.
+ * Older versions wrote to sessionStorage (isolated per tab, which caused "a second tab makes you log in again");
+ * when an old value is found it is migrated to localStorage and the old copy is removed.
  */
 function readStored(): string | null {
   if (typeof window === 'undefined') return null;
@@ -76,7 +76,7 @@ export function setUser(user: UserVO): void {
   cached = user;
   writeRaw(typeof window === 'undefined' ? undefined : window.localStorage,
     STORAGE_KEY, JSON.stringify(user));
-  // 迁移期：确保旧副本不会盖住新值
+  // Migration window: make sure the old copy cannot shadow the new value
   removeRaw(typeof window === 'undefined' ? undefined : window.sessionStorage, STORAGE_KEY);
 }
 
@@ -86,14 +86,14 @@ export function clearUser(): void {
   removeRaw(typeof window === 'undefined' ? undefined : window.sessionStorage, STORAGE_KEY);
 }
 
-/** 只清理 widget 用户缓存及当前会话，不影响正在运行的认证尝试。 */
+/** Clear only the widget user cache and the current session; do not disturb an auth attempt in progress. */
 export function clearWidgetUserSession(): void {
   clearUser();
   removeRaw(typeof window === 'undefined' ? undefined : window.sessionStorage,
     WIDGET_SESSION_KEYS.activeSession);
 }
 
-/** 清理 widget 会话并允许宿主重新发起一次认证。 */
+/** Clear the widget session and let the host start one more authentication attempt. */
 export function clearWidgetSession(): void {
   clearWidgetUserSession();
   removeRaw(typeof window === 'undefined' ? undefined : window.sessionStorage,
@@ -101,17 +101,17 @@ export function clearWidgetSession(): void {
 }
 
 /**
- * 清空 widget 侧会话痕迹：内存缓存 + widget 自己的存储 key。
+ * Wipe widget-side session traces: in-memory cache + the widget's own storage keys.
  *
- * 专供宿主（如 Bole）在用户切换/登出时调用。不要在这里清理 OIDC iframe 的 guard
- * 和 pending key，否则正在运行的隐藏 iframe 会被误判为普通顶层窗口并再次发起 SSO。
+ * Intended for hosts (such as Bole) to call on user switch/logout. Do not clear the OIDC iframe guard
+ * or pending key here, otherwise a running hidden iframe would be mistaken for a normal top-level window and start SSO again.
  */
 export function clearAllSessionData(): void {
   clearWidgetSession();
 }
 
-// token 现在跨标签页共享：别的标签页登出时，本页必须同步丢掉内存缓存并收起会话，
-// 否则会继续拿着已失效的 token 发请求（表现为 401 + 反复弹登录）。
+// The token is now shared across tabs: when another tab logs out, this page must drop its in-memory cache and close the session,
+// otherwise it keeps sending requests with an expired token (manifesting as 401 plus a repeated login prompt).
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (event: StorageEvent) => {
     if (event.key !== STORAGE_KEY) {

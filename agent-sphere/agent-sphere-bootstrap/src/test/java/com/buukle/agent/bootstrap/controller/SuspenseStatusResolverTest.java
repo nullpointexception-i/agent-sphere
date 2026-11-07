@@ -10,12 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 挂起判定的回归护栏。
+ * Regression guard for suspension detection.
  *
- * <p>这里最要紧的是 {@link #fieldOrderAndWhitespaceDoNotMatter()}：旧实现用字符串
- * {@code contains("\"status\":\"awaiting_user\"")} 判定，只要序列化输出多一个空格或调整字段
- * 顺序，挂起就不触发，run 会带着一条「等你回答」的结果继续空转。这类失败不会抛异常，
- * 只会表现为「点了澄清但 agent 不停」，非常难定位。
+ * <p>The most important case is {@link #fieldOrderAndWhitespaceDoNotMatter()}: the old implementation used a string
+ * {@code contains("\"status\":\"awaiting_user\"")} check, so one extra space or a different field order
+ * in the serialized output meant suspension never triggered, and the run spun on holding a "waiting for your answer" result. Such failures throw no exception;
+ * they only show up as "clarification was answered but the agent keeps running", which is very hard to diagnose.
  */
 class SuspenseStatusResolverTest {
 
@@ -36,7 +36,7 @@ class SuspenseStatusResolverTest {
 
     @Test
     void fieldOrderAndWhitespaceDoNotMatter() {
-        // 旧实现对这两种写法都会漏判
+        // The old implementation missed both forms
         assertEquals(RunStatus.WAITING,
                 SuspenseStatusResolver.resolve(WAIT_TOOL, "{\"wait_ms\":1000,\"status\":\"waiting\"}"));
         assertEquals(RunStatus.AWAITING_USER,
@@ -45,7 +45,7 @@ class SuspenseStatusResolverTest {
 
     @Test
     void otherToolsWithSameStatus_areNotSuspendCandidates() {
-        // 只有澄清与 wait 是挂起类工具；别的工具返回 waiting 不该劫持 run
+        // Only clarification and wait are suspension tools; a "waiting" status from any other tool must not hijack the run
         assertNull(SuspenseStatusResolver.resolve("builtin_5", "{\"status\":\"waiting\"}"));
     }
 
@@ -64,7 +64,7 @@ class SuspenseStatusResolverTest {
         assertNull(SuspenseStatusResolver.resolve(WAIT_TOOL, null));
     }
 
-    // 关于「恢复后二次挂起」：resumeFromWait 改写的 artifact 同样带 status=waiting，
-    // 但它写进的是 tool call 记录，恢复后的循环经 HistoryLoader 读历史，wait 不会被重新执行，
-    // 因此该 artifact 永远不会流进 results 触发本判定。防线在「不重跑」而非在此处。
+    // On "a second suspension after resume": the artifact rewritten by resumeFromWait also carries status=waiting,
+    // but it is written to the tool call record; the resumed loop reads history through HistoryLoader, so wait is not re-executed,
+    // and that artifact never flows into results to trigger this check. The defense is "do not re-run", not this code path.
 }

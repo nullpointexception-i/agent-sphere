@@ -14,9 +14,9 @@ public class CreateSuperAgentDTO implements Serializable {
     private String name;
     @Size(max = 512)
     private String description;
-    /** 角色字典 code（system_dic.type=POSITION）；新建时必填。 */
+    /** Role dictionary code (system_dic.type=POSITION); required on creation. */
     @Size(max = 64)
     private String positionCode;
-    /** 预算/触发/回复规范（JSON）。 */
+    /** Budget/trigger/reply rules (JSON). */
     private String config;
 }

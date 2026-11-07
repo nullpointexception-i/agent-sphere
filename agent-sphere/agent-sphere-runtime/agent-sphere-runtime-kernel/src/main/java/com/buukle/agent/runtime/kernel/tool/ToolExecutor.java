@@ -61,15 +61,15 @@ public class ToolExecutor {
     private final PendingWaitSpi pendingWaitSpi;
     private final DelegateService delegateService;
     private final ToolResultReadService toolResultReadService;
-    /** 任务级 MCP 凭证来源。 */
+    /** Source of task-level MCP credentials. */
     private final TaskMcpCredentialStore taskMcpCredentialStore;
 
-    /** 主循环工具入口：以根上下文执行（主 Agent 无父级限制）。 */
+    /** Main-loop tool entry point: executes with the root context (the main agent has no parent restriction). */
     public String execute(TurnToolCall tc, Long sessionId, Long runId, List<RuntimeTool> tools) {
         return execute(tc, SubRunExecutionContext.root(sessionId, runId, null), tools);
     }
 
-    /** 带嵌套上下文执行：Skill 子循环内层工具使用子上下文（深度/栈/白名单）。 */
+    /** Executes with a nested context: inner tools of a Skill sub-loop use the sub-context (depth/stack/whitelist). */
     public String execute(TurnToolCall tc, SubRunExecutionContext ctx, List<RuntimeTool> tools) {
         Long sessionId = ctx.getSessionId();
         Long runId = ctx.getRunId();
@@ -93,9 +93,9 @@ public class ToolExecutor {
                 return denied;
             }
 
-            // delegate 统一执行入口（pseudo-tool）：main 内联或 subagent 隔离，深度由策略统一 +1
+            // Unified delegate execution entry (pseudo-tool): inline in main or isolated as subagent; depth is uniformly increased by the policy
             if (SubAgentConstants.DELEGATE_TOOL.equals(tc.name())) {
-                // 保持同深度不变，仅记录触发本调用的 toolCallId 与当前 owner，供嵌套子 run 回溯
+                // Depth stays the same here; only the toolCallId that triggered this call and the current owner are recorded, so nested sub-runs can trace back
                 SubRunExecutionContext execCtx = ctx.child(ctx.getDepth(), ctx.getToolRefAncestry(),
                         tc.id(), ctx.getOwnerSubAgentRunId());
                 return delegateService.execute(args, execCtx, tools);
@@ -116,8 +116,8 @@ public class ToolExecutor {
                     String optionsJson = argsNode.has("options") ? argsNode.get("options").toString() : null;
                     String description = argsNode.has("description") ? argsNode.get("description").asText() : null;
                     String clarificationId = java.util.UUID.randomUUID().toString().substring(0, CLARIFICATION_ID_LENGTH);
-                    // 先建库、再发 PENDING 事件：Timeline 建澄清行时需 lookupClarificationRef 查得到记录，
-                    // 否则行 refClarificationId=null，刷新后 resolveContent 取不到 response/options（只剩"已应答"）。
+                    // Create the DB row first, then emit the PENDING event: Timeline needs lookupClarificationRef to find the record when building the clarification row,
+                    // otherwise the row has refClarificationId=null and after a refresh resolveContent cannot get response/options (leaving only "answered").
                     clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType,
                             multiple, optionsJson, description, clarificationId);
                     eventPublisher.publishEvent(new RuntimeEventVO(
@@ -140,8 +140,8 @@ public class ToolExecutor {
                 }
             }
 
-            // finish：正常收口在 SessionRunner 里完成（直接读入参并短路结束循环）。
-            // 这里只做兜底 —— 万一有人直接执行它，返回一个明确结果而不是 "Unknown builtin tool"。
+            // finish: normal finalization happens in SessionRunner (reads the input directly and short-circuits the loop).
+            // This is only a fallback — if someone executes it directly, return an explicit result instead of "Unknown builtin tool".
             if (CAPABILITY_TYPE_BUILTIN.equals(type) && FinishConstants.TOOL_NAME.equals(tc.name())) {
                 try {
                     JsonNode argsNode = JSON.readTree(args);
@@ -158,7 +158,7 @@ public class ToolExecutor {
                 }
             }
 
-            // progress 是纯运行时协议工具：记录正常 tool lifecycle，但不执行外部副作用。
+            // progress is a pure runtime protocol tool: it records the normal tool lifecycle but performs no external side effects.
             if (CAPABILITY_TYPE_BUILTIN.equals(type) && ProgressConstants.TOOL_NAME.equals(tc.name())) {
                 try {
                     JsonNode argsNode = JSON.readTree(args);
@@ -180,10 +180,10 @@ public class ToolExecutor {
                 }
             }
 
-            // wait：挂起-恢复，不阻塞。
-            // 这里绝对不能 sleep —— 一睡就占住 maxParallel 信号量并撞上 tool.execution-timeout，
-            // 而「等超过 60s」恰恰是常规工具语义下无法满足的需求。只写一条挂起记录就返回，
-            // SessionRunner 循环判定后 break 退出，到点由 PendingWaitWakeScheduler 唤醒。
+            // wait: suspend-resume, non-blocking.
+            // Absolutely must not sleep here — sleeping would hold the maxParallel semaphore and hit tool.execution-timeout,
+            // and "waiting longer than 60s" is exactly the requirement that normal tool semantics cannot satisfy. Write only a suspension row and return;
+            // SessionRunner decides and breaks out of the loop, and PendingWaitWakeScheduler wakes the run when due.
             if (CAPABILITY_TYPE_BUILTIN.equals(type)
                     && tc.name().equals(LLM_PREFIX_BUILTIN + BuiltinToolEnum.READ_TOOL_RESULT.getId())) {
                 return toolResultReadService.read(sessionId, args);
@@ -226,15 +226,15 @@ public class ToolExecutor {
     }
 
     /**
-     * 取当前任务的任务级 MCP 凭证。
+     * Fetches the current task's task-level MCP credentials.
      *
-     * <p>从 Redis 按 sessionId 取，而不是从工具入参或 binding 里取：凭证一旦进入模型可见的
-     * 任何一处（入参、binding、prompt）就等于交给模型保管，Bole 侧的「按收藏者隔离」随之失效。
-     * 取不到时返回 null，MCP 调用退化为无凭证，服务端会拒绝 —— 这是安全默认值。
+     * <p>Fetched from Redis by sessionId, not from the tool input or binding: once a credential enters any
+     * model-visible place (input, binding, prompt) it is effectively handed to the model, and the collector-based isolation on the Bole side stops working.
+     * Returns null when unavailable; the MCP call then degrades to no credentials and the server rejects it — this is the safe default.
      */
     private String resolveTaskMcpCredential(Long sessionId) {
-        // sessionId 为 null 或 Redis 里没有凭证时返回 null：McpCallContext 会退化为「不带凭证」，
-        // 服务端随即拒绝 —— 安全默认值，且不会让整个 MCP 通道不可用。
+        // Returns null when sessionId is null or Redis has no credential: McpCallContext degrades to "no credentials",
+        // and the server rejects it right away — a safe default that does not make the whole MCP channel unusable.
         return taskMcpCredentialStore.get(sessionId);
     }
 
@@ -258,7 +258,7 @@ public class ToolExecutor {
                 .orElse(toolName);
     }
 
-    /** delegate 可能触发隔离子 agent（subagent/DAG），按子 Agent 预算放宽外层超时。 */
+    /** delegate may trigger an isolated sub-agent (subagent/DAG); relax the outer timeout according to the sub-agent budget. */
     public boolean isSubRunTool(String toolName, List<RuntimeTool> tools) {
         if (toolName == null || tools == null || tools.isEmpty()) return false;
         if (!SubAgentConstants.DELEGATE_TOOL.equals(toolName)) return false;

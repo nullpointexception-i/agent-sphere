@@ -24,7 +24,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-/** skill hub：公开/安装/归属校验/自动更新。 */
+/** skill hub: public listing / install / ownership checks / auto-update. */
 @ExtendWith(MockitoExtension.class)
 class SkillHubServiceTest {
 
@@ -35,13 +35,13 @@ class SkillHubServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        // 初始化 MyBatis-Plus 表信息缓存，使 lambda wrapper getTargetSql() 可用
+        // Initialize the MyBatis-Plus table-info cache so lambda wrapper getTargetSql() works
         com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
                 new org.apache.ibatis.builder.MapperBuilderAssistant(
                         new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""),
                 CapabilitySkill.class);
         service = new CapabilitySkillServiceImpl(new CapabilitySkillConverter());
-        // ServiceImpl.baseMapper 位于父类 CrudRepository（protected，无 setter），反射注入 mock
+        // ServiceImpl.baseMapper lives in the parent CrudRepository (protected, no setter); inject the mock via reflection
         java.lang.reflect.Field f =
                 com.baomidou.mybatisplus.extension.repository.CrudRepository.class.getDeclaredField("baseMapper");
         f.setAccessible(true);
@@ -117,7 +117,7 @@ class SkillHubServiceTest {
         assertEquals(1, captor.getValue().getVersion());
         assertEquals(1, captor.getValue().getOriginVersion());
         assertEquals(false, captor.getValue().getAutoUpdate());
-        // 源行 install_count + 1
+        // Source row install_count + 1
         verify(skillMapper).update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(), any(com.baomidou.mybatisplus.core.conditions.Wrapper.class));
     }
 
@@ -135,7 +135,7 @@ class SkillHubServiceTest {
         given(skillMapper.selectById(7L)).willReturn(skill(7L, "shared", "bob", "PUBLIC"));
         given(skillMapper.insert(any(CapabilitySkill.class))).willReturn(1);
         given(skillMapper.update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(), any(com.baomidou.mybatisplus.core.conditions.Wrapper.class))).willReturn(1);
-        // existsByName: 第一次命中（同名已存在），第二次放行
+        // existsByName: the first call matches (same name exists), the second passes
         given(skillMapper.selectCount(any())).willReturn(1L).willReturn(0L);
 
         SkillVO vo = service.installSkill(7L, null);
@@ -339,7 +339,7 @@ class SkillHubServiceTest {
     @Test
     void syncFromOrigin_staleConditionUpdate_returnsFalse() {
         given(skillMapper.selectById(7L)).willReturn(skill(7L, "shared", "bob", "PUBLIC", 3));
-        // 并发下另一副本已抢先推进，条件更新影响 0 行
+        // Under concurrency another replica advanced first, so the conditional update affects 0 rows
         given(skillMapper.update(org.mockito.ArgumentMatchers.<CapabilitySkill>isNull(),
                 any(com.baomidou.mybatisplus.core.conditions.Wrapper.class))).willReturn(0);
 

@@ -83,9 +83,9 @@ import java.util.concurrent.atomic.AtomicReference;
 public class SessionRunner {
 
     private static final Duration CONTEXT_TTL = Duration.ofMinutes(30);
-    /** 单轮用户消息最多注入的附件（图片）数。 */
+    /** Maximum number of attachments (images) injected into a single user message. */
     private static final int MAX_USER_ATTACHMENTS = 4;
-    /** Redis 取消 RSet 的占位标记（RSet 用作布尔标志，contains/add 均为该值）。 */
+    /** Placeholder marker for the Redis cancel RSet (the RSet is used as a boolean flag; contains/add both use this value). */
     private static final Object CANCEL_MARKER = Boolean.TRUE;
     private final AgentRuntimeProperties properties;
     private final RunSpi runSpi;
@@ -110,37 +110,37 @@ public class SessionRunner {
     private final ReasoningEffortResolver reasoningEffortResolver;
 
     /**
-     * 挂起重试用。刻意用字段注入而不是构造参数：SessionRunner 的构造器已被多个测试直接 new，
-     * 加参数会把测试全改一遍，而这个依赖与既有构造参数没有装配顺序关系。
+     * Retry suspension. Field injection is used instead of a constructor parameter on purpose: SessionRunner's constructor is directly
+     * instantiated by several tests, so adding a parameter would require rewriting them all, and this dependency has no wiring-order relationship with the existing ones.
      */
     @org.springframework.beans.factory.annotation.Autowired
     private com.buukle.agent.instance.spi.PendingWaitSpi pendingWaitSpi;
 
-    /** 浏览器截图观察注入支持（主/子 Agent 共用，共享顺序/计数）；依赖 attachmentResolver，惰性初始化。 */
+    /** Browser screenshot observation injection support (shared by main/sub agents, with shared ordering/count); depends on attachmentResolver and is initialized lazily. */
     private volatile ScreenshotObservationSupport screenshotObservationSupport;
 
-    /** run 级取消：写 Redis RSet（任意副本可调），执行副本 loop 读取并消费。 */
+    /** Run-level cancel: writes a Redis RSet (callable from any replica); the executing replica's loop reads and consumes it. */
     public void cancelRun(Long runId) {
         if (runId != null) {
             runCancelSet(runId).add(CANCEL_MARKER);
         }
     }
 
-    /** session 级取消：loop 内按"当前 run 所属 session 是否被停"直接终止（不依赖 runId）。 */
+    /** Session-level cancel: terminates inside the loop based on whether the session owning the current run was stopped (does not depend on runId). */
     public void cancelSession(Long sessionId) {
         if (sessionId != null) {
             sessionCancelSet(sessionId).add(CANCEL_MARKER);
         }
     }
 
-    /** 清除 session 取消标志（无活动 run / 已消费时调用，避免误杀下一个新 run）。 */
+    /** Clears the session cancel flag (called when there is no active run / it has been consumed, to avoid killing the next new run by mistake). */
     public void clearSessionCancelled(Long sessionId) {
         if (sessionId != null) {
             sessionCancelSet(sessionId).delete();
         }
     }
 
-    /** 该 session 当前是否有正在执行的 run（owner 租约由协调器在 RUNNING 时设置、IDLE 时清除）。 */
+    /** Whether this session currently has a running run (the owner lease is set by the coordinator on RUNNING and cleared on IDLE). */
     public boolean hasActiveRun(Long sessionId) {
         return sessionId != null && redissonClient.getBucket(
                 DistributedRuntimeConstants.sessionOwnerKey(sessionId)).isExists();
@@ -154,12 +154,12 @@ public class SessionRunner {
         return redissonClient.getSet(DistributedRuntimeConstants.sessionCancelKey(sessionId));
     }
 
-    /** run 是否处于取消态（供唤醒/恢复路径在恢复前二次确认）。 */
+    /** Whether the run is in a cancelled state (for wake/recovery paths to double-check before resuming). */
     public boolean isRunCancelled(Long runId) {
         return runId != null && runCancelSet(runId).contains(CANCEL_MARKER);
     }
 
-    /** 会话是否处于取消态（供协调器在 run 异常退出/重启决策时判断）。 */
+    /** Whether the session is in a cancelled state (for the coordinator when deciding on abnormal exit / restart). */
     public boolean isSessionCancelled(Long sessionId) {
         return sessionId != null && sessionCancelSet(sessionId).contains(CANCEL_MARKER);
     }
@@ -184,8 +184,8 @@ public class SessionRunner {
     private KernelContext getContext(Long sessionId) {
         KernelContext ctx = ctxCache().get(sessionId);
         if (ctx != null) {
-            // 长 run 可能持续数小时：每轮续期，避免 30 分钟 TTL 到期后 tools 变空，
-            // 模型无法调用任何工具（含 finish），最后被静默守卫误判为「连续静默」。
+            // Long runs can last hours: renew every loop so that when the 30-minute TTL expires, tools do not become empty and
+            // the model cannot call any tool (including finish), eventually being misjudged by the silent guard as "consecutive silence".
             try {
                 ctxCache().put(sessionId, ctx, CONTEXT_TTL.toMillis(), TimeUnit.MILLISECONDS);
             } catch (Exception e) {
@@ -204,9 +204,9 @@ public class SessionRunner {
         try {
             parked = runInternal(sessionId);
         } finally {
-            // 停车态退出（WAITING / AWAITING_USER）**不清**输入队列/steer：唤醒的恢复输入可能在
-            // 「退出窗口」内刚落进 Redis，清掉会让恢复后的新循环 promoteInput 取空 → run 空转卡死。
-            // 其余退出（终态/取消/无输入）仍清，避免协调器误判"还有消息"而重启主循环。
+            // Parking-state exit (WAITING / AWAITING_USER) does **not** clear the input queue/steer: the resume input may have
+            // just landed in Redis during the "exit window", and clearing it would make the new loop's promoteInput after resume come up empty → the run spins and gets stuck.
+            // Other exits (terminal/cancel/no input) still clear, so the coordinator does not misread "there are still messages" and restart the main loop.
             if (!parked) {
                 inputManager.clear(sessionId);
             }
@@ -214,30 +214,30 @@ public class SessionRunner {
         }
     }
 
-    /** @return 本次是否以「停车态」（WAITING / AWAITING_USER）退出 —— 供 {@link #run} 决定是否清输入。 */
+    /** @return whether this run exited in a "parked state" (WAITING / AWAITING_USER) — used by {@link #run} to decide whether to clear input. */
     private boolean runInternal(Long sessionId) {
         boolean parked = false;
         Long currentRunId = redissonClient.<Long>getBucket(
                 DistributedRuntimeConstants.sessionPendingRunKey(sessionId)).getAndDelete();
         RunVO currentRun = currentRunId != null ? runSpi.getRun(currentRunId) : null;
-        // 从 run 已持久化的计数起步（V82 起）。挂起恢复（澄清/等待）会重进本方法，
-        // 若仍从 0 起算，maxLoopCount 只约束「单次调用」—— 模型可反复挂起无限续命。
+        // Start from the run's persisted counters (since V82). Suspension resume (clarification/wait) re-enters this method,
+        // and if it still started at 0, maxLoopCount would only constrain a "single call" — the model could suspend repeatedly for unlimited extra life.
         int loopCount = currentRun != null && currentRun.getLoopCount() != null
                 ? currentRun.getLoopCount() : 0;
         List<ChatMessageDTO> messages = new ArrayList<>();
         boolean hasToolCalls = false;
         StringBuilder allContent = new StringBuilder();
 
-        // 实例级覆盖（最高优先）：KernelContext 已携带 agentInstance，随 run 执行副本走，天然跨副本一致
+        // Instance-level override (highest priority): KernelContext already carries agentInstance, travels with the run's executing replica, and is naturally consistent across replicas
         KernelContext topCtx = getContext(sessionId);
         Integer instanceLoopLimit = topCtx != null && topCtx.getAgentInstance() != null
                 && topCtx.getAgentInstance().getMaxLoopCount() != null
                 && topCtx.getAgentInstance().getMaxLoopCount() > 0
                 ? topCtx.getAgentInstance().getMaxLoopCount() : null;
 
-        // 上限固化（V88）：run 有多个重入入口（wait 恢复 / 澄清恢复 / 对账抢救），而 TaskLoopLimitHolder
-        // 只在任务请求线程上存在 —— 续跑时重新解析会让同一个 run 的预算中途缩水（2000 → 回落 128）。
-        // 已固化则直接沿用；null（首次进入 / 存量 run）才解析，随后与 loopCount 一并落库。
+        // Limit pinning (V88): a run has several re-entry points (wait resume / clarification resume / reconciliation rescue), while TaskLoopLimitHolder
+        // exists only on the task request thread — re-resolving on resume would shrink the same run's budget midway (2000 → falls back to 128).
+        // When already pinned, reuse it; resolve only when null (first entry / existing run), then persist it together with loopCount.
         Integer pinnedLoopLimit = currentRun != null ? currentRun.getLoopLimit() : null;
         LoopLimitResolver.ResolvedLoopLimit loopLimit = LoopLimitResolver.resolveMain(
                 pinnedLoopLimit, instanceLoopLimit, TaskLoopLimitHolder.get(),
@@ -247,21 +247,21 @@ public class SessionRunner {
         log.info("Run {} execution source={}, effective loop limit={}", currentRunId, loopSource, maxLoopCount);
         int compactionRetries = 0;
         int consecutiveCompactionFailures = 0;
-        // 压缩重试耗尽后置位：本轮不再压缩，直接带超上下文发给模型。
-        // 否则「每轮压缩 → 仍超预算 → 再压缩」只会耗到重试上限，而旧实现的 break 会让 run 永远停在 RUNNING。
+        // Set after compaction retries are exhausted: do not compact again this turn; send the over-context request to the model directly.
+        // Otherwise "compact every loop → still over budget → compact again" would only burn through the retry limit, and the old break left the run stuck in RUNNING forever.
         boolean skipCompaction = false;
-        // 同一 run 连续失败达到上限后彻底关闭压缩，避免每个工具轮都重新烧一次摘要调用。
+        // After the consecutive failure count reaches the limit within one run, shut compaction off entirely so every tool loop does not burn another summarization call.
         boolean compactionDisabledForRun = false;
-        /** 当前 run 的第一条内存消息在 messages 中的下标（压缩重组时据此保留当前 run，不重放数据库）。 */
+        /** Index in messages of the current run's first in-memory message (used by compaction reassembly to keep the current run without replaying the DB). */
         int currentRunStart = -1;
-        /** 当前 run 的 run-local 压缩次数（上限 2 次，不随工具轮重置）。 */
+        /** Number of run-local compactions for the current run (capped at 2, not reset per tool loop). */
         int runCompactionAttempts = 0;
         int runCompactionCount = currentRunId != null
                 ? (int) compactionService.countCompletedRunCompactions(currentRunId) : 0;
         int lastRunCompactionLoop = -1000;
-        // L2：进入 agentic 流程之后，「本轮没有任何工具调用」不再是完成信号。
-        // toolsEverExecuted 从已持久化的 loopCount 起步 —— loopCount 只在工具轮自增，
-        // 所以 >0 就意味着这个 run 真的执行过工具；挂起恢复后依然成立。
+        // L2: once inside the agentic flow, "no tool call this turn" is no longer a completion signal.
+        // toolsEverExecuted starts from the persisted loopCount — loopCount increments only on tool loops,
+        // so >0 means this run really did execute tools; this still holds after a suspension resume.
         boolean toolsEverExecuted = loopCount > 0;
         int silentTurns = 0;
         int maxSilentTurns = Math.max(0, properties.getRunner().getMaxSilentTurns());
@@ -299,8 +299,8 @@ public class SessionRunner {
             for (ToolApprovalService.ApprovalCall call : approvalCalls) {
                 resumeCallIds.add(call.call().id());
             }
-            // 审批挂起时工具记录仍是 PENDING；HistoryLoader 可能补一条失败占位 tool 消息。
-            // 恢复时要先移除这些占位，避免同一 callId 出现两条 tool 消息。
+            // While an approval is suspending, the tool record is still PENDING; HistoryLoader may add a failed placeholder tool message.
+            // On resume those placeholders must be removed first, so the same callId does not end up with two tool messages.
             messages.removeIf(m -> LlmApiConstant.ROLE_TOOL.equals(m.getRole())
                     && resumeCallIds.contains(m.getToolCallId()));
             Map<String, ToolApprovalDecision> decisions = toolApprovalService.decisions(approval);
@@ -393,8 +393,8 @@ public class SessionRunner {
         }
 
         if (topCtx != null && topCtx.isRetryResume() && currentRun != null) {
-            // LLM 瞬时失败后的重试重入：只重建历史，**不加**恢复提示、
-            // **不** failRunningByRunId（上一次失败没有产生工具记录）。
+            // Retry re-entry after a transient LLM failure: rebuild history only; do **not** add a resume hint and
+            // do **not** call failRunningByRunId (the previous failure produced no tool records).
             String systemPrompt = runPromptBuilder.buildSystemPrompt(topCtx);
             if (systemPrompt != null && !systemPrompt.isBlank()) {
                 messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
@@ -407,10 +407,10 @@ public class SessionRunner {
             currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
             refreshTodolistSlot(sessionId, messages);
             hasToolCalls = true;
-            // 注意：这里不能置 toolsEverExecuted=true。它应由已持久化的 loopCount 决定：
-            // 纯聊天 run（loopCount=0）重试恢复后若被强行标记“用过工具”，一次正常文本回答会被
-            // L2 静默守卫当成“工具后沉默”，continue 后再发一轮请求（线上 run 2999/2995：
-            // 成功回复后 300ms 又发起新请求并继续重试）。
+            // Note: toolsEverExecuted must not be set to true here. It should be driven by the persisted loopCount:
+            // if a pure chat run (loopCount=0) is force-marked as "used tools" after a retry resume, a normal text answer would be
+            // treated by the L2 silent guard as "silence after tools", and continue would send another request (production runs 2999/2995:
+            // 300ms after a successful reply a new request was issued and retries continued).
             topCtx.setRetryResume(false);
             log.info("Resumed run {} after transient LLM failure with {} history message(s)",
                     currentRunId, messages.size());
@@ -428,15 +428,15 @@ public class SessionRunner {
                 messages.addAll(history.messages());
             }
             currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
-            // 重建历史只回放 run.getUserMessage()，wait 恢复提示等合成 user 消息没有落库。
-            // 少了尾部 user 锚点：① 模型不知道「刚被重启打断」，醒来后容易重复已完成的工具调用；
-            // ② 最后一条 user 之后变成一大段 assistant/tool，重建出来的 content-only assistant
-            // 会被推进 DeepSeek 的 reasoning_content 校验窗口（线上 run 2794 的 400）。
-            // 补一条恢复提示，与 wait 恢复路径「尾部恒有一条 user」的结构对齐。
+            // History reconstruction replays only run.getUserMessage(); synthetic user messages such as the wait-resume hint are not persisted.
+            // Without the tail user anchor: (1) the model does not know it was just interrupted by a restart and tends to repeat already-completed tool calls when it wakes;
+            // (2) a long stretch of assistant/tool messages follows the last user, and the reconstructed content-only assistant
+            // gets pushed into DeepSeek's reasoning_content validation window (production run 2794's 400).
+            // Adding a resume hint aligns the structure with the wait-resume path: the tail always has one user message.
             messages.add(new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_USER)
                     .setContent(RunnerConstants.RUN_RECOVERY_RESUME_PROMPT));
-            // 恢复路径不走首轮分支（hasToolCalls=true），待办槽必须在这里补回来，否则重建后计划丢失。
+            // The recovery path does not go through the first-turn branch (hasToolCalls=true), so the todo slot must be restored here, otherwise the plan is lost after reconstruction.
             refreshTodolistSlot(sessionId, messages);
             hasToolCalls = true;
             toolsEverExecuted = true;
@@ -471,8 +471,8 @@ public class SessionRunner {
                 currentRunId = currentRun.getId();
             }
             if (ctx == null) {
-                // 正常情况下 coordinator 在启动/恢复前已注册 context；这里为空说明缓存已过期
-                // 或恢复链路没带上 context。继续跑会让 tools=[]，模型无法调用 finish。
+                // Normally the coordinator has already registered the context before start/resume; an empty value here means the cache expired
+                // or the recovery path did not carry the context. Continuing would make tools=[], and the model could not call finish.
                 if (currentRun != null) {
                     log.error("KernelContext missing for session {} (run {}); failing run instead of running without tools",
                             sessionId, currentRunId);
@@ -483,20 +483,20 @@ public class SessionRunner {
                 break loop;
             }
 
-            // 条件状态更新：已取消/终态的 run 不能再被迟到的唤醒拉回 RUNNING。
-            // 旧实现直接 updateRun 整行，取消与挂起竞争时会互相覆盖（线上 run 2995）。
+            // Conditional state update: an already-cancelled/terminal run must not be dragged back to RUNNING by a late wake.
+            // The old implementation called updateRun on the whole row, so cancel and suspension races overwrote each other (production run 2995).
             boolean running = runSpi.markRunning(currentRunId, loopCount, maxLoopCount);
             if (!running) {
                 log.info("Run {} is no longer active; stopping resumed loop", currentRunId);
                 break loop;
             }
             currentRun.setStatus(RunStatus.RUNNING.name());
-            // 随这次状态更新一并落库（不额外增加写）：loopCount 在正常工具轮末尾与
-            // 挂起工具（wait/ask_clarification）break 前都会自增，这里记的是本轮即将执行的序号，
-            // 恢复后从该值续跑不会重复或漏计。
+            // Persisted together with this state update (no extra write): loopCount increments at the end of a normal tool loop and
+            // before breaking for a suspension tool (wait/ask_clarification); what is recorded here is the number of the loop about to run,
+            // so resuming from this value neither repeats nor skips a loop.
             currentRun.setLoopCount(loopCount);
-            // 生效上限与 loopCount 同一位置落库（不额外增加写）：预算与计数器都是 per-run 的，
-            // 分母若不固化，续跑时会在调度线程上重新解析而缩水。
+            // The effective limit is persisted at the same place as loopCount (no extra write): both the budget and the counter are per-run,
+            // and if the denominator is not pinned it would be re-resolved on the scheduler thread on resume and shrink.
             currentRun.setLoopLimit(maxLoopCount);
 
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.RUNNING,
@@ -522,8 +522,8 @@ public class SessionRunner {
                     if (systemPrompt != null && !systemPrompt.isBlank()) {
                         messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent(systemPrompt));
                     }
-                    // HistoryResult.currentRunStart 是相对 history 列表的下标；这里已先加了 system prompt，
-                    // 必须加 base 偏移，否则 wait/澄清恢复后 currentRunStart 会指向 system prompt。
+                    // HistoryResult.currentRunStart is an index relative to the history list; the system prompt has already been prepended here,
+                    // so the base offset must be added; otherwise after a wait/clarification resume currentRunStart would point at the system prompt.
                     int historyBase = messages.size();
                     HistoryLoader.HistoryResult history = historyLoader.loadResult(
                             sessionId, currentRunId, input.isClarificationResume());
@@ -533,16 +533,16 @@ public class SessionRunner {
                     currentRunStart = resolveCurrentRunStart(historyBase, history, messages.size());
                 }
                 messages.add(buildUserMessage(input, attachmentResolver));
-                // 待办列表独立为尾部 system 段（原位替换，不触碰 index 0，保持前缀缓存稳定）
+                // The todo list is a separate tail system segment (replaced in place, index 0 untouched, keeping the prefix cache stable)
                 applyTodolistSuffix(messages, todolistText);
             }
 
             List<RuntimeTool> tools = ctx != null ? ctx.getTools() : List.of();
             List<ToolDefinitionDTO> toolDefs = runPromptBuilder.buildToolDefinitions(tools);
 
-            // 尾部预告块：每轮的 loop 预算 + 临近上限时的硬收口。
-            // isLastLoop 仍按 n-1 判定 —— 它是 loop cap 的执行时机（见下方工具轮收口），
-            // 硬收口则提前 FINAL_TURN_INSTRUCTION_LEAD 轮，两者刻意不同。
+            // Tail notice block: per-loop budget + hard finalization near the limit.
+            // isLastLoop is still decided by n-1 — that is when the loop cap takes effect (see the tool-loop finalization below),
+            // while hard finalization leads by FINAL_TURN_INSTRUCTION_LEAD loops; the two are deliberately different.
             boolean isLastLoop = loopCount >= maxLoopCount - 1;
             applyLoopBudget(messages, loopCount, maxLoopCount);
             applySilentTurnNudge(messages, silentTurns);
@@ -555,18 +555,18 @@ public class SessionRunner {
 
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) break;
 
-            // 统一收口：根据 TurnOutcome 判定 run 状态
+            // Unified finalization: decide the run status from TurnOutcome
             if (turn.content() != null && !turn.content().isBlank()) {
                 allContent.append(turn.content());
             }
 
-            // 只有真正的模型成功轮（COMPLETE / TOOL_CALLS）才重置退避计数：
-            // 口径 B —— 成功一次后下一段失败从第 1 档重新开始。
-            // COMPACTED / RUN_COMPACTED 只是压缩动作，不是模型调用成功，不能清零（否则会掩盖真实失败）。
+            // Only a real model success turn (COMPLETE / TOOL_CALLS) resets the backoff counter:
+            // convention B — after one success, the next stretch of failures restarts from step 1.
+            // COMPACTED / RUN_COMPACTED are only compaction actions, not successful model calls, and must not reset it (otherwise real failures are masked).
             if (turn.outcome() == TurnOutcome.COMPLETE || turn.outcome() == TurnOutcome.TOOL_CALLS) {
                 currentRun.setRetryAttempt(0);
                 currentRun.setWaitKind(null);
-                // 立即定向落库：并发写者用旧快照整行覆盖时，不会把刚清零的计数又写回旧值。
+                // Persist immediately and targeted: when a concurrent writer overwrites the whole row with a stale snapshot, it cannot write the just-reset counter back to the old value.
                 runSpi.resetRetryState(currentRunId);
             }
 
@@ -574,7 +574,7 @@ public class SessionRunner {
                 case COMPACTED -> {
                     CompactionOutcome outcome = turn.compactionOutcome();
                     if (outcome != CompactionOutcome.COMPLETED) {
-                        // 没有真实进展：本轮带当前上下文直接发；连续失败达到上限后本 run 不再压缩。
+                        // No real progress: send this turn with the current context directly; once failures reach the limit this run stops compacting.
                         compactionRetries++;
                         consecutiveCompactionFailures++;
                         if (consecutiveCompactionFailures >= RunnerConstants.MAX_CONSECUTIVE_COMPACTION_FAILURES) {
@@ -589,9 +589,9 @@ public class SessionRunner {
                     }
                     consecutiveCompactionFailures = 0;
                     log.info("Compaction completed, reassembling history (attempt {})", compactionRetries);
-                    // 只替换可压缩的历史前缀；当前 run 的内存消息（user / 工具轮 / 观察）原样保留。
-                    // 旧实现清空后从数据库重放，而 HistoryLoader 默认排除当前 run —— 工具轮会丢上下文、
-                    // 首轮还会把当前 user 既写进摘要又重新加一遍。
+                    // Replace only the compactable history prefix; the current run's in-memory messages (user / tool loops / observations) are kept as-is.
+                    // The old implementation cleared everything and replayed from the DB, while HistoryLoader excludes the current run by default — tool loops lost their context,
+                    // and the first turn wrote the current user into the summary and added it again.
                     List<ChatMessageDTO> currentRunTail = currentRunStart >= 0 && currentRunStart <= messages.size()
                             ? new ArrayList<>(messages.subList(currentRunStart, messages.size()))
                             : new ArrayList<>();
@@ -634,13 +634,13 @@ public class SessionRunner {
                     continue;
                 }
                 case RETRY_LATER -> {
-                    // 取消与挂起在同一窗口竞争时，已取消的 run 不得再创建等待记录
+                    // Cancel and suspension racing in the same window: an already-cancelled run must not create a wait record
                     if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                         log.info("Run {} cancelled before retry suspension; not creating wait", currentRunId);
                         break loop;
                     }
                     if (pendingWaitSpi == null) {
-                        // 兜底：测试/异常装配下没有挂起 SPI 时退回 FAILED，至少不会静默丢 run
+                        // Fallback: when there is no suspension SPI (tests / abnormal wiring), degrade to FAILED so the run is at least not silently dropped
                         log.error("PendingWaitSpi unavailable; failing run {} instead of suspending for retry",
                                 currentRunId);
                         currentRun.setStatus(RunStatus.FAILED.name());
@@ -654,8 +654,8 @@ public class SessionRunner {
                                         .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                         break loop;
                     }
-                    // LLM 瞬时失败：梯度退避 + 挂起（不占执行资源），到点由 wait 调度器唤醒重跑同一轮。
-                    // 关键：本轮不消耗 loopCount（失败轮没有自增），恢复后从原轮次继续。
+                    // Transient LLM failure: graded backoff + suspension (no execution resources held); the wait scheduler wakes it when due to re-run the same turn.
+                    // Key: this turn does not consume loopCount (the failed turn did not increment it), so after resume it continues from the original loop.
                     int attempt = turn.retryAttempt();
                     AgentRuntimeProperties.RunnerConfig retryCfg = properties.getRunner();
                     int maxAttempts = LlmRetryPolicy.maxAttempts(retryCfg);
@@ -664,7 +664,7 @@ public class SessionRunner {
                     pendingWaitSpi.createRetry(sessionId, currentRunId, attempt, wakeAt,
                             turn.retryHint(), turn.httpStatus(), turn.errorMessage());
 
-                    // 建 wait 与取消仍可能交错：再确认一次，已取消就把刚建的那条收掉
+                    // Creating the wait and cancelling can still interleave: check once more and retract the just-created row if already cancelled
                     if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                         pendingWaitSpi.cancelPendingByRunId(currentRunId);
                         log.info("Run {} cancelled during retry suspension; wait cancelled", currentRunId);
@@ -674,7 +674,7 @@ public class SessionRunner {
                     currentRun.setRetryAttempt(attempt);
                     currentRun.setWaitKind(WaitConstants.KIND_LLM_RETRY);
                     currentRun.setStatus(RunStatus.WAITING.name());
-                    // 条件更新：run 已被取消/终态时不能再写回 WAITING
+                    // Conditional update: an already-cancelled/terminal run must not be written back to WAITING
                     if (!runSpi.markWaitingForRetry(currentRunId, attempt)) {
                         pendingWaitSpi.cancelPendingByRunId(currentRunId);
                         log.info("Run {} is no longer active; retry suspension aborted", currentRunId);
@@ -699,7 +699,7 @@ public class SessionRunner {
                     break loop;
                 }
                 case ERROR -> {
-                    // 取消在 LLM 调用期间到达时，取消优先于失败
+                    // When a cancel arrives during the LLM call, cancel takes precedence over failure
                     if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                         break loop;
                     }
@@ -714,7 +714,7 @@ public class SessionRunner {
                     break loop;
                 }
                 case COMPLETE -> {
-                    // 取消在 LLM 调用期间到达时，取消优先于完成
+                    // When a cancel arrives during the LLM call, cancel takes precedence over completion
                     if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                         break loop;
                     }
@@ -722,8 +722,8 @@ public class SessionRunner {
                         hasToolCalls = false;
                         continue;
                     }
-                    // L2：agentic 流程里的沉默不是完成。模型必须以 finish 显式收口；
-                    // 连续静默超过上限就判失败 —— 否则「只说了几句就放弃」会被记成成功。
+                    // L2: silence in the agentic flow is not completion. The model must finalize explicitly with finish;
+                    // exceeding the consecutive-silence limit is a failure — otherwise "gave up after a couple of sentences" would be recorded as success.
                     CompletionProtocol completionProtocol = CompletionProtocol.from(
                             currentRun != null ? currentRun.getCompletionProtocol() : null);
                     boolean implicitText = completionProtocol == CompletionProtocol.IMPLICIT_TEXT
@@ -747,8 +747,8 @@ public class SessionRunner {
                                 RuntimeEventDataVO.builder()
                                         .sessionId(sessionId)
                                         .runId(currentRunId)
-                                        .errorMessage("模型连续 " + currentSilentTurn
-                                                + " 轮未调用任何工具，也未调用 finish 收口")
+                                        .errorMessage("The model produced no tool call and did not call finish for "
+                                                + currentSilentTurn + " consecutive turns")
                                         .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
                         break loop;
                     }
@@ -756,13 +756,13 @@ public class SessionRunner {
                         log.warn("Run {} completed by implicit text after tool use (completionProtocol={}, finishReason={}, contentChars={})",
                                 currentRunId, completionProtocol, turn.finishReason(), turn.content().length());
                     }
-                    // 注意：这里<b>不能</b>置 loopCapped。走到本分支说明模型在最后一轮主动交付了答案，
-                    // 那是一次正常完成，不是被上限截断。旧实现在此也置 loopCapped，导致
-                    // 「恰好在最后一轮收工」与「被截断出半成品」被混为一谈；任务守卫
-                    // (AgentTaskServiceImpl) 据此一票否决，把这份完整产出整个丢掉
-                    // ——线上 run 1575（status=empty/stopReason=POOL_EXHAUSTED，池子跑完的完整结论）
-                    // 就是这样被回成 {"error":"run loop limit reached"} 的。
-                    // 真截断只在下面的工具轮分支标记。
+                    // Note: loopCapped must <b>not</b> be set here. Reaching this branch means the model delivered an answer on the last loop,
+                    // which is a normal completion, not truncation by the limit. The old implementation also set loopCapped here, so
+                    // "finished exactly on the last loop" and "truncated into a half-finished result" were conflated; the task guard
+                    // (AgentTaskServiceImpl) then vetoed it on that basis and threw the whole complete output away
+                    // — production run 1575 (status=empty/stopReason=POOL_EXHAUSTED, the complete conclusion of a finished pool)
+                    // was replied with {"error":"run loop limit reached"} exactly this way.
+                    // Real truncation is marked only in the tool-loop branch below.
                     String reply = allContent.toString();
                     if (reply != null && !reply.isBlank()) {
                         currentRun.setAssistantReply(reply);
@@ -786,8 +786,8 @@ public class SessionRunner {
                 }
             }
 
-            // 这一轮真正发出去了（工具轮）：重置本轮重试计数；若本 run 已连续失败到上限，
-            // 保持关闭压缩，避免每个工具轮都重新尝试一次注定失败的摘要调用。
+            // This turn really sent (tool loop): reset the retry counter for this turn; if this run has already failed up to the limit,
+            // keep compaction off so every tool loop does not re-attempt a summarization call doomed to fail.
             skipCompaction = compactionDisabledForRun;
             compactionRetries = 0;
 
@@ -810,7 +810,7 @@ public class SessionRunner {
             ChatMessageDTO assistantTurn = new ChatMessageDTO()
                     .setRole(LlmApiConstant.ROLE_ASSISTANT)
                     .setToolCalls(toolCallDTOs);
-            // 正文（若有）必须保留：否则压缩/tail/resume 都只剩 tool 调用，模型看不到自己说过什么
+            // The body (if any) must be kept: otherwise compaction/tail/resume would leave only tool calls, and the model could not see what it said
             if (turn.content() != null && !turn.content().isBlank()) {
                 assistantTurn.setContent(turn.content());
             }
@@ -878,8 +878,8 @@ public class SessionRunner {
                                 .publishId(runPublishId).build()));
             }
 
-            // 含 delegate 工具的轮次：外层 fiber 整批执行超时要容得下子 Agent 自身预算（子 Agent 会按自己的 deadline 自终止），
-            // 否则长子 Agent 会在默认 30s 被执行超时打断 → "Tool execution lost"/InterruptedException。
+            // A turn containing the delegate tool: the outer fiber's batch execution timeout must accommodate the sub-agent's own budget (sub-agents self-terminate on their deadline),
+            // otherwise a long sub-agent is interrupted by the default 30s execution timeout → "Tool execution lost"/InterruptedException.
             Duration batchExecutionTimeout = properties.getTool().getExecutionTimeout();
             boolean hasSubRunTool = turn.toolCalls().stream()
                     .anyMatch(tc -> toolExecutor.isSubRunTool(tc.name(), tools));
@@ -898,7 +898,7 @@ public class SessionRunner {
             final Long rid = currentRunId;
             final List<RuntimeTool> tl = tools;
 
-            // 逐个完成时立即推送 SUCCEEDED 事件，不等所有工具完成
+            // Push the SUCCEEDED event as each one completes, without waiting for all tools
             fibers.onEachResult(sr -> {
                 TurnToolCall matching = turn.toolCalls().stream()
                         .filter(tc -> tc.id().equals(sr.callId()))
@@ -921,8 +921,8 @@ public class SessionRunner {
                                     .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + matching.id()).build()));
                     return;
                 }
-                // wait 的“结果”只是挂起信号，不代表等待已经完成：此时保持 RUNNING，
-                // 到点由 recordWaitToolSucceeded 发送 SUCCEEDED 并回填 elapsed_ms/resumed_at。
+                // wait's "result" is only a suspension signal, not that the wait has completed: the run stays RUNNING here,
+                // and when due recordWaitToolSucceeded sends SUCCEEDED and backfills elapsed_ms/resumed_at.
                 ToolCallStatus resultStatus = SuspenseStatusResolver.resolve(matching.name(), artifact)
                         == RunStatus.WAITING
                         ? ToolCallStatus.RUNNING
@@ -945,11 +945,11 @@ public class SessionRunner {
                 break;
             }
 
-            // finish：模型显式声明任务完成 —— agentic run 的唯一合法结束方式。
-            // 必须在提交任何工具之前处理：同轮其它工具不执行（避免"边收尾边产生副作用"）。
-            // 它们的 PENDING 记录已由 runTurn 的 PENDING 事件创建，必须各自补一条 FAILED 关闭，
-            // 否则 timeline 会永久停在 PENDING。本分支也先于 isLastLoop 的 markLoopCapped，
-            // 保证「最后一轮 finish」是一次干净完成、不被标成 loop cap。
+            // finish: the model explicitly declares the task complete — the only legal way for an agentic run to end.
+            // Must be handled before submitting any tool: other tools in the same turn are not executed (avoiding "producing side effects while wrapping up").
+            // Their PENDING records were created by runTurn's PENDING event and must each be closed with a FAILED row,
+            // otherwise timeline stays at PENDING forever. This branch also runs before isLastLoop's markLoopCapped,
+            // ensuring "finish on the last loop" is a clean completion and is not marked as a loop cap.
             TurnToolCall finishCall = null;
             for (TurnToolCall tcc : turn.toolCalls()) {
                 if (FinishConstants.TOOL_NAME.equals(tcc.name())) {
@@ -973,7 +973,7 @@ public class SessionRunner {
                                     .errorMessage("skipped: finish was called in the same turn")
                                     .publishId(RuntimeEventTypeConstant.PUBLISH_ID_TOOL + other.id()).build()));
                 }
-                // 关闭 finish 自身的 PENDING 记录
+                // Close finish's own PENDING record
                 eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.SUCCEEDED,
                         RuntimeEventDataVO.builder()
                                 .sessionId(sessionId)
@@ -1019,8 +1019,8 @@ public class SessionRunner {
             var results = fibers.awaitAll(() -> isRunCancelled(rid) || isSessionCancelled(sid));
 
             // If cancelled during tool execution, publish FAILED events and exit.
-            // 不要在此消费 CANCELLED_RUNS：终态（run=CANCELLED + 终态事件）统一由循环后的收口处理，
-            // 否则 run 会一直停留在 RUNNING 且前端收不到 run_cancelled/run_failed。
+            // Do not consume CANCELLED_RUNS here: terminal states (run=CANCELLED + terminal event) are handled uniformly by the post-loop finalization,
+            // otherwise the run would stay in RUNNING and the frontend would never receive run_cancelled/run_failed.
             if (isRunCancelled(currentRunId) || isSessionCancelled(sessionId)) {
                 for (TurnToolCall tc : turn.toolCalls()) {
                     eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
@@ -1035,10 +1035,10 @@ public class SessionRunner {
                 break;
             }
 
-            // 挂起判定：澄清（等人）与 wait（等时间）都让本轮 break 退出而不是回喂模型。
-            // 结构化解析 status，不再用 contains("\"status\":\"awaiting_user\"")：
-            // 那种写法依赖序列化后的字段顺序与字面量，改一次编码方式就会静默失效，
-            // 挂起不触发 → run 空转。
+            // Suspension decision: both clarification (waiting for a person) and wait (waiting for time) break this turn out of the loop instead of feeding the model again.
+            // Parse status structurally instead of contains("\"status\":\"awaiting_user\""):
+            // that approach depends on the serialized field order and literal, and changing the encoding once silently breaks it —
+            // the suspension does not trigger → the run spins.
             RunStatus suspendStatus = null;
             for (TurnToolCall tc : turn.toolCalls()) {
                 suspendStatus = SuspenseStatusResolver.resolve(tc.name(), results.getOrDefault(tc.id(), ""));
@@ -1048,9 +1048,9 @@ public class SessionRunner {
             }
             if (suspendStatus != null) {
                 parked = true;
-                // 挂起工具（wait / ask_clarification）也是一轮工具调用：自增并落库，
-                // 恢复后使用新的 turn_no，避免复用挂起前的 interaction 与 assistant 行，
-                // 否则挂起后的回复会落在澄清/等待卡片上方，造成时间线乱序。
+                // Suspension tools (wait / ask_clarification) are also a tool loop turn: increment and persist,
+                // so the resume uses a new turn_no and does not reuse the interaction and assistant rows from before the suspension,
+                // otherwise the reply after suspension would land above the clarification/wait card and scramble the timeline order.
                 loopCount++;
                 compactionService.snapshotRunTail(currentRunId, messages, currentRunStart);
                 currentRun.setLoopCount(loopCount);
@@ -1069,18 +1069,18 @@ public class SessionRunner {
                         RunnerConstants.JSON_ERROR_TOOL_LOST);
                 String toolMessage = toolResult;
                 if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId())) {
-                    // 完整清单已经通过尾部待办槽下发；工具回执只保留短确认，避免同一份计划占两份上下文。
+                    // The full list has already been delivered through the tail todo slot; the tool receipt keeps only a short confirmation, so one plan does not take up two contexts.
                     toolMessage = RunnerConstants.TODO_WRITE_ACK;
                 }
                 messages.add(new ChatMessageDTO()
                         .setRole(LlmApiConstant.ROLE_TOOL)
                         .setToolCallId(tc.id())
                         .setContent(toolMessage));
-                // SUCCEEDED 事件已在 onEachResult 回调中发布，此处不再重复
+                // The SUCCEEDED event was already published in the onEachResult callback; do not repeat it here
             }
 
-            // 先追加全部 tool 结果消息，再统一注入截图观察，保证
-            // assistant(tool_calls) → tool* 连续 → user 观察 的合法 OpenAI 序列（多 tool 批次不被打断）
+            // Append all tool result messages first, then inject screenshot observations uniformly, ensuring the legal OpenAI sequence
+            // assistant(tool_calls) → tool* contiguous → user observation (multi-tool batches are not interrupted)
             for (TurnToolCall tc : turn.toolCalls()) {
                 if (tc.name().equals(InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.CHROME.getId())) {
                     injectScreenshotObservation(sessionId, currentRunId, messages,
@@ -1096,14 +1096,14 @@ public class SessionRunner {
                             sessionId, InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId());
                     String freshTodolist = todoRecord != null && todoRecord.getArtifact() != null
                             ? todoRecord.getArtifact() : null;
-                    // 原位更新尾部待办槽（不重写 messages[0]，保持前缀缓存命中）
+                    // Update the tail todo slot in place (do not rewrite messages[0], keeping prefix cache hits)
                     applyTodolistSuffix(messages, freshTodolist);
                 } catch (Exception e) {
                     log.warn("Failed to refresh todolist for session {}", sessionId, e);
                 }
             }
 
-            // 最后一轮工具执行后，直接结束
+            // After the last tool loop executes, end directly
             if (isLastLoop) {
                 markLoopCapped(currentRun, maxLoopCount);
                 String fallback = allContent.length() > 0
@@ -1127,7 +1127,7 @@ public class SessionRunner {
             loopCount++;
         }
 
-        // Handle cancellation after loop exits（run 级或 session 级取消都统一收口）
+        // Handle cancellation after the loop exits (both run-level and session-level cancellations finalize uniformly)
         boolean runCancelled = isRunCancelled(currentRunId);
         if (runCancelled) {
             clearRunCancelled(currentRunId);
@@ -1141,14 +1141,14 @@ public class SessionRunner {
             support.clear(currentRunId);
         }
         if ((runCancelled || sessionCancelled) && currentRun != null) {
-            // 取消时把该 run 名下未唤醒的等待全部收掉：挂起与取消竞争时刚插入的那条也要覆盖。
+            // On cancel, close all un-woken waits under this run: the row inserted while suspension and cancel raced must be covered too.
             if (pendingWaitSpi != null) {
                 pendingWaitSpi.cancelPendingByRunId(currentRunId);
             }
             currentRun.setStatus(RunStatus.CANCELLED.name());
             runSpi.updateRun(currentRun);
-            // 发 CANCELLED（而非 FAILED）：与 DB 状态一致，前端走 run_cancelled 分支显示“已取消”。
-            // 旧实现发 FAILED，RuntimeEventListener 收到后又把 DB 覆写回 FAILED —— 取消被记成失败。
+            // Emit CANCELLED (not FAILED): consistent with the DB state, and the frontend takes the run_cancelled branch to show "cancelled".
+            // The old implementation emitted FAILED, and RuntimeEventListener then overwrote the DB back to FAILED — a cancellation was recorded as a failure.
             eventPublisher.publishEvent(new RuntimeEventVO(RunStatus.CANCELLED,
                     RuntimeEventDataVO.builder()
                             .sessionId(sessionId)
@@ -1156,9 +1156,9 @@ public class SessionRunner {
                             .assistantReply(RunnerConstants.CANCEL_MSG)
                             .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + currentRunId).build()));
         }
-        // 安全网：任何 break / 自然退出都不允许把 run 留在 RUNNING。
-        // 此时 coordinator 会把 session state 置 IDLE 并清掉 owner，而 OrphanRunSweeper 只认
-        // RUNNING/RUNNING_WITH_PENDING + 无 owner —— 永远扫不到这个组合，不兜底就是永久卡死。
+        // Safety net: no break / natural exit is allowed to leave the run in RUNNING.
+        // At that point the coordinator sets session state to IDLE and clears the owner, while OrphanRunSweeper only recognizes
+        // RUNNING/RUNNING_WITH_PENDING + no owner — it would never scan this combination, so without a fallback the run is stuck forever.
         if (currentRun != null && RunStatus.RUNNING.name().equals(currentRun.getStatus())) {
             log.warn("Run {} exited the loop without a terminal status; marking FAILED", currentRunId);
             currentRun.setStatus(RunStatus.FAILED.name());
@@ -1173,7 +1173,7 @@ public class SessionRunner {
         return parked;
     }
 
-    /** 统一写入 run 失败终态并发事件，避免重复拼装 data。 */
+    /** Uniformly writes the run failure terminal state and emits the event, avoiding repeated data assembly. */
     private void failRun(Long sessionId, RunVO run, String message) {
         if (run == null) {
             return;
@@ -1189,7 +1189,7 @@ public class SessionRunner {
                         .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + run.getId()).build()));
     }
 
-    /** 从异常完成的 future 中提取可落库的失败原因（ExecutionException 需要拆 cause）。 */
+    /** Extracts a persistable failure reason from an abnormally completed future (ExecutionException needs its cause unwrapped). */
     private static String futureFailureMessage(CompletableFuture<?> future) {
         try {
             future.get();
@@ -1212,7 +1212,7 @@ public class SessionRunner {
         }
     }
 
-    /** currentRunStart = 已加入 messages 的前缀长度 + history 内的相对下标；history 无当前 run 时取末尾。 */
+    /** currentRunStart = length of the prefix already added to messages + the relative index inside history; when history has no current run, use the end. */
     static int resolveCurrentRunStart(int base, HistoryLoader.HistoryResult history, int totalAfterHistory) {
         if (history == null || history.currentRunStart() < 0) {
             return totalAfterHistory;
@@ -1220,7 +1220,7 @@ public class SessionRunner {
         return base + history.currentRunStart();
     }
 
-    /** 达到轮次上限强收口时标记 run（任务守卫据 loopCapped 判失败，避免"半成品"冒充完成）。 */
+    /** Marks the run when forced finalization hits the loop limit (the task guard judges failure by loopCapped, so a "half-finished" result cannot pose as complete). */
     private void markLoopCapped(RunVO run, int maxLoopCount) {
         if (run == null) {
             return;
@@ -1229,7 +1229,7 @@ public class SessionRunner {
         log.warn("Run {} hit loop cap {} (loopCapped=true, task guard will fail the task)", run.getId(), maxLoopCount);
     }
 
-    /** 压缩重组后从 DB 重新注入待办槽，避免 todo 被摘要/ tail 选择丢掉。 */
+    /** Re-inject the todo slot from the DB after compaction reassembly, so todos are not lost to summary / tail selection. */
     private void refreshTodolistSlot(Long sessionId, List<ChatMessageDTO> messages) {
         try {
             AgentToolCallRecordVO todo = toolCallRecordSpi.getLatestBySessionAndToolName(
@@ -1241,9 +1241,9 @@ public class SessionRunner {
     }
 
     /**
-     * 原位维护消息列表尾部的待办槽：以 {@link RunnerConstants#PROMPT_TODOLIST_HEADER} 定位已有槽
-     * （存在 −> 原位替换；不存在 −> 在 FINAL_TURN 之前或列表末尾插入），避免中间位移破坏前缀缓存。
-     * todolistText 为空时移除旧槽。messages[0] 与历史前缀保持字节不变。
+     * Maintains the todo slot at the tail of the message list in place: locates an existing slot by {@link RunnerConstants#PROMPT_TODOLIST_HEADER}
+     * (present −> replace in place; absent −> insert before FINAL_TURN or at the end of the list), avoiding middle shifts that break the prefix cache.
+     * Removes the old slot when todolistText is empty. messages[0] and the history prefix stay byte-identical.
      */
     private void applyTodolistSuffix(List<ChatMessageDTO> messages, String todolistText) {
         if (messages == null) {
@@ -1268,7 +1268,7 @@ public class SessionRunner {
             messages.get(existingSlot).setContent(suffix);
             return;
         }
-        // 无已有槽：优先插在尾部预告块之前，保证待办是"最末可见 system"之一
+        // No existing slot: insert before the tail notice block when possible, so the todo is one of the "last visible system" messages
         int insertAt = tailNoticeBlockStart(messages);
         messages.add(insertAt, new ChatMessageDTO()
                 .setRole(LlmApiConstant.ROLE_SYSTEM)
@@ -1276,21 +1276,21 @@ public class SessionRunner {
     }
 
     /**
-     * 重建消息列表尾部的预告块：loop 预算预告（每轮都有）+ 硬收口（剩余 ≤
-     * {@link RunnerConstants#FINAL_TURN_INSTRUCTION_LEAD} 轮时起，每轮都带）。
+     * Rebuilds the notice block at the tail of the message list: the loop budget notice (every loop) + hard finalization (from when remaining ≤
+     * {@link RunnerConstants#FINAL_TURN_INSTRUCTION_LEAD} loops, included every loop).
      *
-     * <p>每轮重建而不是原位替换：工具轮会往 messages 尾部追加 assistant(tool_calls)/tool/观察消息，
-     * 上一轮的预算副本会被挤进历史中间，既白烧 context 又与新文案矛盾。清除用 marker
-     * 全表扫描，保证全列表恒只有一份当前轮次的预算。
+     * <p>Rebuilt every loop instead of replaced in place: tool loops append assistant(tool_calls)/tool/observation messages to the tail of messages,
+     * so the previous loop's budget copy would be pushed into the middle of the history, wasting context and contradicting the new text. Removal uses a full
+     * table scan by marker, guaranteeing exactly one copy of the current loop's budget at all times.
      *
-     * <p>硬收口从 n-{@code LEAD} 起注入而非等到最后一轮：收口只是提示、不强制，而模型常常正好
-     * 在最后一轮才收工，只给 1 轮收尾太紧（详见 {@link RunnerConstants#FINAL_TURN_INSTRUCTION_LEAD}）。
-     * 它是<b>持续</b>注入的 —— 一旦进入该窗口，n-2、n-1 同样携带，直到本方法每轮重建时重新判定。
+     * <p>Hard finalization starts at n-{@code LEAD} instead of waiting for the last loop: finalization is only a hint, not enforced, and models often
+     * really wrap up only on the last loop, so 1 loop is too tight to finish (see {@link RunnerConstants#FINAL_TURN_INSTRUCTION_LEAD}).
+     * It is injected <b>continuously</b> — once inside that window, n-2 and n-1 carry it too, until this method's per-loop rebuild decides again.
      */
     /**
-     * 静默追问：本轮没有工具调用时，给模型一条尾部提示（marker 定位，每轮替换而不是累积）。
+     * Silent follow-up: when this turn has no tool calls, give the model a tail hint (located by marker, replaced every loop instead of accumulating).
      *
-     * <p>只对已经进入 agentic 流程的 run 生效 —— 纯聊天实例（从未用过工具）保持「回文本即完成」。
+     * <p>Only applies to runs that have already entered the agentic flow — pure chat instances (never used a tool) keep "returning text means done".
      */
     private void applySilentTurnNudge(List<ChatMessageDTO> messages, int silentTurns) {
         if (messages == null || messages.isEmpty()) {
@@ -1330,8 +1330,8 @@ public class SessionRunner {
     }
 
     /**
-     * 尾部预告块（loop 预算 / 终轮收口）的起始下标；没有则返回列表长度（即末尾）。
-     * 待办槽插在它前面，避免轮中刷新待办后被预告挤到中间、失去「最末可见 system」的效力。
+     * Start index of the tail notice block (loop budget / final-turn finalization); the list length (i.e. the end) when there is none.
+     * The todo slot is inserted before it, so a mid-loop todo refresh is not pushed into the middle by the notice and loses its "last visible system" effect.
      */
     private int tailNoticeBlockStart(List<ChatMessageDTO> messages) {
         for (int i = 0; i < messages.size(); i++) {
@@ -1347,14 +1347,14 @@ public class SessionRunner {
     }
 
     /**
-     * P5：技能执行一致性（**仅日志**，不写 remark/stopReason）。
+     * P5: skill execution consistency (**log only**; does not write remark/stopReason).
      *
-     * <p>判据（宽松、可计算、不依赖模型自述）：
+     * <p>Criteria (loose, computable, not relying on the model's self-report):
      * <ul>
-     *   <li>{@code skillReads=0} → 整个 run 从未读取技能（最强信号）；</li>
-     *   <li>{@code writesBeforeSkillRead>0} → 在读取技能之前就已产生写动作（未按技能执行）。</li>
+     *   <li>{@code skillReads=0} → the run never read a skill (strongest signal);</li>
+     *   <li>{@code writesBeforeSkillRead>0} → a write action occurred before reading the skill (did not follow the skill).</li>
      * </ul>
-     * 输出固定标记 {@code [SKILL_COMPLIANCE]}，事后可 grep / 聚合。
+     * The fixed marker {@code [SKILL_COMPLIANCE]} is emitted so it can be grepped / aggregated later.
      */
     private void logSkillCompliance(Long sessionId, Long runId) {
         try {
@@ -1390,7 +1390,7 @@ public class SessionRunner {
         }
     }
 
-    /** chrome 写动作判定（按 argumentsJson 的 action 字段；与 chrome 工具的 ACTION_* 对齐）。 */
+    /** chrome write-action detection (based on the argumentsJson action field; aligned with the chrome tools' ACTION_*). */
     private static boolean isChromeWriteAction(String args) {
         return args.contains("\"action\":\"click\"")
                 || args.contains("\"action\":\"type\"")
@@ -1423,9 +1423,9 @@ public class SessionRunner {
         int maxAttempts = LlmRetryPolicy.maxAttempts(retryCfg);
         AtomicReference<String> turnReasoningOut = turnReasoning;
         for (int attempt = 0; ; attempt++) {
-            // 1-based：跨挂起累计的失败次数（前几档就地重试，后续档挂起）
+            // 1-based: failures accumulated across suspensions (the first few steps retry in place, later steps suspend)
             int failureNo = retryAttempt + attempt + 1;
-            // 首次调用不算重试：retry_attempt 只在真正重试（内联/挂起）时标记档位
+            // The first call is not a retry: retry_attempt marks a step only when it is a real retry (inline/suspended)
             Integer retryMark = (attempt > 0 || retryAttempt > 0) ? failureNo : null;
             if (attempt > 0) {
                 long backoffMs = LlmRetryPolicy.delayMs(retryCfg, failureNo - 1);
@@ -1438,17 +1438,17 @@ public class SessionRunner {
                     return TurnResult.error("LLM turn retry interrupted");
                 }
             }
-            // 每轮独立累积，避免重试残留上轮的输出/工具调用
+            // Accumulated independently per loop, so retries do not carry over the previous loop's output/tool calls
             AtomicReference<String> contentRef = new AtomicReference<>("");
             List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
             AtomicReference<String> errorRef = new AtomicReference<>();
-            // 本次尝试的错误是否值得重试：4xx（408/429 除外）是终态错误，重试只会把一次失败放大成多次
+            // Whether this attempt's error is worth retrying: 4xx (except 408/429) is a terminal error, and retrying would only amplify one failure into many
             java.util.concurrent.atomic.AtomicBoolean errorRetryableRef =
                     new java.util.concurrent.atomic.AtomicBoolean(true);
             AtomicReference<Integer> errorStatusRef = new AtomicReference<>();
             AtomicReference<String> reasoningRef = new AtomicReference<>("");
-            // 本次尝试的真实 finish_reason（stop/length/content_filter/tool_calls），供调用方区分
-            // 「模型主动停」与「被截断/被过滤」。
+            // This attempt's real finish_reason (stop/length/content_filter/tool_calls), letting the caller distinguish
+            // "the model stopped on its own" from "truncated/filtered".
             AtomicReference<String> finishReasonRef = new AtomicReference<>();
             java.util.concurrent.atomic.AtomicBoolean compactionTriggered = new java.util.concurrent.atomic.AtomicBoolean(false);
             java.util.concurrent.atomic.AtomicBoolean outputExhaustedRef = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -1462,19 +1462,19 @@ public class SessionRunner {
             try {
                 List<ModelRouteFullVO> routes = resolveRoutes(sessionId, ctx);
 
-                // 图片附件请求：仅允许能处理附件的路由，避免落到纯文本模型（400/静默忽略）
+                // Image attachment request: only routes that can handle attachments are allowed, avoiding falling to a text-only model (400/silently ignored)
                 if (hasAttachmentImage(messages) && !routes.isEmpty()) {
                     List<ModelRouteFullVO> capable = routes.stream()
                             .filter(r -> Boolean.TRUE.equals(r.getSupportsAttachment()))
                             .toList();
                     if (capable.isEmpty()) {
-                        // 没有能处理图片的路由：剥离图片降级为纯文本继续（不阻断 run）
+                        // No route can handle images: strip the images and degrade to plain text (does not block the run)
                         log.info("No attachment-capable route, degrading to text: session={}, run={}", sessionId, runId);
                         stripImageParts(messages);
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
                                 RuntimeEventDataVO.builder()
                                         .sessionId(sessionId).runId(runId)
-                                        .response("⚠️ 当前路由均不支持图片，已按纯文本继续处理")
+                                        .response("⚠️ The current route does not support images; continuing with text only")
                                         .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                         .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                         .publishId(UUID.randomUUID().toString()).build()));
@@ -1489,8 +1489,8 @@ public class SessionRunner {
                         cancelled.set(true);
                         throw new RuntimeException("Run cancelled");
                     }
-                    // 每个路由独立累积：主路由失败后由 fallback 重跑时，
-                    // 不能把上一条路由的部分正文/工具调用/错误带进来。
+                    // Accumulated independently per route: when the fallback re-runs after the primary route fails,
+                    // it must not carry over the previous route's partial body/tool calls/errors.
                     errorRef.set(null);
                     errorRetryableRef.set(true);
                     errorStatusRef.set(null);
@@ -1500,7 +1500,7 @@ public class SessionRunner {
                     java.util.concurrent.atomic.AtomicBoolean acceptingEvents =
                             new java.util.concurrent.atomic.AtomicBoolean(true);
 
-                    // 只投影请求副本：canonical messages 保留完整工具结果，供压缩/快照使用。
+                    // Project only the request copy: canonical messages keep the full tool results for compaction/snapshots.
                     Map<String, Boolean> compressByTool = new HashMap<>();
                     for (RuntimeTool t : tools) {
                         compressByTool.put(t.getLlmToolName(), t.isCompressEnabled());
@@ -1512,8 +1512,8 @@ public class SessionRunner {
                             properties.getRunner().getLiveBrowserFullMaxChars(),
                             compressByTool);
 
-                    // ★ 压缩检查：必须用实际会发给模型的投影消息，避免 canonical 工具结果把估算放大。
-                    // 触发只看输入；skipCompaction 仅在「重试耗尽、压缩已被证明救不回来」的下一轮为 true。
+                    // * Compaction check: must use the projected messages actually sent to the model, avoiding canonical tool results inflating the estimate.
+                    // Triggering looks only at input; skipCompaction is true only on a loop where "retries are exhausted and compaction is proven not to help".
                     CompactionService.CompactionDecision decision = compactionService.evaluate(
                             projectedMessages, route, toolDefs);
                     long maxInputTokens = route.getMaxInputTokens() != null
@@ -1523,7 +1523,7 @@ public class SessionRunner {
                     int requestMax = compactionService.resolveRequestMaxOutput(
                             maxInputTokens, decision == null ? 0 : decision.estimated(), nominalChatMax);
 
-                    // 输出空间已不足：先压缩；压缩救不回来时直接失败，绝不发注定 400 的请求。
+                    // Output space is already insufficient: compact first; if compaction cannot help, fail directly and never send a request doomed to 400.
                     boolean outputExhausted = requestMax < RunnerConstants.MIN_CHAT_OUTPUT_TOKENS;
                     outputExhaustedRef.set(outputExhausted);
                     if (!skipCompaction && (outputExhausted
@@ -1533,8 +1533,8 @@ public class SessionRunner {
                         return null;
                     }
                     if (outputExhausted) {
-                        // 压缩已被判定救不回来（skipCompaction）：优先尝试更大上下文的 fallback 路由；
-                        // 最后一条路由仍放不下则直接失败，且标记为不可重试（换路由/重试都不会变好）。
+                        // Compaction has been judged unable to help (skipCompaction): prefer a fallback route with a larger context first;
+                        // if even the last route cannot fit it, fail directly and mark it non-retryable (switching routes/retrying will not help).
                         if (i < activeRoutes.size() - 1) {
                             throw new RouteAttemptException(
                                     RunnerConstants.RUN_CONTEXT_OVERFLOW_MSG, null, true);
@@ -1552,10 +1552,10 @@ public class SessionRunner {
                     if (!toolDefs.isEmpty()) {
                         request.setTools(toolDefs);
                     }
-                    // 采样参数接线：全局默认 + 实例 config 覆盖。
+                    // Sampling parameter wiring: global defaults + instance config override.
                     llmRequestConfigurer.applyChat(request, instanceConfig);
-                    // 思考强度：run 固化档位 + 本轮 requestMax 驱动的有效档位/Qwen 预算（V118）。
-                    // 手选档位在输出空间不足时只降不升，避免全部预算耗在 reasoning 上。
+                    // Reasoning effort: the run's pinned level + the effective level/Qwen budget driven by this turn's requestMax (V118).
+                    // A manually selected level only drops (never rises) when output space is insufficient, so the whole budget is not spent on reasoning.
                     ReasoningEffortResolver.Resolved reasoning = reasoningEffortResolver.resolve(
                             route, route.getConfig(), requestMax, ctx.getReasoningEffort());
                     if (reasoning.supported() && reasoning.effectiveLevel() != null) {
@@ -1576,7 +1576,7 @@ public class SessionRunner {
                             route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(),
                             request,
                             event -> {
-                                // 超时/异常后旧流可能还会吐事件；拒绝写入，避免污染 fallback 的结果。
+                                // After a timeout/exception the old stream may still emit events; reject writes so the fallback's result is not polluted.
                                 if (!acceptingEvents.get()) return;
                                 switch (event) {
                                     case LLMEvent.TextDelta t -> {
@@ -1596,8 +1596,8 @@ public class SessionRunner {
                                                         .publishId(UUID.randomUUID().toString()).build()));
                                     }
                                     case LLMEvent.ToolInputStart start -> {
-                                        // 参数可能还要流式生成几十秒（如整篇文档），先给前端一个
-                                        // “正在生成调用参数”的即时反馈；审批卡仍等参数完整后创建。
+                                        // Arguments may take tens of seconds to stream (e.g. a whole document), so give the frontend an immediate
+                                        // "generating call arguments" feedback first; the approval card is still created only after the arguments are complete.
                                         eventPublisher.publishEvent(new RuntimeEventVO(
                                                 FlowEventType.REASONING_TOKEN,
                                                 RuntimeEventDataVO.builder()
@@ -1610,7 +1610,7 @@ public class SessionRunner {
                                                         .displayNameCn(toolExecutor.resolveDisplayName(start.name(), tools))
                                                         .displayNameEn(toolExecutor.resolveDisplayNameEn(start.name(), tools))
                                                         .response("⚙️ " + toolExecutor.resolveDisplayName(start.name(), tools)
-                                                                + "：正在生成调用参数…").build()));
+                                                                + ": generating call arguments…").build()));
                                     }
                                     case LLMEvent.ToolCall tc -> {
                                         String callPublishId = RuntimeEventTypeConstant.PUBLISH_ID_TOOL + tc.id();
@@ -1624,8 +1624,8 @@ public class SessionRunner {
                                                         .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), tools))
                                                         .argumentsJson(tc.arguments())
                                                         .publishId(callPublishId).build()));
-                                        // finish 的 summary 就是最终答案：正文为空时作为助手正文实时推给前端。
-                                        // 否则前端只剩一张 finish 工具卡、答案空白；正文已流式输出时不重复发。
+                                        // finish's summary is the final answer: when the body is empty, push it to the frontend in real time as the assistant body.
+                                        // Otherwise the frontend would show only a finish tool card with a blank answer; do not resend when the body has already streamed.
                                         if (FinishConstants.TOOL_NAME.equals(tc.name())) {
                                             String summary = jsonField(tc.arguments(), FinishConstants.JSON_SUMMARY);
                                             if (summary != null && !summary.isBlank() && contentRef.get().isEmpty()) {
@@ -1680,7 +1680,7 @@ public class SessionRunner {
                         throw new RuntimeException(e);
                     }
 
-                    // 超时/底层异常会以 future 异常完成；旧实现只等 latch，导致超时被当成正常结束。
+                    // A timeout/underlying exception completes the future exceptionally; the old implementation waited only on the latch, so a timeout was treated as a normal finish.
                     if (future.isCompletedExceptionally()) {
                         acceptingEvents.set(false);
                         String failure = futureFailureMessage(future);
@@ -1688,7 +1688,7 @@ public class SessionRunner {
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
                                 RuntimeEventDataVO.builder()
                                         .sessionId(sessionId).runId(runId)
-                                        .response("⚠️ " + route.getModelName() + ": " + failure + "，尝试备用路由...")
+                                        .response("⚠️ " + route.getModelName() + ": " + failure + ", trying fallback route...")
                                         .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                         .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                         .publishId(UUID.randomUUID().toString()).build()));
@@ -1701,7 +1701,7 @@ public class SessionRunner {
                         eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN,
                                 RuntimeEventDataVO.builder()
                                         .sessionId(sessionId).runId(runId)
-                                        .response("⚠️ " + route.getModelName() + ": " + error + "，尝试备用路由...")
+                                        .response("⚠️ " + route.getModelName() + ": " + error + ", trying fallback route...")
                                         .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
                                         .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
                                         .publishId(UUID.randomUUID().toString()).build()));
@@ -1714,8 +1714,8 @@ public class SessionRunner {
             } catch (Exception e) {
                 if (!cancelled.get()) {
                     log.error("Turn execution failed for session {}", sessionId, e);
-                    // 所有路由都失败时 errorRef 可能仍为空（例如 All routes exhausted），
-                    // 必须把异常本身记成失败原因，否则会被当成空回复继续走。
+                    // When all routes fail, errorRef may still be empty (e.g. All routes exhausted),
+                    // so the exception itself must be recorded as the failure reason; otherwise it would be treated as an empty reply and processing continues.
                     String current = errorRef.get();
                     if (current == null || current.isBlank()) {
                         String message = e.getMessage();
@@ -1725,7 +1725,7 @@ public class SessionRunner {
                 }
             }
 
-            // ★ 压缩触发：session 级失败/无历史时尝试当前 run 的 run-local 压缩。
+            // * Compaction trigger: on a session-level failure / no history, try run-local compaction of the current run.
             if (compactionTriggered.get()) {
                 CompactionOutcome sessionOutcome = compactionService.compact(sessionId, runId, ctx);
                 if (sessionOutcome == CompactionOutcome.COMPLETED) {
@@ -1778,7 +1778,7 @@ public class SessionRunner {
             }
 
             String error = errorRef.get();
-            // 瞬时失败且尚无任何输出 → 按梯度重试：前几档就地 sleep，后续档挂起（WAITING + kind=LLM_RETRY）
+            // Transient failure with no output yet → graded retry: the first few steps sleep in place, later steps suspend (WAITING + kind=LLM_RETRY)
             if (error != null && LlmRetryPolicy.isTransient(errorStatusRef.get(), errorRetryableRef.get())
                     && getTurnContent(contentRef).isEmpty() && toolCalls.isEmpty()
                     && failureNo <= maxAttempts
@@ -1796,17 +1796,17 @@ public class SessionRunner {
                 return TurnResult.error(error).withFinishReason(finishReason);
             }
             if (!toolCalls.isEmpty()) {
-                // 工具轮：即使正文被截断，工具参数已完整或本就不可用，按正常工具轮继续
+                // Tool loop: even if the body was truncated, the tool arguments are already complete or were never usable, so continue as a normal tool loop
                 return TurnResult.toolCalls(getTurnContent(contentRef), toolCalls).withFinishReason(finishReason);
             }
-            // 有正文却没有 LLMEvent.Finish：说明流被截断/连接提前关闭，
-            // 不能把半截正文当成完整回答。完全空的流沿用原语义，避免把无事件路径误判为错误。
+            // There is a body but no LLMEvent.Finish: the stream was truncated / the connection closed early,
+            // and the partial body must not be treated as a complete answer. A completely empty stream keeps the original semantics, so eventless paths are not misjudged as errors.
             if ((finishReason == null || finishReason.isBlank())
                     && !getTurnContent(contentRef).isEmpty()) {
                 return TurnResult.error("LLM stream ended without finish_reason (missing LLMEvent.Finish); "
                         + "refusing to treat partial output as completion");
             }
-            // 没有工具调用却「非正常结束」→ 不能当完成（否则半截答案会被标 COMPLETED）
+            // No tool calls yet "abnormal finish" → cannot count as complete (otherwise a partial answer would be marked COMPLETED)
             if (FinishReason.LENGTH.equals(finishReason)) {
                 return TurnResult.error("output truncated by max_tokens (finish_reason=length): "
                         + "raise max_tokens or shorten the requested answer")
@@ -1820,7 +1820,7 @@ public class SessionRunner {
         }
     }
 
-    /** 读取工具入参里的字符串字段；缺失/非法一律返回 null（收口逻辑要能容忍脏入参）。 */
+    /** Reads a string field from tool input; missing/invalid always returns null (finalization logic must tolerate dirty input). */
     private static String jsonField(String argumentsJson, String field) {
         if (argumentsJson == null || argumentsJson.isBlank()) {
             return null;
@@ -1838,9 +1838,9 @@ public class SessionRunner {
     }
 
     /**
-     * 第 {@code attempt} 次重试前的等待时长：{@code 基数 × 2^(attempt-1)}，封顶 {@code MAX}。
+     * Wait duration before retry number {@code attempt}: {@code base × 2^(attempt-1)}, capped at {@code MAX}.
      *
-     * <p>1-based attempt：第一次重试等 {@code BASE}，之后 2×/4× 递增。
+     * <p>1-based attempt: the first retry waits {@code BASE}, then 2×/4× and so on.
      */
     static long llmTurnRetryBackoffMs(int attempt) {
         if (attempt <= 0) {
@@ -1854,8 +1854,8 @@ public class SessionRunner {
     }
 
     /**
-     * 构建 user 消息：无附件为纯文本，有附件按 OpenAI 兼容 content parts（文本+图片）注入。
-     * 附件仅携带 fileKey，data URL 在组消息时才经 {@code attachmentResolver} 惰性回读。
+     * Builds the user message: plain text when there are no attachments, otherwise OpenAI-compatible content parts (text+images).
+     * Attachments carry only fileKey; the data URL is lazily read back through {@code attachmentResolver} only when the message is assembled.
      */
     static ChatMessageDTO buildUserMessage(SessionInputManager.InputMessage input,
                                            ChatAttachmentResolver attachmentResolver) {
@@ -1887,22 +1887,22 @@ public class SessionRunner {
         return msg.setContent(parts);
     }
 
-    /** 当前轮是否含图片附件：末条 USER 消息 content 为 parts 且含 image_url。 */
+    /** Whether the current turn has image attachments: the last USER message content is parts and contains image_url. */
     static boolean hasAttachmentImage(List<ChatMessageDTO> messages) {
         return ScreenshotObservationSupport.hasAttachmentImage(messages);
     }
 
     /**
-     * 无支持图片的路由时降级：把最后一条 USER 消息的 parts 折叠为纯文本 String
-     * （拼接 text parts，空则用 "[图片]" 占位，避免纯图片消息变成空 content 发往模型）。
+     * Degradation when no route supports images: collapse the last USER message's parts into a plain text String
+     * (concatenate text parts, using "[image]" as a placeholder when empty, so an image-only message does not become empty content sent to the model).
      */
     static void stripImageParts(List<ChatMessageDTO> messages) {
         ScreenshotObservationSupport.stripImageParts(messages);
     }
 
     /**
-     * 浏览器截图工具结果含 data.screenshot → 追加一条 USER 观察消息（text + image_url dataURL）。
-     * 委托 {@link ScreenshotObservationSupport}（与子 Agent 共用逻辑与次数上限）。
+     * When a browser screenshot tool result contains data.screenshot → append a USER observation message (text + image_url dataURL).
+     * Delegates to {@link ScreenshotObservationSupport} (shared logic and injection cap with sub-agents).
      */
     private void injectScreenshotObservation(Long sessionId, Long runId,
                                              List<ChatMessageDTO> messages, String toolResult) {
@@ -1935,7 +1935,7 @@ public class SessionRunner {
         }
     }
 
-    /** 两个输出上限都有效时取较小值；只有一个有效时用它；都无效返回 null。 */
+    /** Takes the smaller value when both output limits are valid; uses the only valid one when just one is; returns null when neither is. */
     private static Integer minPositive(Integer first, Long second) {
         boolean firstValid = first != null && first > 0;
         Integer secondInt = second != null && second > 0

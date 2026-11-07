@@ -36,7 +36,7 @@ export default function TaskArtifactList() {
       document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    message.success(t('pages.artifacts.taskArtifacts.copied', '已复制'));
+    message.success(t('pages.artifacts.taskArtifacts.copied', 'Copied'));
   };
 
   const columns = [
@@ -47,7 +47,7 @@ export default function TaskArtifactList() {
       width: 80,
     },
     {
-      title: t('pages.artifacts.taskArtifacts.task', '任务'),
+      title: t('pages.artifacts.taskArtifacts.task', 'Task'),
       key: 'task',
       ellipsis: true,
       render: (_: any, record: any) => (
@@ -60,7 +60,7 @@ export default function TaskArtifactList() {
       ),
     },
     {
-      title: t('pages.artifacts.taskArtifacts.type', '类型'),
+      title: t('pages.artifacts.taskArtifacts.type', 'Type'),
       dataIndex: 'artifactType',
       key: 'artifactType',
       width: 140,
@@ -81,7 +81,7 @@ export default function TaskArtifactList() {
       render: (v: any) => v ?? '-',
     },
     {
-      title: t('pages.table.status', '状态'),
+      title: t('pages.table.status', 'Status'),
       dataIndex: 'status',
       key: 'status',
       width: 100,
@@ -89,14 +89,14 @@ export default function TaskArtifactList() {
         v ? <Tag color={v === 'ACTIVE' ? 'green' : 'default'}>{v}</Tag> : '-',
     },
     {
-      title: t('pages.table.created', '创建时间'),
+      title: t('pages.table.created', 'Created'),
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 170,
       render: (v: any) => formatTime(v),
     },
     {
-      title: t('pages.table.actions', '操作'),
+      title: t('pages.table.actions', 'Actions'),
       key: 'actions',
       width: 90,
       render: (_: any, record: any) => (
@@ -106,7 +106,7 @@ export default function TaskArtifactList() {
           icon={<EyeOutlined />}
           onClick={() => setDetail(record)}
         >
-          {t('pages.table.detail', '详情')}
+          {t('pages.table.detail', 'Detail')}
         </Button>
       ),
     },
@@ -134,14 +134,17 @@ export default function TaskArtifactList() {
         pagination={{ defaultPageSize: 10 }}
       />
       <Drawer
-        title={t('pages.artifacts.taskArtifacts.detailTitle', '任务产物详情')}
+        title={t(
+          'pages.artifacts.taskArtifacts.detailTitle',
+          'Task Artifact Detail',
+        )}
         open={!!detail}
         onClose={() => setDetail(null)}
         size={760}
         destroyOnHidden
         extra={
           <Button type="primary" icon={<CopyOutlined />} onClick={handleCopy}>
-            {t('pages.artifacts.taskArtifacts.copy', '复制内容')}
+            {t('pages.artifacts.taskArtifacts.copy', 'Copy')}
           </Button>
         }
       >
@@ -152,11 +155,11 @@ export default function TaskArtifactList() {
               value: detail?.id,
             },
             {
-              label: t('pages.artifacts.taskArtifacts.task', '任务'),
+              label: t('pages.artifacts.taskArtifacts.task', 'Task'),
               value: detail?.taskGoal || `#${detail?.taskId}`,
             },
             {
-              label: t('pages.artifacts.taskArtifacts.type', '类型'),
+              label: t('pages.artifacts.taskArtifacts.type', 'Type'),
               value: detail?.artifactType,
             },
             {
@@ -168,19 +171,19 @@ export default function TaskArtifactList() {
               value: detail?.runId,
             },
             {
-              label: t('pages.artifacts.taskArtifacts.taskId', '任务 ID'),
+              label: t('pages.artifacts.taskArtifacts.taskId', 'Task ID'),
               value: detail?.taskId,
             },
             {
-              label: t('pages.artifacts.taskArtifacts.createdBy', '创建人'),
+              label: t('pages.artifacts.taskArtifacts.createdBy', 'Created By'),
               value: detail?.createdBy,
             },
             {
-              label: t('pages.table.created', '创建时间'),
+              label: t('pages.table.created', 'Created'),
               value: formatTime(detail?.createdAt),
             },
             {
-              label: t('pages.artifacts.taskArtifacts.remark', '备注'),
+              label: t('pages.artifacts.taskArtifacts.remark', 'Remark'),
               value: detail?.remark || '-',
             },
           ].map((row) => (
@@ -201,9 +204,7 @@ export default function TaskArtifactList() {
             </div>
           ))}
         </div>
-        <strong>
-          {t('pages.artifacts.taskArtifacts.content', '产物内容')}
-        </strong>
+        <strong>{t('pages.artifacts.taskArtifacts.content', 'Content')}</strong>
         <pre
           style={{
             marginTop: 8,

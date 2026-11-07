@@ -11,15 +11,15 @@ public interface WorkItemService {
 
     WorkItemVO get(Long id);
 
-    /** 失败/取消的任务重新排队，attempt + 1。 */
+    /** Requeues a failed/cancelled work item and increments attempt. */
     WorkItemVO retry(Long superAgentId, Long id);
 
-    /** 取消任务；运行中任务会同时停止 Worker Run。 */
+    /** Cancels a work item; a running item also stops its Worker Run. */
     WorkItemVO cancel(Long superAgentId, Long id);
 
     WorkItemVO confirmSpeculation(Long superAgentId, Long id);
 
-    /** Owner 查看该任务对应 Worker 会话的完整 timeline。 */
+    /** Owner views the full timeline of the Worker session for this work item. */
     SessionTimelinePageVO workerTimeline(Long superAgentId, Long id,
                                          Long beforeSeq, Long afterSeq, int limit);
 }

@@ -82,7 +82,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.admin.auditLogs.time',
-        defaultMessage: '时间',
+        defaultMessage: 'Time',
       }),
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -92,7 +92,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.admin.auditLogs.user',
-        defaultMessage: '用户',
+        defaultMessage: 'User',
       }),
       dataIndex: 'username',
       key: 'username',
@@ -102,7 +102,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.admin.auditLogs.action',
-        defaultMessage: '操作',
+        defaultMessage: 'Action',
       }),
       dataIndex: 'action',
       key: 'action',
@@ -112,7 +112,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.admin.auditLogs.resourceType',
-        defaultMessage: '资源类型',
+        defaultMessage: 'Resource Type',
       }),
       dataIndex: 'resourceType',
       key: 'resourceType',
@@ -122,7 +122,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.admin.auditLogs.resourceId',
-        defaultMessage: '资源 ID',
+        defaultMessage: 'Resource ID',
       }),
       dataIndex: 'resourceId',
       key: 'resourceId',
@@ -133,7 +133,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.admin.auditLogs.ipAddress',
-        defaultMessage: 'IP 地址',
+        defaultMessage: 'IP Address',
       }),
       dataIndex: 'ipAddress',
       key: 'ipAddress',
@@ -143,7 +143,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.admin.auditLogs.status',
-        defaultMessage: '状态',
+        defaultMessage: 'Status',
       }),
       dataIndex: 'success',
       key: 'success',
@@ -153,11 +153,11 @@ export default function AdminAuditLogs() {
           {s
             ? intl.formatMessage({
                 id: 'pages.admin.auditLogs.success',
-                defaultMessage: '成功',
+                defaultMessage: 'Success',
               })
             : intl.formatMessage({
                 id: 'pages.admin.auditLogs.failure',
-                defaultMessage: '失败',
+                defaultMessage: 'Failure',
               })}
         </Tag>
       ),
@@ -165,7 +165,7 @@ export default function AdminAuditLogs() {
     {
       title: intl.formatMessage({
         id: 'pages.table.actions',
-        defaultMessage: '操作',
+        defaultMessage: 'Actions',
       }),
       key: 'actions',
       width: 60,
@@ -186,7 +186,7 @@ export default function AdminAuditLogs() {
         <Input.Search
           placeholder={intl.formatMessage({
             id: 'pages.admin.auditLogs.search.placeholder',
-            defaultMessage: '搜索用户名',
+            defaultMessage: 'Search username',
           })}
           allowClear
           style={{ width: 220 }}
@@ -197,7 +197,7 @@ export default function AdminAuditLogs() {
           allowClear
           placeholder={intl.formatMessage({
             id: 'pages.admin.auditLogs.filter.all',
-            defaultMessage: '全部操作',
+            defaultMessage: 'All Actions',
           })}
           style={{ width: 160 }}
           value={actionFilter}
@@ -228,7 +228,7 @@ export default function AdminAuditLogs() {
       <Modal
         title={intl.formatMessage({
           id: 'pages.admin.auditLogs.title',
-          defaultMessage: '审计日志',
+          defaultMessage: 'Audit Logs',
         })}
         open={!!detailItem}
         onCancel={() => setDetailItem(null)}
@@ -246,7 +246,7 @@ export default function AdminAuditLogs() {
               <Descriptions.Item
                 label={intl.formatMessage({
                   id: 'pages.admin.auditLogs.user',
-                  defaultMessage: '用户',
+                  defaultMessage: 'User',
                 })}
               >
                 {detailItem.username || '-'}
@@ -254,7 +254,7 @@ export default function AdminAuditLogs() {
               <Descriptions.Item
                 label={intl.formatMessage({
                   id: 'pages.admin.auditLogs.time',
-                  defaultMessage: '时间',
+                  defaultMessage: 'Time',
                 })}
               >
                 {detailItem.createdAt
@@ -264,7 +264,7 @@ export default function AdminAuditLogs() {
               <Descriptions.Item
                 label={intl.formatMessage({
                   id: 'pages.admin.auditLogs.action',
-                  defaultMessage: '操作',
+                  defaultMessage: 'Action',
                 })}
               >
                 <Tag>{actionLabel(detailItem.action)}</Tag>
@@ -272,25 +272,25 @@ export default function AdminAuditLogs() {
               <Descriptions.Item
                 label={intl.formatMessage({
                   id: 'pages.admin.auditLogs.status',
-                  defaultMessage: '状态',
+                  defaultMessage: 'Status',
                 })}
               >
                 <Tag color={detailItem.success ? 'green' : 'red'}>
                   {detailItem.success
                     ? intl.formatMessage({
                         id: 'pages.admin.auditLogs.success',
-                        defaultMessage: '成功',
+                        defaultMessage: 'Success',
                       })
                     : intl.formatMessage({
                         id: 'pages.admin.auditLogs.failure',
-                        defaultMessage: '失败',
+                        defaultMessage: 'Failure',
                       })}
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item
                 label={intl.formatMessage({
                   id: 'pages.admin.auditLogs.resourceType',
-                  defaultMessage: '资源类型',
+                  defaultMessage: 'Resource Type',
                 })}
               >
                 {detailItem.resourceType || '-'}
@@ -298,7 +298,7 @@ export default function AdminAuditLogs() {
               <Descriptions.Item
                 label={intl.formatMessage({
                   id: 'pages.admin.auditLogs.resourceId',
-                  defaultMessage: '资源 ID',
+                  defaultMessage: 'Resource ID',
                 })}
               >
                 {detailItem.resourceId || '-'}
@@ -306,7 +306,7 @@ export default function AdminAuditLogs() {
               <Descriptions.Item
                 label={intl.formatMessage({
                   id: 'pages.admin.auditLogs.ipAddress',
-                  defaultMessage: 'IP 地址',
+                  defaultMessage: 'IP Address',
                 })}
               >
                 {detailItem.ipAddress || '-'}
@@ -333,7 +333,7 @@ export default function AdminAuditLogs() {
                 <Tag color="red">
                   {intl.formatMessage({
                     id: 'pages.admin.auditLogs.failure',
-                    defaultMessage: '失败',
+                    defaultMessage: 'Failure',
                   })}
                 </Tag>
                 <span style={{ marginLeft: 8, color: '#ff4d4f', fontSize: 13 }}>

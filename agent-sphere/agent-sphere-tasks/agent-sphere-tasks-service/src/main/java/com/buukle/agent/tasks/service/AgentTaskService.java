@@ -17,9 +17,9 @@ public interface AgentTaskService {
 
     Page<TaskVO> page(String keyword, String status, LocalDateTime startTime, LocalDateTime endTime, int page, int size);
 
-    /** 任务产物分页（归属按 created_by 租户过滤）。 */
+    /** Task artifact page (ownership filtered by created_by tenant). */
     Page<TaskArtifactVO> pageArtifacts(String keyword, Long taskId, int page, int size);
 
-    /** 任务产物详情。 */
+    /** Task artifact detail. */
     TaskArtifactVO getArtifact(Long id);
 }

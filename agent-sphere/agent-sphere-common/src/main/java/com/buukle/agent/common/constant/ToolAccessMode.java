@@ -1,6 +1,6 @@
 package com.buukle.agent.common.constant;
 
-/** 工具对目标系统的读写属性。 */
+/** Read/write access of a tool against its target system. */
 public enum ToolAccessMode {
     READ,
     WRITE,

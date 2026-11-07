@@ -2,6 +2,6 @@ package com.buukle.agent.channel.spi;
 
 import java.io.Serializable;
 
-/** 附件引用：只传 fileKey + 元数据，字节留在文件存储。 */
+/** Attachment reference: carries only fileKey + metadata; the bytes stay in the file store. */
 public record AttachmentRef(String fileKey, String contentType, String name, Long size) implements Serializable {
 }

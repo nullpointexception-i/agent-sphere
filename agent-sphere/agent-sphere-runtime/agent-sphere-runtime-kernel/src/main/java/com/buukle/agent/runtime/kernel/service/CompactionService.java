@@ -68,20 +68,20 @@ public class CompactionService {
 
     public static final String COMPACTED_SENTINEL = "__COMPACTED__";
 
-    /** 估算安全系数：中文/JSON 的字符密度波动大，留 10% 余量避免「估算没到阈值、实际已超上下文」。 */
+    /** Estimation safety factor: Chinese/JSON character density varies a lot, so keep a 10% margin to avoid "estimate below the threshold but actually over the context". */
     private static final double ESTIMATE_SAFETY_RATIO = 1.1;
-    /** 工具 schema / 纯 JSON 以 ASCII 为主，字符/token 明显高于中文正文；用 1.8 会严重高估。 */
+    /** Tool schemas / pure JSON are mostly ASCII, with a much higher chars/token than Chinese prose; using 1.8 would badly over-estimate. */
     private static final double JSON_TOKEN_ESTIMATE_DIVISOR = 3.5;
-    /** 单张图片的保守 token 成本（不解析 base64；按常见多模态路由的高位估）。 */
+    /** Conservative token cost of a single image (base64 is not parsed; estimated at the high end for common multimodal routes). */
     private static final long IMAGE_PART_TOKENS = 1000L;
-    /** 输入预算中为输出预留的最低余量（token）。 */
+    /** Minimum margin reserved for output within the input budget (tokens). */
     private static final long MIN_OUTPUT_MARGIN_TOKENS = 512L;
-    /** 输入预算中为输出预留的余量比例（占 max_input）。 */
+    /** Margin ratio reserved for output within the input budget (of max_input). */
     private static final double OUTPUT_MARGIN_RATIO = 0.05;
-    /** 预算下限（占 max_input）：即使输出额度配置异常也不至于把预算压到无法工作。 */
+    /** Budget floor (of max_input): even if the output quota config is abnormal, the budget is not squeezed to the point of not working. */
     private static final double MIN_INPUT_BUDGET_RATIO = 0.25;
     private static final long SUMMARY_MIN_TOKENS = 256L;
-    /** 有实际 prompt_tokens 校准时的安全余量。 */
+    /** Safety margin when calibrated with real prompt_tokens. */
     private static final double CALIBRATION_SAFETY_RATIO = 1.05;
     private static final double CALIBRATION_MIN = 0.8;
     private static final double CALIBRATION_MAX = 1.5;
@@ -89,39 +89,39 @@ public class CompactionService {
     private static final double CALIBRATION_REJECT_MIN = 0.5;
     private static final double CALIBRATION_REJECT_MAX = 2.0;
     private static final long CALIBRATION_TTL_MS = TimeUnit.HOURS.toMillis(24);
-    /** 自适应 target 至少要给 tail 留的 token（配置 min-tail-tokens 的兜底下限）。 */
+    /** Minimum tokens the adaptive target must leave for the tail (fallback lower bound of the min-tail-tokens config). */
     private static final long MIN_ADAPTIVE_TAIL_TOKENS = 2_000L;
-    /** target 与触发预算之间至少留的余量，避免压缩后立刻再次触发。 */
+    /** Minimum margin between target and trigger budget, so compaction does not retrigger immediately. */
     private static final long TARGET_HEADROOM_TOKENS = 1_024L;
     private static final double TARGET_HEADROOM_RATIO = 0.02;
-    /** 单个 run 的用户/助手正文在压缩输入中的最大字符数（超出标记省略）。 */
+    /** Max characters of a single run's user/assistant body in the compaction input (excess is marked as omitted). */
     private static final int COMPACTION_FIELD_MAX_CHARS = 2000;
-    /** 单个 run 的工具参数在压缩输入中的最大字符数。 */
+    /** Max characters of a single run's tool arguments in the compaction input. */
     private static final int COMPACTION_ARGS_MAX_CHARS = 500;
 
-    /** run-local tail 持久化上限（字符）。 */
+    /** Persistence cap for the run-local tail (characters). */
     private static final int RUN_TAIL_MAX_CHARS = 64_000;
-    /** wait/澄清挂起时的完整未摘要 tail 上限；超限则置空，回退 HistoryLoader 的 DB 重建。 */
+    /** Cap on the full un-summarized tail while suspended for wait/clarification; above it the tail is emptied and HistoryLoader falls back to DB reconstruction. */
     private static final int RUN_TAIL_SNAPSHOT_MAX_CHARS = 256_000;
-    /** run-local tail 单条消息持久化上限（字符）。 */
+    /** Per-message persistence cap for the run-local tail (characters). */
     private static final int RUN_TAIL_MESSAGE_MAX_CHARS = 16_000;
-    /** run-local 压缩输入的单条消息/工具结果上限。 */
+    /** Per-message / per-tool-result cap for run-local compaction input. */
     private static final int RUN_COMPACTION_MESSAGE_MAX_CHARS = 2_000;
     private static final int RUN_COMPACTION_TOOL_RESULT_MAX_CHARS = 1_000;
     private static final int RUN_COMPACTION_INPUT_MAX_CHARS = 900_000;
     private static final String RUN_TAIL_IMAGE_OMITTED = "[image omitted after run compaction]";
     private static final TypeReference<List<ChatMessageDTO>> MESSAGE_LIST_TYPE = new TypeReference<>() {};
 
-    /** 一次压缩模型调用的结果（finish_reason/error 用于判断摘要是否完整）。 */
+    /** Result of one compaction model call (finish_reason/error used to judge whether the summary is complete). */
     private record CompactionCallResult(String content, String finishReason, String error,
                                         Integer completionTokens) {
     }
 
-    /** 某路由的实际 prompt_tokens / 字符估算比值（EWMA）。 */
+    /** Actual prompt_tokens / character-estimate ratio for a route (EWMA). */
     private record Calibration(double ratio, long updatedAt) {
     }
 
-    /** 一次 run-local 压缩的真实结果（COMPLETED 时携带替换后的 messages）。 */
+    /** Real result of one run-local compaction (carries the replaced messages when COMPLETED). */
     public record RunCompactionResult(CompactionOutcome outcome, List<ChatMessageDTO> messages,
                                       int currentRunStart, Long compactRecordId,
                                       long postEstimate, long target) {
@@ -138,38 +138,38 @@ public class CompactionService {
     private final RouteListBuilder routeListBuilder;
     private final FallbackRouteExecutor fallbackRouteExecutor;
     private final LlmRequestConfigurer llmRequestConfigurer;
-    /** 只对每个缺 max_input_tokens 的路由告警一次，避免每轮刷日志。 */
+    /** Warn only once per route missing max_input_tokens, to avoid logging every loop. */
     private final Set<Long> warnedMissingMaxInput = ConcurrentHashMap.newKeySet();
-    /** 只对每个「压缩不可能把上下文压进预算」的路由告警一次，避免每轮刷日志。 */
+    /** Warn only once per route where "compaction cannot bring the context within budget", to avoid logging every loop. */
     private final Set<Long> warnedInfeasibleCompaction = ConcurrentHashMap.newKeySet();
-    /** 按路由保存实际 prompt_tokens 校准系数；进程内、TTL 24h。 */
+    /** prompt_tokens calibration factor per route; in-process, TTL 24h. */
     private final Map<Long, Calibration> calibrationByRoute = new ConcurrentHashMap<>();
 
     /**
-     * 是否需要压缩。
+     * Whether compaction is needed.
      *
-     * <p><b>必须把工具 schema 计入估算</b>：请求体 = messages + tools + 输出；10 个工具的 JSON 约 1 万
-     * token，只算 messages 会让「估算没到阈值、实际已超上下文」——线上 32k 路由（工具 11.7k token）
-     * 就是这样在 32,852 实际 token 时报 400 的。
+     * <p><b>Tool schemas must be counted in the estimate</b>: the request body = messages + tools + output; the JSON of 10 tools is about 10k
+     * tokens, and counting only messages leads to "the estimate is below the threshold but the context is already exceeded" — the production 32k route (tools 11.7k tokens)
+     * is exactly how it returned 400 at an actual 32,852 tokens.
      *
-     * <p>无校准时加 10% 安全系数（字符/1.8 ×1.1）；有实际 prompt_tokens 校准时用
-     * {@code 字符估算 × calibration × 1.05}。route 的 {@code max_output_tokens}
-     * 不参与请求（请求的 max_tokens 由 sampling config 控制），这里也不从总上下文里扣它；
-     * 0.7 的 budgetRatio 本身已为输出预留 30%。
+     * <p>Without calibration add a 10% safety factor (chars/1.8 ×1.1); with real prompt_tokens calibration use
+     * {@code char estimate × calibration × 1.05}. The route's {@code max_output_tokens}
+     * does not participate in the request (the request's max_tokens is controlled by sampling config), so it is not deducted from the total context here either;
+     * the 0.7 budgetRatio itself already reserves 30% for output.
      *
-     * <p><b>固定开销本身就塞不进模型时才跳过压缩</b>：主 system prompt 与工具 schema 是每轮都带的，
-     * 压缩只能压历史。若 {@code leading system + tools} 已超过 {@code max_input_tokens}（硬上限，不再乘
-     * 安全系数），压缩就是不可能的，只会每轮白烧 3 次压缩调用（线上 route 4 = 20k 的测试路由）。
-     * 此时返回 false，让请求带着超上下文直接发：模型接受就继续，拒绝则走 400 终态失败。
-     * 注意门槛必须是硬上限而不是 0.7×budget —— 后者会让「工具占大头但真实仍可容纳」的路由
-     * （如 32k 路由）被永久关闭压缩，历史继续涨到真溢出。
+     * <p><b>Skip compaction only when the fixed overhead alone cannot fit the model</b>: the main system prompt and tool schemas are carried every loop,
+     * and compaction can only compress history. If {@code leading system + tools} already exceeds {@code max_input_tokens} (a hard limit, no longer multiplied by
+     * the safety factor), compaction is impossible and would only burn 3 compaction calls every loop for nothing (production route 4 = the 20k test route).
+     * Return false in that case and let the request go out over-context directly: if the model accepts it, continue; if it rejects it, fail with a 400 terminal state.
+     * Note the threshold must be the hard limit rather than 0.7×budget — the latter would permanently disable compaction for routes where "tools take the bulk but the real content still fits"
+     * (such as a 32k route), and history would keep growing until real overflow.
      */
-    /** 压缩决策快照（供 runner 做 cooldown/硬上限判断，避免重复估算）。 */
+    /** Compaction decision snapshot (for the runner to judge cooldown/hard limit without re-estimating). */
     public record CompactionDecision(boolean shouldCompact, long messageTokens, long toolTokens,
                                      long fixedTokens, long estimated, long budget, long maxInputTokens) {
     }
 
-    /** run-local 压缩目标计算快照（供日志和单测）。 */
+    /** Snapshot of the run-local compaction target computation (for logs and unit tests). */
     record CompactionTarget(long configuredTarget, long fixedTokens, long tailFloor,
                             long budget, long targetCeiling, long target, boolean feasible) {
     }
@@ -206,12 +206,12 @@ public class CompactionService {
                 estimated, budget, maxInputTokens);
     }
 
-    /** 当前请求的字符估算 token（未校准），供 LLM interaction 记录 actual/estimated 比值。 */
+    /** Character-estimated tokens of the current request (uncalibrated), for the LLM interaction record's actual/estimated ratio. */
     public long estimatePromptTokens(List<ChatMessageDTO> messages, List<ToolDefinitionDTO> tools) {
         return estimateMessagesTokens(messages) + estimateToolTokens(tools);
     }
 
-    /** 用一次真实请求的 prompt_tokens / 估算值更新路由校准系数。 */
+    /** Updates the route calibration factor with a real request's prompt_tokens / estimate. */
     public void recordCalibration(Long routeId, Integer estimated, Integer actual) {
         if (routeId == null || estimated == null || actual == null || estimated <= 0 || actual <= 0) {
             return;
@@ -255,7 +255,7 @@ public class CompactionService {
         return (long) Math.ceil(rawTokens * factor);
     }
 
-    /** 按 maxInputTokens 选择档位；档位间线性插值，超出最后一档按比例外推。 */
+    /** Selects a tier by maxInputTokens; linearly interpolates between tiers and extrapolates proportionally beyond the last tier. */
     public CompactionTier resolveTier(long maxInputTokens) {
         var tiers = agentRuntimeProperties.getRunner().getCompaction().getTiers();
         if (tiers == null || tiers.isEmpty()) {
@@ -292,9 +292,9 @@ public class CompactionService {
     }
 
     /**
-     * 聊天请求的名义输出上限：实例 config.max_tokens 优先，其次路由 max_output_tokens。
+     * Nominal output limit for chat requests: instance config.max_tokens first, then route max_output_tokens.
      *
-     * <p>与 tier 无关；存量路由未配置时按 16k 兜底。
+     * <p>Independent of tier; existing routes without it fall back to 16k.
      */
     public int resolveNominalChatMaxOutput(Integer instanceMaxOutput, Long routeMaxOutput) {
         if (instanceMaxOutput != null && instanceMaxOutput > 0) {
@@ -307,10 +307,10 @@ public class CompactionService {
     }
 
     /**
-     * 单轮实际输出上限：给输入和 5% 余量留出空间后，取名义上限与剩余空间的较小值。
+     * Actual output limit for a single turn: after leaving room for input plus a 5% margin, take the smaller of the nominal limit and the remaining space.
      *
-     * <p>输出不足 {@link RunnerConstants#MIN_CHAT_OUTPUT_TOKENS} 时调用方必须压缩或失败，
-     * 不能把注定超过上下文的请求发出去。
+     * <p>When the output is below {@link RunnerConstants#MIN_CHAT_OUTPUT_TOKENS} the caller must compact or fail,
+     * and must not send a request that is bound to exceed the context.
      */
     public int resolveRequestMaxOutput(long maxInputTokens, long estimatedInputTokens, int nominalChatMaxOutput) {
         long margin = Math.max(MIN_OUTPUT_MARGIN_TOKENS,
@@ -340,7 +340,7 @@ public class CompactionService {
         return Math.max(1L, Math.round(lower + (upper - lower) * fraction));
     }
 
-    /** 当前 run 已完成的 run-local 压缩次数（per-run 上限）。 */
+    /** Number of run-local compactions already completed for the current run (per-run cap). */
     public long countCompletedRunCompactions(Long runId) {
         return compactRecordSpi.countCompletedByRunId(runId);
     }
@@ -358,10 +358,10 @@ public class CompactionService {
     }
 
     /**
-     * 压缩触发阈值：只看输入预算，与输出上限解耦。
+     * Compaction trigger threshold: looks only at the input budget, decoupled from the output limit.
      *
-     * <p>tier 的 trigger-tokens 已按「触发点仍能留出 8k 输出」配置；输出放不下时由
-     * {@link #resolveRequestMaxOutput(long, long, int)} 在本轮收缩 max_tokens，而不是提前压缩。
+     * <p>The tier's trigger-tokens is already configured so that "the trigger point still leaves 8k of output"; when output does not fit,
+     * {@link #resolveRequestMaxOutput(long, long, int)} shrinks max_tokens for this turn instead of compacting early.
      */
     private long resolveInputBudget(long maxInputTokens) {
         CompactionTier tier = resolveTier(maxInputTokens);
@@ -374,9 +374,9 @@ public class CompactionService {
     }
 
     /**
-     * 压缩无法削减的部分：开头的连续 system 消息（主提示词 + 历史层注入的摘要/取消提示）+ 工具 schema。
-     * 只有 leading system 算固定开销 —— 尾部 system（时间/待办/预算）每轮重建，同样压不掉，但体量很小，
-     * 这里不额外计入以免误伤边界场景。
+     * The part compaction cannot reduce: the leading contiguous system messages (main prompt + summary/cancel hints injected by the history layer) + tool schemas.
+     * Only leading system counts as fixed overhead — tail system (time/todos/budget) is rebuilt every loop and also cannot be compacted, but it is small,
+     * so it is not counted here to avoid harming edge cases.
      */
     private long estimateFixedTokens(List<ChatMessageDTO> messages, long toolTokens) {
         long systemTokens = 0;
@@ -393,7 +393,7 @@ public class CompactionService {
         return systemTokens + toolTokens;
     }
 
-    /** 中文正文的字符数 → token（向上取整；除数见 {@link RunnerConstants#TOKEN_ESTIMATE_DIVISOR}）。 */
+    /** Chinese prose character count → tokens (rounded up; divisor in {@link RunnerConstants#TOKEN_ESTIMATE_DIVISOR}). */
     private static long charsToTokens(int chars) {
         if (chars <= 0) {
             return 0;
@@ -401,7 +401,7 @@ public class CompactionService {
         return (long) Math.ceil(chars / RunnerConstants.TOKEN_ESTIMATE_DIVISOR);
     }
 
-    /** 工具 schema / JSON 的字符数 → token：以 ASCII 为主，用独立除数，避免按中文密度高估。 */
+    /** Tool schema / JSON character count → tokens: mostly ASCII, using a separate divisor to avoid over-estimating by Chinese density. */
     private static long jsonCharsToTokens(int chars) {
         if (chars <= 0) {
             return 0;
@@ -409,7 +409,7 @@ public class CompactionService {
         return (long) Math.ceil(chars / JSON_TOKEN_ESTIMATE_DIVISOR);
     }
 
-    /** 工具定义也是 prompt 的一部分：把 tools JSON 的字符数折算成 token。 */
+    /** Tool definitions are also part of the prompt: convert the tools JSON character count into tokens. */
     private long estimateToolTokens(List<ToolDefinitionDTO> tools) {
         if (tools == null || tools.isEmpty()) {
             return 0;
@@ -432,13 +432,13 @@ public class CompactionService {
     }
 
     /**
-     * 压缩「游标之后的已结束历史」的最老一段。
+     * Compacts the oldest stretch of "finished history after the cursor".
      *
-     * <p>只压缩已结束的 run：RUNNING（含当前 run）与停车态 run 不进入摘要候选 —— 它们由内存消息承载，
-     * 压缩重组时直接保留，不再从数据库重放。游标只推进到**实际写入摘要的最后一个 run**。
+     * <p>Only finished runs are compacted: RUNNING (including the current run) and parked runs are not summary candidates — they are carried by in-memory messages,
+     * kept as-is during compaction reassembly, and not replayed from the database. The cursor only advances to the <b>last run actually written into the summary</b>.
      *
-     * <p>候选按从旧到新顺序连续纳入，直到压缩输入预算用尽；若第一条 run 本身就超预算，
-     * 对它做字段级/整体截断并标记省略，随后停止（不会跳过它去压缩更新的 run）。
+     * <p>Candidates are included consecutively from oldest to newest until the compaction input budget is exhausted; if the very first run exceeds the budget,
+     * truncate it at field level / as a whole and mark it omitted, then stop (never skip it to compact a newer run).
      */
     private CompactionOutcome doCompact(Long sessionId, SessionVO session, ModelRouteFullVO route, Long runId) {
         AgentCompactRecordVO latest = compactRecordSpi.getLatestCompleted(sessionId);
@@ -466,11 +466,11 @@ public class CompactionService {
             return CompactionOutcome.NO_PROGRESS;
         }
 
-        String detail = "合并 " + compactInput.includedRuns() + " 轮历史"
-                + (compactInput.truncated() ? "（超长内容已截断）" : "");
-        // publishId 必须每次压缩唯一：同一 session 的多次压缩要各自成行（timeline 按它复用/封口）。
+        String detail = "Merged " + compactInput.includedRuns() + " historical runs"
+                + (compactInput.truncated() ? " (oversized content was truncated)" : "");
+        // publishId must be unique per compaction: multiple compactions of the same session each get their own row (timeline reuses/seals by it).
         String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
-        // 先建记录：失败也有审计行，timeline 也能立刻挂上 ref（刷新后正文从 summary_after 解析）。
+        // Create the record first: failures still get an audit row, and timeline can attach its ref immediately (after refresh the body is parsed from summary_after).
         AgentCompactRecordVO record = compactRecordSpi.createRecord(sessionId);
         compactRecordSpi.updateRunning(record.getId());
         publishCompaction(CompactionStatus.RUNNING, sessionId, runId, publishId, record.getId(), detail);
@@ -492,10 +492,10 @@ public class CompactionService {
             }
             String newSummary = summaryResult.content();
             long summaryTokens = charsToTokens(newSummary.length());
-            // compact record 是 HistoryLoader 的权威来源：先落记录（摘要 + 游标同一条 UPDATE）。
+            // The compact record is HistoryLoader's authoritative source: persist it first (summary + cursor in the same UPDATE).
             compactRecordSpi.updateCompleted(record.getId(), session.getSummary(), newSummary,
                     summaryTokens, compactInput.lastRunId());
-            // session.summary 是辅助展示字段；失败不影响历史正确性，best-effort。
+            // session.summary is an auxiliary display field; a failure does not affect history correctness, best-effort.
             try {
                 sessionSpi.updateSummary(sessionId, newSummary, LocalDateTime.now().toString(), route.getId());
             } catch (Exception e) {
@@ -530,8 +530,8 @@ public class CompactionService {
     }
 
     /**
-     * 按「最老优先」连续纳入候选 run，直到 token 上限。返回实际纳入范围（游标依据）。
-     * 第一条就超限时截断该 run 并停止，绝不跳过它去压缩更新的 run。
+     * Includes candidate runs consecutively "oldest first" up to the token limit. Returns the actual included range (the basis for the cursor).
+     * If the first one already exceeds the limit, truncate that run and stop; never skip it to compact a newer run.
      */
     CompactInput buildCompactInput(Long sessionId, List<RunVO> runs, long tokenLimit) {
         StringBuilder sb = new StringBuilder();
@@ -544,7 +544,7 @@ public class CompactionService {
             String runText = renderRun(sessionId, r);
             long tokens = charsToTokens(runText.length());
             if (runText.isBlank()) {
-                // 空 run 无需摘要内容，但可以安全地纳入游标（否则会永久阻塞后续历史）。
+                // An empty run needs no summary content, but can be safely included in the cursor (otherwise it would block later history forever).
                 lastRunId = r.getId();
                 included++;
                 continue;
@@ -569,7 +569,7 @@ public class CompactionService {
         return new CompactInput(sb.toString(), lastRunId, included, truncated);
     }
 
-    /** 渲染单个 run 供摘要使用；与估算共用同一份内容，避免「估了参数却摘要不到」的偏差。 */
+    /** Renders a single run for the summary; shares the same content as the estimate to avoid the drift of "arguments were estimated but not summarized". */
     private String renderRun(Long sessionId, RunVO r) {
         StringBuilder sb = new StringBuilder();
         if (r.getUserMessage() != null && !r.getUserMessage().isBlank()) {
@@ -579,7 +579,7 @@ public class CompactionService {
         }
 
         List<AgentToolCallRecordVO> calls = new ArrayList<>(toolCallRecordSpi.listBySessionId(sessionId, r.getId()));
-        // 子 Agent 的内部调用不是父 Agent 的对话内容，摘要里不应出现（父侧只有一次 delegate 结果）。
+        // A sub-agent's internal calls are not the parent agent's conversation content and must not appear in the summary (the parent side has only one delegate result).
         calls.removeIf(c -> c.getSubAgentRunId() != null);
         Collections.reverse(calls);
         for (AgentToolCallRecordVO c : calls) {
@@ -650,7 +650,7 @@ public class CompactionService {
                     }
                 }
             }
-            // reasoning 也是真实请求的一部分：恢复/挂起后必须计入预算，否则会低估上下文
+            // reasoning is also part of the real request: after resume/suspension it must be counted in the budget, otherwise the context is under-estimated
             if (msg.getReasoningContent() != null) {
                 textChars += msg.getReasoningContent().length();
             }
@@ -668,11 +668,11 @@ public class CompactionService {
     }
 
     /**
-     * 当前 run 的 run-local 压缩：只摘要「当前 user 之后、最后 4 条之前」的消息，
-     * 保留当前 user + 最近 3 条作为 tail；不推进 session 游标。
+     * Run-local compaction of the current run: summarizes only messages "after the current user and before the last 4",
+     * keeping the current user + the most recent 3 as the tail; the session cursor does not advance.
      *
-     * <p>压缩后消息结构：`[system prompt][session summary][current run summary][已完成历史][当前 user + tail]`。
-     * run summary 放在 leading system 区，保持 Qwen 的 system-at-beginning 规则。
+     * <p>Message structure after compaction: `[system prompt][session summary][current run summary][finished history][current user + tail]`.
+     * The run summary goes into the leading system area, preserving Qwen's system-at-beginning rule.
      */
     public RunCompactionResult compactRun(Long sessionId, Long runId, KernelContext ctx,
                                           List<ChatMessageDTO> messages, int currentRunStart,
@@ -696,8 +696,8 @@ public class CompactionService {
     }
 
     /**
-     * wait/澄清挂起：把当前未摘要上下文（从当前 user 到最新消息）快照进最近一条 run-local 记录。
-     * 这样 resume 不会用「上次压缩时」的旧 tail 丢掉之后的回合；超限则置空，让 HistoryLoader 回退 DB 重建。
+     * wait/clarification suspension: snapshot the current un-summarized context (from the current user to the newest message) into the most recent run-local record.
+     * This way resume does not use the stale tail "from the last compaction" and lose later turns; above the limit, empty it so HistoryLoader falls back to DB reconstruction.
      */
     public void snapshotRunTail(Long runId, List<ChatMessageDTO> messages, int currentRunStart) {
         if (runId == null || messages == null || currentRunStart < 0 || currentRunStart >= messages.size()) {
@@ -783,7 +783,7 @@ public class CompactionService {
             return new RunCompactionResult(CompactionOutcome.NO_PROGRESS, messages, currentRunStart, null, 0, 0);
         }
 
-        // 摘要输入只含 user/assistant/tool 工作消息，排除 time/todos/loop 等动态 system 槽
+        // Summary input contains only user/assistant/tool working messages, excluding dynamic system slots such as time/todos/loop
         List<ChatMessageDTO> toSummarize = workMessages(messages.subList(userIndex + 1, tailStart));
         String userText = truncateField(contentText(messages.get(userIndex).getContent()),
                 RUN_COMPACTION_MESSAGE_MAX_CHARS);
@@ -805,7 +805,7 @@ public class CompactionService {
         String publishId = RuntimeEventTypeConstant.PUBLISH_ID_COMPACT + sessionId + ":" + UUID.randomUUID();
         AgentCompactRecordVO record = compactRecordSpi.createRunRecord(sessionId, runId);
         compactRecordSpi.updateRunning(record.getId());
-        String detail = "当前 run 合并 " + toSummarize.size() + " 条消息";
+        String detail = "Current run merged " + toSummarize.size() + " messages";
         publishCompaction(CompactionStatus.RUNNING, sessionId, runId, publishId, record.getId(), detail);
 
         try {
@@ -821,7 +821,7 @@ public class CompactionService {
             }
             String summary = summaryResult.content();
 
-            // 新消息：prefix（去掉旧 run summary）→ 新 run summary 插到 leading system 末尾 → 当前 user + tail
+            // New messages: prefix (old run summary removed) → new run summary inserted at the end of the leading system → current user + tail
             List<ChatMessageDTO> prefix = new ArrayList<>(messages.subList(0, userIndex));
             prefix.removeIf(m -> LlmApiConstant.ROLE_SYSTEM.equals(m.getRole())
                     && m.getContent() instanceof String s && s.startsWith(HistoryLoader.RUN_SUMMARY_PREFIX));
@@ -838,8 +838,8 @@ public class CompactionService {
             int newCurrentRunStart = rebuilt.size();
             rebuilt.addAll(tail);
 
-            // tail 的选择已按 tail-ratio 控制；持久化保留 64k 硬上限，
-            // 以免把「最近一条浏览器全文」按路由预算截掉（浏览器策略优先）。
+            // Tail selection is already controlled by tail-ratio; persistence keeps a 64k hard cap,
+            // so "the most recent full browser page" is not cut by the route budget (browser policy takes precedence).
             String tailJson = serializeTailForPersistence(tail, RUN_TAIL_MAX_CHARS);
             long summaryTokens = charsToTokens(summary.length());
             compactRecordSpi.completeRunCompact(record.getId(), previousSummary, summary, summaryTokens, tailJson);
@@ -866,9 +866,9 @@ public class CompactionService {
     }
 
     /**
-     * 从当前 user 之后选择最近的工作消息作为 tail：排除 time/todo/loop 等动态 system 槽；
-     * 按 tail 预算从新到旧累计；始终包含最新一条浏览器结果（即使超出 tail 预算）；
-     * 不切断 assistant(tool_calls)/tool 组。
+     * Selects recent working messages after the current user as the tail: excludes dynamic system slots such as time/todo/loop;
+     * accumulates newest-to-oldest within the tail budget; always includes the latest browser result (even beyond the tail budget);
+     * does not split assistant(tool_calls)/tool groups.
      */
     private TailSelection selectRunTail(List<ChatMessageDTO> messages, int userIndex, long tailBudgetTokens) {
         int size = messages.size();
@@ -962,7 +962,7 @@ public class CompactionService {
         return latest;
     }
 
-    /** 把当前 run 的旧消息渲染成摘要输入；只含正文/工具调用/工具结果，明确不含 reasoning。 */
+    /** Renders the current run's old messages into summary input; contains only bodies/tool calls/tool results, explicitly no reasoning. */
     private static String renderChatMessagesForCompaction(List<ChatMessageDTO> messages, int maxChars) {
         StringBuilder sb = new StringBuilder();
         for (ChatMessageDTO m : messages) {
@@ -985,7 +985,7 @@ public class CompactionService {
         return truncateWithMarker(sb.toString(), maxChars);
     }
 
-    /** 只取文本正文；图片 part 用标记代替（不解析 data URL）。 */
+    /** Takes only the text body; image parts are replaced with a marker (data URLs are not parsed). */
     private static String contentText(Object content) {
         if (content instanceof String s) {
             return s;
@@ -1011,11 +1011,11 @@ public class CompactionService {
         return LlmApiConstant.ROLE_USER.equals(role) || LlmApiConstant.ROLE_ASSISTANT.equals(role);
     }
 
-    /** tail 持久化：剥离图片 data URL、截断超长正文，并控制总大小。 */
+    /** Tail persistence: strips image data URLs, truncates over-long bodies, and controls the total size. */
     private static String serializeTailForPersistence(List<ChatMessageDTO> tail, int maxChars) {
         List<ChatMessageDTO> copy = sanitizedTailCopy(tail, RUN_TAIL_MESSAGE_MAX_CHARS);
         String json = JsonUtils.toJson(copy);
-        // 保留当前 user（index 0），按「完整 assistant/tool 组」丢弃最旧的一组，避免孤儿 tool 消息
+        // Keep the current user (index 0) and drop the oldest "complete assistant/tool group", avoiding orphan tool messages
         while (json.length() > maxChars && copy.size() > 1) {
             int end = 2;
             while (end < copy.size() && !isGroupStart(copy.get(end))) {
@@ -1031,9 +1031,9 @@ public class CompactionService {
         return json;
     }
 
-    /** 挂起快照：不丢弃任何组；超过上限返回 null，让 resume 回退 DB 重建。 */
+    /** Suspension snapshot: no group is dropped; returns null above the cap so resume falls back to DB reconstruction. */
     private static String serializeTailSnapshot(List<ChatMessageDTO> tail) {
-        // 快照不逐条截断（模型当时看到的内容要完整恢复）；只受总上限约束
+        // The snapshot is not truncated message by message (what the model saw at the time must be restored in full); only the total cap applies
         String json = JsonUtils.toJson(sanitizedTailCopy(tail, Integer.MAX_VALUE));
         if (json != null && json.length() > RUN_TAIL_SNAPSHOT_MAX_CHARS) {
             log.warn("Run tail snapshot too large ({} chars > {}), falling back to DB reconstruction",
@@ -1052,7 +1052,7 @@ public class CompactionService {
         for (ChatMessageDTO m : copy) {
             Object content = m.getContent();
             if (content instanceof List<?> parts) {
-                // JsonUtils 反序列化时 content 是 Object，元素会变成 Map，而不是 ChatMessagePartDTO
+                // During JsonUtils deserialization content is an Object and its elements become Map instead of ChatMessagePartDTO
                 List<Object> sanitized = new ArrayList<>(parts.size());
                 for (Object p : parts) {
                     if (p instanceof ChatMessagePartDTO part
@@ -1091,14 +1091,14 @@ public class CompactionService {
                                     .setContent(CompactionPromptConstant.getSystemPrompt()),
                             new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(messagesText)));
             llmRequestConfigurer.applyGlobal(request);
-            // 摘要不需要思考：全局 config 的 thinking=true 会把输出预算耗在 reasoning 上，
-            // 实测出现 completion=4000、reasoning 5–11k、content 为空（压缩直接失败）。
-            // 三种字段一起关，覆盖 DeepSeek/Qwen/OpenAI 兼容网关的不同开关。
+            // The summary does not need thinking: the global config's thinking=true would spend the output budget on reasoning,
+            // and it was observed that completion=4000, reasoning 5–11k, content empty (compaction fails outright).
+            // Turn off all three fields together, covering the different switches of DeepSeek/Qwen/OpenAI-compatible gateways.
             request.setThinking(new ThinkingDTO().setType("disabled"));
             request.setEnableThinking(false);
             request.setReasoningEffort(null);
-            // 摘要长度必须由请求硬上限兜底：prompt 里的「MUST NOT exceed」只是自然语言要求。
-            // 放在 applyGlobal 之后，避免被全局 sampling 配置覆盖。
+            // The summary length must be backstopped by a hard request limit: "MUST NOT exceed" in the prompt is only a natural-language request.
+            // Placed after applyGlobal so it is not overridden by the global sampling config.
             request.setMaxTokens(hardMaxTokens);
             String apiKeyValue = resolveApiKey(route);
             StringBuilder content = new StringBuilder();
@@ -1113,8 +1113,8 @@ public class CompactionService {
                     request,
                     event -> {
                         switch (event) {
-                            // 压缩输出实时打到前端对话框（分割线下的正文）：
-                            // 用 compaction_output 子类型，避免被当成主 Agent 的 assistant/reasoning 行。
+                            // Compaction output is streamed to the frontend conversation in real time (the body under the divider):
+                            // uses the compaction_output subtype so it is not treated as the main agent's assistant/reasoning rows.
                             case LLMEvent.TextDelta t -> {
                                 content.append(t.text());
                                 eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
@@ -1126,7 +1126,7 @@ public class CompactionService {
                                                 .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_COMPACTION_OUTPUT)
                                                 .publishId(publishId).build()));
                             }
-                            // 摘要模型的思考不展示（避免和压缩正文混在一起）。
+                            // The summary model's thinking is not displayed (to avoid mixing it with the compaction body).
                             case LLMEvent.ReasoningDelta r -> {
                             }
                             case LLMEvent.Finish f -> {
@@ -1150,11 +1150,11 @@ public class CompactionService {
     }
 
     /**
-     * 生成不超过目标 token 的完整摘要。
+     * Generates a complete summary that does not exceed the target token count.
      *
-     * <p>首轮允许模型完整输出（生成上限高于目标），避免 max_tokens 硬截断；若结果超预算或
-     * finish_reason=length，则把该结果作为输入继续压缩，最多 {@code summary-compress-rounds} 轮。
-     * 仍不满足时裁剪到目标预算。
+     * <p>The first round lets the model output in full (generation limit above the target) to avoid a hard max_tokens cut; if the result exceeds the budget or
+     * finish_reason=length, feed that result back as input and compress again, for at most {@code summary-compress-rounds} rounds.
+     * If it still does not fit, trim it to the target budget.
      */
     private CompactionCallResult generateCompleteSummary(String prompt, ModelRouteFullVO route,
                                                          Long sessionId, Long runId, String publishId,
@@ -1191,7 +1191,7 @@ public class CompactionService {
         if (trimmed == null || trimmed.isBlank()) {
             log.warn("Compaction summary trim failed after {} rounds: originalTokens={}, target={}",
                     rounds, charsToTokens(last.content().length()), targetTokens);
-            return new CompactionCallResult("", last.finishReason(), "摘要裁剪失败", last.completionTokens());
+            return new CompactionCallResult("", last.finishReason(), "Summary trimming failed", last.completionTokens());
         }
         log.warn("Compaction summary trimmed after {} rounds: originalTokens={}, trimmedTokens={}, target={}",
                 rounds, charsToTokens(last.content().length()), charsToTokens(trimmed.length()), targetTokens);
@@ -1217,12 +1217,12 @@ public class CompactionService {
     }
 
     private static String incompleteReason(CompactionCallResult result) {
-        if (result == null) return "压缩模型未返回内容";
-        if (result.error() != null) return "压缩调用失败: " + result.error();
-        if (result.content() == null || result.content().isBlank()) return "压缩模型未返回内容";
-        if (FinishReason.LENGTH.equals(result.finishReason())) return "摘要被 max_tokens 截断";
-        if (FinishReason.CONTENT_FILTER.equals(result.finishReason())) return "摘要被内容安全策略拦截";
-        return "摘要结构不完整";
+        if (result == null) return "Compaction model returned no content";
+        if (result.error() != null) return "Compaction call failed: " + result.error();
+        if (result.content() == null || result.content().isBlank()) return "Compaction model returned no content";
+        if (FinishReason.LENGTH.equals(result.finishReason())) return "Summary was truncated by max_tokens";
+        if (FinishReason.CONTENT_FILTER.equals(result.finishReason())) return "Summary was blocked by the content safety policy";
+        return "Summary structure is incomplete";
     }
 
     private static Integer usageInt(Map<String, Object> usage, String... keys) {

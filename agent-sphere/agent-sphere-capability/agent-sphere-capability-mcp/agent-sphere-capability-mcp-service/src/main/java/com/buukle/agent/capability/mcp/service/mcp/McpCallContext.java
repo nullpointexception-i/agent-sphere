@@ -7,11 +7,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 单次 MCP 调用的附加上下文（当前只有任务级凭证）。
+ * Extra context for a single MCP call (currently only the task-level credential).
  *
- * <p>做成独立对象而不是往 transport 上加可变字段：transport 客户端是按 mcpId 缓存复用的
- * （见 {@code McpTransportFactory}），把凭证挂在实例上会让并发任务的凭证互相覆盖 ——
- * 那等于把「谁的收藏记录」搞串，是比不去重严重得多的故障。
+ * <p>Modeled as a separate object instead of adding mutable fields to the transport: transport
+ * clients are cached and reused per mcpId (see {@code McpTransportFactory}), so hanging the
+ * credential on the instance would let concurrent tasks overwrite each other's - mixing up whose
+ * records a call operates on, a far worse failure than a duplicate.
  */
 @Data
 public class McpCallContext {
@@ -28,7 +29,7 @@ public class McpCallContext {
         return NONE;
     }
 
-    /** 携带任务级凭证；凭证为空时返回 none，避免往请求里塞一个空头。 */
+    /** Carries the task-level credential; returns none when the credential is blank, to avoid sending an empty header. */
     public static McpCallContext ofTaskCredential(String taskCredential) {
         if (taskCredential == null || taskCredential.isBlank()) {
             return NONE;

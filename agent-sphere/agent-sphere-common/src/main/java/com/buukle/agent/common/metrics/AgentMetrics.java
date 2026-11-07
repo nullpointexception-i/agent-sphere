@@ -33,7 +33,7 @@ public class AgentMetrics {
     public static final String IM_MESSAGE_SENT = "im.message.sent";
     public static final String IM_SSE_REGISTERED = "im.sse.registered";
     public static final String IM_SSE_PUBLISH_FAILED = "im.sse.publish_failed";
-    /** LLM 流式传输层重试与握手失败（用于定位网络型慢回复）。 */
+    /** LLM streaming-layer retries and handshake failures (used to pinpoint network-related slow replies). */
     public static final String LLM_STREAM_RETRY = "llm.stream.retry";
     public static final String LLM_STREAM_HANDSHAKE_FAILED = "llm.stream.handshake_failed";
     /** Router parked input (clarification / tool approval) bridged to the IM DM. */

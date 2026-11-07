@@ -1,15 +1,15 @@
 package com.buukle.agent.sso.spi;
 
 /**
- * 通过 SSO 身份（provider code + subject）解析调用方。
- * 供外部能力开放接口（completions / tasks）在业务层做认证使用。
+ * Resolve the caller from an SSO identity (provider code + subject).
+ * Used by the external capability API (completions / tasks) for authentication at the business layer.
  */
 public interface SsoIdentitySpi {
 
     /**
-     * 按第三方身份 code + subject 反查 agent-sphere 用户。
+     * Look up an agent-sphere user by third-party identity code + subject.
      *
-     * @return 解析到的身份；未找到返回 null
+     * @return the resolved identity; null when not found
      */
     ResolvedIdentityVO resolveByCodeSubject(String providerCode, String subject);
 }

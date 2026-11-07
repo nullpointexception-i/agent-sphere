@@ -119,9 +119,10 @@ export default class ErrorBoundary extends React.Component<
 
   handleUnhandledRejection = (event: PromiseRejectionEvent) => {
     if (!isChunkLoadError(event.reason)) return;
-    // 路由预加载的 chunk 失败是异步错误，React ErrorBoundary 捕获不到。
-    // 首次由 app.tsx 的 unhandledrejection 自动刷新（带版本号换新）；
-    // 若已自动刷新过一次仍失败，则由这里渲染 fallback，避免白屏。
+    // Route-prefetch chunk failures are async errors that React ErrorBoundary cannot catch.
+    // The first occurrence is auto-reloaded by the unhandledrejection handler in app.tsx
+    // (with a version query to fetch fresh assets). If it still fails after that one
+    // auto-reload, render the fallback here to avoid a blank screen.
     let alreadyReloaded = false;
     try {
       alreadyReloaded =

@@ -21,6 +21,7 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
 import com.buukle.agent.superagent.spi.AgentRouterReplyPort;
 import com.buukle.agent.util.json.JsonUtils;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -95,6 +96,10 @@ public class AgentRouterStreamBridge {
         this.streamPortProvider = streamPortProvider;
         this.replyPortProvider = replyPortProvider;
         this.metrics = metrics;
+    }
+
+    @PostConstruct
+    void startFlusher() {
         this.flusher.scheduleWithFixedDelay(this::flushTick, flushInitialDelayMs,
                 Math.max(10, coalesceMs), TimeUnit.MILLISECONDS);
     }

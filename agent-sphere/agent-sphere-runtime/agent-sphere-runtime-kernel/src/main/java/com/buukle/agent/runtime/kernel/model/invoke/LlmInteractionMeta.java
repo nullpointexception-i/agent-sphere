@@ -15,21 +15,21 @@ public class LlmInteractionMeta {
     private String sessionType;
     /** Super-Agent thread id for cost attribution. */
     private Long threadId;
-    /** 归属的子 Agent 运行（NULL=主 Agent）。 */
+    /** Owning sub-agent run (NULL = main agent). */
     private Long subAgentRunId;
-    /** 上游 HTTP 状态码（错误事件携带；正常结束记 200；无 HTTP 交互时为 null）。 */
+    /** Upstream HTTP status code (carried by error events; 200 for a normal finish; null when there was no HTTP interaction). */
     private Integer httpStatus;
-    /** 本次请求实际使用的模型路由 id（用于 token 校准按路由隔离）。 */
+    /** Model route id actually used by this request (used to isolate token calibration per route). */
     private Long modelRouteId;
-    /** 请求发送前的字符估算 prompt token（用于 actual/estimated 校准）。 */
+    /** Character-estimated prompt tokens before sending (used for actual/estimated calibration). */
     private Integer estimatedPromptTokens;
-    /** 主 Agent 问答轮次序号（= run.loop_count）；非主 Agent 调用为 null。 */
+    /** Main-agent Q&A loop number (= run.loop_count); null for non-main-agent calls. */
     private Integer turnNo;
-    /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */
+    /** Route attempt number within the same loop: 0 = primary route, 1..N = fallback. */
     private Integer attemptNo;
-    /** 本次调用在 LLM 退避梯度上的档位（1..N）；非重试轮为 null。 */
+    /** This call's step on the LLM backoff ladder (1..N); null for non-retry loops. */
     private Integer retryAttempt;
-    /** 调用前预建的 interaction 记录 id；为 null 时走「调用结束后插入」的旧路径。 */
+    /** Id of the interaction row pre-created before the call; when null, the legacy "insert after the call" path is used. */
     private Long recordId;
 
     public LlmInteractionMeta(Long runId, Long sessionId, LlmInteractionType interactionType, Long subAgentRunId) {

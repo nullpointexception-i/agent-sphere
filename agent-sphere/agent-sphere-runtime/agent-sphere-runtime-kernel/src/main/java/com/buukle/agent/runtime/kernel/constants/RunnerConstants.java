@@ -5,15 +5,15 @@ public final class RunnerConstants {
     public static final String EMPTY_JSON_ARGS = "{}";
     public static final long DEFAULT_MAX_INPUT_TOKENS = 1_000_000L;
     public static final long DEFAULT_MAX_OUTPUT_TOKENS = 128_000L;
-    /** 路由未配置 max_input_tokens 时的兜底（与前端新建路由默认值一致）。 */
+    /** Fallback when a route has no max_input_tokens configured (matches the frontend default for new routes). */
     public static final long DEFAULT_ROUTE_MAX_INPUT_TOKENS = 128_000L;
-    /** 路由未配置 max_output_tokens 时的兜底（与前端新建路由默认值一致）。 */
+    /** Fallback when a route has no max_output_tokens configured (matches the frontend default for new routes). */
     public static final long DEFAULT_ROUTE_MAX_OUTPUT_TOKENS = 16_000L;
-    /** 单轮聊天至少保留的输出 token；低于此值不再发送请求，必须压缩或失败。 */
+    /** Minimum output tokens reserved for a single chat turn; below this no request is sent — compact or fail instead. */
     public static final int MIN_CHAT_OUTPUT_TOKENS = 1024;
     /**
-     * 字符数 → token 的估算除数。中文实际约 1.5–1.8 字/token（JSON 里的中文值同样偏密），
-     * 旧的 3 会显著低估、导致压缩总是晚于真实溢出（线上 32k 路由实测请求 32,852 token 时估算才 ~20k）。
+     * Divisor used to estimate tokens from character count. Chinese text is actually about 1.5–1.8 chars/token (Chinese values inside JSON are similarly dense),
+     * and the old value of 3 under-estimated badly, so compaction always lagged behind real overflow (on production a 32k route estimated only ~20k at an actual 32,852-token request).
      */
     public static final double TOKEN_ESTIMATE_DIVISOR = 1.8;
     public static final int TOOL_RESULT_MAX_CHARS = 2000;
@@ -22,14 +22,14 @@ public final class RunnerConstants {
     public static final String FALLBACK_CALL_ID_PREFIX = "hist_";
     public static final String TOOL_RESULT_BUDGET_OMITTED = "[Tool result omitted due to context limit]";
     public static final String PROMPT_TOOLS_HEADER = "\n\nAvailable tools:\n";
-    /** 待办列表尾部段：header 同时作为槽位定位 marker（内容以 header 开头的消息即待办槽）。 */
-    public static final String PROMPT_TODOLIST_HEADER = "\n\n## 进度记录（不代表任务完成）\n";
+    /** Todo list tail segment: the header also acts as the slot marker (a message whose content starts with the header is the todo slot). */
+    public static final String PROMPT_TODOLIST_HEADER = "\n\n## Progress log (does not mean the task is complete)\n";
     public static final String PROMPT_TODOLIST_INSTRUCTION =
-            "\n\n**请根据任务状态变更及时更新此列表，不要等待用户提醒。"
-            + "注意：此列表只是进度记录，**不构成任务完成判据** —— 任务是否完成由任务指令"
-            + "（技能步骤 / 期望输出 / 收尾条件）决定，而不是由本列表全部 completed 决定。"
-            + "它由你维护：采用技能建立时按技能步骤填写，否则由你自行规划；"
-            + "任何更新都必须回传完整清单（该工具是整体替换）。**";
+            "\n\n**Update this list promptly when the task status changes; do not wait for the user to remind you. "
+            + "Note: this list is a progress record only and **is not a completion criterion** - whether the task is complete is decided by the task instructions "
+            + "(skill steps / expected output / closing conditions), not by every item in this list being completed. "
+            + "You maintain it: when a skill defines the plan, fill it in from the skill steps; otherwise plan it yourself. "
+            + "Every update must send the COMPLETE list (this tool replaces the whole list).**";
     public static final String PROMPT_TOOLS_FOOTER = """
             
             TASK LIST: keep exactly ONE task list via the task list tool. It is the plan for the WHOLE task
@@ -53,7 +53,7 @@ public final class RunnerConstants {
             tool once when available, otherwise proceed with the best available assumption; never ask
             consecutive clarifications.
             """;
-    /** 仅在注册了 clarification 工具时追加（避免对不存在的工具发指令）。 */
+    /** Appended only when the clarification tool is registered (avoids instructing a tool that does not exist). */
     public static final String PROMPT_CLARIFICATION_RULES = """
 
             CLARIFICATION RULE: If you need the user to confirm an action, choose between options,
@@ -64,7 +64,7 @@ public final class RunnerConstants {
             reflect the new information, then execute the next step. Do NOT ask another
             clarification on the same topic.""";
 
-    /** 未注册 clarification 工具（自主任务）时的权威规则：不得向用户提问。 */
+    /** Authoritative rule when the clarification tool is not registered (autonomous tasks): must not ask the user questions. */
     public static final String PROMPT_NO_CLARIFICATION_RULE = """
 
             NO USER QUESTIONS: You cannot ask the user for input in this run. If you are blocked
@@ -75,25 +75,25 @@ public final class RunnerConstants {
     public static final String COMPACTION_ASSISTANT_PREFIX = "Assistant: ";
     public static final String COMPACTION_NEWLINE = "\n";
     public static final String HISTORY_SUMMARY_PREFIX = "[Conversation summary]\n";
-    /** todowrite 工具回执：完整清单已通过尾部待办槽下发，回执只保留短确认。 */
+    /** todowrite tool receipt: the full list is delivered through the tail todo slot, so the receipt keeps only a short confirmation. */
     public static final String TODO_WRITE_ACK = "{\"ok\":true,\"message\":\"task list updated\"}";
     /**
-     * 硬收口指令的提前量：剩余轮数 ≤ 该值时即注入 {@link #FINAL_TURN_INSTRUCTION}。
+     * Lead time for the forced-finalization instruction: once remaining loops ≤ this value, {@link #FINAL_TURN_INSTRUCTION} is injected.
      *
-     * <p>曾是「只在最后一轮（n-1）注入」。但收口指令只是<b>提示</b>、不强制执行，而模型往往
-     * 真的在最后一轮才收工 —— 线上 run 1575/1569 两条都正好落在最后一轮。留给模型 1 轮收尾
-     * 太紧：它要么来不及把结论写完整，要么只能把"被打断"当成交付理由
-     * （run 1569 就是 `status:"INCOMPLETE"`）。提前到 n-3 让它有 3 轮完成收尾与润色。
+     * <p>It used to be "inject only on the last loop (n-1)". But the finalization instruction is only a <b>hint</b>, not enforcement, and models often
+     * really wrap up only on the last loop — production runs 1575/1569 both landed exactly on the last loop. Giving the model 1 loop to wrap up
+     * is too tight: it either cannot finish writing the conclusion, or can only use "interrupted" as the delivery excuse
+     * (run 1569 had `status:"INCOMPLETE"`). Moving the lead time to n-3 gives it 3 loops to finish and polish.
      *
-     * <p><b>注意</b>：这不影响 loop cap 的执行时机（仍是 n-1），只是把"该收工了"的信号提前。
+     * <p><b>Note</b>: this does not affect when the loop cap takes effect (still n-1); it only moves the "time to wrap up" signal earlier.
      */
     public static final int FINAL_TURN_INSTRUCTION_LEAD = 3;
 
     /**
-     * 终态轮收口指令：作为尾部 system 消息追加（不修改 index 0，保持前缀缓存稳定）。
+     * Terminal-turn finalization instruction: appended as a tail system message (index 0 is left untouched so the prefix cache stays stable).
      *
-     * <p>措辞用「接近上限 / 剩余轮次有限」而非「这是你的最后一轮」—— 因为它在 n-3 就开始注入，
-     * 说"最后一轮"是假的，模型可能因此误判还剩一次机会而继续调工具。
+     * <p>The wording says "approaching the limit / limited remaining loops" instead of "this is your last loop" — because it starts being injected at n-3,
+     * claiming "last loop" would be false and could make the model misjudge that it has another chance and keep calling tools.
      */
     public static final String FINAL_TURN_INSTRUCTION =
             "\n\n**IMPORTANT: You are approaching the hard loop limit. From now on you must NOT call any more"
@@ -101,41 +101,41 @@ public final class RunnerConstants {
                     + " final answer, then call `finish(status, summary)` to end the run.**";
 
     /**
-     * 每轮 loop 预算预告的 marker：同时用于「跨轮定位并清除上一轮副本」与文案前缀。
+     * Marker for the per-loop budget notice: used both to locate and clear the previous loop's copy across turns and as the text prefix.
      *
-     * <p>预算文案每轮都变（当前第几轮 / 还剩几轮），且工具轮会往 messages 尾部追加
-     * assistant/tool/观察消息（SessionRunner#runInternal），所以**不能原位替换** ——
-     * 上一轮的副本会被挤进历史中间，既浪费 context 又会与新文案互相矛盾。
-     * 必须每轮先按本 marker 全部清除再在尾部重新追加，保证全列表恒只有一份。
+     * <p>The budget text changes every loop (current loop / loops left), and tool loops append
+     * assistant/tool/observation messages to the tail of messages (SessionRunner#runInternal), so **in-place replacement is not possible** —
+     * the previous loop's copy would be pushed into the middle of the history, wasting context and contradicting the new text.
+     * Each loop must first clear all copies by this marker and then re-append at the tail, so exactly one copy exists in the list at all times.
      */
     public static final String LOOP_BUDGET_PREFIX = "\n\n[LOOP BUDGET] ";
 
-    /** 同一 run 连续压缩失败达到该次数后，停止继续压缩，避免每轮重复烧 token。 */
+    /** After this many consecutive compaction failures within one run, stop compacting to avoid burning tokens every loop. */
     public static final int MAX_CONSECUTIVE_COMPACTION_FAILURES = 2;
 
-    /** 静默追问消息的 marker（每轮重建尾部时据此清理旧副本，避免累积）。 */
+    /** Marker for the silent follow-up message (old copies are cleaned up when the tail is rebuilt each loop, avoiding accumulation). */
     public static final String SILENT_TURN_NUDGE_PREFIX = "\n\n[NO TOOL CALL] ";
 
     public static final String SILENT_TURN_NUDGE_TEXT =
             "You ended your turn WITHOUT calling any tool. If the task is complete you MUST call `finish(status, summary)`;"
                     + " otherwise continue by calling the next tool. Replying with plain text alone is treated as an error.";
 
-    /** 剩余轮数低于该值时，预算预告追加一句紧迫提醒（模型对「还剩 100 轮」无感，需要显式推一把）。 */
+    /** When remaining loops fall below this value, the budget notice appends an urgency reminder (models do not react to "100 loops left"; they need an explicit push). */
     public static final int LOOP_BUDGET_LOW_THRESHOLD = 5;
 
     /**
-     * 单轮 LLM 失败后的重试退避基数（毫秒），按 {@code 基数 × 2^(attempt-1)} 递增并封顶。
+     * Backoff base (ms) for retrying after a single-loop LLM failure; grows as {@code base × 2^(attempt-1)} and is capped.
      *
-     * <p>曾经是固定 {@code sleep(1000)} + 只有 1 次重试（合计 2 次尝试）。线上实测模型端
-     * 会<b>突发性连续</b>秒回错误：有 run 在 9 秒内连撞 3 次即耗尽重试预算而 FAILED，
-     * 只有一个恰好只撞 2 次的 run 侥幸活下来。固定 1s 退避撞上突发窗口反而会在同一秒
-     * 再打一次，把同一次抖动放大成连续失败。
+     * <p>It used to be a fixed {@code sleep(1000)} with only 1 retry (2 attempts total). In production the model endpoint was observed
+     * returning errors <b>in sudden bursts</b>: one run hit 3 failures within 9 seconds, exhausted the retry budget and went FAILED,
+     * while only a run that happened to hit exactly 2 failures survived. A fixed 1s backoff lands inside the burst window and fires again in the same second,
+     * amplifying a single jitter into consecutive failures.
      */
     public static final long LLM_TURN_RETRY_BASE_MS = 1_000L;
-    /** 重试退避上限（毫秒），避免长重试链把单轮拖到不可接受。 */
+    /** Retry backoff cap (ms), keeping a long retry chain from dragging a single loop to an unacceptable length. */
     public static final long LLM_TURN_RETRY_MAX_MS = 8_000L;
 
-    /** delegate 子 Agent 工作流指引（仅当注册了 delegate 工具时追加，避免无谓 token）。 */
+    /** delegate sub-agent workflow guide (appended only when the delegate tool is registered, to avoid pointless tokens). */
     public static final String PROMPT_SUBAGENT_WORKFLOW = """
 
 
@@ -151,28 +151,28 @@ public final class RunnerConstants {
     public static final String JSON_ERROR_TOOL_LOST = "{\"error\":\"Tool execution lost\"}";
     public static final String FALLBACK_COMPLETE_MSG = "{\"status\":\"ERROR\",\"reason\":\"No completion content produced\"}";
     public static final String CANCEL_MSG = "⏹️ Run cancelled by user";
-    /** 循环退出却没有任何路径写终态时的兜底失败原因。 */
-    public static final String RUN_LOOP_NO_TERMINAL_MSG = "执行异常：run 循环已退出但未产生终态";
-    /** 长时间停在 RUNNING 且执行副本已不在（无 owner）时的对账失败原因。 */
-    public static final String RUN_STALE_MSG = "执行中断：run 长时间无进展且执行副本已失联";
-    /** 运行上下文丢失（工具列表为空）时的失败原因；不能继续跑静默轮。 */
-    public static final String RUN_CONTEXT_LOST_MSG = "运行上下文已丢失（工具列表为空），无法继续调用工具，请重试";
-    /** 压缩后仍无可用输出空间时的失败原因；不能发出注定 400 的请求。 */
+    /** Fallback failure reason when the loop exits and no path wrote a terminal state. */
+    public static final String RUN_LOOP_NO_TERMINAL_MSG = "Execution error: the run loop exited without producing a terminal state";
+    /** Reconciliation failure reason when a run stays RUNNING for a long time but the executing replica is gone (no owner). */
+    public static final String RUN_STALE_MSG = "Execution interrupted: the run made no progress for a long time and the executing replica is gone";
+    /** Failure reason when the run context is lost (empty tool list); silent loops must not continue. */
+    public static final String RUN_CONTEXT_LOST_MSG = "Run context lost (tool list is empty); cannot continue calling tools. Retry.";
+    /** Failure reason when there is still no usable output space after compaction; a request doomed to 400 must not be sent. */
     public static final String RUN_CONTEXT_OVERFLOW_MSG =
-            "上下文已满且压缩无法腾出输出空间，请缩短对话或换用更大上下文的模型";
+            "The context is full and compaction cannot free output space. Shorten the conversation or switch to a model with a larger context.";
     /**
-     * 服务重启后恢复 run 时补在历史末尾的合成 user 消息。
+     * Synthetic user message appended to the end of the history when a run is recovered after a service restart.
      *
-     * <p>重建历史只回放 {@code run.getUserMessage()}，wait 恢复提示等合成 user 消息没有落库 ——
-     * 少了尾部 user 锚点，最后一条 user 之后会是一大段 assistant/tool：既丢失「醒来先复核」的语义，
-     * 也会把重建出来的 content-only assistant 推进 DeepSeek 的 reasoning_content 校验窗口
-     * （线上 run 2794 的 400）。补这一条让恢复路径与 wait 恢复路径「尾部恒有一条 user」的结构一致。
+     * <p>History reconstruction replays only {@code run.getUserMessage()}; synthetic user messages such as the wait-resume hint are not persisted —
+     * without the tail user anchor, a long stretch of assistant/tool messages follows the last user: this both loses the "re-check after waking" semantics
+     * and pushes the reconstructed content-only assistant into DeepSeek's reasoning_content validation window
+     * (production run 2794's 400). Adding it keeps the recovery path structurally consistent with the wait-resume path: the tail always has one user message.
      */
     public static final String RUN_RECOVERY_RESUME_PROMPT =
             "[The run was interrupted by a server restart and has been resumed. "
                     + "Continue from the existing history: re-read the current state before acting, "
                     + "do NOT repeat tool calls whose results are already in the history, and finish the task.]";
-    /** 工具调用理由规则（仅在 call-reason-enabled 时追加到 system prompt）。 */
+    /** Tool call reason rules (appended to the system prompt only when call-reason-enabled). */
     public static final String PROMPT_CALL_REASON_RULES = """
 
             TOOL CALL REASON: every tool call MUST include `_reason` — one short, user-visible sentence

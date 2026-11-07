@@ -48,7 +48,7 @@ function emptyState() {
     counters: {
       ops: 0, ok: 0, fail: 0,
       changed: 0, selfChanged: 0, selfChangedUnknown: 0,
-      effectCounted: 0,          // 成功且 (changed || selfChanged) 的动作数 = 生效率分子
+      effectCounted: 0,          // actions that succeeded and (changed || selfChanged) = numerator of the effectiveness rate
       echoOk: 0, echoFail: 0,
       misclickSuspect: 0,
       degraded: 0, retargeted: 0, settledFail: 0,
@@ -154,14 +154,14 @@ class BrowserMetrics {
       applyCommon(state, record, now);
       const c = state.counters;
       c.changed += record.changed === true ? 1 : 0;
-      // 计数的是「可判定样本数」（true 和 false 都算），因为它是误点率的分母。
-      // 只累加 true 会让分母偏小、误点率虚高。
+      // Counts the "decidable sample count" (both true and false), because it is the denominator of the misclick rate.
+      // Accumulating only true would shrink the denominator and inflate the misclick rate.
       if (selfChanged === undefined) c.selfChangedUnknown += 1;
       else c.selfChanged += 1;
-      // 生效率分子：成功，且页面或目标元素任一有变化
+      // Effectiveness numerator: succeeded, and either the page or the target element changed
       if (record.ok && (record.changed === true || selfChanged === true)) c.effectCounted += 1;
-      // 误点可疑：页面变了，但「我点的那个元素自身」没变 → 强烈怀疑点错目标。
-      // 这是精准度最强的自动代理指标（changed 是全页指纹，_selfChanged 只看目标自身）。
+      // Suspicious misclick: the page changed but "the element I clicked" did not -> strongly suspect the wrong target.
+      // This is the strongest automatic proxy metric for precision (changed is the whole-page fingerprint; _selfChanged looks only at the target itself).
       if (record.ok && record.changed === true && selfChanged === false) {
         c.misclickSuspect += 1;
       }
@@ -320,7 +320,7 @@ function pushRecent(recent, record) {
   return recent;
 }
 
-/** 误点可疑优先，其次采样待审，最后按时间倒序 —— 采样只影响标记，不影响排序可见性。 */
+/** Suspicious misclicks first, then sampled pending review, finally newest first - sampling only affects the flag, not sort visibility. */
 function sortRecent(rows) {
   return rows.slice().sort((a, b) => {
     const sa = a.changed === true && a.selfChanged === false ? 1 : 0;
@@ -384,12 +384,12 @@ function buildSnapshot(s) {
     hasData: true,
     startedAt: s.startedAt, updatedAt: s.updatedAt, lastRecordAt: s.lastRecordAt,
     ops: c.ops, ok: c.ok, fail: c.fail,
-    // L1 执行率：命令没报错
+    // L1 execution rate: the command did not error
     execRate: pct(c.ok, c.ops),
-    // L2 生效率：成功的动作里有多少产生了页面反应（分母是 ok，不是 ops ——
-    //    失败已在执行率里体现，两者各说一件事，避免重复扣分）
+    // L2 effectiveness rate: how many successful actions produced a page reaction (denominator is ok, not ops -
+    //    failures are already reflected in the execution rate; each metric says one thing, avoiding double penalties)
     effectRate: pct(c.effectCounted, c.ok),
-    // L3 type 达成率：输入框值完全等于目标文本（硬指标）
+    // L3 type achievement rate: the input value exactly equals the target text (hard metric)
     typeRate: pct(c.echoOk, typeAction.ok),
     decidableRate: pct(c.selfChanged, decidable),
     misclickRate: pct(c.misclickSuspect, c.selfChanged),

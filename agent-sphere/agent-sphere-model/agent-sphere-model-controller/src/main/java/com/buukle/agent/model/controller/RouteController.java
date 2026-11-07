@@ -1,5 +1,9 @@
 package com.buukle.agent.model.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -12,14 +16,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/model/routes")
+@RequestMapping(ApiPrefix.V1 + "/model/routes")
 @RequiredArgsConstructor
 @WithTenant
 public class RouteController extends BaseController {
     private final RouteService routeService;
 
     @AuditLog(action = "CREATE", resourceType = "ModelRoute", resourceId = "#result?.body?.id")
-    @RequirePermission("model:route:create")
+    @RequirePermission(PermissionCodes.MODEL_ROUTE_CREATE)
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateRouteDTO dto) {
         return created(routeService.createRoute(dto));
@@ -45,21 +49,21 @@ public class RouteController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE", resourceType = "ModelRoute", resourceId = "#id")
-    @RequirePermission("model:route:update")
+    @RequirePermission(PermissionCodes.MODEL_ROUTE_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateRouteDTO dto) {
         return ok(routeService.updateRoute(id, dto));
     }
 
     @AuditLog(action = "SET_DEFAULT", resourceType = "ModelRoute", resourceId = "#id")
-    @RequirePermission("model:route:update")
+    @RequirePermission(PermissionCodes.MODEL_ROUTE_UPDATE)
     @PutMapping("/{id}/default")
     public ResponseEntity<?> setDefault(@PathVariable Long id) {
         return ok(routeService.setDefault(id));
     }
 
     @AuditLog(action = "DELETE", resourceType = "ModelRoute", resourceId = "#id")
-    @RequirePermission("model:route:delete")
+    @RequirePermission(PermissionCodes.MODEL_ROUTE_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         routeService.deleteRoute(id);

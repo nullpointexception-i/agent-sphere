@@ -1,3 +1,5 @@
+import { PERM } from '@/constants/permissions';
+
 export default function access(
   initialState:
     | { currentUser?: API.CurrentUser; permissions?: string[] }
@@ -9,19 +11,19 @@ export default function access(
     canAdmin:
       (currentUser && currentUser.access === 'admin') ||
       perms.some((p) => p.startsWith('admin:')),
-    canManageModels: perms.includes('model:provider:read'),
-    canManageInstances: perms.includes('instance:read'),
-    canManageSuperAgent: perms.includes('super-agent:read'),
-    canManageIm: perms.includes('im:conversation:read'),
+    canManageModels: perms.includes(PERM.modelProviderRead),
+    canManageInstances: perms.includes(PERM.instanceRead),
+    canManageSuperAgent: perms.includes(PERM.superAgentRead),
+    canManageIm: perms.includes(PERM.imConversationRead),
     canManageCapabilities: perms.some((p) => p.startsWith('capability:')),
-    canManageMcp: perms.includes('capability:mcp:read'),
-    canManageSkill: perms.includes('capability:skill:read'),
-    canManageCli: perms.includes('capability:cli:read'),
-    canManageBuiltin: perms.includes('capability:builtin:read'),
-    canViewDocuments: perms.includes('document:read'),
+    canManageMcp: perms.includes(PERM.capabilityMcpRead),
+    canManageSkill: perms.includes(PERM.capabilitySkillRead),
+    canManageCli: perms.includes(PERM.capabilityCliRead),
+    canManageBuiltin: perms.includes(PERM.capabilityBuiltinRead),
+    canViewDocuments: perms.includes(PERM.documentRead),
     canViewArtifacts:
-      perms.includes('document:read') || perms.includes('admin:tasks:read'),
-    canManageCompletions: perms.includes('admin:completions:read'),
-    canManageTasks: perms.includes('admin:tasks:read'),
+      perms.includes(PERM.documentRead) || perms.includes(PERM.adminTasksRead),
+    canManageCompletions: perms.includes(PERM.adminCompletionsRead),
+    canManageTasks: perms.includes(PERM.adminTasksRead),
   };
 }

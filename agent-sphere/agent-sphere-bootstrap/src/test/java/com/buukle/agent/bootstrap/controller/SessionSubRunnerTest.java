@@ -174,7 +174,7 @@ class SessionSubRunnerTest {
 
     @Test
     void depthExceeded_rejected() {
-        // 当前深度 3，默认最大嵌套 3 → 进入即超限
+        // Current depth 3, default max nesting 3 → over the limit on entry
         SubRunExecutionContext parent = rootCtx().child(3, List.of("agent:other"), null, null);
         String result = executor.execute(delegateTool(null), "{}", parent, List.of());
         assertTrue(result.contains("nested depth"));
@@ -196,13 +196,13 @@ class SessionSubRunnerTest {
         }).when(modelProviderSpi).streamWithStats(anyString(), anyString(), anyString(), anyString(),
                 any(), any(), any());
 
-        // 顶层：owner=null → parent_run_id=null
+        // Top level: owner=null → parent_run_id=null
         executor.execute(delegateTool(null), "{}", rootCtx(), List.of());
         ArgumentCaptor<Long> topParent = ArgumentCaptor.forClass(Long.class);
         verify(subAgentRunSpi).start(eq(1L), eq(2L), topParent.capture(), any(), eq("AGENT"), anyString(), anyString());
         assertNull(topParent.getValue(), "顶层子 run 的 parent_run_id 应为 null");
 
-        // 嵌套：owner=99 → parent_run_id=99
+        // Nested: owner=99 → parent_run_id=99
         SubRunExecutionContext nested = rootCtx().child(1, List.of("agent:other"), "parent-call", 99L);
         executor.execute(delegateTool(null), "{}", nested, List.of());
         ArgumentCaptor<Long> nestedParent = ArgumentCaptor.forClass(Long.class);

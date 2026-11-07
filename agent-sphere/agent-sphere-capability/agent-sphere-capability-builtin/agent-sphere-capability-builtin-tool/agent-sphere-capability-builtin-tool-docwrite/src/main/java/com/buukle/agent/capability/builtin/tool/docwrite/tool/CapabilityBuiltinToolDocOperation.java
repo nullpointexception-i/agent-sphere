@@ -120,7 +120,7 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         }
     }
 
-    /** 结果里补文档版本/标题；失败结果没有 documentId 时跳过。 */
+    /** Fills the document version/title into the result; skipped for failure results without a documentId. */
     private void fillVersion(DocWriteResultVO result) {
         if (result == null || result.getDocumentId() == null || result.getVersion() != null) {
             return;

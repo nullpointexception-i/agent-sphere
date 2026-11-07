@@ -15,7 +15,7 @@ interface HeaderProps {
   selectedModelRouteId?: number;
   onModelRouteChange: (id: number | undefined) => void;
   modelRoutes: any[];
-  /** /runtime/{sid}/reasoning 的能力视图；null 表示未加载或不支持。 */
+  /** Capability view for /runtime/{sid}/reasoning; null means not loaded or unsupported. */
   reasoningCapability?: any;
   reasoningEffort?: string;
   onReasoningChange: (level: string) => void;

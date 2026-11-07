@@ -1,4 +1,4 @@
-/** 子 Agent 运行卡片（agent_sub_agent_run 的视图）。 */
+/** Sub-agent run card (a view of agent_sub_agent_run). */
 export interface SubAgentRun {
   id: number;
   sessionId: number;
@@ -13,7 +13,7 @@ export interface SubAgentRun {
   createdAt?: string;
 }
 
-/** 时间线条目（llm_interaction 或 tool_call）。 */
+/** Timeline entry (llm_interaction or tool_call). */
 export interface SubAgentTimelineItem {
   activityType: 'llm_interaction' | 'tool_call';
   createdAt?: string;
@@ -31,17 +31,17 @@ export interface SubAgentTimelineItem {
   artifact?: string | null;
   toolStatus?: string;
   toolErrorMessage?: string;
-  /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），子 Agent 卡片回显用。 */
+  /** Browser screenshot references in the tool result ([{fileKey, contentType}]), rendered by the sub-agent card. */
   images?: { fileKey: string; contentType?: string }[];
 }
 
-/** 实时聚合的单个子 Agent 当前状态（SSE 流式更新）。 */
+/** Current state of a single live-aggregated sub-agent (updated by SSE streaming). */
 export interface SubAgentLive {
   key: string;
   parentToolCallId?: string;
   agentType?: string;
   agentRef?: string;
-  /** 后端 agent_sub_agent_run 主键（同一子 Agent 执行全程一致），用于身份与 live/历史去重。 */
+  /** Backend agent_sub_agent_run primary key (stable for the whole sub-agent execution), used for identity and live/history dedup. */
   subAgentRunId?: number | null;
   name: string;
   status?: string;
@@ -56,7 +56,7 @@ export interface SubAgentLive {
   }[];
 }
 
-/** 纯 SSE 驱动的子 Agent 实时步骤（按 subAgentRunId 聚合；终态由一次性历史拉取校正）。 */
+/** Purely SSE-driven sub-agent live steps (aggregated by subAgentRunId; terminal state corrected by a one-off history fetch). */
 export type SubAgentLiveStep =
   | {
       type: 'llm';
@@ -73,7 +73,7 @@ export type SubAgentLiveStep =
       status: 'pending' | 'in_progress' | 'succeeded' | 'failed';
       argumentsJson?: string;
       artifact?: string;
-      /** 工具结果中的浏览器截图引用（[{fileKey, contentType}]），live 步骤回显用。 */
+      /** Browser screenshot references in the tool result ([{fileKey, contentType}]), shown by live steps. */
       images?: { fileKey: string; contentType?: string }[];
     };
 

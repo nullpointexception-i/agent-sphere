@@ -53,9 +53,11 @@ function isChunkLoadError(reason: unknown): boolean {
 }
 
 /**
- * 前端重新部署后，旧会话/缓存可能仍引用旧 chunk（旧 index.html 的 manifest）。
- * 异步动态加载失败是 unhandledrejection，React ErrorBoundary 捕获不到。
- * 此处监听并带版本号（_v）强制重取最新 index.html，自动刷新一次，避免手动刷新。
+ * After a frontend redeploy, old sessions/caches may still reference stale chunks
+ * (the manifest from the old index.html).
+ * Async dynamic-import failures surface as unhandledrejection, which React ErrorBoundary
+ * cannot catch. Listen here and force a refetch of the latest index.html with a version
+ * query (_v), auto-reloading once so users do not have to refresh manually.
  */
 function installChunkErrorAutoReload() {
   if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
@@ -111,7 +113,8 @@ export async function getInitialState(): Promise<{
         clearStoredUser();
         return undefined;
       }
-      // SSO 用户：初始化会话时查询第三方身份（provider_code@subject），用于右上角展示
+      // SSO users: query the third-party identity (provider_code@subject) during
+      // initialization, used for the top-right display
       const ssoIdentity = await umiRequest('/api/v1/sso/me', {
         skipErrorHandler: true,
       }).catch(() => null);
@@ -119,8 +122,8 @@ export async function getInitialState(): Promise<{
         user.ssoProviderCode = ssoIdentity.providerCode;
         user.ssoSubject = ssoIdentity.subject;
       }
-      // 用 /auth/me 的新鲜数据（含 permissions/roles）回写本地存储，
-      // 使权限变更在下次启动时立即生效，无需重新登录。
+      // Write fresh /auth/me data (including permissions/roles) back to local storage
+      // so permission changes take effect on the next startup without re-login.
       setStoredUser({ ...stored, ...user });
       return toProCurrentUser(user);
     } catch (_error) {
@@ -135,7 +138,7 @@ export async function getInitialState(): Promise<{
   const { location } = history;
   if (!isPublicPath(location.pathname)) {
     const currentUser = await fetchUserInfo();
-    // permissions 取 /auth/me 刷新后的新鲜值，而非登录时快照
+    // Read permissions from the refreshed /auth/me instead of the login-time snapshot
     const fresh = getStoredUser();
     return {
       fetchUserInfo,
@@ -286,7 +289,8 @@ export function rootContainer(container: React.ReactNode) {
 
 function TrackerInit() {
   useEffect(() => {
-    // 未登录不启动埋点，避免登录页无意义流量与 401 刷新
+    // Do not start tracking when signed out: avoids meaningless login-page traffic
+    // and 401-triggered refreshes
     if (getStoredUser()?.token) {
       tracker.init();
     }

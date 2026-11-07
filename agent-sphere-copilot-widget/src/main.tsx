@@ -13,11 +13,11 @@ export interface AgentSphereWidget {
   init?: (options?: WidgetConfig) => WidgetHandle;
   /** Create the widget in a detached container (advanced usage). */
   mount?: (options?: WidgetConfig) => WidgetHandle;
-  /** 清除当前用户会话并重新挂载，触发静默 SSO 重新登录（用户切换时由宿主调用）。 */
+  /** Clear the current user session and remount, triggering silent SSO to log in again (called by the host when the user switches). */
   relogin?: () => void;
   /**
-   * 仅清空会话数据（内存缓存 + sessionStorage key），不重新挂载、不触发认证。
-   * 宿主（如 Bole）在切换用户后调用它清除旧用户残留，随后自行发起新用户认证。
+   * Clear only the session data (in-memory cache + sessionStorage key) without remounting or triggering authentication.
+   * A host (such as Bole) calls it after switching users to clear the old user's leftovers, then starts authentication for the new user on its own.
    */
   resetSession?: () => void;
 }
@@ -107,8 +107,8 @@ const api: AgentSphereWidget = {
   init: mountWidget,
   mount: mountWidget,
   relogin: () => {
-    // 清除当前用户会话（内存缓存 + sessionStorage），重置 auto-login 标记与退避计数，
-    // 重新挂载触发新的 Root autoLogin 静默 SSO（为切换后的新用户重新登录）
+    // Clear the current user session (in-memory cache + sessionStorage), reset the auto-login marker and backoff counters,
+    // and remount to trigger a new Root autoLogin silent SSO (logging in the newly switched user)
     clearUser();
     sessionStorage.removeItem('agent-sphere-widget:auto-login-tried');
     sessionStorage.removeItem('agent-sphere:as:auto-login-last-at');

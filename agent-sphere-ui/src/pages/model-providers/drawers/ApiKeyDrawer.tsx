@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { App, Button, Drawer, Form, Input, Modal, Radio, Table } from 'antd';
@@ -74,12 +75,12 @@ export default function ApiKeyDrawer({
     {
       title: intl.formatMessage({
         id: 'pages.table.activeKey',
-        defaultMessage: '默认',
+        defaultMessage: 'Active Key',
       }),
       key: 'activeKey',
       width: 60,
       render: (_: any, record: any) => (
-        <Can code="model:apikey:set-active">
+        <Can code={PERM.modelApiKeySetActive}>
           <Radio
             checked={record.id === currentApiKeyId}
             onClick={() => {
@@ -90,7 +91,7 @@ export default function ApiKeyDrawer({
                     message.success(
                       intl.formatMessage({
                         id: 'pages.models.keyUnset',
-                        defaultMessage: '已取消',
+                        defaultMessage: 'Deactivated',
                       }),
                     );
                     onActiveKeyChange?.();
@@ -103,7 +104,7 @@ export default function ApiKeyDrawer({
                     message.success(
                       intl.formatMessage({
                         id: 'pages.models.keySetSuccess',
-                        defaultMessage: '已设为当前密钥',
+                        defaultMessage: 'Set as active key',
                       }),
                     );
                     onActiveKeyChange?.();
@@ -138,7 +139,7 @@ export default function ApiKeyDrawer({
       width: 120,
       render: (_: any, record: any) => (
         <>
-          <Can code="model:apikey:update">
+          <Can code={PERM.modelApiKeyUpdate}>
             <Button
               type="link"
               size="small"
@@ -150,7 +151,7 @@ export default function ApiKeyDrawer({
               }}
             />
           </Can>
-          <Can code="model:apikey:delete">
+          <Can code={PERM.modelApiKeyDelete}>
             <Button
               type="link"
               danger
@@ -198,7 +199,7 @@ export default function ApiKeyDrawer({
       onClose={onClose}
       size="large"
       extra={
-        <Can code="model:apikey:create">
+        <Can code={PERM.modelApiKeyCreate}>
           <Button
             size="small"
             type="primary"
@@ -228,7 +229,8 @@ export default function ApiKeyDrawer({
       >
         {intl.formatMessage({
           id: 'pages.models.apiKeyHint',
-          defaultMessage: '不设置 API Key，路由则无法为 instance 配置模型',
+          defaultMessage:
+            'Without a default API Key, routes cannot be used to configure models for instances',
         })}
       </div>
       <Table

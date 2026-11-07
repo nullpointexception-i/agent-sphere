@@ -1,5 +1,9 @@
 package com.buukle.agent.superagent.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
@@ -24,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/super-agents/{superAgentId}")
+@RequestMapping(ApiPrefix.V1 + "/super-agents/{superAgentId}")
 @WithTenant
 @RequiredArgsConstructor
 public class SuperAgentQueryController extends BaseController {
@@ -37,7 +41,7 @@ public class SuperAgentQueryController extends BaseController {
     private final SuperAgentEventService eventService;
     private final SuperAgentUsageService usageService;
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping("/events")
     public ResponseEntity<?> events(@PathVariable Long superAgentId) {
         List<Long> eventIds = deliveryMapper.selectList(Wrappers.<AgentEventDelivery>lambdaQuery()
@@ -53,7 +57,7 @@ public class SuperAgentQueryController extends BaseController {
                 .orderByDesc(AgentEvent::getId)));
     }
 
-    @RequirePermission("super-agent:update")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_UPDATE)
     @PostMapping("/events/{eventId}/retry")
     public ResponseEntity<?> retryEvent(@PathVariable Long superAgentId,
                                         @PathVariable Long eventId) {
@@ -61,14 +65,14 @@ public class SuperAgentQueryController extends BaseController {
         return ok();
     }
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping("/usage")
     public ResponseEntity<?> usage(@PathVariable Long superAgentId,
                                    @RequestParam(defaultValue = "30") int days) {
         return ok(usageService.usage(superAgentId, days));
     }
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping("/threads")
     public ResponseEntity<?> threads(@PathVariable Long superAgentId) {
         List<Long> eventIds = deliveryMapper.selectList(Wrappers.<AgentEventDelivery>lambdaQuery()

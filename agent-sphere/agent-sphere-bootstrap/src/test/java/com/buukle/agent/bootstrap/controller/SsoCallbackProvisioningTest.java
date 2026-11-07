@@ -136,7 +136,7 @@ class SsoCallbackProvisioningTest {
 
         assertNotNull(redirect);
         assertTrue(redirect.contains("otc="));
-        // 异步开通应被触发（异常在虚拟线程内被捕获，不影响登录）
+        // Async provisioning must be triggered (exceptions are caught on the virtual thread and do not affect login)
         verify(userResourceProvisioner, timeout(3000))
                 .provision(any(), anyString(), anyString(), anyString());
     }

@@ -5,13 +5,13 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.List;
 
-/** Timeline keyset 分页结果。 */
+/** Timeline keyset paging result. */
 @Data
 public class SessionTimelinePageVO implements Serializable {
     private List<AgentTimelineVO> rows;
     private boolean hasMore;
-    /** 便于向前翻页的光标（rows 最旧 seq）。 */
+    /** Cursor for paging forward (oldest seq in rows). */
     private Long oldestSeq;
-    /** 便于向后/补档的光标（rows 最新 seq）。 */
+    /** Cursor for paging backward/catch-up (newest seq in rows). */
     private Long newestSeq;
 }

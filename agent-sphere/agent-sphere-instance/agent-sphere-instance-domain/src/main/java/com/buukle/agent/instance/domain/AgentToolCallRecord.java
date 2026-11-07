@@ -25,14 +25,14 @@ public class AgentToolCallRecord {
     private String compressedArtifact;
     private String status;
     private String errorMessage;
-    /** 归属的子 Agent 运行（NULL=主 Agent）。 */
+    /** Owning sub-agent run (NULL=main Agent). */
     private Long subAgentRunId;
-    /** 产生该调用的 LLM 轮次（= agent_llm_interaction_record.turn_no / run.loop_count）；NULL=迁移前的历史行。 */
+    /** LLM turn that produced this call (= agent_llm_interaction_record.turn_no / run.loop_count); NULL=historical row from before the migration. */
     private Integer turnNo;
-    /** 执行该调用的浏览器设备（扩展回调回传）。 */
+    /** Browser device that executed this call (reported back by the extension callback). */
     private String deviceId;
     private String deviceName;
-    /** 执行来源端：CONSOLE / WIDGET。 */
+    /** Executing surface: CONSOLE / WIDGET. */
     private String execSource;
     @TableLogic
     private Boolean deleteFlag;

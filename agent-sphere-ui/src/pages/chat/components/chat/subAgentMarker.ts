@@ -1,15 +1,16 @@
 /**
- * 子 Agent 协议前缀兼容表。
+ * Sub-agent protocol prefix compatibility table.
  *
- * 后端统一 delegate 重构后使用中性前缀：nodeName `agent:`、reasoning marker `▶ Agent `、
- * publishId `agent-`；历史会话仍可能是旧的 `skill:` / `▶ Skill ` / `skill-`。
- * 这里同时登记两套前缀，识别子 Agent 段时新旧都要接受，避免历史会话断裂。
+ * After the backend's unified delegate refactor, neutral prefixes are used: nodeName `agent:`,
+ * reasoning marker `▶ Agent `, publishId `agent-`; historical sessions may still use the old
+ * `skill:` / `▶ Skill ` / `skill-`. Both prefix sets are registered here so that sub-agent
+ * segments accept old and new alike, keeping historical sessions from breaking.
  */
 export const SUB_AGENT_NODE_NAME_PREFIXES = ['agent:', 'skill:'] as const;
 export const SUB_AGENT_MARKER_PREFIXES = ['▶ Agent ', '▶ Skill '] as const;
 export const SUB_AGENT_PUBLISH_ID_PREFIXES = ['agent-', 'skill-'] as const;
 
-/** 去掉标题/显示名开头的子 Agent 哨兵前缀（兼容历史 `▶ Skill ` 数据）。 */
+/** Strip the sub-agent sentinel prefix from the start of a title/display name (tolerates historical `▶ Skill ` data). */
 export function stripSubAgentMarkerPrefix(text?: string | null): string {
   const raw = text ?? '';
   for (const prefix of SUB_AGENT_MARKER_PREFIXES) {
@@ -19,8 +20,9 @@ export function stripSubAgentMarkerPrefix(text?: string | null): string {
 }
 
 /**
- * 剥离子 Agent LLM 首帧 reasoning 哨兵行（`<marker><id>: <name>\n<body>`）。
- * 同时接受旧 `▶ Skill ` 与新 `▶ Agent `；无已知前缀时按首行剥离（保持既有行为）。
+ * Strip the sub-agent LLM first-frame reasoning sentinel line (`<marker><id>: <name>\n<body>`).
+ * Accepts both the old `▶ Skill ` and the new `▶ Agent `; with no known prefix, strip by the
+ * first line (preserving existing behavior).
  */
 export function stripSubAgentSentinel(delta: string): string {
   const marker = SUB_AGENT_MARKER_PREFIXES.find((prefix) =>

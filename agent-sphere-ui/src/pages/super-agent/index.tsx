@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   AlertOutlined,
   BarChartOutlined,
@@ -37,21 +38,36 @@ import {
   type WorkItem,
 } from '@/services/agentSphere/superAgent';
 
-const AGENT_STATUS: Record<string, { color: string; label: string }> = {
-  ACTIVE: { color: 'green', label: '运行中' },
-  PAUSED: { color: 'orange', label: '已暂停' },
-  ARCHIVED: { color: 'default', label: '已归档' },
+const AGENT_STATUS: Record<string, { color: string; labelKey: string }> = {
+  ACTIVE: { color: 'green', labelKey: 'pages.superAgent.agentStatus.active' },
+  PAUSED: { color: 'orange', labelKey: 'pages.superAgent.agentStatus.paused' },
+  ARCHIVED: {
+    color: 'default',
+    labelKey: 'pages.superAgent.agentStatus.archived',
+  },
 };
 
-const WORK_STATUS: Record<string, { color: string; label: string }> = {
-  QUEUED: { color: 'blue', label: '排队中' },
-  DISPATCHING: { color: 'processing', label: '派发中' },
-  RUNNING: { color: 'processing', label: '执行中' },
-  WAITING: { color: 'gold', label: '等待中' },
-  COMPLETED: { color: 'green', label: '已完成' },
-  DONE: { color: 'green', label: '已完成' },
-  FAILED: { color: 'red', label: '失败' },
-  CANCELLED: { color: 'default', label: '已取消' },
+const WORK_STATUS: Record<string, { color: string; labelKey: string }> = {
+  QUEUED: { color: 'blue', labelKey: 'pages.superAgent.workStatus.queued' },
+  DISPATCHING: {
+    color: 'processing',
+    labelKey: 'pages.superAgent.workStatus.dispatching',
+  },
+  RUNNING: {
+    color: 'processing',
+    labelKey: 'pages.superAgent.workStatus.running',
+  },
+  WAITING: { color: 'gold', labelKey: 'pages.superAgent.workStatus.waiting' },
+  COMPLETED: {
+    color: 'green',
+    labelKey: 'pages.superAgent.workStatus.completed',
+  },
+  DONE: { color: 'green', labelKey: 'pages.superAgent.workStatus.completed' },
+  FAILED: { color: 'red', labelKey: 'pages.superAgent.workStatus.failed' },
+  CANCELLED: {
+    color: 'default',
+    labelKey: 'pages.superAgent.workStatus.cancelled',
+  },
 };
 
 function StatusTag({
@@ -59,11 +75,14 @@ function StatusTag({
   map,
 }: {
   value?: string;
-  map: Record<string, { color: string; label: string }>;
+  map: Record<string, { color: string; labelKey: string }>;
 }) {
+  const intl = useIntl();
   const cfg = value ? map[value] : undefined;
   return cfg ? (
-    <Tag color={cfg.color}>{cfg.label}</Tag>
+    <Tag color={cfg.color}>
+      {intl.formatMessage({ id: cfg.labelKey, defaultMessage: value })}
+    </Tag>
   ) : (
     <Tag>{value ?? '-'}</Tag>
   );
@@ -154,7 +173,9 @@ export default function SuperAgentPage() {
     setSubmitting(true);
     try {
       await superAgentApi.create(values);
-      message.success(t('pages.superAgent.createSuccess', '数字员工已创建'));
+      message.success(
+        t('pages.superAgent.createSuccess', 'Super Agent created'),
+      );
       setCreateOpen(false);
       form.resetFields();
       actionRef.current?.reload();
@@ -169,16 +190,16 @@ export default function SuperAgentPage() {
       title: pause
         ? t(
             'pages.superAgent.pauseConfirm',
-            '暂停后该员工的投递会跳过，确认暂停？',
+            'Deliveries will be skipped after pausing. Continue?',
           )
-        : t('pages.superAgent.resumeConfirm', '确认恢复该数字员工？'),
+        : t('pages.superAgent.resumeConfirm', 'Resume this Super Agent?'),
       onOk: async () => {
         if (pause) {
           await superAgentApi.pause(record.id);
         } else {
           await superAgentApi.resume(record.id);
         }
-        message.success(t('pages.superAgent.updated', '状态已更新'));
+        message.success(t('pages.superAgent.updated', 'Status updated'));
         actionRef.current?.reload();
       },
     });
@@ -187,7 +208,7 @@ export default function SuperAgentPage() {
   const retryWorkItem = async (record: WorkItem) => {
     if (!selected) return;
     await superAgentApi.retryWorkItem(selected.id, record.id);
-    message.success(t('pages.superAgent.retried', '已重新排队'));
+    message.success(t('pages.superAgent.retried', 'Queued again'));
     workActionRef.current?.reload();
   };
 
@@ -196,11 +217,11 @@ export default function SuperAgentPage() {
     modal.confirm({
       title: t(
         'pages.superAgent.cancelConfirm',
-        '取消后 Worker Run 会停止，确认取消？',
+        'Worker Run will be stopped after cancelling. Continue?',
       ),
       onOk: async () => {
         await superAgentApi.cancelWorkItem(selected.id, record.id);
-        message.success(t('pages.superAgent.cancelled', '任务已取消'));
+        message.success(t('pages.superAgent.cancelled', 'Task cancelled'));
         workActionRef.current?.reload();
       },
     });
@@ -252,7 +273,7 @@ export default function SuperAgentPage() {
     setTemplateSaving(true);
     try {
       await superAgentApi.updateGroupRouterTemplate(templateText);
-      message.success(t('pages.superAgent.templateSaved', '模板已保存'));
+      message.success(t('pages.superAgent.templateSaved', 'Template saved'));
       setTemplateOpen(false);
     } finally {
       setTemplateSaving(false);
@@ -276,7 +297,7 @@ export default function SuperAgentPage() {
     setSettingsSaving(true);
     try {
       await superAgentApi.update(settingsAgent.id, values);
-      message.success(t('pages.superAgent.updated', '状态已更新'));
+      message.success(t('pages.superAgent.updated', 'Status updated'));
       setSettingsOpen(false);
       actionRef.current?.reload();
     } finally {
@@ -298,46 +319,46 @@ export default function SuperAgentPage() {
       width: 70,
     },
     {
-      title: t('pages.superAgent.name', '名称'),
+      title: t('pages.superAgent.name', 'Name'),
       dataIndex: 'name',
       ellipsis: true,
     },
     {
-      title: t('pages.superAgent.description', '描述'),
+      title: t('pages.superAgent.description', 'Description'),
       dataIndex: 'description',
       ellipsis: true,
     },
     {
-      title: t('pages.superAgent.position', '角色'),
+      title: t('pages.superAgent.position', 'Role'),
       dataIndex: 'positionCode',
       width: 150,
       render: (_: unknown, record: SuperAgent) => positionName(record) || '-',
     },
     {
-      title: t('pages.superAgent.routerInstance', 'Router 实例'),
+      title: t('pages.superAgent.routerInstance', 'Router Instance'),
       dataIndex: 'routerInstanceId',
       width: 120,
       render: (v: number) => (v ? `#${v}` : '-'),
     },
     {
-      title: t('pages.superAgent.workerInstance', 'Worker 实例'),
+      title: t('pages.superAgent.workerInstance', 'Worker Instance'),
       dataIndex: 'workerInstanceId',
       width: 120,
       render: (v: number) => (v ? `#${v}` : '-'),
     },
     {
-      title: t('pages.superAgent.status', '状态'),
+      title: t('pages.superAgent.status', 'Status'),
       dataIndex: 'status',
       width: 110,
       render: (v: string) => <StatusTag value={v} map={AGENT_STATUS} />,
     },
     {
-      title: t('pages.superAgent.createdAt', '创建时间'),
+      title: t('pages.superAgent.createdAt', 'Created At'),
       dataIndex: 'createdAt',
       width: 170,
     },
     {
-      title: t('pages.table.action', '操作'),
+      title: t('pages.table.action', 'Actions'),
       valueType: 'option',
       width: 440,
       render: (_: unknown, record: SuperAgent) => [
@@ -351,7 +372,7 @@ export default function SuperAgentPage() {
             setSelected(record);
           }}
         >
-          {t('pages.superAgent.tasks', '任务')}
+          {t('pages.superAgent.tasks', 'Tasks')}
         </Button>,
         <Button
           key="usage"
@@ -360,7 +381,7 @@ export default function SuperAgentPage() {
           icon={<BarChartOutlined />}
           onClick={() => openInsight(record, 'usage')}
         >
-          用量
+          {t('pages.superAgent.usage', 'Usage')}
         </Button>,
         <Button
           key="watchdog"
@@ -369,16 +390,16 @@ export default function SuperAgentPage() {
           icon={<AlertOutlined />}
           onClick={() => openInsight(record, 'watchdog')}
         >
-          巡检
+          {t('pages.superAgent.watchdog', 'Watchdog')}
         </Button>,
-        <Can key="settings" code="super-agent:update">
+        <Can key="settings" code={PERM.superAgentUpdate}>
           <Button
             type="link"
             size="small"
             icon={<SettingOutlined />}
             onClick={() => openSettings(record)}
           >
-            设置
+            {t('pages.superAgent.settings', 'Settings')}
           </Button>
         </Can>,
         <Button
@@ -387,9 +408,9 @@ export default function SuperAgentPage() {
           size="small"
           onClick={() => openInsight(record, 'channels')}
         >
-          渠道
+          {t('pages.superAgent.channels', 'Channels')}
         </Button>,
-        <Can key="toggle" code="super-agent:update">
+        <Can key="toggle" code={PERM.superAgentUpdate}>
           <Button
             type="link"
             size="small"
@@ -403,8 +424,8 @@ export default function SuperAgentPage() {
             onClick={() => toggle(record)}
           >
             {record.status === 'ACTIVE'
-              ? t('pages.superAgent.pause', '暂停')
-              : t('pages.superAgent.resume', '恢复')}
+              ? t('pages.superAgent.pause', 'Pause')
+              : t('pages.superAgent.resume', 'Resume')}
           </Button>
         </Can>,
       ],
@@ -418,40 +439,40 @@ export default function SuperAgentPage() {
       width: 70,
     },
     {
-      title: t('pages.superAgent.workTitle', '任务'),
+      title: t('pages.superAgent.workTitle', 'Task'),
       dataIndex: 'title',
       ellipsis: true,
     },
     {
-      title: t('pages.superAgent.status', '状态'),
+      title: t('pages.superAgent.status', 'Status'),
       dataIndex: 'status',
       width: 110,
       render: (v: string) => <StatusTag value={v} map={WORK_STATUS} />,
     },
     {
-      title: t('pages.superAgent.attempt', '第几次'),
+      title: t('pages.superAgent.attempt', 'Attempt'),
       dataIndex: 'attempt',
       width: 80,
       render: (v: number) => v ?? 1,
     },
     {
-      title: t('pages.superAgent.workerSession', 'Worker 会话'),
+      title: t('pages.superAgent.workerSession', 'Worker Session'),
       dataIndex: 'workerSessionId',
       width: 120,
       render: (v: number) => (v ? `#${v}` : '-'),
     },
     {
-      title: t('pages.superAgent.lastProgress', '最后进展'),
+      title: t('pages.superAgent.lastProgress', 'Last Progress'),
       dataIndex: 'lastProgressAt',
       width: 170,
     },
     {
-      title: t('pages.superAgent.summary', '结果'),
+      title: t('pages.superAgent.summary', 'Result'),
       dataIndex: 'summary',
       ellipsis: true,
     },
     {
-      title: t('pages.table.action', '操作'),
+      title: t('pages.table.action', 'Actions'),
       valueType: 'option',
       width: 150,
       render: (_: unknown, record: WorkItem) => [
@@ -463,10 +484,10 @@ export default function SuperAgentPage() {
             icon={<HistoryOutlined />}
             onClick={() => openTimeline(record)}
           >
-            {t('pages.superAgent.timeline', '时间线')}
+            {t('pages.superAgent.timeline', 'Timeline')}
           </Button>
         ) : null,
-        <Can key="retry" code="super-agent:update">
+        <Can key="retry" code={PERM.superAgentUpdate}>
           {record.status === 'FAILED' || record.status === 'CANCELLED' ? (
             <Button
               type="link"
@@ -474,11 +495,11 @@ export default function SuperAgentPage() {
               icon={<RedoOutlined />}
               onClick={() => retryWorkItem(record)}
             >
-              {t('pages.superAgent.retry', '重试')}
+              {t('pages.superAgent.retry', 'Retry')}
             </Button>
           ) : null}
         </Can>,
-        <Can key="cancel" code="super-agent:update">
+        <Can key="cancel" code={PERM.superAgentUpdate}>
           {['QUEUED', 'DISPATCHING', 'RUNNING', 'WAITING'].includes(
             record.status,
           ) ? (
@@ -489,7 +510,7 @@ export default function SuperAgentPage() {
               icon={<StopOutlined />}
               onClick={() => cancelWorkItem(record)}
             >
-              {t('pages.superAgent.cancel', '取消')}
+              {t('pages.superAgent.cancel', 'Cancel')}
             </Button>
           ) : null}
         </Can>,
@@ -498,10 +519,18 @@ export default function SuperAgentPage() {
   ];
 
   const usageColumns = [
-    { title: '日期', dataIndex: 'day', width: 110 },
-    { title: '会话类型', dataIndex: 'sessionType', width: 130 },
+    { title: t('pages.superAgent.date', 'Date'), dataIndex: 'day', width: 110 },
+    {
+      title: t('pages.superAgent.sessionType', 'Session Type'),
+      dataIndex: 'sessionType',
+      width: 130,
+    },
     { title: 'Run', dataIndex: 'runCount', width: 80 },
-    { title: '调用', dataIndex: 'interactionCount', width: 80 },
+    {
+      title: t('pages.superAgent.calls', 'Calls'),
+      dataIndex: 'interactionCount',
+      width: 80,
+    },
     { title: 'Prompt', dataIndex: 'promptTokens', width: 100 },
     { title: 'Completion', dataIndex: 'completionTokens', width: 110 },
     { title: 'Total', dataIndex: 'totalTokens', width: 100 },
@@ -511,32 +540,62 @@ export default function SuperAgentPage() {
 
   const watchdogColumns = [
     { title: 'ID', dataIndex: 'id', width: 70 },
-    { title: '状态', dataIndex: 'status', width: 100 },
+    {
+      title: t('pages.superAgent.status', 'Status'),
+      dataIndex: 'status',
+      width: 100,
+    },
     { title: 'Dispatched', dataIndex: 'dispatchedStuck', width: 110 },
     { title: 'Delivery', dataIndex: 'deliveryStuck', width: 100 },
     { title: 'Outbound', dataIndex: 'outboundStuck', width: 100 },
-    { title: '开始', dataIndex: 'startedAt', width: 170 },
-    { title: '结束', dataIndex: 'finishedAt', width: 170 },
-    { title: '错误', dataIndex: 'errorMessage', ellipsis: true },
+    {
+      title: t('pages.superAgent.start', 'Start'),
+      dataIndex: 'startedAt',
+      width: 170,
+    },
+    {
+      title: t('pages.superAgent.end', 'End'),
+      dataIndex: 'finishedAt',
+      width: 170,
+    },
+    {
+      title: t('pages.superAgent.error', 'Error'),
+      dataIndex: 'errorMessage',
+      ellipsis: true,
+    },
   ];
 
   const channelColumns = [
     { title: 'ID', dataIndex: 'id', width: 70 },
-    { title: '类型', dataIndex: 'channelType', width: 130 },
-    { title: '名称', dataIndex: 'name', ellipsis: true },
-    { title: '状态', dataIndex: 'status', width: 100 },
     {
-      title: '操作',
+      title: t('pages.superAgent.channelType', 'Type'),
+      dataIndex: 'channelType',
+      width: 130,
+    },
+    {
+      title: t('pages.superAgent.channelName', 'Name'),
+      dataIndex: 'name',
+      ellipsis: true,
+    },
+    {
+      title: t('pages.superAgent.status', 'Status'),
+      dataIndex: 'status',
+      width: 100,
+    },
+    {
+      title: t('pages.superAgent.actions', 'Actions'),
       valueType: 'option',
       width: 100,
       render: (_: unknown, record: any) => (
-        <Can code="super-agent:update">
+        <Can code={PERM.superAgentUpdate}>
           <Button
             type="link"
             size="small"
             onClick={() => toggleChannel(record)}
           >
-            {record.status === 'ACTIVE' ? '停用' : '启用'}
+            {record.status === 'ACTIVE'
+              ? t('pages.superAgent.disable', 'Disable')
+              : t('pages.superAgent.enable', 'Enable')}
           </Button>
         </Can>
       ),
@@ -545,7 +604,7 @@ export default function SuperAgentPage() {
 
   const statusOptions = Object.entries(WORK_STATUS).map(([value, cfg]) => ({
     value,
-    label: cfg.label,
+    label: intl.formatMessage({ id: cfg.labelKey, defaultMessage: value }),
   }));
 
   return (
@@ -553,7 +612,7 @@ export default function SuperAgentPage() {
       <ProTable<SuperAgent>
         actionRef={actionRef}
         rowKey="id"
-        headerTitle={t('pages.superAgent.title', '数字员工')}
+        headerTitle={t('pages.superAgent.title', 'Super Agents')}
         search={false}
         options={false}
         request={async () => {
@@ -564,15 +623,15 @@ export default function SuperAgentPage() {
         columns={agentColumns as any}
         toolBarRender={() => [
           <Button key="template" onClick={openTemplate}>
-            Group Router 模板
+            {t('pages.superAgent.groupRouterTemplate', 'Group Router Template')}
           </Button>,
-          <Can key="create" code="super-agent:create">
+          <Can key="create" code={PERM.superAgentCreate}>
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => setCreateOpen(true)}
             >
-              {t('pages.superAgent.create', '新建数字员工')}
+              {t('pages.superAgent.create', 'New Super Agent')}
             </Button>
           </Can>,
         ]}
@@ -580,7 +639,7 @@ export default function SuperAgentPage() {
 
       <Modal
         open={createOpen}
-        title={t('pages.superAgent.create', '新建数字员工')}
+        title={t('pages.superAgent.create', 'New Super Agent')}
         onCancel={() => setCreateOpen(false)}
         onOk={submitCreate}
         confirmLoading={submitting}
@@ -589,24 +648,27 @@ export default function SuperAgentPage() {
         <Form form={form} layout="vertical">
           <Form.Item
             name="name"
-            label={t('pages.superAgent.name', '名称')}
+            label={t('pages.superAgent.name', 'Name')}
             rules={[{ required: true, max: 128 }]}
           >
             <Input />
           </Form.Item>
           <Form.Item
             name="description"
-            label={t('pages.superAgent.description', '描述')}
+            label={t('pages.superAgent.description', 'Description')}
           >
             <Input.TextArea rows={3} maxLength={512} showCount />
           </Form.Item>
           <Form.Item
             name="positionCode"
-            label={t('pages.superAgent.position', '角色')}
+            label={t('pages.superAgent.position', 'Role')}
             rules={[
               {
                 required: true,
-                message: t('pages.superAgent.positionRequired', '请选择角色'),
+                message: t(
+                  'pages.superAgent.positionRequired',
+                  'Select a role',
+                ),
               },
             ]}
           >
@@ -614,7 +676,7 @@ export default function SuperAgentPage() {
               options={positionOptions}
               placeholder={t(
                 'pages.superAgent.positionPlaceholder',
-                '请选择角色',
+                'Select a role',
               )}
             />
           </Form.Item>
@@ -626,8 +688,8 @@ export default function SuperAgentPage() {
         size={900}
         title={
           selected
-            ? `${t('pages.superAgent.tasks', '任务')} · ${selected.name}`
-            : t('pages.superAgent.tasks', '任务')
+            ? `${t('pages.superAgent.tasks', 'Tasks')} · ${selected.name}`
+            : t('pages.superAgent.tasks', 'Tasks')
         }
         onClose={() => setSelected(null)}
         destroyOnHidden
@@ -643,14 +705,20 @@ export default function SuperAgentPage() {
                 items={[
                   {
                     key: 'router',
-                    label: t('pages.superAgent.routerInstance', 'Router 实例'),
+                    label: t(
+                      'pages.superAgent.routerInstance',
+                      'Router Instance',
+                    ),
                     children: selectedInstances?.routerInstance
                       ? `#${selectedInstances.routerInstance.id} ${selectedInstances.routerInstance.name} (${selectedInstances.routerInstance.instanceRole ?? '-'})`
                       : '-',
                   },
                   {
                     key: 'worker',
-                    label: t('pages.superAgent.workerInstance', 'Worker 实例'),
+                    label: t(
+                      'pages.superAgent.workerInstance',
+                      'Worker Instance',
+                    ),
                     children: selectedInstances?.workerInstance
                       ? `#${selectedInstances.workerInstance.id} ${selectedInstances.workerInstance.name} (${selectedInstances.workerInstance.instanceRole ?? '-'})`
                       : '-',
@@ -700,8 +768,8 @@ export default function SuperAgentPage() {
         footer={null}
         title={
           timelineItem
-            ? `${t('pages.superAgent.timeline', '时间线')} · #${timelineItem.id}`
-            : t('pages.superAgent.timeline', '时间线')
+            ? `${t('pages.superAgent.timeline', 'Timeline')} · #${timelineItem.id}`
+            : t('pages.superAgent.timeline', 'Timeline')
         }
         onCancel={() => {
           setTimelineOpen(false);
@@ -752,7 +820,7 @@ export default function SuperAgentPage() {
         size={900}
         title={
           insightAgent
-            ? `${insightMode === 'usage' ? '用量' : insightMode === 'watchdog' ? '巡检' : '渠道'} · ${insightAgent.name}`
+            ? `${insightMode === 'usage' ? t('pages.superAgent.usage', 'Usage') : insightMode === 'watchdog' ? t('pages.superAgent.watchdog', 'Watchdog') : t('pages.superAgent.channels', 'Channels')} · ${insightAgent.name}`
             : ''
         }
         onClose={() => {
@@ -765,7 +833,7 @@ export default function SuperAgentPage() {
           {insightMode === 'usage' ? (
             <>
               <Space style={{ marginBottom: 12 }}>
-                <span>时间范围</span>
+                <span>{t('pages.superAgent.timeRange', 'Time range')}</span>
                 <Select
                   value={usageDays}
                   style={{ width: 120 }}
@@ -775,7 +843,13 @@ export default function SuperAgentPage() {
                   }}
                   options={[7, 30, 90].map((value) => ({
                     value,
-                    label: `${value} 天`,
+                    label: intl.formatMessage(
+                      {
+                        id: 'pages.superAgent.days',
+                        defaultMessage: '{days} days',
+                      },
+                      { days: value },
+                    ),
                   }))}
                 />
               </Space>
@@ -815,15 +889,20 @@ export default function SuperAgentPage() {
       <Modal
         open={templateOpen}
         width={760}
-        title="Group Router 模板"
+        title={t(
+          'pages.superAgent.groupRouterTemplate',
+          'Group Router Template',
+        )}
         confirmLoading={templateSaving}
         onOk={saveTemplate}
         onCancel={() => setTemplateOpen(false)}
         destroyOnHidden
       >
         <Typography.Paragraph type="secondary">
-          修改共享 Group Router 实例的 system
-          prompt；恢复默认时可粘贴下方默认模板。
+          {t(
+            'pages.superAgent.templateHint',
+            'Edit the system prompt of the shared Group Router instance; paste the default template below to restore it.',
+          )}
         </Typography.Paragraph>
         <Input.TextArea
           value={templateText}
@@ -835,14 +914,20 @@ export default function SuperAgentPage() {
           style={{ marginTop: 8 }}
           onClick={() => setTemplateText(templateDefault)}
         >
-          使用默认模板
+          {t('pages.superAgent.useDefaultTemplate', 'Use default template')}
         </Button>
       </Modal>
 
       <Modal
         open={settingsOpen}
         width={720}
-        title={`设置 · ${settingsAgent?.name ?? ''}`}
+        title={intl.formatMessage(
+          {
+            id: 'pages.superAgent.settingsTitle',
+            defaultMessage: 'Settings · {name}',
+          },
+          { name: settingsAgent?.name ?? '' },
+        )}
         confirmLoading={settingsSaving}
         onOk={saveSettings}
         onCancel={() => setSettingsOpen(false)}
@@ -851,21 +936,27 @@ export default function SuperAgentPage() {
         <Form form={settingsForm} layout="vertical">
           <Form.Item
             name="name"
-            label="名称"
+            label={t('pages.superAgent.name', 'Name')}
             rules={[{ required: true, max: 128 }]}
           >
             <Input />
           </Form.Item>
-          <Form.Item name="description" label="描述">
+          <Form.Item
+            name="description"
+            label={t('pages.superAgent.description', 'Description')}
+          >
             <Input.TextArea rows={3} maxLength={512} showCount />
           </Form.Item>
           <Form.Item
             name="positionCode"
-            label={t('pages.superAgent.position', '角色')}
+            label={t('pages.superAgent.position', 'Role')}
             rules={[
               {
                 required: true,
-                message: t('pages.superAgent.positionRequired', '请选择角色'),
+                message: t(
+                  'pages.superAgent.positionRequired',
+                  'Select a role',
+                ),
               },
             ]}
           >
@@ -873,11 +964,14 @@ export default function SuperAgentPage() {
               options={positionOptions}
               placeholder={t(
                 'pages.superAgent.positionPlaceholder',
-                '请选择角色',
+                'Select a role',
               )}
             />
           </Form.Item>
-          <Form.Item name="config" label="配置 JSON">
+          <Form.Item
+            name="config"
+            label={t('pages.superAgent.configJson', 'Config JSON')}
+          >
             <Input.TextArea rows={5} />
           </Form.Item>
         </Form>

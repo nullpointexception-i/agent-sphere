@@ -11,10 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * SSO 用户资源开通：首次登录时按身份源资源模板为用户生成一份私有资源副本。
- * 通过 {@link TenantUtil} 将数据权限与审计填充按用户隔离，使
- * {@link ResourceTemplateCoordinator} 内所有 SPI 查询自动限定 created_by = username，
- * 同名判重天然按用户生效，新建资源 created_by 记为该用户。
+ * SSO user resource provisioning: on first login, generates a private resource copy for the user
+ * from the identity provider's resource template.
+ * {@link TenantUtil} isolates data permissions and audit filling per user, so every SPI query inside
+ * {@link ResourceTemplateCoordinator} is automatically scoped to created_by = username,
+ * name-based duplicate detection naturally applies per user, and new resources record created_by
+ * as that user.
  */
 @Slf4j
 @Service
@@ -26,7 +28,8 @@ public class UserResourceProvisioner {
     private final SystemConfigSpi systemConfigSpi;
 
     /**
-     * 为用户开通资源副本。任何异常均被捕获计入结果，绝不影响登录流程。
+     * Provisions a resource copy for the user. Any exception is caught and recorded in the result;
+     * it never affects the login flow.
      */
     public ResourceInitResult provision(Long userId, String providerCode, String providerName, String customTemplate) {
         UserVO user = userSpi.getByUserId(userId);

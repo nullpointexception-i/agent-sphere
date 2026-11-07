@@ -21,10 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 前缀缓存友好性单测：
- * - buildSystemPrompt 对给定 ctx 字节确定（不含动态时间、不含待办），两次调用结果一致；
- * - 待办列表独立为尾部段 buildTodolistSuffix，不进入 system 头部（messages[0] 前缀稳定）；
- * - buildToolDefinitions 按名称稳定排序（工具顺序变动不影响前缀缓存）。
+ * Prefix-cache friendliness unit tests:
+ * - buildSystemPrompt is byte-deterministic for a given ctx (no dynamic time, no todos); two calls return identical results;
+ * - the todo list is a separate trailing block (buildTodolistSuffix) and does not enter the system head (messages[0] prefix stays stable);
+ * - buildToolDefinitions sorts stably by name (tool order changes do not affect the prefix cache).
  */
 class RunPromptBuilderTest {
 
@@ -58,7 +58,7 @@ class RunPromptBuilderTest {
 
     @Test
     void buildSystemPrompt_neverContainsTodolist() {
-        // 待办已从系统提示剥离为尾部独立段：messages[0] 前缀不随待办变化，缓存稳定
+        // Todos were split out of the system prompt into a trailing block: the messages[0] prefix does not change with todos, keeping the cache stable
         String systemPrompt = builder.buildSystemPrompt(ctx());
 
         assertFalse(systemPrompt.contains("## 当前待办列表"),
@@ -155,7 +155,7 @@ class RunPromptBuilderTest {
 
     @Test
     void buildLoopBudget_neverReportsZeroRemaining() {
-        // 最后一轮：remaining = 1（含本轮）。出现「剩 0 轮」会让模型以为自己已无路可走而放弃收尾
+        // Last round: remaining = 1 (including this one). "0 turns left" makes the model think it is out of options and give up
         String last = builder.buildLoopBudget(128, 1, 128);
 
         assertTrue(last.contains("1 turn(s) remaining"), "末轮应报 1 轮而非 0 轮");

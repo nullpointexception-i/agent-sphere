@@ -30,7 +30,7 @@ function mergeById<T extends { id: number }>(prev: T[], next: T[]): T[] {
   return Array.from(map.values());
 }
 
-/** 后端返回的相对路径按 apiBase 前缀解析为绝对地址；外链原样返回。 */
+/** Resolve a relative path returned by the backend against the apiBase prefix; external links are returned unchanged. */
 function resolveAbsoluteUrl(raw: string, apiBase: string): string {
   if (/^https?:\/\//i.test(raw)) {
     return raw;
@@ -51,23 +51,23 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     [config.apiBase, config.provider],
   );
   const apiBase = config.apiBase ?? '/api/v1';
-  // 稳定引用：避免每次渲染都新建函数导致 UserImages effect 反复触发
+  // Stable reference: avoid creating a new function on every render, which would re-trigger the UserImages effect
   const loadFile = useCallback((fileKey: string) => api.loadFile(fileKey), [api]);
 
-  // 新 timeline 数据通道（REST + SSE）
+  // New timeline data channel (REST + SSE)
   const timeline = useTimelineStream(api);
 
-  // 实例（分页）
+  // Instances (paged)
   const [instances, setInstances] = useState<InstanceVO[]>([]);
   const [agentPage, setAgentPage] = useState(1);
   const [hasMoreAgents, setHasMoreAgents] = useState(false);
   const [loadingAgents, setLoadingAgents] = useState(false);
-  // 会话（分页）
+  // Sessions (paged)
   const [sessions, setSessions] = useState<SessionVO[]>([]);
   const [sessionOffset, setSessionOffset] = useState(0);
   const [hasMoreSessions, setHasMoreSessions] = useState(false);
   const [loadingSessions, setLoadingSessions] = useState(false);
-  // 选中
+  // Selection
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
@@ -75,16 +75,16 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const [inputHeight, setInputHeight] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // 会话重命名
+  // Session rename
   const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
-  // 归档二次确认
+  // Archive confirmation
   const [confirmingArchiveId, setConfirmingArchiveId] = useState<number | null>(null);
-  // 插件下载入口
+  // Plugin download entry
   const [pluginStoreUrl, setPluginStoreUrl] = useState<string>('');
   const [pluginDownloadUrl, setPluginDownloadUrl] = useState<string>('');
   const [pluginMenuOpen, setPluginMenuOpen] = useState(false);
-  // 输入区
+  // Input area
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [attachment, setAttachment] = useState<{
@@ -99,21 +99,21 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const attachmentRef = useRef(attachment);
   attachmentRef.current = attachment;
 
-  /** 释放当前附件预览 objectURL 并清空附件（发送 / 移除 / 替换时调用）。 */
+  /** Release the current attachment preview objectURL and clear the attachment (called on send / remove / replace). */
   const discardAttachment = useCallback(() => {
     setAttachment((prev) => {
       if (prev?.previewUrl) {
         try {
           URL.revokeObjectURL(prev.previewUrl);
         } catch {
-          /* 忽略 */
+          /* ignore */
         }
       }
       return null;
     });
   }, []);
 
-  // 组件卸载：释放附件预览 objectURL 与文件 objectURL 缓存
+  // On unmount: release the attachment preview objectURL and the file objectURL cache
   useEffect(
     () => () => {
       const previewUrl = attachmentRef.current?.previewUrl;
@@ -121,7 +121,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
         try {
           URL.revokeObjectURL(previewUrl);
         } catch {
-          /* 忽略 */
+          /* ignore */
         }
       }
       clearFileCache();
@@ -207,7 +207,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     void loadAgents(1);
   }, [api, loadAgents]);
 
-  // 列表内容不足一屏时自动补下一页
+  // Automatically load the next page while the list does not fill the viewport
   useEffect(() => {
     if (!hasMoreAgents || loadingAgents) {
       return;
@@ -262,7 +262,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     void loadMoreSessions(0);
   }, [selectedAgentId, loadMoreSessions]);
 
-  // 会话列表不足一屏时自动补下一页
+  // Automatically load the next page while the session list does not fill the viewport
   useEffect(() => {
     if (!hasMoreSessions || loadingSessions) {
       return;
@@ -283,8 +283,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     if (selectedAgentId === null) {
       return;
     }
-    // 实例未开放 widget 端会话时不允许手动新建：按钮已置灰，这里再守一道 ——
-    // 按钮置灰只是 UI，函数本身应当自守，避免样式/结构变更后绕过。
+    // Manual session creation is not allowed when the instance has widget sessions disabled: the button is greyed out, but guard here as well -
+    // a greyed-out button is UI only; the function itself should self-guard so a style/structure change cannot bypass it.
     const agent = instances.find((i) => i.id === selectedAgentId);
     if (!allowsWidgetSession(agent)) {
       return;
@@ -292,7 +292,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     setLoading(true);
     setError(null);
     try {
-      const created = await api.createSession(selectedAgentId, '新的会话');
+      const created = await api.createSession(selectedAgentId, 'New session');
       setSessions((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
       setSelectedSessionId(created.id);
     } catch (err) {
@@ -342,7 +342,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     }
   };
 
-  // 通知 chrome-extension 当前会话（sessionStorage 桥 + 即时事件）
+  // Notify chrome-extension of the current session (sessionStorage bridge + immediate event)
   useEffect(() => {
     if (selectedSessionId !== null) {
       try {
@@ -365,18 +365,18 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     };
   }, [selectedSessionId]);
 
-  // timeline 通道与会话绑定（切换会话即重建）
+  // Bind the timeline channel to the session (rebuilt on session switch)
   useEffect(() => {
     if (selectedSessionId === null) {
       return;
     }
-    // 切会话：释放上一会话的图片 objectURL 缓存
+    // Session switch: release the previous session's image objectURL cache
     clearFileCache();
     timeline.connect(selectedSessionId, user.token, apiBase);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, user.token, apiBase]);
 
-  // 会话级用量：run 结束或切换会话时刷新（吸底条）
+  // Session-level usage: refresh when the run ends or the session switches (sticky footer)
   useEffect(() => {
     if (selectedSessionId === null) {
       setSessionUsage(null);
@@ -396,7 +396,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSessionId, timeline.runActive, api]);
 
-  // 进入会话先滚到底一次；随后任何内容增长都保持钉底（翻旧页 prepend 不动）
+  // Scroll to the bottom once when entering a session; afterwards any content growth stays pinned to the bottom (prepending older pages does not move it)
   const initialScrollDoneRef = useRef(false);
   useEffect(() => {
     initialScrollDoneRef.current = false;
@@ -416,7 +416,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     });
   }, []);
 
-  // 长消息、待办、截图等异步内容会改变内容高度；观察内容层而不是滚动层。
+  // Async content such as long messages, todos and screenshots changes the content height; observe the content layer rather than the scroll layer.
   useEffect(() => {
     const el = chatBodyRef.current;
     const inner = chatContentRef.current;
@@ -460,8 +460,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
       if (selectedSessionId === null) {
         return;
       }
-      // 乐观登记已应答，避免随后 refreshLatest 用服务端旧 PENDING 回退。
-      // 必须带 clarificationId：同 run 续跑复用 runId，只按 runId 会误伤后续澄清。
+      // Record it as answered optimistically, so the following refreshLatest does not roll back with a stale server PENDING.
+      // clarificationId is mandatory: continuing the same run reuses runId, and runId alone would affect later clarifications.
       timeline.markClarificationAnswered(runId, clarificationId);
       void api
         .clarify(selectedSessionId, runId, response, clarificationId)
@@ -480,11 +480,11 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     e.target.value = '';
     if (!file) return;
     if (!/^image\/(jpeg|png|webp|gif)$/i.test(file.type)) {
-      setError('仅支持 jpeg/png/webp/gif 图片');
+      setError('Only jpeg/png/webp/gif images are supported');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError('图片不能超过 5MB');
+      setError('Image must be 5MB or smaller');
       return;
     }
     try {
@@ -512,7 +512,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     }
     setSending(true);
     setInputText('');
-    const discText = text || '[图片]';
+    const discText = text || '[Image]';
     timeline.addUserMessage(discText, attachment
       ? [{ fileKey: attachment.fileKey, contentType: attachment.contentType }]
       : undefined);
@@ -521,7 +521,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
     discardAttachment();
     try {
       await api.sendMessage(selectedSessionId, sentText, sentKeys);
-      // POST 成功立即补拉权威行（用户行 + assistant 容器 + run 状态），无需等终态事件
+      // On POST success, immediately catch up the authoritative rows (user row + assistant container + run status); no need to wait for a terminal event
       void timeline.refreshLatest(selectedSessionId);
     } catch (err) {
       timeline.removeUserMessage(discText);
@@ -540,8 +540,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
         setError((err as ApiError).message);
         return;
       }
-      // 兜底：SSE 终态若丢失，runActive 会一直锁住输入/停止按钮。8s 后本地复位
-      // （权威 run_status 行到达时会自然覆盖）。与主站 UI 的兜底一致。
+      // Fallback: if the SSE terminal event is lost, runActive would keep the input/stop button locked. Reset locally after 8s
+      // (the authoritative run_status row will naturally override it). Same fallback as the main site UI.
       window.setTimeout(() => timeline.markRunInactive(), 8000);
     }
   };
@@ -556,12 +556,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
       chatLastScrollHeightRef.current = height;
       chatLastScrollTopRef.current = scrollTop;
       const distance = height - scrollTop - el.clientHeight;
-      // 内容增长触发的 scroll 不代表用户离开底部
+      // A scroll caused by content growth does not mean the user left the bottom
       if (!(grew && chatStickRef.current && !userScrolledUp)) {
         chatStickRef.current = distance < CHAT_STICK_THRESHOLD;
       }
     }
-    // 靠近顶部才加载更早消息；滚到底部时不能触发加载（否则会翻出全量）
+    // Load older messages only when near the top; must not trigger while at the bottom (otherwise it would page in everything)
     if (
       el.scrollTop < SCROLL_END_THRESHOLD &&
       timeline.hasMore &&
@@ -598,28 +598,28 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
   const selectedAgent = instances.find((i) => i.id === selectedAgentId) ?? null;
   /**
-   * 实例是否**未开放** widget 端会话（`agent_instance.allow_widget_session` 为假）。
+   * Whether the instance has widget sessions **disabled** (`agent_instance.allow_widget_session` is false).
    *
-   * <p>关掉时 widget 里既不能手动发起会话，也不能手动对话 —— 只保留「查看历史会话」的能力。
-   * 服务端在 `createSession` / `chat` 用同一规则强校验，这里只是让 UI 保持一致。
+   * <p>When off, the widget allows neither manual session creation nor manual chatting - only "view historical sessions" remains.
+   * The server enforces the same rule in `createSession` / `chat`; this merely keeps the UI consistent.
    *
-   * <p>按**实例**统一门控而非按会话判定：即使选中的是该实例下的历史聊天会话，也一样隐藏输入区。
-   * 规则只依赖 instance，无需额外请求（开关已随实例列表返回）。
+   * <p>Gating is per **instance**, not per session: even when the selected session is a historical chat session under that instance, the input area is hidden.
+   * The rule only depends on instance and needs no extra request (the switch comes with the instance list).
    */
   const businessType = businessTypeOf(selectedAgent);
   const widgetSessionBlocked = !allowsWidgetSession(selectedAgent);
   const visibleSessions = selectedAgentId
     ? sessions.filter((s) => s.agentInstanceId === selectedAgentId)
     : [];
-  // 输入锁定：发送中 / 用户消息刚上墙未替换 / 运行态接口（来源表聚合）。
-  // timeline 只负责渲染，不参与锁定判断。
+  // Input lock: sending / user message just posted but not replaced / runtime endpoint (aggregated from source tables).
+  // The timeline only renders; it does not participate in lock decisions.
   const runActive = timeline.runActive;
   const inputLocked =
     sending ||
     timeline.pendingUserRows.length > 0 ||
     (timeline.runtimeState ? !timeline.runtimeState.canSend : runActive);
 
-  // 解锁后把焦点还给输入框，方便连发
+  // Return focus to the input after unlocking, for consecutive sends
   useEffect(() => {
     if (!inputLocked && selectedSessionId != null) {
       inputRef.current?.focus();
@@ -651,10 +651,10 @@ export function CopilotView({ config, user }: CopilotViewProps) {
   return (
     <div className="aw-view">
       <div className="aw-sidebar">
-        <div className="aw-sidebar-title">实例</div>
+        <div className="aw-sidebar-title">Instances</div>
         <div ref={agentListRef} className="aw-list aw-agent-list" onScroll={handleAgentScroll}>
           {instances.length === 0 && !loadingAgents ? (
-            <div className="aw-item-hint">暂无实例</div>
+            <div className="aw-item-hint">No instances</div>
           ) : null}
           {instances.map((i) => (
             <div
@@ -667,12 +667,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
               {i.name}
             </div>
           ))}
-          {loadingAgents ? <div className="aw-item-hint">加载中…</div> : null}
+          {loadingAgents ? <div className="aw-item-hint">Loading…</div> : null}
         </div>
-        <div className="aw-sidebar-title">会话</div>
+        <div className="aw-sidebar-title">Sessions</div>
         <div ref={sessionListRef} className="aw-list aw-session-list" onScroll={handleSessionScroll}>
           {visibleSessions.length === 0 && !loadingSessions ? (
-            <div className="aw-item-hint">暂无会话，请新建</div>
+            <div className="aw-item-hint">No sessions yet. Create one.</div>
           ) : null}
           {visibleSessions.map((s) =>
             editingSessionId === s.id ? (
@@ -701,9 +701,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 />
                 <span
                   className="aw-item-edit aw-item-ok"
-                  title="提交"
+                  title="Save"
                   role="button"
-                  aria-label="提交重命名"
+                  aria-label="Save rename"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -714,9 +714,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 </span>
                 <span
                   className="aw-item-edit aw-item-cancel"
-                  title="取消"
+                  title="Cancel"
                   role="button"
-                  aria-label="取消重命名"
+                  aria-label="Cancel rename"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -737,12 +737,12 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 <span className="aw-item-label">{s.title}</span>
                 {confirmingArchiveId === s.id ? (
                   <>
-                    <span className="aw-archive-hint">归档？</span>
+                    <span className="aw-archive-hint">Archive?</span>
                     <span
                       className="aw-item-edit aw-item-ok"
-                      title="确认归档"
+                      title="Confirm archive"
                       role="button"
-                      aria-label="确认归档"
+                      aria-label="Confirm archive"
                       onClick={(e) => {
                         e.stopPropagation();
                         void handleCloseSession(s);
@@ -752,9 +752,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     </span>
                     <span
                       className="aw-item-edit aw-item-cancel"
-                      title="取消"
+                      title="Cancel"
                       role="button"
-                      aria-label="取消归档"
+                      aria-label="Cancel archive"
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirmingArchiveId(null);
@@ -767,9 +767,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   <>
                     <span
                       className="aw-item-edit"
-                      title="重命名"
+                      title="Rename"
                       role="button"
-                      aria-label="重命名会话"
+                      aria-label="Rename session"
                       onClick={(e) => {
                         e.stopPropagation();
                         startRename(s);
@@ -779,9 +779,9 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     </span>
                     <span
                       className="aw-item-edit aw-item-archive"
-                      title="归档"
+                      title="Archive"
                       role="button"
-                      aria-label="归档会话"
+                      aria-label="Archive session"
                       onClick={(e) => {
                         e.stopPropagation();
                         setConfirmingArchiveId(s.id);
@@ -794,7 +794,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
               </div>
             ),
           )}
-          {loadingSessions ? <div className="aw-item-hint">加载中…</div> : null}
+          {loadingSessions ? <div className="aw-item-hint">Loading…</div> : null}
         </div>
         <div className="aw-user" title={user.email || user.username}>
           {user.ssoProviderCode && user.ssoSubject
@@ -813,7 +813,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     rel="noreferrer"
                     role="menuitem"
                   >
-                    从应用市场下载
+                    Download from marketplace
                   </a>
                 ) : null}
                 {pluginDownloadUrl ? (
@@ -824,7 +824,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                     rel="noreferrer"
                     role="menuitem"
                   >
-                    站内下载
+                    In-app download
                   </a>
                 ) : null}
               </div>
@@ -834,27 +834,27 @@ export function CopilotView({ config, user }: CopilotViewProps) {
               href={pluginDownloadUrl || pluginStoreUrl || '#'}
               target="_blank"
               rel="noreferrer"
-              title="Chrome 插件下载"
+              title="Download Chrome extension"
               onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setPluginMenuOpen((open) => !open);
               }}
             >
-              插件下载
+              Extension download
               <span className="aw-plugin-caret">▾</span>
             </a>
           </div>
         ) : null}
-        {/* 原生 title 在 disabled 元素上不触发（浏览器不对禁用表单控件派发鼠标事件），
-            所以提示挂在包裹层上，按钮本身仍保留真实 disabled 语义。 */}
+        {/* A native title does not fire on disabled elements (the browser dispatches no mouse events to disabled form controls),
+            so the tooltip lives on the wrapper while the button keeps its real disabled semantics. */}
         <span
           className="aw-new-session-wrap"
           title={
             widgetSessionBlocked
               ? businessType
-                ? `「${businessType}」不支持手动发起会话；如需聊天机器人请申请开通`
-                : '该实例不支持手动发起会话；如需聊天机器人请申请开通'
+                ? `"${businessType}" does not support starting sessions manually. Request access to enable the chatbot.`
+                : 'This instance does not support starting sessions manually. Request access to enable the chatbot.'
               : undefined
           }
         >
@@ -864,18 +864,18 @@ export function CopilotView({ config, user }: CopilotViewProps) {
             disabled={widgetSessionBlocked}
             onClick={() => void handleCreateSession()}
           >
-            新会话
+            New session
           </button>
         </span>
       </div>
 
       <div className="aw-main">
         <div className="aw-header">
-          <span className="aw-title">{selectedAgent?.name ?? '选择实例'}</span>
+          <span className="aw-title">{selectedAgent?.name ?? 'Select an instance'}</span>
         </div>
 
         {error ? <div className="aw-error">{error}</div> : null}
-        {loading ? <div className="aw-loading">加载中…</div> : null}
+        {loading ? <div className="aw-loading">Loading…</div> : null}
 
         {selectedSessionId !== null && selectedSession && selectedAgentId !== null ? (
           <div className="aw-chat">
@@ -920,7 +920,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 />
                 {sessionUsage && Number(sessionUsage.totalTokens) > 0 ? (
                   <div className="aw-session-usage">
-                    ♨ 会话用量 · {formatTokens(sessionUsage.totalTokens)} tokens
+                    ♨ Session usage · {formatTokens(sessionUsage.totalTokens)} tokens
                     {sessionUsage.promptTokens
                       ? ` · prompt ${formatTokens(sessionUsage.promptTokens)}`
                       : ''}
@@ -933,15 +933,15 @@ export function CopilotView({ config, user }: CopilotViewProps) {
             </div>
             {widgetSessionBlocked ? (
               <div className="aw-business-autochat">
-                <div className="aw-business-autochat-label">--{businessType}自动会话--</div>
-                <div className="aw-business-autochat-hint">如需聊天机器人请申请开通</div>
+                <div className="aw-business-autochat-label">--{businessType} auto session--</div>
+                <div className="aw-business-autochat-hint">Request access to enable the chatbot.</div>
               </div>
             ) : (
             <div ref={chatInputRef} className="aw-chat-input">
               {runActive ? (
                 <div className="aw-tl-divider">
                   <span className="aw-running-dot" />
-                  Agent 运行中…
+                  Agent is running…
                 </div>
               ) : null}
               {attachment ? (
@@ -950,8 +950,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   <button
                     type="button"
                     className="aw-attach-remove"
-                    title="移除图片"
-                    aria-label="移除图片"
+                    title="Remove image"
+                    aria-label="Remove image"
                     onClick={discardAttachment}
                   >
                     ✕
@@ -972,7 +972,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   rows={1}
                   value={inputText}
                   disabled={inputLocked}
-                  placeholder={inputLocked ? '回复中…' : '输入消息…（Enter 发送，Shift+Enter 换行）'}
+                  placeholder={inputLocked ? 'Replying…' : 'Type a message… (Enter to send, Shift+Enter for a new line)'}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => {
                     if (
@@ -988,8 +988,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                 <button
                   type="button"
                   className="aw-chat-attach"
-                  title="添加图片"
-                  aria-label="添加图片"
+                  title="Add image"
+                  aria-label="Add image"
                   disabled={!!attachment || uploadingAttachment || sending || inputLocked}
                   onClick={handlePickImage}
                 >
@@ -999,8 +999,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   <button
                     type="button"
                     className="aw-chat-stop"
-                    title="停止回复"
-                    aria-label="停止回复"
+                    title="Stop replying"
+                    aria-label="Stop replying"
                     onClick={() => void handleStop()}
                   >
                     <StopIcon size={16} />
@@ -1009,8 +1009,8 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   <button
                     type="button"
                     className="aw-chat-send"
-                    title="发送"
-                    aria-label="发送"
+                    title="Send"
+                    aria-label="Send"
                     disabled={
                       (!inputText.trim() && !attachment) || inputLocked
                     }
@@ -1038,7 +1038,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
           </div>
         ) : (
           <div className="aw-empty">
-            {!loading ? '选择或新建一个会话开始对话' : ''}
+            {!loading ? 'Select or create a session to start chatting' : ''}
           </div>
         )}
       </div>

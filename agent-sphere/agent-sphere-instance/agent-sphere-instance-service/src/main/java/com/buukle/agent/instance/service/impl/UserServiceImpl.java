@@ -56,14 +56,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
         }
     }
 
-    /** 当前请求来源端（CONSOLE / WIDGET / INTERNAL），写入会话行用于设备管理。 */
+    /** Current request surface (CONSOLE / WIDGET / INTERNAL), written to the session row for device management. */
     private static String currentTokenSource() {
         return SessionSurfaceHolder.current().name();
     }
 
     private static final String DEFAULT_USER_ROLE_CODE = "USER";
 
-    /** 解析新用户初始角色：指定 defaultRoleId 则替换默认 USER 角色（SSO 开通场景）。 */
+    /** Resolve the initial roles for a new user: when defaultRoleId is given it replaces the default USER role (SSO provisioning scenario). */
     public static List<Long> resolveInitialRoleIds(RoleSpi roleSpi, Long defaultRoleId) {
         if (defaultRoleId != null) {
             return List.of(defaultRoleId);
@@ -194,7 +194,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             throw new BizException(InstanceErrorCode.OLD_PASSWORD_MISMATCH);
         user.setPassword(passwordEncoder.encode(newPassword));
         updateById(user);
-        // 改密后其它设备必须重新登录；当前设备保留，避免用户改完密码自己被踢出去
+        // After a password change other devices must sign in again; the current device is kept so the
+        // user is not logged out right after changing the password
         userTokenSpi.revokeAllExcept(userId, AuthContext.getToken());
     }
 
@@ -254,12 +255,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             }
             throw new BizException(InstanceErrorCode.REGISTER_FAILED);
         }
-        // 角色：指定 defaultRoleId 则替换默认 USER 角色（SSO 开通场景）
+        // Roles: when defaultRoleId is given it replaces the default USER role (SSO provisioning scenario)
         List<Long> initialRoleIds = resolveInitialRoleIds(roleSpi, defaultRoleId);
         if (!initialRoleIds.isEmpty()) {
             roleSpi.assignRoles(user.getId(), initialRoleIds);
         }
-        // 自助注册（非 SSO 开通）：发布事件触发资源初始化模板（NativeUserResourceProvisioner）
+        // Self-service registration (not SSO provisioning): publish an event to trigger the resource
+        // initialization template (NativeUserResourceProvisioner)
         if (defaultRoleId == null) {
             UserRegisteredEvent event = new UserRegisteredEvent();
             event.setUserId(user.getId());

@@ -26,17 +26,18 @@ public class DeepseekProviderStrategy implements ProviderStrategy {
 
     @Override
     public void adaptRequest(ChatCompletionRequestDTO request) {
-        // DeepSeek：不接收注定不支持的字段，避免 400/静默异常。
-        // 保留 stream_options（usage 采集）、user、parallel_tool_calls（OpenAI 兼容默认行为）。
+        // DeepSeek: reject fields it is known not to support, avoiding 400s/silent failures.
+        // Keep stream_options (usage collection), user, parallel_tool_calls (OpenAI-compatible default behavior).
         request.setSeed(null);
         request.setN(null);
         request.setMaxCompletionTokens(null);
         request.setLogprobs(null);
         request.setTopLogprobs(null);
         request.setLogitBias(null);
-        // enable_thinking 是 Qwen 专用字段；DeepSeek 用 thinking.type + reasoning_effort。
+        // enable_thinking is a Qwen-only field; DeepSeek uses thinking.type + reasoning_effort.
         request.setEnableThinking(null);
-        // 统一档位 → DeepSeek thinking 开关：none 关闭，其余开启；具体强度由 reasoning_effort 表达。
+        // Unified effort tier → DeepSeek thinking switch: none turns it off, anything else turns it on;
+        // the concrete strength is expressed by reasoning_effort.
         if (request.getReasoningEffort() != null) {
             boolean off = ReasoningEffort.NONE.equalsIgnoreCase(request.getReasoningEffort());
             request.setThinking(new ThinkingDTO().setType(off ? THINKING_DISABLED : THINKING_ENABLED));

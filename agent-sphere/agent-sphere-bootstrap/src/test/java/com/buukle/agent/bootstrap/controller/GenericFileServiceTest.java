@@ -38,7 +38,7 @@ class GenericFileServiceTest {
 
     @BeforeAll
     static void initMpTableInfo() {
-        // 单元测试无 MyBatis-Plus 上下文：LambdaWrapper 需要实体 TableInfo
+        // Unit tests have no MyBatis-Plus context: LambdaWrapper needs the entity TableInfo
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), ""), AgentFileStore.class);
     }

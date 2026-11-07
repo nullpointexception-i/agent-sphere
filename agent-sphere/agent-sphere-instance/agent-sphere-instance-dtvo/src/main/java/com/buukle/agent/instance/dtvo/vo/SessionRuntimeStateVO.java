@@ -7,16 +7,16 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 会话运行态：前端发送锁 / pending 判定的唯一权威来源。
+ * Session runtime state: the single authoritative source for the frontend send lock / pending checks.
  *
- * <p>所有字段都直接来自来源表（{@code agent_run} / 澄清 / 审批 / 队列），
- * 不读 {@code agent_timeline}。
+ * <p>All fields come directly from source tables ({@code agent_run} / clarification / approval /
+ * queue); {@code agent_timeline} is never read.
  */
 @Data
 public class SessionRuntimeStateVO implements Serializable {
     private Long sessionId;
     private Long runId;
-    /** PENDING / RUNNING / WAITING / AWAITING_USER / 终态；无活动 run 时为 null。 */
+    /** PENDING / RUNNING / WAITING / AWAITING_USER / terminal; null when there is no active run. */
     private String runStatus;
     private Integer loopCount;
     private Integer loopLimit;
@@ -25,16 +25,16 @@ public class SessionRuntimeStateVO implements Serializable {
     private Integer pendingToolApprovals;
     private Integer pendingQueue;
     private Boolean canSend;
-    /** 挂起类型：WAIT / LLM_RETRY（runStatus=WAITING 时有值）。 */
+    /** Suspend type: WAIT / LLM_RETRY (present when runStatus=WAITING). */
     private String waitKind;
-    /** LLM 重试档位（1..N）与总档位，前端展示“k/N”。 */
+    /** LLM retry step (1..N) and the total; the frontend displays "k/N". */
     private Integer retryAttempt;
     private Integer retryMax;
-    /** 下次重试的时间点（epoch ms），用于前端读秒。 */
+    /** Time of the next retry (epoch ms), for the frontend countdown. */
     private Long nextRetryAt;
-    /** 距下次重试的毫秒数，由服务端计算，避免浏览器时钟偏差。 */
+    /** Milliseconds until the next retry, computed on the server to avoid browser clock skew. */
     private Long retryRemainingMs;
-    /** RUNNING / CLARIFICATION / TOOL_APPROVAL；为空表示可发送。 */
+    /** RUNNING / CLARIFICATION / TOOL_APPROVAL; empty means a message can be sent. */
     private List<String> blockReasons;
     private LocalDateTime serverTime;
 }

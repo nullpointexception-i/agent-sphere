@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.regex.Pattern;
 
 /**
- * HTML 到 Markdown 转换工具类
+ * HTML to Markdown conversion utility
  */
 @Slf4j
 @Component
@@ -21,10 +21,10 @@ public class HtmlToMarkdownConverter {
     private static final int MAX_HEADING_LEVEL = 6;
 
     /**
-     * 将 HTML 转换为 Markdown
+     * Converts HTML to Markdown
      *
-     * @param html 清理后的 HTML 内容
-     * @return Markdown 格式的文本
+     * @param html cleaned HTML content
+     * @return text in Markdown format
      */
     public String convert(String html) {
         if (html == null || html.trim().isEmpty()) {
@@ -43,7 +43,7 @@ public class HtmlToMarkdownConverter {
     }
 
     /**
-     * 递归转换 DOM 节点
+     * Recursively converts DOM nodes
      */
     private void convertNode(Node node, StringBuilder output, Context ctx) {
         if (node == null) {
@@ -62,7 +62,7 @@ public class HtmlToMarkdownConverter {
     }
 
     /**
-     * 转换 HTML 元素
+     * Converts an HTML element
      */
     private void convertElement(Element element, String tagName, StringBuilder output, Context ctx) {
         switch (tagName) {
@@ -236,20 +236,20 @@ public class HtmlToMarkdownConverter {
     }
 
     /**
-     * 规范化 Markdown - 移除过多的空行和空白
+     * Normalizes Markdown - removes excess blank lines and whitespace
      */
     private String normalizeMarkdown(String markdown) {
-        // 移除多个连续空行
+        // Collapse runs of blank lines
         markdown = markdown.replaceAll("\\n{3,}", "\n\n");
-        // 移除行尾空白
+        // Remove trailing whitespace
         markdown = markdown.replaceAll(" +\n", "\n");
-        // 规范化空白
+        // Normalize whitespace
         markdown = WHITESPACE_PATTERN.matcher(markdown).replaceAll(" ");
         return markdown.trim();
     }
 
     /**
-     * 提取纯文本（备选方案）
+     * Extracts plain text (fallback)
      */
     private String extractPlainText(String html) {
         try {
@@ -262,7 +262,7 @@ public class HtmlToMarkdownConverter {
     }
 
     /**
-     * 转换上下文
+     * Conversion context
      */
     private static class Context {
         int listLevel = 0;

@@ -10,10 +10,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 清理过期 / 已吊销的登录会话。
+ * Cleans up expired / revoked login sessions.
  *
- * <p>会话表只增不减会持续膨胀；token 是临时凭证，超过保留期后没有任何业务价值，
- * 因此这里与审计日志清理一样做物理删除。
+ * <p>A session table that only grows keeps bloating; tokens are temporary credentials with no business
+ * value past the retention period, so this performs a physical delete just like the audit log cleanup.
  */
 @Slf4j
 @Component
@@ -30,7 +30,7 @@ public class UserTokenCleanupTask {
 
     @Scheduled(cron = "${buukle.agent.auth.token-cleanup-cron:0 20 3 * * ?}")
     public void cleanup() {
-        // 多副本：同一时刻仅一个副本执行清扫
+        // Multi-replica: only one replica performs the sweep at any moment
         RLock lock = redissonClient.getLock(CLEANUP_LOCK_KEY);
         if (!lock.tryLock()) {
             return;

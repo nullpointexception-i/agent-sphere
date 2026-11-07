@@ -1,19 +1,20 @@
 package com.buukle.agent.capability.skill.dtvo.enums;
 
 /**
- * Skill 自动同步的执行状态（{@code capability_skill_sync_run.status}）。
+ * Execution status of automatic skill sync ({@code capability_skill_sync_run.status}).
  *
- * <p>与 {@code SessionCleanupRunStatusEnum} 同一套形状，两处任务的前端轮询面板得以复用同一逻辑。
+ * <p>Same shape as {@code SessionCleanupRunStatusEnum}, so the frontend polling panels of both
+ * tasks can share the same logic.
  */
 public final class SkillSyncRunStatusEnum {
 
-    /** 已开始，尚未落终态；长时间停在这里（见 stale）说明进程崩了 */
+    /** Started but not yet terminal; sitting here for a long time (see stale) means the process crashed */
     public static final String STATUS_RUNNING = "RUNNING";
-    /** 正常结束 */
+    /** Finished normally */
     public static final String STATUS_SUCCESS = "SUCCESS";
-    /** 什么都没做：锁被占用或总开关关闭 */
+    /** Did nothing: the lock was taken or the global switch was off */
     public static final String STATUS_SKIPPED = "SKIPPED";
-    /** 执行中抛异常 */
+    /** An exception was thrown during execution */
     public static final String STATUS_FAILED = "FAILED";
 
     private SkillSyncRunStatusEnum() {

@@ -120,7 +120,7 @@ export default function AdminSettings() {
       message.success(
         intl.formatMessage({
           id: 'pages.admin.settings.plugin.upload.success',
-          defaultMessage: '上传成功',
+          defaultMessage: 'Uploaded',
         }),
       );
       loadConfigs();
@@ -129,7 +129,7 @@ export default function AdminSettings() {
         e?.response?.data?.message ||
           intl.formatMessage({
             id: 'pages.chat.saveFailed',
-            defaultMessage: '保存失败',
+            defaultMessage: 'Save failed',
           }),
       );
     }
@@ -137,11 +137,12 @@ export default function AdminSettings() {
   };
 
   /**
-   * 提交一轮清理：先看有没有正在跑的任务，有就直接接管那条记录（不重复提交），
-   * 否则异步提交并打开面板轮询。
+   * Submit one cleanup round: first check whether a task is already running; if so, take
+   * over that record directly (no duplicate submission), otherwise submit asynchronously
+   * and open the panel to poll.
    *
-   * 清理是异步的（后端立刻返回 RUNNING 记录），所以这里不等待结果 ——
-   * 进度与结果都由面板轮询执行记录得到。
+   * Cleanup is async (the backend immediately returns a RUNNING record), so results are not
+   * awaited here — progress and outcome come from the panel polling the execution record.
    */
   const submitCleanup = async (dryRun: boolean) => {
     setCleanupSubmitting(true);
@@ -152,7 +153,8 @@ export default function AdminSettings() {
         message.info(
           intl.formatMessage({
             id: 'pages.admin.settings.cleanup.alreadyRunning',
-            defaultMessage: '已有清理在执行，切换到它的进度',
+            defaultMessage:
+              'A cleanup is already running, showing its progress',
           }),
         );
         return;
@@ -166,7 +168,7 @@ export default function AdminSettings() {
     }
   };
 
-  /** 是否已有 RUNNING 的记录（用于禁用按钮 + 接续展示）。 */
+  /** Whether a RUNNING record already exists (used to disable the button and resume display). */
   const findRunningRun = async () => {
     const page = await agentApi.admin.listSessionCleanupRuns({
       status: 'RUNNING',
@@ -177,10 +179,11 @@ export default function AdminSettings() {
   };
 
   /**
-   * 提交一轮 Skill Hub 同步，形状同 {@link submitCleanup}。
+   * Submit one Skill Hub sync round; same shape as {@link submitCleanup}.
    *
-   * <p>它是系统级定时任务的手动触发入口（与清理同处一格），所以同样先接管已在跑的那条记录，
-   * 避免重复提交 —— 定时轮是 5 分钟一轮，点得再快也不该堆出并发。
+   * <p>This is the manual trigger for a system-level scheduled task (it sits next to cleanup),
+   * so it likewise takes over an already-running record first to avoid duplicate submissions —
+   * the scheduled round runs every 5 minutes, and rapid clicks must not pile up concurrency.
    */
   const submitSkillSync = async () => {
     setSyncSubmitting(true);
@@ -196,7 +199,8 @@ export default function AdminSettings() {
         message.info(
           intl.formatMessage({
             id: 'pages.admin.settings.skillSync.alreadyRunning',
-            defaultMessage: '已有同步在执行，切换到它的进度',
+            defaultMessage:
+              'A sync is already running, switching to its progress',
           }),
         );
         return;
@@ -214,7 +218,8 @@ export default function AdminSettings() {
     modal.confirm({
       title: intl.formatMessage({
         id: 'pages.admin.settings.plugin.delete.confirm',
-        defaultMessage: '确认删除已托管的插件安装包吗？删除后下载入口将隐藏。',
+        defaultMessage:
+          'Delete the managed plugin package? The download entry will be hidden.',
       }),
       okText: intl.formatMessage({ id: 'pages.save' }),
       cancelText: intl.formatMessage({ id: 'pages.cancel' }),
@@ -225,7 +230,7 @@ export default function AdminSettings() {
           message.success(
             intl.formatMessage({
               id: 'pages.admin.settings.plugin.delete.success',
-              defaultMessage: '已删除',
+              defaultMessage: 'Deleted',
             }),
           );
           loadConfigs();
@@ -271,7 +276,7 @@ export default function AdminSettings() {
               {config.configValue ||
                 intl.formatMessage({
                   id: 'pages.admin.settings.notSet',
-                  defaultMessage: '(未设置)',
+                  defaultMessage: '(not set)',
                 })}
             </span>
           ) : (
@@ -279,7 +284,7 @@ export default function AdminSettings() {
               <span style={{ color: 'rgba(0,0,0,0.25)' }}>
                 {intl.formatMessage({
                   id: 'pages.admin.settings.empty',
-                  defaultMessage: '(空)',
+                  defaultMessage: '(empty)',
                 })}
               </span>
             )
@@ -321,7 +326,7 @@ export default function AdminSettings() {
           >
             {intl.formatMessage({
               id: 'pages.admin.settings.cleanup.preview.btn',
-              defaultMessage: '预演清理',
+              defaultMessage: 'Preview',
             })}
           </Button>
           <Button
@@ -332,13 +337,13 @@ export default function AdminSettings() {
           >
             {intl.formatMessage({
               id: 'pages.admin.settings.cleanup.real.btn',
-              defaultMessage: '立即清理',
+              defaultMessage: 'Clean Now',
             })}
           </Button>
           <Button size="small" onClick={() => setRunsOpen(true)}>
             {intl.formatMessage({
               id: 'pages.admin.settings.cleanup.runs.btn',
-              defaultMessage: '执行记录',
+              defaultMessage: 'Run History',
             })}
           </Button>
         </div>
@@ -351,13 +356,13 @@ export default function AdminSettings() {
           >
             {intl.formatMessage({
               id: 'pages.admin.settings.skillSync.trigger.btn',
-              defaultMessage: '检查更新',
+              defaultMessage: 'Check updates',
             })}
           </Button>
           <Button size="small" onClick={() => setSyncRunsOpen(true)}>
             {intl.formatMessage({
               id: 'pages.admin.settings.skillSync.runs.btn',
-              defaultMessage: '执行记录',
+              defaultMessage: 'Execution history',
             })}
           </Button>
         </div>
@@ -371,14 +376,14 @@ export default function AdminSettings() {
             <Button size="small" type="primary">
               {intl.formatMessage({
                 id: 'pages.admin.settings.plugin.upload.btn',
-                defaultMessage: '上传安装包',
+                defaultMessage: 'Upload Package',
               })}
             </Button>
           </Upload>
           <Button size="small" danger onClick={handleDeletePlugin}>
             {intl.formatMessage({
               id: 'pages.admin.settings.plugin.delete.btn',
-              defaultMessage: '删除',
+              defaultMessage: 'Delete',
             })}
           </Button>
         </div>

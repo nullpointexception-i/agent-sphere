@@ -5,7 +5,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-/** 活动列表轻量投影：不包含 request/response/reasoning/args/artifact 等大字段。 */
+/** Lightweight projection for activity lists: excludes large fields such as request/response/reasoning/args/artifact. */
 @Data
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class RunActivitySummaryVO implements Serializable {

@@ -18,9 +18,10 @@ import java.util.Base64;
 import java.util.List;
 
 /**
- * 系统配置：Redis 缓存（RBucket + 5min TTL），全局一致。
- * AES 密钥生成点有两处（{@link #get} 缓存 miss 时、{@link #init}），统一走 Redis
- * {@code SET NX} 原子占位：仅占位成功者生成并落库，其余副本回读 DB。
+ * System config: Redis cache (RBucket + 5 min TTL), globally consistent.
+ * There are two AES key generation points ({@link #get} on a cache miss, and {@link #init}), both going
+ * through the Redis {@code SET NX} atomic claim: only the replica that wins the claim generates and
+ * persists the key; the others read it back from the DB.
  */
 @Slf4j
 @Service
@@ -58,7 +59,8 @@ public class SystemConfigServiceImpl implements SystemConfigSpi {
         if (SystemConfigKeys.AES_KEY.equals(key) && value.isBlank()) {
             value = initAesKey();
         }
-        // 仅非空值写缓存：空值不缓存、不续期 TTL，避免 SQL 直改 DB 后旧空值缓存长期残留
+        // Write the cache only for non-empty values: empty values are neither cached nor TTL-renewed, so a
+        // stale empty cache does not linger after the DB is changed directly via SQL
         if (!value.isBlank()) {
             bucket.set(value);
             bucket.expire(CACHE_TTL);
@@ -89,14 +91,15 @@ public class SystemConfigServiceImpl implements SystemConfigSpi {
     }
 
     /**
-     * AES-256 密钥首启：Redis {@code SET NX} 原子占位，仅占位成功者生成并落库；
-     * 其余副本回读 DB（占位键带短 TTL 防占位残留）。
+     * First startup of the AES-256 key: an atomic Redis {@code SET NX} claim, so only the replica that wins
+     * generates and persists the key; the others read it back from the DB (the claim key carries a short TTL
+     * to avoid a lingering claim).
      */
     private String initAesKey() {
         RBucket<String> initLock = redissonClient.getBucket(DistributedRuntimeConstants.KEY_AES_KEY_INIT);
         boolean acquired = initLock.trySet("1", 1, java.util.concurrent.TimeUnit.MINUTES);
         if (!acquired) {
-            // 其他副本正在生成：回读 DB（最多等 5s）
+            // Another replica is generating it: read back from the DB (wait up to 5s)
             for (int i = 0; i < 5; i++) {
                 SystemConfig config = systemConfigMapper.selectOne(
                         new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SystemConfig>()
@@ -144,7 +147,8 @@ public class SystemConfigServiceImpl implements SystemConfigSpi {
 
     @PostConstruct
     public void init() {
-        // 清理 SQL 直改 DB 场景下残留的空值缓存（如 V62 将 user.resource-template 从空值填充为模板后）
+        // Clear empty-value cache left over from direct SQL changes to the DB (e.g. after V62 fills
+        // user.resource-template from empty to the template)
         invalidateCache(SystemConfigKeys.USER_RESOURCE_TEMPLATE);
         get(SystemConfigKeys.AES_KEY);
     }

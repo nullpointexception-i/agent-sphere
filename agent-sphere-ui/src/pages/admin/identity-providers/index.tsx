@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   App,
@@ -54,7 +55,7 @@ export default function AdminIdentityProviders() {
       document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    message.success(t('pages.admin.copy.success', '已复制'));
+    message.success(t('pages.admin.copy.success', 'Copied'));
   };
 
   useEffect(() => {
@@ -105,12 +106,12 @@ export default function AdminIdentityProviders() {
       } else {
         await agentApi.admin.identityProviders.create(values);
       }
-      message.success(t('pages.save.success', '已保存'));
+      message.success(t('pages.save.success', 'Saved'));
       setEditOpen(false);
       form.resetFields();
       loadItems();
     } catch {
-      message.error(t('pages.chat.saveFailed', '保存失败'));
+      message.error(t('pages.chat.saveFailed', 'Save failed'));
     } finally {
       setSubmitting(false);
     }
@@ -119,17 +120,17 @@ export default function AdminIdentityProviders() {
   const handleDelete = (record: any) => {
     modal.confirm({
       title: intl.formatMessage(
-        { id: 'pages.deleteConfirm.title', defaultMessage: '删除{name}' },
+        { id: 'pages.deleteConfirm.title', defaultMessage: 'Delete {name}' },
         { name: record.name },
       ),
       okType: 'danger',
       onOk: async () => {
         try {
           await agentApi.admin.identityProviders.delete(record.id);
-          message.success(t('pages.document.deleted', '已删除'));
+          message.success(t('pages.document.deleted', 'Deleted'));
           loadItems();
         } catch {
-          message.error(t('pages.chat.saveFailed', '保存失败'));
+          message.error(t('pages.chat.saveFailed', 'Save failed'));
         }
       },
     });
@@ -138,10 +139,10 @@ export default function AdminIdentityProviders() {
   const handleSetEnabled = async (record: any, enabled: boolean) => {
     try {
       await agentApi.admin.identityProviders.setEnabled(record.id, enabled);
-      message.success(t('pages.save.success', '已保存'));
+      message.success(t('pages.save.success', 'Saved'));
       loadItems();
     } catch {
-      message.error(t('pages.chat.saveFailed', '保存失败'));
+      message.error(t('pages.chat.saveFailed', 'Save failed'));
     }
   };
 
@@ -152,14 +153,14 @@ export default function AdminIdentityProviders() {
       message.success(
         t(
           'pages.admin.identityProviders.testConnection.success',
-          '连接测试通过',
+          'Connection test passed',
         ),
       );
     } catch {
       message.error(
         t(
           'pages.admin.identityProviders.testConnection.failed',
-          '连接测试失败',
+          'Connection test failed',
         ),
       );
     } finally {
@@ -175,7 +176,7 @@ export default function AdminIdentityProviders() {
       width: 60,
     },
     {
-      title: t('pages.admin.identityProviders.name', '名称'),
+      title: t('pages.admin.identityProviders.name', 'Name'),
       key: 'name',
       width: 180,
       ellipsis: true,
@@ -189,7 +190,7 @@ export default function AdminIdentityProviders() {
       ),
     },
     {
-      title: t('pages.admin.identityProviders.type', '类型'),
+      title: t('pages.admin.identityProviders.type', 'Type'),
       dataIndex: 'type',
       key: 'type',
       width: 90,
@@ -203,11 +204,11 @@ export default function AdminIdentityProviders() {
       ellipsis: true,
     },
     {
-      title: t('pages.admin.identityProviders.enabled', '启用'),
+      title: t('pages.admin.identityProviders.enabled', 'Enabled'),
       key: 'enabled',
       width: 80,
       render: (_: any, record: any) => (
-        <Can code="admin:identity-provider:update">
+        <Can code={PERM.adminIdentityProviderUpdate}>
           <Switch
             checked={record.enabled}
             onChange={(checked) => handleSetEnabled(record, checked)}
@@ -216,44 +217,47 @@ export default function AdminIdentityProviders() {
       ),
     },
     {
-      title: t('pages.table.created', '创建时间'),
+      title: t('pages.table.created', 'Created'),
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 160,
     },
     {
-      title: t('pages.table.actions', '操作'),
+      title: t('pages.table.actions', 'Actions'),
       key: 'actions',
       width: 180,
       render: (_: any, record: any) => (
         <Space>
-          <Can code="admin:identity-provider:read">
+          <Can code={PERM.adminIdentityProviderRead}>
             <Button
               type="link"
               size="small"
               loading={testingId === record.id}
               onClick={() => handleTestConnection(record.id)}
             >
-              {t('pages.admin.identityProviders.testConnection', '测试连接')}
+              {t(
+                'pages.admin.identityProviders.testConnection',
+                'Test Connection',
+              )}
             </Button>
           </Can>
-          <Can code="admin:identity-provider:update">
+          <Can code={PERM.adminIdentityProviderUpdate}>
             <Button
               type="link"
               size="small"
               onClick={() => handleOpenEdit(record)}
             >
-              {t('pages.table.edit', '编辑')}
+              {t('pages.table.edit', 'Edit')}
             </Button>
           </Can>
-          <Can code="admin:identity-provider:delete">
+          <Can code={PERM.adminIdentityProviderDelete}>
             <Button
               type="link"
               size="small"
               danger
               onClick={() => handleDelete(record)}
             >
-              {t('pages.table.delete', '删除')}
+              {t('pages.table.delete', 'Delete')}
             </Button>
           </Can>
         </Space>
@@ -274,7 +278,7 @@ export default function AdminIdentityProviders() {
           allowClear
           placeholder={t(
             'pages.admin.identityProviders.search.placeholder',
-            '搜索名称或标识',
+            'Search name or code',
           )}
           style={{ width: 280 }}
           onSearch={(value) => {
@@ -282,9 +286,9 @@ export default function AdminIdentityProviders() {
             loadItems(value);
           }}
         />
-        <Can code="admin:identity-provider:create">
+        <Can code={PERM.adminIdentityProviderCreate}>
           <Button type="primary" onClick={() => handleOpenEdit()}>
-            {t('pages.admin.identityProviders.create', '新建身份源')}
+            {t('pages.admin.identityProviders.create', 'New Identity Provider')}
           </Button>
         </Can>
       </div>
@@ -300,8 +304,8 @@ export default function AdminIdentityProviders() {
       <Modal
         title={
           editing
-            ? t('pages.admin.identityProviders.edit', '编辑身份源')
-            : t('pages.admin.identityProviders.create', '新建身份源')
+            ? t('pages.admin.identityProviders.edit', 'Edit Identity Provider')
+            : t('pages.admin.identityProviders.create', 'New Identity Provider')
         }
         open={editOpen}
         onOk={handleSave}
@@ -315,14 +319,14 @@ export default function AdminIdentityProviders() {
         <Form form={form} layout="vertical">
           <Form.Item
             name="code"
-            label={t('pages.admin.identityProviders.code', '标识')}
+            label={t('pages.admin.identityProviders.code', 'Code')}
             rules={[
               { required: true },
               {
                 pattern: /^[a-z][a-z0-9-]*$/,
                 message: t(
                   'pages.admin.permissions.codePattern',
-                  '格式: lowercase letters/numbers/-',
+                  'Format: module:action',
                 ),
               },
             ]}
@@ -331,7 +335,7 @@ export default function AdminIdentityProviders() {
           </Form.Item>
           <Form.Item
             name="name"
-            label={t('pages.admin.identityProviders.name', '名称')}
+            label={t('pages.admin.identityProviders.name', 'Name')}
             rules={[{ required: true }]}
           >
             <Input maxLength={128} />
@@ -361,7 +365,7 @@ export default function AdminIdentityProviders() {
               editing
                 ? t(
                     'pages.admin.identityProviders.clientSecret.keep',
-                    '留空则保留原值',
+                    'Leave empty to keep current value',
                   )
                 : undefined
             }
@@ -403,23 +407,26 @@ export default function AdminIdentityProviders() {
           </Form.Item>
           <Form.Item
             name="enabled"
-            label={t('pages.admin.identityProviders.enabled', '启用')}
+            label={t('pages.admin.identityProviders.enabled', 'Enabled')}
             valuePropName="checked"
           >
             <Switch />
           </Form.Item>
           <Form.Item
             name="remark"
-            label={t('pages.admin.identityProviders.remark', '备注')}
+            label={t('pages.admin.identityProviders.remark', 'Remark')}
           >
             <Input.TextArea maxLength={500} />
           </Form.Item>
           <Form.Item
             name="defaultRoleId"
-            label={t('pages.admin.identityProviders.defaultRole', '默认角色')}
+            label={t(
+              'pages.admin.identityProviders.defaultRole',
+              'Default Role',
+            )}
             extra={t(
               'pages.admin.identityProviders.defaultRole.extra',
-              'SSO 新用户授予该角色（替换默认 USER 角色）',
+              'Granted to new SSO users (replaces default USER role)',
             )}
           >
             <Select
@@ -428,7 +435,7 @@ export default function AdminIdentityProviders() {
               optionFilterProp="label"
               placeholder={t(
                 'pages.admin.identityProviders.defaultRole.placeholder',
-                '选择默认角色',
+                'Select default role',
               )}
               options={roles.map((r) => ({
                 value: r.id,
@@ -443,7 +450,7 @@ export default function AdminIdentityProviders() {
                 <span>
                   {t(
                     'pages.admin.identityProviders.resourceTemplate',
-                    '资源模板 (JSON)',
+                    'Resource Template (JSON)',
                   )}
                 </span>
                 <Button
@@ -452,13 +459,13 @@ export default function AdminIdentityProviders() {
                   style={{ padding: 0, height: 'auto' }}
                   onClick={() => setSampleOpen(true)}
                 >
-                  {t('pages.admin.identityProviders.viewSample', '查看样例')}
+                  {t('pages.admin.identityProviders.viewSample', 'View sample')}
                 </Button>
               </Space>
             }
             extra={t(
               'pages.admin.identityProviders.resourceTemplate.extra',
-              '留空则使用默认模板；用户首次登录时按此 JSON 生成自己的资源副本',
+              'Empty uses the default template; each user gets their own resource copy on first login',
             )}
           >
             <Input.TextArea
@@ -472,7 +479,7 @@ export default function AdminIdentityProviders() {
       <Modal
         title={t(
           'pages.admin.identityProviders.sample.title',
-          '默认资源模板样例',
+          'Default Resource Template Sample',
         )}
         open={sampleOpen}
         onCancel={() => setSampleOpen(false)}
@@ -480,10 +487,10 @@ export default function AdminIdentityProviders() {
         footer={
           <Space>
             <Button onClick={() => setSampleOpen(false)}>
-              {t('pages.table.close', '关闭')}
+              {t('pages.table.close', 'Close')}
             </Button>
             <Button type="primary" onClick={handleCopySample}>
-              {t('pages.admin.identityProviders.copy', '复制 JSON')}
+              {t('pages.admin.identityProviders.copy', 'Copy JSON')}
             </Button>
           </Space>
         }
@@ -504,7 +511,7 @@ export default function AdminIdentityProviders() {
           }}
         >
           {defaultTemplate === null
-            ? t('pages.admin.loading', '加载中…')
+            ? t('pages.admin.loading', 'Loading…')
             : sampleJson}
         </pre>
       </Modal>

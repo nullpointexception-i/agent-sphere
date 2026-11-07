@@ -1,10 +1,12 @@
 import { request } from '@umijs/max';
 
-const BASE = '/api/v1';
+import { API_BASE } from '@/constants/api';
+
+const BASE = API_BASE;
 
 /**
- * 会话清理执行报告（后端 SessionCleanupReportVO）。
- * tableStats 的 key 是数据库表名，运维直接看得懂。
+ * Session cleanup execution report (backend SessionCleanupReportVO).
+ * tableStats keys are database table names, directly understandable to operations.
  */
 export interface SessionCleanupReport {
   dryRun: boolean;
@@ -22,11 +24,11 @@ export interface SessionCleanupReport {
   truncated: boolean;
   elapsedMs: number;
   vacuumHint?: string;
-  /** 进度分母：执行前算出的过期会话总数 */
+  /** Progress denominator: total expired sessions computed before the run */
   totalSessions?: number;
 }
 
-/** 会话清理执行记录（后端 SessionCleanupRunVO）。定时与手动两种触发都会留痕。 */
+/** Session cleanup execution record (backend SessionCleanupRunVO). Both scheduled and manual triggers are recorded. */
 export interface SessionCleanupRun {
   id: number;
   triggerType: 'SCHEDULED' | 'MANUAL';
@@ -37,7 +39,7 @@ export interface SessionCleanupRun {
   cutoff?: string;
   fileCutoff?: string;
   sessionCount?: number;
-  /** 进度分母：执行前 count 出的过期会话总数；进度 = sessionCount / totalSessions */
+  /** Progress denominator: total expired sessions counted before the run; progress = sessionCount / totalSessions */
   totalSessions?: number;
   totalRows?: number;
   skippedActiveSessions?: number;
@@ -49,32 +51,32 @@ export interface SessionCleanupRun {
   errorMessage?: string;
   startedAt?: string;
   finishedAt?: string;
-  /** 疑似中断：进程崩了导致记录永远停在 RUNNING */
+  /** Suspected interruption: a crashed process leaves the record stuck in RUNNING */
   stale?: boolean;
   createdBy?: string;
-  /** 后端写给运维的提示（当前是硬删后的 VACUUM 建议），前端原样展示 */
+  /** Backend hint for operations (currently the post-hard-delete VACUUM recommendation), displayed as is by the frontend */
   remark?: string;
 }
 
-/** Skill 自动同步的一轮执行记录（后端 SkillSyncRunVO）。 */
+/** One round of Skill auto-sync execution record (backend SkillSyncRunVO). */
 export interface SkillSyncRun {
   id: number;
   triggerType: 'SCHEDULED' | 'MANUAL';
   status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
-  /** 本轮扫描到的「开启了自动更新的副本」总数 */
+  /** Total number of "replicas with auto-update enabled" scanned this round */
   scannedCount?: number;
   handled?: number;
   updated?: number;
   skipped?: number;
   batchSize?: number;
-  /** 未同步的副本及原因：SOURCE_GONE / NOT_PUBLIC / VERSION_NOT_AHEAD / CONCURRENT_UPDATE / ERROR:… */
+  /** Replicas not synced and the reason: SOURCE_GONE / NOT_PUBLIC / VERSION_NOT_AHEAD / CONCURRENT_UPDATE / ERROR:… */
   detail?: { copyId: number; originId: number; reason: string }[];
   skipReason?: string;
   errorMessage?: string;
   elapsedMs?: number;
   startedAt?: string;
   finishedAt?: string;
-  /** 疑似中断：进程崩了导致记录永远停在 RUNNING */
+  /** Suspected interruption: a crashed process leaves the record stuck in RUNNING */
   stale?: boolean;
   createdBy?: string;
 }
@@ -88,7 +90,7 @@ export interface PageResult<T> {
 
 export const agentApi = {
   system: {
-    // 公开配置读取（无需登录）：当前支持 plugin.download-url
+    // Public config read (no login required): currently supports plugin.download-url
     publicConfig: (keys: string[]) =>
       request<Record<string, string>>(`${BASE}/system/config/public?keys=${keys.join(',')}`),
   },
@@ -271,7 +273,7 @@ export const agentApi = {
         { method: 'POST', data: formData },
       );
     },
-    // 按 fileKey 回读附件字节（聊天历史图片回显）；返回 Blob，展示侧自行生成 objectURL
+    // Read attachment bytes back by fileKey (chat history image display); returns a Blob, and the view creates its own objectURL
     get: (fileKey: string) =>
       request<Blob>(`${BASE}/files/${fileKey}`, { responseType: 'blob' }),
   },
@@ -284,7 +286,7 @@ export const agentApi = {
       request<any>(
         `${BASE}/instance/runs?sessionId=${sessionId}&page=${page}&size=${size}${keyword ? `&keyword=${encodeURIComponent(keyword)}` : ''}`,
       ),
-    // 按需批量补拉推理：返回 {runId: reasoning}（列表默认离行，不含 reasoning）
+    // Fetch reasoning in batches on demand: returns {runId: reasoning} (the list omits it by default)
     reasoning: (runIds: number[]) =>
       request<Record<string, string>>(`${BASE}/instance/runs/reasoning?runIds=${runIds.join(',')}`),
     stop: (sessionId: number, runId: number) =>
@@ -307,7 +309,7 @@ export const agentApi = {
       request<{ total: number; records: any[] }>(
         `${BASE}/instance/runs/${runId}/activities?sessionId=${sessionId}&offset=${offset}&limit=${limit}`,
       ),
-    // 列表不返回大字段；详情按需拉取完整 request/response/args/artifact
+    // The list does not return large fields; fetch the full request/response/args/artifact on demand for details
     get: (
       runId: number,
       sessionId: number,
@@ -317,7 +319,7 @@ export const agentApi = {
       request<any>(
         `${BASE}/instance/runs/${runId}/activities/${activityType}/${id}?sessionId=${sessionId}`,
       ),
-    // 最近 300 条主 Agent LLM 交互的 token 序列；afterId 支持 5s 增量刷新
+    // Token series of the latest 300 main-agent LLM interactions; afterId supports 5s incremental refresh
     usageSeries: (
       runId: number,
       sessionId: number,
@@ -528,18 +530,18 @@ export const agentApi = {
     deletePlugin: () =>
       request<any>(`${BASE}/system/config/plugin`, { method: 'DELETE' }),
     /**
-     * 提交一轮清理（异步，立即返回执行记录）。
-     * 进度与结果要用返回记录的 id 轮询 {@link getSessionCleanupRun}。
+     * Submit one cleanup round (async, returns the execution record immediately).
+     * Poll {@link getSessionCleanupRun} with the returned record's id for progress and results.
      */
     cleanupSessions: (dryRun: boolean) =>
       request<SessionCleanupRun>(`${BASE}/instance/session-cleanup`, {
         method: 'POST',
         data: { dryRun },
       }),
-    /** 轮询单条执行记录（含实时进度）。 */
+    /** Poll a single execution record (with live progress). */
     getSessionCleanupRun: (id: number) =>
       request<SessionCleanupRun>(`${BASE}/instance/session-cleanup/runs/${id}`),
-    /** 清理执行记录；dryRun 传 undefined 表示不按预演/实删过滤。 */
+    /** Cleanup execution records; passing undefined for dryRun means no dry-run/real-run filtering. */
     listSessionCleanupRuns: (params?: {
       triggerType?: string;
       status?: string;
@@ -551,15 +553,16 @@ export const agentApi = {
         params,
       }),
     /**
-     * 手动触发一轮「从 Skill Hub 同步最新版本」（异步，立即返回执行记录）。
-     * 进度与结果要用返回记录的 id 轮询 {@link getSkillSyncRun}。
+     * Manually trigger one "sync the latest version from Skill Hub" round (async, returns the
+     * execution record immediately).
+     * Poll {@link getSkillSyncRun} with the returned record's id for progress and results.
      */
     syncSkillNow: () =>
       request<SkillSyncRun>(`${BASE}/capability/skill/sync-now`, { method: 'POST' }),
-    /** 轮询单条同步执行记录（含实时统计与跳过明细）。 */
+    /** Poll a single sync execution record (with live stats and skipped details). */
     getSkillSyncRun: (id: number) =>
       request<SkillSyncRun>(`${BASE}/capability/skill/sync-runs/${id}`),
-    /** 同步执行记录分页（定时 + 手动）。 */
+    /** Sync execution records, paged (scheduled + manual). */
     listSkillSyncRuns: (params?: {
       triggerType?: string;
       status?: string;

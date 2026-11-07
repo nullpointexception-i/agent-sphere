@@ -13,15 +13,16 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 浏览器截图落库：扩展捕获后以 base64 上报，按 (browser-screenshot, fileKey) 存
- * {@link GenericFileService}。截图文件与聊天附件并存于 agent_file_store，仅 bizKey 不同。
+ * Browser screenshot persistence: the extension captures a screenshot and uploads it as base64, stored via
+ * {@link GenericFileService} under (browser-screenshot, fileKey). Screenshot files and chat attachments
+ * coexist in agent_file_store, differing only by bizKey.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScreenshotFileService {
 
-    /** 见 {@link FileStoreBizKeys#BROWSER_SCREENSHOT}；保留本字段以免改动既有调用点 */
+    /** See {@link FileStoreBizKeys#BROWSER_SCREENSHOT}; this field is kept so existing call sites are unchanged */
     public static final String BIZ_KEY = FileStoreBizKeys.BROWSER_SCREENSHOT;
     private static final long MAX_SCREENSHOT_BYTES = 8L * 1024 * 1024;
     private static final Set<String> ALLOWED_TYPES = Set.of(
@@ -29,26 +30,26 @@ public class ScreenshotFileService {
 
     private final GenericFileService genericFileService;
 
-    /** base64 截图落库；contentType 白名单外或超限抛 IllegalArgumentException。 */
+    /** Persists a base64 screenshot; throws IllegalArgumentException when contentType is outside the whitelist or the size cap is exceeded. */
     public ScreenshotUploadResult store(String base64, String contentType) {
         if (base64 == null || base64.isBlank()) {
-            throw new IllegalArgumentException("截图内容不能为空");
+            throw new IllegalArgumentException("screenshot content must not be empty");
         }
         String normalized = normalizeContentType(contentType);
         if (normalized == null) {
-            throw new IllegalArgumentException("仅支持 jpeg/png/webp 截图");
+            throw new IllegalArgumentException("only jpeg/png/webp screenshots are supported");
         }
         byte[] bytes;
         try {
             bytes = Base64.getDecoder().decode(base64);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("截图 base64 解码失败");
+            throw new IllegalArgumentException("failed to decode screenshot base64");
         }
         if (bytes.length == 0) {
-            throw new IllegalArgumentException("截图内容不能为空");
+            throw new IllegalArgumentException("screenshot content must not be empty");
         }
         if (bytes.length > MAX_SCREENSHOT_BYTES) {
-            throw new IllegalArgumentException("截图超过 8MB 上限");
+            throw new IllegalArgumentException("screenshot exceeds the 8 MB limit");
         }
         String fileKey = UUID.randomUUID().toString();
         genericFileService.save(BIZ_KEY, fileKey, fileKey + ".jpg", normalized, bytes);
@@ -56,12 +57,12 @@ public class ScreenshotFileService {
         return new ScreenshotUploadResult(fileKey, normalized, bytes.length);
     }
 
-    /** 按 fileKey 回读截图；不存在返回 null。 */
+    /** Reads a screenshot back by fileKey; returns null if it does not exist. */
     public StoredFile load(String fileKey) {
         return genericFileService.get(BIZ_KEY, fileKey);
     }
 
-    /** 读取截图并拼 OpenAI 兼容 data URL；不存在/无字节返回 null。 */
+    /** Reads a screenshot and assembles an OpenAI-compatible data URL; returns null if missing or empty. */
     public String toDataUrl(String fileKey) {
         StoredFile stored = load(fileKey);
         if (stored == null || stored.content() == null || stored.content().length == 0) {

@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 校验 V63 迁移写入的 user.resource-template 在 PostgreSQL standard_conforming_strings=on
- * 语义下存储为合法 JSON（V62 曾因 Java 双反斜杠转义导致 JSON 损坏，防止复发）。
+ * Verify that the user.resource-template written by migration V63 is valid JSON under PostgreSQL
+ * standard_conforming_strings=on semantics (V62 once corrupted JSON through Java double-backslash escaping; prevent a recurrence).
  */
 class DefaultResourceTemplateMigrationTest {
 

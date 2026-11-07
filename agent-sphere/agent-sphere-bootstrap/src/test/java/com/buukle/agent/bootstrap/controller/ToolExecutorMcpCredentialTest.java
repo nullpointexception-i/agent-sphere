@@ -36,10 +36,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 /**
- * 任务级 MCP 凭证的传递链路。
+ * Propagation chain for task-level MCP credentials.
  *
- * <p>这条链路一旦断了，Bole 侧就拿不到「哪个收藏者」，跨用户隔离直接失效 ——
- * 而且不会报错，只会表现为「A 用户能看到 B 用户收藏过谁」，属于最难被发现的一类故障。
+ * <p>If this chain breaks, the Bole side cannot tell "which collector", and cross-user isolation fails outright —
+ * and it raises no error, only "user A can see whom user B collected", one of the hardest classes of bugs to notice.
  */
 @ExtendWith(MockitoExtension.class)
 class ToolExecutorMcpCredentialTest {
@@ -121,8 +121,8 @@ class ToolExecutorMcpCredentialTest {
 
     @Test
     void missingCredentialBecomesNullInsteadOfEmptyString() {
-        // Redis 里没有凭证时必须传 null：传空串会让服务端收到一个存在但无效的凭证头，
-        // 掩盖「凭证链路断了」这个事实。
+        // With no credential in Redis, null must be passed: an empty string makes the server receive a present-but-invalid credential header,
+        // masking the fact that "the credential chain is broken".
         org.mockito.Mockito.when(credentialStore.get(SESSION_ID)).thenReturn(null);
         org.mockito.Mockito.when(mcpSpi.executeTool(anyString(), anyString(), anyString(), any()))
                 .thenReturn("{}");
@@ -141,7 +141,7 @@ class ToolExecutorMcpCredentialTest {
 
         assertEquals(CREDENTIAL, context.header(McpProtocolConstants.HEADER_TASK_MCP_CREDENTIAL));
         assertEquals("X-Task-Mcp-Credential", McpProtocolConstants.HEADER_TASK_MCP_CREDENTIAL);
-        // 头名由 agent-sphere 固定，不可被任务提交方自定义，否则可覆盖已登记 MCP 的 Authorization。
+        // The header name is fixed by agent-sphere and cannot be customized by the task submitter, otherwise it could override the registered MCP Authorization.
         assertTrue(McpCallContext.ofTaskCredential(" ").isEmpty());
         assertTrue(McpCallContext.ofTaskCredential(null).isEmpty());
         assertTrue(McpCallContext.none().isEmpty());

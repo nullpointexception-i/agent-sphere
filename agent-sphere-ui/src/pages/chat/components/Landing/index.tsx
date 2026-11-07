@@ -97,7 +97,7 @@ export default function Landing({
   }, [instances, chosenInstance, currentInstanceObj]);
 
   const noData = dataLoaded && instances.length === 0;
-  // 该实例未开放主站会话（服务端同样会拦，这里只为体验一致）
+  // This instance has console sessions disabled (the server enforces it too; here it is only for consistent UX)
   const consoleBlocked = currentInstance?.allowConsoleSession === false;
 
   return (
@@ -119,7 +119,8 @@ export default function Landing({
         >
           {intl.formatMessage({
             id: 'pages.chat.consoleSessionDisabled',
-            defaultMessage: '该实例未开放主站会话，如需聊天机器人请申请开通',
+            defaultMessage:
+              'This instance does not allow console sessions. Apply for a chatbot if you need one.',
           })}
         </div>
       ) : null}
@@ -238,19 +239,20 @@ export default function Landing({
                       modal.confirm({
                         title: intl.formatMessage({
                           id: 'pages.landing.noModelRouteTitle',
-                          defaultMessage: '未配置默认模型',
+                          defaultMessage: 'No default model configured',
                         }),
                         content: intl.formatMessage({
                           id: 'pages.landing.noModelRouteConfirm',
-                          defaultMessage: '是否去为该实例配置模型？',
+                          defaultMessage:
+                            'Configure a model for this instance?',
                         }),
                         okText: intl.formatMessage({
                           id: 'pages.landing.goConfigure',
-                          defaultMessage: '去配置',
+                          defaultMessage: 'Configure',
                         }),
                         cancelText: intl.formatMessage({
                           id: 'pages.cancel',
-                          defaultMessage: '取消',
+                          defaultMessage: 'Cancel',
                         }),
                         onOk: () => {
                           onConfigureModelRoute(inst);
@@ -282,7 +284,7 @@ export default function Landing({
                       <ExclamationCircleOutlined />
                       {intl.formatMessage({
                         id: 'pages.landing.needModelRoute',
-                        defaultMessage: '需要设置默认模型',
+                        defaultMessage: 'Default model required',
                       })}
                     </div>
                   )}

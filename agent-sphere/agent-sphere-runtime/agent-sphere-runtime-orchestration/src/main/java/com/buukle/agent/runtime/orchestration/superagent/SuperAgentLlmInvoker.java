@@ -19,8 +19,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * Super-Agent 路由层共用的单次 LLM 调用：解析 instance → route → provider → key，
- * 强制关闭思考，返回原始文本。Group Router / Agent Router 都走这里。
+ * Single LLM call shared by the Super-Agent routing layer: resolves instance → route → provider → key,
+ * forces thinking off and returns the raw text. Both Group Router and Agent Router go through here.
  */
 @Service
 @RequiredArgsConstructor

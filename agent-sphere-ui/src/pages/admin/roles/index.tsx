@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   App,
@@ -53,7 +54,7 @@ export default function AdminRoles() {
       message.success(
         intl.formatMessage({
           id: 'pages.save.success',
-          defaultMessage: '已保存',
+          defaultMessage: 'Saved',
         }),
       );
       setCreateOpen(false);
@@ -63,7 +64,7 @@ export default function AdminRoles() {
       message.error(
         intl.formatMessage({
           id: 'pages.chat.saveFailed',
-          defaultMessage: '保存失败',
+          defaultMessage: 'Save failed',
         }),
       );
     } finally {
@@ -105,7 +106,7 @@ export default function AdminRoles() {
       message.success(
         intl.formatMessage({
           id: 'pages.save.success',
-          defaultMessage: '已保存',
+          defaultMessage: 'Saved',
         }),
       );
       setPermModalRole(null);
@@ -113,7 +114,7 @@ export default function AdminRoles() {
       message.error(
         intl.formatMessage({
           id: 'pages.chat.saveFailed',
-          defaultMessage: '保存失败',
+          defaultMessage: 'Save failed',
         }),
       );
     }
@@ -123,7 +124,7 @@ export default function AdminRoles() {
     {
       title: intl.formatMessage({
         id: 'pages.table.name',
-        defaultMessage: '名称',
+        defaultMessage: 'Name',
       }),
       dataIndex: 'name',
       key: 'name',
@@ -139,7 +140,7 @@ export default function AdminRoles() {
     {
       title: intl.formatMessage({
         id: 'pages.table.description',
-        defaultMessage: '描述',
+        defaultMessage: 'Description',
       }),
       dataIndex: 'description',
       key: 'description',
@@ -147,7 +148,7 @@ export default function AdminRoles() {
     {
       title: intl.formatMessage({
         id: 'pages.table.created',
-        defaultMessage: '创建时间',
+        defaultMessage: 'Created',
       }),
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -156,12 +157,12 @@ export default function AdminRoles() {
     {
       title: intl.formatMessage({
         id: 'pages.table.actions',
-        defaultMessage: '操作',
+        defaultMessage: 'Actions',
       }),
       key: 'actions',
       render: (_: any, record: any) => (
         <Space>
-          <Can code="admin:role:assign">
+          <Can code={PERM.adminRoleAssign}>
             <Button
               type="link"
               size="small"
@@ -169,11 +170,11 @@ export default function AdminRoles() {
             >
               {intl.formatMessage({
                 id: 'pages.admin.roles.assignPermission',
-                defaultMessage: '分配权限',
+                defaultMessage: 'Assign Permissions',
               })}
             </Button>
           </Can>
-          <Can code="admin:role:delete">
+          <Can code={PERM.adminRoleDelete}>
             <Button
               type="link"
               size="small"
@@ -184,7 +185,7 @@ export default function AdminRoles() {
                   message.success(
                     intl.formatMessage({
                       id: 'pages.document.deleted',
-                      defaultMessage: '已删除',
+                      defaultMessage: 'Deleted',
                     }),
                   );
                   loadRoles();
@@ -192,7 +193,7 @@ export default function AdminRoles() {
                   message.error(
                     intl.formatMessage({
                       id: 'pages.chat.saveFailed',
-                      defaultMessage: '保存失败',
+                      defaultMessage: 'Save failed',
                     }),
                   );
                 }
@@ -200,7 +201,7 @@ export default function AdminRoles() {
             >
               {intl.formatMessage({
                 id: 'pages.table.delete',
-                defaultMessage: '删除',
+                defaultMessage: 'Delete',
               })}
             </Button>
           </Can>
@@ -273,11 +274,11 @@ export default function AdminRoles() {
   return (
     <>
       <div style={{ marginBottom: 16 }}>
-        <Can code="admin:role:create">
+        <Can code={PERM.adminRoleCreate}>
           <Button type="primary" onClick={() => setCreateOpen(true)}>
             {intl.formatMessage({
               id: 'pages.admin.roles.create',
-              defaultMessage: '新建角色',
+              defaultMessage: 'New Role',
             })}
           </Button>
         </Can>
@@ -302,7 +303,7 @@ export default function AdminRoles() {
       <Modal
         title={intl.formatMessage({
           id: 'pages.admin.roles.create',
-          defaultMessage: '新建角色',
+          defaultMessage: 'New Role',
         })}
         open={createOpen}
         onOk={handleCreate}
@@ -317,7 +318,7 @@ export default function AdminRoles() {
             name="name"
             label={intl.formatMessage({
               id: 'pages.form.name',
-              defaultMessage: '名称',
+              defaultMessage: 'Name',
             })}
             rules={[{ required: true }]}
           >
@@ -346,7 +347,7 @@ export default function AdminRoles() {
             name="description"
             label={intl.formatMessage({
               id: 'pages.form.description',
-              defaultMessage: '描述',
+              defaultMessage: 'Description',
             })}
           >
             <Input.TextArea maxLength={255} />
@@ -356,7 +357,7 @@ export default function AdminRoles() {
       <Modal
         title={intl.formatMessage({
           id: 'pages.admin.roles.assignPermission',
-          defaultMessage: '分配权限',
+          defaultMessage: 'Assign Permissions',
         })}
         open={!!permModalRole}
         onOk={handleSavePerms}

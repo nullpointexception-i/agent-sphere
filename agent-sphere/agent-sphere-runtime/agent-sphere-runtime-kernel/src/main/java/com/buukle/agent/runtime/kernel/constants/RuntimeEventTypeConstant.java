@@ -18,16 +18,16 @@ public final class RuntimeEventTypeConstant {
     public static final String REASONING_SUB_TYPE_RUN_FAILED = "run_failed";
     public static final String REASONING_SUB_TYPE_RUN_CANCELLED = "run_cancelled";
     public static final String REASONING_SUB_TYPE_RUN_AWAITING_USER = "run_awaiting_user";
-    /** wait 挂起（非终态：到点后同一个 run 会继续，前端不应据此解锁输入框）。 */
+    /** wait suspension (not terminal: the same run continues when the timer fires, so the frontend must not unlock the input box based on it). */
     public static final String REASONING_SUB_TYPE_RUN_WAITING = "run_waiting";
 
     public static final String REASONING_SUB_TYPE_COMPACTION_RUNNING = "compaction_running";
     public static final String REASONING_SUB_TYPE_COMPACTION_COMPLETED = "compaction_completed";
     public static final String REASONING_SUB_TYPE_COMPACTION_FAILED = "compaction_failed";
-    /** 压缩模型的流式输出（CONTENT_TOKEN）：前端打印到 compaction 行正文，不并入 assistant。 */
+    /** Streaming output of the compaction model (CONTENT_TOKEN): the frontend prints it into the compaction row body and does not merge it into assistant. */
     public static final String REASONING_SUB_TYPE_COMPACTION_OUTPUT = "compaction_output";
 
-    /** 工具参数仍在流式生成（审批卡要等参数完整才创建）。 */
+    /** Tool arguments are still streaming (the approval card is created only once the arguments are complete). */
     public static final String REASONING_SUB_TYPE_TOOL_INPUT_PREPARING = "tool_input_preparing";
     public static final String REASONING_SUB_TYPE_TOOL_CALL_STARTED = "tool_call_started";
     public static final String REASONING_SUB_TYPE_TOOL_CALL_IN_PROGRESS = "tool_call_in_progress";

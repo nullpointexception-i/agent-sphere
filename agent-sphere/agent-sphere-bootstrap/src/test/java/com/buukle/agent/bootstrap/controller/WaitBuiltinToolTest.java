@@ -33,11 +33,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
- * wait 工具的挂起-回归约。
+ * Suspension-resume contract of the wait tool.
  *
- * <p>核心不变量只有一条，但极容易被破坏：<b>wait 绝不能阻塞</b>。
- * 一旦在这里 sleep，它就会占住 maxParallel 信号量并撞上 tool.execution-timeout，
- * 「等超过 60s」这个需求会重新变得不可满足 —— 也就是这次改造的出发点。
+ * <p>There is only one core invariant, and it is easily broken: <b>wait must never block</b>.
+ * Sleeping here would hold a maxParallel permit and hit tool.execution-timeout,
+ * making "wait longer than 60s" unsatisfiable again — which is exactly why this rework exists.
  */
 @ExtendWith(MockitoExtension.class)
 class WaitBuiltinToolTest {
@@ -103,7 +103,7 @@ class WaitBuiltinToolTest {
                 new TurnToolCall(CALL_ID, WaitConstants.TOOL_NAME, "{\"ms\":1000}"),
                 SESSION_ID, RUN_ID, List.of(waitTool()));
 
-        // wait 没有 SPI bean；若拦截失效就会落到这里报「Unknown tool」
+        // wait has no SPI bean; if interception fails it lands here and reports "Unknown tool"
         verify(builtinSpi, never()).executeBuiltinTool(any(), any(), any(), any(), any());
     }
 
@@ -115,7 +115,7 @@ class WaitBuiltinToolTest {
                 new TurnToolCall("call-xyz", WaitConstants.TOOL_NAME, "{\"ms\":1000}"),
                 SESSION_ID, RUN_ID, List.of(waitTool()));
 
-        // callId 是唤醒时用 getByRunAndCallId 定位 tool call 记录的唯一凭据
+        // callId is the only key used at wake time by getByRunAndCallId to locate the tool call record
         verify(pendingWaitSpi).createPending(SESSION_ID, RUN_ID, "call-xyz", 1000);
     }
 
@@ -125,10 +125,10 @@ class WaitBuiltinToolTest {
                 new TurnToolCall(CALL_ID, WaitConstants.TOOL_NAME, "not-json"),
                 SESSION_ID, RUN_ID, List.of(waitTool()));
 
-        // 与澄清同款：参数不可解析就明确报错让模型重试，而不是猜一个时长去挂起。
+        // Same as clarification: if arguments cannot be parsed, fail explicitly so the model retries instead of guessing a duration to suspend for.
         assertTrue(result.contains("Failed to process wait"), "实际: " + result);
-        // 关键不变量：失败的 wait 绝不能留下 pending 记录 —— 否则没有任何东西会去认领它，
-        // run 会停在 WAITING 直到 cron 兜底，而 cron 醒来后又没有对应的 tool call 结果。
+        // Critical invariant: a failed wait must never leave a pending record — otherwise nothing will ever claim it,
+        // and the run stays in WAITING until cron falls back, after which cron wakes with no matching tool call result.
         verify(pendingWaitSpi, never()).createPending(any(), any(), any(), any(Integer.class));
     }
 

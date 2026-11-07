@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
-/** MCP 连接测试结果。 */
+/** MCP connection test result. */
 @Data
 @Builder
 @NoArgsConstructor

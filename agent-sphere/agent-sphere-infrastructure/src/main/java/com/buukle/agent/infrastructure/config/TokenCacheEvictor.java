@@ -7,13 +7,15 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * token 被吊销后立即清理 Redis 缓存。
+ * Evicts the Redis cache immediately after a token is revoked.
  *
- * <p>为什么需要它：{@code AuthInterceptor} 把「token → 用户」缓存在 Redis（跨副本共享）。
- * 只改 DB 不删缓存的话，已登出的 token 在 TTL 内仍然可用，安全语义不成立。
+ * <p>Why this is needed: {@code AuthInterceptor} caches "token → user" in Redis (shared across replicas).
+ * If only the DB is updated without deleting the cache, a logged-out token remains usable until TTL expiry,
+ * and the security semantics do not hold.
  *
- * <p>为什么用事件：吊销发生在 instance-service，而 {@code CacheService} 在 infrastructure。
- * 直接调用会形成反向依赖，事件是符合现有分层的最小改动。
+ * <p>Why an event: revocation happens in instance-service, while {@code CacheService} lives in
+ * infrastructure. A direct call would create a reverse dependency; an event is the smallest change that fits
+ * the existing layering.
  */
 @Component
 @RequiredArgsConstructor

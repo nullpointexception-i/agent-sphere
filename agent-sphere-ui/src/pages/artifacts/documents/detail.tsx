@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   ArrowLeftOutlined,
   MenuOutlined,
@@ -170,7 +171,7 @@ export default function DocumentDetail() {
               })}
             </Button>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Can code="document:share">
+              <Can code={PERM.documentShare}>
                 <Button
                   icon={<ShareAltOutlined />}
                   size="small"

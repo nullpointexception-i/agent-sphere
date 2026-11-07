@@ -2,19 +2,20 @@ package com.buukle.agent.model.service.stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-/** LLM 流式响应字段解析的公共小工具。 */
+/** Small shared utility for parsing LLM streaming response fields. */
 public final class LlmStreamUtils {
 
     private LlmStreamUtils() {
     }
 
     /**
-     * 按顺序返回第一个「非空文本」字段值。
+     * Return the first "non-empty text" field value in order.
      *
-     * <p>不同网关的 reasoning 字段名不一致（vLLM/Qwen3 用 {@code reasoning}，DeepSeek/智谱用
-     * {@code reasoning_content}），且可能同时出现空串；空串不应遮蔽后续字段。
+     * <p>Reasoning field names differ across gateways (vLLM/Qwen3 use {@code reasoning}, DeepSeek/Zhipu use
+     * {@code reasoning_content}), and empty strings may be present at the same time; an empty string must not
+     * shadow subsequent fields.
      *
-     * @return 第一个非空文本；都没有返回 null
+     * @return the first non-empty text; null when none is present
      */
     public static String firstTextual(JsonNode node, String... fields) {
         if (node == null || fields == null) {

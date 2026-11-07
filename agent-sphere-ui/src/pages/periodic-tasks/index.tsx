@@ -11,7 +11,7 @@ export default function PeriodicTasks() {
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={intl.formatMessage({
             id: 'pages.periodicTasks.comingSoon',
-            defaultMessage: '敬请期待',
+            defaultMessage: 'Coming soon',
           })}
         />
       </div>

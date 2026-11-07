@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   DisconnectOutlined,
   KeyOutlined,
@@ -53,7 +54,7 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       startTransition(() => {
         setInitialState((s) => ({ ...s, currentUser: undefined }));
       });
-      // 吊销该用户全部会话：其它设备 / widget 也必须重新登录
+      // Revoke all sessions for this user: other devices / the widget must sign in again
       loginOut('/api/v1/auth/logout-all');
       return;
     }
@@ -69,7 +70,7 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
   }
 
   const { currentUser, permissions } = initialState;
-  const canAdmin = permissions?.includes('admin:settings:read') ?? false;
+  const canAdmin = permissions?.includes(PERM.adminSettingsRead) ?? false;
 
   if (!currentUser) {
     return <Spin size="small" />;

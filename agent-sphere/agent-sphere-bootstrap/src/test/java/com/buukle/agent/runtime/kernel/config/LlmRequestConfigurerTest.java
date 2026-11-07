@@ -17,7 +17,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
- * 采样配置接线：实例优先、全局兜底；思考强度由 reasoning_effort 控制，不再生成 budget_tokens。
+ * Sampling config wiring: instance first, global as fallback; reasoning effort is controlled by reasoning_effort and budget_tokens is no longer generated.
  */
 @ExtendWith(MockitoExtension.class)
 class LlmRequestConfigurerTest {
@@ -59,7 +59,7 @@ class LlmRequestConfigurerTest {
 
     @Test
     void applyChatKeepsThinkingButNeverAddsBudget() {
-        // 存量实例配置里的 budget_tokens 现在应被忽略，但其余字段仍然生效。
+        // budget_tokens in legacy instance config should now be ignored, while the other fields still apply.
         when(systemConfigSpi.get(eq(SystemConfigKeys.LLM_DEFAULTS_CONFIG), anyString()))
                 .thenReturn("{\"temperature\":0.2,\"thinking\":true,\"budget_tokens\":8192}");
 

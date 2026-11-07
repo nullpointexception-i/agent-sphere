@@ -16,9 +16,9 @@ public class LlmInteractionEvent extends ApplicationEvent {
     private final long durationMs;
     private final boolean success;
     private final String errorMessage;
-    /** 真实终止原因（stop/length/content_filter/tool_calls）；null = 流未给出。 */
+    /** Real termination reason (stop/length/content_filter/tool_calls); null = the stream did not provide one. */
     private String finishReason;
-    /** Provider 传输层重试统计；null = 未采集。 */
+    /** Provider transport-layer retry statistics; null = not collected. */
     private LlmStreamStats streamStats;
 
     public LlmInteractionEvent(Object source, LlmInteractionMeta meta, String modelName,
@@ -103,7 +103,7 @@ public class LlmInteractionEvent extends ApplicationEvent {
         return finishReason;
     }
 
-    /** 链式补充终止原因，避免为审计字段再加重载构造器。 */
+    /** Chained setter for the termination reason, avoiding another overloaded constructor for an audit field. */
     public LlmInteractionEvent withFinishReason(String finishReason) {
         this.finishReason = finishReason;
         return this;
@@ -113,7 +113,7 @@ public class LlmInteractionEvent extends ApplicationEvent {
         return streamStats;
     }
 
-    /** 链式补充 Provider 传输层重试统计。 */
+    /** Chained setter for provider transport-layer retry statistics. */
     public LlmInteractionEvent withStreamStats(LlmStreamStats streamStats) {
         this.streamStats = streamStats;
         return this;

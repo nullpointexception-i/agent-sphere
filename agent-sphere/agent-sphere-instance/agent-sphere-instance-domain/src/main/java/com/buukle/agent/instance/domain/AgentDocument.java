@@ -13,7 +13,7 @@ public class AgentDocument {
     private String title;
     private String content;
     private String contentType;
-    /** 文档内容版本，每次 update 自增（展示用）。 */
+    /** Document content version, incremented on every update (for display). */
     private Integer version;
     private Long sessionId;
     private Long instanceId;

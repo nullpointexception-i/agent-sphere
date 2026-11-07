@@ -50,7 +50,7 @@ function ensureWidget() {
       apiBase: '/api/v1',
       provider: 'bole',
       autoLogin: true,
-      title: 'Agent Sphere 助手',
+      title: 'Agent Sphere Assistant',
       mountTo: container,
     }) ?? null;
 }
@@ -72,8 +72,8 @@ if (params.has('otc') || params.has('error')) {
   setTimeout(ensureWidget, 0);
 }
 
-// 已通过 dev-token 面板注入过用户（或重定向返回时）→ 自动打开抽屉并挂载，
-// 省去手动点击；配合 token 面板的 401 登出提示可立刻看到结果。
+// A user was already injected via the dev-token panel (or we are returning from a redirect) -> open the drawer and mount automatically,
+// saving a manual click; combined with the token panel's 401 logout hint the result shows up immediately.
 const hasStoredUser = (() => {
   try {
     return !!sessionStorage.getItem('agent-sphere-widget:agent-user');

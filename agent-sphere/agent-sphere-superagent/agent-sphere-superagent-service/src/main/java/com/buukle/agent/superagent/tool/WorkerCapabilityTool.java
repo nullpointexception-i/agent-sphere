@@ -67,8 +67,10 @@ public class WorkerCapabilityTool extends AbstractAgentRouterTool {
 
     @Override
     protected String description() {
-        return "List the tools the bound Worker can use (name + description only). "
-                + "Call once before dispatching a non-chat task to decide whether the Worker can do it.";
+        return "MUST be called before answering or declining any non-chat request "
+                + "(query, research, external data, scraping, execution). "
+                + "Returns the bound Worker's tool names and descriptions so you can decide "
+                + "whether to dispatch_worker.";
     }
 
     @Override

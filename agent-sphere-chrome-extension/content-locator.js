@@ -8,13 +8,13 @@
 window.__asContent = window.__asContent || {};
 
 (function () {
-  // 幂等守卫：askContent 在 "Receiving end does not exist" 时会删掉注入缓存并重新注入
-  // （tab-manager.js），没有守卫时本文件的全部 AS.* 会被重复定义。
+  // Idempotency guard: askContent deletes the injection cache and re-injects on "Receiving end does not exist"
+  // (tab-manager.js); without the guard every AS.* in this file would be defined twice.
   //
-  // 必须写在 IIFE 内部：本文件经 chrome.scripting.executeScript({files}) 以【经典脚本】
-  // 加载，而顶层 return 在经典脚本里是 SyntaxError —— 一旦放到 IIFE 外，整个文件不会执行，
-  // window.__asContent 不会被创建，content.js 里所有 AS.* 调用随之 TypeError。
-  // content.js 的同类守卫同样位于其 IIFE 内（见该文件头部）。
+  // Must live inside the IIFE: this file is loaded via chrome.scripting.executeScript({files}) as a **classic script**,
+  // and a top-level return is a SyntaxError in classic scripts - placed outside the IIFE the whole file would not run,
+  // window.__asContent would never be created, and every AS.* call in content.js would throw TypeError.
+  // The equivalent guard in content.js also sits inside its IIFE (see the top of that file).
   if (window.__asLocatorLoaded) return;
   window.__asLocatorLoaded = true;
 
@@ -34,15 +34,15 @@ window.__asContent = window.__asContent || {};
     return AS.globToRegExp(pattern).test(String(value || ''));
   };
 
-  // 元素所在 window（跨同源 iframe 时用其自身文档的 window，保证坐标/样式一致）。
+  // The window the element lives in (use its own document's window inside a same-origin iframe so coordinates/styles match).
   function ownerWin(el) {
     return el && el.ownerDocument && el.ownerDocument.defaultView
       ? el.ownerDocument.defaultView
       : window;
   }
 
-  // 同源 iframe + open shadow DOM 的文档收集（顺序：主文档 → 遇到的 iframe/contentDocument）。
-  // frameId=0 → 仅顶层 document（弹层常渲染在顶层 dialog，忽略 iframe 以减少噪音/歧义）。
+  // Document collection across same-origin iframes + open shadow DOM (order: main document -> iframes/contentDocument encountered).
+  // frameId=0 -> top-level document only (overlays are usually rendered in a top-level dialog; skipping iframes reduces noise/ambiguity).
   function collectFrameDocs(scope, frameId) {
     const docs = [];
     const seenDocs = new Set();
@@ -69,19 +69,19 @@ window.__asContent = window.__asContent || {};
         if (el.tagName === 'IFRAME') {
           try {
             if (el.contentDocument) discover(el.contentDocument);
-          } catch (e) { /* 跨源 iframe 跳过 */ }
+          } catch (e) { /* cross-origin iframe, skip */ }
         }
       }
     };
     const walk = (root) => {
       pick(root);
-      if (topOnly) return; // 顶层只取 document 本体，不往下钻 iframe/shadow
+      if (topOnly) return; // top level takes only the document body; do not descend into iframe/shadow
       for (const el of root.querySelectorAll('*')) {
         if (el.shadowRoot) walk(el.shadowRoot);
         if (el.tagName === 'IFRAME') {
           try {
             if (el.contentDocument) walk(el.contentDocument);
-          } catch (e) { /* 跨源 iframe 跳过 */ }
+          } catch (e) { /* cross-origin iframe, skip */ }
         }
       }
     };
@@ -98,7 +98,7 @@ window.__asContent = window.__asContent || {};
       return docs;
     }
     if (topOnly) {
-      // 顶层 + scope：仅当顶层包含 scope 容器时纳入（iframe/shadow 不穿透）
+      // Top level + scope: include it only when the top level contains the scope container (no iframe/shadow penetration)
       let hit = false;
       for (const root of reachable) {
         try {
@@ -112,33 +112,33 @@ window.__asContent = window.__asContent || {};
       }
       return docs;
     }
-    // scope 可能位于同源 iframe 或 ShadowRoot，不能只从顶层 document 查询。
+    // scope may live in a same-origin iframe or a ShadowRoot, so querying the top-level document alone is not enough.
     for (const root of reachable) {
       try {
         if (root.matches && root.matches(scope)) walk(root);
         root.querySelectorAll(scope).forEach((match) => walk(match));
-      } catch (e) { /* 非法 scope 或文档正在导航时忽略 */ }
+      } catch (e) { /* ignore an invalid scope or a document that is navigating */ }
     }
     return docs;
   }
 
   AS.collectFrameDocs = collectFrameDocs;
 
-  // 逐文档（主文档 + 同源 iframe + shadow）按 selector 收集元素，DOM 顺序稳定，
-  // 与 snapshot/collectInteractables 的跨帧遍历一致。
+  // Collect elements by selector per document (main document + same-origin iframes + shadow), DOM order stable,
+  // consistent with the cross-frame traversal in snapshot/collectInteractables.
   AS.querySelectorAllCrossFrames = function (selector, scope, frameId) {
     if (!selector) return [];
     const out = [];
     for (const doc of collectFrameDocs(scope, frameId)) {
       try {
         doc.querySelectorAll(selector).forEach((n) => out.push(n));
-      } catch (e) { /* 非法 selector 忽略 */ }
+      } catch (e) { /* ignore an invalid selector */ }
     }
     return out;
   };
 
   // Locate by CSS selector; `index` is 1-based (2nd identical element etc.).
-  // 默认跨同源 iframe 查找（与 getContent extract/snapshot 行为一致）。
+  // Search across same-origin iframes by default (consistent with getContent extract/snapshot behavior).
   AS.locateBySelector = function (selector, index, scope, frameId) {
     if (!selector) return null;
     const nodes = AS.querySelectorAllCrossFrames(selector, scope, frameId);
@@ -146,8 +146,8 @@ window.__asContent = window.__asContent || {};
     return el || null;
   };
 
-  // 可点击元素集合（含常见列表项/选项/开关等）。文本输入框/下拉也纳入，
-  // 避免 .search-input / li.suggest-item 等被 isClickable 误判为不可点击。
+  // Clickable element set (including common list items/options/switches). Text inputs/selects are included too,
+  // to keep .search-input / li.suggest-item and the like from being misjudged as not clickable by isClickable.
   const AS_CLICKABLE_SELECTOR = [
     'a[href]',
     'button',
@@ -171,7 +171,7 @@ window.__asContent = window.__asContent || {};
     '[contenteditable="true"]',
   ].join(',');
 
-  // 元素是否可见：非隐藏、非零尺寸、未被覆盖（供文本定位过滤）。跨 iframe 用自身文档坐标系。
+  // Whether an element is visible: not hidden, non-zero size, not covered (used to filter text matches). Cross-iframe uses the element's own document coordinate system.
   function textNodeVisible(el) {
     if (!el || el.nodeType !== 1) return false;
     const win = ownerWin(el);
@@ -182,7 +182,7 @@ window.__asContent = window.__asContent || {};
     return true;
   }
 
-  // 元素是否与自身 frame 视口相交（过滤离屏副本，如 left:-9999 或屏外列表项）。
+  // Whether the element intersects its own frame viewport (filters off-screen copies such as left:-9999 or list items outside the viewport).
   function isOnScreen(el) {
     if (!el || el.nodeType !== 1) return false;
     const win = ownerWin(el);
@@ -197,7 +197,7 @@ window.__asContent = window.__asContent || {};
     return r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh;
   }
 
-  /** 上溯到最近可点击祖先（无则返回原始节点）。 */
+  /** Walk up to the nearest clickable ancestor (returns the original node if none). */
   function nearestClickable(el) {
     if (!el) return null;
     if (el.closest) {
@@ -207,8 +207,8 @@ window.__asContent = window.__asContent || {};
     return el;
   }
 
-  // 对候选列表：过滤不可见 → 上溯可点击 → 去重（保持 DOM 序）。不在此筛“在屏”，
-  // 屏下项留给 locate 的 scrollIntoView + mainFramePoint（滚动后再判视口相交）。
+  // For a candidate list: filter invisible -> walk up to clickable -> dedupe (preserving DOM order). On-screen filtering is not done here;
+  // off-screen items are left to locate's scrollIntoView + mainFramePoint (viewport intersection is checked after scrolling).
   function normalizeCandidates(nodes) {
     const out = [];
     const seen = new Set();
@@ -222,7 +222,7 @@ window.__asContent = window.__asContent || {};
     return out;
   }
 
-  // XPath 不支持 ShadowRoot；统一用 DOM 文本遍历，兼容 Document、ShadowRoot 和 iframe 文档。
+  // XPath does not support ShadowRoot; use DOM text traversal instead, compatible with Document, ShadowRoot and iframe documents.
   function textQueryAll(root, text, mode) {
     const target = String(text).replace(/\s+/g, ' ').trim();
     const out = [];
@@ -241,7 +241,7 @@ window.__asContent = window.__asContent || {};
           out.push(el);
         }
       }
-    } catch (e) { /* 文档在导航中被替换时返回当前已找到的结果 */ }
+    } catch (e) { /* return the results found so far when the document is replaced during navigation */ }
     return out;
   }
 
@@ -251,13 +251,13 @@ window.__asContent = window.__asContent || {};
       for (const el of root.querySelectorAll(`[${attribute}]`)) {
         if (el.getAttribute(attribute) === String(value)) out.push(el);
       }
-    } catch (e) { /* 文档在导航中被替换时忽略 */ }
+    } catch (e) { /* ignore when the document is replaced during navigation */ }
     return out;
   }
 
   // Locate by visible text; `occurrence` is 1-based (Nth element matching the text).
-  // `scope` 限定在某区域（如对话框/面板选择器）内查找，避免跨区重复文本（北京/确定等）。
-  // 默认跨同源 iframe 查找（按 主文档 → iframe 文档 顺序累计，与 snapshot 遍历一致）。
+  // `scope` restricts the search to an area (such as a dialog/panel selector) to avoid duplicate text across areas (Beijing/Confirm etc.).
+  // Searches across same-origin iframes by default (accumulated in main document -> iframe document order, consistent with snapshot traversal).
   AS.locateByText = function (text, occurrence, scope, frameId) {
     if (!text) return null;
     const occ = occurrence == null || occurrence <= 0 ? 1 : occurrence;
@@ -329,7 +329,7 @@ window.__asContent = window.__asContent || {};
     return el;
   };
 
-  // --- 索引化可交互快照（getContent mode:snapshot / locateByRef 共用，保证 ref 稳定） ---
+  // --- Indexed interactive snapshot (shared by getContent mode:snapshot / locateByRef for stable refs) ---
 
   const AS_INTERACTIVE_SELECTOR = [
     'a[href]',
@@ -416,8 +416,8 @@ window.__asContent = window.__asContent || {};
   }
 
   /**
-   * 按 DOM 序收集可见可交互元素（确定性：getContent snapshot 与 locateByRef 共用，
-   * 保证 ref 稳定可复现）。可穿透 open shadow DOM；去重嵌套可点击元素；容量上限。
+   * Collect visible interactive elements in DOM order (deterministic: shared by getContent snapshot and locateByRef,
+   * so refs are stable and reproducible). Penetrates open shadow DOM; dedupes nested clickable elements; has a capacity cap.
    */
   AS.collectInteractables = function (opts) {
     const max = opts && opts.max ? opts.max : 200;
@@ -438,15 +438,15 @@ window.__asContent = window.__asContent || {};
         if (out.length >= max) return;
         pushEl(el);
       }
-      if (topOnly) return; // 顶层：不穿透 iframe/shadow
-      // 穿透 open shadow DOM + 同源 iframe（跨源 contentDocument 访问会抛错，忽略）
+      if (topOnly) return; // top level: do not penetrate iframe/shadow
+      // Penetrate open shadow DOM + same-origin iframes (accessing a cross-origin contentDocument throws, so ignore it)
       for (const el of root.querySelectorAll('*')) {
         if (out.length >= max) return;
         if (el.shadowRoot) walk(el.shadowRoot);
         if (el.tagName === 'IFRAME') {
           try {
             if (el.contentDocument) walk(el.contentDocument);
-          } catch (e) { /* 跨源 iframe 跳过 */ }
+          } catch (e) { /* cross-origin iframe, skip */ }
         }
       }
     };
@@ -454,14 +454,14 @@ window.__asContent = window.__asContent || {};
     return out;
   };
 
-  /** 按快照 ref（0 基索引）重新定位同一元素。frameId=0 时与同约束 snapshot 对齐。 */
+  /** Re-locate the same element by snapshot ref (0-based index). With frameId=0 it aligns with a snapshot taken under the same constraints. */
   AS.locateByRef = function (ref, frameId) {
     if (ref == null) return null;
     const items = AS.collectInteractables({ frameId });
     return items[ref] || null;
   };
 
-  /** 快照项（getContent mode:snapshot 输出）。 */
+  /** Snapshot item (output of getContent mode:snapshot). */
   AS.snapshotItem = function (el, ref) {
     const item = {
       ref,
@@ -478,10 +478,10 @@ window.__asContent = window.__asContent || {};
     return item;
   };
 
-  /** 可交互性：可见、未禁用、pointer-events 可用。
-   *  SPA 引导层/shading 常盖住元素中心，elementFromPoint 命中检查改为"软提示"：
-   *  命中到其它元素时不直接判不可交互（真实点击仍可达），仅打 __asCovered 标记，
-   *  交给 background 的 CDP 受信输入回退兜底。 */
+  /** Interactability: visible, not disabled, pointer-events available.
+   *  SPA overlays/shading often cover the element center, so the elementFromPoint hit check is downgraded to a "soft hint":
+   *  hitting another element does not immediately mark it non-interactive (a real click may still reach it); it only sets __asCovered,
+   *  leaving the CDP trusted-input fallback in background to handle it. */
   AS.isActionable = function (el) {
     if (!el) return false;
     if (el.disabled) return false;
@@ -496,15 +496,15 @@ window.__asContent = window.__asContent || {};
       const cy = r.top + r.height / 2;
       const top = doc.elementFromPoint(cx, cy);
       el.__asCovered = Boolean(top && top !== el && !el.contains(top));
-    } catch (e) { /* 忽略覆盖检查异常 */ }
+    } catch (e) { /* ignore coverage-check errors */ }
     return true;
   };
 
-  /** 前置断言：把「能不能操作」拆成可回报的状态，供 locate 在滚动前后各校验一次。
-   *  对应 Codex 的 elementState visible/enabled —— 它在 scrollIntoView 前后跑两遍，
-   *  ours 只在结果里报一个 clickable 布尔值、不阻断，于是 disabled 按钮也会被点。
-   *  注意这里刻意不含 covered：isActionable 的「软提示」哲学保留不动，
-   *  遮挡交给 writeAction 的降级重试处理，而不是就地判死。 */
+  /** Pre-assertion: split "can it be operated" into a reportable state, so locate can check it once before and after scrolling.
+   *  Corresponds to Codex's elementState visible/enabled - it runs twice around scrollIntoView,
+   *  while ours reports only a clickable boolean in the result without blocking, so disabled buttons were clicked too.
+   *  Note that covered is deliberately excluded here: isActionable's "soft hint" philosophy stays as is,
+   *  and occlusion is left to writeAction's fallback retries rather than being declared fatal here. */
   AS.assertActionable = function (el) {
     if (!el || el.nodeType !== 1) return { ok: false, state: 'connected' };
     if (!el.isConnected) return { ok: false, state: 'connected' };
@@ -512,15 +512,15 @@ window.__asContent = window.__asContent || {};
     if (!asIsVisible(el)) return { ok: false, state: 'visible' };
     try {
       if (ownerWin(el).getComputedStyle(el).pointerEvents === 'none') return { ok: false, state: 'visible' };
-    } catch (e) { /* 样式读取异常不阻断 */ }
+    } catch (e) { /* style-read errors do not block */ }
     return { ok: true, state: null };
   };
 
-  /** 等元素几何收敛：连续 stableFrames 帧 rect 完全相同才算稳定。
-   *  替代原先 `setTimeout(60)` 的盲等 —— 那个常数假设滚动动画已经结束，在懒加载
-   *  撑开布局 / 虚拟列表重排 / SPA 展开时必然取到中间态坐标。
-   *  参数照抄 Codex waitForStableBoundingRect：连续 2 次相同即收敛，最多 10 帧。
-   *  setTimeout(50) 兜底，防止后台标签页 rAF 被节流后死等。 */
+  /** Wait for element geometry to settle: the rect must be identical for stableFrames consecutive frames.
+   *  Replaces the former blind `setTimeout(60)` - that constant assumed the scroll animation had finished, so with lazy-loaded
+   *  layout expansion / virtual list reflow / SPA expansion it inevitably captured intermediate coordinates.
+   *  Parameters copied from Codex waitForStableBoundingRect: settled after 2 consecutive identical rects, at most 10 frames.
+   *  A setTimeout(50) fallback prevents an endless wait when rAF is throttled in a background tab. */
   AS.waitStableRect = function (el, opts) {
     const stableFrames = (opts && opts.stableFrames) || 2;
     const maxFrames = (opts && opts.maxFrames) || 10;
@@ -553,19 +553,19 @@ window.__asContent = window.__asContent || {};
           prev = cur;
         }
       }
-      return null; // 未收敛 → 调用方按不可点处理，绝不盲点
+      return null; // did not settle -> the caller treats it as not clickable, never click blindly
     })();
   };
 
-  /** label 跟随重定向：把 <label> 解析到它关联的真实控件。
-   *  对应 Codex retarget(el,"follow-label") —— 它在 fill/selectText/selectOptions 等
-   *  每个操作的第一步都做这件事。登录页/搜索页大量控件是 label 包 input 的结构，
-   *  LLM 给的 ref 常常落在 label 上。 */
+  /** label follows redirection: resolve <label> to the real control it is associated with.
+   *  Corresponds to Codex retarget(el,"follow-label") - it does this as the first step of fill/selectText/selectOptions
+   *  and similar operations. Login/search pages have many controls structured as a label wrapping an input,
+   *  and the ref the LLM gives often lands on the label. */
   AS.retargetByLabel = function (el) {
     if (!el || el.nodeType !== 1 || el.tagName !== 'LABEL') return el;
     const doc = el.ownerDocument;
     let ctrl = null;
-    try { ctrl = el.control || null; } catch (e) { /* 旧浏览器无 control */ }
+    try { ctrl = el.control || null; } catch (e) { /* control unavailable in old browsers */ }
     if (!ctrl && el.htmlFor) {
       try { ctrl = doc.getElementById(el.htmlFor); } catch (e) { /* ignore */ }
     }
@@ -586,11 +586,11 @@ window.__asContent = window.__asContent || {};
     return ctrl && ctrl.nodeType === 1 ? ctrl : el;
   };
 
-  /** 主视口坐标处的命中判定：确认点击点真的落在目标上，而不是被别的东西盖住。
-   *  elementFromPoint 用的是本 frame 视口坐标，而 mainFramePoint 给的是主视口坐标，
-   *  所以要减去 frame 偏移。跨源 iframe 取不到 → 返回 ok:true（不阻断），
-   *  由 background 侧的 CDP DOM.getNodeForLocation 兜底。
-   *  desc 形如 <tag#id.class>，与 Codex describeBackendNodeForHitTarget 同格式。 */
+  /** Hit test at main-viewport coordinates: confirm the click point really lands on the target, not covered by something else.
+   *  elementFromPoint uses this frame's viewport coordinates while mainFramePoint returns main-viewport coordinates,
+   *  so the frame offset is subtracted. A cross-origin iframe cannot be read -> return ok:true (no blocking),
+   *  leaving it to the CDP DOM.getNodeForLocation fallback on the background side.
+   *  desc looks like <tag#id.class>, the same format as Codex describeBackendNodeForHitTarget. */
   AS.hitDescriptorAt = function (el, mainX, mainY) {
     try {
       const doc = el.ownerDocument;
@@ -601,11 +601,11 @@ window.__asContent = window.__asContent || {};
       if (hit === el || el.contains(hit) || hit.contains(el)) return { ok: true, desc: '' };
       return { ok: false, desc: describeLite(hit) };
     } catch (e) {
-      return { ok: true, desc: '' }; // 跨源 / 文档正在导航 → 不阻断
+      return { ok: true, desc: '' }; // cross-origin / document navigating -> do not block
     }
   };
 
-  /** 元素相对顶层视口的累计偏移（iframe 内沿 frameElement 链累加）。 */
+  /** Cumulative offset of the element relative to the top-level viewport (accumulated along the frameElement chain inside iframes). */
   function frameOffsetOf(el) {
     let x = 0;
     let y = 0;
@@ -623,7 +623,7 @@ window.__asContent = window.__asContent || {};
     return { x, y };
   }
 
-  /** 轻量元素描述 <tag#id.class>，用于失败诊断里指名拦截者。 */
+  /** Lightweight element description <tag#id.class>, used to name the interceptor in failure diagnostics. */
   function describeLite(node) {
     if (!node || node.nodeType !== 1) return '<unknown>';
     const tag = (node.tagName || 'unknown').toLowerCase();
@@ -637,8 +637,8 @@ window.__asContent = window.__asContent || {};
     return `<${tag}${id ? '#' + id : ''}${clsOut}>`;
   }
 
-  /** 将元素中心换算到主 frame 视口坐标（CDP Input.dispatchMouseEvent 用）。
-   *  iframe 内元素沿 window.frameElement 链累加偏移，得到顶层视口 CSS 像素。 */
+  /** Convert the element center to main-frame viewport coordinates (for CDP Input.dispatchMouseEvent).
+   *  For elements inside an iframe, accumulate offsets along the window.frameElement chain to get top-level viewport CSS pixels. */
   AS.mainFramePoint = function (el) {
     if (!el) return null;
     let r;
@@ -648,7 +648,7 @@ window.__asContent = window.__asContent || {};
       return null;
     }
     if (r.width <= 0 && r.height <= 0) return null;
-    if (!isOnScreen(el)) return null; // 离屏副本/屏外项：不提供坐标，避免盲点
+    if (!isOnScreen(el)) return null; // off-screen copy/off-viewport item: provide no coordinates to avoid blind clicks
     let x = r.left + r.width / 2;
     let y = r.top + r.height / 2;
     let win = ownerWin(el);
@@ -672,7 +672,7 @@ window.__asContent = window.__asContent || {};
     return { x: Math.round(x), y: Math.round(y) };
   };
 
-  /** 元素在顶层视口的边界盒（CSS px）：点击坐标对齐用。iframe 内沿 frameElement 链累加偏移。 */
+  /** Bounding box of the element in the top-level viewport (CSS px), for aligning click coordinates. Inside iframes, accumulate offsets along the frameElement chain. */
   AS.mainFrameBounds = function (el) {
     if (!el) return null;
     let r;
@@ -703,8 +703,8 @@ window.__asContent = window.__asContent || {};
   };
 
   /**
-   * clickAt 坐标解析：设备像素（截图）→ CSS px（÷ dpr）→ elementFromPoint 找最近可交互祖先。
-   * 返回 {ok, x, y, interactive, tag, text}；interactive=false 表示点中非交互区域（调用方裸点 + warning）。
+   * clickAt coordinate resolution: device pixels (screenshot) -> CSS px (divide by dpr) -> elementFromPoint to find the nearest interactive ancestor.
+   * Returns {ok, x, y, interactive, tag, text}; interactive=false means a non-interactive area was hit (the caller clicks raw with a warning).
    */
   AS.locatePoint = function (x, y, frameId) {
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
@@ -742,7 +742,7 @@ window.__asContent = window.__asContent || {};
     };
   };
 
-  // 文本候选：跨同源 iframe + shadow 收集（exact/contains/属性兜底），保持 DOM 序。
+  // Text candidates: collected across same-origin iframes + shadow (exact/contains/attribute fallback), preserving DOM order.
   function textCandidates(text, scope, cap, frameId) {
     const out = [];
     const seen = new Set();
@@ -772,8 +772,8 @@ window.__asContent = window.__asContent || {};
     return out;
   }
 
-  // 写动作目标解析：候选按“可见可见性”过滤（含滚动面板内的屏下项，便于 scrollIntoView 后点击）；
-  // 歧义时给出最近的容器 class 建议（去重、过滤无意义 token、最多 3 个）。
+  // Write action target resolution: candidates are filtered by visibility (including off-screen items inside scrollable panels, for clicking after scrollIntoView);
+  // on ambiguity, suggest the nearest container class (deduped, meaningless tokens filtered, at most 3).
   function suggestScopes(candidates) {
     const seen = new Set();
     const out = [];
@@ -792,7 +792,7 @@ window.__asContent = window.__asContent || {};
     return out.slice(0, 3);
   }
 
-  // 歧义判定：可见命中 >1 且无 index/occurrence/scope。坐标的“在屏”约束交给 mainFramePoint（滚动后判定）。
+  // Ambiguity rule: more than one visible hit and no index/occurrence/scope. The coordinate "on screen" constraint is left to mainFramePoint (decided after scrolling).
   AS.resolveActionTarget = function (params) {
     if (!params) return { ok: false, error: 'not_found' };
     if (params.ref != null) {
@@ -820,7 +820,7 @@ window.__asContent = window.__asContent || {};
     return { ok: true, el, count: candidates.length };
   };
 
-  /** 轮询等待元素出现且可交互（用于 click/type/hover/wait）。 */
+  /** Poll until the element appears and is interactive (used by click/type/hover/wait). */
   AS.waitForElement = function (locator, timeout, interval) {
     const t = timeout == null ? 3000 : timeout;
     const iv = interval == null ? 150 : interval;

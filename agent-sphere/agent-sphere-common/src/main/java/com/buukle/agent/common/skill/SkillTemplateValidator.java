@@ -11,36 +11,38 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 技能 definition / promptTemplate 的规范校验。
+ * Validation of skill definition / promptTemplate.
  *
- * <p>技能正文必须遵循固定标题结构：{@code # <技能名>}（唯一 H1）+ {@code ## stepN <步骤名>}
- * （至少一个）+ {@code ### stepN.M <子步骤名>}（挂在其上方最近的、同编号的 {@code ## stepN} 之下），
- * 且不得层级跳跃。UI 表单（service）与 agent 技能工具共用本校验 —— 二者都经过它，
- * 单一实现避免口径漂移。
+ * <p>The skill body must follow a fixed heading structure: {@code # <skill name>} (exactly one H1) +
+ * {@code ## stepN <step name>} (at least one) + {@code ### stepN.M <sub-step name>} (nested under
+ * the nearest preceding {@code ## stepN} with the same number), with no level jumps. The UI form
+ * (service) and the agent skill tool share this validation — both go through it, and a single
+ * implementation prevents the rules from drifting.
  *
- * <p>{@link #validate(String)} 返回 {@code null} 表示通过，否则返回「违规清单 + 标准模板」。
+ * <p>{@link #validate(String)} returns {@code null} when valid, otherwise the "violation list + the
+ * standard template".
  */
 public final class SkillTemplateValidator {
 
-    /** 规范模板：与前端 {@code agent-sphere-ui/src/pages/capabilities/skill/index.tsx} 的 SKILL_TEMPLATE 保持一致。 */
+    /** Canonical template: kept in sync with SKILL_TEMPLATE in the frontend {@code agent-sphere-ui/src/pages/capabilities/skill/index.tsx}. */
     public static final String SKILL_TEMPLATE = """
-            # <技能名称>
+            # <Skill name>
 
-            ## 概述
-            <何时使用 / 输入·输出 / 成功标准>
+            ## Overview
+            <When to use / input and output / success criteria>
 
-            ## step0 <准备>
-            ### step0.1 <子步骤>
-            ### step0.2 <子步骤>
+            ## step0 <Preparation>
+            ### step0.1 <Sub-step>
+            ### step0.2 <Sub-step>
 
-            ## step1 <主步骤>
-            ### step1.1 <子步骤>
-            ### step1.2 <子步骤>
+            ## step1 <Main step>
+            ### step1.1 <Sub-step>
+            ### step1.2 <Sub-step>
 
-            ## step2 <主步骤>
+            ## step2 <Main step>
 
-            ## 收尾对账
-            <完成前必须核对的收尾条件；输出格式 / 验收标准>""";
+            ## Wrap-up checklist
+            <Closing checks that must pass before completion; output format / acceptance criteria>""";
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String MARKDOWN_FENCE = "```json";
@@ -54,13 +56,15 @@ public final class SkillTemplateValidator {
     }
 
     /**
-     * 校验 definition：JSON 形状（parameters + promptTemplate）→ promptTemplate 标题结构。
+     * Validates the definition: JSON shape (parameters + promptTemplate) → promptTemplate heading
+     * structure.
      *
-     * @return 通过返回 {@code null}；否则返回可直接回给用户的错误文本（含违规点与模板）
+     * @return {@code null} when valid; otherwise error text that can be returned to the user as-is
+     *         (violations plus the template)
      */
     public static String validate(String definition) {
         if (definition == null || definition.isBlank()) {
-            return null; // 空定义沿用既有放行语义（由各自入口另行约束）
+            return null; // an empty definition keeps the existing pass-through semantics (constrained separately by each entry point)
         }
         SkillDefinition def;
         try {
@@ -74,34 +78,34 @@ public final class SkillTemplateValidator {
         return validateStructure(def.promptTemplate());
     }
 
-    /** 结构校验；返回 null 表示合规。 */
+    /** Structural validation; returns null when compliant. */
     static String validateStructure(String promptTemplate) {
         if (promptTemplate == null || promptTemplate.isBlank()) {
-            return structureError(List.of("promptTemplate 为空"));
+            return structureError(List.of("promptTemplate is blank"));
         }
         List<Heading> headings = parseHeadings(promptTemplate);
         List<String> problems = new ArrayList<>();
 
         long h1 = headings.stream().filter(h -> h.level() == 1).count();
         if (h1 != 1) {
-            problems.add("必须有且仅有一个 H1 标题（# 技能名），当前 " + h1 + " 个");
+            problems.add("Exactly one H1 title is required (# skill name); found " + h1);
         }
         if (headings.isEmpty() || headings.get(0).level() != 1) {
-            problems.add("第一个标题必须是 H1（# 技能名）");
+            problems.add("The first heading must be H1 (# skill name)");
         }
         boolean hasStep = headings.stream()
                 .anyMatch(h -> h.level() == 2 && STEP_H2.matcher(h.text()).find());
         if (!hasStep) {
-            problems.add("至少需要一个步骤标题（## stepN 步骤名）");
+            problems.add("At least one step heading is required (## stepN step name)");
         }
 
         int prevLevel = 0;
-        String currentStep = null; // 上方最近的 ## stepN 的规范化前缀（非步骤 H2 → null）
+        String currentStep = null; // normalized prefix of the nearest ## stepN above (null for a non-step H2)
         for (Heading h : headings) {
             int lvl = h.level();
             String text = h.text();
             if (prevLevel != 0 && lvl > prevLevel + 1) {
-                problems.add("L" + h.line() + " 标题层级跳跃：H" + prevLevel + " → H" + lvl + "（「" + text + "」）");
+                problems.add("L" + h.line() + " heading level jump: H" + prevLevel + " -> H" + lvl + " (\"" + text + "\")");
             }
             if (lvl == 2) {
                 Matcher m = STEP_H2.matcher(text);
@@ -109,13 +113,13 @@ public final class SkillTemplateValidator {
             } else if (lvl == 3) {
                 Matcher m3 = STEP_H3.matcher(text);
                 if (!m3.find()) {
-                    problems.add("L" + h.line() + " 子步骤必须写作 `### stepN.M 子步骤名`（当前「" + text + "」）");
+                    problems.add("L" + h.line() + " sub-step must use `### stepN.M sub-step name` (current: \"" + text + "\")");
                 } else {
                     Matcher mp = STEP_H3_PARENT.matcher(text);
                     String parent = mp.find() ? normStepId(mp.group(1)) : null;
                     if (currentStep == null || !currentStep.equals(parent)) {
-                        problems.add("L" + h.line() + " 子步骤「" + text + "」不在同编号的步骤之下（当前父步骤："
-                                + (currentStep == null ? "无，请先写 ## stepN" : "## " + currentStep) + "）");
+                        problems.add("L" + h.line() + " sub-step \"" + text + "\" is not under the same numbered step (current parent: "
+                                + (currentStep == null ? "none; write ## stepN first" : "## " + currentStep) + ")");
                     }
                 }
             }
@@ -126,11 +130,11 @@ public final class SkillTemplateValidator {
     }
 
     private static String structureError(List<String> problems) {
-        StringBuilder sb = new StringBuilder("definition 结构不符合技能规范：");
+        StringBuilder sb = new StringBuilder("The definition does not conform to the skill structure rules:");
         for (String p : problems) {
             sb.append("\n- ").append(p);
         }
-        sb.append("\n请按以下模板重写 promptTemplate：\n\n").append(SKILL_TEMPLATE);
+        sb.append("\nRewrite promptTemplate using the following template:\n\n").append(SKILL_TEMPLATE);
         return sb.toString();
     }
 

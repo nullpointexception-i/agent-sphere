@@ -1,15 +1,15 @@
 package com.buukle.agent.infrastructure.config;
 
 /**
- * 登录会话缓存约定。
+ * Login session cache conventions.
  *
- * <p>key 使用 token 的 SHA-256 摘要，避免明文 token 出现在 Redis key 里。
+ * <p>The key uses the SHA-256 digest of the token, so the plaintext token never appears in a Redis key.
  */
 public final class TokenCacheKeys {
 
     public static final String USER_TOKEN_PREFIX = "token:user:";
 
-    /** 缓存 TTL：吊销时显式删除，TTL 只作为异常情况下的兜底。 */
+    /** Cache TTL: revocation deletes explicitly; the TTL is only a fallback for exceptional cases. */
     public static final long USER_TOKEN_CACHE_MINUTES = 5;
 
     private TokenCacheKeys() {

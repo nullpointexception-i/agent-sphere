@@ -9,9 +9,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * agent 链路请求参数接线：全局默认（系统配置 llm.defaults-config）为基底，
- * 实例级 config 字段级覆盖（实例优先），合并结果应用到请求。
- * 与 completions 层共用 {@link LlmSamplingConfigMapper}，保证同一套 JSON 语义一致。
+ * Request parameter wiring for the agent path: global defaults (system config llm.defaults-config) as the base,
+ * overridden at field level by instance-level config (instance takes precedence); the merged result is applied to the request.
+ * Shares {@link LlmSamplingConfigMapper} with the completions layer so the same JSON semantics stay consistent.
  */
 @Component
 @RequiredArgsConstructor
@@ -19,14 +19,14 @@ public class LlmRequestConfigurer {
 
     private final SystemConfigSpi systemConfigSpi;
 
-    /** 全局兜底 + 实例 config 合并后应用到请求。 */
+    /** Merges global fallback + instance config and applies the result to the request. */
     public void apply(ChatCompletionRequestDTO request, String instanceConfigJson) {
         String globalConfig = systemConfigSpi.get(SystemConfigKeys.LLM_DEFAULTS_CONFIG, "");
         LlmSamplingConfigDTO merged = LlmSamplingConfigMapper.merge(globalConfig, instanceConfigJson);
         if (merged != null) {
             LlmSamplingConfigMapper.apply(request, merged);
         }
-        // usage 观测默认开启（仅当配置未显式设置时兜底）：供应商不支持会忽略该字段
+        // usage observation is on by default (a fallback only when the config does not set it explicitly): providers that do not support it ignore the field
         if (request.getStreamOptions() == null) {
             request.setStreamOptions(new com.buukle.agent.model.dtvo.dto.complete.StreamOptionsDTO().setIncludeUsage(true));
         } else if (request.getStreamOptions().getIncludeUsage() == null) {
@@ -35,20 +35,20 @@ public class LlmRequestConfigurer {
     }
 
     /**
-     * 主/子 Agent 聊天请求：应用全局 + 实例采样配置。
+     * Main/sub-agent chat request: applies global + instance sampling config.
      *
-     * <p>思考强度由 `reasoning_effort` 统一控制，不再计算 budget_tokens。
+     * <p>Reasoning effort is controlled uniformly by `reasoning_effort`; budget_tokens is no longer computed.
      */
     public void applyChat(ChatCompletionRequestDTO request, String instanceConfigJson) {
         apply(request, instanceConfigJson);
     }
 
-    /** 仅全局默认（标题 / 压缩等辅助调用的统一兜底）。 */
+    /** Global defaults only (uniform fallback for auxiliary calls such as title / compaction). */
     public void applyGlobal(ChatCompletionRequestDTO request) {
         apply(request, null);
     }
 
-    /** 合并后的输出 token 上限（实例优先、全局兜底）；未配置返回 null（预算回落到比例估算）。 */
+    /** Merged output token limit (instance takes precedence, global as fallback); returns null when unset (budget falls back to ratio estimation). */
     public Integer resolveMaxOutputTokens(String instanceConfigJson) {
         String globalConfig = systemConfigSpi.get(SystemConfigKeys.LLM_DEFAULTS_CONFIG, "");
         LlmSamplingConfigDTO merged = LlmSamplingConfigMapper.merge(globalConfig, instanceConfigJson);

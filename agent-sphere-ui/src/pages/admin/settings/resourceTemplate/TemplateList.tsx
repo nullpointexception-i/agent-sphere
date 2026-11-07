@@ -28,7 +28,7 @@ function itemSummary(item: TemplateItem): string {
         item.provider as string,
         item.company as string,
         item.weight !== undefined ? `weight=${item.weight}` : '',
-        item.supportsAttachment ? '附件' : '',
+        item.supportsAttachment ? 'Attachment' : '',
       ].filter(Boolean);
       return parts.join(' · ');
     }
@@ -101,11 +101,11 @@ export default function TemplateList({ items, issues, onChange }: Props) {
       title: labelOf(
         intl,
         'pages.admin.settings.template.delete.confirm',
-        '确认删除该配置项？',
+        'Delete this item?',
       ),
       content: name,
-      okText: labelOf(intl, 'pages.save', '保存'),
-      cancelText: labelOf(intl, 'pages.cancel', '取消'),
+      okText: labelOf(intl, 'pages.save', 'Save'),
+      cancelText: labelOf(intl, 'pages.cancel', 'Cancel'),
       okButtonProps: { danger: true },
       onOk: () => onChange(items.filter((i) => i !== item)),
     });
@@ -113,7 +113,7 @@ export default function TemplateList({ items, issues, onChange }: Props) {
 
   const columns = [
     {
-      title: labelOf(intl, 'pages.admin.settings.template.col.type', '类型'),
+      title: labelOf(intl, 'pages.admin.settings.template.col.type', 'Type'),
       dataIndex: 'type',
       width: 150,
       render: (type: string) => (
@@ -126,7 +126,7 @@ export default function TemplateList({ items, issues, onChange }: Props) {
       ),
     },
     {
-      title: labelOf(intl, 'pages.admin.settings.template.col.name', '名称'),
+      title: labelOf(intl, 'pages.admin.settings.template.col.name', 'Name'),
       dataIndex: 'name',
       width: 180,
       ellipsis: true,
@@ -134,13 +134,21 @@ export default function TemplateList({ items, issues, onChange }: Props) {
         itemName(record) || <span style={{ color: '#999' }}>-</span>,
     },
     {
-      title: labelOf(intl, 'pages.admin.settings.template.col.config', '配置'),
+      title: labelOf(
+        intl,
+        'pages.admin.settings.template.col.config',
+        'Config',
+      ),
       dataIndex: 'config',
       ellipsis: true,
       render: (_: unknown, record: TemplateItem) => itemSummary(record) || '-',
     },
     {
-      title: labelOf(intl, 'pages.admin.settings.template.col.status', '状态'),
+      title: labelOf(
+        intl,
+        'pages.admin.settings.template.col.status',
+        'Status',
+      ),
       dataIndex: 'status',
       width: 220,
       render: (_: unknown, record: TemplateItem) => {
@@ -150,7 +158,7 @@ export default function TemplateList({ items, issues, onChange }: Props) {
         if (!list || list.length === 0) {
           return (
             <Typography.Text type="success">
-              {labelOf(intl, 'pages.admin.settings.template.status.ok', '正常')}
+              {labelOf(intl, 'pages.admin.settings.template.status.ok', 'OK')}
             </Typography.Text>
           );
         }
@@ -162,7 +170,11 @@ export default function TemplateList({ items, issues, onChange }: Props) {
       },
     },
     {
-      title: labelOf(intl, 'pages.admin.settings.template.col.action', '操作'),
+      title: labelOf(
+        intl,
+        'pages.admin.settings.template.col.action',
+        'Actions',
+      ),
       width: 130,
       render: (_: unknown, record: TemplateItem) => (
         <>
@@ -175,7 +187,7 @@ export default function TemplateList({ items, issues, onChange }: Props) {
               setFormOpen(true);
             }}
           >
-            {labelOf(intl, 'pages.table.edit', '编辑')}
+            {labelOf(intl, 'pages.table.edit', 'Edit')}
           </Button>
           <Button
             type="link"
@@ -183,7 +195,7 @@ export default function TemplateList({ items, issues, onChange }: Props) {
             danger
             onClick={() => handleRemove(record)}
           >
-            {labelOf(intl, 'pages.table.delete', '删除')}
+            {labelOf(intl, 'pages.table.delete', 'Delete')}
           </Button>
         </>
       ),
@@ -201,12 +213,12 @@ export default function TemplateList({ items, issues, onChange }: Props) {
             setCreateOpen(true);
           }}
         >
-          {labelOf(intl, 'pages.admin.settings.template.add', '新增')}
+          {labelOf(intl, 'pages.admin.settings.template.add', 'Add')}
         </Button>
         <span style={{ marginLeft: 12, color: '#999', fontSize: 12 }}>
-          {labelOf(intl, 'pages.admin.settings.template.count', '共')}{' '}
+          {labelOf(intl, 'pages.admin.settings.template.count', 'Total')}{' '}
           {items.length}{' '}
-          {labelOf(intl, 'pages.admin.settings.template.items', '个配置项')}
+          {labelOf(intl, 'pages.admin.settings.template.items', 'items')}
         </span>
       </div>
       <Table
@@ -222,7 +234,7 @@ export default function TemplateList({ items, issues, onChange }: Props) {
         title={labelOf(
           intl,
           'pages.admin.settings.template.selectType',
-          '选择配置项类型',
+          'Select item type',
         )}
         open={createOpen}
         onOk={() => {
@@ -232,14 +244,14 @@ export default function TemplateList({ items, issues, onChange }: Props) {
           setFormOpen(true);
         }}
         onCancel={() => setCreateOpen(false)}
-        okText={labelOf(intl, 'pages.save', '保存')}
-        cancelText={labelOf(intl, 'pages.cancel', '取消')}
+        okText={labelOf(intl, 'pages.save', 'Save')}
+        cancelText={labelOf(intl, 'pages.cancel', 'Cancel')}
       >
         <Form.Item
           label={labelOf(
             intl,
             'pages.admin.settings.template.col.type',
-            '类型',
+            'Type',
           )}
           required
         >

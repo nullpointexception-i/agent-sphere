@@ -44,20 +44,20 @@ public class ChatCompletionRequestDTO implements Serializable {
     private List<String> stop;
     @JsonProperty("stream_options")
     private StreamOptionsDTO streamOptions;
-    /** 期望确定性输出（OpenAI 等支持；DeepSeek/GLM 等不支持，兼容层会剔除）。 */
+    /** Request deterministic output (supported by OpenAI and others; DeepSeek/GLM do not support it, the compatibility layer strips it). */
     private Long seed;
     @JsonProperty("logprobs")
     private Boolean logprobs;
     @JsonProperty("top_logprobs")
     private Integer topLogprobs;
-    /** 采样多少个候选；>1 时接口返回数组（本系统按 1 使用，仅透传）。 */
+    /** Number of candidates to sample; >1 makes the API return an array (this system uses 1 and only passes it through). */
     private Integer n;
-    /** 按 token 的 logit 偏置（OpenAI 位图编码；兼容层按 provider 透传/剔除）。 */
+    /** Per-token logit bias (OpenAI bitmap encoding; the compatibility layer passes or strips it per provider). */
     @JsonProperty("logit_bias")
     private Map<String, Integer> logitBias;
     @JsonProperty("parallel_tool_calls")
     private Boolean parallelToolCalls;
-    /** 调用方标识（审计/遥测；由上层按当前用户填充）。 */
+    /** Caller identifier (audit/telemetry; filled in by the caller layer with the current user). */
     private String user;
     @JsonProperty("reasoning_effort")
     private String reasoningEffort;

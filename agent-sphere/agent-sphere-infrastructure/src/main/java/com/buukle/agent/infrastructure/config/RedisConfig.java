@@ -13,13 +13,15 @@ import org.springframework.context.annotation.Primary;
 public class RedisConfig {
 
     /*
-     * 注意：本项目的 Redis 访问统一走 Redisson（见下），不要引入 Spring Data Redis 的
-     * StringRedisTemplate / RedisTemplate。
+     * Note: Redis access in this project always goes through Redisson (see below); do not introduce
+     * Spring Data Redis's StringRedisTemplate / RedisTemplate.
      *
-     * 原因：本类的连接配置读的是 spring.redis.host/port（旧前缀，靠 @Value 显式读取），
-     * 而 Spring Data Redis 的自动装配只认 spring.data.redis.*（Boot 3 已迁移）。
-     * 在只配了旧前缀的情况下，自动装配会静默回落到 localhost:6379 —— 容器里没有本机 Redis，
-     * 于是读写全部失败。曾因此导致任务级 MCP 凭证从未写入，且失败被降级成 warn 而难以定位。
+     * Reason: this class reads its connection config from spring.redis.host/port (the legacy prefix,
+     * read explicitly via @Value), while Spring Data Redis auto-configuration only binds
+     * spring.data.redis.* (renamed in Boot 3). With only the legacy prefix configured,
+     * auto-configuration silently falls back to localhost:6379 — there is no local Redis in the
+     * container, so every read/write fails. This once caused task-level MCP credentials to never be
+     * written, and the failure was downgraded to a warn and hard to locate.
      */
 
     @Value("${spring.redis.host:localhost}")
@@ -35,8 +37,9 @@ public class RedisConfig {
     }
 
     /**
-     * 事件总线专用客户端：JsonJacksonCodec（支持 {@link com.buukle.agent.runtime.kernel.port.vo.EventType}
-     * 等 POJO 序列化/反序列化）。与默认客户端分离，避免影响 CacheService/锁/RBucket 的默认 codec。
+     * Dedicated client for the event bus: JsonJacksonCodec (supports POJO serialization/deserialization
+     * such as {@link com.buukle.agent.runtime.kernel.port.vo.EventType}). Separated from the default
+     * client so the default codec used by CacheService/locks/RBucket is unaffected.
      */
     @Bean(destroyMethod = "shutdown")
     public RedissonClient eventBusRedissonClient() {

@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.service.converter;
 
-import com.buukle.agent.common.constant.CompletionProtocol;
+
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.enums.InstanceEnum;
@@ -48,9 +49,11 @@ public class InstanceConverter {
         instance.setCustomInstructions(dto.getCustomInstructions());
         instance.setImage(dto.getImage());
         instance.setBusinessType(dto.getBusinessType());
-        // 两个来源开关刻意**不设默认值**：留 null 时 create 走库默认（主站放行/widget 禁止），
-        // update 则被 MyBatis-Plus 忽略、表示"不改动"。若在这里补默认值，任何一次不携带这两个字段的
-        // 更新都会把开关静默重置回默认，把管理员的选择抹掉。
+        // The two surface switches deliberately have **no default value**: when left null, create
+        // uses the database defaults (console allowed / widget denied), and update makes
+        // MyBatis-Plus ignore them, meaning "no change". Filling in defaults here would silently
+        // reset the switches back to the defaults on any update that does not carry these two
+        // fields, wiping out the administrator's choice.
         instance.setAllowConsoleSession(dto.getAllowConsoleSession());
         instance.setAllowWidgetSession(dto.getAllowWidgetSession());
         instance.setMaxLoopCount(normalizeLoop(dto.getMaxLoopCount()));
@@ -59,18 +62,18 @@ public class InstanceConverter {
                 ? null : CompletionProtocol.from(dto.getCompletionProtocol()).name());
         instance.setConfig(normalizeConfig(dto.getConfig()));
         instance.setInstanceRole(dto.getInstanceRole() == null || dto.getInstanceRole().isBlank()
-                ? "CHAT" : dto.getInstanceRole().toUpperCase());
+                ? InstanceRole.CHAT.value() : InstanceRole.normalize(dto.getInstanceRole()));
         instance.setSystemManaged(Boolean.TRUE.equals(dto.getSystemManaged()));
         instance.setStatus(InstanceEnum.STATUS_ENABLED);
         return instance;
     }
 
-    /** 空白 config 归一到 null（不落空串）。 */
+    /** Normalize a blank config to null (never store an empty string). */
     private String normalizeConfig(String config) {
         return config != null && !config.isBlank() ? config : null;
     }
 
-    /** ≤0 / null 归一到 null（null=未配置，0 仅作为 update 的“清除”信号在 service 层单独处理）。 */
+    /** Normalize ≤0 / null to null (null=not configured; 0 is only an update "clear" signal handled separately in the service layer). */
     private Integer normalizeLoop(Integer maxLoopCount) {
         return maxLoopCount != null && maxLoopCount > 0 ? maxLoopCount : null;
     }

@@ -17,39 +17,39 @@ console.log('[AgentSphere] Service Worker started', new Date().toISOString());
 
 let token = '';
 let baseUrl = '';
-/** 本机设备标识（storage.local 持久化，跨重启稳定）+ 可读名。 */
+/** Local device identifier (persisted in storage.local, stable across restarts) + readable name. */
 let deviceId = '';
 let deviceName = '';
-/** 当前 token 的来源端（WIDGET/CONSOLE），随回调上报。 */
+/** Source surface of the current token (WIDGET/CONSOLE), reported with callbacks. */
 let tokenSource = '';
-/** commandId → {runId, callId}：回调要带回，用于把执行设备落到工具记录上。 */
+/** commandId -> {runId, callId}: carried back by callbacks so the executing device is recorded on the tool row. */
 const commandMeta = new Map();
-/** 最近一次触发 task:init 的 token：多个标签页重复上报同一个 token 时不再反复重连。 */
+/** Token that last triggered task:init: repeated reports of the same token from multiple tabs no longer reconnect. */
 let lastInitToken = '';
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
-// 最近一次 navigate 的目标 origin：受控 tab 若离开该站点则拒绝继续操作（防跑偏）。
-// 持久化到 storage.session —— 只放内存的话 SW 重启后 assertControlledHost 会静默失效。
+// Target origin of the last navigate: if the controlled tab leaves that site, refuse further actions (prevents wandering off).
+// Persisted to storage.session - if kept only in memory, assertControlledHost silently stops working after an SW restart.
 let targetOrigin = null;
-// 命令并发守卫：导航重建 content script 期间悬空的命令不再堆积，避免后端 10s 空等。
-// 用时间戳租约：单命令超时（60s）后自动释放，防一条卡死命令锁死整个 session。
-// 60s > 后端 executeJS 的 30s 上限：租约若先于命令到期，并发守卫会放行第二条命令，
-// 两个命令同时操作同一个 tab。
+// Command concurrency guard: commands left dangling while navigation rebuilds content scripts no longer pile up, avoiding a 10s empty wait on the backend.
+// Uses a timestamp lease: it auto-releases after the single-command timeout (60s), so one stuck command cannot lock the whole session.
+// 60s > the backend's 30s executeJS limit: if the lease expired before the command, the concurrency guard would let a second command through,
+// with two commands operating the same tab at once.
 const COMMAND_LEASE_MS = 60000;
-// executeJS 的扩展侧 deadline。刻意比后端 EXECUTEJS_TIMEOUT_SECONDS(30s) 小 3s：
-// 两边相等会形成竞态 —— 后端先超时的话会立刻返回并释放 pending future，扩展却还在跑
-// 且继续持租约，迟到回调被静默丢弃，下一条命令又撞上并发守卫。
-// 27s 让扩展稳定地先返回干净的 errorCategory='timeout' 并正常释放租约。
+// Extension-side deadline for executeJS. Deliberately 3s below the backend EXECUTEJS_TIMEOUT_SECONDS (30s):
+// equal values create a race - if the backend times out first it returns immediately and releases the pending future while the extension is still running
+// and still holds the lease; the late callback is silently dropped and the next command hits the concurrency guard again.
+// 27s lets the extension reliably return a clean errorCategory='timeout' first and release the lease normally.
 const EXECJS_TIMEOUT_MS = 27000;
 let commandInFlightAt = 0;
-// 当前在跑的命令（动作 + 启动时刻），供守卫拒信说明"正在执行什么、还要多久释放"，
-// 让后端 LLM 决定等待还是先 getContent 复核，而不是连续空发。
+// The command currently running (action + start time), so a guard rejection can explain what is executing and how long until it is released,
+// letting the backend LLM decide whether to wait or verify with getContent first instead of firing blindly again and again.
 let commandActive = null;
 
-// ---- 风控命中（无人值守：命中即停）----
-// 判定：受控 tab 被重定向到安全中心/验证码页。命中后**按 session 锁定**，
-// 后续命令一律拒绝 —— 与产品口径「命中就停止，不做等待/重试/绕行」一致。
-// 域名特征刻意泛化，不写具体站点品牌：`//safe.` 主机前缀 + captcha/intercept 路径片段
-// 已覆盖真实风控跳转。若某站点的风控域不是这个形态，应改为从配置读取而非硬编码品牌。
+// ---- Risk-control hit (unattended: stop on hit) ----
+// Detection: the controlled tab was redirected to a security center/captcha page. On a hit it **locks per session**;
+// all later commands are rejected - consistent with the product rule "stop on hit, no waiting/retry/detour".
+// The host pattern is deliberately generic, with no specific site brand: a `//safe.` host prefix + captcha/intercept path fragments
+// already covers real risk-control redirects. If a site's risk-control domain does not take this shape, read it from configuration instead of hardcoding a brand.
 const RISK_URL_PATTERNS = [/\/\/safe\./i, /captchaPage/i, /\/v\/intercept\//i];
 const RISK_TITLE_PATTERNS = [/验证码/, /安全中心/];
 const riskLockedSessions = new Set();
@@ -76,7 +76,7 @@ function defaultDeviceName() {
   return `${browser} · ${os}`;
 }
 
-/** 首次启动生成设备 ID；之后跨重启复用（同一浏览器 = 同一设备）。 */
+/** Generate the device ID on first start; reuse it across restarts (same browser = same device). */
 function ensureDeviceIdentity() {
   chrome.storage.local.get(['deviceId', 'deviceName'], (data) => {
     let changed = false;
@@ -138,11 +138,11 @@ let frontendUrls = [];
 let mainUrl = '';
 
 /**
- * 曾作为默认值的地址（切 https 前的旧值）。
+ * Address that used to be the default (the old value before switching to https).
  *
- * <p>只做**精确匹配**改写：自定义域名、带端口的地址、灰度/内网地址一律不动。
- * 用户若是故意保留 http（内部部署），也会被改写到 https —— 这两个域名就是公网生产地址，
- * 此取舍可接受；需要 http 的用户重新填一次即可。
+ * <p>Only **exact matches** are rewritten: custom domains, addresses with ports, canary/internal addresses are never touched.
+ * If a user deliberately kept http (internal deployment), it is rewritten to https too - these two domains are the public production addresses,
+ * and that trade-off is acceptable; users who need http just fill it in again.
  */
 const LEGACY_DEFAULT_URLS = {
   'http://bole.buukle.top': 'https://bole.buukle.top',
@@ -150,9 +150,9 @@ const LEGACY_DEFAULT_URLS = {
 };
 
 /**
- * 把 storage 里的旧默认地址迁移为 https；无需变更时返回 null。
+ * Migrate the old default addresses in storage to https; returns null when no change is needed.
  *
- * <p>幂等：迁移写回后旧字面量不再存在，下次调用返回 null，不会形成写-改-写循环。
+ * <p>Idempotent: once migrated and written back the old literals no longer exist, so the next call returns null and no write-change-write loop forms.
  */
 function upgradeLegacySettings(settings) {
   if (!settings || typeof settings !== 'object') return null;
@@ -174,8 +174,8 @@ function upgradeLegacySettings(settings) {
 
 function loadConfiguredUrls(done) {
   chrome.storage.local.get(['settings'], (data) => {
-    // 一次性迁移：旧 http 默认值 → https。放在 service worker 的常驻启动路径上，
-    // 用户不开 popup 也会执行；popup 侧的 storage.onChanged 会随后自动重读重渲染。
+    // One-time migration: old http defaults -> https. Placed on the service worker's always-on startup path,
+    // so it runs even if the user never opens the popup; the popup's storage.onChanged then re-reads and re-renders automatically.
     const upgraded = upgradeLegacySettings(data.settings);
     if (upgraded) {
       chrome.storage.local.set({ settings: upgraded }).catch(() => {});
@@ -188,12 +188,12 @@ function loadConfiguredUrls(done) {
         ? [s.frontendUrl]
         : [];
     mainUrl = s.mainUrl || '';
-    // 光标足迹默认开启（显式 false 才关）
+    // Cursor trail is on by default (only an explicit false turns it off)
     agentCursor.setEnabled(s.agentCursor !== false);
-    // 浏览器操作指标默认【关】：数据只留在本机 storage.local，但明细含页面元素文本，
-    // 应由用户显式开启。开关关闭时 record* 首行 return，采集零开销。
+    // Browser operation metrics are **off** by default: data stays in local storage.local, but details contain page element text,
+    // so the user must opt in explicitly. When disabled, record* returns on the first line with zero collection overhead.
     browserMetrics.setEnabled(s.browserMetrics === true);
-    // UI 存的是 0-100 百分比，模块内部用 0-1 比例
+    // The UI stores 0-100 percentages; the module uses a 0-1 ratio internally
     browserMetrics.setSampleRate(s.browserMetricAudit === true
       ? Math.max(0, Math.min(100, Number(s.browserMetricSample) || 5)) / 100
       : 0);
@@ -311,8 +311,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }).catch(() => {});
     console.log('[AgentSphere] auth: task connection established (user-level)');
     fetchSsoDisplayName();
-    // 多个标签页会各自上报同一个 token：只在 token 变化时重建连接，
-    // 否则每次上报都会新建一条 SSE，服务端堆积大量已失效的连接。
+    // Multiple tabs each report the same token: only rebuild the connection when the token changes,
+    // otherwise every report opens a new SSE and the server piles up many dead connections.
     if (token !== lastInitToken) {
       lastInitToken = token;
       ensureOffscreenDocument().then(() => {
@@ -321,7 +321,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
   }
 
-  // content → background: 用户在浮层里选定了执行设备
+  // content -> background: the user selected an execution device in the overlay
   if (msg.type === 'chooseDevice' && msg.deviceId) {
     (async () => {
       try {
@@ -356,7 +356,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return false;
 });
 
-// --- SSO 展示名：providerCode@subject（如 bole@elvin），按 token 去重 ---
+// --- SSO display name: providerCode@subject (such as bole@elvin), deduplicated by token ---
 let ssoDisplayToken = '';
 
 function fetchSsoDisplayName() {
@@ -377,10 +377,10 @@ function fetchSsoDisplayName() {
 
 // --- Helpers ---
 /**
- * 兜底的目标 tab：只认“受控且确实在插件窗口内”的 tab。
- * 旧实现会回落到窗口内任意 active tab —— 插件窗口是全局共享的，那会把上一会话
- * 残留的页面（甚至别的站点）当成本会话的目标页。宁可返回 null 报 NO_TAB，
- * 也不读不属于本会话的页面。
+ * Fallback target tab: only accepts a tab that is "controlled and actually inside the plugin window".
+ * The old implementation fell back to any active tab in the window - the plugin window is globally shared, so that treated a page
+ * left over from the previous session (possibly another site) as this session's target page. Better to return null and report NO_TAB
+ * than to read a page that does not belong to this session.
  */
 async function getActiveTabId() {
   const controlled = tabManager.getControlled();
@@ -388,11 +388,11 @@ async function getActiveTabId() {
   return null;
 }
 
-/** 解析本次动作的目标 tab：显式 tabId 必须属于插件窗口，否则不碰用户 tab。 */
+/** Resolve the target tab for this action: an explicit tabId must belong to the plugin window, otherwise user tabs are left untouched. */
 async function resolveTargetTabId(params) {
   if (params?.tabId != null) {
     if (await tabManager.isPluginTab(params.tabId)) return params.tabId;
-    // 显式 tabId 可能来自已关闭的旧插件窗口；不碰用户 tab，回退到当前受控插件 tab。
+    // An explicit tabId may come from a closed old plugin window; leave user tabs alone and fall back to the current controlled plugin tab.
     const controlled = tabManager.getControlled();
     if (controlled != null && await tabManager.isPluginTab(controlled)) {
       return controlled;
@@ -424,13 +424,13 @@ function mapErrorCategory(e) {
 
 // --- Command execution ---
 async function executeInPage(commandId, action, params, sessionId) {
-  // 先声明会话归属：插件窗口全局共享，上一会话的 tab 不能被本会话读取/复用。
-  // 必须早于风控检查 —— 否则会拿别的会话的 tab 标题/URL 做判定。
+  // Declare session ownership first: the plugin window is globally shared, so the previous session's tab must not be read/reused by this session.
+  // This must run before the risk-control check - otherwise another session's tab title/URL would be used for the decision.
   tabManager.beginSession(sessionId);
-  // 风控命中：按 session 锁定，之后一切命令直接拒绝（命中即停，不等待/不重试/不绕行）
+  // Risk-control hit: lock per session, then reject every command outright (stop on hit, no waiting/retry/detour)
   const checkTabId = params.tabId || tabManager.getControlled();
   if (sessionId && riskLockedSessions.has(sessionId)) {
-    const res = failResult('风控命中（会话已锁定）：页面曾被重定向到安全中心/验证码。请立即结束任务，不要重试或绕行。', 'risk_challenge');
+    const res = failResult('Risk-control hit (session locked): the page was redirected to a security center/captcha page. End the task immediately; do not retry or detour.', 'risk_challenge');
     sendCallbackSafe(commandId, res, checkTabId, sessionId);
     return;
   }
@@ -438,7 +438,7 @@ async function executeInPage(commandId, action, params, sessionId) {
   if (riskHit) {
     if (sessionId) riskLockedSessions.add(sessionId);
     const res = failResult(
-      `风控命中：受控页已被重定向（url=${riskHit.url}）。请立即结束任务（status=failed），不要重试。`,
+      `Risk-control hit: the controlled page was redirected (url=${riskHit.url}). End the task now (status=failed); do not retry.`,
       'risk_challenge',
     );
     res.data = { _riskChallenge: true, _url: riskHit.url, _title: riskHit.title };
@@ -451,7 +451,7 @@ async function executeInPage(commandId, action, params, sessionId) {
     const running = (commandActive && commandActive.action) || 'unknown';
     const retryAfterMs = Math.max(0, COMMAND_LEASE_MS - elapsed);
     const res = failResult(
-      `上一命令仍在执行（并发守卫）：${running} 已耗时 ${Math.round(elapsed / 1000)}s，约 ${Math.ceil(retryAfterMs / 1000)}s 后释放；请先 getContent 复核当前状态`,
+      `Previous command still running (concurrency guard): ${running} has been running for ${Math.round(elapsed / 1000)}s and is released in about ${Math.ceil(retryAfterMs / 1000)}s; call getContent first to verify the current state`,
       ErrorCategory.UNKNOWN,
     );
     res.data = { _runningAction: running, elapsedMs: elapsed, retryAfterMs };
@@ -473,7 +473,7 @@ async function executeInPage(commandId, action, params, sessionId) {
   }
 }
 
-// 受控 tab 必须仍在目标站点内，否则拒绝操作（run 26 曾跑偏到 localhost:8001）。
+// The controlled tab must still be on the target site, otherwise refuse (run 26 once wandered off to localhost:8001).
 async function assertControlledHost(tabId) {
   if (!targetOrigin) return null;
   const tab = await chrome.tabs.get(tabId).catch(() => null);
@@ -481,7 +481,7 @@ async function assertControlledHost(tabId) {
   try {
     const host = new URL(tab.url).host;
     if (host !== new URL(targetOrigin).host) {
-      return `受控 tab 已离开目标站点（实际 ${tab.url}，目标 ${targetOrigin}）。请先 navigate 回主站点再继续，勿在错误页面操作。`;
+      return `Controlled tab left the target site (actual ${tab.url}, target ${targetOrigin}). Navigate back to the main site before continuing; do not operate on the wrong page.`;
     }
   } catch (e) { /* ignore */ }
   return null;
@@ -505,8 +505,8 @@ function keyInfoOf(key) {
   return { key: m[0], code: m[1], keyCode: m[2] };
 }
 
-// 写动作统一走 CDP 受信输入：内容脚本先跨帧定位算出主视口坐标，
-// 再由 Input.dispatchMouseEvent / Input.insertText / Input.dispatchKeyEvent 派发（isTrusted=true）。
+// Write actions all go through CDP trusted input: the content script first locates across frames and computes main-viewport coordinates,
+// then Input.dispatchMouseEvent / Input.insertText / Input.dispatchKeyEvent dispatch them (isTrusted=true).
 const WRITE_ACTIONS = new Set(['click', 'type', 'key', 'hover']);
 
 function hasLocator(params) {
@@ -532,8 +532,8 @@ async function uploadScreenshotToBackend(base64, contentType) {
   return body;
 }
 
-// 坐标点击：基于最后一张 viewport 截图的设备像素 → CSS px → CDP 受信点击；
-// 未命中交互元素时裸点并带 warning（真实点击语义，忠实于视觉操作）。
+// Coordinate click: device pixels from the last viewport screenshot -> CSS px -> CDP trusted click;
+// when no interactive element is hit, click the point anyway with a warning (real click semantics, faithful to the visual action).
 async function clickAtPoint(commandId, params, targetTabId, sessionId) {
   const x = Number(params.x);
   const y = Number(params.y);
@@ -553,17 +553,17 @@ async function clickAtPoint(commandId, params, targetTabId, sessionId) {
     if (d && d.ok && d.x != null && d.y != null) {
       point = { x: d.x, y: d.y };
       if (d.interactive === false) {
-        warning = '坐标点未命中可交互元素，已按原生坐标裸点';
+        warning = 'Coordinate point hit no interactive element; clicked the raw coordinates directly';
       }
     } else if (d && d.ok === false) {
-      warning = d.error || '坐标点解析失败，改用裸点';
+      warning = d.error || 'Failed to resolve the coordinate point; falling back to a raw click';
     }
   } catch (e) {
-    warning = 'locatePoint 异常，改用裸点: ' + (e && e.message);
+    warning = 'locatePoint failed; falling back to a raw click: ' + (e && e.message);
   }
   try {
-    // 视觉操作同样画光标：坐标由模型从截图算出，但用户看到的是「鼠标自己动过去点了
-    // 那里」，观感与 click/type 一致，也更容易判断模型有没有点偏。
+    // Visual actions draw the cursor too: the coordinates come from the model reading the screenshot, but the user sees "the mouse moved there
+    // and clicked", consistent with click/type and making it easier to tell whether the model missed.
     await agentCursor.show(targetTabId, point);
     await cdpClient.nativeClick(targetTabId, point.x, point.y);
   } catch (e) {
@@ -573,7 +573,7 @@ async function clickAtPoint(commandId, params, targetTabId, sessionId) {
   }
   const data = { action: 'clickAt', x: point.x, y: point.y, _executed: true };
   if (warning) data.warning = warning;
-  // post-action 状态：回读 _url/_title/_hints（无 preHash 基线，不虚构 changed）
+  // post-action state: read back _url/_title/_hints (no preHash baseline, so changed is not invented)
   try {
     const v = await tabManager.askContent(targetTabId, {
       type: 'browser_operation',
@@ -607,10 +607,10 @@ async function locatePoint(tabId, params, timeoutMs) {
   if (!loc) {
     return { ok: false, error: 'no response from content script', errorCategory: ErrorCategory.INJECT_FAILED };
   }
-  // content 的结构化失败（断言失败 / 未收敛）此前被整条丢弃：它返回的是
-  // {success:false, error, errorCategory}，没有 data，于是 loc.data 为 undefined 直接
-  // return null —— 'Element is not enabled' 这类信息永远传不上来，
-  // 「目标不可操作」与「目标不存在」在 errorCategory 里被压成同一个 not_found。
+  // The content script's structured failures (assertion failed / not settled) used to be discarded entirely: it returns
+  // {success:false, error, errorCategory} with no data, so loc.data was undefined and
+  // it returned null - information like 'Element is not enabled' could never surface,
+  // and "target not actionable" and "target missing" were flattened into the same not_found in errorCategory.
   if (loc.success === false) {
     return {
       ok: false,
@@ -652,7 +652,7 @@ async function locatePoint(tabId, params, timeoutMs) {
 async function cdpAct(tabId, action, params, loc) {
   switch (action) {
     case 'click':
-      // 先把光标移到目标并等它落位（到达屏障），再派发点击
+      // Move the cursor to the target and wait for it to land (arrival barrier) before dispatching the click
       await agentCursor.show(tabId, loc && loc.point);
       await cdpClient.nativeClick(tabId, loc.point.x, loc.point.y);
       break;
@@ -662,14 +662,14 @@ async function cdpAct(tabId, action, params, loc) {
       break;
     case 'type':
       await agentCursor.show(tabId, loc && loc.point);
-      await cdpClient.nativeClick(tabId, loc.point.x, loc.point.y); // 先受信聚焦
-      if (params.append !== true) await cdpClient.clearInput(tabId); // insertText 只追加，整字段替换前先清空
-      await cdpClient.typeText(tabId, params.text || ''); // 逐字输入（拟人化）
+      await cdpClient.nativeClick(tabId, loc.point.x, loc.point.y); // trusted focus first
+      if (params.append !== true) await cdpClient.clearInput(tabId); // insertText only appends, so clear before replacing the whole field
+      await cdpClient.typeText(tabId, params.text || ''); // type character by character (humanized)
       if (params.submit) await cdpClient.nativeKeyPress(tabId, 'Enter', 'Enter', 13);
       break;
     case 'key': {
       if (loc) {
-        // 给了 locator 就会先受信点击聚焦 —— 这一步同样要有光标
+        // Providing a locator triggers a trusted click to focus first - this step needs the cursor too
         await agentCursor.show(tabId, loc && loc.point);
         await cdpClient.nativeClick(tabId, loc.point.x, loc.point.y);
       }
@@ -680,28 +680,28 @@ async function cdpAct(tabId, action, params, loc) {
   }
 }
 
-// 写动作入口：locate → CDP。
-// 点击/悬停会走三档滚动对齐 + 命中校验的降级循环（对应 Codex 的 AZ 三档 +
-// DOM.getNodeForLocation 命中比对）—— 元素被 sticky header / 弹层盖住时换一个
-// 对齐档位往往就成功了，比直接报错让 LLM 重来快得多。
-// 全档失败才报错，且消息里指名拦截者，errorCategory 区分 occluded / ambiguous / not_found。
+// Write action entry: locate -> CDP.
+// Click/hover go through a three-tier scroll alignment + hit verification fallback loop (matching Codex's AZ three tiers +
+// DOM.getNodeForLocation hit comparison) - when an element is covered by a sticky header / overlay, switching
+// alignment tier often just works, far faster than erroring out and making the LLM start over.
+// Only report an error when all tiers fail, name the interceptor in the message, and let errorCategory distinguish occluded / ambiguous / not_found.
 const ALIGNMENTS = [
   { block: 'center', inline: 'nearest' },
   { block: 'end', inline: 'end' },
   { block: 'start', inline: 'start' },
 ];
 const NEEDS_HIT_TEST = new Set(['click', 'hover']);
-// 三档降级的总预算（毫秒）。刻意【不】跟随后端 executeJS 的 30s 超时放大：
-// 降级解决的是「点得准不准」，不是「页面慢不慢」。每档的 waitMs 已经给了 2.5s
-// 轮询上限；若预算跟随后端等比放大，失败路径会从 ~7s 变成 ~32s，agent 每个
-// 空转轮次都烧 3 倍时间。真正慢的页面应该用显式 wait。
+// Total budget for the three-tier fallback (ms). Deliberately **not** scaled with the backend's 30s executeJS timeout:
+// the fallback addresses "did we click accurately", not "is the page slow". Each tier's waitMs already allows 2.5s
+// of polling; if the budget scaled with the backend, the failure path would go from ~7s to ~32s, and the agent would burn
+// 3x time on every idle round. Truly slow pages should use an explicit wait.
 const ALIGN_RETRY_BUDGET_MS = 8000;
-// 预算之外还要留给：光标到达屏障（≤1.5s，实际 ~250ms）+ 后置校验 0.3s + callback 回传。
+// Beyond the budget, leave room for: the cursor arrival barrier (<=1.5s, ~250ms in practice) + post-check 0.3s + callback return.
 const RESERVE_MS = 2500;
-// 后置 / 只读调用的固定上界，避免一个卡死的 tab 长期占着命令租约。
+// Fixed upper bound for post-check / read-only calls, so a stuck tab does not hold the command lease for long.
 const POST_ACTION_TIMEOUT_MS = 4000;
 
-/** 拦截者描述（interceptors 里第一个 <tag#id.class>）。仅用于失败诊断与指标。 */
+/** Interceptor description (the first <tag#id.class> in interceptors). Used only for failure diagnostics and metrics. */
 function firstInterceptor(interceptors) {
   for (const d of interceptors || []) {
     if (typeof d === 'string' && d.startsWith('<')) return d;
@@ -710,8 +710,8 @@ function firstInterceptor(interceptors) {
 }
 
 /**
- * 写动作的指标落盘。开关关闭时 browserMetrics.record* 首行即 return，零开销。
- * 不新增任何判定逻辑——这里只搬运降级循环/后置校验已经算出来的结果。
+ * Metric persistence for write actions. When the switch is off, browserMetrics.record* returns on the first line with zero overhead.
+ * No new decision logic is added - this only carries over results the fallback loop/post-check already computed.
  */
 function recordMetrics(commandId, action, params, sessionId, tabId, tStart, extra) {
   try {
@@ -727,7 +727,7 @@ function recordMetrics(commandId, action, params, sessionId, tabId, tStart, extr
   }
 }
 
-/** navigate 的指标落盘（仅耗时 + 是否复用 tab）。开关关闭时零开销。 */
+/** Metric persistence for navigate (duration + whether the tab was reused only). Zero overhead when the switch is off. */
 function recordNavigate(commandId, sessionId, t0, extra) {
   try {
     browserMetrics.recordNavigate({
@@ -743,14 +743,14 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
     ? Math.max(500, params.timeout * 1000 - RESERVE_MS)
     : ALIGN_RETRY_BUDGET_MS);
   const interceptors = [];
-  // 同一条命令的三档对齐共享一个 token：content 侧据此复用首档已解析的元素，
-  // 后两档不再重走 resolveActionTarget（省时，也避免页面重排后按 ref 重查漂移）。
+  // The three alignment tiers of one command share a token: the content side uses it to reuse the element resolved by the first tier,
+  // so the last two tiers skip resolveActionTarget (saves time and avoids drift from re-resolving by ref after a reflow).
   const reuseToken = 'r' + commandId + '_' + Date.now();
   let loc = null;
   let done = false;
-  // 不可操作类失败：直接终止并报错，不再尝试后续对齐档
+  // Not-actionable failures: stop and report immediately, no further alignment tiers
   let notInteractable = null;
-  // 指标采集：这些只是「把降级循环已经算出来的结果记下来」，不产生任何新判定。
+  // Metrics: these only "record results the fallback loop already computed" and produce no new decisions.
   let alignUsed = null;
   let alignsTried = 0;
   let hitPath = 'none';
@@ -761,7 +761,7 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
       sendCallbackSafe(commandId, failResult(action + ' requires selector/text/ref', ErrorCategory.NOT_FOUND), targetTabId, sessionId);
       return null;
     }
-    done = true; // key 无 locator，直接走原有路径
+    done = true; // no locator for the key, take the original path
   } else {
     for (let i = 0; i < ALIGNMENTS.length && !done; i++) {
       alignsTried += 1;
@@ -770,7 +770,7 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
         interceptors.push('timeout');
         break;
       }
-      // 按剩余预算摊分给每一档的轮询等待，避免三档叠加撞穿后端超时
+      // Split the remaining budget across each tier's polling wait, so the three tiers together do not blow the backend timeout
       const waitMs = Math.max(0, Math.min(2500, Math.floor(left / (ALIGNMENTS.length - i))));
       loc = await locatePoint(
         targetTabId,
@@ -780,8 +780,8 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
       );
 
       if (!loc || loc.ok === false) {
-        // 目标当前不可操作（disabled / 隐藏 / 未收敛）：换对齐档位毫无意义，
-        // 再试两档只是白烧预算 —— 直接停，并把具体状态回报给调用方。
+        // The target is currently not actionable (disabled / hidden / not settled): switching alignment tiers is pointless,
+        // trying two more tiers only burns budget - stop and report the specific state to the caller.
         if (loc && loc.errorCategory === ErrorCategory.NOT_INTERACTABLE) {
           notInteractable = loc;
           break;
@@ -789,29 +789,29 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
         if (loc && loc.errorCategory === ErrorCategory.AMBIGUOUS) {
           interceptors.push('ambiguous:' + (loc.matches || 2));
         }
-        continue; // not_found / ambiguous 都换下一档
+        continue; // not_found / ambiguous both move to the next tier
       }
-      // 降级成功但仍是多命中：标记出来，调用方据此判断是不是点偏了
+      // Fallback succeeded but still matched multiple elements: flag it so the caller can judge whether the click missed
       if (loc.ambiguous && !interceptors.some((d) => String(d).startsWith('ambiguous:'))) {
         interceptors.push('ambiguous:' + loc.ambiguous.matches);
       }
 
       if (NEEDS_HIT_TEST.has(action)) {
-        hitPath = loc.hitOk ? 'main' : 'cdp'; // main = content 侧 elementFromPoint 通过；cdp = 走了跨帧 CDP 复核
-        let ok = loc.hitOk; // 主帧已由 content 侧 elementFromPoint 自校验
+        hitPath = loc.hitOk ? 'main' : 'cdp'; // main = elementFromPoint passed on the content side; cdp = cross-frame CDP verification was used
+        let ok = loc.hitOk; // the main frame is already self-verified by elementFromPoint on the content side
         if (!ok && loc.hitDesc) interceptors.push(loc.hitDesc);
         if (!ok) {
-          // 跨源 iframe：elementFromPoint 够不着，用 CDP 在主视口坐标空间复核
+          // Cross-origin iframe: elementFromPoint cannot reach it, so verify with CDP in main-viewport coordinates
           const ht = await cdpClient.hitTest(targetTabId, loc.point.x, loc.point.y);
           if (ht.hit && ht.desc) {
             interceptors.push(ht.desc);
-            // 命中元素与目标同 tag → 视为命中（可能是目标的子节点或祖先）
+            // The hit element has the same tag as the target -> treat it as a hit (could be a child or ancestor of the target)
             ok = ht.desc.startsWith('<' + String(loc.tag || '').toLowerCase());
           } else {
-            ok = true; // 探测本身失败不阻断，退回原有行为
+            ok = true; // a failed probe does not block; fall back to the existing behavior
           }
         }
-        if (!ok) continue; // 被挡 → 换下一档
+        if (!ok) continue; // covered -> try the next tier
       } else {
         hitPath = 'skipped';
       }
@@ -820,8 +820,8 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
     }
 
     if (notInteractable) {
-      // 目标存在但此刻不可操作 —— 与「找不到」「被遮挡」是三种不同的处置方式：
-      // 这里该等它可用或换目标，原地重试没有意义。
+      // The target exists but is not actionable right now - this differs from "not found" and "covered" in how it is handled:
+      // here we should wait for it to become usable or switch targets; retrying in place is pointless.
       recordMetrics(commandId, action, params, sessionId, targetTabId, tStart, {
         ok: false,
         cat: ErrorCategory.NOT_INTERACTABLE,
@@ -889,7 +889,7 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
     data.text = loc.text;
   }
   if (action === 'type' && hasLocator(params)) {
-    // 回读输入框当前值，供模型核对是否被累加/残留旧词（_echo_ok 表示已覆盖目标文本）。
+    // Read back the input's current value so the model can check for accumulation/leftover text (_echo_ok means the target text was overwritten).
     try {
       const echo = await tabManager.askContent(targetTabId, {
         type: 'browser_operation',
@@ -908,8 +908,8 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
   const tabNow = await chrome.tabs.get(targetTabId).catch(() => null);
   data._url = (tabNow && tabNow.url) || '';
 
-  // 写动作后置校验：CDP 派发后 settle 短暂稳定（flyout/SPA 展开），再读回当前状态。
-  // → changed（全页指纹差异）、_selfChanged（目标元素自身状态差异）、_hints、_clickable。
+  // Write action post-check: after CDP dispatch, let things settle briefly (flyout/SPA expansion), then read the current state.
+  // -> changed (whole-page fingerprint diff), _selfChanged (target element's own state diff), _hints, _clickable.
   try {
     await new Promise((r) => setTimeout(r, 300));
     const v = await tabManager.askContent(targetTabId, {
@@ -922,8 +922,8 @@ async function writeAction(commandId, action, params, targetTabId, sessionId) {
       if (typeof vd.fp === 'string' && loc && typeof loc.preHash === 'string') {
         data.changed = loc.preHash !== vd.fp;
       }
-      // _selfChanged 回答「我点的那个东西变了吗」。changed 的全页指纹对纯 CSS 展开、
-      // 勾选切换、输入值变化一概无感，而这恰恰是最常见的成功反馈 —— 两者互补。
+      // _selfChanged answers "did the thing I clicked change". changed's whole-page fingerprint is blind to pure CSS expansion,
+      // checkbox toggles and input value changes, which are exactly the most common success feedback - the two are complementary.
       if (typeof vd.selfFp === 'string' && vd.selfFp && loc && typeof loc.selfFp === 'string' && loc.selfFp) {
         data._selfChanged = loc.selfFp !== vd.selfFp;
       }
@@ -961,11 +961,11 @@ async function executeInPageInner(commandId, action, params, sessionId) {
       return;
     }
 
-    // 非 navigate：先把受控 tab 切到前台，再分发。后台 tab 会被 Chrome 节流
-    // （rAF 暂停、setTimeout 钳到 ≥1s，隐藏满 5 分钟到 ~1 次/分钟），而 clickAt /
-    // executeJS / screenshot / getContent 及写动作的稳定性等待全都依赖渲染帧 ——
-    // 后台下每条动作成倍变慢并撞上后端动作超时。放在所有分支之前才能全覆盖。
-    // 目标 tab 只能来自独立插件窗口；显式 tabId 指向用户 tab 时直接 NO_TAB。
+    // Non-navigate: bring the controlled tab to the foreground first, then dispatch. Background tabs are throttled by Chrome
+    // (rAF paused, setTimeout clamped to >=1s, down to ~1/minute after 5 minutes hidden), while clickAt /
+    // executeJS / screenshot / getContent and the write actions' stability waits all depend on render frames -
+    // in the background every action slows down many times over and hits the backend action timeout. Placing it before all branches covers everything.
+    // The target tab can only come from the isolated plugin window; when an explicit tabId points at a user tab, return NO_TAB directly.
     const resolvedTabId = await resolveTargetTabId(params);
     if (!resolvedTabId) {
       console.warn('[AgentSphere] no target tab in plugin window', {
@@ -990,8 +990,8 @@ async function executeInPageInner(commandId, action, params, sessionId) {
         sendCallbackSafe(commandId, failResult(hostErr, ErrorCategory.WRONG_SITE), targetTabId, sessionId);
         return;
       }
-      // params.timeout 是协议里已有的字段（ChromeExecuteContext.timeout + offscreen 白名单），
-      // 这里只作为「调小」用；上限恒为 EXECJS_TIMEOUT_MS，绝不超过后端的 30s。
+      // params.timeout is an existing protocol field (ChromeExecuteContext.timeout + the offscreen whitelist);
+      // it is only used to "shorten" here; the cap is always EXECJS_TIMEOUT_MS and never exceeds the backend's 30s.
       const execTimeout = params.timeout > 0
         ? Math.max(2000, Math.min(EXECJS_TIMEOUT_MS, params.timeout * 1000))
         : EXECJS_TIMEOUT_MS;
@@ -1000,7 +1000,7 @@ async function executeInPageInner(commandId, action, params, sessionId) {
       return;
     }
 
-    // getContent(mode:'axtree') — CDP 可访问性树（仅显式请求时使用，需 debugger 附着）
+    // getContent(mode:'axtree') - CDP accessibility tree (only used on explicit request, requires debugger attachment)
     if (action === 'getContent' && params.mode === 'axtree') {
       const targetTabId = resolvedTabId;
       if (!targetTabId) {
@@ -1016,8 +1016,8 @@ async function executeInPageInner(commandId, action, params, sessionId) {
         await cdpClient.attach(targetTabId);
         const tab = await chrome.tabs.get(targetTabId).catch(() => null);
 const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFullAXTree');
-        // 角色白名单：浏览器的可访问性角色远多于最初那 15 个，缺失的结构性角色
-        // （标题、图片、列表项、对话框等）会让整个页面在 AX 视角下「不可见」。
+        // Role whitelist: browsers have far more accessibility roles than the original 15, and missing structural roles
+        // (headings, images, list items, dialogs, etc.) make the whole page "invisible" from the AX perspective.
         const INTERACTIVE = new Set([
           'button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'radio',
           'switch', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'option',
@@ -1035,15 +1035,15 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
           const role = n.role?.value;
           if (!role || !INTERACTIVE.has(role)) continue;
           const name = n.name?.value || '';
-          // 无障碍名（AXName）按 HTML-AAM 计算：纯图标按钮常常是空的，但依然
-          // 可交互。原实现直接丢弃它们，恰好丢掉了图标按钮这一整类目标。
+          // The accessible name (AXName) is computed per HTML-AAM: icon-only buttons are often empty yet still
+          // interactive. The original implementation discarded them, losing exactly the icon-button class of targets.
           if (!name) nameless++;
           const state = (n.properties || [])
             .filter((p) => ['checked', 'disabled', 'expanded', 'selected', 'focused', 'required'].includes(p.name))
             .map((p) => `${p.name}:${p.value?.value ?? p.value?.type ?? true}`)
             .join(' ');
-          // backendDOMNodeId 把 AX 节点接回真实 DOM 节点（原实现丢弃了它，
-          // 导致观察到的元素无法回连到 DOM）。本次只输出、不建索引动作路径。
+          // backendDOMNodeId links the AX node back to the real DOM node (the original implementation dropped it,
+          // so observed elements could not be connected back to the DOM). This pass only outputs it; no action path is indexed.
           compact.push({
             role,
             name,
@@ -1071,7 +1071,7 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
       return;
     }
 
-    // writeAction 入口：clickAt 走坐标裸点（CDP），与其他写动作并列
+    // writeAction entry: clickAt uses a raw coordinate click (CDP), alongside the other write actions
     if (action === 'clickAt') {
       const targetTabId = resolvedTabId;
       if (!targetTabId) {
@@ -1087,7 +1087,7 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
       return;
     }
 
-    // screenshot：CDP 截图 → 上报后端 → 回调带 fileKey（不发字节过大回调）
+    // screenshot: CDP capture -> report to backend -> callback carries fileKey (no oversized byte payloads in callbacks)
     if (action === 'screenshot') {
       const targetTabId = resolvedTabId;
       if (!targetTabId) {
@@ -1137,14 +1137,14 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
       return;
     }
 
-    // 写动作：CDP 受信输入（唯一变更路径）
+    // Write actions: CDP trusted input (the only mutation path)
     if (WRITE_ACTIONS.has(action)) {
       await writeAction(commandId, action, params, targetTabId, sessionId);
       return;
     }
 
-    // 页面级滚动 → CDP mouseWheel（真实滚轮事件 + 分段停顿）；
-    // 对元素滚动（给了 selector/text/ref）仍走内容脚本的 scrollIntoView（那是定位动作，非人手势）
+    // Page-level scrolling -> CDP mouseWheel (real wheel events + segmented pauses);
+    // scrolling a specific element (selector/text/ref given) still uses the content script's scrollIntoView (that is a positioning action, not a human gesture)
     if (action === 'scroll' && !(params.selector || params.text || params.ref != null)) {
       await cdpClient.scrollPage(targetTabId, params.direction || 'down', params.amount);
       sendCallbackSafe(commandId, {
@@ -1156,7 +1156,7 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
       return;
     }
 
-    // 其余动作 → 内容脚本（只读 / wait / upload / dialog 等）
+    // Everything else -> content script (read-only / wait / upload / dialog etc.)
     const result = await tabManager.askContent(targetTabId, {
       type: 'browser_operation',
       action,
@@ -1170,7 +1170,7 @@ const { nodes } = await cdpClient.sendCommand(targetTabId, 'Accessibility.getFul
   }
 }
 
-/** 把 URL 归一化成可比较形式；ignoreHash 用于“是否被重定向”的展示判断。 */
+/** Normalize a URL into a comparable form; ignoreHash is used for the display decision of "was it redirected". */
 function comparableUrl(raw, ignoreHash) {
   try {
     const u = new URL(raw);
@@ -1181,22 +1181,22 @@ function comparableUrl(raw, ignoreHash) {
   }
 }
 
-/** 两个 URL 是否指向同一地址。默认包含 hash —— hash 路由（如 #preview）也是真实导航目标。 */
+/** Whether two URLs point to the same address. Includes the hash by default - hash routes (such as #preview) are real navigation targets too. */
 function sameUrl(a, b, ignoreHash = false) {
   if (!a || !b) return false;
   return comparableUrl(a, ignoreHash) === comparableUrl(b, ignoreHash);
 }
 
 /**
- * 读取页面真实地址。`chrome.tabs.url` 在重定向/导航竞态下可能是旧值，不能作为
- * “已到达目标页”的依据；读不到时回退到 tabs.url。
+ * Read the page's real address. `chrome.tabs.url` may be stale during a redirect/navigation race and cannot be used
+ * as evidence of "already reached the target page"; fall back to tabs.url when it cannot be read.
  */
 async function resolveActualUrl(tabId, fallback) {
   const live = await tabManager.readPageUrl(tabId);
   return live || fallback || null;
 }
 
-/** 导航收尾：统一用页面真实地址回传，并更新站点守卫/前台/分组。 */
+/** Navigation wrap-up: report the page's real address uniformly and update the site guard/foreground/group. */
 async function completeNavigate(commandId, sessionId, tabId, navT0, requestedUrl, extra = {}) {
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   const actualUrl = await resolveActualUrl(tabId, tab?.url || requestedUrl);
@@ -1212,11 +1212,11 @@ async function completeNavigate(commandId, sessionId, tabId, navT0, requestedUrl
 }
 
 /**
- * 在已存在的插件 tab 上完成一次**真实**导航。
+ * Perform one **real** navigation on an existing plugin tab.
  *
- * <p>复用分支必须先读页面真实 location 再决定是否导航。旧实现只比对
- * `chrome.tabs.url`，命中就直接返回成功 —— 线上因此出现“navigate 秒回成功、
- * 实际页面仍停在拦截页”，模型却把这次假成功当成一次恢复尝试。
+ * <p>The reuse branch must read the page's real location before deciding whether to navigate. The old implementation compared only
+ * `chrome.tabs.url` and returned success immediately on a match - production thus saw "navigate succeeds instantly
+ * while the page actually stays on the intercept page", and the model treated that false success as a recovery attempt.
  */
 async function navigateExistingTab(commandId, sessionId, tabId, params, navT0, extra = {}) {
   let liveUrl = await tabManager.readPageUrl(tabId);
@@ -1262,14 +1262,14 @@ async function handleNavigate(commandId, params, sessionId) {
     }
   }
 
-  // 独立插件窗口：active:true 只在该窗口内生效；窗口本身用 focused:false 创建，
-  // 不抢用户当前窗口焦点。后台 tab 会被 Chrome 节流，所以窗口内仍必须保持 active。
+  // Isolated plugin window: active:true only applies inside that window; the window itself is created with focused:false,
+  // so it does not steal the user's current window focus. Background tabs are throttled by Chrome, so the tab must stay active within the window.
   const tab = await tabManager.openInPluginWindow(params.url);
   if (!tab?.id) {
     sendCallbackSafe(commandId, failResult('Failed to open tab in the AgentSphere window', ErrorCategory.NO_TAB), null, sessionId);
     return;
   }
-  // 先收养再自检：isPluginTab 在窗口状态短暂缺失时可用 trustedTabId 自愈。
+  // Adopt first, then self-check: isPluginTab can self-heal via trustedTabId when window state is briefly missing.
   tabManager.setControlled(tab.id);
   if (!await tabManager.isPluginTab(tab.id)) {
     sendCallbackSafe(commandId, failResult('AgentSphere window state is not initialized; reload the extension', ErrorCategory.NO_TAB), tab.id, sessionId);
@@ -1311,8 +1311,8 @@ function evalInWorldFunc() {
     }
     try {
       const result = await run();
-      // 无返回值：一并回读 document.title，供副作用验证（document.title 标记技巧）
-      // 无需再发一轮 getContent —— __NO_RETURN__ 属"执行成功但无返回值"，勿当失败重试。
+      // No return value: also read back document.title for side-effect verification (the document.title marker trick)
+      // No need for another getContent round - __NO_RETURN__ means "executed successfully but returned nothing"; do not retry it as a failure.
       if (result === undefined) {
         return { __asVoid: true, __asTitle: typeof document !== 'undefined' ? document.title : '' };
       }
@@ -1323,7 +1323,7 @@ function evalInWorldFunc() {
   };
 }
 
-/** 给任意 promise 加 deadline。定时器在两条路径都要清理，否则会堆积。 */
+/** Add a deadline to any promise. The timer must be cleared on both paths, otherwise timers pile up. */
 function withDeadline(promise, ms, label) {
   let timer;
   return Promise.race([
@@ -1345,7 +1345,7 @@ async function runScripting(tabId, code) {
   if (value && typeof value === 'object' && value.__asVoid === true) {
     const r = okWarning(
       'scripting-main',
-      'code executed but did not return a value（__NO_RETURN__ 属正常）；副作用已用 document.title 标记的话，读 _documentTitle 复核',
+      'code executed but did not return a value (__NO_RETURN__ is expected); if side effects were flagged via document.title, verify with _documentTitle',
       '__NO_RETURN__',
       'void',
     );
@@ -1380,8 +1380,8 @@ async function executeJsOnTab(tabId, code, timeoutMs) {
   }
   // Tier 2: chrome.debugger Runtime.evaluate — bypasses CSP entirely; strict sites land here.
   try {
-    // CDP 层同样要传 deadline：这条路径进的是 cdp-client 的串行队列，
-    // 不设界会像早先那样把整个队列毒化（后续 click/insertText 全部排队不执行）。
+    // The CDP layer needs the deadline too: this path enters cdp-client's serial queue,
+    // and without a bound it would poison the whole queue as it did before (subsequent click/insertText all queue up and never run).
     return await cdpClient.evaluate(tabId, code, timeoutMs);
   } catch (e4) {
     const msg = String(e4.message);
@@ -1395,7 +1395,7 @@ async function executeJsOnTab(tabId, code, timeoutMs) {
   }
 }
 
-// --- 多设备：连上后向服务端确认是否有多台在线，需要时在页面里弹选择浮层 ---
+// --- Multi-device: after connecting, ask the server whether several are online and show a selection overlay in the page when needed ---
 let connectionsCheckedAt = 0;
 
 async function syncConnections() {
@@ -1423,7 +1423,7 @@ async function syncConnections() {
       currentDeviceId: deviceId,
     });
   } catch (e) {
-    // 网络抖动忽略；下次连接状态变化会重试
+    // Ignore network jitter; retry on the next connection state change
   }
 }
 

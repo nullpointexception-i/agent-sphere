@@ -21,9 +21,9 @@ public class ToolResultCompressor {
     }
 
     /**
-     * 压缩但保留数组完整（不折叠成 { _count, _showing, items } 只截前几项）。
-     * 用于需要前端完整展示的载荷（如 todo 工具的 todos 列表）。
-     * 数组元素仍按 maxValueChars 截断超长字符串，避免单个元素失控。
+     * Compresses while keeping arrays intact (does not collapse them into { _count, _showing, items } with only the first few items).
+     * Used for payloads the frontend must display in full (such as the todos list of the todo tool).
+     * Array elements are still truncated at maxValueChars to keep any single element from blowing up.
      */
     public static String compressKeepArrays(String raw, int maxValueChars) {
         return compress(raw, maxValueChars, true);
@@ -31,7 +31,7 @@ public class ToolResultCompressor {
 
     private static String compress(String raw, int maxValueChars, boolean keepArrays) {
         if (raw == null || raw.isBlank()) return raw;
-        // 未超预算时不要解析/折叠：短 JSON 里的数组（技能列表、候选列表等）必须原样保留。
+        // Do not parse/collapse when under budget: arrays inside short JSON (skill lists, candidate lists, etc.) must be preserved verbatim.
         if (raw.length() <= maxValueChars) return raw;
         try {
             Object node = MAPPER.readValue(raw, Object.class);

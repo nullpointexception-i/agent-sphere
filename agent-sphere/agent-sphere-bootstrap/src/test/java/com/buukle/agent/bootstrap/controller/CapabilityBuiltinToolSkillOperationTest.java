@@ -96,7 +96,7 @@ class CapabilityBuiltinToolSkillOperationTest {
 
     @Test
     void create_nonConformantStructure_rejectedWithTemplate() {
-        // 结构不合规：没有 H1、没有 ## stepN 步骤 —— 必须在落库前被拦下并回带模板
+        // Invalid structure: no H1 and no ## stepN steps — must be rejected before persisting, with the template returned
         String bad = """
                 {"version":1,"parameters":{"type":"object","properties":{}},"promptTemplate":"## 任务\\nold body"}""";
 
@@ -108,8 +108,8 @@ class CapabilityBuiltinToolSkillOperationTest {
 
         SkillManageResultVO r = (SkillManageResultVO) manageTool.execute(ctx);
 
-        assertTrue(r.getPreview().contains("结构不符合技能规范"), r.getPreview());
-        assertTrue(r.getPreview().contains("# <技能名称>"), "应回带标准模板: " + r.getPreview());
+        assertTrue(r.getPreview().contains("does not conform"), r.getPreview());
+        assertTrue(r.getPreview().contains("# <Skill name>"), "should include the standard template: " + r.getPreview());
         verify(skillSpi, never()).createSkill(any(CreateSkillDTO.class), any());
         verify(instanceCapabilitySpi, never()).createCapability(any(CreateInstanceCapabilityDTO.class));
     }

@@ -103,7 +103,7 @@ class RouteConverterTest {
 
         AgentModelRoute route = converter.toDO(dto);
 
-        // 更新场景：未传该字段不得覆盖既有值（默认 null，走更新时不 set）
+        // Update case: an absent field must not overwrite the existing value (defaults to null and is not set on update)
         assertNull(route.getSupportsAttachment());
     }
 }

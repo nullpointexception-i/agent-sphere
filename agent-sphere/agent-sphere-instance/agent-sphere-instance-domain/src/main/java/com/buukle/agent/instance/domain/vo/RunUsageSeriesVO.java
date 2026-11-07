@@ -6,11 +6,11 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.List;
 
-/** 最近 N 条 LLM 交互的 token 序列。 */
+/** Token series of the most recent N LLM interactions. */
 @Data
 @AllArgsConstructor
 public class RunUsageSeriesVO implements Serializable {
     private List<RunUsagePointVO> points;
-    /** 是否还有比当前窗口更早的交互（仅首次加载有意义）。 */
+    /** Whether there are interactions older than the current window (meaningful only on first load). */
     private boolean hasMore;
 }

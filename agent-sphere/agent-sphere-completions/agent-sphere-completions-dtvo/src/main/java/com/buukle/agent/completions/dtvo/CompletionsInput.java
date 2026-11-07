@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * completions 单次调用入参：input 与 input_schema 匹配的任意 JSON，故以动态字段袋子承载。
+ * Input of a single completions call: input is arbitrary JSON matching input_schema, so it is carried as a dynamic field bag.
  */
 @Data
 public class CompletionsInput implements Serializable {

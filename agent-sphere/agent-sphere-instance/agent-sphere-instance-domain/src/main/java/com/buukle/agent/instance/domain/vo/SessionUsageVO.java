@@ -4,21 +4,21 @@ import lombok.Data;
 
 import java.io.Serializable;
 
-/** 单个会话的用量聚合（跨所有 run 的 LLM 调用求和，会话级展示用）。 */
+/** Usage aggregation for a single session (sum of LLM calls across all runs, for session-level display). */
 @Data
 public class SessionUsageVO implements Serializable {
     private Long sessionId;
-    /** 覆盖的 run 数。 */
+    /** Number of runs covered. */
     private Long runCount;
-    /** 会话内 LLM 调用总次数。 */
+    /** Total number of LLM calls in the session. */
     private Long interactionCount;
     private Long promptTokens;
     private Long completionTokens;
     private Long totalTokens;
     private Long cacheHitTokens;
     private Long cacheMissTokens;
-    /** 最近一次主 Agent CHAT_REPLY 的 prompt tokens（当前上下文占用）；无记录时为 null。 */
+    /** Prompt tokens of the latest main Agent CHAT_REPLY (current context usage); null when there is no record. */
     private Long latestPromptTokens;
-    /** 缓存命中率（0-100，无用量时为 null）。 */
+    /** Cache hit rate (0-100; null when there is no usage). */
     private Double cacheHitRate;
 }

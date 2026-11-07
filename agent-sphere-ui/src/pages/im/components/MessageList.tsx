@@ -1,3 +1,5 @@
+import { PERM } from '@/constants/permissions';
+import { useIntl } from '@umijs/max';
 import {
   Button,
   Empty,
@@ -14,15 +16,15 @@ import { Can } from '@/components/Can';
 import { type ImMessage, imApi } from '@/services/agentSphere/im';
 import { messageText, parsedContent } from './messageUtils';
 
-const TASK_STATUS: Record<string, { color: string; label: string }> = {
-  QUEUED: { color: 'blue', label: '排队中' },
-  DISPATCHING: { color: 'processing', label: '派发中' },
-  RUNNING: { color: 'processing', label: '执行中' },
-  WAITING: { color: 'gold', label: '等待中' },
-  COMPLETED: { color: 'green', label: '已完成' },
-  DONE: { color: 'green', label: '已完成' },
-  FAILED: { color: 'red', label: '失败' },
-  CANCELLED: { color: 'default', label: '已取消' },
+const TASK_STATUS: Record<string, { color: string; labelKey: string }> = {
+  QUEUED: { color: 'blue', labelKey: 'pages.im.status.queued' },
+  DISPATCHING: { color: 'processing', labelKey: 'pages.im.status.dispatching' },
+  RUNNING: { color: 'processing', labelKey: 'pages.im.status.running' },
+  WAITING: { color: 'gold', labelKey: 'pages.im.status.waiting' },
+  COMPLETED: { color: 'green', labelKey: 'pages.im.status.completed' },
+  DONE: { color: 'green', labelKey: 'pages.im.status.completed' },
+  FAILED: { color: 'red', labelKey: 'pages.im.status.failed' },
+  CANCELLED: { color: 'default', labelKey: 'pages.im.status.cancelled' },
 };
 
 function AttachmentMessage({
@@ -98,6 +100,7 @@ function TaskCard({
   onTimeline?: () => void;
 }) {
   const status = String(content.status ?? '');
+  const intl = useIntl();
   const cfg = TASK_STATUS[status];
   const canRetry = status === 'FAILED' || status === 'CANCELLED';
   const canCancel = ['QUEUED', 'DISPATCHING', 'RUNNING', 'WAITING'].includes(
@@ -115,9 +118,16 @@ function TaskCard({
       }}
     >
       <Space style={{ marginBottom: 6 }}>
-        <Tag color="blue">任务</Tag>
+        <Tag color="blue">
+          {intl.formatMessage({
+            id: 'pages.im.task',
+            defaultMessage: 'Task',
+          })}
+        </Tag>
         {cfg ? (
-          <Tag color={cfg.color}>{cfg.label}</Tag>
+          <Tag color={cfg.color}>
+            {intl.formatMessage({ id: cfg.labelKey, defaultMessage: status })}
+          </Tag>
         ) : (
           <Tag>{status || '-'}</Tag>
         )}
@@ -136,23 +146,32 @@ function TaskCard({
       {content.workItemId ? (
         <Space style={{ marginTop: 8 }}>
           <Button size="small" type="link" onClick={onTimeline}>
-            时间线
+            {intl.formatMessage({
+              id: 'pages.im.timeline',
+              defaultMessage: 'Timeline',
+            })}
           </Button>
         </Space>
       ) : null}
       {canRetry || canCancel ? (
         <Space style={{ marginTop: 8 }}>
           {canRetry ? (
-            <Can code="super-agent:update">
+            <Can code={PERM.superAgentUpdate}>
               <Button size="small" type="link" onClick={onRetry}>
-                重试
+                {intl.formatMessage({
+                  id: 'pages.im.retry',
+                  defaultMessage: 'Retry',
+                })}
               </Button>
             </Can>
           ) : null}
           {canCancel ? (
-            <Can code="super-agent:update">
+            <Can code={PERM.superAgentUpdate}>
               <Button size="small" type="link" danger onClick={onCancel}>
-                取消
+                {intl.formatMessage({
+                  id: 'pages.im.cancel',
+                  defaultMessage: 'Cancel',
+                })}
               </Button>
             </Can>
           ) : null}
@@ -193,6 +212,7 @@ export function MessageList({
   onTimeline,
   labels,
 }: Props) {
+  const intl = useIntl();
   return (
     <div
       style={{
@@ -205,7 +225,10 @@ export function MessageList({
       {hasMore ? (
         <div style={{ textAlign: 'center', marginBottom: 8 }}>
           <Button size="small" loading={loadingOlder} onClick={onLoadOlder}>
-            加载更早
+            {intl.formatMessage({
+              id: 'pages.im.loadOlder',
+              defaultMessage: 'Load older',
+            })}
           </Button>
         </div>
       ) : null}
@@ -253,7 +276,10 @@ export function MessageList({
                             size="small"
                             onClick={() => onEdit(item)}
                           >
-                            编辑
+                            {intl.formatMessage({
+                              id: 'pages.im.edit',
+                              defaultMessage: 'Edit',
+                            })}
                           </Button>
                         ) : null}
                         <Button
@@ -262,7 +288,10 @@ export function MessageList({
                           danger
                           onClick={() => onRecall(item.id)}
                         >
-                          撤回
+                          {intl.formatMessage({
+                            id: 'pages.im.withdraw',
+                            defaultMessage: 'Withdraw',
+                          })}
                         </Button>
                       </>
                     ) : null}

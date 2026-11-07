@@ -141,7 +141,8 @@ public class AgentCompactRecordServiceImpl implements AgentCompactRecordSpi {
         AgentCompactRecord r = mapper.selectOne(
                 new LambdaQueryWrapper<AgentCompactRecord>()
                         .eq(AgentCompactRecord::getSessionId, sessionId)
-                        // run-local 记录也有 session_id，必须只取 session 级，否则会误推进 HistoryLoader 游标
+                        // run-local records also carry a session_id, so only session-level rows may be
+                        // taken; otherwise the HistoryLoader cursor would advance by mistake
                         .isNull(AgentCompactRecord::getRunId)
                         .eq(AgentCompactRecord::getStatus, STATUS_COMPLETED)
                         .orderByDesc(AgentCompactRecord::getId)

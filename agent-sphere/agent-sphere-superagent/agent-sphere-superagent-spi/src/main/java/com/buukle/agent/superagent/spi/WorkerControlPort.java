@@ -1,6 +1,6 @@
 package com.buukle.agent.superagent.spi;
 
-/** 由 runtime-orchestration 实现：停止 Worker 会话当前 run。 */
+/** Implemented by runtime-orchestration: stops the current run of the Worker session. */
 public interface WorkerControlPort {
     boolean cancel(Long workerSessionId);
 }

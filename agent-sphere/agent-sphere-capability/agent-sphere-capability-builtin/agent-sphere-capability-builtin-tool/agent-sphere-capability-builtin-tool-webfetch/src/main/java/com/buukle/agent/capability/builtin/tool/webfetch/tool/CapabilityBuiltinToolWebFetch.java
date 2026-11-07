@@ -107,19 +107,19 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
     }
 
     /**
-     * 三层 fallback 获取操作
-     * Layer 1: HTTP 增强（UA 轮转 + 完整 headers + 重试）
-     * Layer 2: JS 渲染（HtmlUnit）
+     * Two-layer fallback fetch
+     * Layer 1: Enhanced HTTP (UA rotation + full headers + retries)
+     * Layer 2: JS rendering (HtmlUnit)
      */
     private WebFetchResultVO fetchWithFallback(String url, int timeout) {
-        // Layer 1: HTTP 增强
+        // Layer 1: Enhanced HTTP
         WebFetchResultVO result = fetchWithRetry(url, timeout);
         if (result != null && result.getStatusCode() >= 200 && result.getStatusCode() < 300) {
             log.debug("HTTP fetch succeeded for url: {}", url);
             return result;
         }
 
-        // Layer 2: JS 渲染
+        // Layer 2: JS rendering
         log.warn("HTTP fetch failed for url: {}, trying JS rendering", url);
         result = jsRenderer.render(url, timeout);
         if (result != null && result.getStatusCode() >= 200 && result.getStatusCode() < 300) {
@@ -127,7 +127,7 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
             return result;
         }
 
-        // 所有方式都失败，返回最后的错误结果
+        // Every method failed; return the final error result
         log.error("All fetch methods failed for url: {}", url);
         WebFetchResultVO errorResult = new WebFetchResultVO();
         errorResult.setStatusCode(500);
@@ -138,7 +138,7 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
     }
 
     /**
-     * 带重试和 UA 轮转的 HTTP 获取
+     * HTTP fetch with retries and UA rotation
      */
     private WebFetchResultVO fetchWithRetry(String url, int timeout) {
         Exception lastException = null;
@@ -171,7 +171,7 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
     }
 
     /**
-     * 执行单次获取操作，手动处理重定向，携带完整的浏览器指纹
+     * Performs a single fetch, handling redirects manually and carrying the full browser fingerprint
      */
     private WebFetchResultVO performFetch(String url, int timeout, BrowserProfile profile) throws Exception {
         return performFetchWithRedirect(url, timeout, profile, 0);
@@ -187,14 +187,14 @@ public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
                 .timeout(Duration.ofSeconds(timeout))
                 .GET();
 
-        // 应用浏览器配置中的所有 headers
+        // Apply all headers from the browser profile
         for (var entry : profile.headers().entrySet()) {
             builder.header(entry.getKey(), entry.getValue());
         }
 
         HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
 
-        // 检查响应体大小上限
+        // Check the response body size limit
         var contentLength = response.headers().firstValue("Content-Length");
         if (contentLength.isPresent()) {
             long len = Long.parseLong(contentLength.get());

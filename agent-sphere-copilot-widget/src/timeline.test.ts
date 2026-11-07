@@ -3,12 +3,12 @@ import { clarificationKey, mergeTimeline } from './timeline';
 import type { TimelineRow } from './types';
 
 /**
- * 回归：同一 run 被追问多轮时，第二轮澄清必须保持 PENDING。
+ * Regression: when the same run is asked follow-up questions over multiple rounds, the second-round clarification must stay PENDING.
  *
- * 后端 resumeFromClarification 在 run 处于 AWAITING_USER 时复用同一个 runId 续跑
- * （不是新建 run），各轮追问的 clarificationId 不同却共用 runId。此前本地乐观态保护
- * 只按 runId 加键，导致第二轮的 PENDING 被误改写成 ANSWERED —— 待选项与输入框不渲染，
- * 表现为「已答复」，刷新后 Ref 重建才恢复。
+ * The backend's resumeFromClarification reuses the same runId to continue while the run is AWAITING_USER
+ * (it does not create a new run), and each follow-up round has a different clarificationId but shares the runId. The previous local optimistic guard
+ * keyed only by runId, so the second round's PENDING was rewritten to ANSWERED - the options and input box did not render,
+ * showing as "already answered", and only came back after a refresh rebuilt the Ref.
  */
 const clarRow = (seq: number, clarificationId: string, state = 'PENDING'): TimelineRow => ({
   seq,
@@ -97,7 +97,7 @@ describe('mergeTimeline 澄清乐观态保护', () => {
   });
 
   it('缺 clarificationId 时不拦截，采信服务端状态', () => {
-    // 只有 runId 的 Set（旧键格式）不应误伤新行
+    // A Set of runIds only (old key shape) must not affect the new row
     const legacy = new Set(['42']);
     const merged = mergeTimeline([], [clarRow(11, 'c2')], legacy);
     expect(merged[0].state).toBe('PENDING');

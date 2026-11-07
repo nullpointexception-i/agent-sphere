@@ -7,6 +7,6 @@ import com.buukle.agent.instance.spi.RunSpi;
 
 public interface RunService extends IService<AgentRun>, RunSpi {
 
-    /** 单 run 用量聚合（InteractionModal 头部 / 运营查询）。 */
+    /** Single-run usage aggregation (InteractionModal header / operations queries). */
     RunUsageVO usageSummary(Long runId);
 }

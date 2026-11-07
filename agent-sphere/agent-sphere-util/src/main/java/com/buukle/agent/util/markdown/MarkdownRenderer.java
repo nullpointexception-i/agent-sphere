@@ -4,35 +4,40 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 把结构化配置渲染为 Markdown，供任务 prompt 使用。
+ * Renders structured configuration as Markdown for task prompts.
  *
- * <p>为什么不再直接塞 JSON：config 里放的是**给模型执行的指令**，不是数据。
- * JSON 的引号与花括号会让模型把它当数据来读，长句规则被包在引号里也更难被当指令遵循；
- * 而 Markdown 的小标题能让「哪些是步骤、哪些是硬性约束」一眼分明。
+ * <p>Why not dump JSON directly: config carries <b>instructions the model must execute</b>, not
+ * data. JSON quotes and braces make the model read it as data, and long rules wrapped in quotes are
+ * also harder to follow as instructions; Markdown headings make it obvious at a glance which parts
+ * are steps and which are hard constraints.
  *
- * <p>两类渲染：
+ * <p>Two rendering modes:
  * <ol>
- *   <li><b>结构化小节（约定形状）</b>：{@code {"sections":[{"title":"…","body":"…"}, …]}}。
- *       标题由调用方给出（业务域才知道 {@code hardGates} 该叫「硬性门槛」），
- *       渲染为 {@code ### 标题} + 正文，且**不额外输出 sections 这一层标题**。</li>
- *   <li><b>通用结构</b>：其余任意 Map/List/标量，按层级渲染小标题与列表项，
- *       保证其它调用方即使不遵守小节约定也能得到可读文本。</li>
+ *   <li><b>Structured sections (agreed shape)</b>: {@code {"sections":[{"title":"…","body":"…"}, …]}}.
+ *       Titles are supplied by the caller (only the business domain knows that {@code hardGates}
+ *       should be called "hard gates"); each is rendered as {@code ### title} + body, and the
+ *       {@code sections} wrapper heading is <b>not</b> emitted.</li>
+ *   <li><b>Generic structure</b>: any other Map/List/scalar, rendered level by level as headings
+ *       and list items, so other callers still get readable text even when they do not follow the
+ *       section convention.</li>
  * </ol>
  *
- * <p>两条刻意的取舍：
+ * <p>Two deliberate trade-offs:
  * <ul>
- *   <li>空值（null / 空白）整节跳过 —— 否则会渲染出 {@code hardGates: null} 这种噪音；</li>
- *   <li>**不使用代码块包裹** —— 用 ``` 包裹等于告诉模型「这是数据」，与「这是执行指令」的意图相反。</li>
+ *   <li>Blank sections (null / whitespace) are skipped entirely — otherwise noise such as
+ *       {@code hardGates: null} would be rendered;</li>
+ *   <li><b>No code-block wrapping</b> — wrapping in ``` tells the model "this is data", the
+ *       opposite of "these are instructions".</li>
  * </ul>
  */
 public final class MarkdownRenderer {
 
-    /** 小节约定的键名。 */
+    /** Key name of the section convention. */
     private static final String SECTION_KEY = "sections";
     private static final String FIELD_TITLE = "title";
     private static final String FIELD_BODY = "body";
 
-    /** 顶层小标题层级：用 ### 留出上层空间（调用方可能还有 ## 级标题）。 */
+    /** Top-level heading level: start at ### to leave room above (callers may have ## headings). */
     private static final int BASE_HEADING_LEVEL = 3;
     private static final int MAX_HEADING_LEVEL = 6;
     private static final char HEADING_MARK = '#';
@@ -43,8 +48,9 @@ public final class MarkdownRenderer {
     }
 
     /**
-     * 渲染任务 config。遵守小节约定时按小节展开，否则退回通用渲染。
-     * 返回内容前后不留多余空行（由调用方决定拼接位置）。
+     * Renders a task config. Expands sections when the section convention is followed, otherwise
+     * falls back to generic rendering. The result has no leading or trailing blank lines (the caller
+     * decides where to splice it in).
      */
     public static String renderConfig(Map<String, Object> config) {
         if (config == null || config.isEmpty()) {
@@ -59,7 +65,7 @@ public final class MarkdownRenderer {
         return renderValue(config, BASE_HEADING_LEVEL);
     }
 
-    /** 逐个小节渲染为 {@code ### 标题\n正文}；标题与正文取首尾空白，空节跳过。 */
+    /** Renders each section as {@code ### title\nbody}; title and body are trimmed, empty sections are skipped. */
     private static String renderSections(List<?> sections) {
         StringBuilder sb = new StringBuilder();
         for (Object item : sections) {
@@ -77,7 +83,7 @@ public final class MarkdownRenderer {
         return sb.toString();
     }
 
-    /** 通用渲染：Map 逐键出小标题，List 出列表项，标量原样。 */
+    /** Generic rendering: Map entries become headings, Lists become list items, scalars are kept as-is. */
     private static String renderValue(Object value, int level) {
         if (isBlankValue(value)) {
             return "";
@@ -111,7 +117,7 @@ public final class MarkdownRenderer {
         return asText(value);
     }
 
-    /** 追加一个非空块（块之间恰好一个换行）。 */
+    /** Appends a non-blank block (exactly one newline between blocks). */
     private static void appendBlock(StringBuilder sb, String block) {
         if (block == null || block.isBlank()) {
             return;
@@ -127,7 +133,7 @@ public final class MarkdownRenderer {
         return String.valueOf(HEADING_MARK).repeat(safeLevel) + " ";
     }
 
-    /** 小节约定的判定：非空，且每个元素都是带非空 title 的 Map。 */
+    /** Section-convention check: non-empty, and every element is a Map with a non-blank title. */
     private static boolean isSectionList(List<?> list) {
         if (list.isEmpty()) {
             return false;

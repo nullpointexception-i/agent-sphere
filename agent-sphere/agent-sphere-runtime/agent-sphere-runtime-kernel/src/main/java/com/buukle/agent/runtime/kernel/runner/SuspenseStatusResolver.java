@@ -7,13 +7,13 @@ import com.buukle.agent.util.json.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 判定某个工具调用是否要求「挂起本轮 run」。
+ * Decides whether a tool call requires suspending the current run.
  *
- * <p>历史上这里是 {@code toolResult.contains("\"status\":\"awaiting_user\"")} —— 依赖序列化
- * 后的字段顺序与字面量，改一次编码方式（比如给 JSON 加个空格）就会静默失效：挂起不触发，
- * run 拿着一条「等你回答」的结果继续空转，比报错更难查。改为结构化解析。
+ * <p>Historically this was {@code toolResult.contains("\"status\":\"awaiting_user\"")} — depending on the serialized
+ * field order and literal, changing the encoding once (say, adding a space to the JSON) silently broke it: the suspension would not trigger,
+ * and the run would keep idling on an "awaiting your answer" result — harder to diagnose than an error. Now it is parsed structurally.
  *
- * <p>解析失败一律返回 {@code null}（不挂起）：宁可多跑一轮，也不要静默停住 run。
+ * <p>Any parse failure returns {@code null} (no suspension): better to run an extra loop than to silently park the run.
  */
 @Slf4j
 public final class SuspenseStatusResolver {
@@ -22,7 +22,7 @@ public final class SuspenseStatusResolver {
     }
 
     /**
-     * @return 对应的 {@link RunStatus}（{@code AWAITING_USER} / {@code WAITING}）；非挂起返回 {@code null}
+     * @return the corresponding {@link RunStatus} ({@code AWAITING_USER} / {@code WAITING}); {@code null} when not suspending
      */
     public static RunStatus resolve(String toolName, String toolResult) {
         if (toolResult == null || toolResult.isBlank()) {

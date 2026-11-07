@@ -1,7 +1,7 @@
 import type { TimelineQuery } from './api';
 import type { SessionTimelinePageVO, TimelineRow } from './types';
 
-/** 游标：oldestSeq = 已载入的最早行，newestSeq = 已载入的最新行。 */
+/** Cursor: oldestSeq = the earliest loaded row, newestSeq = the latest loaded row. */
 export interface TimelineCursors {
   oldestSeq: number | null;
   newestSeq: number | null;
@@ -10,10 +10,10 @@ export interface TimelineCursors {
 export const EMPTY_CURSORS: TimelineCursors = { oldestSeq: null, newestSeq: null };
 
 /**
- * 澄清乐观态的本地保护键。必须包含 clarificationId：后端 resumeFromClarification 在 run
- * 处于 AWAITING_USER 时会复用同一个 runId 续跑，一次会话里 agent 可能被追问多轮，
- * 各轮 clarificationId 不同却共用 runId。只用 runId 会让「第二轮澄清」被误判成已应答，
- * 待选项和输入框不渲染（刷新后 Ref 重建才恢复）。缺 id 时返回 null → 放弃保护、采信服务端。
+ * Local optimistic-state guard key for clarifications. It must include clarificationId: the backend's resumeFromClarification reuses
+ * the same runId to continue while the run is AWAITING_USER, and in one session the agent may be asked several rounds of questions,
+ * each with a different clarificationId but a shared runId. Using runId alone would make the "second-round clarification" look already answered,
+ * so its options and input box would not render (recovering only after a refresh rebuilds the Ref). When the id is missing it returns null -> skip the guard and trust the server.
  */
 export function clarificationKey(runId: unknown, clarificationId: unknown): string | null {
   if (runId == null || clarificationId == null || clarificationId === '') return null;
@@ -21,8 +21,8 @@ export function clarificationKey(runId: unknown, clarificationId: unknown): stri
 }
 
 /**
- * 按 seq 合并 timeline 页（后到行覆盖同 seq 旧行），并剔除被权威行替换掉的占位 subagent 行
- * （seq<0 实时占位；权威子 Agent 行到达后，同 refSubAgentRunId 的占位行移除）。返回按 seq 升序。
+ * Merge a timeline page by seq (a later row overwrites an older row with the same seq) and drop placeholder subagent rows replaced by authoritative ones
+ * (seq<0 real-time placeholders; once the authoritative sub-agent row arrives, the placeholder with the same refSubAgentRunId is removed). Returns rows in ascending seq order.
  */
 export function mergeTimeline(
   prev: TimelineRow[],
@@ -43,7 +43,7 @@ export function mergeTimeline(
       r.refSubAgentRunId != null &&
       Number(r.refSubAgentRunId) > 0
     ) {
-      // 权威 subagent 行到达 → 移除同 refSubAgentRunId 的占位行
+      // Authoritative subagent row arrived -> remove placeholders with the same refSubAgentRunId
       for (const [seq, existing] of [...map.entries()]) {
         if (
           seq < 0 &&
@@ -56,8 +56,8 @@ export function mergeTimeline(
       }
     }
     let incoming = r;
-    // 已本地应答的澄清：服务端旧 PENDING 不得回退乐观态。按 clarificationId 匹配，
-    // 缺 id 时不拦截（见 clarificationKey 注释）。
+    // Clarification already answered locally: a stale PENDING from the server must not roll back the optimistic state. Matched by clarificationId;
+    // when the id is missing nothing is blocked (see the clarificationKey comment).
     if (
       answeredKeys &&
       r.kind === 'clarification' &&
@@ -68,8 +68,8 @@ export function mergeTimeline(
         incoming = { ...r, state: 'ANSWERED' };
       }
     }
-    // assistant 行原地刷新时，权威行可能还没有正文（流式 token 只存在于本地）。
-    // 运行中的空行不得覆盖已经流出的正文/推理，否则用户看到的回复会突然消失。
+    // When an assistant row is refreshed in place, the authoritative row may have no body yet (streaming tokens exist only locally).
+    // A running empty row must not overwrite body/reasoning already streamed out, otherwise the reply the user is reading suddenly disappears.
     const existing = map.get(incoming.seq);
     if (
       existing &&
@@ -94,7 +94,7 @@ export function mergeTimeline(
   return [...map.values()].sort((a, b) => a.seq - b.seq);
 }
 
-/** 用最新一页合并游标。 */
+/** Merge the cursor using the latest page. */
 export function updateCursors(
   cursors: TimelineCursors,
   page: SessionTimelinePageVO,
@@ -113,7 +113,7 @@ export function updateCursors(
   }
 }
 
-/** 初始加载：尾部最新一页。 */
+/** Initial load: the latest page at the tail. */
 export async function fetchInitialTimeline(
   page: (q: TimelineQuery) => Promise<SessionTimelinePageVO>,
   limit = 10,
@@ -124,7 +124,7 @@ export async function fetchInitialTimeline(
   return { rows: res.rows, hasMore: res.hasMore, cursors };
 }
 
-/** 向上翻页（更早）。 */
+/** Page backwards (older). */
 export async function fetchOlderTimeline(
   page: (q: TimelineQuery) => Promise<SessionTimelinePageVO>,
   cursors: TimelineCursors,
@@ -138,7 +138,7 @@ export async function fetchOlderTimeline(
   return { rows: res.rows, hasMore: res.hasMore };
 }
 
-/** 断线/新事件后补最新（afterSeq；空游标则拉尾部页）。 */
+/** Catch up to the latest after a disconnect/new event (afterSeq; with an empty cursor, load the tail page). */
 export async function fetchLatestTimeline(
   page: (q: TimelineQuery) => Promise<SessionTimelinePageVO>,
   cursors: TimelineCursors,
@@ -153,9 +153,9 @@ export async function fetchLatestTimeline(
 }
 
 /**
- * 工具事件后的整页覆盖刷新：拉尾窗（无 afterSeq）。afterSeq 增量会跳过 seq ≤ newest 的
- * 既有行（工具行），导致 live 阶段看不到迟到落库的 content（如浏览器截图 images）；
- * 以尾窗覆盖修正同 seq 行。
+ * Full-page overwrite refresh after tool events: fetch the tail window (no afterSeq). An afterSeq delta skips existing rows with seq <= newest
+ * (tool rows), so content that lands late (such as browser screenshot images) is invisible during the live phase;
+ * the tail window overwrite corrects rows with the same seq.
  */
 export async function fetchTailTimeline(
   page: (q: TimelineQuery) => Promise<SessionTimelinePageVO>,

@@ -10,28 +10,28 @@ import { useStyles } from './style';
 function streamStatusLabel(state: AgentStreamState) {
   if (state.phase === 'failed') {
     return state.errorMessage
-      ? `${tw('chat.agentStreamFailed', '回复失败')} · ${state.errorMessage}`
-      : tw('chat.agentStreamFailed', '回复失败');
+      ? `${tw('chat.agentStreamFailed', 'Reply failed')} · ${state.errorMessage}`
+      : tw('chat.agentStreamFailed', 'Reply failed');
   }
   if (state.phase === 'waiting') {
-    return tw('chat.agentWaiting', '正在处理…');
+    return tw('chat.agentWaiting', 'Processing…');
   }
   if (state.phase === 'tool') {
     const tool = state.displayName || state.toolName || '';
     return tool
-      ? tw('chat.agentToolCalling', '正在调用 {tool}', { tool })
-      : tw('chat.agentWaiting', '正在处理…');
+      ? tw('chat.agentToolCalling', 'Calling {tool}', { tool })
+      : tw('chat.agentWaiting', 'Processing…');
   }
   if (state.phase === 'thinking') {
-    return tw('chat.agentThinking', '正在思考…');
+    return tw('chat.agentThinking', 'Thinking…');
   }
   if (state.phase === 'awaiting') {
-    return tw('chat.agentAwaitingUser', '等待你的回复');
+    return tw('chat.agentAwaitingUser', 'Waiting for your reply');
   }
   if (state.phase === 'reply') {
-    return tw('chat.agentReplying', '正在回复…');
+    return tw('chat.agentReplying', 'Replying');
   }
-  return tw('chat.agentDone', '已完成');
+  return tw('chat.agentDone', 'Done');
 }
 
 /**
@@ -82,7 +82,7 @@ const ThinkingChip = memo(function ThinkingChip({
         <span ref={boxRef} className={styles.agentStreamChipText}>
           {live
             ? thinking
-            : tw('chat.agentThoughtFor', '已思考 {seconds} 秒', {
+            : tw('chat.agentThoughtFor', 'Thought for {seconds}s', {
                 seconds: seconds ?? 0,
               })}
         </span>
@@ -91,9 +91,11 @@ const ThinkingChip = memo(function ThinkingChip({
         <div
           ref={panelRef}
           role="dialog"
-          className={live
-            ? `${styles.agentStreamChipPanel} ${styles.agentStreamChipPanelLive}`
-            : styles.agentStreamChipPanel}
+          className={
+            live
+              ? `${styles.agentStreamChipPanel} ${styles.agentStreamChipPanelLive}`
+              : styles.agentStreamChipPanel
+          }
         >
           <pre className={styles.agentStreamChipPanelText}>{thinking}</pre>
         </div>
@@ -139,7 +141,7 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
     if (state.phase === 'thinking') {
       return;
     }
-    // Freeze how long reasoning took, shown later as "已思考 Xs 秒".
+    // Freeze how long reasoning took, shown later as "thought for Xs".
     setThinkingSeconds((previous) => {
       if (previous !== null) {
         return previous;
@@ -155,7 +157,7 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
     return null;
   }
 
-  const agentName = agent?.displayName || tw('chat.agent', '数字分身');
+  const agentName = agent?.displayName || tw('chat.agent', 'Digital avatar');
   const streaming = !state.finalized;
   const liveThinking = state.phase === 'thinking' && streaming;
   const showPlaceholder =

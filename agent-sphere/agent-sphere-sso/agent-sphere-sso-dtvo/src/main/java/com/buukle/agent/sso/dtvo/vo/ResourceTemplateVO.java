@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
-/** 身份源资源模板默认值（系统默认 JSON，供管理端提示展示）。 */
+/** Default identity-provider resource template (system default JSON, shown as a hint in the admin console). */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

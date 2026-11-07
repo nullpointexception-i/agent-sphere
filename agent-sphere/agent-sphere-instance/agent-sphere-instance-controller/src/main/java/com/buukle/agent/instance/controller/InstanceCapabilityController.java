@@ -1,5 +1,9 @@
 package com.buukle.agent.instance.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.capability.builtin.dtvo.vo.BuiltinToolVO;
 import com.buukle.agent.capability.builtin.spi.CapabilityBuiltinSpi;
 import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
@@ -28,7 +32,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/v1/instance/instance-capabilities")
+@RequestMapping(ApiPrefix.V1 + "/instance/instance-capabilities")
 @RequiredArgsConstructor
 @WithTenant
 public class InstanceCapabilityController extends BaseController {
@@ -43,19 +47,19 @@ public class InstanceCapabilityController extends BaseController {
         return ok(instanceCapabilityService.getCapabilitiesByInstance(instanceId));
     }
 
-    @RequirePermission("instance:capability:bind")
+    @RequirePermission(PermissionCodes.INSTANCE_CAPABILITY_BIND)
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateInstanceCapabilityDTO dto) {
         return created(instanceCapabilityService.createCapability(dto));
     }
 
-    @RequirePermission("instance:capability:bind")
+    @RequirePermission(PermissionCodes.INSTANCE_CAPABILITY_BIND)
     @PostMapping("/batch")
     public ResponseEntity<?> batchCreate(@Valid @RequestBody BatchCreateInstanceCapabilityDTO dto) {
         return created(instanceCapabilityService.batchCreateCapabilities(dto));
     }
 
-    @RequirePermission("instance:capability:unbind")
+    @RequirePermission(PermissionCodes.INSTANCE_CAPABILITY_UNBIND)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         instanceCapabilityService.deleteCapability(id);

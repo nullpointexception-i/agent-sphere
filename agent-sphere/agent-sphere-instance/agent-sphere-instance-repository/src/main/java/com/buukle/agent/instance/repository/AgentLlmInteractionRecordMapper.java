@@ -16,7 +16,7 @@ import java.util.List;
 @Mapper
 public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInteractionRecord> {
 
-    /** 批量 run 用量聚合（RunDrawer / timeline run_status 行用，避免逐 run 查询）。 */
+    /** Batch run usage aggregation (for RunDrawer / timeline run_status rows; avoids one query per run). */
     @Select("""
             <script>
             SELECT run_id                                              AS run_id,
@@ -34,7 +34,7 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
             """)
     List<RunUsageVO> sumUsageByRunIds(@Param("runIds") List<Long> runIds);
 
-    /** 单 run 用量聚合（InteractionModal 头部 / 运营查询用）。 */
+    /** Single-run usage aggregation (InteractionModal header / operations queries). */
     @Select("""
             SELECT run_id                                              AS run_id,
                    COUNT(*)                                            AS interaction_count,
@@ -49,7 +49,7 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
             """)
     RunUsageVO getRunUsage(@Param("runId") Long runId);
 
-    /** 会话级用量聚合（聊天区最下方吸底展示用）。 */
+    /** Session-level usage aggregation (for the bottom-docked display in the chat area). */
     @Select("""
             SELECT session_id                                          AS session_id,
                    COUNT(DISTINCT run_id)                              AS run_count,
@@ -65,7 +65,7 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
             """)
     com.buukle.agent.instance.domain.vo.SessionUsageVO sumUsageBySession(@Param("sessionId") Long sessionId);
 
-    /** 最近 N 条 LLM 交互的 token 指标（含子 Agent；主对话模式由前端过滤 CHAT_REPLY）。 */
+    /** Token metrics of the most recent N LLM interactions (including sub-agents; the main-chat mode filters CHAT_REPLY on the frontend). */
     @Select("""
             SELECT id, interaction_type, model_name, created_at,
                    prompt_tokens, completion_tokens, total_tokens,
@@ -89,7 +89,7 @@ public interface AgentLlmInteractionRecordMapper extends BaseMapper<AgentLlmInte
                                             @Param("afterId") long afterId,
                                             @Param("limit") int limit);
 
-    /** 会话最近一次主 Agent 指定类型交互的 prompt tokens（当前上下文占用）。 */
+    /** Prompt tokens of the session's latest main Agent interaction of the given type (current context usage). */
     @Select("""
             SELECT prompt_tokens
             FROM agent_llm_interaction_record

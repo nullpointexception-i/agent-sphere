@@ -8,12 +8,12 @@ import java.util.List;
 
 @Data
 public class SendMessageDTO implements Serializable {
-    /** 纯图片发送时可为空；与 attachmentKeys 同时为空由服务层校验。 */
+    /** May be empty when sending an image-only message; the service layer validates that it is not empty at the same time as attachmentKeys. */
     @Size(max = 5000)
     private String message;
     private Long modelRouteId;
     private Long threadId;
-    /** 思考强度：low/medium/high/max；为空由后端按输出预算动态计算。 */
+    /** Reasoning effort: low/medium/high/max; when empty the backend computes it from the output budget. */
     private String reasoningEffort;
     private String delivery;
     private Boolean noClarification;

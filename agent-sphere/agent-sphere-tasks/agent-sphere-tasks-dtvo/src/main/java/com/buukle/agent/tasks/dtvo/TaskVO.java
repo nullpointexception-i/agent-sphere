@@ -21,11 +21,11 @@ public class TaskVO implements Serializable {
     private String callbackUrl;
     private String createdAt;
     private String updatedAt;
-    /** 执行日志（LLM 交互 + 工具调用，按时间正序，增量拉取）。 */
+    /** Execution logs (LLM interactions + tool calls, ascending time order, incrementally fetched). */
     private List<TaskExecutionLogVO> executionLogs;
-    /** LLM 交互记录总条数（增量 offset 判断）。 */
+    /** Total LLM interaction records (for incremental offset checks). */
     private Integer executionLogCount;
-    /** 工具调用记录总条数（增量 offset 判断）。 */
+    /** Total tool call records (for incremental offset checks). */
     private Integer toolLogCount;
 }
 

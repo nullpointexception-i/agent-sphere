@@ -14,9 +14,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 聊天附件：发送侧仅校验并携带 fileKey（+content-type），base64 不进 Redis 队列；
- * 组模型消息时才经 {@link ChatAttachmentResolver#toDataUrl} 惰性回读字节拼 data URL。
- * kernel 只依赖 port 接口，字节解析实现收敛在本层（orchestration → infrastructure）。
+ * Chat attachments: the send side only validates and carries fileKey (+content-type); base64 never enters the Redis queue.
+ * Bytes are lazily read back and assembled into a data URL via {@link ChatAttachmentResolver#toDataUrl} only when model messages are built.
+ * kernel depends only on the port interface; byte resolution is confined to this layer (orchestration → infrastructure).
  */
 @Slf4j
 @Service
@@ -28,14 +28,14 @@ public class ChatAttachmentService implements ChatAttachmentResolver {
     private final AttachmentFileService attachmentFileService;
     private final ScreenshotFileService screenshotFileService;
 
-    /** 校验并转换为队列轻量描述；缺失/非图片附件即时 400。 */
+    /** Validate and convert to a lightweight queue descriptor; a missing / non-image attachment yields an immediate 400. */
     public List<PreparedAttachment> resolve(List<String> attachmentKeys) {
         if (attachmentKeys == null || attachmentKeys.isEmpty()) {
             return Collections.emptyList();
         }
         if (attachmentKeys.size() > MAX_ATTACHMENTS) {
             throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID,
-                    "单轮最多 " + MAX_ATTACHMENTS + " 个附件");
+                    "At most " + MAX_ATTACHMENTS + " attachments per turn");
         }
         List<PreparedAttachment> result = new ArrayList<>(attachmentKeys.size());
         for (String key : attachmentKeys) {
@@ -45,21 +45,21 @@ public class ChatAttachmentService implements ChatAttachmentResolver {
             String contentType = attachmentFileService.supportedContentTypeOf(key);
             if (contentType == null) {
                 throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID,
-                        "附件不存在或非图片: " + key);
+                        "Attachment does not exist or is not an image: " + key);
             }
             result.add(new PreparedAttachment(key, contentType));
         }
         return result;
     }
 
-    /** 附件/截图 data URL：聊天附件优先，查不到兜底浏览器截图（同 fileKey 空间不冲突）。 */
+    /** Attachment/screenshot data URL: chat attachments take priority; fall back to browser screenshots when not found (the fileKey spaces do not collide). */
     @Override
     public String toDataUrl(String fileKey) {
         String url = attachmentFileService.toDataUrl(fileKey);
         if (url != null) {
             return url;
         }
-        // 浏览器截图（browser-screenshot bizKey）：聊天附件查不到时兜底截图
+        // Browser screenshot (browser-screenshot bizKey): fall back to the screenshot when no chat attachment is found
         return screenshotFileService.toDataUrl(fileKey);
     }
 }

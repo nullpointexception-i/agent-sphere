@@ -130,7 +130,7 @@ export default function SetModelRouteModal({
                   >
                     {intl.formatMessage({
                       id: 'pages.instances.configureApiKey',
-                      defaultMessage: '配置API Key',
+                      defaultMessage: 'Configure API Key',
                     })}
                   </Button>
                 )}
@@ -141,7 +141,7 @@ export default function SetModelRouteModal({
         <Tooltip
           title={intl.formatMessage({
             id: 'pages.instances.refreshRoutes',
-            defaultMessage: '刷新路由',
+            defaultMessage: 'Refresh routes',
           })}
         >
           <Button icon={<ReloadOutlined />} onClick={handleRefresh} />

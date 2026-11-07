@@ -1,8 +1,9 @@
 /**
- * 尾沿合并 + 单飞：连续触发只在 waitMs 后执行一次；执行期间再来的触发
- * 合并成「完成后再跑一次」，不会并发打满后端。
+ * Trailing-edge coalescing + single flight: consecutive triggers run only once after waitMs;
+ * triggers arriving during a run are merged into "run again after completion", so the backend
+ * is never flooded with concurrency.
  *
- * 用于 timeline 尾页刷新、runtime state 刷新等高频道请求。
+ * Used for high-frequency requests such as timeline tail refresh and runtime state refresh.
  */
 export function createCoalescedTask(
   task: (sessionId: number) => Promise<void>,
@@ -22,7 +23,8 @@ export function createCoalescedTask(
         try {
           await task(sessionId);
         } catch {
-          // 请求错误交给调用方/全局提示；这里只保证合并队列不中断。
+          // Request errors are left to the caller / global prompt; this only keeps the
+          // coalescing queue from stalling.
         }
       }
     } finally {

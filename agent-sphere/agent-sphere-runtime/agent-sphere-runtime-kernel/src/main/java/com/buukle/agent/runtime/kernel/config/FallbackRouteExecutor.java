@@ -21,8 +21,8 @@ public class FallbackRouteExecutor {
             } catch (RouteAttemptException e) {
                 lastEx = e;
                 if (!e.shouldFallback()) {
-                    // 400/401/403/404/413/422 等确定性错误：换模型不会变好，
-                    // 继续 fallback 只会用二次错误掩盖主因。
+                    // Deterministic errors such as 400/401/403/404/413/422: switching models will not help,
+                    // and continuing the fallback would only mask the root cause with a secondary error.
                     log.warn("Route {} failed with non-retryable error (status={}), stop fallback",
                             route.getId(), e.getHttpStatus());
                     throw e;

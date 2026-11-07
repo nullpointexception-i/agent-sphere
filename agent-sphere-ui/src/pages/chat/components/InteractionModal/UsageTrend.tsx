@@ -114,7 +114,7 @@ export default function UsageTrend({
           );
         }
       } catch {
-        // 轮询失败保留旧数据
+        // Keep the previous data when polling fails
       } finally {
         inFlightRef.current = false;
         setLoading(false);

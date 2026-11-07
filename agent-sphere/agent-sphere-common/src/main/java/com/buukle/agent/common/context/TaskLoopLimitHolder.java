@@ -1,10 +1,12 @@
 package com.buukle.agent.common.context;
 
 /**
- * 任务触发 run 的更高轮次上限（ThreadLocal 传播）。
- * 任务调度线程 set，异步执行（AsyncConfig）与 SessionRunner 读取；任务线程结束必须 clear。
- * 使用 InheritableThreadLocal：Java 21 虚拟线程由 carrier 线程池任取执行，Inheritable
- * 在 run 提交给 ExecutorService 时把任务线程的 value 快照传给执行线程。
+ * Higher loop limit for task-triggered runs (propagated via ThreadLocal).
+ * Set by the task scheduling thread and read by async execution (AsyncConfig) and SessionRunner; the
+ * task thread must clear it when it finishes.
+ * Uses InheritableThreadLocal: Java 21 virtual threads are run by whichever carrier thread the pool
+ * picks, and Inheritable snapshots the task thread's value into the executing thread when the run is
+ * submitted to the ExecutorService.
  */
 public final class TaskLoopLimitHolder {
 

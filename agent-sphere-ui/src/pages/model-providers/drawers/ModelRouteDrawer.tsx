@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   DeleteOutlined,
   EditOutlined,
@@ -29,7 +30,7 @@ interface Props {
   onClose: () => void;
 }
 
-/** 统一思考强度档位：与后端 ReasoningEffort 保持一致。 */
+/** Unified reasoning effort levels: keep in sync with the backend ReasoningEffort. */
 const REASONING_LEVELS = [
   'none',
   'minimal',
@@ -40,7 +41,7 @@ const REASONING_LEVELS = [
   'max',
 ];
 
-/** 路由上的档位覆盖存 JSON 数组；解析失败视为「无覆盖」。 */
+/** Level overrides on a route are stored as a JSON array; a parse failure is treated as "no override". */
 function parseReasoningLevels(raw: any): string[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
@@ -93,7 +94,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
     setSubmitting(true);
     try {
       const values = await routeForm.validateFields();
-      // 思考强度覆盖是「三态」：inherit=null 表示继承厂商/全局。
+      // Reasoning effort override is tri-state: inherit=null means inherit from the provider/global.
       const reasoningSupported =
         values.reasoningSupported === 'inherit' ||
         values.reasoningSupported == null
@@ -217,7 +218,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
             icon={<EyeOutlined />}
             onClick={() => setViewRoute(record)}
           />
-          <Can code="model:route:update">
+          <Can code={PERM.modelRouteUpdate}>
             <Button
               type="link"
               size="small"
@@ -252,7 +253,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
               }}
             />
           </Can>
-          <Can code="model:route:delete">
+          <Can code={PERM.modelRouteDelete}>
             <Button
               type="link"
               danger
@@ -300,7 +301,7 @@ export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
       onClose={onClose}
       size="large"
       extra={
-        <Can code="model:route:create">
+        <Can code={PERM.modelRouteCreate}>
           <Button
             size="small"
             type="primary"

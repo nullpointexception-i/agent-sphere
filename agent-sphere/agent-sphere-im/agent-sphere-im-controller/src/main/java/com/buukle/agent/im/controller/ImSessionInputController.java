@@ -1,5 +1,9 @@
 package com.buukle.agent.im.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
@@ -22,14 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @ConditionalOnProperty(prefix = "buukle.agent.im", name = "enabled", havingValue = "true")
-@RequestMapping("/api/v1/im/conversations/{conversationId}/session-inputs")
+@RequestMapping(ApiPrefix.V1 + "/im/conversations/{conversationId}/session-inputs")
 @WithTenant
 @RequiredArgsConstructor
 public class ImSessionInputController extends BaseController {
 
     private final ImSessionInputService sessionInputService;
 
-    @RequirePermission("im:message:send")
+    @RequirePermission(PermissionCodes.IM_MESSAGE_SEND)
     @PostMapping("/{inputId}/approve")
     public ResponseEntity<?> approve(@PathVariable Long conversationId,
                                      @PathVariable String inputId,

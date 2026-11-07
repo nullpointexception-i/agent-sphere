@@ -22,10 +22,11 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 内置 IM 信道适配器。
+ * Built-in IM channel adapter.
  *
- * <p>出站通过 {@code agent_thread.external_thread_id}（= im_conversation.id）定位会话，
- * 以 AGENT 身份落 im_message；入站由 IM 自己的 Service 直接完成，适配器不再重复解析。
+ * <p>Outbound locates the conversation via {@code agent_thread.external_thread_id}
+ * (= im_conversation.id) and writes im_message as AGENT; inbound is handled directly by IM's own
+ * Service, so this adapter does not parse it again.
  */
 @Slf4j
 @Component

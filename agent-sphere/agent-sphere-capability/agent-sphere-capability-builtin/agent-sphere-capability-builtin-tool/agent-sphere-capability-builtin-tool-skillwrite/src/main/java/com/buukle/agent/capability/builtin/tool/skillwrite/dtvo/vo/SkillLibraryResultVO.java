@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/** 技能库（builtin_8）出参。 */
+/** Output of the skill library (builtin_8). */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor

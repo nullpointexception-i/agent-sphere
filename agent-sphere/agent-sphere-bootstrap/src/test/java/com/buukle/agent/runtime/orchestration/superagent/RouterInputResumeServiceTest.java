@@ -56,7 +56,7 @@ class RouterInputResumeServiceTest {
         service.answerClarification(SESSION_ID, RUN_ID, "c1abc123", "差旅");
 
         verify(chatRuntimeService).resumeFromClarification(SESSION_ID, RUN_ID, "差旅", "c1abc123");
-        // 上下文在 finally 中清理，不污染调度线程
+        // Context is cleared in finally so the scheduling thread is not polluted
         assertFalse(AuthContext.isSuperAdmin());
     }
 

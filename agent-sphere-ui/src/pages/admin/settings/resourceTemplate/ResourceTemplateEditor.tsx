@@ -42,7 +42,8 @@ export default function ResourceTemplateEditor({
       setJsonError(
         intl.formatMessage({
           id: 'pages.admin.settings.template.jsonInvalidOnOpen',
-          defaultMessage: '当前配置不是合法 JSON，请先在 JSON 模式下修复',
+          defaultMessage:
+            'Current config is not valid JSON. Fix it in JSON mode first.',
         }),
       );
       setActiveTab('json');
@@ -99,7 +100,7 @@ export default function ResourceTemplateEditor({
       key: 'form',
       label: intl.formatMessage({
         id: 'pages.admin.settings.template.tab.form',
-        defaultMessage: '页面配置',
+        defaultMessage: 'Form',
       }),
       children: (
         <>
@@ -107,7 +108,7 @@ export default function ResourceTemplateEditor({
             {intl.formatMessage({
               id: 'pages.admin.settings.template.tab.formDesc',
               defaultMessage:
-                '按类型可视化编辑资源配置项；模型供应商 / 路由通过模板内的名称互相引用。',
+                'Visually edit resource template items by type; providers / routes refer to each other by template names.',
             })}
           </Typography.Paragraph>
           <TemplateList
@@ -141,7 +142,7 @@ export default function ResourceTemplateEditor({
               title={intl.formatMessage({
                 id: 'pages.admin.settings.template.tab.jsonDesc',
                 defaultMessage:
-                  'JSON 数组格式，与后端配置存储一致；保存时需为合法 JSON。',
+                  'JSON array format, matching backend config storage; must be valid JSON on save.',
               })}
             />
           )}
@@ -161,7 +162,7 @@ export default function ResourceTemplateEditor({
     <Drawer
       title={intl.formatMessage({
         id: 'pages.admin.settings.template.title',
-        defaultMessage: '资源配置模板',
+        defaultMessage: 'Resource Template',
       })}
       size={900}
       open={open}

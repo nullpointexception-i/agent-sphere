@@ -10,10 +10,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 会话来源开关的字段贯通（V89）。
+ * Field pass-through for session source switches (V89).
  *
- * <p>`InstanceConverter` 是手写的，漏掉一个方向不会报错 —— 只会让管理员在主站设的开关
- * **静默失效**（VO 读不到，或 DTO 写不进）。两个方向都要锁。
+ * <p>`InstanceConverter` is hand-written; missing one direction raises no error — it just makes the switch an admin set in the main site
+ * **fail silently** (the VO cannot read it, or the DTO cannot write it). Both directions must be locked.
  */
 class InstanceConverterTest {
 
@@ -39,8 +39,8 @@ class InstanceConverterTest {
 
     @Test
     void nullSwitches_stayNullSoUpdateDoesNotResetThem() {
-        // 关键：留空必须原样透传为 null。MyBatis-Plus 会忽略 null 字段 ——
-        // 若这里补上默认值，任何一次不携带这两个字段的更新都会把管理员的选择重置回默认。
+        // Key point: a blank value must pass through as null unchanged. MyBatis-Plus ignores null fields —
+        // if a default were filled in here, any update that omits these two fields would reset the admin's choice back to the default.
         AgentInstance do_ = converter.toDO(toCreateDto(null, null));
 
         assertNull(do_.getAllowConsoleSession());

@@ -4,7 +4,7 @@ import com.buukle.agent.superagent.dtvo.enums.WorkerDispatchStatus;
 
 import java.io.Serializable;
 
-/** 启动 Worker Run 的结果。 */
+/** Result of starting a Worker Run. */
 public record DispatchResult(
         boolean accepted,
         String status,

@@ -1,6 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
-import com.buukle.agent.common.constant.CompletionProtocol;
+
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
@@ -14,19 +15,19 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 /**
- * 共享 Group Router 实例初始化器。
+ * Shared Group Router instance initializer.
  *
- * <p>Group Router 是全局共享的单实例（不是每个数字员工一个）；启动时按
- * {@code instance_role=GROUP_ROUTER AND system_managed=true} 查找，不存在则在配置了
- * 模型路由时自动创建。即使不配置 {@code group-router.instance-id}，调度器也会回落到
- * 这条记录。
+ * <p>The Group Router is a single globally shared instance (not one per digital employee); at startup it
+ * looks up {@code instance_role=GROUP_ROUTER AND system_managed=true} and creates the instance
+ * automatically when a model route is configured and none exists. Even without configuring
+ * {@code group-router.instance-id}, the scheduler falls back to this record.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class GroupRouterInitializer implements ApplicationRunner {
 
-    private static final String ROLE_GROUP_ROUTER = "GROUP_ROUTER";
+    private static final String ROLE_GROUP_ROUTER = InstanceRole.GROUP_ROUTER.value();
     private static final String BUSINESS_TYPE = "SUPER_AGENT";
 
     private final InstanceSpi instanceSpi;

@@ -21,7 +21,7 @@ public class JsRenderer {
     }
 
     /**
-     * 渲染 URL，获取 JS 执行后的完整 HTML
+     * Renders the URL and returns the full HTML after JS execution
      */
     public WebFetchResultVO render(String url, int timeout) {
         if (!enabled) {
@@ -62,7 +62,7 @@ public class JsRenderer {
     }
 
     /**
-     * 资源清理
+     * Releases resources
      */
     public void close() {
         pool.close();

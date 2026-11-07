@@ -113,7 +113,7 @@ class LiveToolResultPolicyTest {
         List<ChatMessageDTO> projected = LiveToolResultPolicy.project(
                 messages, 100, 10, 1, 20_000, Map.of(SKILL, true));
 
-        // 最近 1 条保留；更旧的超出预算 → 带 callId 的省略引用
+        // The most recent 1 is kept; older ones exceeding the budget → abbreviated reference with callId
         assertEquals("skill-new", projected.get(3).getContent());
         String old = String.valueOf(projected.get(1).getContent());
         assertTrue(old.contains("read_tool_result"));

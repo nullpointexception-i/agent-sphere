@@ -1,5 +1,9 @@
 package com.buukle.agent.instance.controller;
 
+
+
+import com.buukle.agent.common.constant.PermissionCodes;
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -21,7 +25,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping(ApiPrefix.V1 + "")
 @RequiredArgsConstructor
 public class AuditLogController extends BaseController {
 
@@ -30,7 +34,7 @@ public class AuditLogController extends BaseController {
     private final AuditQueryService auditQueryService;
     private final AuditLogService auditLogService;
 
-    @RequirePermission("admin:audit-log:read")
+    @RequirePermission(PermissionCodes.ADMIN_AUDIT_LOG_READ)
     @GetMapping("/admin/audit-logs")
     public ResponseEntity<Page<AuditLogVO>> list(
             @RequestParam(defaultValue = "1") int page,

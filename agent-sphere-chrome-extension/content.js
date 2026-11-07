@@ -24,12 +24,12 @@
   let lastConnected = null;
   let sessionMissingLogged = false;
 
-  // widget 用户 token：page-script.js（MAIN world）经 postMessage 转发（content script 无法读页面 sessionStorage）
+  // Widget user token: page-script.js (MAIN world) forwards it via postMessage (the content script cannot read the page's sessionStorage)
   let widgetUserToken = null;
   let widgetDisplayName = '';
   let lastReportedToken = null;
 
-  // --- 用户维度 token 上报（去重），建立用户级 task 连接 ---
+  // --- User-level token reporting (deduplicated) to establish the user-level task connection ---
   function reportAuthToken(token, displayName, source) {
     if (!token || token === lastReportedToken) return;
     lastReportedToken = token;
@@ -83,15 +83,15 @@
     }).catch(() => {});
   }
 
-  // Resolve the current page's user token (widget localStorage / main-site localStorage); 不依赖会话
+  // Resolve the current page's user token (widget localStorage / main-site localStorage); independent of the session
   async function resolveUser() {
     try {
       const settings = await getSettings();
       const baseUrl = settings.backendUrl || 'http://localhost:8080';
 
-      // 优先直读页面存储（content script 与页面同源，可访问同源存储）。
-      // widget token 已改为 localStorage（同一浏览器所有标签页共用一份）；
-      // sessionStorage 仅在旧版本迁移期兜底。
+      // Prefer reading page storage directly (the content script shares the page origin and can access same-origin storage).
+      // The widget token now lives in localStorage (one copy shared by all tabs of the same browser);
+      // sessionStorage is only a fallback during migration from older versions.
       try {
         const widgetRaw = localStorage.getItem('agent-sphere-widget:agent-user')
           || sessionStorage.getItem('agent-sphere-widget:agent-user');
@@ -110,7 +110,7 @@
           }
         }
       } catch (e) {
-        // storage 受限或解析失败：忽略，走其它来源
+        // storage restricted or parsing failed: ignore and try other sources
       }
 
       if (widgetUserToken) {
@@ -172,7 +172,7 @@
     checkAuth().catch(() => {});
   });
 
-  // --- Task connection status toast (user-level task 流) ---
+  // --- Task connection status toast (user-level task stream) ---
   setInterval(() => {
     if (!chrome.runtime?.id) return;
     chrome.storage.local.get(['taskConnected'], (data) => {
@@ -215,7 +215,7 @@
     }
   }
 
-  // --- 多设备选择浮层：后端发现同一用户有多条插件连接时由 background 下发 ---
+  // --- Multi-device selection overlay: sent by background when the backend sees multiple plugin connections for the same user ---
   function showDeviceChooser(payload) {
     try {
       document.getElementById('agent-sphere-device-chooser')?.remove();
@@ -234,14 +234,14 @@
         + 'box-shadow:0 20px 50px rgba(0,0,0,.25);';
 
       const title = document.createElement('div');
-      title.textContent = '选择用哪台浏览器执行';
+      title.textContent = 'Choose which browser runs this task';
       title.style.cssText = 'font-size:16px;font-weight:600;color:#111827;margin-bottom:6px;';
       card.appendChild(title);
 
       const desc = document.createElement('div');
       desc.textContent = preferredDevice
-        ? `当前执行设备是「${preferredDevice.deviceName || '未知设备'}」。有新设备登录，可切换为下面任意一台。`
-        : '检测到同一账号有多台浏览器在线，请选择本次任务要操作的那台。';
+        ? `The current execution device is "${preferredDevice.deviceName || 'Unknown device'}". A new device has signed in; you can switch to any device below.`
+        : 'Multiple browsers are online for the same account. Choose the one this task should use.';
       desc.style.cssText = 'font-size:12px;color:#6b7280;line-height:1.6;margin-bottom:12px;white-space:pre-line;';
       card.appendChild(desc);
 
@@ -258,15 +258,15 @@
         }
 
         const name = document.createElement('span');
-        name.textContent = device.deviceName || '未知设备';
+        name.textContent = device.deviceName || 'Unknown device';
         name.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         row.appendChild(name);
 
-        if (selected) row.appendChild(chooserBadge('执行中', '#dbeafe', '#1d4ed8'));
-        if (device.current) row.appendChild(chooserBadge('本机', '#dcfce7', '#166534'));
+        if (selected) row.appendChild(chooserBadge('In use', '#dbeafe', '#1d4ed8'));
+        if (device.current) row.appendChild(chooserBadge('This device', '#dcfce7', '#166534'));
 
         const meta = document.createElement('span');
-        meta.textContent = device.source === 'CONSOLE' ? '主站' : device.source === 'WIDGET' ? '助手' : '';
+        meta.textContent = device.source === 'CONSOLE' ? 'Main site' : device.source === 'WIDGET' ? 'Widget' : '';
         meta.style.cssText = 'font-size:11px;color:#6b7280;flex-shrink:0;';
         row.appendChild(meta);
 
@@ -281,13 +281,13 @@
       }
 
       const tip = document.createElement('div');
-      tip.textContent = '切换后如需修改，可在浏览器扩展的「Devices」标签页里重新选择。';
+      tip.textContent = 'To change this later, select again on the "Devices" tab of the browser extension.';
       tip.style.cssText = 'font-size:11px;color:#6b7280;line-height:1.6;margin:2px 0 10px;';
       card.appendChild(tip);
 
       const later = document.createElement('button');
       later.type = 'button';
-      later.textContent = '稍后再说';
+      later.textContent = 'Not now';
       later.style.cssText = 'width:100%;padding:8px;border:none;background:transparent;color:#6b7280;'
         + 'font-size:12px;cursor:pointer;';
       later.addEventListener('click', () => mask.remove());
@@ -319,10 +319,10 @@
       sendResponse({ success: true, ready: true, url: location.href });
       return false;
     }
-    // 光标：ISOLATED world 无法保证盖住站点高层级 z-index，转发给 MAIN world 渲染。
+    // Cursor: the ISOLATED world cannot guarantee it covers the site's high z-index layers, so forward rendering to the MAIN world.
     if (msg.type === 'AGENT_CURSOR_STATE') {
       if (window.top !== window) {
-        // 子 frame 不渲染，但也要回执 —— background 靠 ok 决定是否等到达屏障
+        // Child frames do not render but still acknowledge - background uses ok to decide whether to wait for the arrival barrier
         sendResponse({ ok: true, rendered: false });
         return false;
       }
@@ -336,33 +336,33 @@
     }
   });
 
-  // --- Agent cursor（可视指针 + 移动路径）---
-  // 与 highlightElement 同一机制：content script 直接改页面 DOM，元素就在真实
-  // 渲染树上。不需要 MAIN world 注入 / postMessage 桥（content-cursor.js 已删除）。
-  // 只有顶层 frame 渲染：background 下发的 x/y 是主视口坐标，子 frame 里定位不到。
+  // --- Agent cursor (visible pointer + movement path) ---
+  // Same mechanism as highlightElement: the content script edits the page DOM directly, so the element is on the real
+  // render tree. No MAIN world injection / postMessage bridge is needed (content-cursor.js has been removed).
+  // Rendered only in the top-level frame: the x/y sent by background are main-viewport coordinates, which cannot be located from a child frame.
   const AS_CURSOR = {
     root: null, pointer: null, dots: [],
     pts: [], x: -999, y: -999,
     raf: 0, timer: 0, target: null, reported: -1, fading: 0, settle: null, localSeq: 0,
   };
-  // 按时间插值（而非按帧 ×固定系数）：位移时长与距离、帧率都无关。
-  // 早先按帧缓动时，同一段距离在 60fps 下和 rAF 挂起的 32ms 兜底下耗时完全不同，
-  // 观感就是「时快时慢、不连贯」。cubic ease-out 起步跟手、收尾干净。
-  const AS_CURSOR_DUR = 250;         // 每段位移固定耗时 ms
-  const AS_TRAIL_MAX = 18;           // 轨迹点上限
-  const AS_TRAIL_MIN_DIST = 4;       // 小于该位移不记点（原地不动时不堆点）
-  const AS_TRAIL_MIN_GAP = 14;       // 轨迹采样最小时间间隔 ms（按时长均匀铺点）
-  const AS_TRAIL_LIFE = 620;         // 单点存活时长 ms
-  const AS_TRAIL_FADE = 460;         // 落位后整体淡出时长 ms
-  // 光标落位后常驻可见：会被下一次动作移走，不再自动隐藏。
+  // Interpolate by time (not per frame x fixed factor): the movement duration is independent of distance and frame rate.
+  // The earlier per-frame easing made the same distance take completely different times at 60fps and under the 32ms rAF fallback,
+  // which looked "fast then slow, disjointed". cubic ease-out starts responsively and ends cleanly.
+  const AS_CURSOR_DUR = 250;         // fixed duration per movement segment, ms
+  const AS_TRAIL_MAX = 18;           // max number of trail points
+  const AS_TRAIL_MIN_DIST = 4;       // movements below this distance record no point (no pile-up when stationary)
+  const AS_TRAIL_MIN_GAP = 14;       // minimum trail sampling interval, ms (points spread evenly by duration)
+  const AS_TRAIL_LIFE = 620;         // lifetime of a single point, ms
+  const AS_TRAIL_FADE = 460;         // whole-trail fade-out duration after landing, ms
+  // After landing the cursor stays visible: the next action moves it away; it is no longer auto-hidden.
 
   function asEaseOutCubic(t) {
     const u = 1 - t;
     return 1 - u * u * u;
   }
 
-  // 经典箭头指针轮廓（放大到 ~1.7 倍系统指针）：半透明深色填充 + 白色描边，
-  // 在浅色和深色页面上都能看清，又不会像实心圆那样糊住目标元素。
+  // Classic arrow pointer outline (scaled to ~1.7x the system pointer): semi-transparent dark fill + white stroke,
+  // legible on both light and dark pages without blurring the target element like a solid dot.
   const AS_POINTER_SVG =
     "data:image/svg+xml;charset=utf-8,"
     + encodeURIComponent(
@@ -380,7 +380,7 @@
       + 'z-index:2147483647;pointer-events:none;opacity:0;transition:opacity .18s ease';
     (document.body || document.documentElement).appendChild(root);
 
-    // 轨迹点容器放在指针之下，缩放 0 以免污染页面点击
+    // The trail point container sits below the pointer and is scaled to 0 so it cannot pollute page clicks
     const trail = document.createElement('div');
     trail.style.cssText = 'position:absolute;left:0;top:0;transform:scale(0)';
     root.appendChild(trail);
@@ -406,17 +406,17 @@
   function cursorArrived(seq) {
     AS_CURSOR.reported = seq;
     AS_CURSOR.fading = Date.now();
-    // 本地等待者（content 侧动作，如 select/upload）与 background 的到达屏障共用此回调
+    // Local waiters (content-side actions such as select/upload) share this callback with background's arrival barrier
     const r = AS_CURSOR.settle;
     AS_CURSOR.settle = null;
     if (r) r();
     chrome.runtime.sendMessage({ type: 'notifyCursorArrived', moveSequence: seq }).catch(() => {});
-    // 不自动隐藏：指针停在最后落点，直到下一次动作把它移走。
-    // 尾迹照旧淡出（renderTrail 在 fading 到 0 后停机，指针本身保持 opacity:1）。
+    // Not auto-hidden: the pointer stays at its last landing point until the next action moves it.
+    // The trail still fades out as before (renderTrail stops after fading reaches 0; the pointer itself stays at opacity:1).
   }
 
-  // content 侧动作（select/upload）没有 background 屏障，就地驱动一次光标落位，
-  // 让这些纯 DOM 操作也有和 click/type 一致的视觉线索。
+  // Content-side actions (select/upload) have no background barrier, so drive one cursor landing in place
+  // to give these pure DOM operations the same visual cue as click/type.
   async function cursorVisitElement(el) {
     if (!el || window.top !== window) return;
     const root = ensureCursorEl();
@@ -431,14 +431,14 @@
     const seq = AS_CURSOR.localSeq;
     await new Promise((resolve) => {
       AS_CURSOR.settle = resolve;
-      const bail = setTimeout(resolve, 700); // 兜底：渲染器异常时不挂住动作
+      const bail = setTimeout(resolve, 700); // fallback: do not leave the action hanging if the renderer throws
       AS_CURSOR.settle = () => { clearTimeout(bail); resolve(); };
       agentCursorMove(pt.x, pt.y, true, seq);
     });
   }
 
-  // 任何时刻最多一个 rAF + 一个 timer 在飞，谁先到谁清理另一个并驱动下一帧。
-  // （早先版本每帧都新建 timer 而不清除旧的，导致定时器指数堆积 → 浏览器卡死。）
+  // At most one rAF + one timer in flight at any time; whichever fires first clears the other and drives the next frame.
+  // (Earlier versions created a new timer every frame without clearing the old one, piling up timers exponentially and freezing the browser.)
   function scheduleCursorTick() {
     if (AS_CURSOR.raf) cancelAnimationFrame(AS_CURSOR.raf);
     if (AS_CURSOR.timer) clearTimeout(AS_CURSOR.timer);
@@ -447,7 +447,7 @@
       if (AS_CURSOR.timer) { clearTimeout(AS_CURSOR.timer); AS_CURSOR.timer = 0; }
       cursorTick();
     });
-    // rAF 在隐藏标签页里挂起 → 32ms 兜底，保证自动化 tab（用户没盯着）也能动
+    // rAF is paused in hidden tabs -> 32ms fallback so the automation tab (which the user is not watching) still moves
     AS_CURSOR.timer = setTimeout(() => {
       AS_CURSOR.timer = 0;
       if (AS_CURSOR.raf) { cancelAnimationFrame(AS_CURSOR.raf); AS_CURSOR.raf = 0; }
@@ -463,7 +463,7 @@
   function recordTrailPoint(x, y) {
     const now = Date.now();
     const last = AS_CURSOR.pts[AS_CURSOR.pts.length - 1];
-    // 按时间 + 距离双阈值采样：按时长均匀铺点，长距离不会点太密、短距离不会点太疏
+    // Sample by both time and distance thresholds: points spread evenly by duration, so long moves are not too dense and short ones not too sparse
     if (last
       && now - last.t < AS_TRAIL_MIN_GAP
       && Math.abs(last.x - x) < AS_TRAIL_MIN_DIST
@@ -472,8 +472,8 @@
     while (AS_CURSOR.pts.length > AS_TRAIL_MAX) AS_CURSOR.pts.shift();
   }
 
-  // 轨迹渲染：越新的点越大越实，越旧越淡；落位后整体衰减到透明。
-  // 只写 transform/opacity（合成层属性），不触发布局。
+  // Trail rendering: newer points are larger and more solid, older ones fainter; after landing the whole trail decays to transparent.
+  // Only transform/opacity are written (compositor properties), so no layout is triggered.
   function renderTrail() {
     const now = Date.now();
     let fade = 1;
@@ -488,8 +488,8 @@
     for (let i = 0; i < AS_CURSOR.dots.length; i++) {
       const dot = AS_CURSOR.dots[i];
       if (i >= n || fade <= 0) { dot.style.opacity = '0'; continue; }
-      const p = pts[n - 1 - i];       // 最新的点在最前
-      const k = 1 - i / n;             // 0(最新) → 1(最旧)
+      const p = pts[n - 1 - i];       // newest point first
+      const k = 1 - i / n;             // 0 (newest) -> 1 (oldest)
       dot.style.transform = 'translate3d(' + p.x + 'px,' + p.y + 'px,0) scale(' + (1 - k * 0.62).toFixed(3) + ')';
       dot.style.opacity = (fade * (1 - k) * (1 - k) * 0.55).toFixed(3);
     }
@@ -516,18 +516,18 @@
       AS_CURSOR.pointer.style.transform = 'translate3d(' + AS_CURSOR.x + 'px,' + AS_CURSOR.y + 'px,0)';
     }
     if (arrivedNow && AS_CURSOR.reported !== t.seq) cursorArrived(t.seq);
-    // 目标未达，或轨迹还没淡出完 → 继续；否则自然停机（不会空转）
+    // Target not reached, or the trail has not finished fading -> continue; otherwise stop naturally (never spins)
     if (AS_CURSOR.target || renderTrail()) scheduleCursorTick();
     else stopCursorTick();
   }
 
   function agentCursorMove(x, y, animate, seq) {
-    if (window.top !== window) return; // 只在顶层 frame 渲染
+    if (window.top !== window) return; // render only in the top-level frame
     if (x == null || y == null) return;
     const root = ensureCursorEl();
     if (!root) { cursorArrived(seq); return; }
     root.style.opacity = '1';
-    AS_CURSOR.fading = 0; // 新指令取消上一段的淡出
+    AS_CURSOR.fading = 0; // a new command cancels the previous segment's fade-out
     if (!animate) {
       stopCursorTick();
       AS_CURSOR.target = null;
@@ -538,10 +538,10 @@
       cursorArrived(seq);
       return;
     }
-    // 始终 retarget 到最新请求：飞行中的循环收敛到 target 当前值并回报该 seq，
-    // 所以中途改目标时最后一个 seq 仍能解除到达屏障。
-    // 新起点必须是「当前位置」而不是上一个 target 的终点 —— 用后者会让指针
-    // 在中途改目标时先跳回旧目的地再出发，肉眼可见的瞬移。
+    // Always retarget to the newest request: the in-flight loop converges to the target's current value and reports that seq,
+    // so the last seq still releases the arrival barrier when the target changes mid-flight.
+    // The new start point must be the "current position", not the previous target's end point - using the latter would make the pointer
+    // jump back to the old destination before setting off when the target changes mid-flight, a visible teleport.
     const now = Date.now();
     AS_CURSOR.target = { x, y, seq, t0: now, fx: AS_CURSOR.x, fy: AS_CURSOR.y };
     if (!AS_CURSOR.raf && !AS_CURSOR.timer) scheduleCursorTick();
@@ -561,13 +561,13 @@
     }, 1500);
   }
 
-  // 降级复用缓存：background 对同一条命令的三档对齐共享一个 token。
-  // 只存最近一次，避免跨命令串味；元素脱离文档时调用方会自动回退到完整重解析。
+  // Fallback reuse cache: background shares one token across the three alignment tiers of the same command.
+  // Only the latest is stored to avoid cross-command contamination; when the element leaves the document the caller automatically falls back to a full re-resolve.
   let lastResolved = null;
 
-  /** 目标元素自身状态指纹。changed 是全页指纹（URL+title+每帧交互元素数），
-   *  纯 CSS 展开 / 勾选切换 / 输入值变化都不会改变它 —— 这两种最常见的成功反馈
-   *  恰恰是 changed 测不到的。 */
+  /** Fingerprint of the target element's own state. changed is a whole-page fingerprint (URL+title+interactive element count per frame),
+   *  which pure CSS expansion / checkbox toggles / input value changes never alter - yet these are the two most common success signals
+   *  that changed cannot detect. */
   function targetFingerprint(el) {
     try {
       return [
@@ -587,10 +587,10 @@
 
   async function execute(action, params) {
     const AS = window.__asContent;
-    // 依赖守卫：content-locator.js 先于本文件注入，它一旦没加载成功（语法错误 / 注入被拒），
-    // window.__asContent 就不存在，下面每一个 AS.* 调用都会抛 TypeError，且消息各不相同
+    // Dependency guard: content-locator.js is injected before this file, and if it failed to load (syntax error / injection rejected),
+    // window.__asContent does not exist, so every AS.* call below throws TypeError with a different message,
     // （'reading collectInteractables' / 'reading querySelectorAllCrossFrames' …），
-    // 把「一个依赖没到位」放大成十几处语义不明的失败。这里收敛成一条可操作的错误。
+    // magnifying "one dependency missing" into a dozen vague failures. Collapse it into one actionable error here.
     if (!AS || typeof AS.querySelectorAllCrossFrames !== 'function') {
       return {
         success: false,
@@ -601,7 +601,7 @@
     try {
       highlightElement(params.selector);
       switch (action) {
-      // 只读回读输入框当前值（不滚动、不受歧义/在屏约束）。供 type 后核对是否被累加/残留。
+      // Read back the input's current value only (no scrolling, no ambiguity/on-screen constraints). Used after type to check for accumulation/leftovers.
       case 'readInput': {
           let el = null;
           if (params.ref != null) el = AS.locateByRef(params.ref, params.frameId);
@@ -617,11 +617,11 @@
           return { success: true, data: { ok: true, found: true, value, frame: frameOf(el) } };
         }
 
-      // 内部定位：跨帧找到元素并计算主视口坐标，供 background 走 CDP 受信输入。
+      // Internal locate: find the element across frames and compute main-viewport coordinates for background's CDP trusted input.
       case 'locate': {
-          // 降级复用：background 对同一条命令的三档对齐传同一个 token。首档解析成功后
-          // 记下元素对象，后两档直接复用 —— 既省掉重复的 DOM 遍历，也避免了「页面重排
-          // → 按 ref 重查拿到另一个元素」的漂移。元素脱离文档时自动回退到完整重解析。
+          // Fallback reuse: background passes the same token for the three alignment tiers of one command. After the first tier resolves,
+          // the element object is recorded and the last two tiers reuse it - saving a repeated DOM walk and avoiding "page reflow
+          // -> re-querying by ref yields another element" drift. When the element leaves the document it automatically falls back to a full re-resolve.
           const token = params._reuseToken || null;
           let el = null;
           let resolved = null;
@@ -639,8 +639,8 @@
               await new Promise((r) => setTimeout(r, 150));
               resolved = AS.resolveActionTarget(params);
             }
-            // 歧义不再就地失败：按 DOM 序取首个继续尝试（background 还有三档滚动降级），
-            // 但把 matches 一并带出去，降级成功也可能是点偏了，调用方据此判断。
+            // Ambiguity no longer fails in place: take the first by DOM order and keep going (background still has three scroll fallback tiers),
+            // but pass matches along too - even a successful fallback may have clicked the wrong element, and the caller decides based on that.
             if (!resolved.ok && resolved.error === 'ambiguous') {
               ambiguous = { matches: resolved.matches, suggested: resolved.suggested };
               resolved = await AS.resolveActionTarget({ ...params, occurrence: 1 });
@@ -651,20 +651,20 @@
               }
               return { success: false, error: 'Element not found', errorCategory: 'not_found' };
             }
-            // LLM 给的 ref 常落在包裹控件的 <label> 上，先重定向到真实控件
+            // The ref from the LLM often lands on the <label> wrapping the control, so redirect to the real control first
             el = AS.retargetByLabel(resolved.el);
             if (token) lastResolved = { token, el: resolved.el };
           }
 
           const align = params.align || { block: 'center', inline: 'nearest' };
 
-          // 前置断言 → instant 滚动 → 等几何收敛 → 滚动后二次断言
-          // （对应 Codex elementState visible+enabled 滚动前后各跑一遍）
+          // Pre-assertion -> instant scroll -> wait for geometry to settle -> second assertion after scrolling
+          // (matching Codex elementState visible+enabled, run once before and after scrolling)
           const pre = AS.assertActionable(el);
           if (!pre.ok) {
             return { success: false, error: 'Element is not ' + pre.state, errorCategory: 'not_interactable', blockedBy: pre.state };
           }
-          // behavior:'instant' 关掉平滑滚动动画，否则动画中途取坐标必然偏
+          // behavior:'instant' turns off the smooth-scroll animation, otherwise coordinates captured mid-animation are inevitably off
           try { el.scrollIntoView({ ...align, behavior: 'instant' }); } catch (e) { /* ignore */ }
           const settled = await AS.waitStableRect(el);
           if (!settled) {
@@ -677,8 +677,8 @@
 
           const point = AS.mainFramePoint(el);
           if (!point) return { success: false, error: 'Element not clickable (off-screen)', errorCategory: 'not_found' };
-          // 命中自校验只对需要落点的动作有意义：type/key/select/upload 走键盘或纯 DOM，
-          // elementFromPoint 对它们是纯浪费。
+          // Hit self-verification only matters for actions that need a landing point: type/key/select/upload go through the keyboard or pure DOM,
+          // so elementFromPoint is pure waste for them.
           const local = params.needHitTest === false ? { ok: true, desc: '' } : AS.hitDescriptorAt(el, point.x, point.y);
           return {
             success: true,
@@ -688,13 +688,13 @@
               count: resolved ? resolved.count : 1,
               tag: (el.tagName || '').toLowerCase(),
               text: (el.textContent || el.value || '').trim().slice(0, 100),
-              // 动作前基线：写动作后由 background 对比 → changed；clickable 供判断是否为真实点击目标
+              // Pre-action baseline: background compares after the write action -> changed; clickable tells whether this is a real click target
               preHash: domFingerprint(),
-              // 目标元素自身状态：changed 是全页指纹，纯 CSS 展开 / 勾选切换 / 输入值变化
-              // 都不改变它，_selfChanged 才能回答「我点的那个东西变了吗」。
+              // Target element's own state: changed is a whole-page fingerprint that pure CSS expansion / checkbox toggles / input value changes
+              // never alter; only _selfChanged can answer "did the thing I clicked change".
               selfFp: targetFingerprint(el),
               selfRef: el.__asRef != null ? el.__asRef : null,
-              // 指标用：label 重定向是否改写了目标 / 几何是否收敛
+              // For metrics: whether label redirection rewrote the target / whether the geometry settled
               retargeted: el !== resolved.el,
               settled: true,
               clickable: AS.isActionable(el),
@@ -705,7 +705,7 @@
           };
         }
 
-        // clickAt 坐标解析：设备像素（截图）→ CSS px → 最近可交互元素中心（background 据此受信点击）
+        // clickAt coordinate resolution: device pixels (screenshot) -> CSS px -> nearest interactive element center (background clicks with trusted input)
         case 'locatePoint': {
           if (params.x == null || params.y == null) {
             return { success: false, error: 'x/y required', errorCategory: 'not_found' };
@@ -717,12 +717,12 @@
           return { success: true, data: res };
         }
 
-        // 写动作后置校验（background 在 CDP 派发 + settle 后调用）：回当前指纹与页面提示，
-        // background 据此计算 changed/_hints/_clickable，让动作结果携带真实状态而非空断言。
+        // Write action post-check (called by background after CDP dispatch + settle): return the current fingerprint and page hints,
+        // so background can compute changed/_hints/_clickable and the action result carries the real state instead of an empty assertion.
         case 'verify': {
           const hints = pageHints()._hints;
-          // 回读目标元素自身状态：动作后它多半已改变引用（可能已重渲染），
-          // 所以按 token 缓存的元素优先，缓存失效才退回按 ref 查。
+          // Read back the target element's own state: after the action its reference has most likely changed (it may have re-rendered),
+          // so the element cached by token is preferred and only cache misses fall back to a by-ref query.
           let selfFp = null;
           if (params._reuseToken && lastResolved && lastResolved.token === params._reuseToken
               && lastResolved.el && lastResolved.el.isConnected) {
@@ -765,7 +765,7 @@
           if (!el || el.tagName !== 'SELECT') {
             return { success: false, error: 'select element not found: ' + (params.ref != null ? 'ref ' + params.ref : params.selector), errorCategory: 'not_found' };
           }
-          await cursorVisitElement(el); // 纯 DOM 操作也要有光标落位，与 click/type 观感一致
+          await cursorVisitElement(el); // same as select: the cursor lands on the file input first
           if (params.value != null) {
             el.value = params.value;
           } else if (params.label != null) {
@@ -785,7 +785,7 @@
           if (!params.fileName || !params.fileBase64) {
             return { success: false, error: 'fileName and fileBase64 required for upload' };
           }
-          await cursorVisitElement(el); // 同 select：光标先落到 file input
+          await cursorVisitElement(el); // pure DOM actions also get a cursor landing, consistent with click/type
           const binary = atob(params.fileBase64);
           const bytes = new Uint8Array(binary.length);
           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -824,7 +824,7 @@
 
         case 'getContent': {
           if (params.mode === 'summary') {
-            // 跨帧扫描（同源 iframe + shadow），每项带 frame；frameId=0 时仅顶层。
+            // Cross-frame scan (same-origin iframes + shadow), each item carries its frame; frameId=0 means top level only.
             const qAll = (sel) => AS.querySelectorAllCrossFrames(sel, params.scope, params.frameId);
             const inputs = qAll('input, textarea, select, [contenteditable="true"], [role="combobox"]')
               .map(el => ({
@@ -887,11 +887,11 @@
             return { success: true, data: { _url: location.href, _title: document.title, inputs, buttons, forms, navLinks, sections, dialogs, ...pageHints() } };
           }
           if (params.mode === 'extract') {
-            // 结构化提取重复列表块（候选人卡片等）：一次返回数组，避免多次 full DOM 读取
+            // Structured extraction of repeated list blocks (card lists etc.): return an array in one go, avoiding multiple full DOM reads
             if (!params.selector) return { success: false, error: 'selector required for extract mode' };
             let nodes = [];
-            // 校验与遍历必须分开 catch：合在一起时，遍历阶段的任何 TypeError 都会被
-            // 误报成 'Invalid selector'，把「依赖没加载」伪装成「选择器写错了」。
+            // Validation and traversal must be caught separately: if combined, any TypeError during traversal would be
+            // misreported as 'Invalid selector', disguising "dependency not loaded" as "bad selector".
             try {
               document.querySelector(params.selector);
             } catch (e) {
@@ -915,7 +915,7 @@
                 } else if (f === 'value') {
                   rec.value = el.value || '';
                 } else if (f.startsWith('.')) {
-                  // 相对子选择器：取首个匹配子元素的文本
+                  // Relative child selector: take the text of the first matching child element
                   const sub = el.querySelector(f.slice(1));
                   rec[f] = sub?.textContent?.trim().slice(0, textMax) || '';
                 } else if (f.startsWith('@')) {
@@ -932,7 +932,7 @@
             if (!params.selector) return { success: false, error: 'selector required for query mode' };
             let nodes = [];
             try {
-              document.querySelector(params.selector); // 只校验语法
+              document.querySelector(params.selector); // syntax check only
             } catch (e) {
               return { success: false, error: 'Invalid selector: ' + params.selector, errorCategory: 'not_found' };
             }
@@ -951,7 +951,7 @@
               placeholder: el.getAttribute('placeholder') || '',
               value: el.value || '',
             }));
-            // 宽度护栏：命中过多说明 selector 过宽（如 [class*=x]）——提示收窄到 containers/scope，避免无决策价值的噪声读取
+            // Width guardrail: too many hits means the selector is too broad (such as [class*=x]) - suggest narrowing to containers/scope to avoid noise reads with no decision value
             const tooBroad = nodes.length > 100;
             return {
               success: true,
@@ -960,7 +960,7 @@
                 total: nodes.length,
                 tooBroad,
                 warning: tooBroad
-                  ? '命中过多(' + nodes.length + ')，selector 过宽：优先用 containers 探测 + 容器 scope 收敛，勿用宽泛选择器扫描'
+                  ? 'Too many matches (' + nodes.length + '); the selector is too broad: prefer containers probing + container scope to narrow down, and avoid scanning with broad selectors'
                   : undefined,
                 matches,
               },
@@ -970,9 +970,9 @@
             let want = [];
             if (Array.isArray(params.selectors)) want = params.selectors.filter(Boolean);
             else if (typeof params.selector === 'string' && params.selector.trim()) want = params.selector.split(',').map(s => s.trim()).filter(Boolean);
-            // 不做「AS.collectFrameDocs 不存在就退化成 [document]」的静默降级：那会让结果看起来
-            // 正常却只覆盖顶层，容器全在 iframe 里时会得出「不存在」的错误结论 —— 比直接失败更难查。
-            // execute() 开头的依赖守卫已确保 AS 存在。
+            // Do not silently degrade by "falling back to [document] when AS.collectFrameDocs is missing": that would make the result look
+            // normal while covering only the top level, and with containers all inside iframes it would conclude "not found" - harder to diagnose than a plain failure.
+            // The dependency guard at the top of execute() already guarantees AS exists.
             const docs = AS.collectFrameDocs(params.scope, params.frameId);
             const out = [];
             for (const sel of want) {
@@ -996,8 +996,8 @@
             }
             return { success: true, data: { _url: location.href, _title: document.title, containers: out, ...pageHints() } };
           }
-          // 一次"就绪+建图"：navigate 后一步完成帧图 + 容器探测 + 就绪判定。
-          // 替代"wait 数次 → snapshot → containers"的多轮空探测；ready:false 时应只 wait 再 ready，不重扫。
+          // One "ready + map" pass: after navigate, complete the frame map + container detection + readiness check in one step.
+          // Replaces the multi-round "wait a few times -> snapshot -> containers" blind probing; when ready:false, just wait then ready again without rescanning.
           if (params.mode === 'ready') {
             const waitMs = Math.min(Number(params.waitMs) || 1200, 15000);
             if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
@@ -1006,9 +1006,9 @@
             else if (typeof params.selector === 'string' && params.selector.trim()) {
               want.push(...params.selector.split(',').map(s => s.trim()).filter(Boolean));
             }
-            // 不做「AS.collectFrameDocs 不存在就退化成 [document]」的静默降级：那会让结果看起来
-            // 正常却只覆盖顶层，容器全在 iframe 里时会得出「不存在」的错误结论 —— 比直接失败更难查。
-            // execute() 开头的依赖守卫已确保 AS 存在。
+            // Do not silently degrade by "falling back to [document] when AS.collectFrameDocs is missing": that would make the result look
+            // normal while covering only the top level, and with containers all inside iframes it would conclude "not found" - harder to diagnose than a plain failure.
+            // The dependency guard at the top of execute() already guarantees AS exists.
             const docs = AS.collectFrameDocs(params.scope, params.frameId);
             const containers = [];
             for (const sel of want) {
@@ -1049,7 +1049,7 @@
             const max = params.max || 200;
             const els = AS.collectInteractables({ max, frameId: params.frameId });
             const items = els.map((el, i) => ({ ...AS.snapshotItem(el, i), frame: frameOf(el) }));
-            // 首屏即暴露 frame 结构（壳页面 + iframe 内容区）：顶层 snapshot 看不到的控件要能直接定位归属
+            // Expose the frame structure on first paint (shell page + iframe content area): controls invisible to a top-level snapshot must be attributable directly
             const frames = collectFrames();
             return {
               success: true,
@@ -1087,13 +1087,13 @@
   let __asDomNodes = 0;
   const DOM_NODE_CAP = 2000;
 
-  // 框架型弹层通用选择器（覆盖 Vue v-transfer-dom / 自定义 dialog 渲染到 body 的场景）。
+  // Generic selectors for framework overlays (covering Vue v-transfer-dom / custom dialogs rendered into body).
   const DIALOG_SELECTOR =
     '[role="dialog"], [role="alertdialog"], .ant-modal, .el-dialog, .antd-fd-modal, [class*="dialog"], [class*="popup"]';
 
-  // 轻量 DOM 指纹：动作前后对比，供 agent 判断"是否有实际变化"（避免动作后盲目重读）。
-  // 跨 frame 统计（顶层 + 各同源 iframe 的可交互元素数）：壳页面 + iframe 内容区的
-  // 动作变化（如筛选/搜索区在 iframe 内刷新）才能被 changed 捕获到。
+  // Lightweight DOM fingerprint: compared before and after an action so the agent can tell "was there a real change" (avoiding blind re-reads after actions).
+  // Cross-frame counting (top level + interactive element count of each same-origin iframe): only this way can changes in the
+  // shell page + iframe content area (such as a filter/search area refreshing inside an iframe) be captured by changed.
   function domFingerprint() {
     try {
       const INTERACTIVE = 'a,button,input,textarea,select,[role]';
@@ -1107,7 +1107,7 @@
           const frUrl = (w.location && w.location.href) || '';
           const cnt = w.document.querySelectorAll(INTERACTIVE).length;
           parts.push(frUrl + ':iframe:' + cnt);
-        } catch (e) { /* 跨源 iframe 忽略 */ }
+        } catch (e) { /* ignore cross-origin iframe */ }
       }
       return location.href + '|' + document.title + '|' + parts.join(',');
     } catch (e) {
@@ -1115,7 +1115,7 @@
     }
   }
 
-  // 同源 iframe 结构清单（url + 可交互数 + 是否同源可读），供 snapshot 首屏识别"搜索区在哪个 frame"。
+  // Same-origin iframe structure list (url + interactive count + whether same-origin readable), so snapshot can tell on first paint "which frame the search area is in".
   function collectFrames() {
     const out = [];
     try {
@@ -1129,7 +1129,7 @@
             ? f.contentWindow.document.querySelectorAll('a,button,input,textarea,select,[role]').length
             : 0;
         } catch (e) {
-          continue; // 跨源 iframe：不列入（无法操作）
+          continue; // cross-origin iframe: exclude it (cannot be operated)
         }
         out.push({ frame: url, interactables: count, sameOrigin });
       }
@@ -1137,9 +1137,9 @@
     return out;
   }
 
-  // ---- 页面提示（动作结果里附带，减少 agent 重读）----
+  // ---- Page hints (attached to action results to reduce agent re-reads) ----
 
-  // 可见对话框标题列表（供 agent 知道弹了什么框、需不需要关）。
+  // List of visible dialog titles (so the agent knows what was opened and whether it needs closing).
   function visibleDialogs() {
     try {
       const seen = new Set();
@@ -1164,7 +1164,7 @@
     }
   }
 
-  // 当前生效的筛选筹码指纹（文本集），供 agent 判断筛选增删是否成功。
+  // Fingerprint of the currently active filter chips (text set), so the agent can tell whether a filter was added or removed successfully.
   function chipsFingerprint() {
     try {
       const out = [];
@@ -1186,7 +1186,7 @@
     }
   }
 
-  // 结果计数提示（"共有 N 份简历" 等），屏蔽异步刷新带来的重读。
+  // Result count hint (such as "N results in total"), suppressing re-reads caused by async refreshes.
   function countHint() {
     try {
       const leaf = (pred) => {
@@ -1213,12 +1213,12 @@
     return { _hints: h };
   }
 
-  // 元素所在 frame 的 window：同源 iframe 内元素的事件 view 必须用它，否则 iframe 处理器收不到。
+  // Window of the frame the element lives in: event views for elements inside same-origin iframes must use it, otherwise the iframe handler never receives them.
   function winOf(el) {
     return (el && el.ownerDocument && el.ownerDocument.defaultView) || window;
   }
 
-  // 元素所在 frame 的 URL（同源 iframe 可读；主文档返回顶层 URL）。用于标注元素所属层。
+  // URL of the frame the element lives in (readable for same-origin iframes; the main document returns the top-level URL). Used to label which layer an element belongs to.
   function frameOf(el) {
     try {
       const w = winOf(el);
@@ -1228,7 +1228,7 @@
     }
   }
 
-  // 顶层 + 同源 iframe 当前 URL（便于判定搜索/导航是否真的生效，如 keywords= 参数变化）。
+  // Current URLs of the top level + same-origin iframes (to tell whether search/navigation really took effect, such as a keywords= parameter change).
   function frameUrls() {
     const out = [];
     try {
@@ -1238,7 +1238,7 @@
         try {
           const h = f.contentWindow && f.contentWindow.location && f.contentWindow.location.href;
           if (h && !out.includes(h)) out.push(h);
-        } catch (e) { /* 跨源 iframe 忽略 */ }
+        } catch (e) { /* ignore cross-origin iframe */ }
       }
     } catch (e) { /* ignore */ }
     return out;

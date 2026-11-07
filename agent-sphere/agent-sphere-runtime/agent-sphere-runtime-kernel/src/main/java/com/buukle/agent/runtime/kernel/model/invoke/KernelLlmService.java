@@ -40,10 +40,10 @@ public class KernelLlmService {
     }
 
     /**
-     * 主 Agent 问答轮开始前建 RUNNING 记录。
+     * Creates the RUNNING row before the main agent's Q&A turn starts.
      *
-     * <p>非主 Agent 调用（标题生成 / 压缩 / 子 Agent）不预建，仍在调用结束后由监听器插入。
-     * 预建失败必须让本次调用失败：否则会出现「已经流式输出但没有轮次记录」的不可恢复状态。
+     * <p>Non-main-agent calls (title generation / compaction / sub-agents) are not pre-created; the listener still inserts them after the call ends.
+     * A pre-create failure must fail this call: otherwise the run ends up in an unrecoverable state of "already streaming output but no turn record".
      */
     private void preCreateTurnRecord(LlmInteractionMeta meta, String modelName) {
         if (meta == null
@@ -67,8 +67,8 @@ public class KernelLlmService {
     public CompletableFuture<Void> stream(String company, String baseUrl, String apiKey, String modelName,
                                           ChatCompletionRequestDTO request,
                                           Consumer<LLMEvent> onEvent, LlmInteractionMeta meta) {
-        // 主 Agent 轮次：调用前先建 RUNNING 记录，Timeline 从第一个 token 起就有稳定引用。
-        // 失败在这里直接抛出（不启动流），避免"没有轮次记录却已经开始输出"。
+        // Main agent turn: create the RUNNING row before the call, so Timeline has a stable reference from the first token.
+        // Throw directly on failure here (do not start the stream), avoiding "no turn record yet output has already started".
         preCreateTurnRecord(meta, modelName);
 
         CompletableFuture<Void> future = new CompletableFuture<>();
@@ -81,20 +81,20 @@ public class KernelLlmService {
             StringBuilder textCollector = new StringBuilder();
             StringBuilder reasoningCollector = new StringBuilder();
             AtomicReference<Map<String, Object>> usageRef = new AtomicReference<>();
-            // 真实终止原因：finish_reason=length/content_filter 必须可审计（截断不能当成功）。
+            // Real termination reason: finish_reason=length/content_filter must be auditable (truncation must not count as success).
             AtomicReference<String> finishReasonRef = new AtomicReference<>();
             /**
-             * 供应商以 <b>事件</b>（而非异常）回报的错误。
+             * An error reported by the provider as an <b>event</b> (rather than an exception).
              *
-             * <p>它不经过下面的 catch，所以 {@code success}/{@code errorMessage} 永远是默认值 ——
-             * 结果是「直接把 run 打挂」的那类失败在 {@code agent_llm_interaction_record} 里
-             * 全记成 {@code success=true, error_message=NULL}，事后完全无法审计。
-             * 用 AtomicReference 持有是因为内层 stream consumer 无法直接改外层局部变量。
+             * <p>It does not go through the catch below, so {@code success}/{@code errorMessage} always stay at their defaults —
+             * as a result, failures that "took the run down directly" were all recorded in {@code agent_llm_interaction_record}
+             * as {@code success=true, error_message=NULL}, making them impossible to audit afterwards.
+             * An AtomicReference is used because the inner stream consumer cannot modify an outer local variable directly.
              */
             AtomicReference<String> errorEventRef = new AtomicReference<>();
-            // 上游 HTTP 状态码（错误事件携带）；成功且无错误事件时按 200 记，便于直接按状态码筛。
+            // Upstream HTTP status code (carried by error events); when successful with no error event it is recorded as 200 so it can be filtered directly by status.
             AtomicReference<Integer> httpStatusRef = new AtomicReference<>();
-            // Provider 传输层重试统计（连接/TLS/EOF），用于定位网络型慢回复。
+            // Provider transport-layer retry statistics (connect/TLS/EOF), used to locate network-type slow replies.
             AtomicReference<com.buukle.agent.model.dtvo.complete.LlmStreamStats> streamStatsRef =
                     new AtomicReference<>(com.buukle.agent.model.dtvo.complete.LlmStreamStats.empty());
             try {
@@ -106,7 +106,7 @@ public class KernelLlmService {
                         streamStatsRef.set(modelProviderSpi.streamWithStats(company, baseUrl, apiKey, modelName, request,
                                 event -> {
                                     if (future.isCancelled()) return;
-                                    // 清洗 LLM 文本中的 NUL（PG text 列拒绝），再进 collectors 与转发事件
+                                    // Sanitize NUL characters in LLM text (PG text columns reject them), then feed the collectors and forward events
                                     if (event instanceof LLMEvent.TextDelta(String text1)) {
                                         String clean = TextSanitizer.sanitize(text1);
                                         resultCollector.append(clean);
@@ -115,10 +115,10 @@ public class KernelLlmService {
                                     } else if (event instanceof LLMEvent.ReasoningDelta(String text)) {
                                         String clean = TextSanitizer.sanitize(text);
                                         reasoningCollector.append(clean);
-                                        resultCollector.append(clean); // response_body 保持兼容（合并）
+                                        resultCollector.append(clean); // keep response_body compatible (merged)
                                         onEvent.accept(new LLMEvent.ReasoningDelta(clean));
                                     } else if (event instanceof LLMEvent.Error error) {
-                                        // 先记账再转发：转发后调用方可能立刻终止本次调用
+                                        // Record first, then forward: after forwarding the caller may terminate this call immediately
                                         errorEventRef.compareAndSet(null, error.message());
                                         if (error.httpStatus() != null) {
                                             httpStatusRef.set(error.httpStatus());
@@ -145,8 +145,8 @@ public class KernelLlmService {
                 if (!done.await(timeout, TimeUnit.SECONDS)) {
                     throw new RuntimeException("LLM stream timed out after " + timeout + "s");
                 }
-                // onDone 在 streamWithStats 返回前触发；等待 provider 线程真正返回，
-                // 确保 transport 统计已经写入 streamStatsRef。
+                // onDone fires before streamWithStats returns; wait for the provider thread to actually return,
+                // ensuring the transport statistics have already been written to streamStatsRef.
                 joinQuietly(providerThread);
                 Exception err = streamError.get();
                 if (err != null) {
@@ -159,11 +159,11 @@ public class KernelLlmService {
                 errorMessage = e.getMessage();
                 future.completeExceptionally(e instanceof RuntimeException re ? re : new RuntimeException(e));
             } finally {
-                // 事件错误与异常错误合并成同一条失败记录：只要有任一路径报错，这次调用就没成功
+                // Merge event errors and exception errors into a single failure record: if any path reports an error, this call did not succeed
                 String eventError = errorEventRef.get();
                 boolean failed = !success || eventError != null;
                 String finalError = errorMessage != null ? errorMessage : eventError;
-                // http_status 落库：错误事件带真实状态码；正常结束按 200 记。
+                // Persist http_status: error events carry the real status code; a normal finish is recorded as 200.
                 Integer httpStatus = httpStatusRef.get();
                 if (httpStatus == null && !failed) {
                     httpStatus = 200;
@@ -171,8 +171,8 @@ public class KernelLlmService {
                 if (meta != null) {
                     meta.setHttpStatus(httpStatus);
                 }
-                // 记录“实际发出去的请求体”：provider 策略会在调用前改写 request（Qwen 会降级尾部 system），
-                // 在 finally 里序列化才能与线上真实请求一致，否则审计记录会误导排查。
+                // Record "the request body actually sent": the provider strategy may rewrite the request before the call (Qwen downgrades trailing system),
+                // so serializing in finally is what matches the real production request; otherwise audit records mislead troubleshooting.
                 String requestBody = JsonUtils.toJson(request);
                 eventPublisher.publishEvent(new LlmInteractionEvent(
                         this, meta, modelName, requestBody, resultCollector.toString(),
@@ -189,8 +189,8 @@ public class KernelLlmService {
     }
 
     /**
-     * 同步便捷调用：内部复用 {@link #stream} 流式收集文本，阻塞直到完成（沿用 llm.stream-timeout）。
-     * 供单次 LLM 能力（completions 层）使用，同样走 LlmInteractionEvent 审计。
+     * Synchronous convenience call: internally reuses {@link #stream} to collect text, blocking until done (uses llm.stream-timeout).
+     * Used by single-shot LLM capabilities (completions layer), and also goes through LlmInteractionEvent auditing.
      */
     public InvokeResult invokeSync(String company, String baseUrl, String apiKey, String modelName,
                                    ChatCompletionRequestDTO request, LlmInteractionMeta meta) {
@@ -244,7 +244,7 @@ public class KernelLlmService {
             Thread.currentThread().interrupt();
             failRef.compareAndSet(null, new RuntimeException("LLM call interrupted", e));
         }
-        // 同 stream()：等 provider 线程返回后再读取 transport 统计，避免 onDone 竞态。
+        // Same as stream(): wait for the provider thread to return before reading transport statistics, avoiding an onDone race.
         joinQuietly(providerThread);
         Exception err = failRef.get();
         boolean success = err == null;
@@ -266,7 +266,7 @@ public class KernelLlmService {
         return result;
     }
 
-    /** 等待 provider 线程返回以采集 transport 统计；不掩盖调用方中断。 */
+    /** Waits for the provider thread to return in order to collect transport statistics; does not mask caller interruption. */
     private static void joinQuietly(Thread thread) {
         if (thread == null) {
             return;
@@ -278,7 +278,7 @@ public class KernelLlmService {
         }
     }
 
-    /** 单次同步 LLM 调用结果。 */
+    /** Result of a single synchronous LLM call. */
     public static class InvokeResult {
         private boolean success;
         private String content;

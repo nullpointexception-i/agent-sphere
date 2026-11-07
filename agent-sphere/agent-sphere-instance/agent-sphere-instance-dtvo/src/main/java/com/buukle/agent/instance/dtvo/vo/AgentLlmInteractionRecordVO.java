@@ -12,13 +12,13 @@ public class AgentLlmInteractionRecordVO implements Serializable {
     private Long superAgentId;
     private String sessionType;
     private Long threadId;
-    /** 主 Agent 问答轮次序号（= run.loop_count）。 */
+    /** Main Agent question/answer turn number (= run.loop_count). */
     private Integer turnNo;
-    /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */
+    /** Route attempt number within the same turn: 0=primary route, 1..N=fallback. */
     private Integer attemptNo;
-    /** 同一 (run, turn, attempt) 下的调用序号（每次重试一行）。 */
+    /** Call number under the same (run, turn, attempt) (one row per retry). */
     private Integer retryNo;
-    /** 该次调用在 LLM 退避梯度上的档位（1..N）；非重试轮为 NULL。 */
+    /** Position of this call on the LLM backoff ladder (1..N); NULL for non-retry turns. */
     private Integer retryAttempt;
     /** RUNNING / COMPLETED / FAILED。 */
     private String status;
@@ -34,21 +34,21 @@ public class AgentLlmInteractionRecordVO implements Serializable {
     private String reasoning;
     private String replyContent;
     private Long subAgentRunId;
-    /** 归一化用量 JSON（TokenUsage，供应商无关）。 */
+    /** Normalized usage JSON (TokenUsage, provider-agnostic). */
     private String usage;
     private Integer promptTokens;
     private Integer completionTokens;
     private Integer totalTokens;
     private Integer cacheHitTokens;
     private Integer cacheMissTokens;
-    /** Provider 传输层实际尝试次数（含首次）。 */
+    /** Actual Provider transport-layer attempts (including the first one). */
     private Integer streamAttempts;
-    /** Provider 传输层重试次数（attempts-1）。 */
+    /** Provider transport-layer retry count (attempts-1). */
     private Integer streamRetryCount;
-    /** 最近一次传输层失败的类型与摘要。 */
+    /** Type and summary of the most recent transport-layer failure. */
     private String streamError;
     private String createdBy;
     private String createdAt;
-    /** createdAt 的 epoch 毫秒（精确到毫秒，仅供历史重建配对使用，不参与展示）。 */
+    /** Epoch milliseconds of createdAt (millisecond precision; only for historical rebuild pairing, not for display). */
     private Long createdAtMillis;
 }

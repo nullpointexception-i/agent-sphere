@@ -11,10 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * config → Markdown 渲染。
+ * config → Markdown rendering.
  *
- * <p>这里防的是两类回归：一是渲染回退成 JSON（引号花括号会让模型把指令当数据读），
- * 二是空节没有被跳过（prompt 里出现 {@code hardGates: null} 这类噪音）。
+ * <p>This guards against two regressions: rendering falling back to JSON (quotes and braces make
+ * the model read instructions as data), and blank sections not being skipped (noise such as
+ * {@code hardGates: null} showing up in the prompt).
  */
 class MarkdownRendererTest {
 
@@ -34,9 +35,9 @@ class MarkdownRendererTest {
         assertTrue(markdown.contains("### 第一步：打开目标渠道"), markdown);
         assertTrue(markdown.contains("顺次打开 boss"), markdown);
         assertTrue(markdown.contains("### 硬性门槛（必要条件，任一不满足即不得收藏）"), markdown);
-        // 不得额外输出 sections 这一层标题
+        // must not emit an extra "sections" wrapper heading
         assertFalse(markdown.contains("sections"), markdown);
-        // 不得残留 JSON 结构
+        // no JSON structure may remain
         assertFalse(markdown.contains("{"), markdown);
         assertFalse(markdown.contains("\"title\""), markdown);
     }
@@ -70,16 +71,17 @@ class MarkdownRendererTest {
 
         assertTrue(markdown.contains("### step1"), markdown);
         assertTrue(markdown.contains("顺次打开 boss"), markdown);
-        // null 值整节跳过
+        // null values skip the whole section
         assertFalse(markdown.contains("hardGates"), markdown);
-        // 嵌套对象降一级；列表出列表项
+        // nested objects drop one level; lists become list items
         assertTrue(markdown.contains("#### inner"), markdown);
         assertTrue(markdown.contains("- a"), markdown);
     }
 
     @Test
     void sectionListWithMissingTitleIsNotTreatedAsSections() {
-        // title 缺失说明不是小节约定，必须退回通用渲染而不是丢掉内容。
+        // A missing title means this is not the section convention; fall back to generic rendering
+        // rather than dropping the content.
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("sections", List.of(Map.of("body", "没有标题")));
 

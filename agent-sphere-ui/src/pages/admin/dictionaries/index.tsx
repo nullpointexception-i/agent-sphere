@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   App,
@@ -69,10 +70,10 @@ export default function AdminDictionaries() {
     try {
       if (editing?.id) {
         await dictApi.update(editing.id, values);
-        message.success(t('pages.admin.dictionaries.updated', '已更新'));
+        message.success(t('pages.admin.dictionaries.updated', 'Updated'));
       } else {
         await dictApi.create(values);
-        message.success(t('pages.admin.dictionaries.created', '已创建'));
+        message.success(t('pages.admin.dictionaries.created', 'Created'));
       }
       setEditOpen(false);
       form.resetFields();
@@ -85,17 +86,20 @@ export default function AdminDictionaries() {
   const handleDelete = (record: SystemDicEntry) => {
     if (!record.id) return;
     modal.confirm({
-      title: t('pages.admin.dictionaries.deleteTitle', '删除字典项？'),
+      title: t(
+        'pages.admin.dictionaries.deleteTitle',
+        'Delete this dictionary entry?',
+      ),
       content: t(
         'pages.admin.dictionaries.deleteContent',
-        '删除后该选项不再出现在下拉框；已创建的数字分身不受影响。',
+        'The option disappears from dropdowns. Existing avatars are not affected.',
       ),
-      okText: t('pages.admin.dictionaries.delete', '删除'),
+      okText: t('pages.admin.dictionaries.delete', 'Delete'),
       okType: 'danger',
-      cancelText: t('pages.admin.dictionaries.cancel', '取消'),
+      cancelText: t('pages.admin.dictionaries.cancel', 'Cancel'),
       onOk: async () => {
         await dictApi.delete(record.id as number);
-        message.success(t('pages.admin.dictionaries.deleted', '已删除'));
+        message.success(t('pages.admin.dictionaries.deleted', 'Deleted'));
         await load();
       },
     });
@@ -103,56 +107,56 @@ export default function AdminDictionaries() {
 
   const columns = [
     {
-      title: t('pages.admin.dictionaries.code', '编码'),
+      title: t('pages.admin.dictionaries.code', 'Code'),
       dataIndex: 'code',
       width: 140,
     },
     {
-      title: t('pages.admin.dictionaries.nameCn', '中文名'),
+      title: t('pages.admin.dictionaries.nameCn', 'Chinese name'),
       dataIndex: 'nameCn',
       ellipsis: true,
     },
     {
-      title: t('pages.admin.dictionaries.nameEn', '英文名'),
+      title: t('pages.admin.dictionaries.nameEn', 'English name'),
       dataIndex: 'nameEn',
       ellipsis: true,
     },
     {
-      title: t('pages.admin.dictionaries.sortNo', '排序'),
+      title: t('pages.admin.dictionaries.sortNo', 'Sort'),
       dataIndex: 'sortNo',
       width: 80,
     },
     {
-      title: t('pages.admin.dictionaries.status', '状态'),
+      title: t('pages.admin.dictionaries.status', 'Status'),
       dataIndex: 'status',
       width: 100,
       render: (value: string) => (
         <Tag color={value === 'ACTIVE' ? 'green' : 'default'}>
           {value === 'ACTIVE'
-            ? t('pages.admin.dictionaries.active', '启用')
-            : t('pages.admin.dictionaries.disabled', '停用')}
+            ? t('pages.admin.dictionaries.active', 'Active')
+            : t('pages.admin.dictionaries.disabled', 'Disabled')}
         </Tag>
       ),
     },
     {
-      title: t('pages.admin.dictionaries.action', '操作'),
+      title: t('pages.admin.dictionaries.action', 'Actions'),
       valueType: 'option',
       width: 150,
       render: (_: unknown, record: SystemDicEntry) => (
         <Space size={4}>
-          <Can code="admin:dictionary:update">
+          <Can code={PERM.adminDictionaryUpdate}>
             <Button type="link" size="small" onClick={() => openEdit(record)}>
-              {t('pages.admin.dictionaries.edit', '编辑')}
+              {t('pages.admin.dictionaries.edit', 'Edit')}
             </Button>
           </Can>
-          <Can code="admin:dictionary:delete">
+          <Can code={PERM.adminDictionaryDelete}>
             <Button
               type="link"
               size="small"
               danger
               onClick={() => handleDelete(record)}
             >
-              {t('pages.admin.dictionaries.delete', '删除')}
+              {t('pages.admin.dictionaries.delete', 'Delete')}
             </Button>
           </Can>
         </Space>
@@ -181,7 +185,7 @@ export default function AdminDictionaries() {
             options={[
               {
                 value: DIC_TYPE_POSITION,
-                label: t('pages.admin.dictionaries.typePosition', '角色'),
+                label: t('pages.admin.dictionaries.typePosition', 'Roles'),
               },
             ]}
           />
@@ -189,7 +193,7 @@ export default function AdminDictionaries() {
             allowClear
             placeholder={t(
               'pages.admin.dictionaries.searchPlaceholder',
-              '搜索编码或名称',
+              'Search code or name',
             )}
             style={{ width: 280 }}
             onSearch={(value) => {
@@ -198,9 +202,9 @@ export default function AdminDictionaries() {
             }}
           />
         </Space>
-        <Can code="admin:dictionary:create">
+        <Can code={PERM.adminDictionaryCreate}>
           <Button type="primary" onClick={() => openEdit()}>
-            {t('pages.admin.dictionaries.create', '新建字典项')}
+            {t('pages.admin.dictionaries.create', 'New entry')}
           </Button>
         </Can>
       </div>
@@ -216,8 +220,8 @@ export default function AdminDictionaries() {
       <Modal
         title={
           editing
-            ? t('pages.admin.dictionaries.editTitle', '编辑字典项')
-            : t('pages.admin.dictionaries.createTitle', '新建字典项')
+            ? t('pages.admin.dictionaries.editTitle', 'Edit dictionary entry')
+            : t('pages.admin.dictionaries.createTitle', 'New dictionary entry')
         }
         open={editOpen}
         onOk={handleSave}
@@ -235,14 +239,14 @@ export default function AdminDictionaries() {
           </Form.Item>
           <Form.Item
             name="code"
-            label={t('pages.admin.dictionaries.code', '编码')}
+            label={t('pages.admin.dictionaries.code', 'Code')}
             rules={[
               { required: true, max: 64 },
               {
                 pattern: /^[A-Za-z0-9_-]+$/,
                 message: t(
                   'pages.admin.dictionaries.codePattern',
-                  '仅支持字母、数字、下划线和短横线',
+                  'Only letters, digits, underscores and hyphens are allowed',
                 ),
               },
             ]}
@@ -251,44 +255,44 @@ export default function AdminDictionaries() {
           </Form.Item>
           <Form.Item
             name="nameCn"
-            label={t('pages.admin.dictionaries.nameCn', '中文名')}
+            label={t('pages.admin.dictionaries.nameCn', 'Chinese name')}
             rules={[{ required: true, max: 128 }]}
           >
             <Input maxLength={128} />
           </Form.Item>
           <Form.Item
             name="nameEn"
-            label={t('pages.admin.dictionaries.nameEn', '英文名')}
+            label={t('pages.admin.dictionaries.nameEn', 'English name')}
             rules={[{ required: true, max: 128 }]}
           >
             <Input maxLength={128} />
           </Form.Item>
           <Form.Item
             name="sortNo"
-            label={t('pages.admin.dictionaries.sortNo', '排序')}
+            label={t('pages.admin.dictionaries.sortNo', 'Sort')}
           >
             <InputNumber min={0} max={9999} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item
             name="status"
-            label={t('pages.admin.dictionaries.status', '状态')}
+            label={t('pages.admin.dictionaries.status', 'Status')}
           >
             <Select
               options={[
                 {
                   value: 'ACTIVE',
-                  label: t('pages.admin.dictionaries.active', '启用'),
+                  label: t('pages.admin.dictionaries.active', 'Active'),
                 },
                 {
                   value: 'DISABLED',
-                  label: t('pages.admin.dictionaries.disabled', '停用'),
+                  label: t('pages.admin.dictionaries.disabled', 'Disabled'),
                 },
               ]}
             />
           </Form.Item>
           <Form.Item
             name="remark"
-            label={t('pages.admin.dictionaries.remark', '备注')}
+            label={t('pages.admin.dictionaries.remark', 'Remark')}
           >
             <Input.TextArea rows={2} maxLength={512} showCount />
           </Form.Item>

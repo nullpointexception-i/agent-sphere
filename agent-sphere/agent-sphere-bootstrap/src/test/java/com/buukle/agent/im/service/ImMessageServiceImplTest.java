@@ -47,7 +47,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** IM 发送：序号原子递增、幂等、SSE 提示。 */
+/** IM sending: atomic sequence increment, idempotency, SSE notifications. */
 @ExtendWith(MockitoExtension.class)
 class ImMessageServiceImplTest {
 
@@ -276,7 +276,7 @@ class ImMessageServiceImplTest {
         service.send(10L, dto);
 
         verify(sessionInputSpi).answerRouterClarification(77L, "选项A");
-        // 拦截成功：不再走 ingest（事件进不了 Router 调度）
+        // Interception succeeded: ingest is skipped (the event never reaches Router scheduling)
         verify(ingestPortProvider, never()).getIfAvailable();
     }
 

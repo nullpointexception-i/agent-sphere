@@ -1,5 +1,7 @@
 package com.buukle.agent.instance.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.vo.AgentSubAgentRunVO;
@@ -15,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/instance")
+@RequestMapping(ApiPrefix.V1 + "/instance")
 @RequiredArgsConstructor
 @WithTenant
 public class SubAgentRunController extends BaseController {

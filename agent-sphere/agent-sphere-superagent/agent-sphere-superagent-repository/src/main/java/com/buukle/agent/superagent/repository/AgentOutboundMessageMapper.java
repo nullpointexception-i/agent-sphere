@@ -23,8 +23,7 @@ public interface AgentOutboundMessageMapper extends BaseMapper<AgentOutboundMess
             """)
     List<AgentOutboundMessage> selectPending(@Param("now") LocalDateTime now, @Param("limit") int limit);
 
-    /** 进程在 SENDING 中途退出时，超时后重新排队，避免消息永久悬挂。 */
-    /** Requeue rows whose send lease expired (process crashed or send hung). */
+    /** Requeue rows stuck in SENDING after the lease expires (process crashed mid-send) so messages never hang forever. */
     @Update("""
             UPDATE agent_outbound_message
             SET status = 'RETRY', next_retry_at = now(), updated_at = now(),

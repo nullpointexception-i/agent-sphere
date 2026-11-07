@@ -11,9 +11,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@link EventType}（sealed interface）反序列化器：按 {@code value()} 字符串映射到具体枚举。
- * 供 Redis 事件总线（{@code JsonJacksonCodec}）跨副本反序列化 {@link RuntimeEventVO} 使用。
- * 静态构建 value→枚举 映射，覆盖全部 permitted 类型，无需维护魔法值。
+ * {@link EventType} (sealed interface) deserializer: maps the {@code value()} string to the concrete enum.
+ * Used by the Redis event bus ({@code JsonJacksonCodec}) to deserialize {@link RuntimeEventVO} across replicas.
+ * Builds the value→enum map statically, covering all permitted types without magic values.
  */
 public class EventTypeDeserializer extends JsonDeserializer<EventType> {
 

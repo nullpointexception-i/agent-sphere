@@ -10,7 +10,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * WebClient 连接池，复用 HtmlUnit 实例以减少创建开销
+ * WebClient connection pool that reuses HtmlUnit instances to reduce creation overhead
  */
 @Slf4j
 public class JsRendererPool {
@@ -29,7 +29,7 @@ public class JsRendererPool {
     }
 
     /**
-     * 获取 WebClient 实例
+     * Acquires a WebClient instance
      */
     public WebClient acquire(int timeout) throws InterruptedException {
         if (closed) return null;
@@ -37,35 +37,35 @@ public class JsRendererPool {
         WebClient client = pool.poll(timeout, TimeUnit.SECONDS);
         if (client != null) return client;
 
-        // 池中无空闲实例，创建新的
+        // No idle instance in the pool, create a new one
         if (pool.size() < maxPoolSize) {
             return createWebClient();
         }
 
-        // 池满了，等待
+        // Pool is full, wait
         return pool.poll(maxWaitMillis, TimeUnit.MILLISECONDS);
     }
 
     /**
-     * 归还 WebClient 实例
+     * Returns a WebClient instance
      */
     public void release(WebClient webClient) {
         if (closed || webClient == null) return;
         if (!pool.offer(webClient)) {
-            // 池已满，关闭实例
+            // Pool is full, close the instance
             webClient.close();
         }
     }
 
     /**
-     * 等待后台 JS 执行完成
+     * Waits for background JS to finish executing
      */
     public void waitForBackgroundJs(WebClient webClient) {
         webClient.waitForBackgroundJavaScript(backgroundJsTimeout);
     }
 
     /**
-     * 创建 WebClient 实例
+     * Creates a WebClient instance
      */
     private WebClient createWebClient() {
         WebClient webClient = new WebClient(BrowserVersion.CHROME);
@@ -82,7 +82,7 @@ public class JsRendererPool {
     }
 
     /**
-     * 关闭所有实例
+     * Closes all instances
      */
     public void close() {
         closed = true;

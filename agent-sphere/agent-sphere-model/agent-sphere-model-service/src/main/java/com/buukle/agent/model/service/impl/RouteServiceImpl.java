@@ -96,8 +96,8 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
         AgentModelRoute route = routeConverter.toDO(dto);
         route.setId(id);
         updateById(route);
-        // 思考强度覆盖是「三态」：null=继承厂商/全局。updateById 会忽略 null，
-        // 故显式按整份 DTO 覆盖这四个字段，才能把路由覆盖恢复成继承。
+        // Reasoning-strength overrides are three-state: null = inherit from provider/global. updateById ignores
+        // null, so explicitly overwrite these four fields from the whole DTO to restore inheritance for the route.
         lambdaUpdate()
                 .eq(AgentModelRoute::getId, id)
                 .set(AgentModelRoute::getReasoningSupported, dto.getReasoningSupported())

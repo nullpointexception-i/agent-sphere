@@ -14,25 +14,26 @@ public class CapabilitySkill {
     private String description;
     private String definition;
     private String status;
-    /** hub 可见性：PRIVATE=仅作者，PUBLIC=hub 公开。 */
+    /** Hub visibility: PRIVATE = author only, PUBLIC = listed in the hub. */
     private String visibility;
-    /** fork 血缘：安装副本指回源 skill id；原生为 null。 */
+    /** Fork lineage: an installed copy points back to the source skill id; null for originals. */
     private Long originSkillId;
-    /** 被复制安装次数（源行累加）。 */
+    /** Number of times this skill has been copied/installed (accumulated on the source row). */
     private Integer installCount;
-    /** 内容版本：源技能每次内容编辑自增；创建时为 1。 */
+    /** Content version: bumped on every content edit of the source skill; 1 on creation. */
     private Integer version;
-    /** 已安装副本上次同步时记录的源版本；仅副本（originSkillId 非空）有意义。 */
+    /** Source version recorded when an installed copy was last synced; only meaningful for copies (originSkillId non-null). */
     private Integer originVersion;
-    /** 已安装副本是否随源版本自动更新；仅副本有意义。 */
+    /** Whether an installed copy follows source versions automatically; only meaningful for copies. */
     private Boolean autoUpdate;
     /**
-     * 最后一次与源头对齐的时间（展示快照）：install 时记为安装时间，
-     * syncFromOrigin 成功时刷新。与 originVersion 取值始终一致但互不影响 ——
-     * originVersion 是条件 UPDATE 的乐观锁字段，一旦更新失败它会与界面脱节。
+     * Last time the copy was aligned with its origin (display snapshot): set to the install time on
+     * install and refreshed when syncFromOrigin succeeds. Always equal in value to originVersion but
+     * independent of it - originVersion is the optimistic-lock field of the conditional UPDATE, so a
+     * failed update desyncs it from the UI.
      */
     private LocalDateTime syncedAt;
-    /** 最后一次同步到的源头版本号（展示快照，只读）。 */
+    /** Origin version the copy was last synced to (display snapshot, read-only). */
     private Integer syncedFromVersion;
     @TableLogic
     private Boolean deleteFlag;

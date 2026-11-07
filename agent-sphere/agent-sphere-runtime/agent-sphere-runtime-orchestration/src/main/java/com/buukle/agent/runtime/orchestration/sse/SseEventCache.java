@@ -12,10 +12,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 
 /**
- * session/用户级 SSE 事件缓存（Redis List + 滑动 TTL）。
+ * Session/user-level SSE event cache (Redis List + sliding TTL).
  *
- * 单写者（origin 副本）写、多读者 flush：origin 在发布 topic 前先 append；各副本在客户端
- * （重连到本副本）注册 emitter 时 flush 回放。避免跨副本重连丢事件，且无重复投递。
+ * Single writer (origin replica) writes, multiple readers flush: origin appends before publishing to the topic; each replica,
+ * when a client (reconnecting to that replica) registers an emitter, flushes to replay. This avoids losing events on cross-replica reconnects without duplicate delivery.
  */
 @Slf4j
 @Component
@@ -27,12 +27,12 @@ public class SseEventCache {
     private final RedissonClient eventBusRedissonClient;
     private final AgentRuntimeProperties properties;
 
-    /** 新 run 开始时清空该 session 缓存，避免重连后重放旧 run 事件（origin 调用）。 */
+    /** Clear the session cache when a new run starts, so reconnects do not replay old run events (called by origin). */
     public void clearSessionEvents(Long sessionId) {
         getSessionList(sessionId).delete();
     }
 
-    /** origin 在发布 topic 前追加事件。 */
+    /** Origin appends the event before publishing to the topic. */
     public void appendSessionEvent(Long sessionId, Object event) {
         RList<Object> list = getSessionList(sessionId);
         list.add(event);
@@ -40,7 +40,7 @@ public class SseEventCache {
         list.expire(properties.getSse().getCacheTtl());
     }
 
-    /** 新连接注册后回放缓存（读取即清除，避免重复回放）。 */
+    /** Replay the cache after a new connection registers (read-and-clear to avoid duplicate replay). */
     public void flushSessionEvents(Long sessionId, SseEmitter emitter) {
         RList<Object> list = getSessionList(sessionId);
         List<Object> events = list.readAll();
@@ -51,14 +51,14 @@ public class SseEventCache {
             try {
                 emitter.send(SseEmitter.event().data(event));
             } catch (Exception e) {
-                // emitter 已断：剩余事件丢弃（下次重连再读，缓存被清属可接受丢失，与现状一致）
+                // emitter disconnected: drop the remaining events (they are read on the next reconnect; losing a cleared cache is acceptable and matches current behavior)
                 break;
             }
         }
         list.delete();
     }
 
-    /** 用户级缓存（插件 task 指令）——origin 追加。 */
+    /** User-level cache (extension task commands) — appended by origin. */
     public void appendUserEvent(String username, Object event) {
         RList<Object> list = getUserList(username);
         list.add(event);
@@ -66,7 +66,7 @@ public class SseEventCache {
         list.expire(properties.getSse().getCacheTtl());
     }
 
-    /** 用户级缓存回放。 */
+    /** Replay the user-level cache. */
     public void flushUserEvents(String username, SseEmitter emitter) {
         RList<Object> list = getUserList(username);
         List<Object> events = list.readAll();

@@ -33,10 +33,10 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * Resume 恢复：
- * - 有 run-local 记录：summary 始终作为 leading system，tail 只在 restoreCurrentRun 时注入；
- *   否则当前 run 的尾部由 SessionRunner 保留，避免重复。
- * - 无 run-local 记录：恢复持久化 tool 历史 + 逐轮 assistant 正文；reasoning 走 reasoning_content，不进入正文。
+ * Resume recovery:
+ * - With a run-local record: summary is always the leading system, and tail is injected only when restoreCurrentRun;
+ *   otherwise the current run's tail is kept by SessionRunner to avoid duplication.
+ * - Without a run-local record: restore the persisted tool history + per-turn assistant body; reasoning goes through reasoning_content and never enters the body.
  */
 @ExtendWith(MockitoExtension.class)
 class HistoryLoaderTest {
@@ -102,7 +102,7 @@ class HistoryLoaderTest {
 
         List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, false);
 
-        // 只有 summary；tail 由 SessionRunner 的 currentRunTail 提供
+        // Summary only; the tail is provided by SessionRunner's currentRunTail
         assertEquals(1, messages.size());
         assertTrue(messages.get(0).getContent().toString().contains("RUN-SUM"));
     }
@@ -114,7 +114,7 @@ class HistoryLoaderTest {
         AgentLlmInteractionRecordVO first = interaction("first assistant text", "2026-10-29 04:12:21");
         AgentLlmInteractionRecordVO second = interaction(null, "2026-10-29 04:12:26");
         when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(first, second));
-        // 生产 SPI 返回倒序，HistoryLoader 内部 reverse 成时间正序
+        // The production SPI returns descending order; HistoryLoader reverses it to chronological order internally
         when(toolCallRecordSpi.listBySessionId(SESSION_ID, RUN_ID)).thenReturn(List.of(
                 toolCall(2L, "call-2", "04:12:28"),
                 toolCall(1L, "call-1", "04:12:22")));
@@ -130,7 +130,7 @@ class HistoryLoaderTest {
         assertEquals("call-1", firstAssistant.getToolCalls().get(0).getId());
         assertEquals("tool", messages.get(2).getRole());
         assertEquals("call-1", messages.get(2).getToolCallId());
-        // 第二轮没有正文：只有 assistant(tool_calls) + tool
+        // The second turn has no body: only assistant(tool_calls) + tool
         assertEquals("assistant", messages.get(3).getRole());
         assertEquals("call-2", messages.get(3).getToolCalls().get(0).getId());
         assertEquals("tool", messages.get(4).getRole());
@@ -268,7 +268,7 @@ class HistoryLoaderTest {
     void screenshotReplayIsSkippedWhenReplayDisabled() {
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
 
-        // restoreCurrentRun=false：session 压缩重组不重放截图，也不重建当前 run
+        // restoreCurrentRun=false: session compaction reassembly does not replay screenshots or rebuild the current run
         List<ChatMessageDTO> messages = loader.load(SESSION_ID, RUN_ID, false);
 
         assertTrue(messages.stream().noneMatch(m -> "user".equals(m.getRole())
@@ -292,9 +292,9 @@ class HistoryLoaderTest {
 
     @Test
     void toolCallInSameSecondAsNextTurnKeepsPreviousTurn() {
-        // 线上 run 2810：tool 记于 03:54:51.000042，归属 turn16（03:54:49.986679）；
-        // 但秒级截断后与 turn17 的开始时间（03:54:51.842411）相同，旧实现会把它错配到 turn17，
-        // 让一条 assistant 携带两个 tool_calls 并被模型端 400 拒绝。
+        // Production run 2810: the tool was recorded at 03:54:51.000042 and belongs to turn16 (03:54:49.986679);
+        // but after second-level truncation it matches turn17's start time (03:54:51.842411), so the old implementation misassigned it to turn17,
+        // making one assistant carry two tool_calls and get rejected with 400 by the model side.
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         LocalDateTime turn16At = LocalDateTime.of(2026, 11, 3, 3, 54, 49, 986_679_000);
         LocalDateTime toolAt = LocalDateTime.of(2026, 11, 3, 3, 54, 51, 0);
@@ -318,8 +318,8 @@ class HistoryLoaderTest {
 
     @Test
     void screenshotObservationIsAppendedAfterAllToolMessagesOfTurn() {
-        // 同一轮多个 tool 调用时，截图观察必须排在该轮全部 tool 消息之后，
-        // 否则 assistant(tool_calls) → tool → user(观察) → tool 会被判定为非法序列。
+        // With multiple tool calls in one turn, the screenshot observation must come after all tool messages of that turn,
+        // otherwise assistant(tool_calls) → tool → user(observation) → tool is judged an illegal sequence.
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         LocalDateTime turnAt = LocalDateTime.of(2026, 11, 3, 3, 54, 49, 0);
         when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(interactionAt("turn", turnAt)));
@@ -360,7 +360,7 @@ class HistoryLoaderTest {
 
     @Test
     void toolCallWithTurnNoIsPairedByTurnNotByTimestamp() {
-        // 有 turn_no 时不再看时间：这条调用时间落在 turn1 的窗口里，但 turn_no=0 必须归 turn0。
+        // With turn_no present, time is ignored: this call's time falls in turn1's window, but turn_no=0 must assign it to turn0.
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         AgentLlmInteractionRecordVO turn0 = interactionAt("turn 0",
                 LocalDateTime.of(2026, 11, 3, 3, 54, 49, 0));
@@ -387,7 +387,7 @@ class HistoryLoaderTest {
 
     @Test
     void toolCallWithoutTurnNoFallsBackToTimeWindow() {
-        // 迁移前的历史行没有 turn_no：仍按毫秒窗口配对，不能因为缺字段就丢调用。
+        // Historical rows predating the migration have no turn_no: still pair by millisecond window; a missing field must not drop the call.
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         AgentLlmInteractionRecordVO turn0 = interactionAt("turn 0",
                 LocalDateTime.of(2026, 11, 3, 3, 54, 49, 0));
@@ -405,8 +405,8 @@ class HistoryLoaderTest {
 
     @Test
     void subAgentToolCallsAreNotReplayedIntoParentHistory() {
-        // 子 Agent 的 tool 记录与父 run 共用 run_id（靠 sub_agent_run_id 区分），
-        // 但它们不属于父 Agent 的对话：父侧只见过一次 delegate 的结果。
+        // Sub-agent tool records share run_id with the parent run (distinguished by sub_agent_run_id),
+        // but they are not part of the parent Agent's conversation: the parent only ever saw one delegate result.
         when(compactRecordSpi.getLatestCompletedByRunId(RUN_ID)).thenReturn(null);
         when(interactionSpi.listByRunIdAsc(RUN_ID)).thenReturn(List.of(
                 interaction("assistant text", "2026-10-29 04:12:21")));
@@ -454,7 +454,7 @@ class HistoryLoaderTest {
 
     private static final DateTimeFormatter TS_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    /** 带毫秒精度的交互记录（真实 VO 由 mapper 同时填 createdAt 字符串与 createdAtMillis）。 */
+    /** Interaction record with millisecond precision (the real VO is filled by the mapper with both the createdAt string and createdAtMillis). */
     private static AgentLlmInteractionRecordVO interactionAt(String reply, LocalDateTime at) {
         AgentLlmInteractionRecordVO vo = interaction(reply, at.format(TS_FMT));
         vo.setCreatedAtMillis(TimeUtils.toEpochMillis(at));

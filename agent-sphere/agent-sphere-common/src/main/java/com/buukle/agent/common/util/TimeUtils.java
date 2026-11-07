@@ -4,21 +4,22 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 /**
- * 时间换算工具。
+ * Time conversion utilities.
  *
- * <p>数据库里的 {@code timestamp without time zone} 一律按 {@code Asia/Shanghai} 解释
- * （与 {@code Application#setDefaultTimezone} 一致）。这里显式指定时区，避免依赖
- * JVM 默认时区在测试/容器里被改掉后出现偏移。
+ * <p>{@code timestamp without time zone} values in the database are always interpreted as
+ * {@code Asia/Shanghai} (consistent with {@code Application#setDefaultTimezone}). The zone is
+ * specified explicitly here so that a changed JVM default zone in tests or containers cannot
+ * introduce an offset.
  */
 public final class TimeUtils {
 
-    /** 全库统一时区（与 Application#setDefaultTimezone 保持一致）。 */
+    /** Single database-wide time zone (kept consistent with Application#setDefaultTimezone). */
     public static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
     private TimeUtils() {
     }
 
-    /** {@code LocalDateTime} → epoch 毫秒；null 透传。 */
+    /** {@code LocalDateTime} → epoch milliseconds; null passes through. */
     public static Long toEpochMillis(LocalDateTime time) {
         return time == null ? null : time.atZone(ZONE).toInstant().toEpochMilli();
     }

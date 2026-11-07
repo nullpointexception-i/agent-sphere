@@ -19,11 +19,11 @@ let taskReconnectCount = 0;
 let connected = false;
 
 const RECONNECT_BASE_MS = 5000;
-const TASK_RECONNECT_FAST_INTERVAL_MS = 1000; // 断开后前 30s：每秒重试 1 次
+const TASK_RECONNECT_FAST_INTERVAL_MS = 1000; // first 30s after disconnect: retry once per second
 const TASK_RECONNECT_FAST_LIMIT = 30;
 const ZOMBIE_STALE_MS = 75000; // backend heartbeats every 15s; no data past this → treat as a zombie connection
 
-/** 从 background 拉取凭证（offscreen 无 chrome.storage，必须经 runtime 消息）。 */
+/** Pull credentials from background (offscreen has no chrome.storage, so runtime messaging is required). */
 async function requestCreds() {
   try {
     const res = await chrome.runtime.sendMessage({
@@ -202,7 +202,7 @@ function handleSseData(dataLine) {
 
 function keepAlive() {
   if (!token || !baseUrl) {
-    // 凭证缺失（offscreen 先于登录启动 / SW 重启后内存态丢失）：重试拉取
+    // Credentials missing (offscreen started before login / in-memory state lost after an SW restart): retry fetching
     requestCreds().then((ok) => {
       if (ok) connectTaskSse();
     });
@@ -220,7 +220,7 @@ function keepAlive() {
   }
 }
 
-// 未连接（无凭据/流已断）时 5s 一查快速恢复；已连接时 30s 省电
+// Check every 5s while disconnected (no credentials / stream broken) for fast recovery; every 30s once connected to save power
 const KEEPALIVE_IDLE_MS = 5000;
 const KEEPALIVE_CONNECTED_MS = 30000;
 

@@ -1,6 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.dict.SystemDicConstants;
@@ -40,8 +41,8 @@ import java.util.UUID;
 public class SuperAgentServiceImpl implements SuperAgentService {
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String ROLE_ROUTER = "ROUTER";
-    private static final String ROLE_WORKER = "WORKER";
+    private static final String ROLE_ROUTER = InstanceRole.ROUTER.value();
+    private static final String ROLE_WORKER = InstanceRole.WORKER.value();
     private static final String BUSINESS_TYPE = "SUPER_AGENT";
 
     private final AgentSuperAgentMapper superAgentMapper;

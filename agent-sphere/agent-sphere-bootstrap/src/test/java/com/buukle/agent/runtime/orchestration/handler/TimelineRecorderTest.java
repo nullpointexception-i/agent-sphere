@@ -26,8 +26,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 压缩行生命周期：一次压缩（publishId）复用一行，RUNNING 建行、终态原地更新；
- * 下一次压缩另起一行。流式输出按 publishId 回填 seq/kind 后打到该行。
+ * Compaction row lifecycle: one compaction (publishId) reuses one row — RUNNING creates it, terminal states update it in place;
+ * the next compaction starts a new row. Streaming output fills in seq/kind by publishId and writes to that row.
  */
 @ExtendWith(MockitoExtension.class)
 class TimelineRecorderTest {
@@ -65,7 +65,7 @@ class TimelineRecorderTest {
         recorder.recordCompaction(SESSION_ID, RUN_ID, "compact-1", 7L,
                 TimelineState.COMPLETED.getCode(), "合并 3 轮历史");
 
-        // 同一次压缩：不再新建行，只 update
+        // Same compaction: no new row, update only
         verify(timelineSpi, times(1)).record(anyLong(), anyLong(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any());
         verify(timelineSpi).update(eq(SESSION_ID), eq(11L), any(), any(), any());
@@ -143,7 +143,7 @@ class TimelineRecorderTest {
 
         recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
 
-        // uk_timeline_run_status 只允许一行：终态必须原地更新
+        // uk_timeline_run_status allows one row only: terminal states must be updated in place
         verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
                 eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any());
         verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),
@@ -210,7 +210,7 @@ class TimelineRecorderTest {
 
         verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
                 eq(TimelineState.RESUMED.getCode()), eq(TimelineState.RESUMED.getCode()),
-                eq("▶️ 已恢复（等待 7s）"));
+                eq("▶️ Resumed (waited 7s)"));
     }
 
     @Test
@@ -233,7 +233,7 @@ class TimelineRecorderTest {
         assertEquals(31L, row.seq());
         verify(timelineSpi).update(eq(SESSION_ID), eq(31L),
                 eq(TimelineState.RUNNING.getCode()), eq(TimelineState.RUNNING.getCode()),
-                eq("▶️ 已恢复，继续执行"));
+                eq("▶️ Resumed; continuing"));
     }
 
     @Test
@@ -252,7 +252,7 @@ class TimelineRecorderTest {
 
         recorder.recordRunTerminal(SESSION_ID, RUN_ID, RunStatus.COMPLETED);
 
-        // 一个 run 只有一行 run_status（uk_timeline_run_status）：终态必须原地更新。
+        // A run has only one run_status row (uk_timeline_run_status): terminal states must be updated in place.
         verify(timelineSpi).update(eq(SESSION_ID), eq(17L),
                 eq(TimelineState.COMPLETED.getCode()), eq(TimelineState.COMPLETED.getCode()), any());
         verify(timelineSpi, times(0)).record(anyLong(), anyLong(), any(), any(), any(), any(),

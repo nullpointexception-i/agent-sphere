@@ -15,7 +15,7 @@
   padding: 0;
 }
 
-/* 全宽（drawer/hosted）下聊天区右侧留边，与左侧 sidebar 间距对称，不再贴浏览器/抽屉边缘 */
+/* In full-width (drawer/hosted) mode leave a right margin in the chat area, symmetric with the left sidebar gap, so it no longer hugs the browser/drawer edge */
 .aw-hosted .aw-view {
   padding-right: 10px;
 }
@@ -268,8 +268,8 @@
   padding-top: 8px;
 }
 
-/* 包裹层承载悬停提示：原生 title 在 disabled 元素上不触发
-   （浏览器不对禁用表单控件派发鼠标事件）。按钮本身保留真实 disabled 语义。 */
+/* The wrapper carries the hover tooltip: a native title does not fire on disabled elements
+   (the browser dispatches no mouse events to disabled form controls). The button keeps its real disabled semantics. */
 .aw-new-session-wrap {
   flex-shrink: 0;
   display: block;
@@ -376,7 +376,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* 关闭滚动锚定：长消息/图片插入时不擅自改 scrollTop */
+  /* Disable scroll anchoring: do not change scrollTop on our own when long messages/images are inserted */
   overflow-anchor: none;
   scrollbar-width: thin;
   font-size: 12px;
@@ -431,7 +431,7 @@
   font-size: 12px;
 }
 
-/* 聊天区空态（暂不依赖 .aw-tl 内边距，上下加留白视觉居中） */
+/* Chat area empty state (not relying on .aw-tl padding for now; add vertical whitespace to center it visually) */
 .aw-tl-empty {
   padding: 32px 0;
   text-align: center;
@@ -670,7 +670,7 @@
   font-size: 12px;
 }
 
-/* ---- Markdown 渲染 ---- */
+/* ---- Markdown rendering ---- */
 .aw-md {
   width: 100%;
   word-break: break-word;
@@ -978,7 +978,7 @@
   white-space: nowrap;
 }
 
-/* ---- 子 Agent 卡片 ---- */
+/* ---- Sub-agent card ---- */
 .aw-usage-chip {
   margin-left: auto;
   color: #9ca3af;
@@ -1073,7 +1073,7 @@
   color: #9ca3af;
 }
 
-/* ---- 澄清 ---- */
+/* ---- Clarification ---- */
 .aw-tl-clarify-options {
   display: flex;
   gap: 6px;
@@ -1129,7 +1129,7 @@
   cursor: default;
 }
 
-/* ---- RUNNING 小球（wobble） ---- */
+/* ---- RUNNING dot (wobble) ---- */
 @keyframes aw-dot-wobble {
   0%,
   100% {
@@ -1150,7 +1150,7 @@
   animation: aw-dot-wobble 0.6s ease-in-out infinite;
 }
 
-/* ---- 聊天输入区 ---- */
+/* ---- Chat input area ---- */
 .aw-chat-input {
   flex-shrink: 0;
   display: flex;
@@ -1167,8 +1167,8 @@
   gap: 8px;
 }
 
-/* 任务专用实例（businessType 非空）：输入区原位替换为占位，
-   会话列表与时间线保持原样，仍可只读查看任务执行过程。 */
+/* Task-dedicated instance (non-empty businessType): the input area is replaced in place by a placeholder;
+   the session list and timeline stay as they are, so the task execution can still be viewed read-only. */
 .aw-business-autochat {
   flex-shrink: 0;
   display: flex;

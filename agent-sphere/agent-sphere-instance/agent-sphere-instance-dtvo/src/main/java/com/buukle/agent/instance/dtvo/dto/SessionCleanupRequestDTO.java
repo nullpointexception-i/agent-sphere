@@ -5,13 +5,14 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 手动触发历史会话清理的请求。
+ * Request to manually trigger historical session cleanup.
  *
- * <p>{@code dryRun} 默认 true：清理是<b>不可逆硬删</b>，接口设计上必须让人先看清单再删。
+ * <p>{@code dryRun} defaults to true: cleanup is an <b>irreversible hard delete</b>, so the API is
+ * designed to make people inspect the list before deleting.
  */
 @Data
 public class SessionCleanupRequestDTO implements Serializable {
 
-    /** 只统计「将会删除多少行」而不落刀；默认 true */
+    /** Only count "how many rows would be deleted" without deleting anything; defaults to true */
     private boolean dryRun = true;
 }

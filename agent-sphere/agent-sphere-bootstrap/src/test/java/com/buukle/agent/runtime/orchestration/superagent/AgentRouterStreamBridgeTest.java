@@ -248,7 +248,7 @@ class AgentRouterStreamBridgeTest {
         assertEquals(1, published.stream()
                 .filter(e -> AgentStreamStatus.STARTED.equals(e.streamStatus()))
                 .count());
-        // 空 finalReply 且无 assistantReply：不应触发自动 final。
+        // Empty finalReply and no assistantReply: must not trigger an automatic final.
         verify(replyPort, never()).sendFinalReply(anyLong(), anyLong(), anyLong(), anyString());
     }
 

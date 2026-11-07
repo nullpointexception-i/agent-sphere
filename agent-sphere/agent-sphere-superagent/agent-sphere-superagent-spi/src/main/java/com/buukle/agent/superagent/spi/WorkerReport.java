@@ -2,7 +2,7 @@ package com.buukle.agent.superagent.spi;
 
 import java.io.Serializable;
 
-/** Worker Run 终态回报。 */
+/** Terminal-state report of a Worker Run. */
 public record WorkerReport(
         Long workItemId,
         Long superAgentId,

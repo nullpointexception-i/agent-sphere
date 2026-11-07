@@ -7,10 +7,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
- * Group Router 的 LLM 适配器。
+ * LLM adapter for Group Router.
  *
- * <p>superagent-service 只依赖 {@link GroupRouterPort}；本类在 orchestration 内用现有
- * KernelLlmService + 路由/密钥解析实现，避免 Super-Agent 域反向依赖运行时。
+ * <p>superagent-service depends only on {@link GroupRouterPort}; this class, inside orchestration, uses the existing
+ * KernelLlmService + route/key resolution, so the Super-Agent domain does not depend back on the runtime.
  */
 @Service
 @RequiredArgsConstructor

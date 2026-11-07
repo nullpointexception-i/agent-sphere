@@ -35,10 +35,12 @@ import { createCoalescedTask } from './utils/coalesce';
 const SESSION_PAGE_SIZE = 10;
 
 /**
- * 澄清乐观态的本地保护键。必须包含 clarificationId：同一次 run 续跑时后端复用 runId，
- * 而每轮追问的 clarificationId 不同。只用 runId 会让「第二轮澄清」被误判成已应答。
- * clarificationId 缺失时返回 null —— 调用方据此【放弃保护】、采信服务端状态，
- * 因为错误拦截的代价（永久显示错误状态直到刷新）远大于放过一次竞态回退。
+ * Local guard key for the optimistic clarification state. It must include clarificationId: when
+ * the same run resumes, the backend reuses runId, while each clarification round has a different
+ * clarificationId. Using runId alone would misjudge "the second clarification" as already answered.
+ * When clarificationId is missing, return null — callers then [drop the guard] and trust the
+ * server state, because the cost of wrongly blocking (a permanently wrong state until refresh) is
+ * far greater than letting one race fall through.
  */
 function clarificationKey(
   runId: unknown,
@@ -49,7 +51,7 @@ function clarificationKey(
   return `${runId}:${clarificationId}`;
 }
 
-/** 兼容后端 `YYYY-MM-DD HH:mm:ss[.ffffff]`（非 ISO）与 ISO 格式 → timestamp；失败返回 0。 */
+/** Tolerate the backend's `YYYY-MM-DD HH:mm:ss[.ffffff]` (non-ISO) and ISO formats → timestamp; 0 on failure. */
 function toTs(v: any): number {
   if (typeof v === 'number') return v;
   if (typeof v !== 'string' || !v) return 0;
@@ -106,12 +108,12 @@ export default function Chat() {
   const [selectedModelRouteId, setSelectedModelRouteId] = useState<
     number | undefined
   >(undefined);
-  /** 思考强度能力（动态默认 + 各档可行性）。 */
+  /** Reasoning effort capability (dynamic default + per-level feasibility). */
   const [reasoningCapability, setReasoningCapability] = useState<any>(null);
   const [reasoningEffort, setReasoningEffort] = useState<string | undefined>(
     undefined,
   );
-  /** 用户是否手动改过档位：空闲刷新时不要覆盖手选值。 */
+  /** Whether the user manually changed the level: do not overwrite the manual choice on idle refresh. */
   const reasoningTouchedRef = useRef(false);
   const [expandOpen, setExpandOpen] = useState(false);
   const [expandText, setExpandText] = useState('');
@@ -130,15 +132,18 @@ export default function Chat() {
   const currentRunIdRef = useRef<number | null>(null);
   const stopFallbackRef = useRef<number | null>(null);
   const pendingMsgConsumedRef = useRef(false);
-  // 已本地应答的澄清：防止随后 refreshLatest 用服务端旧 PENDING 覆盖乐观态。
-  // 键必须是 runId + clarificationId，不能只用 runId —— 后端 resumeFromClarification
-  // 在 run 处于 AWAITING_USER 时会【复用同一个 runId】续跑，一次会话里 agent 可能被
-  // 追问多轮，各轮 clarificationId 不同却共用 runId。按 runId 加键会把后续澄清全部
-  // 误判为「已答过」并改写成 ANSWERED，待选项和输入框不渲染（刷新后 Ref 重建才恢复）。
+  // Clarifications already answered locally: prevents a subsequent refreshLatest from overwriting the optimistic state with the server's stale PENDING value.
+  // The key must be runId + clarificationId, not runId alone — the backend's
+  // resumeFromClarification [reuses the same runId] to resume while the run is AWAITING_USER, and
+  // one session may ask the agent multiple rounds, each with a different clarificationId but a
+  // shared runId. Keying by runId would mark every later clarification as "already answered" and
+  // rewrite it to ANSWERED, so the options and input box would not render (only a refresh,
+  // rebuilding the refs, recovers).
   const answeredClarificationsRef = useRef<Set<string>>(new Set());
-  // 切会话时递增：异步请求回来发现 epoch 变了就丢弃，避免旧会话数据污染新会话。
+  // Incremented when switching sessions: if an async request returns after the epoch changed, drop
+  // it so data from the old session does not pollute the new one.
   const requestEpochRef = useRef(0);
-  // token 流式缓冲：每帧合并一次 setTimeline，避免每个 token 全量重建数组。
+  // Token streaming buffer: merge one setTimeline per frame instead of rebuilding the whole array on every token.
   const pendingDeltaRef = useRef(
     new Map<number, { reply?: string; thinking?: string }>(),
   );
@@ -203,7 +208,7 @@ export default function Chat() {
 
       const historyMsgs: any[] = [];
       for (const r of runs) {
-        // 澄清应答 run：回复已展示在澄清卡片里，跳过独立用户气泡
+        // Clarification-answer run: the reply is already shown in the clarification card, so skip a separate user bubble
         if (
           !r.clarificationResponse &&
           r.userMessage &&
@@ -217,7 +222,8 @@ export default function Chat() {
             ts: toTs(r.createdAt),
           });
         }
-        // 澄清不再写入 messages：澄清卡由 timeline 渲染，messages 仅保留用户气泡。
+        // Clarifications are no longer written into messages: the clarification card is rendered by the
+        // timeline, and messages keeps only user bubbles.
       }
       if (page === 1) {
         setMessages(historyMsgs);
@@ -227,10 +233,11 @@ export default function Chat() {
     } catch {}
   }, []);
 
-  // 按 runId（可选 clarificationId）就地更新 timeline 澄清行状态
-  // 把某次澄清的状态变更应用到匹配行。
-  // 匹配粒度：clarificationId 存在时【必须】命中同一轮；缺失时只允许命中 run 内
-  // 仍处于 PENDING 的行 —— 否则同 run 续跑产生的后续澄清会被连带改写。
+  // Update the timeline clarification row in place by runId (optionally clarificationId)
+  // Apply a clarification status change to the matching row.
+  // Match granularity: when clarificationId exists it [must] hit the same round; when missing,
+  // only rows still PENDING within the run may match — otherwise later clarifications produced
+  // by a run resume would be rewritten along with it.
   const applyClarificationState = (
     rows: any[],
     d: any,
@@ -245,7 +252,7 @@ export default function Chat() {
       if (wantId != null && haveId != null) {
         if (String(haveId) !== String(wantId)) return r;
       } else if (r.state !== 'PENDING') {
-        // 无 id 可比时只改待答复的行，绝不覆盖已终结的行
+        // When there is no id to compare, only change rows awaiting a reply; never overwrite finalized rows
         return r;
       }
       return {
@@ -255,7 +262,7 @@ export default function Chat() {
       };
     });
 
-  // 本地立即解除所有 PENDING 澄清（停止/取消时秒解锁，不等 SSE 回来）
+  // Immediately release all local PENDING clarifications (instant unlock on stop/cancel, without waiting for SSE)
   const cancelPendingClarificationsLocally = () =>
     setTimeline((prev) =>
       prev.map((r) =>
@@ -271,7 +278,7 @@ export default function Chat() {
       const m = new Map<number, any>(prev.map((r) => [r.seq, r]));
       for (const r of rows) {
         if (r && r.seq != null) {
-          // 子 Agent 权威行到达时移除 SS E 占位行（seq<0），避免同 subId 出现双行
+          // When the authoritative sub-agent row arrives, remove the SSE placeholder row (seq<0) so the same subId does not appear twice
           if (r.kind === 'subagent' && r.refSubAgentRunId != null) {
             const pid = Number(r.refSubAgentRunId);
             for (const [seq, row] of m) {
@@ -286,8 +293,10 @@ export default function Chat() {
             }
           }
           const incoming = { ...(m.get(r.seq) || {}), ...r };
-          // 运行中的 assistant 权威行为空时，不能用空内容覆盖本地已流出的正文/推理，
-          // 否则重试/尾窗刷新会让用户已经看到的回复突然消失。
+          // When the authoritative assistant row for a running run is empty, do not overwrite
+          // locally streamed body/reasoning with empty content,
+          // otherwise a retry/tail-window refresh would make the reply the user already saw
+          // suddenly disappear.
           const existingRow = m.get(r.seq);
           if (
             existingRow &&
@@ -305,8 +314,9 @@ export default function Chat() {
                 incoming.content?.thinking || existingRow.content?.thinking,
             };
           }
-          // 已本地应答的澄清不被服务端旧 PENDING 回退。按 clarificationId 匹配，
-          // 缺 id 时不拦截（见 clarificationKey 注释）。
+          // Locally answered clarifications are not reverted by a stale server PENDING. Matched
+          // by clarificationId; when the id is missing no guard is applied (see the
+          // clarificationKey comment).
           if (
             incoming.kind === 'clarification' &&
             incoming.state === 'PENDING'
@@ -326,8 +336,9 @@ export default function Chat() {
     });
   };
 
-  // 流式 token 合并：一帧最多一次 setTimeline，只有当前流式行会换引用，
-  // 配合 RowCard memo 可避免整页/整列表重渲染。
+  // Streaming token merge: at most one setTimeline per frame, and only the currently streaming
+  // row changes reference,
+  // which together with RowCard memo avoids re-rendering the whole page/list.
   const flushStreamingDeltas = useCallback(() => {
     deltaRafRef.current = null;
     const batch = pendingDeltaRef.current;
@@ -412,7 +423,7 @@ export default function Chat() {
       bumpCursors(rows);
       setTimelineHasMore(Boolean(page?.hasMore));
     } catch {
-      // 后端未启用/异常：忽略
+      // Not enabled on the backend / request failed: ignore
     }
   };
 
@@ -434,17 +445,19 @@ export default function Chat() {
 
   const refreshLatest = async (sid: number) => {
     const epoch = requestEpochRef.current;
-    // afterSeq 分页在后端是 `LIMIT size+1`（AgentTimelineServiceImpl#list）。若两次刷新
-    // 之间新增超过 limit 行，单次只会补到第 limit 行，剩余行被 hasMore 标记但没有任何
-    // 「继续向后拉」的路径（loadOlderTimeline 走 beforeSeq，方向相反）→ 中间行永久缺失
-    // 到下次刷新。这里循环续拉，直到取空或不再 hasMore；轮次上限防异常情况下死循环。
+    // afterSeq pagination on the backend is `LIMIT size+1` (AgentTimelineServiceImpl#list). If more
+    // than limit rows are added between two refreshes, a single call only fills up to the limit-th
+    // row, and the remaining rows are flagged by hasMore without any path to "keep pulling forward"
+    // (loadOlderTimeline uses beforeSeq, the opposite direction) → the middle rows stay missing until
+    // the next refresh. This loop keeps pulling until empty or no longer hasMore; a round cap prevents
+    // an infinite loop in abnormal cases.
     const LIMIT = 10;
     const MAX_ROUNDS = 20;
     let round = 0;
     let more = false;
     do {
       try {
-        // 空游标（新会话首条消息）→ 直接拉尾页；否则按 afterSeq 增量补行
+        // Empty cursor (first message of a new session) → fetch the tail page directly; otherwise append incrementally by afterSeq
         const page = await agentApi.sessions.getTimeline(
           sid,
           newestSeqRef.current != null
@@ -460,8 +473,9 @@ export default function Chat() {
         }
         more = !!page?.hasMore;
         if (more) setTimelineHasMore(true);
-        // 游标未前进（空页，或后端返回的 seq 不大于当前游标）→ 无更多可取，直接终止，
-        // 否则同一页会被反复拉取直到 MAX_ROUNDS。
+        // Cursor did not advance (empty page, or the returned seq is not greater than the current
+        // cursor) → nothing more to fetch, stop immediately,
+        // otherwise the same page would be pulled repeatedly until MAX_ROUNDS.
         if (!rows.length || newestSeqRef.current === before) break;
       } catch {
         break;
@@ -469,11 +483,14 @@ export default function Chat() {
     } while (more && ++round < MAX_ROUNDS);
   };
 
-  // 按最新 run 状态行校准发送锁。SSE 断连窗口内若丢了 run 终态事件，sending 会一直卡在
-  // true（此前只能刷新页面恢复）；重连后拉一次权威状态即可解锁。
-  // 停车态判定：RUNNING/PENDING/WAITING 仍锁定；终态与 AWAITING_USER 解锁
-  // （AWAITING_USER 由澄清卡接管，输入框应可用来作答）。
-  // 发送锁唯一来源：/runtime/{sid}/state（来源表聚合）。timeline 只做展示，不参与判断。
+  // Calibrate the send lock from the latest run status row. If a run terminal event is lost during an
+  // SSE disconnect window, sending stays stuck at
+  // true (previously recoverable only by refreshing the page); fetching the authoritative state once
+  // on reconnect unlocks it.
+  // Parked-state rule: RUNNING/PENDING/WAITING stay locked; terminal states and AWAITING_USER unlock
+  // (AWAITING_USER is handled by the clarification card, so the input box should be usable to answer).
+  // Single source for the send lock: /runtime/{sid}/state (aggregated from source tables).
+  // The timeline only renders and does not take part in decisions.
   const refreshRuntimeState = async (sid: number) => {
     if (typeof document !== 'undefined' && document.hidden) return;
     const epoch = requestEpochRef.current;
@@ -490,11 +507,12 @@ export default function Chat() {
           state.blockReasons.includes('RUNNING'),
       );
     } catch {
-      // 不兜底：错误交给全局请求提示；发送锁保持上一次权威值
+      // No fallback: errors go to the global request prompt; the send lock keeps the last authoritative value
     }
   };
 
-  // 思考强度能力：动态默认由后端按实际输出上限计算；不可行档位照常返回，前端只做警告。
+  // Reasoning effort capability: the dynamic default is computed by the backend from the actual output
+  // limit; infeasible levels are still returned, and the frontend only warns.
   const refreshReasoningCapability = async (sid: number, routeId?: number) => {
     const epoch = requestEpochRef.current;
     try {
@@ -509,7 +527,7 @@ export default function Chat() {
         setReasoningEffort(undefined);
         return;
       }
-      // 运行中 run 已固化档位；空闲时只有用户没手选过才跟随动态默认。
+      // A running run has a fixed level; when idle, follow the dynamic default only if the user has not manually chosen one.
       if (cap.running) {
         setReasoningEffort(cap.selectedLevel ?? undefined);
       } else if (!reasoningTouchedRef.current) {
@@ -523,8 +541,10 @@ export default function Chat() {
   const refreshReasoningRef = useRef(refreshReasoningCapability);
   refreshReasoningRef.current = refreshReasoningCapability;
 
-  // 工具事件后的整页覆盖刷新：按 seq 覆盖同 seq 行，补齐迟到落库的 content（如截图 images）。
-  // afterSeq 增量会跳过 seq ≤ newest 的既有行（工具行），导致 live 阶段看不到截图；此处拉尾窗覆盖修正。
+  // Full-page overwrite refresh after tool events: overwrite rows with the same seq to backfill
+  // content persisted late (e.g. screenshot images).
+  // The afterSeq increment skips existing rows with seq ≤ newest (tool rows), so screenshots stay
+  // invisible during the live phase; pull the tail window here to overwrite and correct.
   const refreshTail = async (sid: number) => {
     const epoch = requestEpochRef.current;
     try {
@@ -541,8 +561,10 @@ export default function Chat() {
     }
   };
 
-  // 高频道请求合并：工具事件/运行态事件在 100~250ms 窗口内只打一次后端；
-  // 执行期间再来的触发会合并成「完成后再补一次」，避免并发风暴。
+  // High-frequency request coalescing: tool events / runtime-state events hit the backend only once
+  // within a 100~250ms window;
+  // triggers arriving during execution are merged into "run once more after completion", avoiding a
+  // concurrency storm.
   const refreshLatestRef = useRef(refreshLatest);
   refreshLatestRef.current = refreshLatest;
   const refreshStateRef = useRef(refreshRuntimeState);
@@ -560,7 +582,7 @@ export default function Chat() {
     createCoalescedTask((sid: number) => refreshTailRef.current(sid), 150),
   ).current;
 
-  // 标签页切回前台补一次权威运行态：后台不轮询，恢复时避免发送锁停在旧值。
+  // Fetch the authoritative runtime state once when the tab returns to the foreground: there is no background polling, so avoid leaving the send lock at a stale value.
   useEffect(() => {
     const onVisible = () => {
       const sid = currentSessionIdRef.current;
@@ -570,7 +592,7 @@ export default function Chat() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refreshStateCoalesced]);
 
-  // 会话级用量：run 终态后拉取 SUM，驱动聊天区最下方吸底用量条
+  // Session-level usage: fetch the SUM after a run reaches terminal state, driving the bottom usage bar of the chat area
   const refreshSessionUsage = async (sid: number) => {
     if (!sid) return;
     try {
@@ -612,13 +634,29 @@ export default function Chat() {
         queueId,
       );
       if (res?.result === 'ALREADY_CONSUMED') {
-        message.warning('消息已开始执行，无法撤回');
+        message.warning(
+          intl.formatMessage({
+            id: 'pages.chat.withdrawAlreadyRunning',
+            defaultMessage: 'Message already started and cannot be withdrawn',
+          }),
+        );
       } else if (res?.result === 'NOT_FOUND') {
-        message.warning('排队消息不存在');
+        message.warning(
+          intl.formatMessage({
+            id: 'pages.chat.queueNotFound',
+            defaultMessage: 'Queued message not found',
+          }),
+        );
       }
       await refreshQueue(currentSession.id);
     } catch (e: any) {
-      message.error(e?.message || '撤回失败');
+      message.error(
+        e?.message ||
+          intl.formatMessage({
+            id: 'pages.chat.withdrawFailed',
+            defaultMessage: 'Failed to withdraw',
+          }),
+      );
     }
   };
 
@@ -691,10 +729,12 @@ export default function Chat() {
   const handleTimelineClarify = async (row: any, response: string) => {
     if (!currentSession?.id || !row?.runId) return;
     const key = clarificationKey(row.runId, row.clarificationId);
-    // 先记为已应答，防止随后的 refreshLatest 用服务端旧 PENDING 覆盖乐观态。
-    // id 缺失时不记录：无法定位到具体是哪一轮澄清，记 runId 会误伤同 run 的后续澄清。
+    // Record as answered first, preventing the subsequent refreshLatest from overwriting the
+    // optimistic state with a stale server PENDING.
+    // Do not record when the id is missing: the specific clarification round cannot be located, and
+    // recording the runId would wrongly affect later clarifications of the same run.
     if (key) answeredClarificationsRef.current.add(key);
-    // 乐观回显：立即将澄清行置为已应答并显示用户提交内容
+    // Optimistic echo: immediately mark the clarification row as answered and show the user's submitted content
     setTimeline((prev) =>
       applyClarificationState(
         prev,
@@ -711,18 +751,26 @@ export default function Chat() {
         row.clarificationId,
       );
     } catch (e: any) {
-      // 提交失败（重复提交/澄清已失效）：撤销本地应答并拉取权威状态，避免卡死
+      // Submission failed (duplicate submit / clarification expired): revert the local answer and fetch the authoritative state to avoid a deadlock
       if (key) answeredClarificationsRef.current.delete(key);
-      message.error(e?.message || '澄清提交失败，请重试');
+      message.error(
+        e?.message ||
+          intl.formatMessage({
+            id: 'pages.chat.clarifyFailed',
+            defaultMessage: 'Failed to submit clarification, please retry',
+          }),
+      );
       void refreshLatest(currentSession.id);
     }
   };
 
-  // 子 Agent 实时步骤：由 SSE 事件增量构建（纯驱动，无需轮询/节流拉接口）。
-  // - reasoning_token 首帧(firstFrame) → 切新 LLM 轮；其余 → 追加当前轮思考；
-  // - content_token → 追加当前轮回复；
-  // - tool_call_{started,in_progress,succeeded,failed} → 按 publishId 就地更新工具步骤。
-  /** 从工具结果 artifact JSON 解析浏览器截图引用（data.screenshot.fileKey/contentType）。 */
+  // Sub-agent live steps: built incrementally from SSE events (purely driven, no polling / throttled
+  // endpoint pulls).
+  // - reasoning_token first frame (firstFrame) → switch to a new LLM round; otherwise → append to the
+  //   current round's thinking;
+  // - content_token → append to the current round's reply;
+  // - tool_call_{started,in_progress,succeeded,failed} → update the tool step in place by publishId.
+  /** Parse browser screenshot references from the tool result artifact JSON (data.screenshot.fileKey/contentType). */
   const parseScreenshotRef = (artifact?: string) => {
     if (!artifact) return null;
     try {
@@ -798,7 +846,7 @@ export default function Chat() {
         };
         if (d?.argumentsJson) update.argumentsJson = d.argumentsJson;
         if (d?.artifact) update.artifact = d.artifact;
-        // 工具结果含浏览器截图 → live 步骤直接带 images（刷新后走后端 timeline 一致）
+        // Tool result contains browser screenshots → live steps carry images directly (after refresh, the backend timeline is consistent)
         const shot = parseScreenshotRef(update.artifact);
         if (shot) update.images = [shot];
         setSubAgentLive((prev) => {
@@ -824,8 +872,10 @@ export default function Chat() {
       }
       if (subType === 'model_reason') {
         if (d?.firstFrame) {
-          // 新 LLM 轮：剥离首帧哨兵行（"<marker>id: name\n"），旧轮标记结束
-          // 新旧前缀均接受（`▶ Agent ` / `▶ Skill `），避免历史会话断裂
+          // New LLM round: strip the first-frame sentinel line ("<marker>id: name\n"), marking the
+          // end of the old round
+          // Both old and new prefixes are accepted (`▶ Agent ` / `▶ Skill `) so historical sessions do
+          // not break
           const body = stripSubAgentSentinel(delta);
           setSubAgentLive((prev) => {
             const arr: any[] = prev[subId] || [];
@@ -991,7 +1041,13 @@ export default function Chat() {
       await refreshPendingClarifications(currentSession.id);
       void refreshLatest(currentSession.id);
     } catch (e: any) {
-      message.error(e?.message || '澄清提交失败，请重试');
+      message.error(
+        e?.message ||
+          intl.formatMessage({
+            id: 'pages.chat.clarifyFailed',
+            defaultMessage: 'Failed to submit clarification, please retry',
+          }),
+      );
       await refreshPendingClarifications(currentSession.id);
     } finally {
       setClarificationSubmitting(false);
@@ -1004,8 +1060,9 @@ export default function Chat() {
     }
   }, [currentSession?.id, refreshPendingClarifications]);
 
-  // SSE 事件可能丢失或在连接建立前发出：run 活跃期间做短时有界轮询，
-  // 确保审批/澄清浮层不依赖单一路径也能出现。
+  // SSE events may be lost or emitted before the connection is established: do short bounded polling
+  // while a run is active
+  // to ensure the approval/clarification overlays appear even without relying on a single path.
   useEffect(() => {
     if (!currentSession?.id || !sending) return;
     const sid = currentSession.id;
@@ -1027,7 +1084,7 @@ export default function Chat() {
 
   const connectSSE = useCallback((sid: number) => {
     if (abortRef.current) abortRef.current.abort();
-    // 切会话时清空本地已应答标记（仅内存，避免跨会话误抑制刷新）
+    // Clear locally answered markers when switching sessions (memory only, so a different session does not wrongly suppress refreshes)
     if (currentSessionIdRef.current !== sid) {
       answeredClarificationsRef.current.clear();
     }
@@ -1039,7 +1096,7 @@ export default function Chat() {
     abortRef.current = controller;
     const token = getToken();
     if (!token) {
-      // token 瞬时为空时不要静默放弃：1s 后重试，避免 SSE 永久不建连
+      // Do not silently give up when the token is briefly empty: retry after 1s so SSE does not stay disconnected forever
       setTimeout(() => {
         if (currentSessionIdRef.current === sid) connectSSE(sid);
       }, 1000);
@@ -1056,8 +1113,10 @@ export default function Chat() {
           reconnectCountRef.current = 0;
           console.log('[SSE] connected');
           if (wasReconnect) {
-            // 重连：补拉断连窗口内丢失的行，并按权威 run 状态校准发送锁，
-            // 否则丢终态事件会让发送/停止永久锁死（只能刷新页面恢复）。
+            // Reconnect: backfill rows lost during the disconnect window and calibrate the send lock
+            // from the authoritative run state,
+            // otherwise a lost terminal event leaves send/stop locked forever (recoverable only by
+            // refreshing the page).
             refreshLatestCoalesced(sid);
             refreshStateCoalesced(sid);
           }
@@ -1071,7 +1130,7 @@ export default function Chat() {
             const evtType = parsed.eventType || parsed.type || '';
             const d = parsed.data || parsed;
 
-            // 会话守卫：忽略非当前会话的事件，防止旧会话仍在流式时污染当前 messages/timeline（串台/重复）
+            // Session guard: ignore events from other sessions, preventing a still-streaming old session from polluting the current messages/timeline (cross-talk/duplicates)
             if (currentSessionIdRef.current !== sid) return;
 
             if (evtType === 'TOOL_APPROVAL_PENDING') {
@@ -1093,12 +1152,15 @@ export default function Chat() {
               return;
             }
 
-            // 子 Agent 实时：纯 SSE 驱动逐步构建（content/reasoning/tool 事件均带 subAgentRunId）
+            // Sub-agent live: purely SSE-driven incremental building (content/reasoning/tool events all carry subAgentRunId)
             if (d?.subAgentRunId != null) {
               handleSubAgentLiveEvent(evtType, d);
-              // 头行兜底：纯 LLM 式子 run 期间没有 run 终态/tool 结束事件触发 refreshLatest，
-              // 若子 Agent 头行还没进 timeline，SubAgentCard 就不会挂载 → live 无从渲染。
-              // 此处就地插入 RUNNING 占位行（后续 refreshLatest/终态合并自动替换为权威行）。
+              // Header-row fallback: during a pure-LLM sub-run there is no run terminal / tool end
+              // event to trigger refreshLatest,
+              // and if the sub-agent header row has not entered the timeline, SubAgentCard will not
+              // mount → live cannot render.
+              // Insert a RUNNING placeholder row here in place (later refreshLatest/terminal merges
+              // replace it with the authoritative row).
               const liveSubId = Number(d.subAgentRunId);
               if (Number.isFinite(liveSubId)) {
                 setTimeline((prev) => {
@@ -1111,18 +1173,27 @@ export default function Chat() {
                   return [
                     ...prev,
                     {
-                      // 占位 seq 按 subId 唯一取负（与 widget placeholderSeq 对齐）：
-                      // 并行子 agent 会同时存在多个占位行，硬编码 -1 会导致 React key
-                      // `-1-subagent` 重复，且 mergeTimeline 按 seq 建 Map 时互相覆盖丢数据
+                      // Placeholder seq is uniquely negative per subId (aligned with the widget's
+                      // placeholderSeq):
+                      // parallel sub-agents will have several placeholder rows at once, and a
+                      // hardcoded -1 would cause duplicate React keys
+                      // `-1-subagent`, and mergeTimeline building a Map by seq would overwrite each
+                      // other and lose data
                       seq: -(Math.abs(liveSubId) + 1),
                       kind: 'subagent',
                       refSubAgentRunId: liveSubId,
                       status: 'RUNNING',
-                      title: d?.displayNameCn || d?.displayName || '子 Agent',
+                      title:
+                        d?.displayNameCn ||
+                        d?.displayName ||
+                        intl.formatMessage({
+                          id: 'pages.chat.tool.subagent',
+                          defaultMessage: 'Sub-agent',
+                        }),
                       content: {
                         displayName: d?.displayNameCn || d?.displayName,
                         state: 'RUNNING',
-                        // 同批次并行子 agent 共享 parentToolCallId，用于 Tab 成组展示
+                        // Parallel sub-agents in the same batch share parentToolCallId, used for Tab grouping
                         parentToolCallId: d?.parentToolCallId ?? null,
                       },
                     },
@@ -1131,9 +1202,10 @@ export default function Chat() {
               }
             }
 
-            // 统一 Timeline 流式/补行（后端信封已带 seq/kind）：
-            // - assistant 容器 token（content/reasoning）→ 按 seq 就地追加打则字；
-            // - run 终态/工具结束/澄清 → 按 afterSeq 拉最新页补行（工具/澄清行暂无 seq 打标）。
+            // Unified Timeline streaming / row backfill (backend envelopes already carry seq/kind):
+            // - assistant container tokens (content/reasoning) → append in place by seq with the typewriter;
+            // - run terminal / tool end / clarification → pull the latest page by afterSeq to backfill
+            //   rows (tool/clarification rows are not seq-tagged yet).
             const tlSubType = String(
               d?.reasoningSubType || d?.status || evtType,
             );
@@ -1142,7 +1214,13 @@ export default function Chat() {
               setPreparingTool({
                 publishId: d?.publishId ? String(d.publishId) : undefined,
                 name:
-                  d?.displayNameCn || d?.displayNameEn || d?.toolName || '工具',
+                  d?.displayNameCn ||
+                  d?.displayNameEn ||
+                  d?.toolName ||
+                  intl.formatMessage({
+                    id: 'pages.chat.tool.tool',
+                    defaultMessage: 'Tool',
+                  }),
               });
             } else if (
               tlSubType === 'tool_call_started' ||
@@ -1158,8 +1236,9 @@ export default function Chat() {
               setPreparingTool(null);
             }
 
-            // run 运行态/终态：顶层兜底解锁/置位，不依赖 reasoning_token 信封，
-            // 避免终态事件以其他信封到达时 sending 永久卡住。
+            // Run runtime/terminal state: top-level fallback for unlocking/setting, not relying on the
+            // reasoning_token envelope,
+            // so sending does not stay stuck forever when a terminal event arrives in another envelope.
             if (
               tlSubType === 'run_completed' ||
               tlSubType === 'run_failed' ||
@@ -1179,22 +1258,26 @@ export default function Chat() {
             } else if (
               tlSubType === 'run_running' ||
               tlSubType === 'run_pending' ||
-              // wait 挂起：run 并未结束，到点会自行恢复，输入框应保持锁定。
-              // 断线重连恰好落在等待窗口内时，靠这条把 sending 重新立起来。
+              // wait suspended: the run has not ended and will resume on its own when due, so the input
+              // box should stay locked.
+              // If a reconnect happens to land inside the waiting window, this re-establishes sending.
               tlSubType === 'run_waiting'
             ) {
               setSending(true);
               refreshStateCoalesced(sid);
             }
 
-            // run_status 是「一个 run 一行、原地更新」：事件已带 seq/status/title，
-            // 直接就地合并；afterSeq 增量拿不到同 seq 的更新（重试次数不会刷新）。
+            // run_status is "one row per run, updated in place": the event already carries
+            // seq/status/title,
+            // so merge in place directly; the afterSeq increment cannot get updates for the same seq
+            // (retry counts are not refreshed).
             if (d?.seq != null && d?.kind === 'run_status') {
               const rsSeq = Number(d.seq);
               const rsState =
                 d?.status ||
                 (tlSubType === 'run_waiting' ? 'WAITING' : undefined);
-              const rsText = d?.statusTitle || d?.assistantReply || d?.response || '';
+              const rsText =
+                d?.statusTitle || d?.assistantReply || d?.response || '';
               mergeTimeline([
                 {
                   seq: rsSeq,
@@ -1208,8 +1291,10 @@ export default function Chat() {
               ]);
             }
 
-            // 上下文压缩：RUNNING 事件本地插行（后端已回填 seq/kind），输出 token 追加到正文。
-            // 刻意不在 compaction_running 时 refreshLatest —— 浅合并会用「尚无正文」的权威行覆盖已流出的文字。
+            // Context compaction: insert a row locally on the RUNNING event (the backend has already
+            // backfilled seq/kind), and append output tokens to the body.
+            // Deliberately do not refreshLatest while compaction_running — a shallow merge would
+            // overwrite already-streamed text with an authoritative row that "has no body yet".
             if (d?.seq != null && d?.kind === 'compaction') {
               const seq = Number(d.seq);
               const delta =
@@ -1235,7 +1320,10 @@ export default function Chat() {
                     d?.statusTitle ||
                     d?.assistantReply ||
                     existing?.title ||
-                    '正在压缩上下文…',
+                    intl.formatMessage({
+                      id: 'pages.chat.compacting',
+                      defaultMessage: 'Compacting context…',
+                    }),
                   content,
                 });
                 return [...m.values()].sort((a, b) => a.seq - b.seq);
@@ -1248,7 +1336,7 @@ export default function Chat() {
               d?.response &&
               (evtType === 'content_token' || evtType === 'reasoning_token')
             ) {
-              // 合并到下一帧统一 flush：50 token/s 不再触发 50 次全量数组重建。
+              // Merge into the next frame and flush together: 50 tokens/s no longer triggers 50 full array rebuilds.
               enqueueStreamingDelta(
                 Number(d.seq),
                 evtType === 'content_token' ? 'reply' : 'thinking',
@@ -1268,8 +1356,10 @@ export default function Chat() {
               ].includes(tlSubType) ||
               String(evtType).startsWith('clarification_')
             ) {
-              // 工具事件：整页覆盖刷新（补迟到落库的截图 images 等），避免 afterSeq 增量跳过既有工具行。
-              // run_status 同理：行是原地更新的，afterSeq 拉不到同 seq 的新状态/重试次数。
+              // Tool event: full-page overwrite refresh (backfills screenshots persisted late, etc.),
+              // avoiding the afterSeq increment skipping existing tool rows.
+              // Same for run_status: the row is updated in place, so afterSeq cannot pull the new
+              // state/retry count for the same seq.
               const isRunStatusSub = [
                 'run_completed',
                 'run_failed',
@@ -1287,7 +1377,7 @@ export default function Chat() {
                 refreshLatestCoalesced(sid);
               }
             }
-            // run 终态：刷新会话级用量（聊天区吸底 SUM）
+            // Run terminal state: refresh session-level usage (bottom SUM bar of the chat area)
             if (
               tlSubType === 'run_completed' ||
               tlSubType === 'run_failed' ||
@@ -1296,7 +1386,7 @@ export default function Chat() {
               void refreshSessionUsage(sid);
             }
 
-            // 始终跟踪当前 runId（含任务系统发起的 run），保证停止能命中正确 run
+            // Always track the current runId (including runs started by the task system) so stop hits the right run
             const msgRunId = Number(d?.runId);
             if (Number.isFinite(msgRunId)) {
               currentRunIdRef.current = msgRunId;
@@ -1477,7 +1567,7 @@ export default function Chat() {
                   stopFallbackRef.current = null;
                 }
                 const runId = d?.runId;
-                // 展示 LLM 错误消息（429/502/其他）
+                // Show LLM error messages (429/502/other)
                 if (subType === 'run_failed') {
                   const errorMsg = d?.errorMessage;
                   if (runId && errorMsg) {
@@ -1505,8 +1595,9 @@ export default function Chat() {
                     });
                   }
                 }
-                // 注意：不再用 assistantReply 聚合生成独立 AI 回复气泡；
-                // 主 Agent 回复只显示在各 interaction timeline 条目内（content_token 归组）。
+                // Note: assistantReply is no longer aggregated into a separate AI reply bubble;
+                // the main agent reply only shows inside each interaction timeline entry (grouped by
+                // content_token).
                 return;
               }
 
@@ -1524,8 +1615,10 @@ export default function Chat() {
                 return;
               }
 
-              // 推理已改为后端 Timeline/TimelineList 展示，不再维护 interaction timeline 拼装；
-              // 剩余 isSystem 状态行（run_pending 等）忽略；intent_retry 时清理空 ai 消息。
+              // Reasoning is now rendered by the backend Timeline/TimelineList; the interaction
+              // timeline assembly is no longer maintained;
+              // remaining isSystem status rows (run_pending, etc.) are ignored; empty ai messages are
+              // cleaned up on intent_retry.
               if (subType === 'intent_retry') {
                 setMessages((prev) =>
                   prev.filter(
@@ -1538,33 +1631,34 @@ export default function Chat() {
             if (evtType.startsWith('clarification_')) {
               refreshStateCoalesced(sid);
               if (evtType === 'clarification_responded') {
-                // 记为已应答：防止随后 refreshLatest 用服务端旧 PENDING 覆盖乐观态
+                // Record as answered: prevents a subsequent refreshLatest from overwriting the optimistic state with a stale server PENDING
                 const key = clarificationKey(d?.runId, d?.clarificationId);
                 if (key) answeredClarificationsRef.current.add(key);
                 setTimeline((prev) =>
                   applyClarificationState(prev, d, 'ANSWERED', d?.response),
                 );
               } else if (evtType === 'clarification_dismissed') {
-                // 后端 ClarificationStatus 只有 PENDING/RESPONDED/DISMISSED，
-                // 不存在 clarification_expired —— 该分支此前永远不会命中。
+                // The backend ClarificationStatus only has PENDING/RESPONDED/DISMISSED,
+                // there is no clarification_expired — this branch never matched before.
                 setTimeline((prev) =>
                   applyClarificationState(prev, d, 'CANCELLED'),
                 );
               }
-              // 澄清统一走底部浮层；timeline 只保留审计行。
+              // Clarifications all go through the bottom sheet; the timeline keeps only audit rows.
               void refreshPendingClarifications(sid);
               return;
             }
             if (evtType === 'content_token') {
-              // 主 Agent 回复文本：由统一 Timeline 打字机在流式分支（seq+assistant）处理，
-              // 此处不再维护独立主 timeline/回复气泡。
+              // Main agent reply text: handled by the unified Timeline typewriter in the streaming
+              // branch (seq+assistant),
+              // and no separate main timeline/reply bubble is maintained here anymore.
               return;
             }
           } catch {}
         },
         onError: (err: unknown) => {
           setSseConnected(false);
-          // 诊断：打印断开原因（stream ended / connect timeout / HTTP 状态 / 底层 read 错误）
+          // Diagnostics: print the disconnect reason (stream ended / connect timeout / HTTP status / underlying read error)
           const reason = err instanceof Error ? err.message : String(err || '');
           if (currentSessionIdRef.current === sid) {
             console.warn('[SSE] error:', reason);
@@ -1641,8 +1735,9 @@ export default function Chat() {
                 );
               });
             }
-            // chat 成功后立即拉一次最新 timeline（用户行 + assistant 容器行），
-            // 避免依赖单靠 SSE/终态事件（空游标此前会被跳过）
+            // Fetch the latest timeline once immediately after chat succeeds (user row + assistant
+            // container row),
+            // avoiding reliance on SSE/terminal events alone (empty cursors were previously skipped)
             void refreshLatest(sid);
           } catch (e) {
             setSending(false);
@@ -1678,7 +1773,7 @@ export default function Chat() {
         setToolCalls([]);
         setPreparingTool(null);
         setSessionPanelOpen(true);
-        // 统一 Timeline：重置并加载首尾一页（每页由后端 keyset 控制）
+        // Unified Timeline: reset and load the first and last page (each page is controlled by backend keyset paging)
         setTimeline([]);
         oldestSeqRef.current = null;
         newestSeqRef.current = null;
@@ -1759,7 +1854,7 @@ export default function Chat() {
         agentApi.runs
           .stop(currentSession.id, clarification.runId)
           .catch(() => {});
-        // 立即本地解除该澄清行（不等 SSE），并把发送态复位
+        // Release this clarification row locally right away (without waiting for SSE) and reset the send state
         setTimeline((prev) =>
           applyClarificationState(
             prev,
@@ -1787,7 +1882,7 @@ export default function Chat() {
       return;
     }
 
-    // 发送新消息前取消仍在等待的澄清（只认来源表：待澄清批次）
+    // Cancel any pending clarification before sending a new message (source tables only: the batch awaiting clarification)
     const pendingBatch = clarificationBatch;
     const pendingItems = pendingBatch?.items ?? [];
     if (pendingBatch) {
@@ -1831,7 +1926,7 @@ export default function Chat() {
       if (res?.runId) {
         currentRunIdRef.current = res.runId;
         runUserMessageRef.current.set(res.runId, msg);
-        // 乐观用户气泡此刻才拿到后端 runId：回填以便按 run 锚定排序（后端为准）
+        // The optimistic user bubble only gets the backend runId now: write it back so ordering can anchor on the run (backend is authoritative)
         const rid = res.runId;
         setMessages((prev) => {
           const idx = prev.findLastIndex(
@@ -1842,7 +1937,7 @@ export default function Chat() {
             i === idx ? { ...(m as any), runId: rid } : m,
           );
         });
-        // 统一 Timeline：拉最新页补用户行/助手容器
+        // Unified Timeline: fetch the latest page to append user rows/assistant containers
         if (currentSession?.id) void refreshLatest(Number(currentSession.id));
       }
     } catch (err) {
@@ -2011,7 +2106,7 @@ export default function Chat() {
               sending={sending}
               onSendMessage={sendMessage}
               onCancelSend={() => {
-                // 先取消仍在等待的澄清（只认来源表：待澄清批次），并立即本地解锁
+                // Cancel any pending clarification first (source tables only: the batch awaiting clarification) and unlock locally right away
                 const pendingBatch = clarificationBatch;
                 const pendingItems = pendingBatch?.items ?? [];
                 if (pendingBatch) {
@@ -2029,7 +2124,7 @@ export default function Chat() {
                   }
                 }
                 cancelPendingClarificationsLocally();
-                // sending 不乐观解锁：等该 run 终态事件恢复；8s 兜底防后端未发终态
+                // sending is not optimistically unlocked: wait for the run's terminal event to restore it; an 8s fallback covers a backend that never emits a terminal state
                 if (stopFallbackRef.current) {
                   clearTimeout(stopFallbackRef.current);
                 }
@@ -2041,12 +2136,21 @@ export default function Chat() {
                   agentApi.runs
                     .sessionStop(currentSession.id)
                     .catch((e: any) => {
-                      // 不再静默吞错：会话归属校验失败(FORBIDDEN)等会让“停止”看起来毫无反应。
+                      // No longer silently swallow errors: a failed session ownership check (FORBIDDEN), etc., would make "stop" appear to do nothing.
                       console.warn('session stop failed', e);
                       message.error(
                         e?.message
-                          ? `停止失败：${e.message}`
-                          : '停止失败，请重试',
+                          ? intl.formatMessage(
+                              {
+                                id: 'pages.chat.stopFailed',
+                                defaultMessage: 'Stop failed: {message}',
+                              },
+                              { message: e.message },
+                            )
+                          : intl.formatMessage({
+                              id: 'pages.chat.stopFailedRetry',
+                              defaultMessage: 'Stop failed, please retry',
+                            }),
                       );
                     });
                 }

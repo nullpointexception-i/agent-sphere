@@ -26,9 +26,9 @@ import java.util.stream.Collectors;
 public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteractionRecordSpi {
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    /** 主 Agent 问答轮次（与 kernel LlmInteractionType.CHAT_REPLY 的落库字符串一致；instance 不能依赖 kernel）。 */
+    /** Main Agent question/answer turn (matches the persisted value of kernel LlmInteractionType.CHAT_REPLY; instance cannot depend on kernel). */
     private static final String INTERACTION_TYPE_CHAT_REPLY = "CHAT_REPLY";
-    /** retry_no 分配的并发重试次数（唯一索引冲突时重新取号）。 */
+    /** Number of concurrent retry_no allocation attempts (re-allocate when the unique index conflicts). */
     private static final int MAX_RETRY_NO_ALLOCATIONS = 5;
 
     private final AgentLlmInteractionRecordMapper mapper;
@@ -50,14 +50,17 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         }
         int attemptNo = vo.getAttemptNo() == null ? 0 : vo.getAttemptNo();
         vo.setAttemptNo(attemptNo);
-        // 0 表示非重试轮；1..N 为退避梯度档位，仅用于展示/排查
+        // 0 means a non-retry turn; 1..N are backoff ladder positions used only for display/troubleshooting
         if (vo.getRetryAttempt() != null && vo.getRetryAttempt() <= 0) {
             vo.setRetryAttempt(null);
         }
 
-        // 每次新调用独立一行（V117）：已完成的成功结果不能被后续重试覆盖。
-        // 不复用 RUNNING 行：上一轮持久化与下一轮建行可能并发，复用会让两次调用互相覆盖；
-        // 进程崩溃遗留的 RUNNING 行由 failStaleRunning 兜底（Timeline 取 retry_no 最大的 RUNNING）。
+        // Every new call gets its own row (V117): a completed successful result must not be
+        // overwritten by a later retry.
+        // RUNNING rows are not reused: persistence of the previous turn and row creation for the next
+        // may run concurrently, and reuse would let the two calls overwrite each other; RUNNING rows
+        // left behind by a crashed process are handled by failStaleRunning (the Timeline takes the
+        // RUNNING row with the highest retry_no).
         for (int i = 0; i < MAX_RETRY_NO_ALLOCATIONS; i++) {
             vo.setRetryNo(nextRetryNo(vo.getRunId(), vo.getTurnNo(), attemptNo));
             AgentLlmInteractionRecord record = newRecord(vo);
@@ -84,14 +87,16 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
             log.warn("LLM interaction complete skipped: id={} no longer exists", id);
             return;
         }
-        // 已完成的行是不可回退的历史事实：后到的失败重试不能把它降级、更不能清空已成功正文。
+        // A completed row is an immutable historical fact: a late failing retry may not downgrade it,
+        // let alone clear an already successful body.
         if (AgentLlmInteractionRecord.STATUS_COMPLETED.equals(existing.getStatus())
                 && !Boolean.TRUE.equals(vo.getSuccess())) {
             log.warn("LLM interaction {} already completed; ignoring late failure", id);
             return;
         }
-        // 同一轮只有一条记录：最终完成必须能落库。
-        // 即使清理任务曾把 RUNNING 误判为 FAILED，这里也要用真实结果覆盖，避免答案丢失。
+        // There is exactly one record per turn: final completion must be persisted.
+        // Even if a cleanup task once misjudged RUNNING as FAILED, the real result must overwrite it
+        // here so the answer is not lost.
         int updated = mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
                 .eq(AgentLlmInteractionRecord::getId, id)
                 .set(AgentLlmInteractionRecord::getRequestBody, vo.getRequestBody())
@@ -126,7 +131,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         if (runId == null || turnNo == null) {
             return null;
         }
-        // 多 attempt 时：优先当前 RUNNING 的 attempt，否则取最新 attempt
+        // With multiple attempts: prefer the currently RUNNING attempt, otherwise take the latest attempt
         AgentLlmInteractionRecord record = mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                 .eq(AgentLlmInteractionRecord::getRunId, runId)
                 .eq(AgentLlmInteractionRecord::getTurnNo, turnNo)
@@ -141,7 +146,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         if (staleMinutes <= 0) {
             return 0;
         }
-        // 只处理主 Agent 问答轮；心跳基准用 updated_at（每次重试都会刷新）
+        // Only main Agent question/answer turns are handled; the heartbeat baseline uses updated_at (refreshed on every retry)
         return mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
                 .eq(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_RUNNING)
                 .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
@@ -151,7 +156,7 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
                 .set(AgentLlmInteractionRecord::getErrorMessage, "stale running interaction"));
     }
 
-    /** 该 (run, turn, attempt) 下已有最大 retry_no + 1；无记录时从 0 开始。 */
+    /** Largest existing retry_no under this (run, turn, attempt) + 1; starts at 0 when there is no record. */
     private int nextRetryNo(Long runId, Integer turnNo, int attemptNo) {
         AgentLlmInteractionRecord latest = mapper.selectOne(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                 .select(AgentLlmInteractionRecord::getRetryNo)
@@ -223,18 +228,19 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         return mapper.selectList(new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                         .eq(AgentLlmInteractionRecord::getRunId, runId)
                         .eq(AgentLlmInteractionRecord::getInteractionType, INTERACTION_TYPE_CHAT_REPLY)
-                        // 未完成的轮次不进入历史：预建 RUNNING 行不能当已完成的 assistant 正文
+                        // Unfinished turns do not enter history: a pre-created RUNNING row must not be
+                        // treated as a completed assistant body
                         .eq(AgentLlmInteractionRecord::getStatus, AgentLlmInteractionRecord.STATUS_COMPLETED)
                         .isNull(AgentLlmInteractionRecord::getSubAgentRunId)
-                        // 只取恢复所需的轻量列；request_body/response_body 可能非常大
+                        // Fetch only the lightweight columns needed for recovery; request_body/response_body can be very large
                         .select(AgentLlmInteractionRecord::getId,
                                 AgentLlmInteractionRecord::getRunId,
                                 AgentLlmInteractionRecord::getSessionId,
                                 AgentLlmInteractionRecord::getInteractionType,
                                 AgentLlmInteractionRecord::getReplyContent,
-                                // 恢复思考模型时必须回放原始 reasoning，否则 DeepSeek 会 400
+                                // When restoring a thinking model the original reasoning must be replayed, otherwise DeepSeek returns 400
                                 AgentLlmInteractionRecord::getReasoning,
-                                // 轮次号：与 tool 记录的 turn_no 精确配对（见 HistoryLoader）
+                                // Turn number: matches the turn_no of tool records exactly (see HistoryLoader)
                                 AgentLlmInteractionRecord::getTurnNo,
                                 AgentLlmInteractionRecord::getCreatedAt)
                         .orderByAsc(AgentLlmInteractionRecord::getId))
@@ -271,7 +277,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         if (existing != null && !existing.isBlank()) {
             return false;
         }
-        // 只更新 reply_content，且二次校验仍为空：不覆盖并发写入的正文，也不重写 request/response 大字段
+        // Update reply_content only, and re-check that it is still empty: do not overwrite concurrently
+        // written content, and do not rewrite the large request/response fields
         return mapper.update(null, new LambdaUpdateWrapper<AgentLlmInteractionRecord>()
                 .eq(AgentLlmInteractionRecord::getId, latest.getId())
                 .and(w -> w.isNull(AgentLlmInteractionRecord::getReplyContent)
@@ -344,7 +351,8 @@ public class AgentLlmInteractionRecordServiceImpl implements AgentLlmInteraction
         vo.setCacheMissTokens(record.getCacheMissTokens());
         if (record.getCreatedAt() != null) {
             vo.setCreatedAt(record.getCreatedAt().format(DTF));
-            // 秒级字符串不足以配对（同一秒内可能有下一轮开始），另存毫秒值
+            // A second-level string is not precise enough for pairing (the next turn may start within
+            // the same second), so the millisecond value is stored separately
             vo.setCreatedAtMillis(TimeUtils.toEpochMillis(record.getCreatedAt()));
         }
         return vo;

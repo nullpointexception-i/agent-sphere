@@ -7,12 +7,12 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum ModelErrorCode implements ErrorCode {
-    PROVIDER_NOT_FOUND("A0011", "供应商不存在", "请检查供应商ID"),
-    API_KEY_NOT_FOUND("A0012", "API Key不存在", "请检查API Key ID"),
-    ROUTE_NOT_FOUND("A0013", "路由不存在", "请检查路由ID"),
-    ROUTE_FALLBACK_NOT_FOUND("A0014", "回退路由不存在", "请检查回退路由ID"),
-    ROUTE_FALLBACK_CYCLE("A0015", "回退链路存在循环依赖", "请检查回退路由配置"),
-    LLM_CALL_FAILED("C0001", "LLM调用失败", "LLM服务暂时不可用，请稍后重试");
+    PROVIDER_NOT_FOUND("A0011", "Provider not found", "Check the provider ID"),
+    API_KEY_NOT_FOUND("A0012", "API key not found", "Check the API key ID"),
+    ROUTE_NOT_FOUND("A0013", "Route not found", "Check the route ID"),
+    ROUTE_FALLBACK_NOT_FOUND("A0014", "Fallback route not found", "Check the fallback route ID"),
+    ROUTE_FALLBACK_CYCLE("A0015", "Fallback chain contains a cycle", "Check the fallback route configuration"),
+    LLM_CALL_FAILED("C0001", "LLM call failed", "The LLM service is temporarily unavailable; retry later");
 
     private final String code;
     private final String message;

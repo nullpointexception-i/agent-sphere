@@ -6,20 +6,20 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.util.StringUtils;
 
 /**
- * 子 Agent 结构化接触信封：把 task 私有入参（args）与 dependsOn 上游结果（upstream）
- * 以确定性 JSON 载体注入子 Agent，避免依赖 args 透传或 goal 文本内联。
+ * Structured contact envelope for sub-agents: injects the task's private inputs (args) and the dependsOn upstream results (upstream)
+ * into the sub-agent as a deterministic JSON carrier, avoiding reliance on args pass-through or inlining into the goal text.
  *
  * <pre>{@code
  * {"schema":"v1-delegate-contact","laneKey":"k_base","args":{...},
  *  "upstream":{"k_dep":{...}},"upstream_visible":true,"upstream_raw":"{...}","truncated":false}
  * }</pre>
  *
- * <p>{@code upstream_visible}/{@code upstream_raw} 由框架计算（P0 探针字段），
- * 子 Agent 只需引用/复述，无需自报，从根上消除“探针口径不一致”。
+ * <p>{@code upstream_visible}/{@code upstream_raw} are computed by the framework (P0 probe fields);
+ * the sub-agent only needs to reference/restate them, never self-report, which removes "probe inconsistency" at the root.
  *
- * <p>由 {@link DelegateService} 构建并经 ExecBinding 传给 {@code SessionSubRunner}，
- * 后者在渲染 goal 之后追加为一条独立 user 消息；也可由 {@code SubAgentPolicy}
- * 递归内联进 prompt 作纵深防御。
+ * <p>Built by {@link DelegateService} and passed to {@code SessionSubRunner} via ExecBinding;
+ * the latter appends it as a separate user message after rendering the goal, and {@code SubAgentPolicy}
+ * may also inline it recursively into the prompt as defense in depth.
  */
 public final class ContactEnvelope {
 
@@ -45,7 +45,7 @@ public final class ContactEnvelope {
         this.truncated = truncated;
     }
 
-    /** 从任务 key/args/upstream 构建；无任何数据时返回 null。 */
+    /** Builds from task key/args/upstream; returns null when there is no data at all. */
     public static ContactEnvelope of(String laneKey, JsonNode args, JsonNode upstream) {
         ContactEnvelope env = new ContactEnvelope(laneKey,
                 args == null || !args.isObject() ? JSON.createObjectNode() : args,
@@ -71,8 +71,8 @@ public final class ContactEnvelope {
     }
 
     /**
-     * 上游超预算时的截断副本：按 key 截断各上游 value 的 JSON 文本并标注，
-     * 保证信封本身永远完整可解析（P0 信封免截断）。
+     * Truncated copy when upstream exceeds the budget: truncates each upstream value's JSON text by key and marks it,
+     * keeping the envelope itself always complete and parseable (P0 envelopes are exempt from truncation).
      */
     public ContactEnvelope truncateUpstream(int maxBytes) {
         String raw = upstream.toString();
@@ -102,7 +102,7 @@ public final class ContactEnvelope {
         if (!upstream.isEmpty()) {
             root.set(UPSTREAM_KEY, upstream);
         }
-        // P0 标准探针：由框架计算，子 Agent 引用即可
+        // P0 standard probes: computed by the framework; the sub-agent only needs to reference them
         root.put(UPSTREAM_VISIBLE_KEY, !upstream.isEmpty());
         root.put(UPSTREAM_RAW_KEY, upstream.toString());
         if (truncated) {
@@ -111,7 +111,7 @@ public final class ContactEnvelope {
         return root;
     }
 
-    /** 从 JSON 文本解析；非对象/无数据返回 null。 */
+    /** Parses from JSON text; returns null when it is not an object / has no data. */
     public static ContactEnvelope parse(String raw) {
         if (!StringUtils.hasText(raw)) {
             return null;

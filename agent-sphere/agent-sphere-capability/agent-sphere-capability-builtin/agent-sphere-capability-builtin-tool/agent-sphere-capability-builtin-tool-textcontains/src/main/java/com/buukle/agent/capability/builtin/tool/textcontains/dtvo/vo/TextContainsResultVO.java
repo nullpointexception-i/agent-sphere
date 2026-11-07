@@ -11,6 +11,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TextContainsResultVO extends ExecuteResult {
-    /** 目标字符串 B 是否包含子串 A。 */
+    /** Whether target string B contains substring A. */
     private boolean contains;
 }

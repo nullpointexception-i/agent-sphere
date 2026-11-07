@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
-/** 活动列表只返回轻量元数据；大报文按 activityType/id 走详情查询。 */
+/** The activity list returns lightweight metadata only; large payloads go through the detail query by activityType/id. */
 @ExtendWith(MockitoExtension.class)
 class RunActivityServiceImplTest {
 

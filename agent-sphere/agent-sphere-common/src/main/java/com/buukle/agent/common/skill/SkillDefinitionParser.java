@@ -5,9 +5,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Skill definition 解析器。支持 V1（parameters + promptTemplate）与遗留
- * {"prompt": "..."} 格式；不再"日志后静默跳过"，解析失败抛出 {@link InvalidSubRunDefinition}。
- * 未知键会被忽略（只读取 version / parameters / promptTemplate / prompt）。
+ * Skill definition parser. Supports V1 (parameters + promptTemplate) and the legacy
+ * {"prompt": "..."} format; it no longer "logs and silently skips" — a parse failure throws
+ * {@link InvalidSubRunDefinition}. Unknown keys are ignored (only version / parameters /
+ * promptTemplate / prompt are read).
  */
 public final class SkillDefinitionParser {
 
@@ -21,7 +22,7 @@ public final class SkillDefinitionParser {
     private SkillDefinitionParser() {
     }
 
-    /** 解析定义；返回 null 仅当入参为 null/空白（缺省定义），其余失败抛异常。 */
+    /** Parses the definition; returns null only when the input is null/blank (no definition), any other failure throws. */
     public static SkillDefinition parse(String definition) throws InvalidSubRunDefinition {
         if (definition == null || definition.isBlank()) {
             return null;
@@ -37,12 +38,12 @@ public final class SkillDefinitionParser {
         try {
             root = JSON.readTree(jsonStr);
         } catch (Exception e) {
-            throw new InvalidSubRunDefinition("definition 不是合法 JSON: " + e.getMessage());
+            throw new InvalidSubRunDefinition("definition is not valid JSON: " + e.getMessage());
         }
         if (root == null || !root.isObject()) {
-            throw new InvalidSubRunDefinition("definition 必须是 JSON 对象");
+            throw new InvalidSubRunDefinition("definition must be a JSON object");
         }
-        // 遗留格式：{"prompt": "..."}
+        // legacy format: {"prompt": "..."}
         JsonNode legacyPrompt = root.get(KEY_PROMPT);
         if (legacyPrompt != null && root.size() == 1 && legacyPrompt.isTextual()) {
             return SkillDefinition.ofLegacy(legacyPrompt.asText());
@@ -50,10 +51,10 @@ public final class SkillDefinitionParser {
         JsonNode params = root.get(KEY_PARAMETERS);
         JsonNode promptTemplate = root.get(KEY_PROMPT_TEMPLATE);
         if (params == null || !params.isObject()) {
-            throw new InvalidSubRunDefinition("缺少 'parameters' JSON Schema 对象");
+            throw new InvalidSubRunDefinition("missing 'parameters' JSON Schema object");
         }
         if (promptTemplate == null || !promptTemplate.isTextual() || promptTemplate.asText().isBlank()) {
-            throw new InvalidSubRunDefinition("缺少非空 'promptTemplate'");
+            throw new InvalidSubRunDefinition("missing non-blank 'promptTemplate'");
         }
         int version = root.has(KEY_VERSION) && root.get(KEY_VERSION).isInt() ? root.get(KEY_VERSION).asInt() : 1;
         return new SkillDefinition(version, params.toString(), promptTemplate.asText());

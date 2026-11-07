@@ -8,7 +8,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-/** TokenUsage 归一化：兼容 DeepSeek 顶层 cache 计数 / OpenAI details 两种形状。 */
+/** TokenUsage normalization: supports both the DeepSeek top-level cache counters and the OpenAI details shape. */
 class TokenUsageTest {
 
     @Test

@@ -23,13 +23,13 @@ public class AgentModelRoute {
     private String completionProtocol;
     /** Whether this route is the owner's default route. */
     private Boolean isDefault;
-    /** 思考强度：NULL=继承厂商；true/false=覆盖。 */
+    /** Reasoning strength: NULL = inherit from provider; true/false = override. */
     private Boolean reasoningSupported;
-    /** 思考强度模式：levels。 */
+    /** Reasoning strength mode: levels. */
     private String reasoningMode;
-    /** 覆盖档位（JSON 数组，如 ["low","high","max"]）。 */
+    /** Override levels (JSON array, e.g. ["low","high","max"]). */
     private String reasoningLevels;
-    /** 覆盖正文保留比例；NULL=继承厂商/全局。 */
+    /** Override ratio of the answer body to preserve; NULL = inherit from provider/global. */
     private java.math.BigDecimal reasoningAnswerReserveRatio;
     @TableLogic
     private Boolean deleteFlag;

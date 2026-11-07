@@ -57,9 +57,10 @@
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-runtime-kernel</artifactId>
         </dependency>
-        <!-- 仅供 SessionCleanupTask 引用 TaskEnum 状态值（活跃任务守卫）。
-             不能引 tasks-service/tasks-repository：tasks-service 依赖 instance-spi，
-             拉进来只会让域间耦合变重；dtvo 是叶子模块（只依赖 common），无环。 -->
+        <!-- Only used by SessionCleanupTask to reference TaskEnum status values (the active-task guard).
+             tasks-service/tasks-repository must not be pulled in: tasks-service depends on instance-spi,
+             and adding it would only make cross-domain coupling worse; dtvo is a leaf module (depends
+             only on common), so there is no cycle. -->
         <dependency>
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-tasks-dtvo</artifactId>

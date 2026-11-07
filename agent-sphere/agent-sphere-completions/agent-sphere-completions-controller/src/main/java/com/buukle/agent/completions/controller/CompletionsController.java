@@ -1,5 +1,9 @@
 package com.buukle.agent.completions.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.completions.dtvo.ChatCompletionsReq;
 import com.buukle.agent.completions.dtvo.ChatCompletionsResp;
 import com.buukle.agent.completions.dtvo.CompletionsInput;
@@ -15,10 +19,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 单次 LLM 能力调用（外部开放接口，业务层以 code+subject+businessType 认证）。
+ * One-shot LLM capability call (external open API; the business layer authenticates with code+subject+businessType).
  */
 @RestController
-@RequestMapping("/api/v1/api/completions")
+@RequestMapping(ApiPrefix.V1 + "/api/completions")
 @RequiredArgsConstructor
 public class CompletionsController extends BaseController {
 

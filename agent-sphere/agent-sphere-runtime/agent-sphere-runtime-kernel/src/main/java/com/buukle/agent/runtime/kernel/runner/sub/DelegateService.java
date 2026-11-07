@@ -34,11 +34,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * delegate 统一执行入口：main 内联、subagent 隔离（单任务或 DAG 并行）。
+ * Unified delegate execution entry: inline in main, isolated as subagent (single task or parallel DAG).
  *
- * <p>子 Agent 完全继承父 Agent 的工具集与模型路由；agentRef=instance:&lt;id&gt; 仅用于叠加
- * 该实例的 systemPrompt+customInstructions。所有错误以 {@code {"error":"..."}} JSON 返回，
- * 不向主循环抛异常。
+ * <p>A sub-agent fully inherits the parent agent's tool set and model route; agentRef=instance:&lt;id&gt; is only used to layer
+ * that instance's systemPrompt+customInstructions. All errors are returned as {@code {"error":"..."}} JSON
+ * and never thrown to the main loop.
  */
 @Slf4j
 @Component
@@ -64,7 +64,7 @@ public class DelegateService {
     private static final String JSON_KEY_STATUS = "status";
     private static final String JSON_KEY_REASON = "reason";
     private static final String JSON_KEY_DATA = "data";
-    // P1 _meta 命名空间：框架字段全部收敛于此，永不读写顶层业务键
+    // P1 _meta namespace: all framework fields converge here; top-level business keys are never read or written
     private static final String META_KEY = "_meta";
     private static final String META_CONTRACT = "contract";
     private static final String META_STATUS = "status";
@@ -83,13 +83,13 @@ public class DelegateService {
     private static final String STATUS_OK = "OK";
     private static final String STATUS_ERROR = "ERROR";
     private static final String STATUS_UNCERTAIN = "UNCERTAIN";
-    // P2 三态 verdict（lane 输出契约）
+    // P2 three-state verdict (lane output contract)
     private static final String VERDICT_COMPUTED = "COMPUTED";
     private static final String VERDICT_UPSTREAM_MISSING = "UPSTREAM_MISSING";
     private static final String VERDICT_UNVERIFIABLE = "CLAIM_UNVERIFIABLE";
     private static final java.util.Set<String> VALID_VERDICTS =
             java.util.Set.of(VERDICT_COMPUTED, VERDICT_UPSTREAM_MISSING, VERDICT_UNVERIFIABLE);
-    // P1 错误分类（失败归因与重试决策）
+    // P1 error classification (failure attribution and retry decisions)
     private static final String CAT_UPSTREAM_MISSING = "UPSTREAM_MISSING";
     private static final String CAT_TIMEOUT = "TIMEOUT";
     private static final String CAT_MODEL_NO_OUTPUT = "MODEL_NO_OUTPUT";
@@ -97,13 +97,13 @@ public class DelegateService {
     private static final String CAT_TOOL_ERROR = "TOOL_ERROR";
     private static final String CAT_INTERRUPTED = "INTERRUPTED";
     private static final int DEFAULT_RETRY_LIMIT = 1;
-    // FIX-2 失败阶段归类：父级判定用，区分“未派发/上游搁浅/无输出/工具错误/内容降级”。
+    // FIX-2 failure stage classification: used by parent-side decisions to distinguish "not dispatched / upstream stranded / no output / tool error / content downgraded".
     private static final String STAGE_NOT_DISPATCHED = "NOT_DISPATCHED";
     private static final String STAGE_UPSTREAM_STRANDED = "UPSTREAM_STRANDED";
     private static final String STAGE_NO_OUTPUT = "NO_OUTPUT";
     private static final String STAGE_TOOL_ERROR = "TOOL_ERROR";
     private static final String STAGE_CONTENT_DEGRADED = "CONTENT_DEGRADED";
-    /** 与 agent_sub_agent_run.display_name VARCHAR(200) 对齐的上限。 */
+    /** Upper bound aligned with agent_sub_agent_run.display_name VARCHAR(200). */
     private static final int DISPLAY_NAME_MAX = 200;
     private static final Pattern JSON_BLOCK = Pattern.compile("(?s)```(?:json)?\\s*(.*?)\\s*```");
     private static final Pattern LAST_JSON_OBJECT = Pattern.compile("(?s)\\{.*\\}");
@@ -157,7 +157,7 @@ public class DelegateService {
 
     // -------------------------------------------------------------- subagent
 
-    /** 单车道：以 goal 构造一个无依赖的任务，走与 DAG 完全相同的管线。 */
+    /** Single lane: builds one dependency-free task from the goal and goes through exactly the same pipeline as the DAG. */
     private DagTask singleTask(JsonNode args, String goal) {
         return new DagTask(SubAgentConstants.DELEGATE_TOOL, goal, text(args, KEY_AGENT_REF),
                 List.of(), args.path(KEY_ARGS));
@@ -190,8 +190,8 @@ public class DelegateService {
     }
 
     /**
-     * 统一车道执行管线（单车道与 DAG 共用）：环检测 → 分层派发 → 有界重试 →
-     * 生成统一聚合信封 {@code {mode, overall, results[]}}；lane 节点 schema 成功/失败一致。
+     * Unified lane execution pipeline (shared by single lane and DAG): cycle detection → layered dispatch → bounded retry →
+     * generation of the unified aggregation envelope {@code {mode, overall, results[]}}; the lane node schema is identical for success and failure.
      */
     private String executeTasks(SubRunExecutionContext parentCtx, List<RuntimeTool> tools, List<DagTask> parsed) {
         if (parsed.isEmpty()) {
@@ -262,7 +262,7 @@ public class DelegateService {
         return out.toString();
     }
 
-    /** 统一 lane 节点：`result`=纯业务 JSON（剥离 `_meta`；失败为 null），框架元数据进 `meta`。 */
+    /** Unified lane node: `result` = pure business JSON (`_meta` stripped; null on failure), framework metadata goes into `meta`. */
     private static ObjectNode buildLaneNode(String key, String stored, String raw, long durationMs, boolean fenced) {
         ObjectNode node = JSON.createObjectNode();
         node.put(SubAgentConstants.META_WRAPPER_KEY, key);
@@ -318,7 +318,7 @@ public class DelegateService {
 
     // ------------------------------------------------------------------- DAG
 
-    /** 读取 lane 结果中的 `_meta` 块（无则返回 null，由调用方按严格口径处理）。 */
+    /** Reads the `_meta` block from a lane result (null when absent; the caller applies the strict rule). */
     private static JsonNode metaOf(String stored) {
         JsonNode node = parseJson(stored);
         if (node != null && node.isObject()) {
@@ -337,7 +337,7 @@ public class DelegateService {
         return def;
     }
 
-    /** dependsOn 有向图环检测（派发前一次性判定；环与“上游失败”是两种不同结局）。 */
+    /** Cycle detection for the dependsOn directed graph (decided once before dispatch; a cycle and "upstream failed" are different outcomes). */
     private static boolean hasCycle(List<DagTask> parsed) {
         Map<String, List<String>> edges = new java.util.HashMap<>();
         for (DagTask task : parsed) {
@@ -371,8 +371,8 @@ public class DelegateService {
         return false;
     }
 
-    /** 无预算上限的按依赖首次分层执行。已执行过的泳道（不论结果）不再重派发——重试由 {@link #tryRetryFailed} 负责。
-     * 依赖永久未交付的泳道填 notDispatched（正常分支，非顶层错误），由重试轮次决定是否补跑。 */
+    /** Dependency-first layered execution without a budget cap. Lanes already executed (regardless of result) are not redispatched — retries are handled by {@link #tryRetryFailed}.
+     * Lanes whose dependencies are permanently undelivered are filled with notDispatched (a normal branch, not a top-level error); retry rounds decide whether to re-run them. */
     private void runDagLayers(List<DagTask> parsed, SessionSubRunner runner, SubRunExecutionContext parentCtx,
                                  List<RuntimeTool> tools, int maxParallel, Map<String, String> results,
                                  Map<String, String> rawOutputs, Map<String, Long> durations,
@@ -412,9 +412,9 @@ public class DelegateService {
         }
     }
 
-    /** FIX-1 拓扑化重试：每轮只重派“依赖现已交付”的泳道；下游仅在上游确认后才在后续轮次重派。
-     * 预算为 per-lane 上限（每泳道至多重试 retryLimit 次）；已交付上游保持结果供下游判定，
-     * 避免同批并行把可恢复的上游重试放大成整条子图静默搁浅（P0-2）。 */
+    /** FIX-1 topological retry: each round redispatches only lanes "whose dependencies are now delivered"; downstream lanes are redispatched in later rounds only after upstream is confirmed.
+     * The budget is a per-lane cap (each lane is retried at most retryLimit times); delivered upstream lanes keep their results for downstream decisions,
+     * avoiding the case where parallel execution in the same batch amplifies a recoverable upstream retry into a silently stranded subgraph (P0-2). */
     private void tryRetryFailed(List<DagTask> parsed, SessionSubRunner runner, SubRunExecutionContext parentCtx,
                                 List<RuntimeTool> tools, int maxParallel, Map<String, String> results,
                                 Map<String, String> rawOutputs, Map<String, Long> durations,
@@ -440,7 +440,7 @@ public class DelegateService {
             if (eligible.isEmpty()) {
                 return;
             }
-            // 仅清除本批待重派泳道旧结果；已交付上游保持，供下游 fail-fast 判定。
+            // Clear only the previous results of lanes to be redispatched in this batch; delivered upstream lanes keep theirs for downstream fail-fast decisions.
             for (DagTask task : eligible) {
                 results.remove(task.key());
                 retryCounts.put(task.key(), retryCounts.getOrDefault(task.key(), 0) + 1);
@@ -498,7 +498,7 @@ public class DelegateService {
             return;
         }
         try {
-            // P0 fail-fast：上游未交付就不派发，直接记 UPSTREAM_MISSING（可区分“真缺失”与“注入故障”）
+            // P0 fail-fast: do not dispatch when an upstream is undelivered; record UPSTREAM_MISSING directly (distinguishes a "real absence" from an "injected fault")
             for (String dep : task.dependsOn()) {
                 if (laneDelivered(results.getOrDefault(dep, "")) != StatusVerdict.DELIVERED_OK) {
                     results.put(task.key(), upstreamMissing(task.key(), dep));
@@ -509,7 +509,7 @@ public class DelegateService {
             String system = resolveAgentSystem(task.agentRef());
             JsonNode upstream = upstreamDataForDependencies(task, results);
             String hint = retryHints.get(task.key());
-            // P0 输出契约前置教学：DAG lane 必须带 _meta（业务字段放顶层），避免烧一次重试来“学会”契约
+            // P0 output contract taught up front: DAG lanes must carry _meta (business fields at the top level), avoiding burning a retry just to "learn" the contract
             String goal = task.goal() + contractFooter(task)
                     + (StringUtils.hasText(hint) ? "\n\n" + hint : "");
             RuntimeTool tool = buildTaskTool(task.key(), goal, system, null,
@@ -532,7 +532,7 @@ public class DelegateService {
         }
     }
 
-    /** P3-8 围栏标记：原始输出是否带 ``` 代码块围栏（聚合输出透出，供 harness 断言“无围栏”）。 */
+    /** P3-8 fence marker: whether the raw output was wrapped in ``` code fences (surfaced in the aggregate output so the harness can assert "no fence"). */
     private static boolean hadFence(String rawResult) {
         if (!StringUtils.hasText(rawResult)) {
             return false;
@@ -541,7 +541,7 @@ public class DelegateService {
         return matcher.find();
     }
 
-    /** P0 输出契约 footer：有依赖的泳道另需 verdict 三态 + 上游探针。 */
+    /** P0 output contract footer: lanes with dependencies additionally need the three-state verdict + upstream probes. */
     private static String contractFooter(DagTask task) {
         boolean hasDeps = task.dependsOn() != null && !task.dependsOn().isEmpty();
         StringBuilder sb = new StringBuilder(
@@ -560,12 +560,12 @@ public class DelegateService {
     }
 
     /**
-     * P1/P2/P3 lane 输出校验（`_meta` 命名空间契约 `delegate-lane/v1`）：
-     * 框架只读顶层 `_meta`，永不读写顶层业务键。`_meta` 必填且须含合法 contract+status；
-     * 有依赖的泳道另需 verdict 三态 + upstream_visible/upstream_raw 探针；
-     * 计数类字段-expand 明细交叉校验；chain 须为 string[]。
-     * 违例 → UNCERTAIN 包装（含 key/raw/_meta，不碰业务原文之外的字段）+ 登记针对性 retry hint。
-     * 框架包装器（`_meta.framework==true`）跳过探针/verdict/内容检查，只验 status 合法。
+     * P1/P2/P3 lane output validation (`_meta` namespace contract `delegate-lane/v1`):
+     * the framework reads only the top-level `_meta` and never reads or writes top-level business keys. `_meta` is required and must contain a valid contract+status;
+     * lanes with dependencies additionally need the three-state verdict + upstream_visible/upstream_raw probes;
+     * count fields are cross-checked against the `-expand` detail; chain must be string[].
+     * Violation → UNCERTAIN wrapper (containing key/raw/_meta, touching no fields beyond the original business text) + a targeted retry hint is registered.
+     * Framework wrappers (`_meta.framework==true`) skip probe/verdict/content checks and only verify that status is valid.
      */
     private void classifyLane(DagTask task, Map<String, String> results,
                               Map<String, String> retryHints, Map<String, Integer> retryCounts,
@@ -625,7 +625,7 @@ public class DelegateService {
         }
         if (!framework) {
             checkCountConsistency(node, violations);
-            // chain 是业务字段（非 _meta），仅校验其形状，不改写
+            // chain is a business field (not _meta); only its shape is validated, never rewritten
             JsonNode chain = node.path("chain");
             if (!chain.isMissingNode() && !chain.isNull()) {
                 if (!chain.isArray()) {
@@ -645,9 +645,9 @@ public class DelegateService {
             retryHints.put(task.key(), retryHintFor(violations));
         } else {
             retryHints.remove(task.key());
-            // 回写当前轮次：框架包装器的 retryCount 随重派发递增（R1/R9 计数可见）
+            // Write back the current round: the framework wrapper's retryCount increments on redispatch (R1/R9 counts stay visible)
             stampRetryCount(results, task.key(), retryCount);
-            // R1：空输出/解析失败类即使成形为框架包装，也登记 nudge 要求下轮必出契约 JSON
+            // R1: empty output/parse failure, even when shaped as a framework wrapper, registers a nudge requiring contract JSON next round
             JsonNode settled = parseJson(results.getOrDefault(task.key(), ""));
             if (settled != null && settled.isObject()) {
                 JsonNode settledMeta = settled.path(META_KEY);
@@ -658,33 +658,33 @@ public class DelegateService {
                                     + " even if only to report status UNCERTAIN")));
                 }
             }
-            // B1：围栏仅记录告警，不改判（剥离失败走兜底违约路径）
+            // B1: the fence is only recorded as a warning and does not change the verdict (stripping failure goes through the fallback violation path)
             if (Boolean.TRUE.equals(fencedFlags.get(task.key()))) {
                 addWarning(results, task.key(), SubAgentConstants.WARNING_FENCED);
             }
-            // FIX-3 contentVerdict：框架独立内容审定（不改 status，仅透明化“OK 但内容为空”）。
-            // 业务对象为“空对象且状态 OK”时记 INVALID，业务对象缺失/非对象记 DEGRADED，否则 OK。
+            // FIX-3 contentVerdict: framework-side independent content review (does not change status; only exposes "OK but empty content").
+            // When the business object is "an empty object with status OK" it is INVALID; when the business object is missing/not an object it is DEGRADED; otherwise OK.
             stampContentVerdict(results, task.key(), node);
         }
         logLane(task.key(), results.get(task.key()), retryCount);
     }
 
-    /** FIX-3 在 `_meta.contentVerdict` 写入框架侧独立审定（OK|DEGRADED|INVALID），不改业务 status。 */
+    /** FIX-3 writes the framework-side independent review into `_meta.contentVerdict` (OK|DEGRADED|INVALID) without changing the business status. */
     private static void stampContentVerdict(Map<String, String> results, String key, JsonNode node) {
         JsonNode stored = parseJson(results.getOrDefault(key, ""));
         if (!(stored instanceof ObjectNode obj) || !(obj.get(META_KEY) instanceof ObjectNode metaObj)) {
             return;
         }
-        // 业务对象 = 顶层剥离 _meta 后剩余字段
+        // Business object = the remaining fields after stripping _meta from the top level
         JsonNode business = obj.deepCopy();
         if (business instanceof ObjectNode bobj) {
             bobj.remove(META_KEY);
         }
         String verdict;
         if (!(business instanceof ObjectNode bus) || bus.size() == 0) {
-            // 无业务字段
+            // No business fields
             if (STATUS_OK.equals(metaObj.path(META_STATUS).asText())) {
-                verdict = "INVALID"; // 声称 OK 却无内容 → 结构性掩盖
+                verdict = "INVALID"; // claims OK but has no content -> structural masking
             } else {
                 verdict = "DEGRADED";
             }
@@ -697,7 +697,7 @@ public class DelegateService {
         results.put(key, obj.toString());
     }
 
-    /** 回写 _meta.retryCount（框架包装器在创建时 retryCount 恒为 0，重试轮次需显式回填）。 */
+    /** Writes back _meta.retryCount (a framework wrapper's retryCount is always 0 when created, so retry rounds must backfill it explicitly). */
     private static void stampRetryCount(Map<String, String> results, String key, int retryCount) {
         JsonNode node = parseJson(results.getOrDefault(key, ""));
         if (node instanceof ObjectNode obj) {
@@ -709,7 +709,7 @@ public class DelegateService {
         }
     }
 
-    /** 向已存储结果的 _meta.warnings 追加非致命告警（B1）。 */
+    /** Appends non-fatal warnings to the stored result's _meta.warnings (B1). */
     private static void addWarning(Map<String, String> results, String key, String warning) {
         JsonNode node = parseJson(results.getOrDefault(key, ""));
         if (node instanceof ObjectNode obj) {
@@ -736,7 +736,7 @@ public class DelegateService {
         }
     }
 
-    /** P2 expand-then-aggregate：单数组字段 + 单 count/len/length 字段（排除 *token*）时必须一致。 */
+    /** P2 expand-then-aggregate: a single array field plus a single count/len/length field (excluding *token*) must agree. */
     private static void checkCountConsistency(JsonNode node, List<String> violations) {
         List<String> arrays = new ArrayList<>();
         List<String> counts = new ArrayList<>();
@@ -793,8 +793,8 @@ public class DelegateService {
     }
 
     /**
-     * P1-3/P1-4 框架失败包裹：`key`（关联）与 `raw`（原文证据）放顶层便于对账取证，
-     * 其余框架字段全部收敛进 `_meta`（`framework:true` 即平台签发标记，业务输出永不带此标记）。
+     * P1-3/P1-4 framework failure wrapper: `key` (correlation) and `raw` (raw-text evidence) are placed at the top level for reconciliation and evidence collection,
+     * while all other framework fields converge into `_meta` (`framework:true` is the platform-issued marker, never present in business output).
      */
     private static ObjectNode metaWrapperBase(String key, String raw) {
         ObjectNode out = JSON.createObjectNode();
@@ -857,7 +857,7 @@ public class DelegateService {
         return out.toString();
     }
 
-    /** FIX-2 失败阶段归类：按 errorCategory 映射，供父级拓扑级判定（区别于自报 status）。 */
+    /** FIX-2 failure stage classification: mapped from errorCategory for parent-side topology decisions (distinct from the self-reported status). */
     private static String stageForCategory(String category) {
         if (CAT_MODEL_NO_OUTPUT.equals(category)) {
             return STAGE_NO_OUTPUT;
@@ -872,8 +872,8 @@ public class DelegateService {
     }
 
     /**
-     * P0 交付门控（`_meta` 命名空间）：只有显式 {@code _meta.status=="OK"} 才算交付。
-     * 无 `_meta` 块的一律 UNCERTAIN（严格口径，不兼容“裸业务 JSON 即交付”的旧假设）。
+     * P0 delivery gating (`_meta` namespace): only an explicit {@code _meta.status=="OK"} counts as delivered.
+     * Anything without a `_meta` block is UNCERTAIN (strict rule, incompatible with the old assumption that "bare business JSON means delivered").
      */
     private static StatusVerdict laneDelivered(String result) {
         if (!StringUtils.hasText(result)) {
@@ -918,7 +918,7 @@ public class DelegateService {
                 .capabilityType(SubAgentConstants.CAPABILITY_TYPE_SUB_AGENT)
                 .llmToolName(SubAgentConstants.DELEGATE_TOOL)
                 .toolRef(ref)
-                // display_name 落库为 VARCHAR(200)：禁止把完整 goal 当显示名，缩略为 key 或截断标题
+                // display_name is persisted as VARCHAR(200): never use the full goal as the display name; abbreviate to the key or a truncated title
                 .displayName(safeDisplayName(displayName, key))
                 .description(goal)
                 .parametersSchemaJson(SubAgentConstants.DELEGATE_SCHEMA)
@@ -929,12 +929,12 @@ public class DelegateService {
     private static String safeDisplayName(String displayName, String key) {
         String base = StringUtils.hasText(displayName)
                 ? displayName : (StringUtils.hasText(key) ? key : SubAgentConstants.DELEGATE_TOOL);
-        // 单行化 + 截断：防止 goal/多行文本越过 VARCHAR(200)
+        // Single-line + truncate: keep goal/multi-line text from exceeding VARCHAR(200)
         String singleLine = base.replaceAll("\\s+", " ").trim();
         return singleLine.length() > DISPLAY_NAME_MAX ? singleLine.substring(0, DISPLAY_NAME_MAX) : singleLine;
     }
 
-    /** agentRef=instance:&lt;id&gt; → 该实例的 systemPrompt+customInstructions；空引用返回 null。 */
+    /** agentRef=instance:&lt;id&gt; → that instance's systemPrompt+customInstructions; an empty reference returns null. */
     private String resolveAgentSystem(String agentRef) {
         if (!StringUtils.hasText(agentRef)) {
             return null;
@@ -1017,8 +1017,8 @@ public class DelegateService {
     }
 
     /**
-     * R4 上游最小化 + 去递归：只取上游 lane 的业务载荷（剥离 `_meta`，内含上游的
-     * `upstream_raw`，否则深度 d 时转义层与体积近似指数膨胀），并弱化最小权限。
+     * R4 upstream minimization + recursion removal: take only the upstream lane's business payload (strip `_meta`, which itself contains the upstream's
+     * `upstream_raw`, otherwise at depth d the escaping layers and size would grow almost exponentially), and weaken least privilege.
      */
     private static JsonNode upstreamDataForDependencies(DagTask task, Map<String, String> results) {
         ObjectNode upstream = JSON.createObjectNode();

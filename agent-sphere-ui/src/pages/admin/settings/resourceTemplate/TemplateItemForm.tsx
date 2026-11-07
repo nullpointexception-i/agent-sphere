@@ -56,7 +56,7 @@ function jsonRule(intl: ReturnType<typeof useIntl>) {
           new Error(
             intl.formatMessage({
               id: 'pages.admin.completions.invalidJson',
-              defaultMessage: '无效 JSON',
+              defaultMessage: 'Invalid JSON',
             }),
           ),
         );
@@ -94,7 +94,7 @@ function definitionFromForm(values: {
         parameters = parsed as Record<string, unknown>;
       }
     } catch {
-      throw new Error('parameters 不是合法 JSON');
+      throw new Error('parameters is not valid JSON');
     }
   }
   return JSON.stringify(
@@ -132,7 +132,8 @@ function FieldRenderer({
         <Tooltip
           title={intl.formatMessage({
             id: 'pages.admin.settings.template.jsonRequired',
-            defaultMessage: '必须是合法 JSON 字符串；留空可保存',
+            defaultMessage:
+              'Must be a valid JSON string; may be left empty on save',
           })}
         >
           <QuestionCircleOutlined
@@ -190,7 +191,7 @@ function FieldRenderer({
             optionFilterProp="label"
             placeholder={intl.formatMessage({
               id: 'pages.admin.settings.template.selectProvider',
-              defaultMessage: '选择模板内的模型供应商',
+              defaultMessage: 'Select a provider from the template',
             })}
             options={providers.map((name) => ({ value: name, label: name }))}
           />
@@ -205,7 +206,7 @@ function FieldRenderer({
             optionFilterProp="label"
             placeholder={intl.formatMessage({
               id: 'pages.admin.settings.template.selectRoute',
-              defaultMessage: '选择模板内的模型路由',
+              defaultMessage: 'Select a model route from the template',
             })}
             options={routes.map((name) => ({ value: name, label: name }))}
           />
@@ -219,14 +220,22 @@ function FieldRenderer({
             label={labelWithRule(
               intl.formatMessage({
                 id: 'pages.admin.settings.template.skill.promptTemplate',
-                defaultMessage: '任务指令 (promptTemplate)',
+                defaultMessage: 'Task instruction (promptTemplate)',
               }),
               intl.formatMessage({
                 id: 'pages.admin.settings.template.skill.promptTemplateHint',
-                defaultMessage: '支持 Markdown 与 {{字段}} 占位符',
+                defaultMessage: 'Supports Markdown and {{field}} placeholders',
               }),
             )}
-            rules={[{ required: true, message: '任务指令不能为空' }]}
+            rules={[
+              {
+                required: true,
+                message: intl.formatMessage({
+                  id: 'pages.admin.settings.template.skill.promptTemplateRequired',
+                  defaultMessage: 'Task instruction is required',
+                }),
+              },
+            ]}
           >
             <SkillMarkdownEditor />
           </Form.Item>
@@ -235,11 +244,11 @@ function FieldRenderer({
             label={labelWithRule(
               intl.formatMessage({
                 id: 'pages.admin.settings.template.skill.parameters',
-                defaultMessage: '入参 JSON Schema (parameters)',
+                defaultMessage: 'Input JSON Schema (parameters)',
               }),
               intl.formatMessage({
                 id: 'pages.admin.settings.template.skill.parametersHint',
-                defaultMessage: '可留空=空对象',
+                defaultMessage: 'May be empty (empty object)',
               }),
             )}
             rules={[jsonRule(intl)]}
@@ -314,7 +323,7 @@ export default function TemplateItemForm({
       }
       onSubmit(item);
     } catch {
-      // 表单校验失败
+      // Form validation failed
     }
   };
 
@@ -325,7 +334,7 @@ export default function TemplateItemForm({
     <Modal
       title={`${intl.formatMessage({
         id: isEdit ? 'pages.table.edit' : 'pages.table.create',
-        defaultMessage: isEdit ? '编辑' : '新增',
+        defaultMessage: isEdit ? 'Edit' : 'New',
       })} ${txt(TYPE_LABELS[type], intl)}`}
       open={open}
       onOk={handleOk}

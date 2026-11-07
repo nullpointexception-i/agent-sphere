@@ -29,8 +29,8 @@ public class KernelContext implements Serializable {
     private boolean recoveryResume;
     /** True when re-entering the loop after an LLM transient failure (WAITING + kind=LLM_RETRY). */
     private boolean retryResume;
-    /** 本 run 固化的思考强度（V118）。 */
+    /** Reasoning effort fixed for this run (V118). */
     private String reasoningEffort;
-    /** 本 run 固化的思考预算（Qwen，V118）。 */
+    /** Reasoning budget fixed for this run (Qwen, V118). */
     private Integer reasoningBudgetTokens;
 }

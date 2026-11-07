@@ -5,12 +5,12 @@
 import { loadSessionState, saveSessionState, clearSessionState } from './session-state.js';
 
 const CONTENT_FILES = ['content-locator.js', 'content.js'];
-// 独立插件窗口的默认尺寸；位置相对用户当前窗口左上角偏移，避免完全盖住用户窗口。
+// Default size of the isolated plugin window; its position is offset from the top-left of the user's current window so it does not fully cover it.
 const PLUGIN_WINDOW_SIZE = { width: 1280, height: 860 };
 const PLUGIN_WINDOW_OFFSET = 40;
 const PLUGIN_WINDOW_LAYOUT = 1;
 
-// content script sendMessage 可能在 tab 导航/重建时永不回包 → 加超时，避免命令悬挂。
+// content script sendMessage may never reply while a tab navigates/rebuilds -> add a timeout to keep commands from hanging.
 function withTimeout(promise, ms, error) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(error), ms);
@@ -28,15 +28,15 @@ export class TabManager {
     this.tabFollowResolve = null;
     this.pluginGroupId = null;
     this.pluginWindowId = null;
-    // 本 worker 内由 navigate/子 tab 明确收养的 tab；仅内存，用于窗口状态丢失时自愈。
+    // Tabs explicitly adopted by navigate/child tabs within this worker; memory only, used to self-heal when window state is lost.
     this.trustedTabId = null;
-    // 会话级 tab 归属：插件窗口是全局共享的，上一会话留下的 tab 绝不能被本会话复用/读取。
-    // 按 session 分别记账 —— 同一浏览器可能有多个会话并发运行，不能互相清空。
+    // Session-level tab ownership: the plugin window is globally shared, so a tab left by the previous session must never be reused/read by this session.
+    // Accounted per session - the same browser may run several sessions concurrently and they must not clear each other.
     this.sessionId = null;
     this.sessionTabIds = [];
     this.sessionTabIdsBySession = new Map();
     this.controlledBySession = new Map();
-    // 已注入 content scripts 的 tab 缓存（避免每次命令都重注入 + 300ms 停顿）
+    // Cache of tabs that already have content scripts injected (avoids re-injecting + a 300ms pause on every command)
     this.injectedTabs = new Set();
 
     // Follow tabs opened by the controlled tab (target=_blank / window.open),
@@ -50,8 +50,8 @@ export class TabManager {
           : await chrome.tabs.get(tab.openerTabId).catch(() => null);
         if (tab.openerTabId !== this.controlledTabId || !opener) return;
         if (wid == null || Number(opener.windowId) !== Number(wid)) {
-          // 初次 windows.create 可能继承 extension caller 的 openerTabId。
-          // 只有 opener 本身在已验证的插件窗口内，才允许跟随；不能把新窗口移回旧用户窗。
+          // The first windows.create may inherit the extension caller's openerTabId.
+          // Follow it only when the opener itself is inside a verified plugin window; the new window must not be moved back into the user's window.
           console.info('[AgentSphere] ignoring tab opened outside the isolated window', {
             tabId: tab.id,
             openerTabId: tab.openerTabId,
@@ -70,7 +70,7 @@ export class TabManager {
       })();
     });
 
-    // 页面导航/重新加载后 content scripts 失效 → 失效注入缓存
+    // After page navigation/reload the content scripts are invalid -> invalidate the injection cache
     chrome.tabs.onUpdated.addListener((tabId, info) => {
       if (info.status === 'loading') {
         this.injectedTabs.delete(tabId);
@@ -110,10 +110,10 @@ export class TabManager {
     });
   }
 
-  /** Service worker 重启后从 storage.session 恢复窗口/分组/受控 tab。 */
+  /** Restore windows/groups/controlled tabs from storage.session after a service worker restart. */
   async hydrate() {
-    // 迁移只执行一次且必须先完成：并发的 hydrate 不能在迁移中途读到旧状态，
-    // 否则会把刚写入的新窗口 id 清掉（表现为 pluginWindowId=null）。
+    // Migration runs once and must complete first: concurrent hydrate calls must not read stale state mid-migration,
+    // otherwise the newly written window id would be cleared (showing up as pluginWindowId=null).
     if (!this.layoutReady) this.layoutReady = this.migrateLayout();
     await this.layoutReady;
     const st = await loadSessionState();
@@ -126,7 +126,7 @@ export class TabManager {
     if (this.controlledTabId == null && st.controlledTabId != null) {
       this.controlledTabId = st.controlledTabId;
     }
-    // 只在内存里还没有会话时恢复：beginSession 已经声明了本次会话，不能被旧值覆盖。
+    // Only restore when there is no session in memory yet: beginSession has already declared this session, and it must not be overwritten by an old value.
     if (this.sessionId == null) {
       if (st.tabSessionId != null) this.sessionId = st.tabSessionId;
       if (Array.isArray(st.tabSessionTabIds)) {
@@ -136,11 +136,11 @@ export class TabManager {
   }
 
   /**
-   * 声明“当前会话”。插件窗口是全局共享的，上一会话留下的 tab 绝不能被本会话
-   * 复用或读取（线上曾读到别的任务残留的站点页面）。
+   * Declare the "current session". The plugin window is globally shared, so a tab left by the previous session must never be
+   * reused or read by this session (production once read a site page left over from another task).
    *
-   * <p>切换会话时只换归属登记，**不关闭任何 tab**：同一浏览器里可能还有别的
-   * 会话在并发运行，关掉会直接破坏对方。按 session 分别记账，切回来还能续用。
+   * <p>Switching sessions only changes the ownership record, **without closing any tab**: other sessions may still be
+   * running concurrently in the same browser, and closing one would break them. Accounting is per session, so switching back can resume.
    */
   beginSession(sessionId) {
     if (sessionId == null) return;
@@ -163,7 +163,7 @@ export class TabManager {
     }
   }
 
-  /** 把 tab 登记为本会话的 tab；只有登记过的 tab 才允许被本会话复用。 */
+  /** Register a tab as belonging to this session; only registered tabs may be reused by this session. */
   registerSessionTab(tabId) {
     if (tabId == null) return;
     if (this.isSessionTab(tabId)) return;
@@ -180,11 +180,11 @@ export class TabManager {
   }
 
   /**
-   * 读取 tab 的真实页面地址（`location.href`）。
+   * Read a tab's real page address (`location.href`).
    *
-   * <p>`chrome.tabs.url` 在重定向/导航竞态下可能是旧值 —— 线上出现过 tabs.url 报
-   * 目标页、页面实际停在拦截页的情况。任何“已到达目标页”的判定都必须以页面
-   * 自己的 location 为准。读不到（未注入/导航中）时返回 null，由调用方决定是否重新导航。
+   * <p>`chrome.tabs.url` may be stale during a redirect/navigation race - production saw tabs.url report the target page
+   * while the page actually stayed on the intercept page. Any "already reached the target page" decision must rely on the page's
+   * own location. Returns null when it cannot be read (not injected/navigating), leaving re-navigation to the caller.
    */
   async readPageUrl(tabId, timeoutMs = 3000) {
     if (tabId == null) return null;
@@ -201,8 +201,8 @@ export class TabManager {
   }
 
   /**
-   * 升级前旧版本把 controlledTabId/pluginGroupId 指向用户窗口里的受控 tab，
-   * 这些 legacy 值不能再用来识别插件窗口。只清浏览器操作状态，保留 targetOrigin 等站点安全状态。
+   * Before the upgrade, older versions pointed controlledTabId/pluginGroupId at a controlled tab inside the user's window;
+   * those legacy values can no longer identify the plugin window. Clear only browser operation state and keep site safety state such as targetOrigin.
    */
   async migrateLayout() {
     const st = await loadSessionState();
@@ -227,7 +227,7 @@ export class TabManager {
     this.pluginGroupId = null;
     this.controlledTabId = null;
     this.trustedTabId = null;
-    // 窗口没了，会话登记的 tab 也都没了；保留内存里的 sessionId（会话可能仍在跑）。
+    // The window is gone, so the session's registered tabs are gone too; keep the in-memory sessionId (the session may still be running).
     this.sessionTabIds = [];
     this.sessionTabIdsBySession.clear();
     this.controlledBySession.clear();
@@ -238,8 +238,8 @@ export class TabManager {
   }
 
   /**
-   * 判断某个 windowId 是否确实是插件窗口：优先看 AgentSphere group，
-   * 其次看受控 tab / 本 worker 收养的 tab。防止 window id 被浏览器复用后误认用户窗口。
+   * Determine whether a windowId really is a plugin window: check the AgentSphere group first,
+   * then controlled tabs / tabs adopted by this worker. Prevents a reused window id from being mistaken for a user window.
    */
   async windowLooksLikePlugin(windowId) {
     if (windowId == null) return false;
@@ -258,8 +258,8 @@ export class TabManager {
   }
 
   /**
-   * 创建独立窗口并尽量保持用户当前窗口焦点。
-   * Chrome 的 focused:false 通常足够；这里再兜底一次，防止某些平台仍把新窗口置前。
+   * Create an isolated window while keeping the user's current window focused as much as possible.
+   * Chrome's focused:false is usually enough; add one more safeguard in case some platforms still bring the new window forward.
    */
   async createUnfocusedWindow(url) {
     const prev = await chrome.windows
@@ -278,7 +278,7 @@ export class TabManager {
         return null;
       });
     if (!win) {
-      // 个别环境/策略下 inactive window 创建失败；退化为普通创建，随后再把焦点还给用户。
+      // In some environments/policies creating an inactive window fails; degrade to a normal create and then return focus to the user.
       win = await chrome.windows.create({ url, type: 'normal', ...bounds }).catch((e) => {
         console.warn('[AgentSphere] windows.create fallback failed:', e?.message);
         return null;
@@ -295,8 +295,8 @@ export class TabManager {
   }
 
   /**
-   * 在独立插件窗口中打开 URL。窗口已存在时新建 tab；不存在时直接建窗口。
-   * 不激活用户窗口，也不复用用户窗口里的 tab。
+   * Open a URL in the isolated plugin window. Creates a new tab when the window exists, or creates the window when it does not.
+   * Does not activate the user's window, nor reuse tabs from it.
    */
   async openInPluginWindow(url) {
     const wid = await this.getPluginWindowId();
@@ -308,7 +308,7 @@ export class TabManager {
             url,
             active: true,
           });
-          // 以 tab.windowId 为准（windows.create/get 的 id 在个别环境下可能缺失）。
+          // Trust tab.windowId (windows.create/get ids may be missing in some environments).
           this.pluginWindowId = tab.windowId ?? wid;
           await saveSessionState({ pluginWindowId: this.pluginWindowId });
           await this.groupTab(tab.id);
@@ -329,7 +329,7 @@ export class TabManager {
       tab = (await chrome.tabs.query({ windowId: win.id, active: true }))[0];
     }
     if (!tab && win.id != null) {
-      // windows.create 偶发返回空窗口：显式补一个 tab，避免 navigate 返回 NO_TAB。
+      // windows.create occasionally returns an empty window: add a tab explicitly so navigate does not return NO_TAB.
       tab = await chrome.tabs.create({
         windowId: win.id,
         url,
@@ -342,7 +342,7 @@ export class TabManager {
       });
       return undefined;
     }
-    // Chrome 文档里 Window.id 是 optional；tab.windowId 是更可靠的锚点。
+    // In the Chrome docs Window.id is optional; tab.windowId is the more reliable anchor.
     const windowId = tab.windowId ?? win.id;
     if (windowId == null) {
       console.warn('[AgentSphere] isolated tab has no windowId', {
@@ -377,8 +377,8 @@ export class TabManager {
     if (!tab) return false;
     const wid = await this.getPluginWindowId();
     if (wid != null && Number(tab.windowId) === Number(wid)) return true;
-    // 本 worker 内 navigate 刚收养过的 tab：只判定，不改写 pluginWindowId，
-    // 否则一旦 trustedTabId 指向用户窗口，插件窗口锚点就会被写成用户窗口。
+    // A tab that navigate just adopted within this worker: only decide, do not rewrite pluginWindowId,
+    // otherwise once trustedTabId points at a user window, the plugin window anchor would be written as the user window.
     return this.trustedTabId != null && Number(this.trustedTabId) === Number(tabId);
   }
 
@@ -406,7 +406,7 @@ export class TabManager {
         return;
       }
       if (Number(tab.windowId) !== Number(wid)) {
-        // Chrome 把子 tab 开到了别的窗口（如 popup）：保持独立，不收养、不移动。
+        // Chrome opened the child tab in another window (such as a popup): keep it independent, do not adopt or move it.
         console.log('[AgentSphere] agent-opened tab stays in its own window', {
           tabId: tab.id,
           tabWindowId: tab.windowId,
@@ -451,16 +451,16 @@ export class TabManager {
   }
 
   /**
-   * 把受控 tab 切到前台（其所在窗口内的活动 tab）。
+   * Bring the controlled tab to the foreground (the active tab within its window).
    *
-   * <p>后台 tab 会被 Chrome 节流：`requestAnimationFrame` 暂停、`setTimeout` 钳到 ≥1s
-   * （隐藏满 5 分钟进一步降到约 1 次/分钟）。而本插件的几个稳定性等待全部依赖 rAF +
-   * setTimeout —— 元素几何收敛帧（waitStableRect）、光标到达动画 —— 后台下每条写动作
-   * 都要白白多花数秒，叠加后频繁撞上后端的动作超时。
+   * <p>Background tabs are throttled by Chrome: `requestAnimationFrame` is paused and `setTimeout` is clamped to >=1s
+   * (dropping further to about once per minute after 5 minutes hidden). Several of this extension's stability waits depend entirely on rAF +
+   * setTimeout - the element geometry settle frame (waitStableRect) and the cursor arrival animation - so in the background every write action
+   * wastes several extra seconds and, stacked together, frequently hits the backend action timeout.
    *
-   * <p>只允许激活独立插件窗口内的 tab；用户窗口里的 tab 一律不碰。
-   * 刻意只 `tabs.update({active:true})`、不 `windows.update({focused:true})`：
-   * 窗口可见但非聚焦时，活动 tab 通常已算 `visible`，既解除节流又不抢用户的 OS 焦点。
+   * <p>Only tabs inside the isolated plugin window may be activated; tabs in the user's window are never touched.
+   * Deliberately only `tabs.update({active:true})`, never `windows.update({focused:true})`:
+   * when the window is visible but unfocused the active tab is usually already counted as `visible`, which lifts throttling without stealing the user's OS focus.
    */
   async ensureForeground(tabId) {
     if (!tabId) return;
@@ -471,14 +471,14 @@ export class TabManager {
       if (!tab || Number(tab.windowId) !== Number(wid)) return;
       const win = await chrome.windows.get(wid).catch(() => null);
       if (win?.state === 'minimized') {
-        // 恢复成普通窗口但不聚焦：最小化窗口里的 tab 会被 Chrome 当成隐藏页节流。
+        // Restore it to a normal window without focusing: tabs in a minimized window are treated as hidden pages and throttled by Chrome.
         await chrome.windows.update(wid, { state: 'normal', focused: false }).catch(() => {});
       }
       if (!tab.active) {
         await chrome.tabs.update(tabId, { active: true });
       }
     } catch (e) {
-      // tab 已关闭或不归本窗口管：不阻断调用方，后续动作各自报错即可
+      // The tab is closed or not managed by this window: do not block the caller; later actions will each report their own error
     }
   }
 
@@ -505,8 +505,8 @@ export class TabManager {
    * Never reuses a user tab: the whole point of the isolated window is that the
    * agent's navigation cannot steal or overwrite the user's current tab.
    *
-   * <p>也绝不跨会话复用：插件窗口是全局共享的，只认本会话登记过的 tab。
-   * 旧实现会回落到“窗口内任意 tab”，线上因此把上一任务残留的页面当成了本会话的受控页。
+   * <p>Never reuse across sessions either: the plugin window is globally shared, so only tabs registered to this session count.
+   * The old implementation fell back to "any tab in the window", so production treated a page left over from the previous task as this session's controlled page.
    */
   async findReusableTab(url) {
     const want = this.normalizeUrl(url);
@@ -599,7 +599,7 @@ export class TabManager {
   }
 
   // Send a message to a tab's content script, re-injecting when the receiver is missing.
-  // frameId 语义：undefined/null=全部框架广播；0=定向顶层 document；>0=定向子框架。
+  // frameId semantics: undefined/null = broadcast to all frames; 0 = target the top-level document; >0 = target a child frame.
   async askContent(tabId, msg, maxRetries = 3, frameId = 0, timeoutMs = 15000) {
     const sendOpts =
       frameId === undefined || frameId === null ? undefined : { frameId };
@@ -638,7 +638,7 @@ export class TabManager {
       const tab = await chrome.tabs.get(tabId).catch(() => null);
       if (!tab) return false;
 
-      // 不在插件窗口里的 tab 只记录、不移动：移动会把用户窗口/新窗口的 tab 互相拽走。
+      // Tabs outside the plugin window are only recorded, never moved: moving would drag tabs between the user's window and the new window.
       if (Number(tab.windowId) !== Number(this.pluginWindowId)) {
         console.warn('[AgentSphere] tab is outside the plugin window; not grouping', {
           tabId,
@@ -663,8 +663,8 @@ export class TabManager {
         await chrome.tabs.group({ tabIds: [tabId], groupId: gid });
         return true;
       }
-      // 不指定 windowId 时 Chrome 把新 group 建在“当前窗口”（用户聚焦的窗口），
-      // 会把 tab 从插件窗口拽进用户窗口。必须显式指定插件窗口。
+      // Without an explicit windowId, Chrome creates the new group in the "current window" (the user's focused window),
+      // which would drag the tab from the plugin window into the user's window. The plugin window must be specified explicitly.
       const newId = await chrome.tabs.group({
         tabIds: [tabId],
         createProperties: { windowId: this.pluginWindowId },

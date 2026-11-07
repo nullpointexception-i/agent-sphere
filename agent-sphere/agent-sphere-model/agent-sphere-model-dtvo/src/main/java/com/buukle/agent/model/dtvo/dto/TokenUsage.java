@@ -6,11 +6,12 @@ import java.io.Serializable;
 import java.util.Map;
 
 /**
- * 归一化的调用用量（供应商无关），供落库与聚合统计使用。
- * 兼容各家的 usage 形状：
- * - DeepSeek：顶层 prompt_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens，
- *   新版本还下沉到 prompt_tokens_details.cached_tokens；completion_tokens_details.reasoning_tokens 记思考占用。
- * - OpenAI：无顶层 hit/miss，命中数在 prompt_tokens_details.cached_tokens。
+ * Normalized call usage (provider-agnostic), used for persistence and aggregate statistics.
+ * Compatible with each provider's usage shape:
+ * - DeepSeek: top-level prompt_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens;
+ *   newer versions also nest prompt_tokens_details.cached_tokens; completion_tokens_details.reasoning_tokens
+ *   records reasoning consumption.
+ * - OpenAI: no top-level hit/miss; the hit count lives in prompt_tokens_details.cached_tokens.
  */
 @Data
 public class TokenUsage implements Serializable {
@@ -43,7 +44,7 @@ public class TokenUsage implements Serializable {
         return (Map<String, Object>) m;
     }
 
-    /** 从供应商原始 usage {@code Map} 归一化；无任何用量字段时返回 null，其余字段按可得值填充。 */
+    /** Normalize from the provider's raw usage {@code Map}; returns null when no usage field is present, otherwise fills the fields that are available. */
     @SuppressWarnings("unchecked")
     public static TokenUsage from(Map<String, Object> raw) {
         if (raw == null || raw.isEmpty()) return null;

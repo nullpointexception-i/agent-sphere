@@ -70,14 +70,14 @@ class TaskControllerTest {
         dto.setCode("bole");
         dto.setSubject("elvin");
         dto.setBusinessType("sourcing");
-        dto.setTaskTimeoutSeconds(10); // 低于 @Min(60)
+        dto.setTaskTimeoutSeconds(10); // below @Min(60)
 
         mockMvc.perform(post("/api/v1/api/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest());
 
-        // 越界值连服务层都不该进：超时是安全敏感参数（同时决定凭证有效期）。
+        // Out-of-range values must not even reach the service layer: the timeout is security-sensitive (it also determines credential lifetime).
         verifyNoInteractions(taskService);
     }
 

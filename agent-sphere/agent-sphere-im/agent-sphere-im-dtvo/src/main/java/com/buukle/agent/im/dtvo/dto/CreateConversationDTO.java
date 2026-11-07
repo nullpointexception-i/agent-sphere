@@ -17,8 +17,8 @@ public class CreateConversationDTO implements Serializable {
     private String title;
     @Size(max = 512)
     private String purpose;
-    /** 初始成员（用户 ID，不含创建者）。 */
+    /** Initial members (user IDs, excluding the creator). */
     private List<Long> participantUserIds;
-    /** 群级分派规则（JSON 字符串）。 */
+    /** Group-level dispatch rules (JSON string). */
     private String gateConfig;
 }

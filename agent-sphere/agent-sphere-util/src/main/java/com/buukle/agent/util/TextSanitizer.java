@@ -1,18 +1,19 @@
 package com.buukle.agent.util;
 
 /**
- * 文本清洗工具：剔除数据库/协议不允许的字符。
+ * Text sanitizing utility: removes characters the database/protocol does not allow.
  *
- * PostgreSQL 的 text/varchar 列不接受 NUL 字节（0x00），LLM 输出偶发携带 \u0000
- * 会导致 INSERT/UPDATE 抛 DataIntegrityViolationException。在 LLM 文本入口与落库边界
- * 统一清洗，防止污染 run.reasoning / reply / user_message / tool artifact 等列。
+ * PostgreSQL text/varchar columns reject the NUL byte (0x00); an occasional \u0000 in LLM output
+ * makes INSERT/UPDATE throw DataIntegrityViolationException. Sanitize at the LLM text entry points
+ * and persistence boundaries to keep it out of columns such as run.reasoning / reply /
+ * user_message / tool artifact.
  */
 public final class TextSanitizer {
 
     private TextSanitizer() {
     }
 
-    /** 移除 NUL（\u0000）；其余字符原样保留。null 安全。 */
+    /** Removes NUL (\u0000); all other characters are preserved. Null-safe. */
     public static String sanitize(String text) {
         if (text == null || text.indexOf('\u0000') < 0) {
             return text;

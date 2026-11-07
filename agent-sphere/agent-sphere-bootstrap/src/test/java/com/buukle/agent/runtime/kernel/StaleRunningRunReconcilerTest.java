@@ -35,9 +35,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 卡在 RUNNING 的收口护栏：OrphanRunSweeper 只认 Redis state=活跃 + 无 owner，
- * 而「循环退出未写终态」的 run 会被置成 state=IDLE + 无 owner —— 它永远扫不到。
- * 本任务按 DB 的 updated_at 兜底，但必须以「无 owner」为前提，避免误杀正在长调用的活 run。
+ * Finalization guard for runs stuck in RUNNING: OrphanRunSweeper only matches Redis state=active + no owner,
+ * while a run that "exited the loop without writing a terminal state" is set to state=IDLE + no owner — it is never swept.
+ * This task falls back to the DB updated_at, but only when "no owner" holds, to avoid killing a live run in a long call.
  */
 @ExtendWith(MockitoExtension.class)
 class StaleRunningRunReconcilerTest {

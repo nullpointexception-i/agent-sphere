@@ -20,8 +20,8 @@ const AUTO_LOGIN_TRIED_KEY = 'agent-sphere-widget:auto-login-tried';
 const LOGOUT_EVENT = 'agent-sphere:logout';
 
 /**
- * 校验缓存用户是否仍是当前宿主用户（identityKey 为宿主的 username/display subject）。
- * AgentSphere /sso/me 当前返回 displaySubject 作为 ssoSubject；不匹配即残留旧会话。
+ * Check whether the cached user is still the current host user (identityKey is the host's username/display subject).
+ * AgentSphere /sso/me currently returns displaySubject as ssoSubject; a mismatch means a stale session is left over.
  */
 function identityMatches(config: WidgetConfig, u: UserVO | null): boolean {
   const expected = config.identityKey;
@@ -34,7 +34,7 @@ function identityMatches(config: WidgetConfig, u: UserVO | null): boolean {
   if (u.ssoSubject) {
     return u.ssoSubject === String(expected);
   }
-  // 尚未解析出身份信息，无法判定 —— 不误伤
+  // Identity not resolved yet, so it cannot be decided - do not act on it
   return true;
 }
 
@@ -60,7 +60,7 @@ function stripQueryParams(names: string[]): void {
   window.history.replaceState(null, '', url);
 }
 
-/** 与主站同步：登录后/每次启动拉取 /sso/me，把 providerCode@subject 并入本地用户。 */
+/** Stay in sync with the main site: after login / on every start, fetch /sso/me and merge providerCode@subject into the local user. */
 async function syncSsoIdentity(api: ApiClient, u: UserVO): Promise<UserVO> {
   try {
     const identity = await api.ssoMe();
@@ -74,7 +74,7 @@ async function syncSsoIdentity(api: ApiClient, u: UserVO): Promise<UserVO> {
       return merged;
     }
   } catch {
-    // 非 SSO 或接口异常：忽略，保留原用户
+    // Not SSO or the API failed: ignore and keep the existing user
   }
   return u;
 }
@@ -125,7 +125,7 @@ export function Root({ config }: RootProps) {
       }
       let stored = getUser();
       if (stored && !identityMatches(config, stored)) {
-        // 缓存用户与宿主当前用户不一致（切换后残留旧会话）：丢弃缓存，避免旧 token 继续可用
+        // The cached user differs from the host's current user (stale session after a switch): drop the cache so the old token cannot stay usable
         clearWidgetUserSession();
         stored = null;
       }
@@ -194,7 +194,7 @@ export function Root({ config }: RootProps) {
   );
 
   if (phase === 'booting') {
-    return <div className="aw-booting">加载中…</div>;
+    return <div className="aw-booting">Loading…</div>;
   }
 
   if (phase === 'login' || !user) {

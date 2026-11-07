@@ -32,24 +32,29 @@ public class CreateTaskDTO implements Serializable {
     private String businessType;
 
     /**
-     * 任务级 MCP 凭证：调用方（Bole）在提交任务时下发，Agent 执行 MCP 工具时作为
-     * {@code X-Task-Mcp-Credential} 请求头注入，让服务端能识别「这次调用属于哪个任务/哪个用户」。
+     * Task-level MCP credential: issued by the caller (Bole) when submitting the task and injected as
+     * the {@code X-Task-Mcp-Credential} request header when the Agent executes MCP tools, so the server
+     * can identify "which task / which user this call belongs to".
      *
-     * <p>必须是顶层独立字段：{@code config} 会被整包序列化进 prompt（凭证进 prompt 等于交给模型保管），
-     * {@code context} 会随 TaskVO 对外返回。凭证只在提交时进 Redis，运行期由工具执行链路取用，
-     * 既不落库也不进任何模型可见文本。
+     * <p>It must be a top-level standalone field: {@code config} is serialized wholesale into the prompt
+     * (a credential in the prompt means handing it to the model), and {@code context} is returned
+     * externally with TaskVO. The credential goes only into Redis on submission and is read by the tool
+     * execution chain at runtime; it is neither persisted nor placed in any model-visible text.
      */
     @Size(max = 4096)
     private String mcpCredential;
 
     /**
-     * 任务超时时间（秒）。业务方（Bole）指定则以其为准；不传则由 AS 侧配置兜底。
+     * Task timeout in seconds. If the caller (Bole) specifies it, that value wins; if omitted, the
+     * AS-side config provides the fallback.
      *
-     * <p>该值同时决定两件事：AS 侧任务的存活上限（超时判 FAILED），以及业务方据它签发的
-     * MCP 凭证有效期 —— 两者必须一致，否则会出现「任务还在跑但凭证已过期」。
+     * <p>This value determines two things at once: the AS-side task's lifetime cap (timeout marks it
+     * FAILED), and the MCP credential validity period the caller issues based on it — the two must
+     * match, otherwise the task keeps running while the credential has already expired.
      *
-     * <p>上限 4 小时：它既决定凭证有效期、也决定任务占用资源的时长，属安全敏感参数，
-     * 越界直接 400（由 GlobalExceptionHandler 把 MethodArgumentNotValidException 映射为 400）。
+     * <p>Upper bound 4 hours: it determines both credential validity and how long the task holds
+     * resources, so it is a security-sensitive parameter; out-of-range values are rejected with 400
+     * (GlobalExceptionHandler maps MethodArgumentNotValidException to 400).
      */
     @Min(60)
     @Max(14400)

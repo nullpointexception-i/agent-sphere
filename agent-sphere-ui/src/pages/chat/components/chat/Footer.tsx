@@ -23,7 +23,7 @@ interface FooterProps {
   onExpandOpen: () => void;
   sessionKey?: string;
   sessionId?: number;
-  /** 该会话所属实例未开放主站会话（`allowConsoleSession=false`）：禁用输入并提示。 */
+  /** The instance owning this session has console sessions disabled (`allowConsoleSession=false`): disable input and show a hint. */
   consoleBlocked?: boolean;
   runMode?: 'WRITE' | 'READ_ONLY';
   onRunModeChange?: (mode: 'WRITE' | 'READ_ONLY') => void;
@@ -84,7 +84,7 @@ export default function Footer({
       message.warning(
         intl.formatMessage({
           id: 'pages.chat.attachmentTypeHint',
-          defaultMessage: '仅支持 jpeg/png/webp/gif 图片',
+          defaultMessage: 'Only jpeg/png/webp/gif images are supported',
         }),
       );
       return;
@@ -93,7 +93,7 @@ export default function Footer({
       message.warning(
         intl.formatMessage({
           id: 'pages.chat.attachmentSizeHint',
-          defaultMessage: '图片不能超过 5MB',
+          defaultMessage: 'Image must not exceed 5MB',
         }),
       );
       return;
@@ -113,7 +113,7 @@ export default function Footer({
       message.error(
         intl.formatMessage({
           id: 'pages.chat.attachmentUploadFailed',
-          defaultMessage: '附件上传失败',
+          defaultMessage: 'Attachment upload failed',
         }),
       );
       console.warn('[attachment] upload failed:', err);
@@ -240,7 +240,8 @@ export default function Footer({
       }
       const image = files.find((f) => f.type.startsWith('image/'));
       if (!image) return;
-      // 消费图片粘贴（与图片按钮共用单附件规则：已有/上传中/发送中则提示并忽略）
+      // Handle pasted images (shares the single-attachment rule with the image button:
+      // hint and ignore if one already exists / is uploading / is sending)
       pe.preventDefault();
       if (
         attachmentsRef.current.length > 0 ||
@@ -250,7 +251,8 @@ export default function Footer({
         message.warning(
           intlRef.current.formatMessage({
             id: 'pages.chat.attachmentBusyHint',
-            defaultMessage: '已有待发送附件，请先发送或删除后再粘贴',
+            defaultMessage:
+              'There is already a pending attachment. Send or remove it before pasting.',
           }),
         );
         return;
@@ -392,7 +394,8 @@ export default function Footer({
         >
           {intl.formatMessage({
             id: 'pages.chat.consoleSessionDisabled',
-            defaultMessage: '该实例未开放主站会话，如需聊天机器人请申请开通',
+            defaultMessage:
+              'This instance does not allow console sessions. Apply for a chatbot if you need one.',
           })}
         </div>
       ) : null}

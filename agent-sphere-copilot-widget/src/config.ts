@@ -22,14 +22,14 @@ export interface WidgetConfig {
    */
   mountTo?: HTMLElement;
   /**
-   * 宿主提供的当前用户身份标识（如 Bole 的 username 字符串）。挂载时若缓存用户与
-   * 该标识不匹配（宿主切换用户后残留旧会话），widget 会丢弃缓存并触发重新登录，
-   * 防止旧用户 token 继续进入 chat。
+   * Current user identity supplied by the host (for example Bole's username string). At mount time, if the cached user does not match
+   * this identifier (the host switched users but a stale session remains), the widget drops the cache and triggers a fresh login,
+   * preventing the old user's token from entering chat.
    */
   identityKey?: string;
   /**
-   * Chrome 插件下载地址覆盖。未提供且后端配置了 plugin.download-url（应用内上传托管或外链）
-   * 时，widget 运行时从公开配置拉取并在"新会话"按钮上方展示下载入口。
+   * Override for the Chrome extension download URL. When absent and the backend has plugin.download-url configured (in-app upload hosting or an external link),
+   * the widget fetches it from the public config at runtime and shows a download entry above the "New session" button.
    */
   pluginDownloadUrl?: string;
 }
@@ -38,7 +38,7 @@ export const DEFAULT_CONFIG: Required<Pick<WidgetConfig, 'apiBase' | 'provider' 
   apiBase: '/api/v1',
   provider: 'business',
   autoLogin: true,
-  title: 'Agent Sphere 助手',
+  title: 'Agent Sphere Assistant',
 };
 
 export const SSO_AUTHORIZE_PATH = '/auth/sso/authorize';
@@ -47,10 +47,10 @@ export const SSO_QUERY_PARAM_OTC = 'otc';
 export const SSO_QUERY_PARAM_ERROR = 'error';
 
 /**
- * 声明调用来源的请求头 —— 必须与后端 `SessionSurfaceHolder.HEADER` 一致。
+ * Request header declaring the call surface - must match the backend `SessionSurfaceHolder.HEADER`.
  *
- * <p>服务端按实例的 `allow_widget_session` 开关校验建会话/发消息；缺省（不带头）按**主站**处理，
- * 那样被关掉 widget 的实例在这里仍会被放行，所以每个请求都要带上。
+ * <p>The server validates session creation/sends against the instance's `allow_widget_session` switch; without the header the call is treated as the **main site**,
+ * so instances with the widget disabled would still be allowed here. Every request must therefore carry it.
  */
 export const CLIENT_SURFACE_HEADER = 'X-Client-Surface';
 export const CLIENT_SURFACE_WIDGET = 'widget';

@@ -16,7 +16,7 @@ public class SsoIdentity {
     private Long id;
     private String providerCode;
     private String subject;
-    /** 第三方登录用户名（如 bole 的 preferred_username），用于右上角 provider@username 展示；空则回退 subject */
+    /** Third-party login username (for example the IdP's preferred_username), shown as provider@username in the top-right corner; falls back to subject when empty */
     private String displaySubject;
     private Long agentUserId;
     private String status;

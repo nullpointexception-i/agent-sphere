@@ -1,6 +1,6 @@
 package com.buukle.agent.infrastructure.file;
 
-/** 通用文件存储返回的二进制文件信息。 */
+/** Binary file info returned by the generic file store. */
 public record StoredFile(
         String bizKey,
         String fileKey,

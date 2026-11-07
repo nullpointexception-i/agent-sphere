@@ -34,9 +34,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 统一事件入口：IM / Webhook 的 NormalizedEvent 先落 agent_thread + agent_event。
+ * Unified event entry point: NormalizedEvent from IM / Webhook is first persisted to agent_thread + agent_event.
  *
- * <p>只负责持久化与幂等；相关性判断由 Group Router 后续消费。
+ * <p>Only handles persistence and idempotency; relevance decisions are left to the Group Router downstream.
  */
 @Slf4j
 @Service
@@ -94,8 +94,7 @@ public class EventIngestService implements EventIngestPort {
         }
     }
 
-    /** 直接 @Agent 的事件不进入群级批次，立即写 DIRECT 投递并标记已处理。 */
-    /** Direct pass-through for agents subscribed to this thread. */
+    /** Direct @Agent events skip the group batch: write a DIRECT delivery immediately and mark it processed. */
     private void passThroughSubscriptions(AgentEvent row) {
         List<AgentThreadSubscription> subscriptions = subscriptionMapper.selectList(
                 Wrappers.<AgentThreadSubscription>lambdaQuery()
@@ -214,7 +213,7 @@ public class EventIngestService implements EventIngestPort {
             delivery.setStatus(AgentEventDeliveryStatus.PENDING);
             delivery.setAttempts(0);
             delivery.setActorType(ActorType.SYSTEM);
-            // delivered_at 由 AgentRouterScheduler 在创建 Work Item 后写入
+            // delivered_at is written by AgentRouterScheduler after the Work Item is created
             delivery.setDeliveredAt(null);
             try {
                 deliveryMapper.insert(delivery);

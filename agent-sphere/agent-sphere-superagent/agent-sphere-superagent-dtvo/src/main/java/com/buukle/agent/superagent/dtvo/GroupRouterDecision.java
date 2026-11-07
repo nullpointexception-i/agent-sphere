@@ -5,7 +5,7 @@ import lombok.Data;
 import java.io.Serializable;
 import java.util.List;
 
-/** Group Router 的严格 JSON 输出。 */
+/** Strict JSON output of the Group Router. */
 @Data
 public class GroupRouterDecision implements Serializable {
 

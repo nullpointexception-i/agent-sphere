@@ -5,10 +5,10 @@ export interface SseCallbacks {
 }
 
 /**
- * 建立 SSE 连接并消费 data: JSON 行（与主站 utils/sse.ts 同款）：
- * - 连接超时守护只覆盖初始 fetch 阶段；headers 到手即解除，避免误杀存活中的流。
- * - watchdog：60s 无任何数据则视为死链，触发 onError 走重连。
- * - 外部 signal abort 时静默返回。
+ * Open an SSE connection and consume data: JSON lines (same as the main site's utils/sse.ts):
+ * - The connect-timeout guard covers only the initial fetch phase; it is cleared as soon as headers arrive, so a live stream is not killed by mistake.
+ * - watchdog: 60s without any data is treated as a dead link and triggers onError to reconnect.
+ * - Abort from an external signal returns silently.
  */
 export async function connectSse(
   url: string,
@@ -45,7 +45,7 @@ export async function connectSse(
       return;
     }
 
-    // 连接已建立（headers 到手）：解除初始 fetch 守卫。
+    // Connection established (headers received): clear the initial fetch guard.
     clearTimeout(connectTimer);
 
     const reader = response.body?.getReader();

@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.instance.dtvo.dto.ClarifyDTO;
 import com.buukle.agent.instance.dtvo.dto.ResolveClarificationsDTO;
@@ -13,7 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/runtime")
+@RequestMapping(ApiPrefix.V1 + "/runtime")
 @WithTenant
 @RequiredArgsConstructor
 public class ChatRuntimeController {
@@ -80,13 +82,13 @@ public class ChatRuntimeController {
         return ResponseEntity.ok(chatRuntimeService.pendingClarifications(sessionId));
     }
 
-    /** 运行态权威来源：发送锁 / pending 判定只读这里。 */
+    /** Authoritative source of run state: send-lock / pending checks read only from here. */
     @GetMapping("/{sessionId}/state")
     public ResponseEntity<?> state(@PathVariable Long sessionId) {
         return ResponseEntity.ok(chatRuntimeService.getState(sessionId));
     }
 
-    /** 思考强度能力：可选档位、动态默认、不可行警告。 */
+    /** Reasoning-effort capability: selectable levels, dynamic default, infeasible warnings. */
     @GetMapping("/{sessionId}/reasoning")
     public ResponseEntity<?> reasoning(@PathVariable Long sessionId,
                                        @RequestParam(required = false) Long modelRouteId) {

@@ -13,13 +13,13 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * wait 唤醒的补偿路径：内存定时器丢失（副本重启/发布）时兜底。
+ * Compensation path for wait wake-up: fallback when in-memory timers are lost (replica restart/deploy).
  *
- * <p>与 {@link PendingWaitWakeScheduler} 共用 {@code claimForResume} 的 CAS，
- * 所以两者同时命中同一条记录也只会恢复一次 —— 这里不需要「谁先谁后」的约定。
+ * <p>Shares the {@code claimForResume} CAS with {@link PendingWaitWakeScheduler},
+ * so even if both hit the same record it is resumed only once — no "who goes first" protocol is needed here.
  *
- * <p>k8s 里 backend 是多副本，必须持 Redisson 锁再扫，避免每副本都去抢同批记录
- * （虽然 CAS 兜住了重复恢复，事件广播仍会重复）。
+ * <p>In k8s the backend runs multiple replicas, so the sweep must hold a Redisson lock to avoid every replica grabbing the same batch
+ * (CAS prevents duplicate resumes, but event broadcasts would still duplicate).
  */
 @Slf4j
 @Component
@@ -27,7 +27,7 @@ public class WaitWakeTask {
 
     private static final String WAKE_LOCK_KEY = "scheduler:pending-wait";
     private static final Duration LOCK_LEASE = Duration.ofSeconds(30);
-    /** 允许的扫描滞后：内存定时器是主路径，cron 只需兜底，容忍几秒抖动。 */
+    /** Allowed sweep lag: in-memory timers are the primary path, the cron is only a fallback, so a few seconds of jitter is tolerated. */
     private static final Duration OVERDUE_GRACE = Duration.ofSeconds(2);
     private static final int BATCH_LIMIT = 100;
 
@@ -45,7 +45,7 @@ public class WaitWakeTask {
 
     @Scheduled(cron = "${buukle.agent.wait.wake-cron:*/10 * * * * ?}")
     public void sweepDueWaits() {
-        // 调度线程可能残留别的任务的租户上下文；带租户会让 DataPermission 过滤掉本批记录。
+        // The scheduling thread may retain tenant context from another task; with a tenant set, DataPermission filters out this batch.
         PendingWaitWakeScheduler.clearInheritedContext();
         boolean locked = false;
         try {
@@ -66,7 +66,7 @@ public class WaitWakeTask {
                 try {
                     PendingWaitVO claimed = pendingWaitSpi.getById(wait.getId());
                     if (claimed == null) {
-                        // claim 成功却读不回来：回置 PENDING 交给下一轮，绝不能停在这里。
+                        // Claimed successfully but unreadable: restore PENDING for the next round; never stop here.
                         log.warn("Wait {} claimed but unreadable; releasing claim", wait.getId());
                         releaseClaim(wait.getId());
                         continue;
@@ -76,7 +76,7 @@ public class WaitWakeTask {
                     if (e instanceof InterruptedException) {
                         Thread.currentThread().interrupt();
                     }
-                    // 单条失败不拖垮整批：其余等待仍应被唤醒
+                    // One failure must not sink the batch: the remaining waits should still be woken
                     log.error("Failed to resume pending wait {}", wait.getId(), e);
                     requeueBestEffort(wait.getId());
                     if (e instanceof Error error) {
@@ -101,7 +101,7 @@ public class WaitWakeTask {
         }
     }
 
-    /** 回置 claim：先按记录回置 attempts，读不到再按 id 原子回置（不依赖任何回读）。 */
+    /** Restore the claim: restore attempts via the record first, and if unreadable restore atomically by id (no read-back needed). */
     private void requeueBestEffort(Long waitId) {
         try {
             PendingWaitVO w = pendingWaitSpi.getById(waitId);

@@ -19,20 +19,20 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * wait 的主唤醒路径：每条等待记录一个内存定时器，到点触发恢复。
+ * Primary wake path for wait: one in-memory timer per waiting record, firing recovery when due.
  *
- * <p>run 采用「单写者（本执行副本）」语义（见 RuntimeEventListener 注释），
- * 所以在创建等待的那台副本上挂定时器就够了，不需要跨副本协调。
- * 副本重启会让内存定时器全部丢失 —— 那由 {@code WaitWakeTask} 的 cron 兜底。
+ * <p>Runs follow "single writer (this executing replica)" semantics (see the RuntimeEventListener comments),
+ * so scheduling the timer on the replica that created the wait is sufficient; no cross-replica coordination is needed.
+ * A replica restart loses all in-memory timers — the {@code WaitWakeTask} cron covers that as a fallback.
  *
- * <p>两条路径都会先 {@code claimForResume} 做 CAS，只有抢占成功的一方才真正恢复，
- * 因此「定时器与 cron 同时命中同一条记录」不会造成 run 被恢复两次。
+ * <p>Both paths first do a {@code claimForResume} CAS, and only the winner actually resumes,
+ * so a timer and the cron hitting the same record at once cannot resume a run twice.
  *
- * <p><b>唤醒线程必须无租户。</b>它是懒创建的长驻单线程，会通过 {@code InheritableThreadLocal}
- * 继承「第一次 schedule 时那个线程」的 {@code TenantUtil}（控制台会话的用户名）——
- * {@code DataPermissionInterceptor} 随后会把 {@code created_by=<那个用户>} 加到每条 SELECT 上，
- * 于是别的用户的等待记录 {@code getById} 读不到，恢复被静默跳过。任务型 run 不设
- * {@code TenantUtil}，所以过去多数时候线程是干净的、问题被掩盖。
+ * <p><b>The wake thread must have no tenant.</b> It is a lazily created long-lived single thread and, through {@code InheritableThreadLocal}, inherits
+ * the {@code TenantUtil} of "the thread that first called schedule" (the console session's username) —
+ * {@code DataPermissionInterceptor} then appends {@code created_by=<that user>} to every SELECT,
+ * so {@code getById} cannot read other users' waiting records and the resume is silently skipped. Task-type runs do not set
+ * {@code TenantUtil}, so in the past the thread was usually clean and the problem stayed masked.
  */
 @Slf4j
 @Component
@@ -43,8 +43,8 @@ public class PendingWaitWakeScheduler {
     private final ConcurrentHashMap<Long, ScheduledFuture<?>> scheduled = new ConcurrentHashMap<>();
 
     /**
-     * 守护型单线程池：wait 恢复本身是快速的（落库 + 发事件 + 提交异步执行），
-     * 真正的耗时在 asyncHandleUserMessage 里，不该占住这里。
+     * Daemon single-thread pool: wait recovery itself is fast (persist + emit event + submit async execution),
+     * the real latency is inside asyncHandleUserMessage and should not occupy this thread.
      */
     private final ScheduledExecutorService executor =
             Executors.newSingleThreadScheduledExecutor(r -> {
@@ -80,20 +80,20 @@ public class PendingWaitWakeScheduler {
         clearInheritedContext();
         try {
             if (!pendingWaitSpi.claimForResume(waitId)) {
-                // 已被 cron 抢先，或已被另一条路径恢复：安静退出
+                // Already claimed by the cron, or resumed by another path: exit quietly
                 log.debug("Wait {} already claimed; skipping in-memory wake", waitId);
                 return;
             }
             PendingWaitVO wait = pendingWaitSpi.getById(waitId);
             if (wait == null) {
-                // 不能静默丢弃：claim 已经写进去了，就此返回会让记录停在 RESUMED、cron 永远捞不到。
+                // Must not drop silently: the claim is already written, so returning here would leave the record at RESUMED where the cron can never pick it up.
                 log.warn("Wait {} claimed but unreadable; releasing claim so cron can retry", waitId);
                 releaseClaim(waitId);
                 return;
             }
             chatRuntimeService.onResumeOutcome(wait, chatRuntimeService.resumeFromWait(wait));
         } catch (Throwable t) {
-            // catch Throwable：Error（OOM 等）同样会把记录留在 RESUMED，必须先尽力回置再重抛。
+            // catch Throwable: an Error (OOM etc.) also leaves the record at RESUMED, so restore it best-effort before rethrowing.
             log.error("Failed to wake pending wait {}", waitId, t);
             requeueBestEffort(waitId);
             if (t instanceof Error error) {
@@ -105,15 +105,15 @@ public class PendingWaitWakeScheduler {
     }
 
     /**
-     * 清掉从创建线程继承来的租户/身份。后台线程本来就不该带请求上下文；
-     * 不清会让 {@code DataPermissionInterceptor} 用别人的 {@code created_by} 过滤掉本记录。
+     * Clear tenant/identity inherited from the creating thread. A background thread should never carry request context;
+     * otherwise {@code DataPermissionInterceptor} filters out this record using someone else's {@code created_by}.
      */
     static void clearInheritedContext() {
         TenantUtil.stop();
         AuthContext.clear();
     }
 
-    /** claim 之后任何异常都要回置 PENDING（best-effort），否则记录停在 RESUMED、cron 不再重试。 */
+    /** Any exception after claim must restore PENDING (best-effort), otherwise the record stays RESUMED and the cron never retries. */
     private void requeueBestEffort(Long waitId) {
         try {
             PendingWaitVO w = pendingWaitSpi.getById(waitId);
@@ -124,11 +124,11 @@ public class PendingWaitWakeScheduler {
         } catch (Exception e) {
             log.error("Failed to requeue wait {} after wake error", waitId, e);
         }
-        // 回读也失败了：退回到「按 id 原子回置」，否则这条记录再没人碰。
+        // The read-back failed too: fall back to an atomic restore by id, otherwise nothing will ever touch this record again.
         releaseClaim(waitId);
     }
 
-    /** 把一条 claim 成功但读不回来的记录放回 PENDING（不做回读）。 */
+    /** Put a record that was claimed successfully but cannot be read back to PENDING (no read-back). */
     private void releaseClaim(Long waitId) {
         try {
             if (!pendingWaitSpi.releaseClaim(waitId)) {
@@ -146,7 +146,7 @@ public class PendingWaitWakeScheduler {
         }
     }
 
-    /** 暴露给补偿任务：手动触发一次（用于进程内定时器丢失后的即时恢复）。 */
+    /** Exposed for compensation tasks: trigger once manually (for immediate recovery after in-process timers are lost). */
     public void triggerNow(Long waitId) {
         cancel(waitId);
         schedule(waitId, 0);

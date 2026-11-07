@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 入站事件的统一形状。Adapter 只做协议转换，不做业务判断。
+ * Unified shape of an inbound event. Adapters only convert protocols; they make no business decisions.
  */
 public record NormalizedEvent(
         String channelType,

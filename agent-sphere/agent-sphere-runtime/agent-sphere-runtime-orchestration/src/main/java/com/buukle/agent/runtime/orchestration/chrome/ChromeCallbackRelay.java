@@ -11,8 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * Chrome 回调 relay：跨副本广播的插件回调落到本副本后，完成本地 pending future。
- * 工具在**执行副本**注册的 future 由此完成，插件协议与工具侧零改动。
+ * Chrome callback relay: when a cross-replica broadcast extension callback lands on this replica,
+ * it completes the local pending future. Futures registered by tools on the **executing replica**
+ * are completed here, with zero changes to the extension protocol or the tool side.
  */
 @Slf4j
 @Component
@@ -36,7 +37,7 @@ public class ChromeCallbackRelay {
         recordExecutionDevice(body);
     }
 
-    /** 记录「这条工具调用由哪台浏览器执行」；扩展未回传设备信息（老版本）时跳过。 */
+    /** Record which browser executed this tool call; skipped when the extension omits device info (older versions). */
     private void recordExecutionDevice(ChromeCallbackDTO body) {
         if (body.getRunId() == null || body.getCallId() == null || body.getDeviceId() == null) {
             return;

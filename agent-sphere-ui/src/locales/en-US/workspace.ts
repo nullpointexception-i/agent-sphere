@@ -137,6 +137,8 @@ export default {
   'workspace.chat.taskStatus.pending': 'Awaiting reply',
   'workspace.chat.taskStatus.answered': 'Answered',
   'workspace.chat.agentAwaitingUser': 'Waiting for your reply',
+  'workspace.chat.agentThoughtFor': 'Thought for {seconds}s',
+  'workspace.chat.agentDone': 'Done',
   'workspace.chat.inputFallback': 'Your avatar needs your input',
   'workspace.chat.inputStatus.answered': 'Answered',
   'workspace.chat.inputStatus.cancelled': 'Cancelled',

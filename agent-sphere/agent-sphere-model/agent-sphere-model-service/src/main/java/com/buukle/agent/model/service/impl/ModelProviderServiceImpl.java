@@ -171,8 +171,9 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
             }
             attempts++;
             int chunkCount = 0;
-            // 本次流里最后一个非空 finish_reason：OpenAI 兼容接口只在最后一个 chunk 给，
-            // 过去这里被丢弃、结束时硬编码成 "stop"，导致 length（截断）/content_filter 被当成正常完成。
+            // Last non-empty finish_reason in this stream: OpenAI-compatible APIs only send it in the last
+            // chunk. It used to be discarded here and hardcoded to "stop" at the end, so length (truncation)
+            // / content_filter were treated as normal completion.
             String lastFinishReason = null;
             java.util.concurrent.Future<?> readTimeoutFuture = null;
             try {
@@ -189,8 +190,8 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                         .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                         .build();
 
-                // 响应头独立短超时：TLS 握手/响应头挂住时快速失败并进入重试，
-                // 不能沿用 120s 的响应体读取超时。
+                // Separate short timeout for response headers: fail fast and retry when the TLS handshake /
+                // response headers hang; the 120s response-body read timeout must not be reused here.
                 HttpResponse<java.io.InputStream> response = httpClient.sendAsync(request,
                                 HttpResponse.BodyHandlers.ofInputStream())
                         .orTimeout(streamHeaderTimeoutSeconds, TimeUnit.SECONDS)
@@ -200,12 +201,12 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     String errorBody = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
                     log.error("LLM stream error: model={}, status={}, body={}", modelName, status, errorBody);
                     String uiMsg = switch (status) {
-                        case 429 -> "请求过于频繁，请稍后再试";
-                        case 502 -> "模型服务暂时不可用";
-                        default -> "模型调用异常 (" + status + "): " + truncateError(errorBody);
+                        case 429 -> "Too many requests; retry later";
+                        case 502 -> "The model service is temporarily unavailable";
+                        default -> "Model call failed (" + status + "): " + truncateError(errorBody);
                     };
-                    // 4xx（408/429 除外）是终态错误：重试不会成功，只会把一次失败放大成多次；
-                    // 5xx/429/408 则是真瞬时故障，保留重试。
+                    // 4xx (except 408/429) are terminal errors: retrying cannot succeed and only multiplies one
+                    // failure into several; 5xx/429/408 are genuine transient faults, so retries are kept.
                     boolean retryable = status == 408 || status == 429 || status >= 500;
                     onEvent.accept(new LLMEvent.Error(uiMsg, status, retryable));
                     onDone.run();
@@ -214,7 +215,8 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 log.info("LLM stream response: status={}", response.statusCode());
 
                 ToolStream toolStream = new ToolStream(onEvent);
-                // 响应头已就绪：body 阶段用定时中断兜底读取超时（每轮取消，避免残留中断）
+                // Response headers are ready: for the body phase, use a scheduled interrupt as the read-timeout
+                // fallback (cancelled each round to avoid a leftover interrupt).
                 readTimeoutFuture = READ_TIMEOUT_SCHEDULER.schedule(
                         Thread.currentThread()::interrupt, streamReadTimeoutSeconds, TimeUnit.SECONDS);
                 AtomicReference<JsonNode> usageRef = new AtomicReference<>();
@@ -227,7 +229,8 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                             chunkCount++;
                             try {
                                 JsonNode chunk = JsonUtils.parse(data, JsonNode.class);
-                                // usage 末帧（stream_options.include_usage）：choices 为空、usage 在 chunk 顶层，取最后一次非空
+                                // Final usage frame (stream_options.include_usage): choices is empty, usage sits at
+                                // the chunk top level; keep the last non-null one.
                                 if (chunk != null && chunk.has(LlmApiConstants.FIELD_USAGE)
                                         && !chunk.get(LlmApiConstants.FIELD_USAGE).isNull()) {
                                     usageRef.set(chunk.get(LlmApiConstants.FIELD_USAGE));
@@ -246,7 +249,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                                     }
                                     JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
                                     if (delta != null) {
-                                        // 双字段兼容：vLLM/Qwen3 用 reasoning，DeepSeek/智谱用 reasoning_content
+                                        // Dual-field compatibility: vLLM/Qwen3 use reasoning, DeepSeek/Zhipu use reasoning_content.
                                         String r = LlmStreamUtils.firstTextual(delta,
                                                 LlmApiConstants.FIELD_REASONING,
                                                 LlmApiConstants.FIELD_REASONING_CONTENT);
@@ -327,7 +330,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     handshakeFailed = true;
                     metrics.increment(AgentMetrics.LLM_STREAM_HANDSHAKE_FAILED, "model", modelName);
                 }
-                // 传输层瞬时失败（EOF/断连等，未收到任何分片）→ 重试；超时/取消不重试
+                // Transient transport failure (EOF/disconnect, no chunk received) -> retry; timeout/cancel -> no retry.
                 if (attempt < streamMaxRetries && chunkCount == 0 && !userTimedOut) {
                     retryCount++;
                     metrics.increment(AgentMetrics.LLM_STREAM_RETRY, "model", modelName);
@@ -338,10 +341,11 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 }
                 log.error("LLM stream failed: model={}, timedOut={}, chunks={}, retried={}, errorType={}, handshake={}",
                         modelName, userTimedOut, chunkCount, attempt, lastErrorType, handshake, e);
-                // 显式报错而非静默空结果，供上层路由降级/任务重试感知
+                // Report an explicit error instead of silently returning an empty result, so the upper layer can
+                // degrade the route / retry the task.
                 onEvent.accept(new LLMEvent.Error(userTimedOut
-                        ? "模型流式读取超时（已重试）"
-                        : "上游连接中断（chunks=0），重试 " + attempt + " 次后仍失败"));
+                        ? "Model stream read timed out (already retried)"
+                        : "Upstream connection interrupted (chunks=0); still failing after " + attempt + " retries"));
                 onDone.run();
                 return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
             }
@@ -350,7 +354,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
         return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
     }
 
-    /** 第 N 次重试（N 从 1 开始）的退避；列表耗尽后取最后一项。 */
+    /** Backoff for the Nth retry (N starts at 1); use the last entry once the list is exhausted. */
     private long retryDelayMillis(int attempt) {
         List<Duration> delays = properties.getLlm().getStreamRetryDelays();
         if (delays != null && !delays.isEmpty()) {
@@ -398,7 +402,7 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
         return body.substring(0, logBodyMaxLength) + "...<truncated>";
     }
 
-    /** 错误体单独放宽：400 的完整原因必须能落库，否则无法定位线上问题。 */
+    /** Error bodies get a separate, larger limit: the full reason of a 400 must be persisted, otherwise production issues cannot be diagnosed. */
     private static String truncateError(String body) {
         int max = 2000;
         if (body == null || body.length() <= max) return body;

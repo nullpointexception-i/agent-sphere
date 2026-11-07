@@ -5,6 +5,7 @@ import com.buukle.agent.capability.builtin.tool.webread.dtvo.vo.WebReadResultVO;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
+import com.buukle.agent.common.constant.HttpHeaders;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -17,7 +18,7 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * Jina Reader 工具类 - 调用 Jina Reader API 获取 Markdown
+ * Jina Reader utility - calls the Jina Reader API to obtain Markdown
  * <p>
  * Get your Jina AI API key for free: https://jina.ai/?sui=apikey
  */
@@ -25,14 +26,14 @@ import java.util.Map;
 @Component
 public class JinaReader {
 
-    private static final String HEADER_AUTHORIZATION = "Authorization";
+    private static final String HEADER_AUTHORIZATION = HttpHeaders.AUTHORIZATION;
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
     private static final String HEADER_ACCEPT = "Accept";
     private static final String HEADER_ENGINE = "X-Engine";
     private static final String HEADER_RETURN_FORMAT = "X-Return-Format";
     private static final String HEADER_TIMEOUT = "X-Timeout";
 
-    private static final String BEARER_PREFIX = "Bearer ";
+    private static final String BEARER_PREFIX = HttpHeaders.BEARER_PREFIX;
     private static final String APPLICATION_JSON = "application/json";
     private static final String RETURN_FORMAT_MARKDOWN = "markdown";
 
@@ -67,10 +68,10 @@ public class JinaReader {
     }
 
     /**
-     * 通过 Jina Reader API 读取 URL 内容并转换为 Markdown
+     * Reads URL content through the Jina Reader API and converts it to Markdown
      *
-     * @param url            要读取的 URL
-     * @param timeoutSeconds 超时时间（秒）
+     * @param url            URL to read
+     * @param timeoutSeconds timeout in seconds
      * @return WebReadResultVO
      */
     public WebReadResultVO readUrl(String url, int timeoutSeconds) {

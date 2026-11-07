@@ -20,11 +20,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 统一 Timeline 打平索引的运行时记录器：
- * - 主 Agent 流式容器行（首个 token 建行并回填 seq，run 终态封口）；
- * - 工具行 / 澄清行 / run_status 行；
- * - chat() 用户消息行、SkillReActExecutor 子 Agent 头行（均经 SPI 直接调用）。
- * 本类不改变既有事件语义，仅消费其副作用追加展示序列。
+ * Runtime recorder for the flattened unified Timeline index:
+ * - main Agent streaming container row (created on the first token with seq backfilled, closed at run terminal state);
+ * - tool rows / clarification rows / run_status rows;
+ * - chat() user message rows and SkillReActExecutor sub-agent header rows (both invoked directly through SPI).
+ * This class does not change existing event semantics; it only consumes their side effects to append display entries.
  */
 @Slf4j
 @Component
@@ -41,22 +41,22 @@ public class TimelineRecorder {
     private final ConcurrentHashMap<String, Long> clarificationSeqByRun = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> approvalSeqByRun = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> runStatusSeqByRun = new ConcurrentHashMap<>();
-    /** 压缩行：同一 publishId（= 一次压缩尝试）复用一行，终态后释放。 */
+    /** Compaction row: the same publishId (= one compaction attempt) reuses one row, released at terminal state. */
     private final ConcurrentHashMap<String, Long> compactionSeqByPublishId = new ConcurrentHashMap<>();
 
-    /** run 终态展示文案。成功 run 展示完成时间 yyyy-MM-dd HH:mm:ss（不再显示「任务完成」）。 */
+    /** Run terminal display text. A successful run shows the completion time yyyy-MM-dd HH:mm:ss (no longer "task completed"). */
     private static final DateTimeFormatter RUN_TERMINAL_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String TITLE_RUN_FAILED = "❌ 执行失败";
-    private static final String TITLE_RUN_CANCELLED = "⏹️ 已取消";
-    private static final String TITLE_RUN_AWAITING = "⏸️ 等待澄清";
-    private static final String TITLE_RUN_WAITING = "⏳ 等待中（到点自动继续）";
-    private static final String TITLE_RUN_RESUMED = "▶️ 已恢复（等待 %s）";
-    private static final String TITLE_RUN_RETRY_RESUMED = "▶️ 已恢复，继续执行";
-    private static final String TITLE_COMPACT_RUNNING = "正在压缩上下文…";
-    private static final String TITLE_COMPACT_COMPLETED = "上下文已压缩";
-    private static final String TITLE_COMPACT_FAILED = "上下文压缩失败";
+    private static final String TITLE_RUN_FAILED = "❌ Run failed";
+    private static final String TITLE_RUN_CANCELLED = "⏹️ Cancelled";
+    private static final String TITLE_RUN_AWAITING = "⏸️ Awaiting clarification";
+    private static final String TITLE_RUN_WAITING = "⏳ Waiting (continues automatically when due)";
+    private static final String TITLE_RUN_RESUMED = "▶️ Resumed (waited %s)";
+    private static final String TITLE_RUN_RETRY_RESUMED = "▶️ Resumed; continuing";
+    private static final String TITLE_COMPACT_RUNNING = "Compacting context…";
+    private static final String TITLE_COMPACT_COMPLETED = "Context compacted";
+    private static final String TITLE_COMPACT_FAILED = "Context compaction failed";
 
-    /** 直接记录一行（chat 用户消息 / 子 Agent 头行等），返回 seq。 */
+    /** Record a row directly (chat user message / sub-agent header row, etc.) and return seq. */
     public long record(Long sessionId, Long runId, String kind, String subtype, String state, String title,
                        Long refRunId, Long refInteractionId, Long refToolCallId,
                        Long refSubAgentRunId, Long refClarificationId) {
@@ -77,7 +77,7 @@ public class TimelineRecorder {
         }
     }
 
-    /** 主 Agent 助手容器：首个 token 建行并回填 seq（打字机目标）。返回带 seq/kind 的副本。 */
+    /** Main Agent assistant container: create the row on the first token and backfill seq (typewriter target). Returns a copy carrying seq/kind. */
     public RuntimeEventDataVO stampStreamingSeq(Long sessionId, Long runId, RuntimeEventDataVO data) {
         if (runId == null) {
             return data;
@@ -94,10 +94,10 @@ public class TimelineRecorder {
     }
 
     /**
-     * 打开本轮助手行：轮次身份来自执行侧 (run, loop_count) 的 interaction 记录。
+     * Open this turn's assistant row: turn identity comes from the execution-side (run, loop_count) interaction record.
      *
-     * <p>记录缺失属于执行链路的硬错误（Kernel 在调用前已预建），不做“新建兜底”，
-     * 只记录 ERROR 便于告警。
+     * <p>A missing record is a hard error of the execution chain (Kernel pre-creates it before the call); there is no "create as fallback",
+     * only an ERROR is logged for alerting.
      */
     private Long openAssistantTurn(Long sessionId, Long runId) {
         try {
@@ -119,7 +119,7 @@ public class TimelineRecorder {
         }
     }
 
-    /** run 终态：封口主助手容器（兜底；每轮 LLM 调用已由 closeAssistantTurn 封口）。 */
+    /** Run terminal state: close the main assistant container (fallback; each LLM turn is already closed by closeAssistantTurn). */
     public void closeAssistant(Long sessionId, Long runId, String state) {
         if (runId == null) {
             return;
@@ -129,7 +129,7 @@ public class TimelineRecorder {
             update(sessionId, seq, state, null, null);
             return;
         }
-        // 重启/跨副本：按 run 关闭所有仍 RUNNING 的 assistant 行
+        // Restart / cross-replica: close every assistant row of this run that is still RUNNING
         try {
             timelineSpi.closeRunningAssistant(sessionId, runId, state);
         } catch (Exception e) {
@@ -137,7 +137,7 @@ public class TimelineRecorder {
         }
     }
 
-    /** 每轮 LLM 调用结束（interaction 落库后）：封口当前打开的助手行并回填该轮引用，一轮一行。 */
+    /** End of each LLM call (after the interaction is persisted): close the currently open assistant row and backfill this turn's reference; one row per turn. */
     public void closeAssistantTurn(Long sessionId, Long runId, String state, Long interactionId) {
         if (runId == null) {
             return;
@@ -159,7 +159,7 @@ public class TimelineRecorder {
         }
     }
 
-    /** 工具行：开始/更新状态（主 Agent 工具；子 Agent 工具由子 Agent 详情懒取，不入主行）。 */
+    /** Tool row: start/update status (main Agent tools; sub-agent tools are lazily fetched in sub-agent details and never enter the main row). */
     public void recordTool(Long sessionId, Long runId, String stepKey, Long refToolCallId, String state, String title) {
         try {
             String key = runId + ":" + stepKey;
@@ -190,7 +190,7 @@ public class TimelineRecorder {
         toolSeqByRunStep.remove(runId + ":" + stepKey);
     }
 
-    /** run 状态行：同一 run 复用一行（RUNNING 建行，终态原地更新），避免历史残留「运行中」行。 */
+    /** Run status row: the same run reuses one row (RUNNING creates it, terminal state updates in place), avoiding stale "running" rows in history. */
     public void recordRunStatus(Long sessionId, Long runId, String state, String title) {
         if (runId == null) {
             return;
@@ -211,7 +211,7 @@ public class TimelineRecorder {
                     runId, null, null, null, null);
             runStatusSeqByRun.put(runId, seq);
         } else {
-            // 乱序到达的 RUNNING/AWAITING 不能把已经终态的行降级
+            // An out-of-order RUNNING/AWAITING must not downgrade a row that is already terminal
             String latestState = findLatestState(query);
             if (isTerminalRunState(latestState) && !isTerminalRunState(state)) {
                 return;
@@ -224,8 +224,8 @@ public class TimelineRecorder {
     }
 
     /**
-     * wait 到点恢复：把暂停位置的 WAITING 行改成过去式（RESUMED），
-     * 避免恢复后仍显示「等待中」。终态仍会在 run 末尾另起一行。
+     * wait resume on schedule: turn the WAITING row at the suspension point into the past tense (RESUMED),
+     * so it no longer shows "waiting" after resuming. The terminal state still creates a separate row at the end of the run.
      */
     public void markWaitResumed(Long sessionId, Long runId, long waitedMs) {
         if (runId == null) {
@@ -257,10 +257,10 @@ public class TimelineRecorder {
     }
 
     /**
-     * LLM 重试到点恢复：把原地复用的「重试中（k/N）」行改回「执行中」。
-     * 否则该行会一直停在上一档的文案，直到下一次挂起或 run 终态。
+     * LLM retry resume on schedule: turn the in-place reused "retrying (k/N)" row back to "running".
+     * Otherwise the row stays on the previous wording until the next suspension or the run's terminal state.
      *
-     * @return 更新后的行；没有等待行可改时返回 null
+     * @return the updated row; null when there is no waiting row to update
      */
     public RunStatusRow markRetryResumed(Long sessionId, Long runId) {
         if (runId == null) {
@@ -278,7 +278,7 @@ public class TimelineRecorder {
             if (seq == null || seq <= 0) {
                 return null;
             }
-            // 只改「等待中」的行；已被其它路径更新（终态/取消）就不动
+            // Only update a "waiting" row; leave it alone if another path already updated it (terminal/cancel)
             if (!TimelineState.WAITING.getCode().equals(findLatestState(query))) {
                 return null;
             }
@@ -302,17 +302,17 @@ public class TimelineRecorder {
         return rest == 0 ? minutes + "m" : minutes + "m" + rest + "s";
     }
 
-    /** run_status 行的 (seq, title)：调用方据此把「哪一行、什么文案」带进 SSE 事件。 */
+    /** (seq, title) of the run_status row: callers use it to carry "which row and what text" into the SSE event. */
     public record RunStatusRow(long seq, String title) {
     }
 
-    /** run 终态：状态/title 由 RunStatus 映射（避免魔法值散落）；更新同一行并释放该 run 的占位。 */
+    /** Run terminal state: status/title mapped from RunStatus (avoids scattered magic values); updates the same row and releases this run's slot. */
     public RunStatusRow recordRunTerminal(Long sessionId, Long runId, RunStatus status) {
         return recordRunTerminal(sessionId, runId, status, null);
     }
 
     /**
-     * @param titleOverride 非空时替换默认状态文案（如 LLM 重试：「繁忙，正在自动重试（2/6）· 16:54 重试」）
+     * @param titleOverride when non-blank, replaces the default status text (e.g. LLM retry: "busy, retrying automatically (2/6) · retry at 16:54")
      */
     public RunStatusRow recordRunTerminal(Long sessionId, Long runId, RunStatus status, String titleOverride) {
         if (runId == null) {
@@ -337,7 +337,7 @@ public class TimelineRecorder {
         if (titleOverride != null && !titleOverride.isBlank()) {
             title = titleOverride;
         }
-        // 重试行用 subtype 标记，前端据此保留 WAITING 行（wait 的等待行仍被过滤，由 WaitCard 展示）
+        // Retry rows are marked via subtype, so the frontend keeps the WAITING row (wait's waiting row is still filtered out and rendered by WaitCard)
         String subtype = titleOverride != null && !titleOverride.isBlank()
                 ? com.buukle.agent.common.constant.PendingWaitKind.LLM_RETRY
                 : state;
@@ -356,20 +356,20 @@ public class TimelineRecorder {
                 || status == RunStatus.FAILED
                 || status == RunStatus.CANCELLED;
         if (seq != null && seq > 0) {
-            // 迟到的暂停事件不能把已终态的行降级。
+            // A late pause event must not downgrade an already terminal row.
             if (isTerminalRunState(findLatestState(query)) && !terminalStatus) {
                 return null;
             }
-            // uk_timeline_run_status 只允许一个 run 一行 run_status：所有状态切换都原地更新。
-            // 旧实现「终态另起一行 / 恢复后另起一行」会撞唯一索引，insert 失败被吞掉，
-            // 于是重试耗尽后时间线永远停在「重试中」（线上 run 2972）。
+            // uk_timeline_run_status allows only one run_status row per run: every status switch updates in place.
+            // The old implementation "new row at terminal state / new row after resume" hit the unique index and swallowed the insert failure,
+            // so once retries were exhausted the timeline stayed on "retrying" forever (production run 2972).
             timelineSpi.update(sessionId, seq, state, subtype, title);
             if (terminalStatus) {
                 runStatusSeqByRun.remove(runId, seq);
             }
             return new RunStatusRow(seq, title);
         }
-        // 兜底：还没有状态行（极端路径）
+        // Fallback: no status row yet (extreme path)
         long created = timelineSpi.record(sessionId, runId, TimelineKind.RUN_STATUS.getCode(),
                 state, subtype, title, runId, null, null, null, null);
         if (created > 0) {
@@ -379,8 +379,8 @@ public class TimelineRecorder {
     }
 
     /**
-     * 压缩行：同一次压缩（publishId）RUNNING 建行、COMPLETED/FAILED 原地更新后释放；
-     * 下一次压缩（新的 publishId）另起一行。正文由 {@link #stampCompactionSeq} 回填 seq 后流式推送。
+     * Compaction row: the same compaction (publishId) creates the row on RUNNING and releases it after COMPLETED/FAILED update in place;
+     * the next compaction (a new publishId) creates a separate row. The body streams after {@link #stampCompactionSeq} backfills seq.
      */
     public long recordCompaction(Long sessionId, Long runId, String publishId, Long compactRecordId,
                                  String state, String detail) {
@@ -421,7 +421,7 @@ public class TimelineRecorder {
         }
     }
 
-    /** 压缩输出流式 token：按 publishId 回填 seq/kind（行应在 RUNNING 事件时已建好）。返回副本。 */
+    /** Streaming compaction-output token: backfill seq/kind by publishId (the row should already exist from the RUNNING event). Returns a copy. */
     public RuntimeEventDataVO stampCompactionSeq(RuntimeEventDataVO data) {
         Long runId = data.getRunId();
         String key = compactionKey(data.getPublishId(), runId);
@@ -447,7 +447,7 @@ public class TimelineRecorder {
     private Long findLatestSeq(TimelineRefQuery query) {
         try {
             Long seq = timelineSpi.findLatestSeq(query);
-            // Mockito/异常兜底可能返回 0；seq 只认正数，避免把 0 当作已存在行去 update
+            // Mockito/exception fallbacks may return 0; accept only positive seq, so 0 is never treated as an existing row to update
             return seq != null && seq > 0 ? seq : null;
         } catch (Exception e) {
             log.warn("Timeline findLatestSeq failed: {}", e.getMessage());
@@ -490,7 +490,7 @@ public class TimelineRecorder {
         return detail != null && !detail.isBlank() ? base + " · " + detail : base;
     }
 
-    /** 澄清行：pending→answered 复用同一行。 */
+    /** Clarification row: pending→answered reuses the same row. */
     public void recordClarification(Long sessionId, Long runId, String clarificationId, String state, String title) {
         if (runId == null) {
             return;
@@ -500,7 +500,7 @@ public class TimelineRecorder {
             Long seq = clarificationSeqByRun.get(key);
             Long refId = lookupClarificationRef(runId, clarificationId);
             if (seq == null && refId != null) {
-                // 跨副本/重启后 Map 丢失：回 DB 找同一 ref 的旧行，而不是新建一条 PENDING 残留
+                // Map lost after restart/cross-replica: look up the old row for the same ref in the DB instead of leaving a new PENDING row behind
                 seq = findLatestSeq(TimelineRefQuery.builder()
                         .runId(runId)
                         .kind(TimelineKind.CLARIFICATION.getCode())
@@ -515,7 +515,7 @@ public class TimelineRecorder {
                         runId, null, null, null, refId);
                 clarificationSeqByRun.put(key, seq);
             } else {
-                // subtype 必须跟着 state 一起改：旧实现只传 state，PENDING 子类型会残留
+                // subtype must change together with state: the old implementation passed only state, leaving the PENDING subtype behind
                 timelineSpi.update(sessionId, seq, state, state, title);
             }
             if (isTerminalClarificationState(state)) {

@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 public class FiberSet implements AutoCloseable {
 
     private static final long POLL_INTERVAL_NANOS = 500_000_000L; // 500ms
-    /** 取消时等待被中断工具线程退出的界内时长（防止取消键被清空后孤儿子 Agent 空窗续跑）。 */
+    /** Bounded duration to wait for interrupted tool threads to exit on cancel (prevents orphan sub-agents from resuming during the gap after the cancel key is cleared). */
     private static final long CANCEL_JOIN_NANOS = TimeUnit.SECONDS.toNanos(10);
 
     private final Semaphore semaphore;
@@ -20,7 +20,7 @@ public class FiberSet implements AutoCloseable {
     private final long submitTimeoutSeconds;
     private final long executionTimeoutSeconds;
     private Consumer<SingleResult> onResult;
-    private volatile boolean cancelled; // 显式取消（检查器触发）：整批结果不再采集
+    private volatile boolean cancelled; // Explicit cancellation (triggered by the checker): stop collecting results for the whole batch
 
     @FunctionalInterface
     public interface CancellationChecker {
@@ -50,8 +50,8 @@ public class FiberSet implements AutoCloseable {
             return;
         }
         CompletableFuture<FiberResult> future = new CompletableFuture<>();
-        // 虚拟线程 + 线程映射：取消时既能 cancel future，也能 interrupt 正在执行的线程
-        // （CompletableFuture.cancel(true) 不会中断已在运行的任务）
+        // Virtual threads + thread mapping: on cancel we can both cancel the future and interrupt the running thread
+        // (CompletableFuture.cancel(true) does not interrupt a task that is already running)
         Thread worker = Thread.ofVirtual().start(() -> {
             try {
                 String result = task.get();
@@ -81,8 +81,8 @@ public class FiberSet implements AutoCloseable {
                 if (checker != null && checker.isCancelled()) {
                     cancelled = true;
                     interruptRunning();
-                    // 先 cancel：被中断任务即便之后返回，也无法把结果写入已取消的 future；
-                    // 再有界 join，等待工具线程真正退出，避免取消键被主循环收口清空后孤儿子 Agent 空窗续跑。
+                    // Cancel first: even if an interrupted task returns later, it cannot write its result into the cancelled future;
+                    // then join with a bound and wait for the tool threads to actually exit, so orphan sub-agents do not resume in the gap after the main loop's finalization clears the cancel key.
                     for (var f : futures) f.cancel(true);
                     awaitRunningTerminated();
                     break;
@@ -108,7 +108,7 @@ public class FiberSet implements AutoCloseable {
 
         ConcurrentHashMap<String, String> results = new ConcurrentHashMap<>();
         if (cancelled) {
-            // 显式取消：整批结果已无意义（主循环 break 后不再使用），且避免“被中断任务”残留结果
+            // Explicit cancel: the whole batch of results is meaningless (unused after the main loop breaks), and this avoids leaving stale results from "interrupted tasks"
             return results;
         }
         for (CompletableFuture<FiberResult> future : futures) {
@@ -137,9 +137,9 @@ public class FiberSet implements AutoCloseable {
     }
 
     /**
-     * 有界等待被中断的工具线程退出，再让主循环收口。
-     * 若在中断后立即返回，孤儿子 Agent（skill）会唤醒后重查取消键——而取消键可能在收口时已被
-     * 清空 → 空窗续跑。这里等它们真正终止：它们唤醒后重查时取消键仍在位 → 以 cancelled 退出。
+     * Waits with a bound for interrupted tool threads to exit, then lets the main loop finalize.
+     * Returning immediately after the interrupt would let orphan sub-agents (skill) wake up and re-check the cancel key — but the key may already have been
+     * cleared during finalization → they would resume in the gap. Here we wait for them to terminate for real: when they wake and re-check, the cancel key is still present → they exit as cancelled.
      */
     private void awaitRunningTerminated() {
         long deadline = System.nanoTime() + CANCEL_JOIN_NANOS;
@@ -157,7 +157,7 @@ public class FiberSet implements AutoCloseable {
                 Thread.currentThread().interrupt();
                 return;
             }
-            // 过半时长后二次 interrupt，防止一次中断被阻塞点吞掉
+            // Second interrupt after half the duration, in case the first interrupt was swallowed by a blocking point
             if (!reInterrupted && remaining < CANCEL_JOIN_NANOS / 2) {
                 reInterrupted = true;
                 interruptRunning();

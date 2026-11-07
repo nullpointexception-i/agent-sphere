@@ -46,10 +46,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link SessionCleanupTask} 单测。
+ * {@link SessionCleanupTask} unit tests.
  *
- * <p>不连库不连 Redis（{@code @ExtendWith(MockitoExtension.class)} + mock），重点覆盖三件容易回归的事：
- * 活跃守卫是否真的挡住了会话、删除顺序是否满足外键、dry-run 是否真的不落刀。
+ * <p>No DB and no Redis ({@code @ExtendWith(MockitoExtension.class)} + mocks); the focus is on three
+ * regression-prone things: whether the active guard really blocks sessions, whether the delete order
+ * satisfies the foreign keys, and whether a dry-run really deletes nothing.
  */
 @ExtendWith(MockitoExtension.class)
 class SessionCleanupTaskTest {
@@ -87,11 +88,11 @@ class SessionCleanupTaskTest {
                 redissonClient, cleanupExecutor);
         ReflectionTestUtils.setField(task, "batchSize", BATCH_SIZE);
         ReflectionTestUtils.setField(task, "maxBatches", MAX_BATCHES);
-        // 批间休眠设为 0：单测不该真的睡
+        // Batch sleep set to 0: unit tests should not actually sleep
         ReflectionTestUtils.setField(task, "batchSleepMs", 0);
     }
 
-    /** 干净的基础环境：配置正常、锁可拿、独立类别的 select 一律返回空。 */
+    /** Clean baseline environment: configuration is normal, the lock can be acquired, and the standalone-category selects all return empty. */
     private void stubHappyPath() {
         lenient().when(redissonClient.getLock(anyString())).thenReturn(lock);
         lenient().when(lock.tryLock()).thenReturn(true);
@@ -117,7 +118,7 @@ class SessionCleanupTaskTest {
                 .thenReturn("90");
     }
 
-    /** 让「过期会话」查询按批次依次返回，最后回空表示数据已取尽。 */
+    /** Make the "expired sessions" query return batch by batch, ending with an empty result to indicate the data is exhausted. */
     @SafeVarargs
     private final void stubExpiredSessions(List<Long>... batches) {
         OngoingStubbing<List<Long>> stubbing = lenient()
@@ -304,7 +305,7 @@ class SessionCleanupTaskTest {
     @DisplayName("批次上限：每轮都取满时按 max-batches 收口并标记 truncated")
     void stopsAtMaxBatches() {
         stubHappyPath();
-        // 每一批都是满的（size == batchSize）→ 永远取不满，循环只能靠预算终止
+        // Every batch is full (size == batchSize) → it never drains, so the loop can only stop via the budget
         when(sessionCleanupMapper.selectExpiredSessionIds(any(), any(), any(), anyInt()))
                 .thenReturn(List.of(1L, 2L));
         when(sessionCleanupMapper.selectTaskIdsBySessionIds(any())).thenReturn(List.of());
@@ -345,7 +346,7 @@ class SessionCleanupTaskTest {
     @DisplayName("最后一批刚好取满但下次取空时，不应误报 truncated")
     void notTruncatedWhenFullyDrained() {
         stubHappyPath();
-        // 第一批恰好等于 batchSize（看起来像「还有更多」），第二批取空 → 实际已清完
+        // The first batch exactly equals batchSize (looks like "there is more"), the second is empty → it is actually fully cleaned
         stubExpiredSessions(List.of(1L, 2L), List.of());
         when(sessionCleanupMapper.selectTaskIdsBySessionIds(any())).thenReturn(List.of());
         when(sessionCleanupMapper.selectTaskIdsByRunSessionIds(any())).thenReturn(List.of());
@@ -372,7 +373,7 @@ class SessionCleanupTaskTest {
         verify(lock).unlock();
     }
 
-    // ==================== 执行记录生命周期 ====================
+    // ==================== Execution record lifecycle ====================
 
     @Test
     @DisplayName("RUNNING 记录必须在抢锁之前写入")
@@ -400,7 +401,7 @@ class SessionCleanupTaskTest {
 
         verify(sessionCleanupRunMapper).markSkipped(eq(RECORD_ID),
                 eq(SessionCleanupRunStatusEnum.STATUS_SKIPPED),
-                eq("另一副本或另一次清理正在执行，本次跳过"),
+                eq(SessionCleanupTask.SKIP_LOCK_REASON),
                 org.mockito.ArgumentMatchers.anyLong(), anyString());
     }
 
@@ -418,7 +419,7 @@ class SessionCleanupTaskTest {
 
         verify(sessionCleanupRunMapper).markSkipped(eq(RECORD_ID),
                 eq(SessionCleanupRunStatusEnum.STATUS_SKIPPED),
-                eq("清理开关 session.cleanup-enabled 为 false，本次跳过"),
+                eq(SessionCleanupTask.SKIP_DISABLED_REASON),
                 org.mockito.ArgumentMatchers.anyLong(), anyString());
     }
 
@@ -515,7 +516,7 @@ class SessionCleanupTaskTest {
         assertEquals(3456L, vo.getTotalRows());
     }
 
-    // ==================== 异步提交 + 实时进度 ====================
+    // ==================== Async submission + live progress ====================
 
     @Test
     @DisplayName("异步提交：请求线程插记录并立刻返回，后台任务被提交但不阻塞")
@@ -532,11 +533,12 @@ class SessionCleanupTaskTest {
 
         assertEquals(RECORD_ID, run.getId());
         assertEquals(SessionCleanupRunStatusEnum.STATUS_RUNNING, run.getStatus());
-        // 记录在请求线程插入（前端拿到的 id 立刻可查），且后台任务已提交
+        // The record is inserted on the request thread (the id returned to the frontend is immediately
+        // queryable) and the background task has been submitted
         verify(sessionCleanupRunMapper).insertRunning(eq(TRIGGER), eq(true),
                 eq(SessionCleanupRunStatusEnum.STATUS_RUNNING), anyString());
         verify(cleanupExecutor).execute(any(Runnable.class));
-        // 提交路径不该同步做任何删除
+        // The submit path must not perform any deletion synchronously
         verify(sessionCleanupMapper, never()).selectExpiredSessionIds(any(), any(), any(), anyInt());
     }
 
@@ -557,7 +559,7 @@ class SessionCleanupTaskTest {
                 org.mockito.ArgumentMatchers.anyLong(), anyString(), anyString());
         verify(sessionCleanupRunMapper).markProgress(eq(RECORD_ID), eq(4), eq(4), eq(4L), eq(2),
                 org.mockito.ArgumentMatchers.anyLong(), anyString(), anyString());
-        // 终态也要带上分母
+        // The terminal state must carry the denominator as well
         verify(sessionCleanupRunMapper).markSuccess(eq(RECORD_ID),
                 eq(SessionCleanupRunStatusEnum.STATUS_SUCCESS),
                 eq(7), eq(7), any(LocalDateTime.class), any(LocalDateTime.class),

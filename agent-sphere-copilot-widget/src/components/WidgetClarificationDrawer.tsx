@@ -91,7 +91,7 @@ export function WidgetClarificationDrawer({
       }}
     >
       <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(0,0,0,.06)', fontSize: 12, fontWeight: 600 }}>
-        需要你的确认
+        Your confirmation is needed
         <span style={{ float: 'right', fontWeight: 400, color: '#6b7280' }}>
           {items.filter((i) => answered(i.clarificationId)).length}/{items.length}
         </span>
@@ -127,8 +127,8 @@ export function WidgetClarificationDrawer({
         {current.type === 'confirm' ? (
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             {[
-              ['confirmed', '确认'],
-              ['cancelled', '取消'],
+              ['confirmed', 'Confirm'],
+              ['cancelled', 'Cancel'],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -182,13 +182,13 @@ export function WidgetClarificationDrawer({
           value={currentAnswer.text}
           onChange={(e) => setAnswer(current.clarificationId, { text: e.target.value })}
           rows={3}
-          placeholder="也可以手动输入…"
+          placeholder="Or type your answer…"
           style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
         />
       </div>
       <div style={{ padding: 10, borderTop: '1px solid rgba(0,0,0,.06)', display: 'flex', justifyContent: 'space-between' }}>
         <button type="button" disabled={submitting} onClick={onCancel} style={{ border: '1px solid #ffccc7', color: '#cf1322', background: 'rgba(255,255,255,.7)', borderRadius: 6, padding: '6px 12px' }}>
-          停止
+          Stop
         </button>
         <button
           type="button"
@@ -204,7 +204,7 @@ export function WidgetClarificationDrawer({
           }
           style={{ border: 'none', background: allAnswered ? '#1677ff' : '#bfbfbf', color: '#fff', borderRadius: 6, padding: '6px 16px' }}
         >
-          {submitting ? '提交中...' : '提交'}
+          {submitting ? 'Submitting...' : 'Submit'}
         </button>
       </div>
     </div>

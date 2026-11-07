@@ -56,7 +56,7 @@ public class CompletionsServiceImpl implements CompletionsService {
     private static final String INPUT_HOLDER = "{{input}}";
     private static final String ROLE_SYSTEM = "system";
     private static final String ROLE_USER = "user";
-    private static final String OUTPUT_SCHEMA_HINT = "\n\n请严格按照以下 JSON Schema 输出最终结果（只输出符合 schema 的 JSON，不要额外说明）：\n";
+    private static final String OUTPUT_SCHEMA_HINT = "\n\nReturn the final result strictly according to the following JSON Schema (output only JSON that matches the schema, with no extra explanation):\n";
     private static final String RESPONSE_FORMAT_TYPE_JSON_OBJECT = "json_object";
     private static final String JSON_SCHEMA_NAME = "output";
 
@@ -118,7 +118,8 @@ public class CompletionsServiceImpl implements CompletionsService {
             request.setMessages(messages);
             applyResponseFormat(request, c.getOutputSchema());
             applyConfig(request, c.getConfig());
-            // usage 采集默认开启（配置未显式设置时兜底），保证调用记录 usage 真实可观测
+            // usage collection is on by default (fallback when the config does not set it explicitly), so call
+            // records have observable usage.
             if (request.getStreamOptions() == null
                     || request.getStreamOptions().getIncludeUsage() == null) {
                 request.setStreamOptions(
@@ -255,7 +256,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         return completionsCallService.pageByCompletions(id, page, size);
     }
 
-    /** 解析外部调用方身份：code+subject 反查 SSO identity，失败 → 401。 */
+    /** Resolve the external caller identity: look up the SSO identity by code+subject; on failure → 401. */
     private ResolvedIdentityVO resolveCallerIdentity(CallerAuth auth) {
         ResolvedIdentityVO identity = ssoIdentitySpi.resolveByCodeSubject(auth.code(), auth.subject());
         if (identity == null) {
@@ -282,7 +283,7 @@ public class CompletionsServiceImpl implements CompletionsService {
         return messages;
     }
 
-    /** 若配置了 outputSchema，设置 response_format=json_schema / object（模型不支持时 LLM 层仍会按 prompt 提示输出）。 */
+    /** If outputSchema is configured, set response_format=json_schema / object (when the model does not support it, the LLM layer still follows the prompt hint). */
     private void applyResponseFormat(ChatCompletionRequestDTO request, String outputSchema) {
         if (!StringUtils.hasText(outputSchema)) {
             return;
@@ -298,11 +299,11 @@ public class CompletionsServiceImpl implements CompletionsService {
             responseFormat.setJson_schema(jsonSchema);
             request.setResponseFormat(responseFormat);
         } catch (Exception e) {
-            // schema 解析失败：忽略 response_format，仅靠 prompt 提示
+            // schema parse failure: ignore response_format and rely on the prompt hint only.
         }
     }
 
-    /** 解析 agent_completions.config，把支持的参数映射到请求（复用共享映射层，覆盖全字段）。 */
+    /** Parse agent_completions.config and map the supported parameters onto the request (reusing the shared mapping layer, covering all fields). */
     private void applyConfig(ChatCompletionRequestDTO request, String configJson) {
         LlmSamplingConfigDTO cfg = LlmSamplingConfigMapper.fromJson(configJson);
         LlmSamplingConfigMapper.apply(request, cfg);

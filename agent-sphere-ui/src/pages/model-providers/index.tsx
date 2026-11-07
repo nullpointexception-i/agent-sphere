@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import {
   BranchesOutlined,
   DeleteOutlined,
@@ -98,7 +99,7 @@ export default function ModelProviders() {
     <PageContainer
       title={false}
       extra={
-        <Can code="model:provider:create">
+        <Can code={PERM.modelProviderCreate}>
           <Button
             type="primary"
             icon={<PlusOutlined />}

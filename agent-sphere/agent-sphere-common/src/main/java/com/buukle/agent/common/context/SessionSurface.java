@@ -1,26 +1,28 @@
 package com.buukle.agent.common.context;
 
 /**
- * 会话操作的来源端。
+ * Client surface of a session operation.
  *
- * <p>同一个会话接口（建会话 / 发消息）被多个入口共用，而实例上可以按来源分别控制是否放行
- * （{@code agent_instance.allow_console_session} / {@code allow_widget_session}），
- * 因此服务端必须知道这次调用来自哪一端。
+ * <p>The same session endpoints (create session / send message) are shared by several entry
+ * points, while an instance can allow or deny each surface separately
+ * ({@code agent_instance.allow_console_session} / {@code allow_widget_session}), so the server must
+ * know which surface a call came from.
  */
 public enum SessionSurface {
 
-    /** 嵌入式 widget（agent-sphere-copilot-widget）。 */
+    /** Embeddable widget (agent-sphere-copilot-widget). */
     WIDGET,
 
-    /** 主站控制台（agent-sphere-ui）。 */
+    /** Main console (agent-sphere-ui). */
     CONSOLE,
 
     /**
-     * 服务端内部调用 —— 任务提交、结构化提炼等。
+     * Server-internal calls — task submission, structured extraction, and so on.
      *
-     * <p>这是**未设置来源时的默认值**：内部调用不经过 HTTP 拦截器（`/api/v1/api/*` 提前放行，
-     * `pollSweep` / 提炼轮干脆没有请求线程），拿到 null 必须按内部处理，否则任务路径会被自己的
-     * 开关拦掉。
+     * <p>This is the <b>default when no surface is set</b>: internal calls do not pass through the
+     * HTTP interceptor ({@code /api/v1/api/*} is allowed early, and {@code pollSweep} / extraction
+     * turns have no request thread at all), so a null value must be treated as internal — otherwise
+     * task paths would be blocked by their own switch.
      */
     INTERNAL
 }

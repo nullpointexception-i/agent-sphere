@@ -18,13 +18,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 登录会话实现。
+ * Login session implementation.
  *
- * <p>核心约束：
+ * <p>Core constraints:
  * <ul>
- *   <li>只存 token 的 SHA-256 摘要，明文仅在签发响应中出现；</li>
- *   <li>签发不覆盖任何已有会话 —— 这是「主站与 widget 互踢」的根因修复；</li>
- *   <li>吊销通过事件通知 infrastructure 清理 Redis 缓存，避免依赖反向。</li>
+ *   <li>only the SHA-256 digest of the token is stored; the plaintext appears only in the issuance response;</li>
+ *   <li>issuance never overwrites an existing session — this is the root-cause fix for "console and widget kicking each other offline";</li>
+ *   <li>revocation notifies infrastructure through an event to clear the Redis cache, avoiding a reverse dependency.</li>
  * </ul>
  */
 @Slf4j
@@ -34,9 +34,9 @@ public class UserTokenServiceImpl
         extends ServiceImpl<AgentUserTokenMapper, AgentUserToken>
         implements UserTokenSpi {
 
-    /** 会话有效期（滑动续期）。 */
+    /** Session validity period (sliding renewal). */
     private static final int TOKEN_TTL_DAYS = 30;
-    /** last_used_at 的写库节流窗口。 */
+    /** Write-throttling window for last_used_at. */
     private static final int TOUCH_STALE_DAYS = 7;
 
     private final ApplicationEventPublisher eventPublisher;
@@ -196,7 +196,8 @@ public class UserTokenServiceImpl
         try {
             baseMapper.touch(hash, TOKEN_TTL_DAYS, TOUCH_STALE_DAYS);
         } catch (Exception e) {
-            // 续期失败不能影响本次鉴权：token 本身仍然有效，只是有效期不延长
+            // A renewal failure must not affect this authentication: the token itself is still valid,
+            // only its expiry is not extended
             log.warn("Token touch failed: {}", e.getMessage());
         }
     }

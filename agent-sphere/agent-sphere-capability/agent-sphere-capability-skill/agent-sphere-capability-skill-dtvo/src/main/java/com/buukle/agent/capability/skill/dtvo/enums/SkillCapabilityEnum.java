@@ -7,10 +7,10 @@ public final class SkillCapabilityEnum {
     private SkillCapabilityEnum() {
     }
 
-    /** 校验状态值，非法抛 IllegalArgumentException。 */
+    /** Validates the status value; throws IllegalArgumentException when invalid. */
     public static void assertValidStatus(String status) {
         if (!STATUS_ENABLED.equals(status) && !STATUS_DISABLED.equals(status)) {
-            throw new IllegalArgumentException("非法 skill 状态: " + status);
+            throw new IllegalArgumentException("Invalid skill status: " + status);
         }
     }
 }

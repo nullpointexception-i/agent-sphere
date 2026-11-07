@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
-/** 唤醒方（内存定时器 / cron 补偿）消费的一条等待记录。 */
+/** A wait record consumed by a waker (in-memory timer / cron compensation). */
 @Data
 @AllArgsConstructor
 public class PendingWaitVO implements Serializable {
@@ -18,21 +18,21 @@ public class PendingWaitVO implements Serializable {
     private Integer waitMs;
     private LocalDateTime wakeAt;
     private String status;
-    /** 已重试恢复次数（V86）。 */
+    /** Number of resume retries already performed (V86). */
     private Integer attempts;
-    /** 挂起类型（V115）：WAIT / LLM_RETRY。 */
+    /** Suspend type (V115): WAIT / LLM_RETRY. */
     private String kind;
-    /** LLM_RETRY 的上游 HTTP 状态码。 */
+    /** Upstream HTTP status code for LLM_RETRY. */
     private Integer errorStatus;
-    /** 错误分类 code（LLM_RETRY 时有值）：provider_busy / connect_timeout / rate_limited … */
+    /** Error category code (present for LLM_RETRY): provider_busy / connect_timeout / rate_limited … */
     private String reason;
-    /** 最近一次错误原文（展示用）。 */
+    /** Raw text of the most recent error (for display). */
     private String lastError;
 
     public PendingWaitVO() {
     }
 
-    /** 兼容既有调用方（wait 工具链路）的 8 参构造；kind 等新字段走 setter。 */
+    /** 8-argument constructor kept for existing callers (the wait tool chain); newer fields such as kind go through setters. */
     public PendingWaitVO(Long id, Long sessionId, Long runId, String callId, Integer waitMs,
                          LocalDateTime wakeAt, String status, Integer attempts) {
         this.id = id;

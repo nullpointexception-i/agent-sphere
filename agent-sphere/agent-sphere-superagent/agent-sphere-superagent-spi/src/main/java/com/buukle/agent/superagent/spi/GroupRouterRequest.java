@@ -2,7 +2,7 @@ package com.buukle.agent.superagent.spi;
 
 import java.io.Serializable;
 
-/** 群消息分派请求。 */
+/** Group message dispatch request. */
 public record GroupRouterRequest(
         Long instanceId,
         Long sessionId,

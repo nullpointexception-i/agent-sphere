@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   App,
@@ -74,7 +75,7 @@ export default function AdminPermissions() {
       message.success(
         intl.formatMessage({
           id: 'pages.save.success',
-          defaultMessage: '已保存',
+          defaultMessage: 'Saved',
         }),
       );
       setEditOpen(false);
@@ -84,7 +85,7 @@ export default function AdminPermissions() {
       message.error(
         intl.formatMessage({
           id: 'pages.chat.saveFailed',
-          defaultMessage: '保存失败',
+          defaultMessage: 'Save failed',
         }),
       );
     } finally {
@@ -102,7 +103,7 @@ export default function AdminPermissions() {
     {
       title: intl.formatMessage({
         id: 'pages.form.name',
-        defaultMessage: '名称',
+        defaultMessage: 'Name',
       }),
       dataIndex: 'name',
       key: 'name',
@@ -110,7 +111,7 @@ export default function AdminPermissions() {
     {
       title: intl.formatMessage({
         id: 'pages.table.code',
-        defaultMessage: '编码',
+        defaultMessage: 'Code',
       }),
       dataIndex: 'code',
       key: 'code',
@@ -118,7 +119,7 @@ export default function AdminPermissions() {
     {
       title: intl.formatMessage({
         id: 'pages.table.type',
-        defaultMessage: '类型',
+        defaultMessage: 'Type',
       }),
       dataIndex: 'type',
       key: 'type',
@@ -127,7 +128,7 @@ export default function AdminPermissions() {
     {
       title: intl.formatMessage({
         id: 'pages.table.sort',
-        defaultMessage: '排序',
+        defaultMessage: 'Sort',
       }),
       dataIndex: 'sort',
       key: 'sort',
@@ -136,13 +137,13 @@ export default function AdminPermissions() {
     {
       title: intl.formatMessage({
         id: 'pages.table.actions',
-        defaultMessage: '操作',
+        defaultMessage: 'Actions',
       }),
       key: 'actions',
       width: 140,
       render: (_: any, record: any) => (
         <Space>
-          <Can code="admin:permission:update">
+          <Can code={PERM.adminPermissionUpdate}>
             <Button
               type="link"
               size="small"
@@ -150,11 +151,11 @@ export default function AdminPermissions() {
             >
               {intl.formatMessage({
                 id: 'pages.table.edit',
-                defaultMessage: '编辑',
+                defaultMessage: 'Edit',
               })}
             </Button>
           </Can>
-          <Can code="admin:permission:delete">
+          <Can code={PERM.adminPermissionDelete}>
             <Button
               type="link"
               size="small"
@@ -165,7 +166,7 @@ export default function AdminPermissions() {
                   message.success(
                     intl.formatMessage({
                       id: 'pages.document.deleted',
-                      defaultMessage: '已删除',
+                      defaultMessage: 'Deleted',
                     }),
                   );
                   loadItems();
@@ -173,7 +174,7 @@ export default function AdminPermissions() {
                   message.error(
                     intl.formatMessage({
                       id: 'pages.chat.saveFailed',
-                      defaultMessage: '保存失败',
+                      defaultMessage: 'Save failed',
                     }),
                   );
                 }
@@ -181,7 +182,7 @@ export default function AdminPermissions() {
             >
               {intl.formatMessage({
                 id: 'pages.table.delete',
-                defaultMessage: '删除',
+                defaultMessage: 'Delete',
               })}
             </Button>
           </Can>
@@ -193,11 +194,11 @@ export default function AdminPermissions() {
   return (
     <>
       <div style={{ marginBottom: 16 }}>
-        <Can code="admin:permission:create">
+        <Can code={PERM.adminPermissionCreate}>
           <Button type="primary" onClick={() => handleOpenEdit()}>
             {intl.formatMessage({
               id: 'pages.admin.permissions.create',
-              defaultMessage: '新建权限',
+              defaultMessage: 'New Permission',
             })}
           </Button>
         </Can>
@@ -224,11 +225,11 @@ export default function AdminPermissions() {
           editing
             ? intl.formatMessage({
                 id: 'pages.table.edit',
-                defaultMessage: '编辑',
+                defaultMessage: 'Edit',
               })
             : intl.formatMessage({
                 id: 'pages.admin.permissions.create',
-                defaultMessage: '新建权限',
+                defaultMessage: 'New Permission',
               })
         }
         open={editOpen}
@@ -244,7 +245,7 @@ export default function AdminPermissions() {
             name="name"
             label={intl.formatMessage({
               id: 'pages.form.name',
-              defaultMessage: '名称',
+              defaultMessage: 'Name',
             })}
             rules={[{ required: true }]}
           >
@@ -254,7 +255,7 @@ export default function AdminPermissions() {
             name="code"
             label={intl.formatMessage({
               id: 'pages.form.code',
-              defaultMessage: '编码',
+              defaultMessage: 'Code',
             })}
             rules={[
               { required: true },
@@ -262,7 +263,7 @@ export default function AdminPermissions() {
                 pattern: /^[a-z][a-z0-9:*]*$/,
                 message: intl.formatMessage({
                   id: 'pages.admin.permissions.codePattern',
-                  defaultMessage: '格式: module:action',
+                  defaultMessage: 'Format: module:action',
                 }),
               },
             ]}
@@ -273,7 +274,7 @@ export default function AdminPermissions() {
             name="type"
             label={intl.formatMessage({
               id: 'pages.form.type',
-              defaultMessage: '类型',
+              defaultMessage: 'Type',
             })}
             rules={[{ required: true }]}
           >
@@ -283,14 +284,14 @@ export default function AdminPermissions() {
             name="parentId"
             label={intl.formatMessage({
               id: 'pages.admin.permissions.parent',
-              defaultMessage: '父级',
+              defaultMessage: 'Parent',
             })}
           >
             <Select
               allowClear
               placeholder={intl.formatMessage({
                 id: 'pages.admin.permissions.parentPlaceholder',
-                defaultMessage: '无（一级菜单）',
+                defaultMessage: 'None (top-level)',
               })}
               options={allParents.map((p: any) => ({
                 label: `${p.name} (${p.code})`,
@@ -302,7 +303,7 @@ export default function AdminPermissions() {
             name="sort"
             label={intl.formatMessage({
               id: 'pages.form.sort',
-              defaultMessage: '排序',
+              defaultMessage: 'Sort',
             })}
           >
             <InputNumber min={0} max={999} style={{ width: '100%' }} />
@@ -311,7 +312,7 @@ export default function AdminPermissions() {
             name="description"
             label={intl.formatMessage({
               id: 'pages.form.description',
-              defaultMessage: '描述',
+              defaultMessage: 'Description',
             })}
           >
             <Input.TextArea maxLength={255} />

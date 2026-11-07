@@ -166,13 +166,13 @@ public class RuntimeOrchestrator {
             run.setCompletionProtocol(CompletionProtocol.resolve(instanceOverride, routeDefault).name());
             changed = true;
         }
-        // 路由 pin（V116）：只在首次进入时写一次。之后所有恢复入口都用这条，
-        // 避免实例按 weight 重新挑选 / 管理员中途改配置导致同一个 run 换模型。
+        // Route pin (V116): write once on first entry only. All resume entry points then use this route,
+        // so re-picking an instance by weight or an admin config change mid-run cannot switch the model of the same run.
         if (run.getModelRouteId() == null && validated.getModelRoute() != null) {
             run.setModelRouteId(validated.getModelRoute().getId());
             changed = true;
         }
-        // 思考强度 pin（V118）：按名义输出上限动态解析默认档；用户手选档位优先。
+        // Reasoning-effort pin (V118): resolve the default level dynamically from the nominal output cap; a user-selected level takes precedence.
         if (validated.getModelRoute() != null) {
             Integer instanceMaxOutput = llmRequestConfigurer.resolveMaxOutputTokens(
                     validated.getAgentInstance() != null

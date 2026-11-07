@@ -1,6 +1,6 @@
 package com.buukle.agent.instance.dtvo.enums;
 
-/** 统一 Timeline 行 content 解析键（避免业务逻辑内联魔法字符串）。 */
+/** Content key for parsing unified Timeline row {@code content} (avoids inlining magic strings in business logic). */
 public enum TimelineContentKey {
     TEXT("text"),
     THINKING("thinking"),
@@ -22,22 +22,22 @@ public enum TimelineContentKey {
     RESPONSE("response"),
     STATE("state"),
     STARTED_AT("startedAt"),
-    /** 子 Agent 类型（SUBAGENT 行）。 */
+    /** Sub-agent type (SUBAGENT row). */
     AGENT_TYPE("agentType"),
-    /** 子 Agent 引用/标识（SUBAGENT 行）。 */
+    /** Sub-agent reference/identifier (SUBAGENT row). */
     AGENT_REF("agentRef"),
     DURATION_MS("durationMs"),
     MODEL_NAME("modelName"),
-    /** 触发该子 Agent 的父工具调用 id（SUBAGENT 行；同批次并行子 Agent 共享）。 */
+    /** Id of the parent tool call that triggered this sub-agent (SUBAGENT row; shared by parallel sub-agents in the same batch). */
     PARENT_TOOL_CALL_ID("parentToolCallId"),
-    /** 用户消息附图引用（[{fileKey, contentType}]，前端按 fileKey 拉字节显示）。 */
+    /** User message image attachment references ([{fileKey, contentType}]; the frontend fetches bytes by fileKey to display them). */
     IMAGES("images"),
-    /** 用量聚合（{promptTokens, completionTokens, totalTokens, cacheHitTokens, cacheMissTokens}；assistant / run_status 行）。 */
+    /** Usage aggregation ({promptTokens, completionTokens, totalTokens, cacheHitTokens, cacheMissTokens}; assistant / run_status rows). */
     USAGE("usage"),
     FEEDBACK("feedback"),
-    /** 工具名（TOOL 行；用于前端识别内部协议工具，如 finish/builtin_12）。 */
+    /** Tool name (TOOL row; lets the frontend recognize internal protocol tools such as finish/builtin_12). */
     TOOL_NAME("toolName"),
-    /** 工具标准化元数据（durationMs / statusCode / chars / exitCode / server …）。 */
+    /** Standardized tool metadata (durationMs / statusCode / chars / exitCode / server …). */
     META("meta");
 
     private final String code;

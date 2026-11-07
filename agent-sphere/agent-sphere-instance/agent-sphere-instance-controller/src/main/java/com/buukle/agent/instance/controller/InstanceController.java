@@ -1,5 +1,9 @@
 package com.buukle.agent.instance.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -17,14 +21,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/instance/instances")
+@RequestMapping(ApiPrefix.V1 + "/instance/instances")
 @RequiredArgsConstructor
 @WithTenant
 public class InstanceController extends BaseController {
     private final InstanceService instanceService;
 
     @AuditLog(action = "CREATE", resourceType = "Instance", resourceId = "#result?.body?.id")
-    @RequirePermission("instance:create")
+    @RequirePermission(PermissionCodes.INSTANCE_CREATE)
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateInstanceDTO dto) {
         return created(instanceService.createInstance(dto));
@@ -57,21 +61,21 @@ public class InstanceController extends BaseController {
     }
 
     @AuditLog(action = "UPDATE", resourceType = "Instance", resourceId = "#id")
-    @RequirePermission("instance:update")
+    @RequirePermission(PermissionCodes.INSTANCE_UPDATE)
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateInstanceDTO dto) {
         return ok(instanceService.updateInstance(id, dto));
     }
 
     @AuditLog(action = "SET_MODEL_ROUTE", resourceType = "Instance", resourceId = "#id")
-    @RequirePermission("instance:bind-model")
+    @RequirePermission(PermissionCodes.INSTANCE_BIND_MODEL)
     @PutMapping("/{id}/model-route")
     public ResponseEntity<?> setModelRoute(@PathVariable Long id, @RequestBody SetModelRouteDTO dto) {
         return ok(instanceService.setModelRoute(id, dto.getModelRouteId()));
     }
 
     @AuditLog(action = "DELETE", resourceType = "Instance", resourceId = "#id")
-    @RequirePermission("instance:delete")
+    @RequirePermission(PermissionCodes.INSTANCE_DELETE)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         instanceService.deleteInstance(id);
@@ -79,7 +83,7 @@ public class InstanceController extends BaseController {
     }
 
     @AuditLog(action = "BATCH_DELETE", resourceType = "Instance", resourceId = "#ids?.toString()")
-    @RequirePermission("instance:delete")
+    @RequirePermission(PermissionCodes.INSTANCE_DELETE)
     @DeleteMapping("/batch")
     public ResponseEntity<?> batchDelete(@RequestBody List<Long> ids) {
         instanceService.batchDeleteInstances(ids);

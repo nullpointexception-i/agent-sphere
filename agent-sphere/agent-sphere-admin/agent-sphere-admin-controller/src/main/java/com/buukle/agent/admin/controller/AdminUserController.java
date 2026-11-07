@@ -1,5 +1,8 @@
 package com.buukle.agent.admin.controller;
 
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -13,13 +16,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/admin/users")
+@RequestMapping(ApiPrefix.V1 + "/admin/users")
 @RequiredArgsConstructor
 public class AdminUserController extends BaseController {
 
     private final UserSpi userSpi;
 
-    @RequirePermission("admin:user:read")
+    @RequirePermission(PermissionCodes.ADMIN_USER_READ)
     @GetMapping
     public ResponseEntity<Page<UserVO>> list(
             @RequestParam(defaultValue = "1") int page,

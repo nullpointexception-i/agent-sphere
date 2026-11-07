@@ -131,6 +131,8 @@ export default {
   'workspace.chat.taskStatus.pending': '待回复',
   'workspace.chat.taskStatus.answered': '已回复',
   'workspace.chat.agentAwaitingUser': '等待你的回复',
+  'workspace.chat.agentThoughtFor': '已思考 {seconds} 秒',
+  'workspace.chat.agentDone': '已完成',
   'workspace.chat.inputFallback': '数字分身需要你的输入',
   'workspace.chat.inputStatus.answered': '已回复',
   'workspace.chat.inputStatus.cancelled': '已取消',

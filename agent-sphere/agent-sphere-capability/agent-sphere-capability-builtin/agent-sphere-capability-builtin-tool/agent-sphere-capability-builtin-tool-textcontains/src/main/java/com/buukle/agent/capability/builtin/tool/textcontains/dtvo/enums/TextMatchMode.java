@@ -1,22 +1,23 @@
 package com.buukle.agent.capability.builtin.tool.textcontains.dtvo.enums;
 
 /**
- * `text_contains` 的匹配模式。
+ * Matching mode for `text_contains`.
  *
- * <p>刻意做成显式枚举而非若干布尔开关：布尔组合会让「区分大小写」与「去空白」产生四个含义不明的
- * 开关状态，而枚举在参数 schema 里会直接列成可选值，模型不需要推断。
+ * <p>Deliberately an explicit enum rather than a set of boolean flags: boolean combinations of
+ * "case sensitive" and "trim whitespace" produce four poorly defined switch states, whereas an
+ * enum is listed directly as allowed values in the parameter schema, so the model need not infer.
  */
 public enum TextMatchMode {
 
-    /** 严格子串匹配（默认）：区分大小写、不做任何归一化。 */
+    /** Strict substring match (default): case-sensitive, no normalization. */
     EXACT,
 
-    /** 忽略大小写。 */
+    /** Case-insensitive. */
     IGNORE_CASE,
 
-    /** 两端去空白后严格匹配。 */
+    /** Strict match after trimming both ends. */
     TRIMMED,
 
-    /** 两端去空白 + 忽略大小写。 */
+    /** Trim both ends plus case-insensitive. */
     IGNORE_CASE_TRIMMED
 }

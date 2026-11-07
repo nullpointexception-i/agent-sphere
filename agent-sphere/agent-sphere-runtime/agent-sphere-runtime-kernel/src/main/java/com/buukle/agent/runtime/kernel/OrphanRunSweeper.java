@@ -18,9 +18,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 孤儿 run 清扫（各副本运行）：session 处于 RUNNING/RUNNING_WITH_PENDING 但 owner 租约
- * 过期（执行副本宕机）→ 抢锁 → 将该 session 活动 run 置 FAILED → 状态复位 → 续跑队列剩余输入。
- * 职责边界：只处理 SessionRunner 的 run 终态；任务级推进由 task poller 负责，二者不双写。
+ * Orphan run sweep (runs on every replica): the session is in RUNNING/RUNNING_WITH_PENDING but the owner lease
+ * has expired (the executing replica is down) → acquire the lock → mark the session's active run as FAILED → reset state → continue the remaining queued input.
+ * Responsibility boundary: this only handles SessionRunner run terminal states; task-level progression belongs to the task poller, and the two never double-write.
  */
 @Slf4j
 @Component
@@ -55,7 +55,7 @@ public class OrphanRunSweeper {
         RBucket<String> owner = redissonClient.getBucket(
                 DistributedRuntimeConstants.sessionOwnerKey(sessionId));
         if (owner.isExists()) {
-            return; // 执行副本存活
+            return; // the executing replica is alive
         }
         RLock lock = redissonClient.getLock(DistributedRuntimeConstants.sessionLockKey(sessionId));
         if (!lock.tryLock()) {
@@ -84,7 +84,7 @@ public class OrphanRunSweeper {
                     if (activeSessions != null) activeSessions.remove(sessionId);
                     coordinator.wake(sessionId);
                 } else {
-                    // 没有更新 run：交给 recovery 恢复原 run；不要在这里 FAILED。
+                    // The run was not updated: leave it to recovery to restore the original run; do not mark FAILED here.
                     eventPublisher.publishEvent(new InterruptedRunRecoveryEvent(
                             sessionId, active.getId(), "owner lease expired"));
                     log.warn("Interrupted run {} (session {}) queued for recovery", active.getId(), sessionId);
@@ -105,7 +105,7 @@ public class OrphanRunSweeper {
                 || SessionRunCoordinator.State.RUNNING_WITH_PENDING.name().equals(state);
     }
 
-    /** 清空本副本内存中的推理缓冲并写回 run，避免孤儿 run 的推理丢失。 */
+    /** Flush this replica's in-memory reasoning buffer to the run so an orphan run's reasoning is not lost. */
     private void flushReasoning(RunVO run) {
         try {
             String reasoning = reasoningBufferStore.drain(run.getId());

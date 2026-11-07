@@ -14,12 +14,12 @@ public class ChromeCallbackDTO {
     private String method;
     private String resultType;
     private String warning;
-    /** 执行该命令的设备/来源（扩展回传；老扩展为空）。 */
+    /** Device/source that executed the command (reported back by the extension; empty for old extensions). */
     private String deviceId;
     private String deviceName;
     private String source;
     private String extensionVersion;
-    /** 命令里带过来的 run / 工具调用 id，用于把设备信息落库。 */
+    /** run / tool-call id carried in the command, used to persist the device info. */
     private Long runId;
     private String callId;
 

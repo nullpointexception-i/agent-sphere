@@ -14,18 +14,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 事件总线 → 本地 SSE 投递 relay。
- * 各副本（含发布者自己）订阅：session 事件投 {@link SseManager#sendBySession}，
- * 浏览器指令**按设备定向**投给唯一目标连接。单路径投递，无重复。
+ * Event bus → local SSE delivery relay.
+ * Every replica (including the publisher) subscribes: session events go to {@link SseManager#sendBySession};
+ * browser commands are **device-targeted** to a single target connection. One delivery path, no duplicates.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class SseEventRelay {
 
-    /** 没有任何在线的浏览器扩展。 */
+    /** No online browser extension. */
     public static final String ERROR_BROWSER_NOT_CONNECTED = "browser_not_connected";
-    /** 多台在线但用户尚未选择执行设备。 */
+    /** Multiple devices online but the user has not selected an execution device yet. */
     public static final String ERROR_DEVICE_SELECTION_REQUIRED = "device_selection_required";
 
     private final RedisEventBus eventBus;
@@ -50,10 +50,10 @@ public class SseEventRelay {
     }
 
     /**
-     * 浏览器指令：先选路，再只投给目标连接。
+     * Browser command: pick the route first, then deliver only to the target connection.
      *
-     * <p>不再广播 —— 广播会让多台浏览器**同时执行**，取先返回的结果，正是「命令跑到别的浏览器」的根因。
-     * 选路失败时由本副本直接完成 pending future（只有持有 future 的副本生效），工具侧立刻拿到明确错误。
+     * <p>No more broadcast — broadcasting makes multiple browsers **execute concurrently** and takes the first result, which is exactly the root cause of "the command ran in another browser".
+     * When routing fails, this replica completes the pending future directly (only the replica holding the future acts), so the tool side immediately gets an explicit error.
      */
     private void onChromeCommand(ChromeCommandEnvelope envelope) {
         if (envelope == null || envelope.getUsername() == null) {
@@ -67,7 +67,7 @@ public class SseEventRelay {
         switch (selection.state()) {
             case EMPTY -> ChromePendingStore.complete(command.getCommandId(),
                     fail(command.getCommandId(),
-                            "浏览器插件未连接：没有在线的扩展。请先打开浏览器，并在插件里登录后再试。",
+                            "Browser extension is not connected: no online extension. Open the browser, log in to the extension, and retry.",
                             ERROR_BROWSER_NOT_CONNECTED));
             case NEEDS_SELECTION -> ChromePendingStore.complete(command.getCommandId(),
                     fail(command.getCommandId(),
@@ -86,16 +86,16 @@ public class SseEventRelay {
     }
 
     private static String selectionRequiredMessage(UserConnectionRegistry.Selection selection) {
-        StringBuilder sb = new StringBuilder("当前有 ")
+        StringBuilder sb = new StringBuilder("There are ")
                 .append(selection.live().size())
-                .append(" 台浏览器在线，请先在浏览器扩展的提示里选择「本机执行」后再重试。在线设备：");
+                .append(" browsers online. Choose \"Run on this device\" in the browser extension prompt, then retry. Online devices: ");
         for (int i = 0; i < selection.live().size(); i++) {
             if (i > 0) {
-                sb.append("、");
+                sb.append(", ");
             }
             UserConnectionRegistry.ConnectionView view = selection.live().get(i);
             sb.append(view.deviceName() != null && !view.deviceName().isBlank()
-                    ? view.deviceName() : "未知设备");
+                    ? view.deviceName() : "Unknown device");
             if (view.source() != null) {
                 sb.append("(").append(view.source()).append(")");
             }

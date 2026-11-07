@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+
+import com.buukle.agent.instance.dtvo.enums.RunEnum;import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.common.context.AuthContext;
@@ -51,10 +52,10 @@ import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 /**
- * 统一 Timeline 打平展示索引实现：
- * - 会话级 seq：Redis AtomicLong INCR（多副本单调、不重置）；
- * - 行记录/状态封口；
- * - keyset 分页（beforeSeq 向上翻 / afterSeq 断线补档）+ 按 ref 批量解析正文（非懒取）。
+ * Unified flattened Timeline display index implementation:
+ * - session-level seq: Redis AtomicLong INCR (monotonic across replicas, never reset);
+ * - row recording/state closing;
+ * - keyset paging (beforeSeq scrolls back / afterSeq catches up after disconnects) + batch body resolution by ref (eager, not lazy).
  */
 @Slf4j
 @Service
@@ -62,11 +63,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, AgentTimeline>
         implements AgentTimelineSpi {
 
-    /** 单字段正文加载上限（超长截断，避免单页过载；不落库）。 */
+    /** Per-field body load cap (truncated when too long to avoid overloading a page; not persisted). */
     private static final int CONTENT_CAP = 20000;
-    /** 快照标签上限。 */
+    /** Snapshot title cap. */
     private static final int TITLE_CAP = 300;
-    /** 公共状态列默认值（通用约定 ACTIVE）。 */
+    /** Default value of the common status column (the ACTIVE convention). */
     private static final String STATUS_ACTIVE = "ACTIVE";
 
     private final RedissonClient redissonClient;
@@ -207,7 +208,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         if (existing != null) {
             return existing.getSeq();
         }
-        // 同一 run 同时只允许一条 RUNNING assistant 行：重启遗留的旧行先关闭
+        // Only one RUNNING assistant row is allowed per run at a time: close the old row left over from a restart first
         closeRunningAssistant(sessionId, runId, TimelineState.CANCELLED.getCode());
 
         long seq = nextSeq(sessionId);
@@ -224,7 +225,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             save(row);
             return seq;
         } catch (DuplicateKeyException e) {
-            // 跨副本并发建同一轮：唯一索引只放行一个，回查赢家
+            // Concurrent creation of the same turn across replicas: the unique index only lets one through; look up the winner
             AgentTimeline winner = findAssistantByInteraction(runId, interactionId);
             if (winner != null) {
                 return winner.getSeq();
@@ -279,10 +280,12 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
     }
 
     /**
-     * 按 run + kind + ref 取最近一行。
+     * Fetch the most recent row by run + kind + ref.
      *
-     * <p>ref 字段按调用方传入的非空值逐项 AND；run_status / assistant 没有 ref，只按 run + kind。
-     * MyBatis-Plus 的 @TableLogic 会自动追加 delete_flag = 0，历史逻辑删除行不会参与复用。
+     * <p>Ref fields are ANDed one by one for each non-null value passed by the caller; run_status /
+     * assistant rows have no ref and are matched by run + kind only.
+     * MyBatis-Plus @TableLogic automatically appends delete_flag = 0, so historically deleted rows
+     * never participate in reuse.
      */
     private AgentTimeline findLatest(TimelineRefQuery query) {
         if (query == null || query.getRunId() == null || query.getKind() == null) {
@@ -310,7 +313,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         List<AgentTimeline> rows;
         boolean hasMore = false;
         if (beforeSeq != null) {
-            // 向上翻页：取 seq < beforeSeq 的最新 size 行（补 1 判 hasMore），再转正序
+            // Scroll back: take the newest size rows with seq < beforeSeq (fetch one extra to detect hasMore), then restore ascending order
             rows = lambdaQuery()
                     .eq(AgentTimeline::getSessionId, sessionId)
                     .lt(AgentTimeline::getSeq, beforeSeq)
@@ -321,7 +324,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             if (hasMore) rows.remove(rows.size() - 1);
             Collections.reverse(rows);
         } else if (afterSeq != null) {
-            // 断线补档：取 seq > afterSeq 的最早 size 行
+            // Reconnect catch-up: take the earliest size rows with seq > afterSeq
             rows = lambdaQuery()
                     .eq(AgentTimeline::getSessionId, sessionId)
                     .gt(AgentTimeline::getSeq, afterSeq)
@@ -331,7 +334,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             hasMore = rows.size() > size;
             if (hasMore) rows.remove(rows.size() - 1);
         } else {
-            // 首页：最近 size 行，补 1 判 hasMore
+            // First page: the latest size rows, fetching one extra to detect hasMore
             rows = lambdaQuery()
                     .eq(AgentTimeline::getSessionId, sessionId)
                     .orderByDesc(AgentTimeline::getSeq)
@@ -349,7 +352,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
             return pageVO;
         }
         Map<Long, AgentRun> runs = loadRuns(rows);
-        // run 级用量聚合批量预取（run_status 行展示会话内单 run SUM；避免逐行查询）
+        // Batch-prefetch run-level usage aggregation (run_status rows show the per-run SUM within the session; avoids one query per row)
         List<Long> distinctRunIds = rows.stream()
                 .map(r -> r.getRefRunId() != null ? r.getRefRunId() : r.getRunId())
                 .filter(java.util.Objects::nonNull)
@@ -386,7 +389,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         return vo;
     }
 
-    /** 按 ref 从原表批量解析正文（loading 时取好，非懒取）。 */
+    /** Batch-resolve bodies from source tables by ref (resolved eagerly on load, not lazily). */
     private Map<String, Object> resolveContent(AgentTimeline row, Map<Long, AgentRun> runs,
                                                Map<Long, com.buukle.agent.instance.domain.vo.RunUsageVO> usageByRun) {
         String kind = row.getKind();
@@ -407,22 +410,24 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                     }
                 }
                 case ASSISTANT -> {
-                    // 每轮 LLM 调用行：正文直接引用该轮 interaction 记录的 reasoning/reply_content（response_body 仅审计）
+                    // Per-turn LLM call row: the body directly references that turn's interaction
+                    // reasoning/reply_content (response_body is for auditing only)
                     if (row.getRefInteractionId() != null) {
                         AgentLlmInteractionRecord rec = interactionMapper.selectById(row.getRefInteractionId());
                         if (rec != null) {
-                            // 展示状态以执行记录为准（timeline 快照只做兜底）
+                            // Display state follows the execution record (the timeline snapshot is only a fallback)
                             content.put(TimelineContentKey.STATE.getCode(), rec.getStatus());
                             if (rec.getReasoning() != null && !rec.getReasoning().isBlank()) {
                                 content.put(TimelineContentKey.THINKING.getCode(), cap(rec.getReasoning(), CONTENT_CAP));
                             }
-                            // 只认 reply_content：response_body 是 reasoning + 正文的审计合并文本，
-                            // 工具轮/澄清轮没有正文时若回退到它，会把 reasoning 当成可见回复。
+                            // Only reply_content is accepted: response_body is the audit merge of
+                            // reasoning + body, and falling back to it when a tool/clarification turn
+                            // has no body would show reasoning as a visible reply.
                             String reply = rec.getReplyContent();
                             if (reply != null && !reply.isBlank()) {
                                 content.put(TimelineContentKey.REPLY.getCode(), cap(reply, CONTENT_CAP));
                             }
-                            // 迭代级用量：该次 LLM 调用的归一化用量（有值才附）
+                            // Iteration-level usage: normalized usage of this LLM call (attached only when present)
                             if (rec.getDurationMs() != null) {
                                 content.put(TimelineContentKey.DURATION_MS.getCode(), rec.getDurationMs());
                             }
@@ -438,7 +443,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                             }
                         }
                     } else {
-                        // 兜底：无 per-turn 引用时取 run 聚合正文（旧行/极端路径）
+                        // Fallback: when there is no per-turn reference, take the run's aggregated body (old rows / edge paths)
                         AgentRun r = runs.get(row.getRefRunId() != null ? row.getRefRunId() : row.getRunId());
                         if (r != null) {
                             if (r.getReasoning() != null && !r.getReasoning().isBlank()) {
@@ -462,7 +467,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                             if (rec.getArgumentsJson() != null) content.put(TimelineContentKey.ARGS.getCode(), cap(rec.getCompressedArguments() != null ? rec.getCompressedArguments() : rec.getArgumentsJson(), CONTENT_CAP));
                             if (rec.getArtifact() != null) {
                                 content.put(TimelineContentKey.ARTIFACT.getCode(), cap(rec.getCompressedArtifact() != null ? rec.getCompressedArtifact() : rec.getArtifact(), CONTENT_CAP));
-                                // 浏览器截图：工具结果含 data.screenshot → 主面板工具卡回显图片
+                                // Browser screenshot: the tool result contains data.screenshot → the main panel tool card shows the image
                                 List<RunAttachment> images = ScreenshotRefParser.extractScreenshotImages(rec.getArtifact());
                                 if (!images.isEmpty()) {
                                     content.put(TimelineContentKey.IMAGES.getCode(), images);
@@ -542,7 +547,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                             content.put(TimelineContentKey.DURATION_MS.getCode(),
                                     java.time.Duration.between(r.getCreatedAt(), r.getUpdatedAt()).toMillis());
                         }
-                        // 耗时与模型名：取该 run 最近一次主 Agent LLM 调用记录（run 表无这两个字段）
+                        // Elapsed time and model name: take this run's latest main Agent LLM call record (the run table has neither field)
                         AgentLlmInteractionRecord last = interactionMapper.selectOne(
                                 new LambdaQueryWrapper<AgentLlmInteractionRecord>()
                                         .eq(AgentLlmInteractionRecord::getRunId, r.getId())
@@ -552,7 +557,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                         if (last != null && last.getModelName() != null) {
                             content.put(TimelineContentKey.MODEL_NAME.getCode(), last.getModelName());
                         }
-                        // run 级用量：批量预取的 run 汇总（run 结束后 SUM 展示）
+                        // Run-level usage: the batch-prefetched run summary (SUM shown once the run ends)
                         com.buukle.agent.instance.domain.vo.RunUsageVO usage = usageByRun != null
                                 ? usageByRun.get(r.getId()) : null;
                         if (usage != null && usage.getTotalTokens() != null && usage.getTotalTokens() > 0) {
@@ -562,7 +567,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
                         }
                     }
                 }
-                default -> { /* 未知 kind：仅元数据 */ }
+                default -> { /* Unknown kind: metadata only */ }
             }
         } catch (Exception e) {
             log.warn("Timeline content resolve failed (seq={}, kind={}): {}", row.getSeq(), kind, e.getMessage());
@@ -595,7 +600,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         return s.length() > max ? s.substring(0, max) : s;
     }
 
-    /** 组装用量聚合 Map（前端统一结构；仅在有值字段时放入，零值保留便于展示）。 */
+    /** Assemble the usage aggregation map (uniform structure for the frontend; only valued fields are put in, zero values kept for display). */
     private static Map<String, Object> usageMap(Number prompt, Number completion, Number total,
                                                 Number cacheHit, Number cacheMiss) {
         Map<String, Object> m = new HashMap<>(5);
@@ -607,7 +612,7 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         return m;
     }
 
-    /** 词表校验：只告警不阻断（timeline 只做展示，写入失败不应影响主流程）。 */
+    /** Vocabulary check: warn only, never block (the timeline is display-only; a failed write must not affect the main flow). */
     private static void warnIfInvalidState(String kind, String state) {
         TimelineKind k = TimelineKind.from(kind);
         TimelineState s = TimelineState.from(state);
@@ -616,31 +621,31 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         }
     }
 
-    /** 工具执行状态 → 展示词表。 */
+    /** Tool execution status → display vocabulary. */
     private static String mapToolState(String status) {        if (status == null) {
             return null;
         }
         return switch (status.toUpperCase(Locale.ROOT)) {
-            case "PENDING", "RUNNING" -> TimelineState.IN_PROGRESS.getCode();
+            case RunEnum.STATUS_PENDING, RunEnum.STATUS_RUNNING -> TimelineState.IN_PROGRESS.getCode();
             case "SUCCEEDED" -> TimelineState.SUCCEEDED.getCode();
-            case "FAILED" -> TimelineState.FAILED.getCode();
+            case RunEnum.STATUS_FAILED -> TimelineState.FAILED.getCode();
             default -> null;
         };
     }
 
-    /** 审批状态 → 展示词表。 */
+    /** Approval status → display vocabulary. */
     private static String mapApprovalState(String status) {
         if (status == null) {
             return null;
         }
         return switch (status.toUpperCase(Locale.ROOT)) {
-            case "PENDING" -> TimelineState.PENDING.getCode();
+            case RunEnum.STATUS_PENDING -> TimelineState.PENDING.getCode();
             case "DISMISSED" -> TimelineState.CANCELLED.getCode();
             default -> TimelineState.ANSWERED.getCode();
         };
     }
 
-    /** 澄清状态：有回答即 ANSWERED，dismissed 为 CANCELLED。 */
+    /** Clarification status: any answer means ANSWERED; dismissed means CANCELLED. */
     private static String mapClarificationState(String userResponse) {
         if (userResponse == null) {
             return TimelineState.PENDING.getCode();
@@ -651,20 +656,20 @@ public class AgentTimelineServiceImpl extends ServiceImpl<AgentTimelineMapper, A
         return TimelineState.ANSWERED.getCode();
     }
 
-    /** 压缩记录状态 → 展示词表。 */
+    /** Compaction record status → display vocabulary. */
     private static String mapCompactionState(String status) {
         if (status == null) {
             return null;
         }
         return switch (status.toUpperCase(Locale.ROOT)) {
-            case "PENDING", "RUNNING" -> TimelineState.RUNNING.getCode();
-            case "COMPLETED" -> TimelineState.COMPLETED.getCode();
-            case "FAILED" -> TimelineState.FAILED.getCode();
+            case RunEnum.STATUS_PENDING, RunEnum.STATUS_RUNNING -> TimelineState.RUNNING.getCode();
+            case RunEnum.STATUS_COMPLETED -> TimelineState.COMPLETED.getCode();
+            case RunEnum.STATUS_FAILED -> TimelineState.FAILED.getCode();
             default -> null;
         };
     }
 
-    /** 解析 USER 行附件引用 JSON；失败返回空列表（不阻断正文渲染）。 */
+    /** Parse the attachment reference JSON of a USER row; returns an empty list on failure (body rendering is never blocked). */
     public static List<RunAttachment> parseAttachments(String json) {
         if (json == null || json.isBlank()) {
             return Collections.emptyList();

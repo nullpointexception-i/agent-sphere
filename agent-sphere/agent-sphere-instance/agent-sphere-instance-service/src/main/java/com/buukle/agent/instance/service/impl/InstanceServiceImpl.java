@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.service.impl;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
+
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.constant.CompletionProtocol;
@@ -61,7 +62,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
         instance.setId(id);
         updateById(instance);
         if (clearLoop) {
-            // 0 = 清除覆盖（置 NULL）；updateById 忽略 null 字段，需显式 set
+            // 0 = clear the override (set NULL); updateById ignores null fields, so an explicit set is required
             lambdaUpdate()
                     .eq(AgentInstance::getId, id)
                     .set(AgentInstance::getMaxLoopCount, null)
@@ -75,7 +76,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
                     .update();
         }
         if (dto.getConfig() != null && dto.getConfig().isBlank()) {
-            // 空字符串 = 清除配置覆盖（置 NULL 走全局兜底）
+            // Empty string = clear the config override (set NULL to use the global fallback)
             lambdaUpdate()
                     .eq(AgentInstance::getId, id)
                     .set(AgentInstance::getConfig, null)
@@ -122,7 +123,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
         }
         String owner = com.buukle.agent.common.context.AuthContext.getUsername();
         if (!java.util.Objects.equals(owner, existing.getCreatedBy())) {
-            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.FORBIDDEN, "无权操作他人实例");
+            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.FORBIDDEN, "Cannot operate on another user's instance");
         }
     }
 
@@ -152,7 +153,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     public List<InstanceVO> listInstances(String keyword, LocalDateTime startTime, LocalDateTime endTime) {
         log.info("listInstances called: keyword='{}', startTime={}, endTime={}", keyword, startTime, endTime);
         List<AgentInstance> instances = lambdaQuery()
-                .eq(AgentInstance::getInstanceRole, "CHAT")
+                .eq(AgentInstance::getInstanceRole, InstanceRole.CHAT.value())
                 .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
                 .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
                 .le(endTime != null, AgentInstance::getCreatedAt, endTime)
@@ -171,7 +172,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     public IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
                                            LocalDateTime endTime, String instanceRole) {
         String role = instanceRole == null || instanceRole.isBlank()
-                ? "CHAT" : instanceRole.trim().toUpperCase();
+                ? InstanceRole.CHAT.value() : InstanceRole.normalize(instanceRole);
         boolean allRoles = "ALL".equals(role);
         Page<AgentInstance> p = lambdaQuery()
                 .eq(!allRoles, AgentInstance::getInstanceRole, role)
@@ -204,7 +205,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     public List<InstanceVO> listLatestNInstances(int n) {
         int limit = Math.min(Math.max(n, 1), 32);
         List<AgentInstance> instances = lambdaQuery()
-                .eq(AgentInstance::getInstanceRole, "CHAT")
+                .eq(AgentInstance::getInstanceRole, InstanceRole.CHAT.value())
                 .orderByDesc(AgentInstance::getCreatedAt)
                 .last("LIMIT " + limit)
                 .list();

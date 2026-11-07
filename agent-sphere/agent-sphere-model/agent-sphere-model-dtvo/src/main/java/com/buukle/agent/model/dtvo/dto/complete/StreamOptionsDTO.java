@@ -11,7 +11,7 @@ import java.io.Serializable;
 @Accessors(chain = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class StreamOptionsDTO implements Serializable {
-    /** 流式响应末尾携带 usage（OpenAI / 兼容实现支持）。 */
+    /** Include usage at the end of a streaming response (supported by OpenAI / compatible implementations). */
     @JsonProperty("include_usage")
     private Boolean includeUsage;
 }

@@ -162,7 +162,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         assertSurfaceAllowed(instance);
     }
 
-    /** 来源开关判定的唯一实现；createSession 复用已加载的实例如以免二次查库。 */
+    /** Single implementation of the surface switch check; createSession reuses the already-loaded instance to avoid a second DB lookup. */
     private void assertSurfaceAllowed(AgentInstance instance) {
         SessionSurfacePolicy.assertAllowed(SessionSurfaceHolder.current(),
                 instance.getAllowConsoleSession(), instance.getAllowWidgetSession());

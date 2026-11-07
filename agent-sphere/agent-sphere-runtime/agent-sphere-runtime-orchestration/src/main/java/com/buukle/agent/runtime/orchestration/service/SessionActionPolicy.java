@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 发送锁判定：全系统唯一入口。
+ * Send-lock decision: the single system-wide entry point.
  *
- * <p>时间线（{@code agent_timeline}）只负责展示，不参与这里的任何判断。
- * 前端、widget、未来的其它入口都必须调用同一套规则，避免各自实现漂移。
+ * <p>The timeline ({@code agent_timeline}) is display-only and takes no part in any decision here.
+ * The frontend, widget and any future entry point must call the same rule set, so implementations cannot drift apart.
  */
 public final class SessionActionPolicy {
 
@@ -24,9 +24,9 @@ public final class SessionActionPolicy {
     }
 
     /**
-     * @param runStatus             活动的 run 状态，可为 null
-     * @param pendingClarifications 未回答的澄清数
-     * @param pendingToolApprovals  未处理的审批数
+     * @param runStatus             active run status, may be null
+     * @param pendingClarifications number of unanswered clarifications
+     * @param pendingToolApprovals  number of unhandled approvals
      */
     public static Decision decide(String runStatus, int pendingClarifications, int pendingToolApprovals) {
         List<String> reasons = new ArrayList<>(3);

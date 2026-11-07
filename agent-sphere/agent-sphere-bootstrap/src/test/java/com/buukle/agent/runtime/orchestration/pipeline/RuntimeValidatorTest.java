@@ -18,11 +18,11 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
- * `RuntimeValidator.toFull` 必须保留 max_input_tokens / max_output_tokens。
+ * `RuntimeValidator.toFull` must preserve max_input_tokens / max_output_tokens.
  *
- * <p>CompactionService 用 max_input_tokens 算压缩阈值；漏拷会回落 DEFAULT(1M)，预算变 700k，
- * 小上下文路由（如 32k / 20k）永远不触发压缩 —— 线上 session 951（route 4 = 20k）与
- * Qwen 32k 的 400 都是这个字段被丢掉导致的。
+ * <p>CompactionService uses max_input_tokens to compute the compaction threshold; a missed copy falls back to DEFAULT(1M), making the budget 700k,
+ * so small-context routes (e.g. 32k / 20k) never trigger compaction — production session 951 (route 4 = 20k) and
+ * the Qwen 32k 400s were all caused by this field being dropped.
  */
 @ExtendWith(MockitoExtension.class)
 class RuntimeValidatorTest {

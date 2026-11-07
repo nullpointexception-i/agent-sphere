@@ -11,18 +11,21 @@ public interface ImMessageService {
     MessageVO send(Long conversationId, SendMessageDTO dto);
 
     /**
-     * Agent 出站：绕过用户成员/归属校验，以 AGENT 身份写入会话，不再触发入站事件。
+     * Agent outbound: bypasses user membership/ownership checks, writes to the conversation as
+     * AGENT, and does not trigger inbound events.
      */
     MessageVO sendAsAgent(Long conversationId, Long superAgentId, String text, String clientMsgId);
 
     /**
-     * Agent 出站（指定消息类型，如 CARD）：content 直接序列化进 im_message.content。
+     * Agent outbound (explicit message type, e.g. CARD): content is serialized directly into
+     * im_message.content.
      */
     MessageVO sendAsAgent(Long conversationId, Long superAgentId, String type,
                           Object content, String clientMsgId);
 
     /**
-     * Agent 更新已发送的消息内容（任务卡片状态变更）；只允许更新 AGENT 发出的消息。
+     * Agent updates the content of an already-sent message (task card status changes); only
+     * AGENT-sent messages may be updated.
      */
     MessageVO updateAsAgent(Long conversationId, Long messageId, String type, Object content);
 

@@ -45,7 +45,13 @@ export default function SharedChat() {
   if (!data) {
     return (
       <div style={{ padding: 24 }}>
-        <Result status="404" title="分享不存在或已失效" />
+        <Result
+          status="404"
+          title={intl.formatMessage({
+            id: 'pages.share.notFound',
+            defaultMessage: 'This share does not exist or has expired',
+          })}
+        />
       </div>
     );
   }
@@ -92,7 +98,7 @@ export default function SharedChat() {
         >
           {intl.formatMessage({
             id: 'pages.share.title',
-            defaultMessage: '来自 AgentSphere 的分享',
+            defaultMessage: 'Shared from AgentSphere',
           })}
         </Typography.Title>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -156,7 +162,7 @@ export default function SharedChat() {
       >
         {intl.formatMessage({
           id: 'pages.share.continue',
-          defaultMessage: '和 AgentSphere 继续聊',
+          defaultMessage: 'Continue chatting with AgentSphere',
         })}
       </button>
     </div>

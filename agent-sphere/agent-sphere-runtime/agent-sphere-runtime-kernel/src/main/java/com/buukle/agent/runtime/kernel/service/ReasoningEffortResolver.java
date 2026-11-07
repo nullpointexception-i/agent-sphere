@@ -18,15 +18,15 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 统一思考强度解析。
+ * Unified reasoning effort resolution.
  *
- * <p>配置优先级：路由覆盖 &gt; 厂商数据库配置 &gt; yaml 厂商默认 &gt; yaml 全局默认。
+ * <p>Config priority: route override &gt; provider database config &gt; yaml provider default &gt; yaml global default.
  *
- * <p>档位分三层：
+ * <p>Levels are split into three layers:
  * <ul>
- *   <li>{@code defaultLevel}：无用户选择时的动态默认，受 {@code default-max-level} 封顶；</li>
- *   <li>{@code selectedLevel}：用户手选（即使不可行也保留，前端只警告）；</li>
- *   <li>{@code effectiveLevel}：本轮真正使用的档位——手选不可行时降到最高可行档（只降不升）。</li>
+ *   <li>{@code defaultLevel}: dynamic default when the user makes no choice, capped by {@code default-max-level};</li>
+ *   <li>{@code selectedLevel}: the user's manual choice (kept even if infeasible; the frontend only warns);</li>
+ *   <li>{@code effectiveLevel}: the level actually used for this turn — when the manual choice is infeasible it drops to the highest feasible level (only down, never up).</li>
  * </ul>
  */
 @Slf4j
@@ -34,7 +34,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ReasoningEffortResolver {
 
-    /** provider.config.reasoning 的字段名。 */
+    /** Field name inside provider.config.reasoning. */
     private static final String PROP_REASONING = "reasoning";
     private static final String PROP_SUPPORTED = "supported";
     private static final String PROP_MODE = "mode";
@@ -66,10 +66,10 @@ public class ReasoningEffortResolver {
     }
 
     /**
-     * @param route                   模型路由（含 company / 路由覆盖字段）
+     * @param route                   model route (including company / route override fields)
      * @param providerConfigJson       agent_model_provider.config
-     * @param effectiveMaxOutputTokens 本轮请求实际会发出的 max_tokens；null 表示未配置输出上限
-     * @param requestedLevel           用户选择/run 固化档位；为空则使用动态默认
+     * @param effectiveMaxOutputTokens the max_tokens actually sent for this turn's request; null means no output limit configured
+     * @param requestedLevel          user-selected/run-pinned level; empty means use the dynamic default
      */
     public Resolved resolve(ModelRouteFullVO route, String providerConfigJson,
                             Integer effectiveMaxOutputTokens, String requestedLevel) {
@@ -104,7 +104,7 @@ public class ReasoningEffortResolver {
         if (levels.isEmpty()) {
             levels = global.getDefaultLevels() == null ? List.of() : global.getDefaultLevels();
         }
-        // 按全局 levelOrder 排序，去掉未知档位
+        // Sort by the global levelOrder and drop unknown levels
         List<String> levelOrder = global.getLevelOrder() == null
                 ? ReasoningEffort.ORDER : global.getLevelOrder();
         List<String> ordered = new ArrayList<>();
@@ -157,7 +157,7 @@ public class ReasoningEffortResolver {
                 effectiveMaxOutputTokens == null ? null : reserve, thinkingBudget);
     }
 
-    /** 无用户选择时的动态默认：最高可行档，但不超过 default-max-level。 */
+    /** Dynamic default when the user makes no choice: the highest feasible level, but no higher than default-max-level. */
     private static String pickDefault(List<String> ordered, List<LevelView> views,
                                       List<String> levelOrder, String defaultMaxLevel,
                                       Integer effectiveMaxOutputTokens) {
@@ -178,7 +178,7 @@ public class ReasoningEffortResolver {
         return highestFeasible != null ? highestFeasible : ordered.get(0);
     }
 
-    /** 手选档位不可行时降到最高可行档；不会升级。 */
+    /** When the manual level is infeasible, drop to the highest feasible level; never upgrades. */
     private static String pickEffective(List<String> ordered, List<LevelView> views, String selected) {
         int selectedIndex = indexOfIgnoreCase(ordered, selected);
         if (selectedIndex < 0) {
@@ -256,7 +256,7 @@ public class ReasoningEffortResolver {
         return budget > 0 ? (int) Math.min(Integer.MAX_VALUE, budget) : null;
     }
 
-    /** 厂商 key 大小写不敏感（枚举值 `GLM` 与 yaml 的 `glm` 必须能对上）。 */
+    /** Provider keys are case-insensitive (the enum value `GLM` must match yaml's `glm`). */
     private static AgentRuntimeProperties.LlmConfig.ProviderReasoningConfig findProvider(
             AgentRuntimeProperties.LlmConfig.ReasoningConfig global, String company) {
         if (global.getProviders() == null || company == null || company.isBlank()) {

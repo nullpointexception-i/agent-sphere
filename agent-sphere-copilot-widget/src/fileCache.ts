@@ -1,10 +1,10 @@
 /**
- * 附件字节 objectURL 的 module 级缓存：
- * - 同一 fileKey 并发请求去重（in-flight promise 复用），避免重复 fetch / 重复 createObjectURL；
- * - 命中缓存直接返回，渲染抖动不再触发重复下载（修复 ERR_INSUFFICIENT_RESOURCES）；
- * - 支持 AbortController：clearFileCache 会中止在途请求并释放全部 objectURL。
+ * Module-level cache of attachment-bytes objectURLs:
+ * - Concurrent requests for the same fileKey are deduplicated (the in-flight promise is reused), avoiding duplicate fetch / createObjectURL calls;
+ * - Cache hits return immediately, so render churn no longer triggers repeated downloads (fixes ERR_INSUFFICIENT_RESOURCES);
+ * - AbortController support: clearFileCache aborts in-flight requests and releases every objectURL.
  *
- * 生命周期：缓存归属模块，组件只读不 revoke；切会话/卸载时调用 clearFileCache 统一回收。
+ * Lifetime: the cache belongs to the module; components only read and never revoke. Call clearFileCache to reclaim everything on session switch/unmount.
  */
 
 interface CacheEntry {
@@ -15,7 +15,7 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
-/** 取（或加载）objectURL；同 key 并发去重；结果缓存至 clearFileCache。 */
+/** Get (or load) an objectURL; concurrent calls for the same key are deduplicated; the result is cached until clearFileCache. */
 export function loadCachedObjectUrl(
   cacheKey: string,
   loader: (fileKey: string, signal: AbortSignal) => Promise<Blob>,
@@ -46,7 +46,7 @@ export function loadCachedObjectUrl(
   return promise;
 }
 
-/** 清空缓存：中止在途请求并释放所有 objectURL（会话切换 / 组件卸载时调用）。 */
+/** Clear the cache: abort in-flight requests and release all objectURLs (called on session switch / component unmount). */
 export function clearFileCache(): void {
   for (const entry of cache.values()) {
     entry.controller?.abort();
@@ -54,14 +54,14 @@ export function clearFileCache(): void {
       try {
         URL.revokeObjectURL(entry.url);
       } catch {
-        /* 忽略 */
+        /* ignore */
       }
     }
   }
   cache.clear();
 }
 
-/** 当前缓存条目数（调试用）。 */
+/** Current number of cache entries (for debugging). */
 export function cachedObjectUrlCount(): number {
   return cache.size;
 }

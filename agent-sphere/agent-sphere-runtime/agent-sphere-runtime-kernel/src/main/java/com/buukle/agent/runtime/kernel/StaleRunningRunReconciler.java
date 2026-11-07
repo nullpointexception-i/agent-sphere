@@ -27,16 +27,16 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 「卡在 RUNNING」的 run 对账任务（DB 层安全网）。
+ * Reconciliation task for runs "stuck in RUNNING" (DB-level safety net).
  *
- * <p>为什么 {@link OrphanRunSweeper} 兜不住：它只扫 Redis 里 state ∈ {RUNNING, RUNNING_WITH_PENDING}
- * 且 owner 租约过期的 session。而「循环异常退出但没写终态」这类 run 的收尾路径里，
- * {@link SessionRunCoordinator} 已经把 state 置 IDLE 并清掉 owner —— 组合成了
- * 「DB 里 RUNNING、Redis 里 IDLE/无 owner」，两者都看不见（线上 run 2263/2264 即此）。
+ * <p>Why {@link OrphanRunSweeper} cannot cover this: it only scans sessions whose Redis state ∈ {RUNNING, RUNNING_WITH_PENDING}
+ * and whose owner lease has expired. But on the wrap-up path of runs like "the loop exited abnormally without writing a terminal state",
+ * {@link SessionRunCoordinator} has already set state to IDLE and cleared the owner — producing
+ * "RUNNING in the DB, IDLE/no owner in Redis", which neither of them sees (production runs 2263/2264 were exactly this).
  *
- * <p>这里直接按 DB 的 {@code updated_at} 扫：超过阈值仍 RUNNING，且 session 无 owner 租约
- * （= 没有任何副本在跑它）→ 置 FAILED 并发终态事件。owner 存在时一律跳过 —— 活副本会每 60s 续约，
- * 因此长时间的工具/LLM 调用不会被误杀。
+ * <p>Here we scan directly by the DB {@code updated_at}: still RUNNING beyond the threshold, and the session has no owner lease
+ * (= no replica is running it) → mark FAILED and emit the terminal event. Whenever an owner exists it is skipped — a live replica renews every 60s,
+ * so long-running tool/LLM calls are never killed by mistake.
  */
 @Slf4j
 @Component
@@ -73,7 +73,7 @@ public class StaleRunningRunReconciler {
 
     @Scheduled(fixedDelayString = "${buukle.agent.run.stale-reconcile-interval:PT1M}")
     public void reconcile() {
-        // 后台线程可能继承请求线程的租户，DataPermissionInterceptor 会给 findStaleByStatus 追加 created_by。
+        // The background thread may inherit the request thread's tenant, and DataPermissionInterceptor appends created_by to findStaleByStatus.
         TenantUtil.stop();
         AuthContext.clear();
         RLock lock = redissonClient.getLock(LOCK_KEY);
@@ -83,7 +83,7 @@ public class StaleRunningRunReconciler {
             if (!locked) {
                 return;
             }
-            // 压缩记录没有自己的定时器：进程崩溃/重启遗留的 PENDING/RUNNING 也在这里一并收口。
+            // Compaction records have no timer of their own: PENDING/RUNNING rows left behind by a process crash/restart are finalized here as well.
             int staleCompactions = compactRecordSpi.failStalePending(
                     LocalDateTime.now().minusMinutes(Math.max(STALE_COMPACTION_MINUTES, staleMinutes)));
             if (staleCompactions > 0) {
@@ -156,7 +156,7 @@ public class StaleRunningRunReconciler {
             log.info("Run {} is stale in DB but session {} still has a live owner; skipping", runId, sessionId);
             return;
         }
-        // findStaleByStatus 是快照：重新读一次，避免给刚完成的 run 补一刀。
+        // findStaleByStatus is a snapshot: read again so a run that just completed is not hit by one extra blow.
         RunVO fresh = runSpi.getRunMeta(runId);
         if (fresh == null || !RunStatus.RUNNING.name().equals(fresh.getStatus())) {
             return;
@@ -178,7 +178,7 @@ public class StaleRunningRunReconciler {
                         .errorMessage(reason)
                         .publishId(RuntimeEventTypeConstant.PUBLISH_ID_RUN + runId).build()));
 
-        // 死 run 的 session 若还停在 RUNNING（副本崩溃场景），顺手复位；残留排队输入交给 wake 继续跑。
+        // If a dead run's session is still in RUNNING (replica crash scenario), reset it in passing; leftover queued input is handed to wake to continue.
         RBucket<String> stateBucket = redissonClient.getBucket(
                 DistributedRuntimeConstants.sessionStateKey(sessionId));
         String state = stateBucket.get();

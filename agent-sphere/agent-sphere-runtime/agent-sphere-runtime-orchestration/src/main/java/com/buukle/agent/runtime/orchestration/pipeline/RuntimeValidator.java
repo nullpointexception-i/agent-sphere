@@ -65,7 +65,7 @@ public class RuntimeValidator {
             ModelProviderVO provider = providerSpi.getProvider(primaryRoute.getProviderId());
             String name = provider != null ? provider.getName() : String.valueOf(primaryRoute.getProviderId());
             throw new BizException(OrchestrationErrorCode.MODEL_ROUTE_NO_API_KEY,
-                    "供应商 [" + name + "] 未配置 API 密钥");
+                    "Provider [" + name + "] has no API key configured");
         }
 
         ModelRouteFullVO modelRoute = toFull(primaryRoute);
@@ -99,7 +99,7 @@ public class RuntimeValidator {
         if (overrideRouteId != null) {
             ModelRouteVO route = routeSpi.getRoute(overrideRouteId);
             if (route != null) return route;
-            // run 上 pin 的路由已被删除/停用：回落到实例当前配置，不让 run 因此卡死
+            // The route pinned on the run was deleted/disabled: fall back to the instance's current config so the run does not get stuck
             log.warn("Pinned model route {} no longer exists; falling back to instance route", overrideRouteId);
         }
         // If instance has a specific modelRouteId, use it directly
@@ -128,7 +128,7 @@ public class RuntimeValidator {
         full.setReasoningMode(route.getReasoningMode());
         full.setReasoningLevels(route.getReasoningLevels());
         full.setReasoningAnswerReserveRatio(route.getReasoningAnswerReserveRatio());
-        // 必须带上：CompactionService 用 max_input_tokens 算压缩阈值；漏拷会回落 1M → 永不压缩
+        // Must be copied: CompactionService uses max_input_tokens for the compaction threshold; omitting it falls back to 1M → never compacts
         full.setMaxInputTokens(route.getMaxInputTokens());
         full.setMaxOutputTokens(route.getMaxOutputTokens());
 

@@ -18,10 +18,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 统一 delegate 子 Agent 策略：宿主配置（{@code buukle.agent.delegate}）+ 中性协议命名/文案。
+ * Unified delegate sub-agent policy: host configuration ({@code buukle.agent.delegate}) + neutral protocol naming/text.
  *
- * <p>子 Agent 完全继承父 Agent 的资源（工具集、模型路由），仅通过 agentRef 叠加
- * instance 的 systemPrompt+customInstructions。
+ * <p>A sub-agent fully inherits the parent agent's resources (tool set, model route); only the agentRef's
+ * instance systemPrompt+customInstructions are layered on top.
  */
 @Component
 @RequiredArgsConstructor
@@ -36,8 +36,8 @@ public class SubAgentPolicy implements SubRunPolicy {
     private static final String PROMPT_ARGS_SEPARATOR = "\n\nArgs: ";
     private static final String EMPTY_ARGS = "{}";
     /**
-     * P0 信封契约前言：机读说明上游输入的位置与形状，要求原文引用，消除
-     * “框架信封字段 vs 消费端探针字段”口径不一致。
+     * P0 envelope contract preamble: machine-readable description of where upstream input lives and its shape, requiring verbatim quoting,
+     * removing the mismatch between "framework envelope fields vs consumer probe fields".
      */
     private static final String ENVELOPE_PREAMBLE = "UPSTREAM INPUTS: Your upstream lane results (if any) are under "
             + "CONTACT_ENVELOPE.upstream.<depKey> as complete result JSON. "
@@ -89,7 +89,7 @@ public class SubAgentPolicy implements SubRunPolicy {
             try {
                 return Long.parseLong(suffix);
             } catch (NumberFormatException ignored) {
-                // 非数字 key：回退稳定 hash
+                // Non-numeric key: fall back to a stable hash
             }
         }
         return ref != null ? Math.abs((long) ref.hashCode()) : -1L;
@@ -147,7 +147,7 @@ public class SubAgentPolicy implements SubRunPolicy {
         }
         String effectiveArgs = StringUtils.hasText(argsJson) ? argsJson.trim() : EMPTY_ARGS;
         String head = goal + PROMPT_ARGS_SEPARATOR + effectiveArgs;
-        // P0 信封免截断：信封按自有预算截断上游 value（标 truncated），正文只截 head，永不砍信封
+        // The P0 envelope is exempt from truncation: the envelope truncates upstream values under its own budget (marked truncated); the body only truncates the head and never cuts the envelope
         String envelopePart = "";
         ContactEnvelope envelope = ContactEnvelope.parse(bindingString(tool, ExecBindingKeys.DELEGATE_CONTACT));
         if (envelope != null && envelope.hasData()) {
@@ -242,27 +242,27 @@ public class SubAgentPolicy implements SubRunPolicy {
 
     @Override
     public String textStarted(String displayName, int depth) {
-        // 注意：不得以 markerPrefix 开头，避免前端把“开始执行”系统提示误判为新子 Agent 段
-        return "⚙️ 子 Agent " + displayName + " 开始执行（深度 " + depth + "）…";
+        // Note: must not start with markerPrefix, otherwise the frontend misreads the "start executing" system prompt as a new sub-agent segment
+        return "⚙️ Sub-agent " + displayName + " started (depth " + depth + ")…";
     }
 
     @Override
     public String textTimeout(String displayName) {
-        return "⏱️ 子 Agent " + displayName + " 超时终止";
+        return "⏱️ Sub-agent " + displayName + " timed out and was stopped";
     }
 
     @Override
     public String textFailed(String displayName) {
-        return "❌ 子 Agent " + displayName + " 执行失败";
+        return "❌ Sub-agent " + displayName + " failed";
     }
 
     @Override
     public String textCompleted(String displayName) {
-        return "✅ 子 Agent " + displayName + " 完成";
+        return "✅ Sub-agent " + displayName + " completed";
     }
 
     @Override
     public String textSubLoopCapped(String displayName) {
-        return "⏹️ 子 Agent " + displayName + " 达到子循环上限";
+        return "⏹️ Sub-agent " + displayName + " reached the sub-loop limit";
     }
 }

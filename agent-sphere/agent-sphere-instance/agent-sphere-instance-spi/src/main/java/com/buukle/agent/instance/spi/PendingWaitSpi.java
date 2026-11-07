@@ -8,84 +8,90 @@ import java.util.List;
 public interface PendingWaitSpi {
 
     /**
-     * 写入一条挂起记录并触发内存定时器（由实现内部发布本地事件完成）。
+     * Write a suspend record and trigger the in-memory timer (the implementation publishes a local event internally).
      *
-     * <p>调用方（ToolExecutor 拦截 wait 工具）拿到的返回值只用于日志：真正的
-     * 「是否挂起」由工具返回的 {@code {"status":"waiting"}} 表达。
+     * <p>The caller (ToolExecutor intercepting the wait tool) uses the return value for logging only:
+     * whether the run is actually suspended is expressed by the tool result {@code {"status":"waiting"}}.
      *
-     * @param waitMs 实际等待毫秒，实现需自行夹到 [MIN, MAX] 区间
-     * @return 新建记录 id
+     * @param waitMs actual wait in milliseconds; the implementation must clamp it to the [MIN, MAX] range
+     * @return id of the new record
      */
     Long createPending(Long sessionId, Long runId, String callId, int waitMs);
 
     /**
-     * 写入一条 LLM 瞬时失败的挂起重试记录（kind=LLM_RETRY）。
+     * Write a suspend-and-retry record for a transient LLM failure (kind=LLM_RETRY).
      *
-     * <p>与 {@link #createPending} 共用调度器（内存定时器 + cron 补偿），但唤醒语义不同：
-     * 重试不需要补记 wait 工具结果，也不追加「你等完了」的合成 user 消息。
+     * <p>It shares the scheduler with {@link #createPending} (in-memory timer + cron compensation) but
+     * has different wake semantics: a retry does not need to backfill the wait tool result and does
+     * not append a synthetic "your wait is over" user message.
      *
-     * @param attempt     这是第几次失败（1 起）
-     * @param reason      错误分类 code（provider_busy / connect_timeout / rate_limited / unknown_transient）
-     * @param errorStatus 上游 HTTP 状态码，可为 null
-     * @param lastError   错误原文（截断后落库）
-     * @return 新建记录 id
+     * @param attempt     which failure this is (starting at 1)
+     * @param reason      error category code (provider_busy / connect_timeout / rate_limited / unknown_transient)
+     * @param errorStatus upstream HTTP status code, may be null
+     * @param lastError   raw error text (truncated before persisting)
+     * @return id of the new record
      */
     Long createRetry(Long sessionId, Long runId, int attempt, java.time.LocalDateTime wakeAt,
                      String reason, Integer errorStatus, String lastError);
 
     /**
-     * CAS 抢占：仅当记录仍为 PENDING 时把它置为 RESUMED 并返回 {@code true}。
+     * CAS claim: set the record to RESUMED and return {@code true} only when it is still PENDING.
      *
-     * <p>内存定时器与 cron 补偿都会调它 —— 两者可能同时命中同一条记录，
-     * 只有抢占成功的一方允许唤醒，否则会把同一个 run 恢复两次。
+     * <p>Both the in-memory timer and the cron compensation call it — they may hit the same record at
+     * the same time, and only the party that claims successfully may wake the run; otherwise the same
+     * run would be resumed twice.
      */
     boolean claimForResume(Long waitId);
 
-    /** 补偿扫描：取出到期但仍是 PENDING 的记录（按 wake_at 升序）。 */
+    /** Compensation sweep: fetch due records that are still PENDING (ascending by wake_at). */
     List<PendingWaitVO> listDue(Duration overdueBy, int limit);
 
-    /** 按 id 取一条等待记录（唤醒时在 CAS 之后回读详情）。 */
+    /** Fetch one wait record by id (the detail is read back after the CAS during wake-up). */
     PendingWaitVO getById(Long waitId);
 
     /**
-     * 取消某 run 名下所有仍 PENDING 的挂起记录（置 CANCELLED）。
+     * Cancel all still-PENDING suspend records under a run (set them to CANCELLED).
      *
-     * <p>run 被停止时调用：loop 已退出，取消标志没有消费者；若不把挂起记录从 PENDING
-     * 挪走，到点后 waker（{@link #listDue}/{@link #claimForResume} 只认 PENDING）仍会
-     * 尝试恢复该 run。
+     * <p>Called when the run is stopped: the loop has already exited and the cancellation flag has no
+     * consumer; if the suspend records are not moved out of PENDING, the waker
+     * ({@link #listDue}/{@link #claimForResume} only accept PENDING) will still try to resume the run
+     * when the time arrives.
      *
-     * @return 被取消的记录数
+     * @return number of records cancelled
      */
     int cancelPendingByRunId(Long runId);
 
     /**
-     * 恢复失败后回置为 PENDING 以便重试：仅当记录处于 RESUMED 时生效，attempts +1、记 last_error。
+     * Put the record back to PENDING after a failed resume so it can be retried: only applies when the
+     * record is RESUMED; attempts +1 and last_error is recorded.
      *
-     * <p>唤醒是「先 CAS 置 RESUMED、再真正恢复」；一旦恢复抛异常，记录若停在 RESUMED，
-     * {@link #listDue}/{@link #claimForResume} 只认 PENDING → cron 永不重试 → run 永久卡 WAITING。
-     * 因此失败必须回置 PENDING（本方法）。
+     * <p>Wake-up is "first CAS to RESUMED, then actually resume"; if resuming throws and the record
+     * stays RESUMED, {@link #listDue}/{@link #claimForResume} only accept PENDING → cron never retries
+     * → the run stays stuck in WAITING forever. A failure must therefore put it back to PENDING (this method).
      *
-     * @return 回置后的 attempts；回置失败（记录非 RESUMED）返回 -1
+     * @return attempts after putting it back; -1 when the put-back failed (the record is not RESUMED)
      */
     int requeueForRetry(Long waitId, String error);
 
     /**
-     * claim 之后「记录读不回来」时的兜底：RESUMED → PENDING，attempts + 1。
+     * Fallback for "the record cannot be read back" after claim: RESUMED → PENDING, attempts + 1.
      *
-     * <p>唤醒路径必须先 {@link #claimForResume} 再回读详情才能恢复；一旦回读失败（曾因
-     * 后台线程继承到别的租户、被 {@code DataPermissionInterceptor} 追加 {@code created_by}
-     * 过滤而返回 null），记录就停在 RESUMED —— 而 {@link #listDue}/{@link #claimForResume}
-     * 只认 PENDING，cron 永远捞不到，run 只能等对账任务兜底。
+     * <p>The wake-up path must first {@link #claimForResume} and then read the detail back before it
+     * can resume; if the read-back fails (it once inherited another tenant on a background thread and
+     * {@code DataPermissionInterceptor} appended a {@code created_by} filter, returning null), the
+     * record stays RESUMED — and {@link #listDue}/{@link #claimForResume} only accept PENDING, so cron
+     * never picks it up and the run can only wait for the reconciliation task.
      *
-     * <p><b>刻意不做回读</b>：回读失败正是要处理的场景，只有单条原子 UPDATE 才能把它放回队列。
+     * <p><b>Deliberately no read-back</b>: a failed read-back is exactly the case to handle, and only a
+     * single atomic UPDATE can put it back on the queue.
      *
-     * @return true 表示已回置 PENDING（可被 cron 重试）；false 表示记录已不是 RESUMED 或重试已达上限
+     * @return true means it has been put back to PENDING (cron can retry); false means the record is no longer RESUMED or the retry cap is reached
      */
     boolean releaseClaim(Long waitId);
 
-    /** 终态化一条等待记录（CANCELLED / FAILED），记录原因。 */
+    /** Move a wait record to a terminal state (CANCELLED / FAILED), recording the reason. */
     void markTerminal(Long waitId, String status, String error);
 
-    /** 取某 run 名下仍 PENDING 的挂起记录（对账用；至多一条）。 */
+    /** Fetch still-PENDING suspend records under a run (for reconciliation; at most one). */
     List<PendingWaitVO> listPendingByRunId(Long runId);
 }

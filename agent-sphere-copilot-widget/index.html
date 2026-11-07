@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AgentSphere Copilot Widget — 业务系统模拟</title>
+    <title>AgentSphere Copilot Widget — Business System Mock</title>
     <style>
       body {
         margin: 0;
@@ -101,27 +101,28 @@
   </head>
   <body>
     <header class="biz-header">
-      <strong>业务系统模拟（抽屉挂载）</strong>
-      <button id="assistant-btn">AI 助手</button>
+      <strong>Business System Mock (drawer mount)</strong>
+      <button id="assistant-btn">AI Assistant</button>
     </header>
     <main class="biz-main">
       <p>
-        模拟第三方业务系统（如 Human Resource Intermediary）以「右侧抽屉」方式内嵌 AgentSphere
-        widget。
+        Simulates a third-party business system (for example, a Human Resource Intermediary) embedding
+        the AgentSphere widget in a right-side drawer.
       </p>
       <p>
-        点击右上角「AI 助手」或右下角悬浮按钮 → 打开抽屉并 <code>mountTo</code> 挂载 widget；
-        关闭抽屉会 <code>unmount</code>。带 <code>?otc=</code>/<code>?error=</code> 时自动打开。
+        Click "AI Assistant" in the top-right or the floating button in the bottom-right to open the drawer and
+        mount the widget with <code>mountTo</code>; closing the drawer calls <code>unmount</code>. It opens
+        automatically when <code>?otc=</code>/<code>?error=</code> is present.
       </p>
-      <p>dev 配置：<code>provider: bole</code>、<code>autoLogin: true</code>（mock IdP :9000）。</p>
+      <p>Dev config: <code>provider: business</code>, <code>autoLogin: true</code> (mock IdP :9000).</p>
     </main>
-    <button class="biz-fab" id="assistant-fab">🤖 AI 助手</button>
+    <button class="biz-fab" id="assistant-fab">🤖 AI Assistant</button>
 
     <div class="biz-mask" id="drawer-mask"></div>
     <div class="biz-drawer" id="biz-drawer">
       <div class="biz-drawer-header">
-        <span>Agent Sphere 助手</span>
-        <button id="drawer-close">关闭</button>
+        <span>Agent Sphere Assistant</span>
+        <button id="drawer-close">Close</button>
       </div>
       <div class="biz-drawer-body">
         <div id="widget-container"></div>

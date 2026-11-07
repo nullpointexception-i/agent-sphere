@@ -6,8 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.MissingNode;
 
 /**
- * {@code {{path}}} 占位符渲染器（安全：不执行表达式/脚本/SpEL/Shell）。
- * 支持嵌套路径（{{candidate.name}}）、对象/数组自动 JSON 序列化；缺失字段抛明确错误。
+ * Renderer for {@code {{path}}} placeholders (safe: no expression/script/SpEL/Shell execution).
+ * Supports nested paths ({{candidate.name}}) and automatic JSON serialization for objects/arrays; a
+ * missing field raises a clear error.
  */
 public final class SkillPromptRenderer {
 
@@ -19,7 +20,7 @@ public final class SkillPromptRenderer {
     private SkillPromptRenderer() {
     }
 
-    /** 渲染模板，argsJson 为 skill 调用参数 JSON。 */
+    /** Renders the template; argsJson is the JSON of the skill call arguments. */
     public static String render(String template, String argsJson) {
         if (template == null || template.isBlank()) {
             return "";
@@ -28,10 +29,10 @@ public final class SkillPromptRenderer {
         try {
             args = JSON.readTree(argsJson == null || argsJson.isBlank() ? "{}" : argsJson);
         } catch (Exception e) {
-            throw new InvalidSubRunDefinition("skill 参数不是合法 JSON: " + e.getMessage());
+            throw new InvalidSubRunDefinition("skill arguments are not valid JSON: " + e.getMessage());
         }
         if (args == null || !args.isObject()) {
-            throw new InvalidSubRunDefinition("skill 参数必须是 JSON 对象");
+            throw new InvalidSubRunDefinition("skill arguments must be a JSON object");
         }
         StringBuilder out = new StringBuilder();
         int idx = 0;
@@ -61,13 +62,14 @@ public final class SkillPromptRenderer {
         JsonNode node = args;
         for (String segment : path.split("\\.")) {
             if (segment.isBlank()) {
-                throw new InvalidSubRunDefinition("占位符路径非法: {{" + path + "}}");
+                throw new InvalidSubRunDefinition("invalid placeholder path: {{" + path + "}}");
             }
             node = node.get(segment.trim());
-            // 缺失字段不再中止整个渲染：回填显式标记让 skill 自行处理
-            //（可结合 {{input}} 整段参数自抽取），避免"参数缺失"把整条 skill 判死。
+            // Missing fields no longer abort the whole rendering: fill in an explicit marker and let
+            // the skill handle it (it may combine {{input}} to extract the full argument set), so a
+            // "missing parameter" does not kill the entire skill.
             if (node == null || node instanceof MissingNode) {
-                return "[缺参数:" + path + "]";
+                return "[missing argument: " + path + "]";
             }
         }
         if (node.isTextual()) {

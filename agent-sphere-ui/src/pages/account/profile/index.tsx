@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { UploadOutlined, UserOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl, useModel } from '@umijs/max';
@@ -168,7 +169,7 @@ export default function Profile() {
               <Input maxLength={64} />
             </Form.Item>
             <Form.Item>
-              <Can code="user:profile:update">
+              <Can code={PERM.userProfileUpdate}>
                 <Button type="primary" onClick={handleSave} loading={saving}>
                   {intl.formatMessage({ id: 'pages.settings.save' })}
                 </Button>

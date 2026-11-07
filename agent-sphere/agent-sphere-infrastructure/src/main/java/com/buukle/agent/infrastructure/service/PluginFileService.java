@@ -14,9 +14,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * Chrome 插件安装包托管：上传的 zip 经 {@link GenericFileService} 落库（PG bytea，
- * 多副本共享库一致），并写 plugin.download-url 为 apiBase 相对下载路由。
- * 前端（主站登录页 / widget）经公开配置读取后展示下载入口。
+ * Chrome extension installer hosting: the uploaded zip is persisted via {@link GenericFileService}
+ * (PG bytea, consistent across replicas sharing the DB), and plugin.download-url is written as an
+ * apiBase-relative download route.
+ * The frontend (console login page / widget) reads it via the public config and shows the download entry.
  */
 @Slf4j
 @Service
@@ -33,17 +34,17 @@ public class PluginFileService {
     private final SystemConfigSpi systemConfigSpi;
     private final SystemConfigServiceImpl systemConfigService;
 
-    /** 上传并托管 zip：校验类型/大小，落库成功后刷新 plugin.download-url 为托管路由。 */
+    /** Uploads and hosts the zip: validates type/size, and on successful persistence refreshes plugin.download-url to the hosted route. */
     public void upload(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("插件安装包不能为空");
+            throw new IllegalArgumentException("plugin package must not be empty");
         }
         if (file.getSize() > MAX_SIZE_BYTES) {
-            throw new IllegalArgumentException("插件安装包超过 100MB 上限");
+            throw new IllegalArgumentException("plugin package exceeds the 100 MB limit");
         }
         String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
         if (!name.toLowerCase().endsWith(".zip")) {
-            throw new IllegalArgumentException("仅支持 .zip 格式的插件安装包");
+            throw new IllegalArgumentException("only .zip plugin packages are supported");
         }
         try {
             genericFileService.save(BIZ_KEY, FILE_KEY, FILE_NAME, "application/zip", file.getBytes());
@@ -51,11 +52,11 @@ public class PluginFileService {
             systemConfigService.invalidateCache(SystemConfigKeys.PLUGIN_DOWNLOAD_URL);
             log.info("Plugin package stored to DB: {} bytes", file.getSize());
         } catch (java.io.IOException e) {
-            throw new IllegalStateException("插件安装包保存失败: " + e.getMessage());
+            throw new IllegalStateException("failed to save plugin package: " + e.getMessage());
         }
     }
 
-    /** 删除托管包并清空 plugin.download-url（前端据此隐藏下载入口）。 */
+    /** Deletes the hosted package and clears plugin.download-url (the frontend hides the download entry based on it). */
     public void delete() {
         genericFileService.delete(BIZ_KEY, FILE_KEY);
         systemConfigSpi.set(SystemConfigKeys.PLUGIN_DOWNLOAD_URL, "");
@@ -63,7 +64,7 @@ public class PluginFileService {
         log.info("Plugin package removed");
     }
 
-    /** 下载托管包：无文件返回 404。 */
+    /** Downloads the hosted package: returns 404 if there is no file. */
     public ResponseEntity<byte[]> download() {
         StoredFile stored = genericFileService.get(BIZ_KEY, FILE_KEY);
         if (stored == null || stored.content() == null) {

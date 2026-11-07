@@ -1,3 +1,4 @@
+import { PERM } from '@/constants/permissions';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { App, Button, Card, Form, Input } from 'antd';
@@ -80,7 +81,7 @@ export default function Password() {
               <Input.Password maxLength={32} />
             </Form.Item>
             <Form.Item>
-              <Can code="user:password:update">
+              <Can code={PERM.userPasswordUpdate}>
                 <Button type="primary" onClick={handleSubmit} loading={saving}>
                   {intl.formatMessage({ id: 'pages.settings.save' })}
                 </Button>

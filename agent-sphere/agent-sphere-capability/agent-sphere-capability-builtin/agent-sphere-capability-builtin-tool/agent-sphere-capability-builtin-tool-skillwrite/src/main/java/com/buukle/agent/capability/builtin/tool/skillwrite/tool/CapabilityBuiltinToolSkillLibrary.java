@@ -38,15 +38,15 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
     static final String MARKDOWN_FENCE = "```json";
 
     private static final String TOOL_DESCRIPTION = """
-            发现与渐进式读取技能文档：list / count / search / search_by_title / get。
-            仅支持以上 5 个 action；创建/追加/更新技能请使用 builtin_9（技能管理），不要对本工具传 create/append/update。
-            - list: 返回全部绑定技能；支持 keyword 过滤、page/pageSize 分页（默认 20）。
-            - search（search_by_title 的别名）: 按技能名称关键字查找。
-            - get: 用 skillId 或精确 name 读取；可用 structure 看大纲、sectionHeading 读某节、startLine/endLine 读行范围。
-            技能正文结构约定：# 技能名 + ## stepN 步骤 + ### stepN.M 子步骤（步骤标识取自标题首词，如 step1 / step1.1）。
-            采用某技能时：先 get 读取它，把步骤标识与 skillId 记进任务清单（todowrite 的 skillId/stepId）；
-            执行该步骤前再用 get(skillId=…, sectionHeading=stepId) 读取该节正文。
-            读取技能本身不会改动你的任务清单。
+            Discover and progressively read skill documents: list / count / search / search_by_title / get.
+            Only these 5 actions are supported; to create/append/update skills use builtin_9 (skill manage), do not pass create/append/update to this tool.
+            - list: return all bound skills; supports keyword filtering and page/pageSize pagination (default 20).
+            - search (alias of search_by_title): find by skill-name keyword.
+            - get: read by skillId or exact name; use structure for the outline, sectionHeading for one section, startLine/endLine for a line range.
+            Skill body structure convention: # skill name + ## stepN step + ### stepN.M sub-step (the step identifier is the first word of the heading, e.g. step1 / step1.1).
+            When adopting a skill: first get it, then record the step identifiers and skillId in your task list (todowrite's skillId/stepId);
+            before executing a step, use get(skillId=..., sectionHeading=stepId) again to read that section body.
+            Reading a skill never changes your task list.
             """;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -252,7 +252,7 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         String prompt = extractPromptTemplate(definition);
         int totalLines = prompt != null ? lineCount(prompt) : lineCount(definition);
 
-        // Structure mode: 仅返回 promptTemplate 大纲（标题 + 行号）。
+        // Structure mode: return only the promptTemplate outline (headings + line numbers).
         if (Boolean.TRUE.equals(ctx.getStructure())) {
             if (prompt == null) {
                 return withPreview(r, "definition has no textual 'promptTemplate' to outline");
@@ -264,7 +264,7 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
             return r;
         }
 
-        // Section mode: 按标题提取 promptTemplate 对应 section 正文。
+        // Section mode: extract the promptTemplate section body matching the heading.
         if (ctx.getSectionHeading() != null) {
             if (prompt == null) {
                 return withPreview(r, "definition has no textual 'promptTemplate' to search sections");
@@ -281,7 +281,7 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
             return r;
         }
 
-        // Line range 模式: 按行号提取 promptTemplate 内容。
+        // Line range mode: extract promptTemplate content by line number.
         if (ctx.getStartLine() != null) {
             if (prompt == null) {
                 return withPreview(r, "definition has no textual 'promptTemplate' to extract lines");
@@ -292,7 +292,7 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
             return r;
         }
 
-        // Default: 全文 definition（JSON）。
+        // Default: full definition (JSON).
         r.setContent(definition);
         r.setPreview(previewOf(definition));
         r.setTotalLines(totalLines);
@@ -358,7 +358,7 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         return r;
     }
 
-    /** 解出 definition 内嵌的 promptTemplate 文本；非对象 JSON / 无文本 promptTemplate 时返回 null。 */
+    /** Extracts the promptTemplate text embedded in definition; returns null for non-object JSON or a non-textual promptTemplate. */
     private String extractPromptTemplate(String definition) {
         if (definition == null || definition.isBlank()) return null;
         try {

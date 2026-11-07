@@ -61,8 +61,8 @@ async function request<T>(
   if (!headers.has('Content-Type') && init.body != null) {
     headers.set('Content-Type', 'application/json');
   }
-  // 声明调用来源：服务端按实例的 allow_widget_session 开关校验建会话/发消息。
-  // 缺省（不带头）会被当作主站，那样关掉了 widget 的实例在这里仍会被放行。
+  // Declare the call surface: the server validates session creation/sends against the instance's allow_widget_session switch.
+  // Without the header the call is treated as the main site, so instances with the widget disabled here would still be allowed.
   headers.set(CLIENT_SURFACE_HEADER, CLIENT_SURFACE_WIDGET);
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
@@ -87,7 +87,7 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
-/** 拉取附件字节（Bearer 鉴权，支持中止）。 */
+/** Fetch attachment bytes (Bearer auth, abortable). */
 async function fetchFileBlob(
   base: string,
   fileKey: string,
@@ -109,8 +109,8 @@ async function fetchFileBlob(
 }
 
 /**
- * 按 fileKey 回读附件字节（聊天历史图片回显），转 objectURL 交给 <img> 渲染。
- * 走 module 级缓存 + 并发去重（见 fileCache），避免重复下载与 objectURL 泄漏。
+ * Read attachment bytes back by fileKey (chat history image replay) and turn them into an objectURL for <img> rendering.
+ * Uses a module-level cache plus in-flight deduplication (see fileCache) to avoid duplicate downloads and leaked objectURLs.
  */
 export function loadFileObjectUrl(
   base: string,
@@ -123,7 +123,7 @@ export function loadFileObjectUrl(
   );
 }
 
-/** 上传聊天图片附件（FormData，Bearer 鉴权），返回 fileKey 供随消息发送。 */
+/** Upload a chat image attachment (FormData, Bearer auth) and return the fileKey to send with the message. */
 export async function uploadFile(
   base: string,
   file: File,
@@ -133,7 +133,7 @@ export async function uploadFile(
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  // 勿设 Content-Type，浏览器自动带 multipart boundary
+  // Do not set Content-Type; the browser adds the multipart boundary automatically
   const formData = new FormData();
   formData.append('file', file);
   const response = await fetch(buildUrl(base, '/files/upload'), {
@@ -222,24 +222,24 @@ export function closeSession(base: string, id: number): Promise<void> {
   return request(base, `/instance/sessions/${id}`, { method: 'DELETE' });
 }
 
-/** 子 Agent 时间线（interactions + tool_calls 按时序）。 */
+/** Sub-agent timeline (interactions + tool_calls in chronological order). */
 export function subAgentTimeline(base: string, subAgentRunId: number): Promise<SubAgentTimelineItemVO[]> {
   return request(base, `/instance/sub-agent-runs/${subAgentRunId}/timeline`);
 }
 
-/** 公开配置读取（免鉴权）：当前支持 plugin.download-url（插件安装包下载地址）。 */
+/** Public configuration read (no auth): currently supports plugin.download-url (plugin installer download URL). */
 export function publicConfig(base: string, keys: string[]): Promise<Record<string, string>> {
   return request(base, '/system/config/public', {
     params: { keys: keys.join(',') },
   });
 }
 
-/** session 级停止：停止该 session 当前运行中的 run（不依赖 runId）。 */
+/** Session-level stop: stops the run currently executing in this session (does not need runId). */
 export function stopSession(base: string, sessionId: number): Promise<void> {
   return request(base, `/runtime/${sessionId}/stop`, { method: 'POST' });
 }
 
-/** 会话级 token 用量（吸底条）。 */
+/** Session-level token usage (sticky footer bar). */
 export function sessionUsage(base: string, sessionId: number): Promise<UsageData> {
   return request<UsageData>(base, `/instance/sessions/${sessionId}/usage`);
 }
@@ -250,7 +250,7 @@ export interface TimelineQuery {
   limit?: number;
 }
 
-/** 会话 timeline 分页（typed log：user/assistant/tool/clarification/subagent/run_status）。 */
+/** Session timeline pagination (typed log: user/assistant/tool/clarification/subagent/run_status). */
 export function getTimeline(
   base: string,
   sessionId: number,
@@ -263,7 +263,7 @@ export function getTimeline(
   return request(base, `/instance/sessions/${sessionId}/timeline`, { params });
 }
 
-/** 会话运行态（来源表聚合）：发送锁 / pending 判定的唯一权威来源。 */
+/** Session runtime state (aggregated from source tables): the single authority for the send lock / pending checks. */
 export function getRuntimeState(
   base: string,
   sessionId: number,
@@ -271,7 +271,7 @@ export function getRuntimeState(
   return request(base, `/runtime/${sessionId}/state`);
 }
 
-/** 发送消息（REST 方式，SSE 通道负责后续打字机/补行）。 */
+/** Send a message (REST); the SSE channel handles the subsequent typewriter output and catch-up. */
 export function sendMessage(
   base: string,
   sessionId: number,
@@ -340,7 +340,7 @@ export function resolveClarifications(
   });
 }
 
-/** 澄清应答。 */
+/** Clarification answer. */
 export function clarify(
   base: string,
   sessionId: number,
@@ -365,14 +365,14 @@ export interface RuntimeStateVO {
   pendingToolApprovals: number;
   pendingQueue: number;
   canSend: boolean;
-  /** 挂起类型：WAIT / LLM_RETRY。 */
+  /** Suspension type: WAIT / LLM_RETRY. */
   waitKind?: string | null;
-  /** LLM 重试档位与总档位（k/N）。 */
+  /** LLM retry attempt and total attempts (k/N). */
   retryAttempt?: number | null;
   retryMax?: number | null;
-  /** 下次重试的绝对时间（epoch ms）。 */
+  /** Absolute time of the next retry (epoch ms). */
   nextRetryAt?: number | null;
-  /** 距下次重试的毫秒数（服务端计算，前端读秒用）。 */
+  /** Milliseconds until the next retry (computed by the server, counted down in the UI). */
   retryRemainingMs?: number | null;
   blockReasons: string[];
 }

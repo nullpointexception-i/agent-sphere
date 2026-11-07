@@ -16,13 +16,13 @@ public class ChromeExecuteContext extends ExecuteContext {
     @Schema(example = "navigate")
     private String action;
 
-    @Schema(example = "https://example.com", description = "Navigate的目标URL，仅action=navigate时必填")
+    @Schema(example = "https://example.com", description = "Target URL for navigate; required only when action=navigate")
     private String url;
 
     @Schema(example = "#search-btn")
     private String selector;
 
-    @Schema(example = "北京")
+    @Schema(example = "Search")
     private String text;
 
     @Schema(example = "document.title",
@@ -36,16 +36,16 @@ public class ChromeExecuteContext extends ExecuteContext {
     @Schema(example = "snapshot", description = "getContent mode: snapshot/summary/axtree/query/extract/containers/ready.")
     private String mode;
 
-    @Schema(example = "123", description = "指定操作的标签页ID，为空时自动使用当前受控标签页")
+    @Schema(example = "123", description = "Target tab ID for the command; defaults to the current controlled tab when empty")
     private Integer tabId;
 
-    @Schema(example = "false", description = "type操作时是否追加到已有内容末尾（不替换）")
+    @Schema(example = "false", description = "For type: append to existing content instead of replacing it")
     private Boolean append;
 
-    @Schema(example = "2", description = "selector命中多个元素时定位第N个（1起），如两个相同的input[type=number]；仅click/type/hover生效")
+    @Schema(example = "2", description = "1-based index when the selector matches multiple elements (e.g. two identical input[type=number]); applies to click/type/hover only")
     private Integer index;
 
-    @Schema(example = "2", description = "text匹配多处文本时定位第N处（1起），如多个\"确定\"按钮；仅click/hover生效")
+    @Schema(example = "2", description = "1-based occurrence when text matches multiple places (e.g. several \"OK\" buttons); applies to click/hover only")
     private Integer occurrence;
 
     @Schema(example = "0", description = "Snapshot ref (0-based); preferred over selector/text.")
@@ -60,43 +60,43 @@ public class ChromeExecuteContext extends ExecuteContext {
     @Schema(example = "10", description = "Command timeout seconds (2-30).")
     private Integer timeout;
 
-    @Schema(example = "Enter", description = "key动作：按键名（Enter/Tab/Escape/Backspace/ArrowDown等），可选codeKey指定物理键")
+    @Schema(example = "Enter", description = "key action: key name (Enter/Tab/Escape/Backspace/ArrowDown etc.); codeKey optionally selects the physical key")
     private String key;
 
-    @Schema(example = "Enter", description = "key动作：物理键code")
+    @Schema(example = "Enter", description = "key action: physical key code")
     private String codeKey;
 
-    @Schema(example = "down", description = "scroll动作：方向 up/down/left/right，或给定selector/ref滚动到该元素")
+    @Schema(example = "down", description = "scroll action: direction up/down/left/right, or scroll to the element given by selector/ref")
     private String direction;
 
-    @Schema(example = "600", description = "scroll动作：滚动像素，缺省为视口高度0.8")
+    @Schema(example = "600", description = "scroll action: pixels to scroll; defaults to 0.8 x viewport height")
     private Integer amount;
 
-    @Schema(example = "value_1", description = "select动作：<select>要选中的value")
+    @Schema(example = "value_1", description = "select action: the <select> value to choose")
     private String value;
 
-    @Schema(example = "选项B", description = "select动作：<select>要选中的选项文本或value")
+    @Schema(example = "Option B", description = "select action: the <select> option label or value to choose")
     private String label;
 
-    @Schema(example = "200", description = "getContent mode:snapshot 的元素上限（默认200）")
+    @Schema(example = "200", description = "getContent mode=snapshot: element cap (default 200)")
     private Integer max;
 
-    @Schema(example = "resume.pdf", description = "upload动作：文件名")
+    @Schema(example = "resume.pdf", description = "upload action: file name")
     private String fileName;
 
-    @Schema(example = "JVBERi0xLjQK...", description = "upload动作：文件内容base64")
+    @Schema(example = "JVBERi0xLjQK...", description = "upload action: file content as base64")
     private String fileBase64;
 
-    @Schema(example = "application/pdf", description = "upload动作：MIME类型")
+    @Schema(example = "application/pdf", description = "upload action: MIME type")
     private String fileType;
 
-    @Schema(example = "0", description = "指定操作的iframe frameId（同源iframe内元素定位；缺省顶层）")
+    @Schema(example = "0", description = "iframe frameId for the command (locate elements inside a same-origin iframe; defaults to the top frame)")
     private Integer frameId;
 
-    @Schema(example = "[role=\"dialog\"]", description = "把 text/selector 查找限定在该选择器对应的区域内（解决重复文本如多个\"确定\"/\"北京\"），仅 click/hover/type 生效")
+    @Schema(example = "[role=\"dialog\"]", description = "Restrict text/selector lookup to the region matched by this selector (for duplicate text such as several \"OK\"/\"Search\" buttons); applies to click/hover/type only")
     private String scope;
 
-    @Schema(example = "true", description = "type 动作：输入后派发 Enter 提交（如搜索框回车触发搜索），并回传 _submitted/changed")
+    @Schema(example = "true", description = "type action: dispatch Enter after typing to submit (e.g. submit a search box) and return _submitted/changed")
     private Boolean submit;
 
     @Schema(example = "[\"text\",\".name\",\"@data-id\"]", description = "extract fields: text, .child, @attr, href, value.")
@@ -114,9 +114,9 @@ public class ChromeExecuteContext extends ExecuteContext {
     @Schema(example = "560", description = "clickAt: device-pixel Y on the last viewport screenshot.")
     private Integer y;
 
-    @Schema(example = "jpeg", description = "screenshot动作：图片格式 jpeg/png，默认 jpeg")
+    @Schema(example = "jpeg", description = "screenshot action: image format jpeg/png, default jpeg")
     private String format;
 
-    @Schema(example = "60", description = "screenshot动作：jpeg 质量 0-100，默认 60")
+    @Schema(example = "60", description = "screenshot action: jpeg quality 0-100, default 60")
     private Integer quality;
 }

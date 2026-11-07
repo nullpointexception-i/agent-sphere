@@ -94,7 +94,7 @@ class RouterInputBridgeTest {
         assertEquals(THREAD_ID, command.threadId());
         assertEquals(SessionInputType.CLARIFICATION, command.inputType());
         assertEquals("c1abc123", command.inputId());
-        // 行数据的 title/options/description 优先，行缺省时回落事件数据
+        // Row data's title/options/description take precedence; fall back to event data when the row lacks them
         assertEquals("请补充差旅还是办公", command.description());
         assertEquals("[\"差旅\",\"办公\"]", command.optionsJson());
         assertEquals(Boolean.FALSE, command.multiple());

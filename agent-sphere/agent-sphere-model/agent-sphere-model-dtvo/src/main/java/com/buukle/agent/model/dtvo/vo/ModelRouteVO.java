@@ -21,10 +21,10 @@ public class ModelRouteVO implements Serializable {
     private String completionProtocol;
     /** Whether this route is the owner's default route. */
     private Boolean isDefault;
-    /** 思考强度覆盖：NULL=继承厂商。 */
+    /** Reasoning strength override: NULL = inherit from provider. */
     private Boolean reasoningSupported;
     private String reasoningMode;
-    /** JSON 数组字符串，如 ["low","high","max"]。 */
+    /** JSON array string, e.g. ["low","high","max"]. */
     private String reasoningLevels;
     private java.math.BigDecimal reasoningAnswerReserveRatio;
     private Boolean apiKeyConfigured;

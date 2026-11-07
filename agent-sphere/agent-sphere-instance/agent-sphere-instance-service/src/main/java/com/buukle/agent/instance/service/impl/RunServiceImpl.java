@@ -42,9 +42,9 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     private final PendingWaitSpi pendingWaitSpi;
     private final AgentRuntimeProperties agentRuntimeProperties;
 
-    /** 列表/增量查询排除的大字段属性名（按需经 findReasoningBatch 定点补拉，避免行宽撑爆） */
+    /** Property name of the large field excluded from list/incremental queries (fetched on demand via findReasoningBatch to keep rows small) */
     private static final String REASONING_PROPERTY = "reasoning";
-    /** 终态集合：任何非终态事件都不能把 run 从这些状态改回去。 */
+    /** Terminal statuses: no non-terminal event may move a run out of these states. */
     private static final List<String> TERMINAL_STATUSES = List.of(
             RunEnum.STATUS_COMPLETED, RunEnum.STATUS_FAILED, RunEnum.STATUS_CANCELLED);
 
@@ -90,8 +90,9 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                         RunEnum.STATUS_PENDING,
                         RunEnum.STATUS_RUNNING,
                         RunEnum.STATUS_AWAITING_USER,
-                        // WAITING 也是停车态：loop 已退出但 run 尚未终结，必须算活动，
-                        // 否则停止/守卫会把它当成“无会话”，既不取消也漏清理。
+                        // WAITING is also a parked state: the loop has exited but the run has not
+                        // finished, so it must count as active; otherwise stop/guards would treat it as
+                        // "no session" and neither cancel it nor clean it up.
                         RunEnum.STATUS_WAITING))
                 .orderByDesc(AgentRun::getId)
                 .last("LIMIT 1")
@@ -139,10 +140,11 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
     }
 
     /**
-     * WAITING 且 kind=LLM_RETRY 时，把「第 k/N 次 + 下次时间 + 错误分类」补到 VO。
+     * When WAITING and kind=LLM_RETRY, fill "attempt k/N + next time + error category" into the VO.
      *
-     * <p>详情字段留在 agent_pending_wait（唯一真相），run 行只冗余 waitKind/retryAttempt；
-     * 只有 WAITING 的 run 才查一次，正常路径零开销。
+     * <p>The detail fields stay in agent_pending_wait (single source of truth); the run row only
+     * duplicates waitKind/retryAttempt. Only WAITING runs trigger one query, so the normal path has
+     * zero overhead.
      */
     private void fillRetryState(RunVO vo) {
         if (vo == null || !RunEnum.STATUS_WAITING.equals(vo.getStatus())
@@ -155,7 +157,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
         }
         PendingWaitVO wait = pending.get(0);
         if (!PendingWaitKind.LLM_RETRY.equals(wait.getKind())) {
-            // 防御：run.wait_kind 可能因历史写入残留，真正的类型以挂起记录为准
+            // Defensive: run.wait_kind may be a leftover from historical writes; the suspend record is the real source of truth
             return;
         }
         vo.setRetryAttempt(wait.getAttempts());
@@ -274,7 +276,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
 
     @Override
     public List<RunVO> listRunsBySessionAfterId(Long sessionId, Long afterRunId) {
-        // 离行：列表/增量查询排除 reasoning 大字段，按需走 findReasoningBatch 定点补拉
+        // Off-row: list/incremental queries exclude the large reasoning field and fetch it on demand via findReasoningBatch
         List<AgentRun> runs = lambdaQuery().eq(AgentRun::getSessionId, sessionId)
                 .gt(AgentRun::getId, afterRunId)
                 .select(AgentRun.class, i -> !REASONING_PROPERTY.equals(i.getProperty()))
@@ -292,7 +294,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 .orderByDesc(AgentRun::getCreatedAt)
                 .page(new Page<>(page, size));
         IPage<RunVO> voPage = p.convert(runConverter::toVO);
-        // Attach clarification data to each run; 澄清应答 run 的 userMessage 携带前缀，展示层去掉
+        // Attach clarification data to each run; the userMessage of a clarification-answer run carries a prefix that the view layer strips
         List<Long> runIds = voPage.getRecords().stream().map(RunVO::getId).collect(Collectors.toList());
         if (!runIds.isEmpty()) {
             Map<Long, List<ClarificationVO>> clarificationMap = clarificationService.mapByRunIdList(runIds);
@@ -301,7 +303,7 @@ public class RunServiceImpl extends ServiceImpl<RunMapper, AgentRun> implements 
                 List<ClarificationVO> cvs = clarificationMap.get(runVO.getId());
                 if (cvs != null && !cvs.isEmpty()) runVO.setClarifications(cvs);
             }
-            // run 级用量聚合批量回填（RunDrawer 逐行直接消费）
+            // Batch-backfill run-level usage aggregation (consumed row by row by RunDrawer)
             Map<Long, RunUsageVO> usageMap = interactionMapper.sumUsageByRunIds(runIds)
                     .stream().collect(Collectors.toMap(RunUsageVO::getRunId, u -> u));
             for (RunVO runVO : voPage.getRecords()) {

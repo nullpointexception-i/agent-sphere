@@ -37,8 +37,8 @@ class SystemConfigPublicControllerTest {
 
     @BeforeEach
     void setUp() {
-        // SystemConfigServiceImpl 也实现 SystemConfigSpi：若用 @InjectMocks 类型注入会歧义
-        // （同 JVM 先跑其他测试后，接口槽位可能错配到 impl mock），显式构造保证确定性。
+        // SystemConfigServiceImpl also implements SystemConfigSpi: @InjectMocks type injection would be ambiguous
+        // (after other tests run in the same JVM, the interface slot may be wired to the impl mock), so construct explicitly for determinism.
         SystemConfigController controller = new SystemConfigController(
                 systemConfigSpi, systemConfigService, cryptoService, apiKeyMapper);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();

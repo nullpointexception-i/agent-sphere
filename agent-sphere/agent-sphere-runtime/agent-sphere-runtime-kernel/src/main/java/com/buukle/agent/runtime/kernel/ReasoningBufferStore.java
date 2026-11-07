@@ -6,8 +6,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 按 runId 累积的模型推理（thinking）文本缓冲，单副本内存态。
- * 终态 run 一次性写入 agent_run.reasoning；孤儿清扫标记 FAILED 前先 drain 落库，避免推理丢失。
+ * Per-runId buffer of accumulated model reasoning (thinking) text; single-replica in-memory state.
+ * A terminal run writes it once to agent_run.reasoning; the orphan sweep drains it to the DB before marking FAILED so reasoning is not lost.
  */
 @Component
 public class ReasoningBufferStore {
@@ -21,7 +21,7 @@ public class ReasoningBufferStore {
         reasoningBuffers.computeIfAbsent(runId, k -> new StringBuilder()).append(text);
     }
 
-    /** 取出并清空该 run 已积累的推理；无缓冲返回 null。 */
+    /** Takes and clears the reasoning accumulated for the run; returns null when there is no buffer. */
     public String drain(Long runId) {
         StringBuilder sb = reasoningBuffers.remove(runId);
         return sb == null || sb.length() == 0 ? null : sb.toString();

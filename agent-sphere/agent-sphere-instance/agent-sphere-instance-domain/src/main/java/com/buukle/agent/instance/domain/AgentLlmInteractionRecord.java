@@ -20,15 +20,15 @@ public class AgentLlmInteractionRecord {
     private Long superAgentId;
     private String sessionType;
     private Long threadId;
-    /** 主 Agent 问答轮次序号（= run.loop_count）；其余调用为 NULL。 */
+    /** Main Agent question/answer turn number (= run.loop_count); NULL for other calls. */
     private Integer turnNo;
-    /** 同一轮内的路由尝试序号：0=主路由，1..N=fallback。 */
+    /** Route attempt number within the same turn: 0=primary route, 1..N=fallback. */
     private Integer attemptNo;
-    /** 同一 (run, turn, attempt) 下的调用序号：每次重试/新一轮各自一行，避免成功结果被覆盖。 */
+    /** Call number under the same (run, turn, attempt): every retry/new turn gets its own row, so a successful result is never overwritten. */
     private Integer retryNo;
-    /** 该次调用在 LLM 退避梯度上的档位（1..N，V117）；非重试轮为 NULL。 */
+    /** Position of this call on the LLM backoff ladder (1..N, V117); NULL for non-retry turns. */
     private Integer retryAttempt;
-    /** RUNNING / COMPLETED / FAILED。 */
+    /** RUNNING / COMPLETED / FAILED. */
     private String status;
     private String interactionType;
     private String modelName;
@@ -36,28 +36,28 @@ public class AgentLlmInteractionRecord {
     private String responseBody;
     private Integer httpStatus;
     private Integer durationMs;
-    /** 供应商真实 finish_reason（stop/length/content_filter/tool_calls），截断可审计。 */
+    /** Provider's real finish_reason (stop/length/content_filter/tool_calls); truncation stays auditable. */
     private String finishReason;
     private String errorMessage;
     private Boolean success;
-    /** 该次 LLM 调用独立的 thinking(reasoning_content) 全文；与 response_body(reply+合并) 拆分。 */
+    /** Full thinking (reasoning_content) of this LLM call, stored separately from response_body (reply+merged). */
     private String reasoning;
-    /** reply 正文（与 reasoning 拆分后的纯回复文本；缺省保留 response_body）。 */
+    /** Reply body (pure reply text split out from reasoning; falls back to response_body when absent). */
     private String replyContent;
-    /** 归属的子 Agent 运行（NULL=主 Agent）。 */
+    /** Owning sub-agent run (NULL=main Agent). */
     private Long subAgentRunId;
-    /** 归一化用量 JSON（TokenUsage，供应商无关镜像，冗余标量列供聚合）。 */
+    /** Normalized usage JSON (TokenUsage, a provider-agnostic mirror; redundant scalar columns feed aggregation). */
     private String usage;
     private Integer promptTokens;
     private Integer completionTokens;
     private Integer totalTokens;
     private Integer cacheHitTokens;
     private Integer cacheMissTokens;
-    /** Provider 传输层实际尝试次数（含首次）。 */
+    /** Actual Provider transport-layer attempts (including the first one). */
     private Integer streamAttempts;
-    /** Provider 传输层重试次数（attempts-1）。 */
+    /** Provider transport-layer retry count (attempts-1). */
     private Integer streamRetryCount;
-    /** 最近一次传输层失败的类型与摘要（成功记录也可能非空）。 */
+    /** Type and summary of the most recent transport-layer failure (may also be non-null on a successful record). */
     private String streamError;
     @TableLogic
     private Boolean deleteFlag;

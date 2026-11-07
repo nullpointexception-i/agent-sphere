@@ -1,6 +1,6 @@
 package com.buukle.agent.capability.builtin.tool.skillwrite.dtvo.enums;
 
-/** 技能管理工具（builtin_9）支持的 action。 */
+/** Actions supported by the skill management tool (builtin_9). */
 public enum SkillManageAction {
     CREATE("create"),
     APPEND("append"),

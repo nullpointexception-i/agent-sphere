@@ -1,5 +1,9 @@
 package com.buukle.agent.superagent.controller;
 
+
+
+import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
@@ -17,20 +21,20 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/super-agents/{superAgentId}/channels")
+@RequestMapping(ApiPrefix.V1 + "/super-agents/{superAgentId}/channels")
 @WithTenant
 @RequiredArgsConstructor
 public class ChannelBindingController extends BaseController {
 
     private final ChannelBindingService channelBindingService;
 
-    @RequirePermission("super-agent:read")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
     @GetMapping
     public ResponseEntity<?> list(@PathVariable Long superAgentId) {
         return ok(channelBindingService.list(superAgentId));
     }
 
-    @RequirePermission("super-agent:create")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_CREATE)
     @PostMapping
     public ResponseEntity<?> create(@PathVariable Long superAgentId,
                                     @RequestBody AgentChannelBinding binding) {
@@ -38,7 +42,7 @@ public class ChannelBindingController extends BaseController {
         return created(channelBindingService.create(binding));
     }
 
-    @RequirePermission("super-agent:update")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_UPDATE)
     @PatchMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(@PathVariable Long superAgentId,
                                           @PathVariable Long id,

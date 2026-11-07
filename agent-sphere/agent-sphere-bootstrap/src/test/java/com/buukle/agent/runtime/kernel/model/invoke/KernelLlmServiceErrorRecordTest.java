@@ -26,12 +26,12 @@ import static org.mockito.Mockito.doAnswer;
 
 
 /**
- * LLM 调用记录的失败判定护栏。
+ * Guard for failure classification of LLM call records.
  *
- * <p>线上曾出现整批 run 被「模型端秒回错误」打挂，而 {@code agent_llm_interaction_record} 里
- * 这些记录<b>全是 success=true / error_message=NULL</b> —— 因为供应商是以 {@link LLMEvent.Error}
- * <b>事件</b>（而非异常）回报错误的，该路径根本不经过 catch。事后只能靠「耗时&lt;1s + 零 token」
- * 反推，错误原因彻底丢失。本测试锁死「事件错误也必须记为失败」。
+ * <p>Production once saw a whole batch of runs killed by "instant errors from the model side", while in {@code agent_llm_interaction_record}
+ * those records were <b>all success=true / error_message=NULL</b> — because the provider reports errors as an {@link LLMEvent.Error}
+ * <b>event</b> (not an exception), a path that never passes through catch. Afterwards the only clue was "<1s duration + zero tokens",
+ * reverse-engineered, with the error cause completely lost. This test locks down "event errors must also be recorded as failures".
  */
 @ExtendWith(MockitoExtension.class)
 class KernelLlmServiceErrorRecordTest {
@@ -51,7 +51,7 @@ class KernelLlmServiceErrorRecordTest {
                 org.mockito.Mockito.mock(com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi.class));
     }
 
-    /** 让供应商在 stream 过程中发一个事件序列（不抛异常）。 */
+    /** Make the provider emit an event sequence during streaming (without throwing). */
     private void emitEvents(LLMEvent... events) throws Exception {
         doAnswer(inv -> {
             Consumer<LLMEvent> consumer = inv.getArgument(5);
@@ -67,8 +67,8 @@ class KernelLlmServiceErrorRecordTest {
 
     private LlmInteractionEvent captured() throws Exception {
         ArgumentCaptor<LlmInteractionEvent> cap = ArgumentCaptor.forClass(LlmInteractionEvent.class);
-        // 交互记录在 finally 里发布，而 future 在 finally <b>之前</b> 就 complete 了，
-        // 所以 get() 返回时事件未必已发出 —— 必须带超时等待。
+        // The interaction record is published in finally, but the future completes <b>before</b> finally,
+        // so the event may not have been emitted when get() returns — a timed wait is required.
         org.mockito.Mockito.verify(eventPublisher, org.mockito.Mockito.timeout(5000)
                         .atLeastOnce())
                 .publishEvent(cap.capture());
@@ -95,7 +95,7 @@ class KernelLlmServiceErrorRecordTest {
 
     @Test
     void eventError_afterTextDelta_stillRecordedAsFailure() throws Exception {
-        // 供应商可能先吐部分文本再报错；只要报了错，这次调用就没成功
+        // The provider may emit partial text before reporting an error; once it reports an error, the call did not succeed
         emitEvents(new LLMEvent.TextDelta("partial"), new LLMEvent.Error("stream broke"));
 
         service.stream("c", "u", "k", "m",
@@ -122,7 +122,7 @@ class KernelLlmServiceErrorRecordTest {
 
     @Test
     void toolCallOnlyTurn_isRecordedAsSuccessWithEmptyBody() throws Exception {
-        // 只回 tool call 不回正文时 response_body 本就是空串，属正常；不能因此误判为失败
+        // When only a tool call is returned with no text, response_body is naturally empty; that must not be misjudged as failure
         emitEvents(new LLMEvent.ToolCall("call-1", "builtin_5", "{}"));
 
         service.stream("c", "u", "k", "m",
@@ -146,7 +146,7 @@ class KernelLlmServiceErrorRecordTest {
                     new ChatCompletionRequestDTO(), e -> {
                     }, meta()).get();
         } catch (Exception expected) {
-            // 异常路径，只关心落库记录
+            // Exception path; only the persisted record matters
         }
 
         LlmInteractionEvent e = captured();
