@@ -146,7 +146,6 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant BIZ as Business system
     participant T as TaskService
     participant R as SessionRunner
@@ -185,7 +184,6 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant CH as IM / webhook channel
     participant E as EventIngestService
     participant G as GroupRouterScheduler
@@ -400,91 +398,25 @@ Dependency discipline:
 
 #### Static component relationships
 
-```mermaid
-flowchart LR
-    AI["AuthInterceptor<br/>authn / tenant / surface / permission"]
-    C1["ChatRuntimeController"]
-    C2["TaskController"]
-    C3["InstanceController"]
-    C4["CapabilitySkillController"]
-    C5["SuperAgentController"]
-    C6["ImMessageController"]
-
-    S1["ChatRuntimeService"]
-    S2["TaskService"]
-    S3["InstanceService"]
-    S4["CapabilitySkillService"]
-    S5["SuperAgentService"]
-    S6["ImMessageService"]
-
-    O1["RuntimeOrchestrator"]
-    O2["ContextPreparer"]
-    O3["SseManager"]
-    O4["TimelineRecorder"]
-    O5["RuntimeEventListener"]
-
-    K1["SessionRunner"]
-    K2["KernelLlmService"]
-    K3["ToolExecutor"]
-    K4["FiberSet"]
-    K5["HistoryLoader / Compaction"]
-    K6["DelegateService / SessionSubRunner"]
-
-    P1["MCP client"]
-    P2["Skill service"]
-    P3["CLI executor"]
-    P4["Builtin SPI"]
-    P5["Chrome bridge"]
-
-    E1["LLM providers"]
-    E2["MCP server"]
-    E3["Chrome extension"]
-    E4[("PostgreSQL")]
-    E5[("Redis")]
-
-    AI --> C1
-    AI --> C2
-    AI --> C3
-    AI --> C4
-    AI --> C5
-    AI --> C6
-    C1 --> S1
-    C2 --> S2
-    C3 --> S3
-    C4 --> S4
-    C5 --> S5
-    C6 --> S6
-    S2 --> S1
-    S5 --> S1
-    S1 --> O1
-    O1 --> O2
-    O1 --> K1
-    O2 --> K5
-    K1 --> K2
-    K1 --> K3
-    K1 --> K6
-    K3 --> K4
-    K3 --> P1
-    K3 --> P2
-    K3 --> P3
-    K3 --> P4
-    K3 --> P5
-    K2 --> E1
-    P1 --> E2
-    P5 --> E3
-    O1 --> O3
-    O3 -->|SSE| U["Frontend / Widget / Workspace"]
-    O4 --> E4
-    O5 --> E4
-    S1 --> E5
-    K1 --> E5
-```
-
+`mermaid
+graph LR
+    UI["Web / Widget / Workspace"] --> API["Controllers"]
+    API --> SVC["Application services"]
+    SVC --> ORCH["Runtime orchestrator"]
+    ORCH --> KERNEL["SessionRunner"]
+    KERNEL --> LLM["KernelLlmService"]
+    KERNEL --> TOOLS["ToolExecutor"]
+    TOOLS --> CAPS["MCP / Skill / CLI / Builtin"]
+    LLM --> PROVIDERS["LLM providers"]
+    ORCH --> SSE["SseManager"]
+    SSE --> UI
+    SVC --> DB[("PostgreSQL")]
+    KERNEL --> REDIS[("Redis")]
+`
 #### One `chat` call sequence
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant U as Web UI / Widget
     participant A as AuthInterceptor
     participant C as ChatRuntimeController
@@ -538,7 +470,6 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant CH as IM / webhook
     participant E as EventIngestService
     participant G as GroupRouterScheduler
@@ -562,7 +493,6 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant U as IM user
     participant C as ImConversationController
     participant M as ImMessageController
