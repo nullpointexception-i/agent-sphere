@@ -14,6 +14,8 @@ import com.buukle.agent.admin.dtvo.vo.TenantSwitchVO;
 import com.buukle.agent.admin.dtvo.vo.TenantVO;
 import com.buukle.agent.admin.dtvo.vo.UserTenantVO;
 import com.buukle.agent.admin.exception.AdminErrorCode;
+import com.buukle.agent.admin.spi.TenantProvisioningSpi;
+import com.buukle.agent.admin.spi.TenantProvisioningSpi.ProvisionedTenant;
 import com.buukle.agent.admin.repository.SysPermissionMapper;
 import com.buukle.agent.admin.repository.SysRoleMapper;
 import com.buukle.agent.admin.repository.SysRolePermissionMapper;
@@ -50,7 +52,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class TenantService {
+public class TenantService implements TenantProvisioningSpi {
 
     /**
      * Tenant administrators get every permission except the system/security and
@@ -202,6 +204,68 @@ public class TenantService {
         createTenantAdminRole(tenant);
         createTenantUserRole(tenant);
         return tenant;
+    }
+
+    @Override
+    @Transactional
+    public ProvisionedTenant createUnderPlatform(String code, String name, String remark) {
+        String tenantCode = uniqueTenantCode(code);
+        String tenantName = name == null || name.isBlank() ? tenantCode : name.trim();
+        if (tenantName.length() > 100) {
+            tenantName = tenantName.substring(0, 100);
+        }
+        SysTenant tenant = new SysTenant();
+        tenant.setCode(tenantCode);
+        tenant.setName(tenantName);
+        tenant.setPid(TenantConstants.PLATFORM_TENANT_ID);
+        tenant.setSortOrder(0);
+        tenant.setStatus(TenantConstants.STATUS_ACTIVE);
+        tenant.setRemark(remark);
+        tenant.setCreatedAt(LocalDateTime.now());
+        tenant.setUpdatedAt(LocalDateTime.now());
+        tenantMapper.insert(tenant);
+
+        createTenantAdminRole(tenant);
+        createTenantUserRole(tenant);
+
+        SysRole userRole = roleMapper.selectOne(Wrappers.lambdaQuery(SysRole.class)
+                .eq(SysRole::getTenantId, tenant.getId())
+                .eq(SysRole::getCode, TenantConstants.ROLE_USER)
+                .last("LIMIT 1"));
+        return new ProvisionedTenant(
+                tenant.getId(),
+                tenant.getCode(),
+                tenant.getName(),
+                userRole == null ? null : userRole.getId());
+    }
+
+    @Override
+    public String findTenantName(Long tenantId) {
+        if (tenantId == null) {
+            return null;
+        }
+        SysTenant tenant = tenantMapper.selectById(tenantId);
+        return tenant == null ? null : tenant.getName();
+    }
+
+    private String uniqueTenantCode(String raw) {
+        String base = raw == null ? "SSO" : raw.trim().toUpperCase()
+                .replaceAll("[^A-Z0-9_-]", "_");
+        if (base.isEmpty()) {
+            base = "SSO";
+        }
+        if (base.length() > 50) {
+            base = base.substring(0, 50);
+        }
+        String candidate = base;
+        int suffix = 2;
+        while (tenantMapper.selectCount(Wrappers.lambdaQuery(SysTenant.class)
+                .eq(SysTenant::getCode, candidate)) > 0) {
+            String suffixText = "_" + suffix++;
+            int keep = Math.min(base.length(), 50 - suffixText.length());
+            candidate = base.substring(0, keep) + suffixText;
+        }
+        return candidate;
     }
 
     @Transactional

@@ -41,6 +41,7 @@ public class IdentityProviderConverter {
         vo.setScopes(provider.getScopes());
         vo.setClaimMappings(provider.getClaimMappings());
         vo.setDefaultRoleId(provider.getDefaultRoleId());
+        vo.setTenantId(provider.getTenantId());
         vo.setResourceTemplate(provider.getResourceTemplate());
         vo.setEnabled(provider.getEnabled());
         vo.setStatus(provider.getStatus());

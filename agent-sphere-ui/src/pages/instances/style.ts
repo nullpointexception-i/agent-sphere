@@ -44,17 +44,32 @@ export const useStyles = createStyles(({ css, token }) => ({
     .ant-card-actions { border-top: 1px solid ${token.colorBorderSecondary}; }
   `,
 
+  cardTitleWrap: css`
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  `,
+
   cardTitle: css`
     display: flex;
     align-items: center;
     gap: ${token.paddingXS}px;
+    min-width: 0;
   `,
 
   cardName: css`
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  `,
+
+  cardTags: css`
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
   `,
 
   cardDesc: css`

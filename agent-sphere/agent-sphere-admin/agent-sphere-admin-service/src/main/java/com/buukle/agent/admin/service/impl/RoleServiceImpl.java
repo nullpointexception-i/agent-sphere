@@ -155,6 +155,27 @@ public class RoleServiceImpl implements RoleSpi {
     }
 
     @Override
+    public Long findIdByTenantAndCode(Long tenantId, String code) {
+        if (tenantId == null || code == null) {
+            return null;
+        }
+        SysRole role = roleMapper.selectOne(Wrappers.lambdaQuery(SysRole.class)
+                .eq(SysRole::getTenantId, tenantId)
+                .eq(SysRole::getCode, code)
+                .last("LIMIT 1"));
+        return role == null ? null : role.getId();
+    }
+
+    @Override
+    public Long findTenantIdByRoleId(Long roleId) {
+        if (roleId == null) {
+            return null;
+        }
+        SysRole role = roleMapper.selectById(roleId);
+        return role == null ? null : role.getTenantId();
+    }
+
+    @Override
     public SysRoleVO create(SysRoleVO vo) {
         Long tenantId = resolveRoleTenantId(vo.getTenantId());
         var query = Wrappers.lambdaQuery(SysRole.class).eq(SysRole::getCode, vo.getCode());

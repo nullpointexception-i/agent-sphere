@@ -134,6 +134,53 @@ public class TenantScopeServiceImpl implements TenantScopeSpi {
     }
 
     @Override
+    public void ensureAssignment(Long userId, Long tenantId) {
+        if (userId == null || tenantId == null) {
+            return;
+        }
+        if (!isTenantActive(tenantId)) {
+            throw new com.buukle.agent.common.exception.BizException(
+                    com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID,
+                    "Tenant is disabled or missing: " + tenantId);
+        }
+        List<SysUserTenant> assignments = activeAssignments(userId);
+        SysUserTenant target = assignments.stream()
+                .filter(a -> tenantId.equals(a.getTenantId()))
+                .findFirst()
+                .orElse(null);
+
+        SysUserTenant clear = new SysUserTenant();
+        clear.setIsCurrent(false);
+        clear.setUpdatedAt(LocalDateTime.now());
+        userTenantMapper.update(clear, Wrappers.lambdaQuery(SysUserTenant.class)
+                .eq(SysUserTenant::getUserId, userId)
+                .eq(SysUserTenant::getIsCurrent, true));
+
+        if (target == null) {
+            SysUserTenant row = new SysUserTenant();
+            row.setUserId(userId);
+            row.setTenantId(tenantId);
+            row.setVisibility(TenantConstants.VISIBILITY_SELF_ONLY);
+            row.setIsCurrent(true);
+            row.setStatus(TenantConstants.STATUS_ACTIVE);
+            row.setCreatedAt(LocalDateTime.now());
+            row.setUpdatedAt(LocalDateTime.now());
+            userTenantMapper.insert(row);
+            return;
+        }
+        target.setVisibility(TenantConstants.VISIBILITY_SELF_ONLY);
+        target.setIsCurrent(true);
+        target.setStatus(TenantConstants.STATUS_ACTIVE);
+        target.setUpdatedAt(LocalDateTime.now());
+        userTenantMapper.updateById(target);
+    }
+
+    @Override
+    public Long defaultTenantId() {
+        return TenantConstants.DEFAULT_TENANT_ID;
+    }
+
+    @Override
     public boolean isTenantActive(Long tenantId) {
         if (tenantId == null) {
             return false;

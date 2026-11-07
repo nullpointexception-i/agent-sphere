@@ -25,6 +25,16 @@ public interface RoleSpi {
         return listAll();
     }
 
+    /** Exact lookup used by tenant-aware provisioning (no visibility filtering). */
+    default Long findIdByTenantAndCode(Long tenantId, String code) {
+        return null;
+    }
+
+    /** Owning tenant of a role; null means a platform role. */
+    default Long findTenantIdByRoleId(Long roleId) {
+        return null;
+    }
+
     SysRoleVO create(SysRoleVO vo);
 
     SysRoleVO update(Long id, SysRoleVO vo);

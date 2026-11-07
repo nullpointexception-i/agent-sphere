@@ -1,6 +1,9 @@
 package com.buukle.agent.sso.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.admin.spi.RoleSpi;
+import com.buukle.agent.admin.spi.TenantProvisioningSpi;
+import com.buukle.agent.admin.spi.TenantProvisioningSpi.ProvisionedTenant;
 import com.buukle.agent.common.config.SystemConfigKeys;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.exception.BizException;
@@ -17,6 +20,7 @@ import com.buukle.agent.sso.service.converter.IdentityProviderConverter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -29,20 +33,30 @@ public class IdentityProviderServiceImpl extends ServiceImpl<IdentityProviderMap
     private final IdentityProviderConverter identityProviderConverter;
     private final SsoOidcClient ssoOidcClient;
     private final SystemConfigSpi systemConfigSpi;
+    private final TenantProvisioningSpi tenantProvisioningSpi;
+    private final RoleSpi roleSpi;
+
     @Override
+    @Transactional
     public IdentityProviderVO createProvider(CreateIdentityProviderDTO dto) {
         long count = lambdaQuery().eq(IdentityProvider::getCode, dto.getCode()).count();
         if (count > 0) {
             throw new BizException(SsoErrorCode.PROVIDER_CODE_EXISTS);
         }
+        ProvisionedTenant tenant = tenantProvisioningSpi.createUnderPlatform(
+                "SSO_" + dto.getCode(),
+                dto.getName(),
+                "Auto-created for identity provider " + dto.getCode());
         IdentityProvider provider = identityProviderConverter.toDO(dto);
+        provider.setTenantId(tenant.tenantId());
+        provider.setDefaultRoleId(tenant.userRoleId());
         save(provider);
-        return identityProviderConverter.toVO(provider);
+        return toVO(provider);
     }
 
     @Override
     public IdentityProviderVO getProvider(Long id) {
-        return identityProviderConverter.toVO(requireProvider(id));
+        return toVO(requireProvider(id));
     }
 
     @Override
@@ -60,15 +74,21 @@ public class IdentityProviderServiceImpl extends ServiceImpl<IdentityProviderMap
                                 .like(IdentityProvider::getCode, keyword))
                 .orderByDesc(IdentityProvider::getCreatedAt)
                 .list();
-        return providers.stream().map(identityProviderConverter::toVO).toList();
+        return providers.stream().map(this::toVO).toList();
     }
 
     @Override
     public IdentityProviderVO updateProvider(Long id, UpdateIdentityProviderDTO dto) {
         IdentityProvider existing = requireProvider(id);
+        if (dto.getDefaultRoleId() != null && existing.getTenantId() != null) {
+            Long roleTenantId = roleSpi.findTenantIdByRoleId(dto.getDefaultRoleId());
+            if (!existing.getTenantId().equals(roleTenantId)) {
+                throw new BizException(SsoErrorCode.DEFAULT_ROLE_SCOPE_INVALID);
+            }
+        }
         identityProviderConverter.applyUpdate(existing, dto);
         updateById(existing);
-        return identityProviderConverter.toVO(existing);
+        return toVO(existing);
     }
 
     @Override
@@ -96,5 +116,13 @@ public class IdentityProviderServiceImpl extends ServiceImpl<IdentityProviderMap
             throw new BizException(SsoErrorCode.PROVIDER_NOT_FOUND);
         }
         return provider;
+    }
+
+    private IdentityProviderVO toVO(IdentityProvider provider) {
+        IdentityProviderVO vo = identityProviderConverter.toVO(provider);
+        if (vo != null && provider.getTenantId() != null) {
+            vo.setTenantName(tenantProvisioningSpi.findTenantName(provider.getTenantId()));
+        }
+        return vo;
     }
 }

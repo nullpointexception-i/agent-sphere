@@ -47,37 +47,41 @@ class SsoProvisioningServiceTest {
     }
 
     @Test
-    void provisionOrGet_shouldPassDefaultRoleIdToRegister() {
+    void provisionOrGet_shouldPassTenantAndDefaultRoleIdToRegister() {
         when(ssoIdentityMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
-        when(userSpi.register(any(RegisterDTO.class), any())).thenReturn(userVO(7L));
+        when(userSpi.register(any(RegisterDTO.class), any(), any())).thenReturn(userVO(7L));
 
         SsoProvisioningService.ProvisionResult result =
-                service.provisionOrGet("business", "7", null, null, null, 42L);
+                service.provisionOrGet("business", "7", null, null, null, 11L, 42L);
 
         assertEquals(7L, result.userId());
         assertEquals("business_7", result.username());
         assertTrue(result.created());
         ArgumentCaptor<RegisterDTO> dto = ArgumentCaptor.forClass(RegisterDTO.class);
         ArgumentCaptor<Long> roleId = ArgumentCaptor.forClass(Long.class);
-        verify(userSpi).register(dto.capture(), roleId.capture());
+        ArgumentCaptor<Long> tenantId = ArgumentCaptor.forClass(Long.class);
+        verify(userSpi).register(dto.capture(), roleId.capture(), tenantId.capture());
         assertEquals("business_7", dto.getValue().getUsername());
         assertNotNull(dto.getValue().getPassword());
         assertEquals(dto.getValue().getPassword(), dto.getValue().getRepeatPassword());
         assertEquals(42L, roleId.getValue());
+        assertEquals(11L, tenantId.getValue());
         verify(ssoIdentityMapper).insert(any(SsoIdentity.class));
     }
 
     @Test
     void provisionOrGet_shouldPassNullDefaultRoleIdWhenAbsent() {
         when(ssoIdentityMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
-        when(userSpi.register(any(RegisterDTO.class), any())).thenReturn(userVO(7L));
+        when(userSpi.register(any(RegisterDTO.class), any(), any())).thenReturn(userVO(7L));
 
         SsoProvisioningService.ProvisionResult result =
-                service.provisionOrGet("business", "7", null, null, null, null);
+                service.provisionOrGet("business", "7", null, null, null, null, null);
 
         ArgumentCaptor<Long> roleId = ArgumentCaptor.forClass(Long.class);
-        verify(userSpi).register(any(RegisterDTO.class), roleId.capture());
+        ArgumentCaptor<Long> tenantId = ArgumentCaptor.forClass(Long.class);
+        verify(userSpi).register(any(RegisterDTO.class), roleId.capture(), tenantId.capture());
         assertEquals(null, roleId.getValue());
+        assertEquals(null, tenantId.getValue());
         assertTrue(result.created());
     }
 
@@ -92,14 +96,14 @@ class SsoProvisioningServiceTest {
         when(userSpi.getByUserId(9L)).thenReturn(userVO(9L));
 
         SsoProvisioningService.ProvisionResult result =
-                service.provisionOrGet("business", "7", null, "new-name", "new-name", 42L);
+                service.provisionOrGet("business", "7", null, "new-name", "new-name", 11L, 42L);
 
         assertEquals(9L, result.userId());
         assertEquals("business_7", result.username());
         assertFalse(result.created());
         assertEquals("new-name", existing.getDisplaySubject());
         verify(ssoIdentityMapper).updateById((SsoIdentity) any(SsoIdentity.class));
-        verify(userSpi, never()).register(any(), any());
+        verify(userSpi, never()).register(any(), any(), any());
     }
 
     @Test
@@ -112,9 +116,9 @@ class SsoProvisioningServiceTest {
         when(ssoIdentityMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existing);
         when(userSpi.getByUserId(9L)).thenReturn(userVO(9L));
 
-        service.provisionOrGet("business", "7", null, "same", "same", null);
+        service.provisionOrGet("business", "7", null, "same", "same", 11L, null);
 
         verify(ssoIdentityMapper, never()).updateById(any(SsoIdentity.class));
-        verify(userSpi, never()).register(any(), any());
+        verify(userSpi, never()).register(any(), any(), any());
     }
 }

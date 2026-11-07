@@ -201,7 +201,7 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
 
         SsoProvisioningService.ProvisionResult provision = provisioningService.provisionOrGet(
                 providerCode, claims.subject(), claims.email(), claims.name(), claims.preferredUsername(),
-                identityProvider.getDefaultRoleId());
+                identityProvider.getTenantId(), identityProvider.getDefaultRoleId());
 
         if (provision.created()) {
             // First provisioning: create private user resource copies from the identity provider's resource template

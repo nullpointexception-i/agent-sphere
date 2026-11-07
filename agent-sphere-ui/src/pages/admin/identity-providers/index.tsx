@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import {
+  Alert,
   App,
   Button,
   Form,
@@ -190,6 +191,20 @@ export default function AdminIdentityProviders() {
       ),
     },
     {
+      title: t('pages.admin.identityProviders.tenant', 'Tenant'),
+      key: 'tenant',
+      width: 160,
+      ellipsis: true,
+      render: (_: any, record: any) =>
+        record.tenantName ? (
+          <span>{record.tenantName}</span>
+        ) : (
+          <Tag>
+            {t('pages.admin.identityProviders.tenantLegacy', 'Default')}
+          </Tag>
+        ),
+    },
+    {
       title: t('pages.admin.identityProviders.type', 'Type'),
       dataIndex: 'type',
       key: 'type',
@@ -317,6 +332,17 @@ export default function AdminIdentityProviders() {
         width={640}
       >
         <Form form={form} layout="vertical">
+          {!editing && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title={t(
+                'pages.admin.identityProviders.autoTenant',
+                'A tenant will be created under the platform tenant. Users signing in through this provider join that tenant and receive the ordinary user role by default.',
+              )}
+            />
+          )}
           <Form.Item
             name="code"
             label={t('pages.admin.identityProviders.code', 'Code')}
@@ -418,31 +444,38 @@ export default function AdminIdentityProviders() {
           >
             <Input.TextArea maxLength={500} />
           </Form.Item>
-          <Form.Item
-            name="defaultRoleId"
-            label={t(
-              'pages.admin.identityProviders.defaultRole',
-              'Default Role',
-            )}
-            extra={t(
-              'pages.admin.identityProviders.defaultRole.extra',
-              'Granted to new SSO users (replaces default USER role)',
-            )}
-          >
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              placeholder={t(
-                'pages.admin.identityProviders.defaultRole.placeholder',
-                'Select default role',
+          {editing ? (
+            <Form.Item
+              name="defaultRoleId"
+              label={t(
+                'pages.admin.identityProviders.defaultRole',
+                'Default Role',
               )}
-              options={roles.map((r) => ({
-                value: r.id,
-                label: r.name ? `${r.name} (${r.code})` : `#${r.id}`,
-              }))}
-            />
-          </Form.Item>
+              extra={t(
+                'pages.admin.identityProviders.defaultRole.extra',
+                'Granted to new SSO users in this tenant',
+              )}
+            >
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                placeholder={t(
+                  'pages.admin.identityProviders.defaultRole.placeholder',
+                  'Select default role',
+                )}
+                options={roles
+                  .filter(
+                    (r) =>
+                      !editing?.tenantId || r.tenantId === editing.tenantId,
+                  )
+                  .map((r) => ({
+                    value: r.id,
+                    label: r.name ? `${r.name} (${r.code})` : `#${r.id}`,
+                  }))}
+              />
+            </Form.Item>
+          ) : null}
           <Form.Item
             name="resourceTemplate"
             label={

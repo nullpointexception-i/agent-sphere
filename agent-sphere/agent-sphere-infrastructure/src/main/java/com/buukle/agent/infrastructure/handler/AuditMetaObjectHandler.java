@@ -8,9 +8,18 @@ import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Set;
 
 @Component
 public class AuditMetaObjectHandler implements MetaObjectHandler {
+
+    /**
+     * Entities whose tenant_id is always set explicitly by business code. A
+     * platform role/grant must stay NULL, so the generic fill must not turn it
+     * into 0 or the current tenant.
+     */
+    private static final Set<String> EXPLICIT_TENANT_ENTITIES = Set.of(
+            "SysRole", "SysUserRole", "SysUserTenant", "IdentityProvider");
 
     /**
      * Tenant id used by system tasks that have no request tenant. It matches the
@@ -38,6 +47,10 @@ public class AuditMetaObjectHandler implements MetaObjectHandler {
         this.fillStrategy(metaObject, "createdAt", now);
         this.fillStrategy(metaObject, "updatedAt", now);
         if (!metaObject.hasSetter("tenantId")) {
+            return;
+        }
+        if (EXPLICIT_TENANT_ENTITIES.contains(
+                metaObject.getOriginalObject().getClass().getSimpleName())) {
             return;
         }
         Long tenantId = TenantScopeHolder.currentTenantId();

@@ -27,6 +27,8 @@ public class IdentityProvider {
     private String scopes;
     private String claimMappings;
     private Long defaultRoleId;
+    /** Tenant auto-provisioned for this provider; NULL for legacy providers. */
+    private Long tenantId;
     /** Resource template (JSONB): the set of resources (MCP / model / completions / instance / docs, etc.) initialized when this identity provider is newly provisioned */
     private String resourceTemplate;
     private Boolean enabled;

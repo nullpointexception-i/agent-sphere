@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { API_PATHS } from '@/constants/endpoints';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 import { useReconnectingSse } from '@/hooks/useReconnectingSse';
+import { agentApi } from '@/services/agentSphere/api';
 import {
   type ImAttachment,
   type ImConversation,
@@ -114,6 +115,8 @@ export default function ImPage() {
   const [groupPurpose, setGroupPurpose] = useState('');
   const [gateSaving, setGateSaving] = useState(false);
   const [createForm] = Form.useForm();
+  const [contactOptions, setContactOptions] = useState<any[]>([]);
+  const [agentOptions, setAgentOptions] = useState<any[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<number | undefined>(undefined);
   activeIdRef.current = activeId;
@@ -389,6 +392,18 @@ export default function ImPage() {
     loadConversations();
   }, []);
 
+  useEffect(() => {
+    if (!createOpen) return;
+    agentApi.workspaceContacts
+      .users({ page: 1, size: 200 })
+      .then((page: any) => setContactOptions(page.records || page || []))
+      .catch(() => setContactOptions([]));
+    superAgentApi
+      .list()
+      .then((list) => setAgentOptions(list || []))
+      .catch(() => setAgentOptions([]));
+  }, [createOpen]);
+
   // IM user-level SSE: incremental updates by event type instead of a full refresh on each event.
   useReconnectingSse(API_PATHS.IM_STREAM, (type, event) => {
     void handleStreamEvent(type, event).catch(() => {});
@@ -615,10 +630,11 @@ export default function ImPage() {
         .filter((value: number) => Number.isFinite(value)),
     });
     for (const agentId of values.agentIds ?? []) {
+      const agent = agentOptions.find((item) => item.id === Number(agentId));
       await imApi.addParticipant(created.id, {
         participantType: 'AGENT',
         participantId: Number(agentId),
-        displayName: `Agent #${agentId}`,
+        displayName: agent?.name || '数字员工',
       });
     }
     toast.success(t('pages.im.created', 'Conversation created'));
@@ -628,9 +644,22 @@ export default function ImPage() {
     setActiveId(created.id);
   };
 
+  const activeName = active
+    ? active.type === 'GROUP'
+      ? active.remark || active.title || t('pages.im.group', '群聊')
+      : active.displayName || active.title || t('pages.im.dm', '单聊')
+    : '';
+
   return (
     <PageContainer>
-      <div style={{ display: 'flex', gap: 16, minHeight: 560 }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 16,
+          height: 'calc(100vh - 160px)',
+          minHeight: 560,
+        }}
+      >
         <ConversationList
           conversations={conversations}
           activeId={activeId}
@@ -647,87 +676,129 @@ export default function ImPage() {
           }}
         />
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#fff',
+            border: '1px solid #eef0f4',
+            borderRadius: 14,
+            overflow: 'hidden',
+          }}
+        >
           {active ? (
             <>
-              <div style={{ marginBottom: 12 }}>
-                <Typography.Title level={5} style={{ margin: 0 }}>
-                  {active.title || `${active.type} #${active.id}`}
-                </Typography.Title>
-                <Typography.Text type="secondary">
-                  conversation #{active.id} · thread {active.threadId ?? '-'}
-                </Typography.Text>
-                {active.type === 'GROUP' ? (
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<SettingOutlined />}
-                    onClick={openGate}
-                    style={{ marginLeft: 8 }}
-                  >
-                    {t('pages.im.groupSettings', 'Group Settings')}
-                  </Button>
-                ) : null}
-                <Input.Search
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  onSearch={runSearch}
-                  allowClear
-                  placeholder={t('pages.im.searchMessages', 'Search messages')}
-                  style={{ width: 220, marginLeft: 8 }}
-                />
-                {searchKeyword ? (
-                  <Tag closable onClose={clearSearch} style={{ marginLeft: 8 }}>
-                    {intl.formatMessage(
-                      {
-                        id: 'pages.im.searchPrefix',
-                        defaultMessage: 'Search: {keyword}',
-                      },
-                      { keyword: searchKeyword },
+              <div
+                style={{
+                  padding: '16px 20px',
+                  borderBottom: '1px solid #f0f0f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <Typography.Title level={5} style={{ margin: 0 }}>
+                    {activeName}
+                  </Typography.Title>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {active.type === 'GROUP'
+                      ? t('pages.im.group', '群聊')
+                      : t('pages.im.dm', '单聊')}
+                    {participants.length
+                      ? ` · ${participants.length} ${t('pages.im.members', '位成员')}`
+                      : ''}
+                  </Typography.Text>
+                </div>
+                <Space wrap>
+                  {active.type === 'GROUP' ? (
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<SettingOutlined />}
+                      onClick={openGate}
+                    >
+                      {t('pages.im.groupSettings', 'Group Settings')}
+                    </Button>
+                  ) : null}
+                  <Input.Search
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    onSearch={runSearch}
+                    allowClear
+                    placeholder={t(
+                      'pages.im.searchMessages',
+                      'Search messages',
                     )}
-                  </Tag>
-                ) : null}
+                    style={{ width: 220 }}
+                  />
+                  {searchKeyword ? (
+                    <Tag closable onClose={clearSearch}>
+                      {intl.formatMessage(
+                        {
+                          id: 'pages.im.searchPrefix',
+                          defaultMessage: 'Search: {keyword}',
+                        },
+                        { keyword: searchKeyword },
+                      )}
+                    </Tag>
+                  ) : null}
+                </Space>
               </div>
-              <MessageList
-                messages={messages}
-                loading={messagesLoading}
-                hasMore={hasMore}
-                loadingOlder={loadingOlder}
-                bottomRef={bottomRef}
-                onLoadOlder={loadOlder}
-                onReply={setReplyToId}
-                onEdit={openEdit}
-                onRecall={recallMessage}
-                onRetryCard={retryCard}
-                onCancelCard={cancelCard}
-                onTimeline={openCardTimeline}
-                labels={{
-                  noMessage: t('pages.im.noMessage', 'No messages yet'),
-                  reply: t('pages.im.reply', 'Reply'),
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '0 20px',
                 }}
-              />
-              <Composer
-                text={text}
-                onTextChange={setText}
-                onSend={send}
-                sending={sending}
-                participants={participants}
-                mentions={mentions}
-                onMentionsChange={setMentions}
-                replyToId={replyToId}
-                onClearReply={() => setReplyToId(undefined)}
-                onUpload={uploadAttachment}
-                labels={{
-                  placeholder: t(
-                    'pages.im.placeholder',
-                    'Type a message. Enter to send, Shift+Enter for a new line',
-                  ),
-                  mention: t('pages.im.mention', '@Agent'),
-                  send: t('pages.im.send', 'Send'),
-                  replying: t('pages.im.replying', 'Reply'),
-                  attachment: t('pages.im.attachment', 'Attachment'),
-                }}
-              />
+              >
+                <MessageList
+                  participants={participants}
+                  messages={messages}
+                  loading={messagesLoading}
+                  hasMore={hasMore}
+                  loadingOlder={loadingOlder}
+                  bottomRef={bottomRef}
+                  onLoadOlder={loadOlder}
+                  onReply={setReplyToId}
+                  onEdit={openEdit}
+                  onRecall={recallMessage}
+                  onRetryCard={retryCard}
+                  onCancelCard={cancelCard}
+                  onTimeline={openCardTimeline}
+                  labels={{
+                    noMessage: t('pages.im.noMessage', 'No messages yet'),
+                    reply: t('pages.im.reply', 'Reply'),
+                  }}
+                />
+                <Composer
+                  text={text}
+                  onTextChange={setText}
+                  onSend={send}
+                  sending={sending}
+                  participants={participants}
+                  mentions={mentions}
+                  onMentionsChange={setMentions}
+                  replyToId={replyToId}
+                  onClearReply={() => setReplyToId(undefined)}
+                  onUpload={uploadAttachment}
+                  labels={{
+                    placeholder: t(
+                      'pages.im.placeholder',
+                      'Type a message. Enter to send, Shift+Enter for a new line',
+                    ),
+                    mention: t('pages.im.mention', '@Agent'),
+                    send: t('pages.im.send', 'Send'),
+                    replying: t('pages.im.replying', 'Reply'),
+                    attachment: t('pages.im.attachment', 'Attachment'),
+                  }}
+                />
+              </div>
             </>
           ) : (
             <Empty
@@ -759,8 +830,14 @@ export default function ImPage() {
           >
             <Select
               options={[
-                { value: 'GROUP', label: 'GROUP' },
-                { value: 'DM', label: 'DM' },
+                {
+                  value: 'GROUP',
+                  label: t('pages.im.group', '群聊'),
+                },
+                {
+                  value: 'DM',
+                  label: t('pages.im.dm', '单聊'),
+                },
               ]}
             />
           </Form.Item>
@@ -769,23 +846,41 @@ export default function ImPage() {
           </Form.Item>
           <Form.Item
             name="participantUserIds"
-            label={t('pages.im.userIds', 'Member User IDs')}
+            label={t('pages.im.members', 'Members')}
             tooltip={t(
               'pages.im.userIdsHint',
-              'Separate with commas or press Enter',
+              'Select members from the current tenant',
             )}
           >
-            <Select mode="tags" tokenSeparators={[',']} />
+            <Select
+              mode="multiple"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={contactOptions.map((user) => ({
+                value: user.id,
+                label: user.displayName || user.username || '用户',
+              }))}
+            />
           </Form.Item>
           <Form.Item
             name="agentIds"
-            label={t('pages.im.agentIds', 'Super Agent IDs')}
+            label={t('pages.im.agentIds', '数字员工')}
             tooltip={t(
               'pages.im.agentIdsHint',
-              'Add groups already bound to these Super Agents',
+              'Add groups already bound to these digital employees',
             )}
           >
-            <Select mode="tags" tokenSeparators={[',']} />
+            <Select
+              mode="multiple"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={agentOptions.map((agent) => ({
+                value: agent.id,
+                label: agent.name || '数字员工',
+              }))}
+            />
           </Form.Item>
         </Form>
       </Modal>
@@ -861,7 +956,8 @@ export default function ImPage() {
                 >
                   <span>
                     {participant.displayName ||
-                      `Agent #${participant.participantId}`}
+                      participant.username ||
+                      '数字员工'}
                   </span>
                   <Switch
                     checked={Boolean(participant.muted)}
@@ -921,9 +1017,6 @@ export default function ImPage() {
                   <Space size={8}>
                     <Tag>{row.kind}</Tag>
                     <Tag>{row.state ?? '-'}</Tag>
-                    <Typography.Text type="secondary">
-                      seq {row.seq}
-                    </Typography.Text>
                   </Space>
                   {text ? (
                     <div style={{ marginTop: 4 }}>{String(text)}</div>

@@ -1,18 +1,20 @@
 import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import {
+  Avatar,
   Badge,
   Button,
   Empty,
   Listy,
-  Space,
   Spin,
   Tag,
   Typography,
 } from 'antd';
+import dayjs from 'dayjs';
 import { Can } from '@/components/Can';
 import { PERM } from '@/constants/permissions';
 import type { ImConversation } from '@/services/agentSphere/im';
+import { messageText } from './messageUtils';
 
 interface Props {
   conversations: ImConversation[];
@@ -30,6 +32,40 @@ interface Props {
   };
 }
 
+function conversationLabel(
+  conversation: ImConversation,
+  intl: ReturnType<typeof useIntl>,
+) {
+  if (conversation.type === 'GROUP') {
+    return (
+      conversation.remark ||
+      conversation.title ||
+      intl.formatMessage({ id: 'pages.im.group', defaultMessage: 'Group' })
+    );
+  }
+  return (
+    conversation.displayName ||
+    conversation.title ||
+    intl.formatMessage({ id: 'pages.im.dm', defaultMessage: 'Direct chat' })
+  );
+}
+
+function conversationPreview(conversation: ImConversation) {
+  if (conversation.lastMessage) {
+    const text = messageText(conversation.lastMessage).trim();
+    if (text) return text;
+  }
+  return conversation.purpose || '';
+}
+
+function conversationTime(value?: string) {
+  if (!value) return '';
+  const at = dayjs(value);
+  return at.isSame(dayjs(), 'day')
+    ? at.format('HH:mm')
+    : at.format('MM-DD HH:mm');
+}
+
 export function ConversationList({
   conversations,
   activeId,
@@ -45,16 +81,22 @@ export function ConversationList({
   return (
     <div
       style={{
-        width: 300,
-        borderRight: '1px solid #f0f0f0',
-        paddingRight: 12,
+        width: 320,
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#fff',
+        border: '1px solid #eef0f4',
+        borderRadius: 14,
+        overflow: 'hidden',
       }}
     >
-      <Space
+      <div
         style={{
-          width: '100%',
+          padding: '14px 16px',
+          borderBottom: '1px solid #f0f0f0',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 12,
         }}
       >
         <Typography.Text strong>{labels.conversations}</Typography.Text>
@@ -68,87 +110,127 @@ export function ConversationList({
             {labels.newConversation}
           </Button>
         </Can>
-      </Space>
+      </div>
       <Spin spinning={loading}>
-        {conversations.length === 0 ? (
-          <Empty description={labels.noConversation} />
-        ) : (
-          <>
-            <Listy
-              items={conversations}
-              rowKey="id"
-              itemRender={(conversation) => (
-                <div
-                  onClick={() => onSelect(conversation.id)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '10px 8px',
-                    borderRadius: 8,
-                    background:
-                      conversation.id === activeId ? '#e6f4ff' : undefined,
-                  }}
-                >
-                  <Space align="start">
-                    <TeamOutlined />
-                    <div>
-                      <Space>
-                        <span
+        <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+          {conversations.length === 0 ? (
+            <Empty description={labels.noConversation} />
+          ) : (
+            <>
+              <Listy
+                items={conversations}
+                rowKey="id"
+                itemRender={(conversation) => {
+                  const active = conversation.id === activeId;
+                  const preview = conversationPreview(conversation);
+                  return (
+                    <div
+                      onClick={() => onSelect(conversation.id)}
+                      style={{
+                        cursor: 'pointer',
+                        display: 'flex',
+                        gap: 10,
+                        padding: '10px 10px',
+                        marginBottom: 4,
+                        borderRadius: 10,
+                        background: active ? '#eef2ff' : undefined,
+                        transition: 'background 0.15s ease',
+                      }}
+                    >
+                      <Badge
+                        count={conversation.unread ?? 0}
+                        size="small"
+                        offset={[-2, 2]}
+                      >
+                        <Avatar
+                          shape={
+                            conversation.type === 'GROUP' ? 'square' : 'circle'
+                          }
+                          size={40}
+                          src={conversation.avatar}
+                          icon={<TeamOutlined />}
+                          style={{ background: '#f1efff', color: '#6c5ce7' }}
+                        />
+                      </Badge>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
                           style={{
-                            display: 'inline-block',
-                            maxWidth: 170,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            verticalAlign: 'bottom',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
                           }}
                         >
-                          {conversation.type === 'GROUP'
-                            ? conversation.remark ||
-                              conversation.title ||
-                              intl.formatMessage(
-                                {
-                                  id: 'pages.im.groupWithId',
-                                  defaultMessage: 'Group #{id}',
-                                },
-                                { id: conversation.id },
-                              )
-                            : conversation.displayName ||
-                              conversation.title ||
-                              intl.formatMessage(
-                                {
-                                  id: 'pages.im.dmWithId',
-                                  defaultMessage: 'Direct chat #{id}',
-                                },
-                                { id: conversation.id },
-                              )}
-                        </span>
-                        <Tag>{conversation.type}</Tag>
-                        <Badge count={conversation.unread ?? 0} size="small" />
-                      </Space>
-                      <div style={{ color: '#999' }}>
-                        {conversation.lastMessageAt || conversation.status}
+                          <Typography.Text
+                            strong
+                            ellipsis
+                            style={{ flex: 1, minWidth: 0 }}
+                          >
+                            {conversationLabel(conversation, intl)}
+                          </Typography.Text>
+                          <span
+                            style={{
+                              color: '#a0a4ad',
+                              fontSize: 11,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {conversationTime(conversation.lastMessageAt)}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            marginTop: 3,
+                          }}
+                        >
+                          <Tag
+                            color={
+                              conversation.type === 'GROUP' ? 'blue' : 'default'
+                            }
+                            style={{ marginInlineEnd: 0 }}
+                          >
+                            {conversation.type === 'GROUP'
+                              ? intl.formatMessage({
+                                  id: 'pages.im.group',
+                                  defaultMessage: 'Group',
+                                })
+                              : intl.formatMessage({
+                                  id: 'pages.im.dm',
+                                  defaultMessage: 'Direct',
+                                })}
+                          </Tag>
+                          <Typography.Text
+                            type="secondary"
+                            ellipsis
+                            style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+                          >
+                            {preview || '-'}
+                          </Typography.Text>
+                        </div>
                       </div>
                     </div>
-                  </Space>
-                </div>
-              )}
-            />
-            {hasMore ? (
-              <Button
-                block
-                type="text"
-                loading={loadingMore}
-                onClick={onLoadMore}
-                style={{ marginTop: 8 }}
-              >
-                {intl.formatMessage({
-                  id: 'pages.im.loadMore',
-                  defaultMessage: 'Load more',
-                })}
-              </Button>
-            ) : null}
-          </>
-        )}
+                  );
+                }}
+              />
+              {hasMore ? (
+                <Button
+                  block
+                  type="text"
+                  loading={loadingMore}
+                  onClick={onLoadMore}
+                  style={{ marginTop: 8 }}
+                >
+                  {intl.formatMessage({
+                    id: 'pages.im.loadMore',
+                    defaultMessage: 'Load more',
+                  })}
+                </Button>
+              ) : null}
+            </>
+          )}
+        </div>
       </Spin>
     </div>
   );

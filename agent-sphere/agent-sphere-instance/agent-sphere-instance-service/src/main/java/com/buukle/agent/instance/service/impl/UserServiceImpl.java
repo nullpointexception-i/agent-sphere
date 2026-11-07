@@ -71,16 +71,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
 
     private static final String DEFAULT_USER_ROLE_CODE = "USER";
 
-    /** Resolve the initial roles for a new user: when defaultRoleId is given it replaces the default USER role (SSO provisioning scenario). */
-    public static List<Long> resolveInitialRoleIds(RoleSpi roleSpi, Long defaultRoleId) {
+    /** Resolve the initial roles for a new user inside the target tenant. */
+    public static List<Long> resolveInitialRoleIds(RoleSpi roleSpi, Long defaultRoleId, Long tenantId) {
         if (defaultRoleId != null) {
             return List.of(defaultRoleId);
         }
-        return roleSpi.listAll().stream()
-                .filter(r -> DEFAULT_USER_ROLE_CODE.equals(r.getCode()))
-                .findFirst()
-                .map(r -> List.of(r.getId()))
-                .orElseGet(List::of);
+        Long roleId = roleSpi.findIdByTenantAndCode(tenantId, DEFAULT_USER_ROLE_CODE);
+        return roleId == null ? List.of() : List.of(roleId);
     }
 
     private UserVO toVO(AgentUser user) {
@@ -284,6 +281,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
 
     @Override
     public UserVO register(RegisterDTO dto, Long defaultRoleId) {
+        return register(dto, defaultRoleId, null);
+    }
+
+    @Override
+    public UserVO register(RegisterDTO dto, Long defaultRoleId, Long tenantId) {
         if (!dto.getPassword().equals(dto.getRepeatPassword())) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Passwords do not match");
         }
@@ -305,10 +307,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, AgentUser> implemen
             }
             throw new BizException(InstanceErrorCode.REGISTER_FAILED);
         }
-        // Every new user belongs to the default tenant; an admin can move them later.
-        tenantScopeSpi.ensureDefaultAssignment(user.getId());
-        // Roles: when defaultRoleId is given it replaces the default USER role (SSO provisioning scenario)
-        List<Long> initialRoleIds = resolveInitialRoleIds(roleSpi, defaultRoleId);
+        // Self-registration goes to the default tenant; SSO provisioning goes to
+        // the tenant bound to the identity provider.
+        if (tenantId != null) {
+            tenantScopeSpi.ensureAssignment(user.getId(), tenantId);
+        } else {
+            tenantScopeSpi.ensureDefaultAssignment(user.getId());
+        }
+        Long targetTenantId = tenantId != null ? tenantId : tenantScopeSpi.defaultTenantId();
+        List<Long> initialRoleIds = resolveInitialRoleIds(roleSpi, defaultRoleId, targetTenantId);
         if (!initialRoleIds.isEmpty()) {
             roleSpi.assignRoles(user.getId(), initialRoleIds);
         }

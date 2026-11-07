@@ -35,11 +35,18 @@ export function Composer({
   labels,
 }: Props) {
   return (
-    <div style={{ marginTop: 12 }}>
+    <div
+      style={{
+        marginTop: 12,
+        paddingTop: 12,
+        paddingBottom: 16,
+        borderTop: '1px solid #f0f0f0',
+      }}
+    >
       {replyToId ? (
         <div style={{ marginBottom: 6 }}>
           <Tag closable onClose={onClearReply}>
-            {labels.replying} #{replyToId}
+            {labels.replying}
           </Tag>
         </div>
       ) : null}
@@ -55,7 +62,9 @@ export function Composer({
           .map((participant) => ({
             value: participant.participantId,
             label:
-              participant.displayName || `Agent #${participant.participantId}`,
+              participant.displayName ||
+              participant.username ||
+              (participant.participantType === 'AGENT' ? '数字员工' : '用户'),
           }))}
       />
       <Input.TextArea

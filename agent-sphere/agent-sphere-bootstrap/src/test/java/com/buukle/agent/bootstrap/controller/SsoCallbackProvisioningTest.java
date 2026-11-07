@@ -84,7 +84,7 @@ class SsoCallbackProvisioningTest {
         when(identityProviderMapper.selectOne(any(Wrapper.class))).thenReturn(provider());
         when(ssoOidcClient.exchangeAndVerify(any(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(new SsoOidcClient.IdTokenClaims("7", "e@x.com", "name", "pref"));
-        when(provisioningService.provisionOrGet(anyString(), anyString(), anyString(), anyString(), anyString(), any()))
+        when(provisioningService.provisionOrGet(anyString(), anyString(), anyString(), anyString(), anyString(), any(), any()))
                 .thenReturn(SsoProvisioningService.ProvisionResult.of(7L, "business_7", true));
         when(userResourceProvisionerProvider.getIfAvailable()).thenReturn(userResourceProvisioner);
         when(userResourceProvisioner.provision(any(), anyString(), anyString(), anyString()))
@@ -111,7 +111,7 @@ class SsoCallbackProvisioningTest {
         when(identityProviderMapper.selectOne(any(Wrapper.class))).thenReturn(provider());
         when(ssoOidcClient.exchangeAndVerify(any(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(new SsoOidcClient.IdTokenClaims("7", "e@x.com", "name", "pref"));
-        when(provisioningService.provisionOrGet(anyString(), anyString(), anyString(), anyString(), anyString(), any()))
+        when(provisioningService.provisionOrGet(anyString(), anyString(), anyString(), anyString(), anyString(), any(), any()))
                 .thenReturn(SsoProvisioningService.ProvisionResult.of(7L, "business_7", false));
 
         String redirect = ssoService.callback("code", "state", "iss", null);
@@ -126,7 +126,7 @@ class SsoCallbackProvisioningTest {
         when(identityProviderMapper.selectOne(any(Wrapper.class))).thenReturn(provider());
         when(ssoOidcClient.exchangeAndVerify(any(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(new SsoOidcClient.IdTokenClaims("7", "e@x.com", "name", "pref"));
-        when(provisioningService.provisionOrGet(anyString(), anyString(), anyString(), anyString(), anyString(), any()))
+        when(provisioningService.provisionOrGet(anyString(), anyString(), anyString(), anyString(), anyString(), any(), any()))
                 .thenReturn(SsoProvisioningService.ProvisionResult.of(7L, "business_7", true));
         when(userResourceProvisionerProvider.getIfAvailable()).thenReturn(userResourceProvisioner);
         when(userResourceProvisioner.provision(any(), anyString(), anyString(), anyString()))

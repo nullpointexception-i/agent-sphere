@@ -38,6 +38,15 @@ public interface UserSpi {
 
     UserVO register(RegisterDTO dto, Long defaultRoleId);
 
+    /**
+     * SSO provisioning: register into a specific tenant and assign a role from
+     * that tenant. Implementations that do not support tenant targeting fall
+     * back to the default registration path.
+     */
+    default UserVO register(RegisterDTO dto, Long defaultRoleId, Long tenantId) {
+        return register(dto, defaultRoleId);
+    }
+
     UserVO loginByUserId(Long userId);
 
     UserVO getByUserId(Long userId);

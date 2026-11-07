@@ -23,6 +23,15 @@ public interface TenantScopeSpi {
      */
     void ensureDefaultAssignment(Long userId);
 
+    /**
+     * Ensure a user has an active assignment to the given tenant and that it is
+     * the current tenant. Used by SSO provisioning.
+     */
+    void ensureAssignment(Long userId, Long tenantId);
+
+    /** Default tenant id used for self-registration. */
+    Long defaultTenantId();
+
     boolean isTenantActive(Long tenantId);
 
     /** User ids assigned to any of the supplied tenants. Used for user/contact lists. */

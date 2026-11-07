@@ -1,11 +1,13 @@
 import {
   AlertOutlined,
+  ApiOutlined,
   BarChartOutlined,
   HistoryOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   RedoOutlined,
+  RobotOutlined,
   SettingOutlined,
   StopOutlined,
   UnorderedListOutlined,
@@ -14,17 +16,22 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import {
   App,
+  Avatar,
   Button,
+  Card,
   Descriptions,
   Drawer,
+  Empty,
   Form,
   Input,
   List,
   Modal,
+  Pagination,
   Select,
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import { useEffect, useRef, useState } from 'react';
@@ -48,6 +55,8 @@ const AGENT_STATUS = SUPER_AGENT_STATUS;
 
 const WORK_STATUS = WORK_ITEM_STATUS;
 
+const SUPER_AGENT_PAGE_SIZE = 9;
+
 function StatusTag({
   value,
   map,
@@ -69,8 +78,10 @@ function StatusTag({
 export default function SuperAgentPage() {
   const { message, modal } = App.useApp();
   const intl = useIntl();
-  const actionRef = useRef<any>(null);
   const workActionRef = useRef<any>(null);
+  const [agents, setAgents] = useState<SuperAgent[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
@@ -116,6 +127,27 @@ export default function SuperAgentPage() {
     label: intl.locale === 'en-US' ? item.nameEn : item.nameCn,
   }));
 
+  const loadAgents = async () => {
+    setListLoading(true);
+    try {
+      setAgents((await superAgentApi.list()) || []);
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAgents();
+  }, []);
+
+  useEffect(() => {
+    const maxPage = Math.max(
+      1,
+      Math.ceil(agents.length / SUPER_AGENT_PAGE_SIZE),
+    );
+    if (page > maxPage) setPage(maxPage);
+  }, [agents.length, page]);
+
   useEffect(() => {
     dictApi
       .listActive()
@@ -156,7 +188,8 @@ export default function SuperAgentPage() {
       );
       setCreateOpen(false);
       form.resetFields();
-      actionRef.current?.reload();
+      await loadAgents();
+      setPage(1);
     } finally {
       setSubmitting(false);
     }
@@ -178,7 +211,7 @@ export default function SuperAgentPage() {
           await superAgentApi.resume(record.id);
         }
         message.success(t('pages.superAgent.updated', 'Status updated'));
-        actionRef.current?.reload();
+        loadAgents();
       },
     });
   };
@@ -277,7 +310,7 @@ export default function SuperAgentPage() {
       await superAgentApi.update(settingsAgent.id, values);
       message.success(t('pages.superAgent.updated', 'Status updated'));
       setSettingsOpen(false);
-      actionRef.current?.reload();
+      loadAgents();
     } finally {
       setSettingsSaving(false);
     }
@@ -289,126 +322,6 @@ export default function SuperAgentPage() {
     await superAgentApi.updateChannelStatus(insightAgent.id, record.id, next);
     await openInsight(insightAgent, 'channels');
   };
-
-  const agentColumns = [
-    {
-      title: t('pages.table.id', 'ID'),
-      dataIndex: 'id',
-      width: 70,
-    },
-    {
-      title: t('pages.superAgent.name', 'Name'),
-      dataIndex: 'name',
-      ellipsis: true,
-    },
-    {
-      title: t('pages.superAgent.description', 'Description'),
-      dataIndex: 'description',
-      ellipsis: true,
-    },
-    {
-      title: t('pages.superAgent.position', 'Role'),
-      dataIndex: 'positionCode',
-      width: 150,
-      render: (_: unknown, record: SuperAgent) => positionName(record) || '-',
-    },
-    {
-      title: t('pages.superAgent.routerInstance', 'Router Instance'),
-      dataIndex: 'routerInstanceId',
-      width: 120,
-      render: (v: number) => (v ? `#${v}` : '-'),
-    },
-    {
-      title: t('pages.superAgent.workerInstance', 'Worker Instance'),
-      dataIndex: 'workerInstanceId',
-      width: 120,
-      render: (v: number) => (v ? `#${v}` : '-'),
-    },
-    {
-      title: t('pages.superAgent.status', 'Status'),
-      dataIndex: 'status',
-      width: 110,
-      render: (v: string) => <StatusTag value={v} map={AGENT_STATUS} />,
-    },
-    {
-      title: t('pages.superAgent.createdAt', 'Created At'),
-      dataIndex: 'createdAt',
-      width: 170,
-    },
-    {
-      title: t('pages.table.action', 'Actions'),
-      valueType: 'option',
-      width: 440,
-      render: (_: unknown, record: SuperAgent) => [
-        <Button
-          key="tasks"
-          type="link"
-          size="small"
-          icon={<UnorderedListOutlined />}
-          onClick={() => {
-            setWorkStatus(undefined);
-            setSelected(record);
-          }}
-        >
-          {t('pages.superAgent.tasks', 'Tasks')}
-        </Button>,
-        <Button
-          key="usage"
-          type="link"
-          size="small"
-          icon={<BarChartOutlined />}
-          onClick={() => openInsight(record, 'usage')}
-        >
-          {t('pages.superAgent.usage', 'Usage')}
-        </Button>,
-        <Button
-          key="watchdog"
-          type="link"
-          size="small"
-          icon={<AlertOutlined />}
-          onClick={() => openInsight(record, 'watchdog')}
-        >
-          {t('pages.superAgent.watchdog', 'Watchdog')}
-        </Button>,
-        <Can key="settings" code={PERM.superAgentUpdate}>
-          <Button
-            type="link"
-            size="small"
-            icon={<SettingOutlined />}
-            onClick={() => openSettings(record)}
-          >
-            {t('pages.superAgent.settings', 'Settings')}
-          </Button>
-        </Can>,
-        <Button
-          key="channels"
-          type="link"
-          size="small"
-          onClick={() => openInsight(record, 'channels')}
-        >
-          {t('pages.superAgent.channels', 'Channels')}
-        </Button>,
-        <Can key="toggle" code={PERM.superAgentUpdate}>
-          <Button
-            type="link"
-            size="small"
-            icon={
-              record.status === STATUS.ACTIVE ? (
-                <PauseCircleOutlined />
-              ) : (
-                <PlayCircleOutlined />
-              )
-            }
-            onClick={() => toggle(record)}
-          >
-            {record.status === STATUS.ACTIVE
-              ? t('pages.superAgent.pause', 'Pause')
-              : t('pages.superAgent.resume', 'Resume')}
-          </Button>
-        </Can>,
-      ],
-    },
-  ];
 
   const workColumns = [
     {
@@ -584,24 +497,30 @@ export default function SuperAgentPage() {
     label: intl.formatMessage({ id: cfg.labelKey, defaultMessage: value }),
   }));
 
+  const pagedAgents = agents.slice(
+    (page - 1) * SUPER_AGENT_PAGE_SIZE,
+    page * SUPER_AGENT_PAGE_SIZE,
+  );
+
   return (
     <PageContainer title={false} breadcrumbRender={false}>
-      <ProTable<SuperAgent>
-        actionRef={actionRef}
-        rowKey="id"
-        headerTitle={t('pages.superAgent.title', 'Super Agents')}
-        search={false}
-        options={false}
-        request={async () => {
-          const data = await superAgentApi.list();
-          return { data, success: true, total: data.length };
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: 'wrap',
         }}
-        pagination={false}
-        columns={agentColumns as any}
-        toolBarRender={() => [
+      >
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          {t('pages.superAgent.title', 'Super Agents')}
+        </Typography.Title>
+        <Space wrap>
           <Button key="template" onClick={openTemplate}>
             {t('pages.superAgent.groupRouterTemplate', 'Group Router Template')}
-          </Button>,
+          </Button>
           <Can key="create" code={PERM.superAgentCreate}>
             <Button
               type="primary"
@@ -610,9 +529,173 @@ export default function SuperAgentPage() {
             >
               {t('pages.superAgent.create', 'New Super Agent')}
             </Button>
-          </Can>,
-        ]}
-      />
+          </Can>
+        </Space>
+      </div>
+      <Spin spinning={listLoading}>
+        {agents.length === 0 ? (
+          <Empty
+            description={t(
+              'pages.superAgent.empty',
+              'No digital employees yet',
+            )}
+          />
+        ) : (
+          <>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                gap: 16,
+              }}
+            >
+              {pagedAgents.map((agent) => (
+                <Card key={agent.id} size="small" hoverable>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <Avatar
+                      size={44}
+                      icon={<RobotOutlined />}
+                      style={{
+                        background: '#f1efff',
+                        color: '#6c5ce7',
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        <Typography.Text
+                          strong
+                          ellipsis
+                          style={{ flex: 1, minWidth: 0 }}
+                        >
+                          {agent.name}
+                        </Typography.Text>
+                        <StatusTag value={agent.status} map={AGENT_STATUS} />
+                      </div>
+                      <Typography.Paragraph
+                        type="secondary"
+                        ellipsis={{ rows: 2 }}
+                        style={{
+                          margin: '8px 0 0',
+                          fontSize: 12,
+                          minHeight: 36,
+                        }}
+                      >
+                        {agent.description || '-'}
+                      </Typography.Paragraph>
+                      <Space size={4} wrap style={{ marginTop: 8 }}>
+                        {agent.positionCode && (
+                          <Tag color="purple">{positionName(agent)}</Tag>
+                        )}
+                        {agent.createdAt && <Tag>{agent.createdAt}</Tag>}
+                      </Space>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      marginTop: 12,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <Tooltip title={t('pages.superAgent.tasks', 'Tasks')}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<UnorderedListOutlined />}
+                        onClick={() => {
+                          setWorkStatus(undefined);
+                          setSelected(agent);
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('pages.superAgent.usage', 'Usage')}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<BarChartOutlined />}
+                        onClick={() => openInsight(agent, 'usage')}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('pages.superAgent.watchdog', 'Watchdog')}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<AlertOutlined />}
+                        onClick={() => openInsight(agent, 'watchdog')}
+                      />
+                    </Tooltip>
+                    <Tooltip title={t('pages.superAgent.channels', 'Channels')}>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<ApiOutlined />}
+                        onClick={() => openInsight(agent, 'channels')}
+                      />
+                    </Tooltip>
+                    <Can code={PERM.superAgentUpdate}>
+                      <Tooltip
+                        title={t('pages.superAgent.settings', 'Settings')}
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<SettingOutlined />}
+                          onClick={() => openSettings(agent)}
+                        />
+                      </Tooltip>
+                    </Can>
+                    <Can code={PERM.superAgentUpdate}>
+                      <Tooltip
+                        title={
+                          agent.status === STATUS.ACTIVE
+                            ? t('pages.superAgent.pause', 'Pause')
+                            : t('pages.superAgent.resume', 'Resume')
+                        }
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={
+                            agent.status === STATUS.ACTIVE ? (
+                              <PauseCircleOutlined />
+                            ) : (
+                              <PlayCircleOutlined />
+                            )
+                          }
+                          onClick={() => toggle(agent)}
+                        />
+                      </Tooltip>
+                    </Can>
+                  </div>
+                </Card>
+              ))}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                marginTop: 16,
+              }}
+            >
+              <Pagination
+                current={page}
+                pageSize={SUPER_AGENT_PAGE_SIZE}
+                total={agents.length}
+                showSizeChanger={false}
+                onChange={setPage}
+              />
+            </div>
+          </>
+        )}
+      </Spin>
 
       <Modal
         open={createOpen}

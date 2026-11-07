@@ -8,7 +8,6 @@ import {
   EditOutlined,
   EyeOutlined,
   PlusOutlined,
-  ReloadOutlined,
   UnorderedListOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
@@ -35,7 +34,7 @@ import {
   Upload,
 } from 'antd';
 import type dayjs from 'dayjs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
 import SetModelRouteModal from '@/components/SetModelRouteModal';
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
@@ -66,7 +65,6 @@ export default function InstanceList() {
   const [modelRouteModal, setModelRouteModal] = useState(false);
   const [modelRouteInstance, setModelRouteInstance] = useState<any>(null);
   const [, setProviders] = useState<any[]>([]);
-  const [allRoutes, setAllRoutes] = useState<any[]>([]);
   const [capabilities, setCapabilities] = useState<any[]>([]);
   const [detailTab, setDetailTab] = useState('info');
   const [form] = Form.useForm();
@@ -86,13 +84,6 @@ export default function InstanceList() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [tableScrollY, setTableScrollY] = useState(400);
   const roleReadOnly = instanceRole !== 'CHAT';
-  const routeNameMap = useMemo(() => {
-    const m: Record<number, string> = {};
-    allRoutes.forEach((r: any) => {
-      m[r.id] = r.modelName;
-    });
-    return m;
-  }, [allRoutes]);
 
   useEffect(() => {
     const calc = () => setTableScrollY(window.innerHeight - 280);
@@ -128,10 +119,6 @@ export default function InstanceList() {
     agentApi.modelProviders
       .list()
       .then(setProviders)
-      .catch(() => {});
-    agentApi.routes
-      .listAll()
-      .then(setAllRoutes)
       .catch(() => {});
   }, []);
 
@@ -439,7 +426,7 @@ export default function InstanceList() {
                   : undefined
               }
               onChange={(dates) => {
-                if (dates && dates[0] && dates[1]) {
+                if (dates?.[0] && dates[1]) {
                   const diff = dates[1].diff(dates[0], 'day');
                   if (diff > 90) {
                     setTimeRange([dates[0], dates[0].add(90, 'day')]);
@@ -726,36 +713,42 @@ export default function InstanceList() {
                       ) : undefined
                     }
                     title={
-                      <div className={styles.cardTitle}>
-                        {selectMode && (
-                          <span
-                            style={{
-                              marginRight: 4,
-                              fontSize: 16,
-                              flexShrink: 0,
-                            }}
+                      <div className={styles.cardTitleWrap}>
+                        <div className={styles.cardTitle}>
+                          {selectMode && (
+                            <span
+                              style={{
+                                marginRight: 4,
+                                fontSize: 16,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {selectedIds.has(item.id) ? '✓' : '○'}
+                            </span>
+                          )}
+                          <span className={styles.cardName}>{item.name}</span>
+                        </div>
+                        <div className={styles.cardTags}>
+                          <Tag
+                            color={
+                              item.status === 'ENABLED' ? 'green' : 'default'
+                            }
                           >
-                            {selectedIds.has(item.id) ? '✓' : '○'}
-                          </span>
-                        )}
-                        <span className={styles.cardName}>{item.name}</span>
-                        <Tag
-                          color={
-                            item.status === 'ENABLED' ? 'green' : 'default'
-                          }
-                        >
-                          {item.status}
-                        </Tag>
-                        <Tag
-                          color={
-                            item.instanceRole === 'CHAT' ? 'default' : 'purple'
-                          }
-                        >
-                          {item.instanceRole || 'CHAT'}
-                        </Tag>
-                        {item.businessType && (
-                          <Tag color="blue">{item.businessType}</Tag>
-                        )}
+                            {item.status}
+                          </Tag>
+                          <Tag
+                            color={
+                              item.instanceRole === 'CHAT'
+                                ? 'default'
+                                : 'purple'
+                            }
+                          >
+                            {item.instanceRole || 'CHAT'}
+                          </Tag>
+                          {item.businessType && (
+                            <Tag color="blue">{item.businessType}</Tag>
+                          )}
+                        </div>
                       </div>
                     }
                     description={

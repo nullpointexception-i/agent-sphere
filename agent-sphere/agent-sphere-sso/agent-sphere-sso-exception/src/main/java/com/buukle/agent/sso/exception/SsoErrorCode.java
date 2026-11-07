@@ -16,7 +16,9 @@ public enum SsoErrorCode implements ErrorCode {
     OTC_INVALID("S0007", "Login credential has expired", "Log in again"),
     PROVISION_FAILED("S0008", "User provisioning failed", "Retry later"),
     PROVIDER_CODE_EXISTS("S0009", "Identity provider code already exists", "Choose a different identity provider code"),
-    CONNECTION_FAILED("S0010", "Connection test failed", "Check the identity provider configuration");
+    CONNECTION_FAILED("S0010", "Connection test failed", "Check the identity provider configuration"),
+    DEFAULT_ROLE_SCOPE_INVALID("S0011", "Default role does not belong to the provider tenant",
+            "Choose a role from this identity provider's tenant");
 
     private final String code;
     private final String message;

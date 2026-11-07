@@ -9,6 +9,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
+import dayjs from 'dayjs';
 import type { RefObject } from 'react';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
@@ -18,7 +19,11 @@ import {
   STATUS,
   WORK_ITEM_ACTIVE_STATUSES,
 } from '@/constants/status';
-import { type ImMessage, imApi } from '@/services/agentSphere/im';
+import {
+  type ImMessage,
+  type ImParticipant,
+  imApi,
+} from '@/services/agentSphere/im';
 import { messageText, parsedContent } from './messageUtils';
 
 const TASK_STATUS = IM_TASK_STATUS;
@@ -126,11 +131,6 @@ function TaskCard({
         ) : (
           <Tag>{status || '-'}</Tag>
         )}
-        {content.workItemId ? (
-          <Typography.Text type="secondary">
-            #{content.workItemId}
-          </Typography.Text>
-        ) : null}
       </Space>
       <div style={{ fontWeight: 600 }}>{content.title ?? '-'}</div>
       {content.summary ? (
@@ -181,6 +181,7 @@ interface Props {
   loading: boolean;
   hasMore: boolean;
   loadingOlder: boolean;
+  participants: ImParticipant[];
   bottomRef: RefObject<HTMLDivElement | null>;
   onLoadOlder: () => void;
   onReply: (id: number) => void;
@@ -197,6 +198,7 @@ export function MessageList({
   loading,
   hasMore,
   loadingOlder,
+  participants,
   bottomRef,
   onLoadOlder,
   onReply,
@@ -208,13 +210,21 @@ export function MessageList({
   labels,
 }: Props) {
   const intl = useIntl();
+  const nameByKey = new Map(
+    participants.map((participant) => [
+      `${participant.participantType}:${participant.participantId}`,
+      participant.displayName ||
+        participant.username ||
+        (participant.participantType === 'AGENT' ? '数字员工' : '用户'),
+    ]),
+  );
   return (
     <div
       style={{
         flex: 1,
         overflowY: 'auto',
-        paddingRight: 8,
-        maxHeight: 460,
+        padding: '12px 4px',
+        minHeight: 0,
       }}
     >
       {hasMore ? (
@@ -240,19 +250,21 @@ export function MessageList({
                 <div
                   style={{
                     display: 'block',
-                    padding: '12px 0',
-                    borderBottom: '1px solid #f0f0f0',
+                    padding: '12px 8px',
+                    borderBottom: '1px solid #f5f5f5',
                   }}
                 >
                   <Space size={8}>
                     <Tag
                       color={item.senderType === 'AGENT' ? 'blue' : 'default'}
                     >
-                      {item.senderType}
-                      {item.senderId ? ` #${item.senderId}` : ''}
+                      {nameByKey.get(`${item.senderType}:${item.senderId}`) ||
+                        (item.senderType === 'AGENT' ? '数字员工' : '用户')}
                     </Tag>
                     <Typography.Text type="secondary">
-                      #{item.seq} · {item.createdAt}
+                      {item.createdAt
+                        ? dayjs(item.createdAt).format('HH:mm')
+                        : ''}
                     </Typography.Text>
                     <Button
                       type="link"

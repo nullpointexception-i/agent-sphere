@@ -32,7 +32,7 @@ public class SsoProvisioningService {
 
     @Transactional
     public ProvisionResult provisionOrGet(String providerCode, String subject, String email, String displayName,
-                                          String preferredUsername, Long defaultRoleId) {
+                                          String preferredUsername, Long tenantId, Long defaultRoleId) {
         SsoIdentity existing = ssoIdentityMapper.selectOne(
                 new LambdaQueryWrapper<SsoIdentity>()
                         .eq(SsoIdentity::getProviderCode, providerCode)
@@ -56,7 +56,7 @@ public class SsoProvisioningService {
         registerDTO.setRepeatPassword(registerDTO.getPassword());
         UserVO user;
         try {
-            user = userSpi.register(registerDTO, defaultRoleId);
+            user = userSpi.register(registerDTO, defaultRoleId, tenantId);
         } catch (Exception e) {
             log.error("SSO provision failed: provider={}, subject={}", providerCode, subject, e);
             throw new BizException(SsoErrorCode.PROVISION_FAILED);
