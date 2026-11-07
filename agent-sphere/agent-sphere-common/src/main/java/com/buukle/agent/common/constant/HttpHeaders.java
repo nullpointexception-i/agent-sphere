@@ -13,6 +13,10 @@ public final class HttpHeaders {
     public static final String BEARER_PREFIX = "Bearer ";
     public static final String USER_AGENT = "User-Agent";
     public static final String CLIENT_SURFACE = "X-Client-Surface";
+    public static final String CONTENT_TYPE = "Content-Type";
+    public static final String ACCEPT = "Accept";
+    public static final String APPLICATION_JSON = "application/json";
+    public static final String TEXT_EVENT_STREAM = "text/event-stream";
 
     private HttpHeaders() {
     }

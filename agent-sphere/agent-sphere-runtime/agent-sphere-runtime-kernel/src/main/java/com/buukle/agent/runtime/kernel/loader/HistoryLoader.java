@@ -15,9 +15,9 @@ import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolCallDTO;
-import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
-import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
+import com.buukle.agent.runtime.kernel.runner.tool.LiveToolResultPolicy;
 import com.buukle.agent.runtime.kernel.util.ScreenshotObservationSupport;
 import com.buukle.agent.util.json.JsonUtils;
 import com.buukle.agent.util.json.ToolCallReason;
@@ -66,67 +66,102 @@ public class HistoryLoader {
      */
     public HistoryResult loadResult(Long sessionId, Long excludeRunId, boolean restoreCurrentRun) {
         List<ChatMessageDTO> messages = new ArrayList<>();
-        int currentRunStart = -1;
 
         AgentCompactRecordVO latestCompact = compactRecordSpi.getLatestCompleted(sessionId);
-        if (latestCompact != null && latestCompact.getSummaryAfter() != null
-                && !latestCompact.getSummaryAfter().isBlank()) {
-            messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_SYSTEM)
-                    .setContent(RunnerConstants.HISTORY_SUMMARY_PREFIX + latestCompact.getSummaryAfter()));
-        }
-
+        appendSessionSummary(messages, latestCompact);
         Long afterRunId = latestCompact != null && latestCompact.getCompactedUptoRunId() != null
                 ? latestCompact.getCompactedUptoRunId() : 0L;
         List<RunVO> runs = runSpi.listRunsBySessionAfterId(sessionId, afterRunId);
 
-        // run-local compaction of the current run: summary always acts as the leading system; tail is injected only on resume
-        // (during session compaction reassembly the tail is kept by SessionRunner's currentRunTail to avoid duplication).
+        RunLocalSummary runLocal = appendRunLocalSummary(messages, excludeRunId, restoreCurrentRun);
+        appendCancelledRunHint(messages, runs, excludeRunId);
+
+        boolean includeCurrent = restoreCurrentRun && !runLocal.hasSummary() && excludeRunId != null;
+        Map<Long, List<AgentToolCallRecordVO>> callsByRun =
+                collectToolCallsByRun(sessionId, runs, excludeRunId, includeCurrent, restoreCurrentRun);
+        Set<Long> overBudget = markOverBudget(runs, callsByRun);
+
+        // Build completed runs chronologically (current run handled separately).
+        for (RunVO run : runs) {
+            if (excludeRunId != null && excludeRunId.equals(run.getId())) {
+                continue;
+            }
+            appendRun(messages, run, callsByRun.get(run.getId()), overBudget);
+        }
+
+        RunVO currentRun = runs.stream()
+                .filter(r -> excludeRunId != null && excludeRunId.equals(r.getId()))
+                .findFirst().orElse(null);
+        int currentRunStart = appendCurrentRun(messages, currentRun, excludeRunId, callsByRun, overBudget,
+                includeCurrent, restoreCurrentRun, runLocal);
+        return new HistoryResult(messages, currentRunStart);
+    }
+
+    private void appendSessionSummary(List<ChatMessageDTO> messages, AgentCompactRecordVO latestCompact) {
+        if (latestCompact == null || latestCompact.getSummaryAfter() == null
+                || latestCompact.getSummaryAfter().isBlank()) {
+            return;
+        }
+        messages.add(new ChatMessageDTO()
+                .setRole(LlmRoles.SYSTEM)
+                .setContent(RunnerConstants.HISTORY_SUMMARY_PREFIX + latestCompact.getSummaryAfter()));
+    }
+
+    /**
+     * Run-local compaction of the current run: the summary always acts as the leading system;
+     * the tail is injected only on resume, because during session compaction reassembly the
+     * caller keeps its own {@code currentRunTail} to avoid duplication.
+     */
+    private RunLocalSummary appendRunLocalSummary(List<ChatMessageDTO> messages, Long excludeRunId,
+                                                  boolean restoreCurrentRun) {
         AgentCompactRecordVO runCompact = excludeRunId != null
                 ? compactRecordSpi.getLatestCompletedByRunId(excludeRunId) : null;
-        boolean hasRunSummary = runCompact != null && runCompact.getSummaryAfter() != null
+        boolean hasSummary = runCompact != null && runCompact.getSummaryAfter() != null
                 && !runCompact.getSummaryAfter().isBlank();
-        List<ChatMessageDTO> runTail = null;
-        if (hasRunSummary) {
-            messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_SYSTEM)
-                    .setContent(RUN_SUMMARY_PREFIX + runCompact.getSummaryAfter()));
-            if (restoreCurrentRun) {
-                runTail = parseTail(runCompact.getTailJson());
-            }
+        if (!hasSummary) {
+            return RunLocalSummary.absent();
         }
+        messages.add(new ChatMessageDTO()
+                .setRole(LlmRoles.SYSTEM)
+                .setContent(RUN_SUMMARY_PREFIX + runCompact.getSummaryAfter()));
+        List<ChatMessageDTO> runTail = restoreCurrentRun ? parseTail(runCompact.getTailJson()) : null;
+        return new RunLocalSummary(true, runTail);
+    }
 
-        // Detect if any previous run was cancelled — inject a context hint
-        boolean hasCancelledRun = runs.stream().anyMatch(
-                r -> RunStatus.CANCELLED.name().equals(r.getStatus())
-                        && (excludeRunId == null || !excludeRunId.equals(r.getId())));
-        if (hasCancelledRun) {
-            String originalUserMessage = runs.stream()
-                    .filter(r -> RunStatus.CANCELLED.name().equals(r.getStatus())
-                            && (excludeRunId == null || !excludeRunId.equals(r.getId())))
-                    .map(RunVO::getUserMessage)
-                    .filter(msg -> msg != null && !msg.isBlank())
-                    .findFirst().orElse("");
-            messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_SYSTEM)
-                    .setContent("[The previous run was cancelled. "
-                            + (originalUserMessage.isBlank()
-                                ? "The user may be continuing their original request."
-                                : "The user's original request was: \"" + originalUserMessage + "\". Read history carefully and continue.")
-                            + " Do NOT ask 'what do you want to do' — execute the task.]"));
+    private void appendCancelledRunHint(List<ChatMessageDTO> messages, List<RunVO> runs, Long excludeRunId) {
+        // Detect if any previous run was cancelled — inject a context hint.
+        List<RunVO> cancelled = runs.stream()
+                .filter(r -> RunStatus.CANCELLED.name().equals(r.getStatus()))
+                .filter(r -> excludeRunId == null || !excludeRunId.equals(r.getId()))
+                .toList();
+        if (cancelled.isEmpty()) {
+            return;
         }
+        String originalUserMessage = cancelled.stream()
+                .map(RunVO::getUserMessage)
+                .filter(msg -> msg != null && !msg.isBlank())
+                .findFirst().orElse("");
+        messages.add(new ChatMessageDTO()
+                .setRole(LlmRoles.SYSTEM)
+                .setContent("[The previous run was cancelled. "
+                        + (originalUserMessage.isBlank()
+                        ? "The user may be continuing their original request."
+                        : "The user's original request was: \"" + originalUserMessage + "\". Read history carefully and continue.")
+                        + " Do NOT ask 'what do you want to do' — execute the task.]"));
+    }
 
-        boolean includeCurrent = restoreCurrentRun && !hasRunSummary && excludeRunId != null;
-
-        // Collect all tool call records per run (current run only when needed for reconstruction)
+    private Map<Long, List<AgentToolCallRecordVO>> collectToolCallsByRun(Long sessionId, List<RunVO> runs,
+                                                                        Long excludeRunId, boolean includeCurrent,
+                                                                        boolean restoreCurrentRun) {
         Map<Long, List<AgentToolCallRecordVO>> callsByRun = new LinkedHashMap<>();
         for (RunVO run : runs) {
             boolean current = excludeRunId != null && excludeRunId.equals(run.getId());
-            // If the run-local tail is corrupt and a fallback is needed, also read the current run's tool records
+            // If the run-local tail is corrupt and a fallback is needed, also read the current run's tool records.
             if (current && !includeCurrent && !restoreCurrentRun) {
                 continue;
             }
-            List<AgentToolCallRecordVO> calls = new ArrayList<>(toolCallRecordSpi.listBySessionId(sessionId, run.getId()));
+            List<AgentToolCallRecordVO> calls =
+                    new ArrayList<>(toolCallRecordSpi.listBySessionId(sessionId, run.getId()));
             // A sub-agent's internal tool calls are not part of the parent run's conversation history: the parent agent sees the delegate result only once,
             // and replaying them would let the model see tool_calls it never issued (with different turn_no semantics).
             calls.removeIf(c -> c.getSubAgentRunId() != null);
@@ -135,8 +170,11 @@ public class HistoryLoader {
                 callsByRun.put(run.getId(), calls);
             }
         }
+        return callsByRun;
+    }
 
-        // Budget: accumulate from newest to oldest, mark over-budget entries
+    /** Accumulates from newest to oldest and marks entries that exceed the tool-result history budget. */
+    private Set<Long> markOverBudget(List<RunVO> runs, Map<Long, List<AgentToolCallRecordVO>> callsByRun) {
         Set<Long> overBudget = new HashSet<>();
         int budgetUsed = 0;
         List<Long> runIds = runs.stream().map(RunVO::getId).toList();
@@ -157,39 +195,48 @@ public class HistoryLoader {
                 }
             }
         }
+        return overBudget;
+    }
 
-        // Build completed runs chronologically (current run handled separately)
-        for (RunVO run : runs) {
-            if (excludeRunId != null && excludeRunId.equals(run.getId())) {
-                continue;
-            }
-            appendRun(messages, run, callsByRun.get(run.getId()), overBudget);
-        }
-
-        // Current run: prefer the tail on resume; otherwise use persisted tool history + per-loop assistant bodies
-        RunVO currentRun = runs.stream()
-                .filter(r -> excludeRunId != null && excludeRunId.equals(r.getId()))
-                .findFirst().orElse(null);
+    /**
+     * Appends the current run on resume: prefer the run-local tail, otherwise replay persisted
+     * tool history plus per-loop assistant bodies.
+     *
+     * @return index where the current run starts, or -1 when it was not appended
+     */
+    private int appendCurrentRun(List<ChatMessageDTO> messages, RunVO currentRun, Long excludeRunId,
+                                 Map<Long, List<AgentToolCallRecordVO>> callsByRun, Set<Long> overBudget,
+                                 boolean includeCurrent, boolean restoreCurrentRun, RunLocalSummary runLocal) {
         if (includeCurrent && currentRun != null) {
-            currentRunStart = messages.size();
+            int start = messages.size();
             appendRunWithAssistantText(messages, currentRun, callsByRun.get(currentRun.getId()), overBudget,
                     restoreCurrentRun);
-        } else if (restoreCurrentRun && hasRunSummary) {
-            if (runTail != null && !runTail.isEmpty()) {
-                currentRunStart = messages.size();
-                messages.addAll(runTail);
-            } else {
-                log.warn("Run-local compaction tail unreadable for run {}; falling back to persisted tool history",
-                        excludeRunId);
-                if (currentRun != null) {
-                    currentRunStart = messages.size();
-                    appendRunWithAssistantText(messages, currentRun,
-                            callsByRun.get(currentRun.getId()), overBudget, restoreCurrentRun);
-                }
-            }
+            return start;
         }
+        if (!restoreCurrentRun || !runLocal.hasSummary()) {
+            return -1;
+        }
+        if (runLocal.tail() != null && !runLocal.tail().isEmpty()) {
+            int start = messages.size();
+            messages.addAll(runLocal.tail());
+            return start;
+        }
+        log.warn("Run-local compaction tail unreadable for run {}; falling back to persisted tool history",
+                excludeRunId);
+        if (currentRun == null) {
+            return -1;
+        }
+        int start = messages.size();
+        appendRunWithAssistantText(messages, currentRun, callsByRun.get(currentRun.getId()), overBudget,
+                restoreCurrentRun);
+        return start;
+    }
 
-        return new HistoryResult(messages, currentRunStart);
+    /** Presence of the run-local summary plus the optional resume tail. */
+    private record RunLocalSummary(boolean hasSummary, List<ChatMessageDTO> tail) {
+        static RunLocalSummary absent() {
+            return new RunLocalSummary(false, null);
+        }
     }
 
     private void appendRun(List<ChatMessageDTO> messages, RunVO run,
@@ -224,7 +271,7 @@ public class HistoryLoader {
                                                    Set<Long> overBudget, boolean replayScreenshots) {
         if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
             messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_USER)
+                    .setRole(LlmRoles.USER)
                     .setContent(run.getUserMessage()));
         }
         List<AgentToolCallRecordVO> allCalls = calls != null ? calls : List.of();
@@ -272,7 +319,7 @@ public class HistoryLoader {
             String content = cur.getReplyContent();
             boolean hasText = content != null && !content.isBlank();
             if (hasText || !turnCalls.isEmpty()) {
-                ChatMessageDTO assistant = new ChatMessageDTO().setRole(LlmApiConstant.ROLE_ASSISTANT);
+                ChatMessageDTO assistant = new ChatMessageDTO().setRole(LlmRoles.ASSISTANT);
                 if (hasText) {
                     assistant.setContent(content);
                 }
@@ -301,7 +348,7 @@ public class HistoryLoader {
                 : (idx < allCalls.size() ? allCalls.subList(idx, allCalls.size()) : List.of());
         if (!remaining.isEmpty()) {
             messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_ASSISTANT)
+                    .setRole(LlmRoles.ASSISTANT)
                     .setToolCalls(toToolCalls(remaining)));
             for (AgentToolCallRecordVO call : remaining) {
                 messages.add(toolMessage(call, overBudget));
@@ -342,7 +389,7 @@ public class HistoryLoader {
                                         Set<Long> overBudget, boolean replayScreenshots) {
         if (run.getUserMessage() != null && !run.getUserMessage().isBlank()) {
             messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_USER)
+                    .setRole(LlmRoles.USER)
                     .setContent(run.getUserMessage()));
         }
         List<AgentToolCallRecordVO> allCalls = calls != null ? calls : List.of();
@@ -363,7 +410,7 @@ public class HistoryLoader {
     static boolean hasValidToolCallPairing(List<ChatMessageDTO> segment) {
         for (int i = 0; i < segment.size(); i++) {
             ChatMessageDTO message = segment.get(i);
-            if (!LlmApiConstant.ROLE_ASSISTANT.equals(message.getRole())
+            if (!LlmRoles.ASSISTANT.equals(message.getRole())
                     || message.getToolCalls() == null || message.getToolCalls().isEmpty()) {
                 continue;
             }
@@ -373,7 +420,7 @@ public class HistoryLoader {
             }
             int j = i + 1;
             while (j < segment.size() && !expected.isEmpty()
-                    && LlmApiConstant.ROLE_TOOL.equals(segment.get(j).getRole())) {
+                    && LlmRoles.TOOL.equals(segment.get(j).getRole())) {
                 expected.remove(segment.get(j).getToolCallId());
                 j++;
             }
@@ -472,11 +519,11 @@ public class HistoryLoader {
             return;
         }
         boolean hasAssistantText = messages.stream().anyMatch(m ->
-                LlmApiConstant.ROLE_ASSISTANT.equals(m.getRole())
+                LlmRoles.ASSISTANT.equals(m.getRole())
                         && m.getContent() instanceof String s && !s.isBlank());
         if (!hasAssistantText) {
             messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_ASSISTANT)
+                    .setRole(LlmRoles.ASSISTANT)
                     .setContent(run.getAssistantReply()));
         }
     }
@@ -516,7 +563,7 @@ public class HistoryLoader {
         }
         for (AgentToolCallRecordVO c : calls) {
             messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_ASSISTANT)
+                    .setRole(LlmRoles.ASSISTANT)
                     .setToolCalls(List.of(toolCall(c))));
             messages.add(toolMessage(c, overBudget));
         }
@@ -565,7 +612,7 @@ public class HistoryLoader {
                     : "{\"error\":\"Tool execution failed\"}";
         }
         return new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_TOOL)
+                .setRole(LlmRoles.TOOL)
                 .setToolCallId(callId)
                 .setContent(result);
     }

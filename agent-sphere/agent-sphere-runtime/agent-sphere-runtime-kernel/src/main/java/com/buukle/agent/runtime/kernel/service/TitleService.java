@@ -16,7 +16,7 @@ import com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
-import com.buukle.agent.runtime.kernel.port.vo.SessionStatus;
+import com.buukle.agent.runtime.kernel.port.vo.SessionEventType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -56,7 +56,7 @@ public class TitleService {
             String title = doGenerateTitle(sessionId, userMessage);
             if (title != null && !title.isBlank()) {
                 sessionSpi.updateSession(sessionId, title);
-                eventPublisher.publishEvent(new RuntimeEventVO(SessionStatus.TITLE_UPDATED,
+                eventPublisher.publishEvent(new RuntimeEventVO(SessionEventType.TITLE_UPDATED,
                         RuntimeEventDataVO.builder()
                                 .sessionId(sessionId)
                                 .runId(runId)

@@ -1,7 +1,7 @@
-import { localizeApiError } from '@/utils/errorMessage';
 import { useIntl } from '@umijs/max';
 import { App, Button, Collapse, Form, Input, Modal, Tag, Upload } from 'antd';
 import { useEffect, useState } from 'react';
+import { STATUS } from '@/constants/status';
 import { useCan } from '@/hooks/usePermission';
 import { useRecordedTask } from '@/hooks/useRecordedTask';
 import type {
@@ -9,6 +9,7 @@ import type {
   SkillSyncRun,
 } from '@/services/agentSphere/api';
 import { agentApi } from '@/services/agentSphere/api';
+import { localizeApiError } from '@/utils/errorMessage';
 import ResourceTemplateEditor from './resourceTemplate/ResourceTemplateEditor';
 import SessionCleanupRunPanel from './sessionCleanup';
 import SessionCleanupRunsDrawer from './sessionCleanupRuns';
@@ -174,7 +175,7 @@ export default function AdminSettings() {
   /** Whether a RUNNING record already exists (used to disable the button and resume display). */
   const findRunningRun = async () => {
     const page = await agentApi.admin.listSessionCleanupRuns({
-      status: 'RUNNING',
+      status: STATUS.CLEANUP.RUNNING,
       page: 1,
       size: 1,
     });
@@ -192,7 +193,7 @@ export default function AdminSettings() {
     setSyncSubmitting(true);
     try {
       const running = await agentApi.admin.listSkillSyncRuns({
-        status: 'RUNNING',
+        status: STATUS.CLEANUP.RUNNING,
         page: 1,
         size: 1,
       });

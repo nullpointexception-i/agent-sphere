@@ -1,5 +1,6 @@
 package com.buukle.agent.model.service.adapter.strategy.impl;
 
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.common.constant.ReasoningEffort;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
@@ -34,9 +35,9 @@ import java.util.List;
 @Component
 public class QwenProviderStrategy implements ProviderStrategy {
 
-    private static final String ROLE_ASSISTANT = "assistant";
-    private static final String ROLE_SYSTEM = "system";
-    private static final String ROLE_USER = "user";
+    private static final String ROLE_ASSISTANT = LlmRoles.ASSISTANT;
+    private static final String ROLE_SYSTEM = LlmRoles.SYSTEM;
+    private static final String ROLE_USER = LlmRoles.USER;
 
     @Override
     public ModelProviderCompany getCompany() {

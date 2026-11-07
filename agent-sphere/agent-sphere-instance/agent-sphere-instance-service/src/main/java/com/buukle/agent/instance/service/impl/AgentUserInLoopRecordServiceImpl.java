@@ -2,7 +2,7 @@ package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.instance.domain.AgentUserInLoopRecord;
-import com.buukle.agent.instance.dtvo.enums.AgentUserInLoopRecordStatus;
+import com.buukle.agent.common.event.UserInLoopRecordStatus;
 import com.buukle.agent.instance.dtvo.vo.AgentUserInLoopRecordVO;
 import com.buukle.agent.instance.repository.AgentUserInLoopRecordMapper;
 import com.buukle.agent.instance.spi.AgentUserInLoopRecordSpi;
@@ -44,7 +44,7 @@ public class AgentUserInLoopRecordServiceImpl implements AgentUserInLoopRecordSp
         record.setRunId(runId);
         record.setSessionId(sessionId);
         record.setInteractionType(interactionType);
-        record.setStatus(AgentUserInLoopRecordStatus.WAITING);
+        record.setStatus(UserInLoopRecordStatus.WAITING.value());
         record.setPrompt(prompt);
         mapper.insert(record);
         return toVO(record);
@@ -70,7 +70,7 @@ public class AgentUserInLoopRecordServiceImpl implements AgentUserInLoopRecordSp
     public void respondRecord(Long id, String response, String respondedBy, String result, String comment) {
         AgentUserInLoopRecord record = mapper.selectById(id);
         if (record == null) return;
-        record.setStatus(AgentUserInLoopRecordStatus.RESPONDED);
+        record.setStatus(UserInLoopRecordStatus.RESPONDED.value());
         record.setResponse(response);
         record.setRespondedBy(respondedBy);
         record.setResult(result);

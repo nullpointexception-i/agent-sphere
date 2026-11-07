@@ -1,4 +1,5 @@
 import { API_PATHS } from '@/constants/endpoints';
+import { TIMING } from '@/constants/timing';
 import { getToken } from '@/utils/auth';
 
 interface FrontendEvent {
@@ -154,7 +155,7 @@ class UserTracker {
     this.buffer.push(event);
     if (this.buffer.length >= 20) this.flush();
     else if (!this.flushTimer) {
-      this.flushTimer = setTimeout(() => this.flush(), 30000);
+      this.flushTimer = setTimeout(() => this.flush(), TIMING.TRACKER_FLUSH_MS);
     }
   }
 

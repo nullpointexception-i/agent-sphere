@@ -1,8 +1,8 @@
-import { LARGE_PAGE_SIZE } from '@/constants/pagination';
 import { EyeOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Button, Descriptions, Input, Modal, Select, Table, Tag } from 'antd';
 import { useEffect, useState } from 'react';
+import { LARGE_PAGE_SIZE } from '@/constants/pagination';
 import { agentApi } from '@/services/agentSphere/api';
 
 const ACTION_OPTIONS = [

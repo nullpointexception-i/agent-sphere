@@ -2,6 +2,7 @@ package com.buukle.agent.completions.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.completions.domain.AgentCompletions;
@@ -54,8 +55,8 @@ public class CompletionsServiceImpl implements CompletionsService {
 
     private static final Pattern FIELD_PLACEHOLDER = Pattern.compile("\\{\\{\\s*([\\w.]+)\\s*}}");
     private static final String INPUT_HOLDER = "{{input}}";
-    private static final String ROLE_SYSTEM = "system";
-    private static final String ROLE_USER = "user";
+    private static final String ROLE_SYSTEM = LlmRoles.SYSTEM;
+    private static final String ROLE_USER = LlmRoles.USER;
     private static final String OUTPUT_SCHEMA_HINT = "\n\nReturn the final result strictly according to the following JSON Schema (output only JSON that matches the schema, with no extra explanation):\n";
     private static final String RESPONSE_FORMAT_TYPE_JSON_OBJECT = "json_object";
     private static final String JSON_SCHEMA_NAME = "output";

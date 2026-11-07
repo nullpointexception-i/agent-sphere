@@ -1,10 +1,10 @@
-import { PERM } from '@/constants/permissions';
 import { UploadOutlined, UserOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl, useModel } from '@umijs/max';
 import { App, Button, Card, Form, Input, Upload } from 'antd';
 import { useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 

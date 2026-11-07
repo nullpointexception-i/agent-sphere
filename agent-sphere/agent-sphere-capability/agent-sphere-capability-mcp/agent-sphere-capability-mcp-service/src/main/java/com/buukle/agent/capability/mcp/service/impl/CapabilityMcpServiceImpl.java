@@ -16,6 +16,7 @@ import com.buukle.agent.capability.mcp.service.mcp.McpCallContext;
 import com.buukle.agent.capability.mcp.service.mcp.McpProtocolConstants;
 import com.buukle.agent.capability.mcp.service.mcp.McpTransportClient;
 import com.buukle.agent.capability.mcp.service.mcp.McpTransportFactory;
+import com.buukle.agent.common.constant.HttpHeaders;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
 import lombok.extern.slf4j.Slf4j;
@@ -32,8 +33,8 @@ import java.util.List;
 public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityMcp> implements CapabilityMcpService {
     private static final String SQL_LIMIT_ONE = "LIMIT 1";
     private static final String DIRECT_HTTP_HINT = "No MCP found for serverUrl={}, using direct HTTP call";
-    private static final String HEADER_CONTENT_TYPE = "Content-Type";
-    private static final String APPLICATION_JSON = "application/json";
+    private static final String HEADER_CONTENT_TYPE = HttpHeaders.CONTENT_TYPE;
+    private static final String APPLICATION_JSON = HttpHeaders.APPLICATION_JSON;
     private static final String HTTP_PREFIX = "http://";
     private static final String HTTPS_PREFIX = "https://";
 

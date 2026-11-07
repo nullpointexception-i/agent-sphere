@@ -1,6 +1,3 @@
-import { localizeApiError } from '@/utils/errorMessage';
-import { API_BASE } from '@/constants/api';
-import { API_PATHS } from '@/constants/endpoints';
 import {
   DownOutlined,
   GlobalOutlined,
@@ -23,8 +20,11 @@ import {
 } from '@umijs/max';
 import { Alert, App, Button, Card, Col, Dropdown, Row } from 'antd';
 import React, { startTransition, useEffect, useState } from 'react';
+import { API_BASE } from '@/constants/api';
+import { API_PATHS } from '@/constants/endpoints';
 import { agentApi } from '@/services/agentSphere/api';
 import { setStoredUser, type UserVO } from '@/utils/auth';
+import { localizeApiError } from '@/utils/errorMessage';
 import { labelWithRule } from '@/utils/labelWithRule';
 import Settings from '../../../../config/defaultSettings';
 import { useStyles } from './style';
@@ -147,8 +147,14 @@ const Login: React.FC = () => {
       await completeLogin(user);
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
-      const msg = localizeApiError(body, error?.message || intl.formatMessage({ id: 'pages.login.failure',
-          defaultMessage: 'Login failed, please try again!', }));
+      const msg = localizeApiError(
+        body,
+        error?.message ||
+          intl.formatMessage({
+            id: 'pages.login.failure',
+            defaultMessage: 'Login failed, please try again!',
+          }),
+      );
       setErrorMessage(msg);
     }
   };
@@ -176,8 +182,14 @@ const Login: React.FC = () => {
       window.location.href = authorizeUrl;
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
-      const msg = localizeApiError(body, error?.message || intl.formatMessage({ id: 'pages.login.ssoFailed',
-          defaultMessage: 'Failed to start enterprise sign-in, please retry!', }));
+      const msg = localizeApiError(
+        body,
+        error?.message ||
+          intl.formatMessage({
+            id: 'pages.login.ssoFailed',
+            defaultMessage: 'Failed to start enterprise sign-in, please retry!',
+          }),
+      );
       message.error(msg);
     }
   };
@@ -192,8 +204,14 @@ const Login: React.FC = () => {
       await completeLogin(user);
     } catch (error: any) {
       const body = error?.response?.data ?? error?.data ?? {};
-      const msg = localizeApiError(body, error?.message || intl.formatMessage({ id: 'pages.login.failure',
-          defaultMessage: 'Login failed, please try again!', }));
+      const msg = localizeApiError(
+        body,
+        error?.message ||
+          intl.formatMessage({
+            id: 'pages.login.failure',
+            defaultMessage: 'Login failed, please try again!',
+          }),
+      );
       setErrorMessage(msg);
     }
   };

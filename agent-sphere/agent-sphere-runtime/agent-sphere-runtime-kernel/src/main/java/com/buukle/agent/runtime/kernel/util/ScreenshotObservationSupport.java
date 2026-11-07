@@ -2,7 +2,7 @@ package com.buukle.agent.runtime.kernel.util;
 
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
-import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -79,7 +79,7 @@ public final class ScreenshotObservationSupport {
                         .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl(dataUrl)));
             }
             return new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_USER)
+                    .setRole(LlmRoles.USER)
                     .setContent(parts);
         } catch (Exception e) {
             log.warn("Screenshot observation build failed: {}", e.getMessage());
@@ -126,7 +126,7 @@ public final class ScreenshotObservationSupport {
             return;
         }
         ChatMessageDTO last = messages.get(messages.size() - 1);
-        if (last == null || !LlmApiConstant.ROLE_USER.equals(last.getRole())) {
+        if (last == null || !LlmRoles.USER.equals(last.getRole())) {
             return;
         }
         Object content = last.getContent();
@@ -150,7 +150,7 @@ public final class ScreenshotObservationSupport {
             return false;
         }
         ChatMessageDTO last = messages.get(messages.size() - 1);
-        if (last == null || !LlmApiConstant.ROLE_USER.equals(last.getRole())) {
+        if (last == null || !LlmRoles.USER.equals(last.getRole())) {
             return false;
         }
         Object content = last.getContent();

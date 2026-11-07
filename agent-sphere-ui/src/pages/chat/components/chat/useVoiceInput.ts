@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { TIMING } from '@/constants/timing';
 
 interface UseVoiceInputOptions {
   inputRef: React.MutableRefObject<string>;
@@ -25,7 +26,7 @@ export function useVoiceInput({
   const lastTranscriptRef = useRef('');
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const SILENCE_TIMEOUT = 10000;
+  const SILENCE_TIMEOUT = TIMING.VOICE_SILENCE_MS;
 
   const toggleRecording = useCallback(() => {
     if (sending) return;

@@ -1,6 +1,8 @@
 package com.buukle.agent.runtime.kernel.runner;
 
-import com.buukle.agent.runtime.kernel.runner.LoopLimitResolver.ResolvedLoopLimit;
+import com.buukle.agent.runtime.kernel.runner.loop.LoopLimitResolver;
+import com.buukle.agent.runtime.kernel.runner.loop.LoopLimitResolver.ResolvedLoopLimit;
+import com.buukle.agent.runtime.kernel.runner.loop.LoopLimitSource;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

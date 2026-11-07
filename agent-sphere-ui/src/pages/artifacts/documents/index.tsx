@@ -1,5 +1,3 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
-import { PERM } from '@/constants/permissions';
 import {
   DeleteOutlined,
   DownloadOutlined,
@@ -14,6 +12,8 @@ import { App, Button, Descriptions, Modal, Tag, Typography } from 'antd';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 import { exportDocxToFile } from '@/utils/exportWord';
 

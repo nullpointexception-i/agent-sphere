@@ -232,6 +232,20 @@ public class ContextPreparer {
     private List<RuntimeTool> resolveTools(List<CapabilityVO> capabilities, ValidationResult validated,
                                            boolean noClarification, RunVO run) {
         List<RuntimeTool> result = new ArrayList<>();
+        resolveCapabilityTools(capabilities, result);
+        addAutoIncludeBuiltinTools(result);
+        addDelegateTool(result);
+        addClarificationTool(noClarification, result);
+        addWaitTool(result);
+        addReadToolResultTool(capabilities, result);
+        addProgressTool(result);
+        addFinishTool(capabilities, noClarification, run, result);
+        applyReadOnlyFilter(run, result);
+        return dedupeByLlmName(result);
+    }
+
+    /** Resolves tools bound to the instance capabilities (MCP / CLI / builtin). */
+    private void resolveCapabilityTools(List<CapabilityVO> capabilities, List<RuntimeTool> result) {
         for (CapabilityVO cap : capabilities) {
             if (!STATUS_ENABLED.equals(cap.getStatus())) continue;
             try {
@@ -250,146 +264,155 @@ public class ContextPreparer {
                 log.warn("Failed to resolve RuntimeTool id={} type={}", cap.getId(), cap.getCapabilityType(), e);
             }
         }
+    }
+
+    /** Builtin tools that every instance gets without an explicit DB binding. */
+    private void addAutoIncludeBuiltinTools(List<RuntimeTool> result) {
         for (BuiltinToolVO tool : builtinSpi.listAutoIncludeBuiltinTools()) {
-            String llmName = LLM_PREFIX_BUILTIN + tool.getId();
-            Map<String, Object> binding = new HashMap<>();
-            binding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, tool.getName());
-            result.add(RuntimeTool.builder()
-                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                    .capabilityId(tool.getId())
-                    .llmToolName(llmName)
-                    .toolRef(ToolRefs.builtin(tool.getName()))
-                    .displayName(tool.getDisplayNameCn())
-                    .displayNameCn(tool.getDisplayNameCn())
-                    .displayNameEn(tool.getDisplayNameEn())
-                    .description(tool.getDescription() != null ? tool.getDescription() : "")
-                    .parametersSchemaJson(tool.getParamSchema())
-                    .execBinding(binding)
-                    .compressEnabled(tool.isCompressEnabled())
-                    .accessMode(tool.getAccessMode())
-                    .securityLevel(tool.getSecurityLevel())
-                    .approvalScope(tool.getApprovalScope())
-                    .build());
+            result.add(toRuntimeTool(tool));
         }
-        // When delegate is enabled, register it as the single execution-entry pseudo-tool: skill bodies are no longer registered as tools;
-        // the main agent decides through delegate whether to execute inline (main) or in an isolated sub-agent (subagent).
-        if (properties.getDelegate().isEnabled()) {
-            result.add(RuntimeTool.builder()
-                    .capabilityType(SubAgentConstants.CAPABILITY_TYPE_SUB_AGENT)
-                    .llmToolName(SubAgentConstants.DELEGATE_TOOL)
-                    .toolRef(ToolRefs.agent(SubAgentConstants.DELEGATE_TOOL))
-                    .displayName("Delegate sub-agent").displayNameCn("委派子 Agent").displayNameEn("Delegate")
-                    .description("The only execution entry for delegated work. Use mode=main to execute inline in the current loop "
-                            + "(no sub-agent), or mode=subagent to isolate work in a sub-agent. Provide optional agentRef=instance:<id> "
-                            + "to prefix the sub-agent system prompt, or tasks[] for a DAG of parallel sub-agents (requires mode=subagent).")
-                    .parametersSchemaJson(SubAgentConstants.DELEGATE_SCHEMA)
-                    .execBinding(Map.of()).build());
+    }
+
+    /** Single execution entry for delegated work (inline main loop or isolated sub-agent). */
+    private void addDelegateTool(List<RuntimeTool> result) {
+        if (!properties.getDelegate().isEnabled()) {
+            return;
         }
-        // Register ask_clarification by default; removed for autonomous tasks (noClarification) so the model cannot ask the user questions
-        if (!noClarification) {
-            long clarificationId = BuiltinToolEnum.ASK_CLARIFICATION.getId();
-            String clarificationLlmName = LLM_PREFIX_BUILTIN + clarificationId;
-            Map<String, Object> clarificationBinding = new HashMap<>();
-            clarificationBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ChatClarification.INTERNAL_NAME);
-            result.add(RuntimeTool.builder()
-                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                    .capabilityId(clarificationId)
-                    .llmToolName(clarificationLlmName)
-                    .toolRef(ToolRefs.builtin(ChatClarification.INTERNAL_NAME))
-                    .displayName(ChatClarification.DISPLAY_NAME)
-                    .displayNameCn(ChatClarification.DISPLAY_NAME_CN)
-                    .displayNameEn(ChatClarification.DISPLAY_NAME)
-                    .description(ChatClarification.DESCRIPTION)
-                    .parametersSchemaJson(CLARIFICATION_PARAM_SCHEMA)
-                    .execBinding(clarificationBinding).build());
+        result.add(RuntimeTool.builder()
+                .capabilityType(SubAgentConstants.CAPABILITY_TYPE_SUB_AGENT)
+                .llmToolName(SubAgentConstants.DELEGATE_TOOL)
+                .toolRef(ToolRefs.agent(SubAgentConstants.DELEGATE_TOOL))
+                .displayName("Delegate sub-agent").displayNameCn("委派子 Agent").displayNameEn("Delegate")
+                .description("The only execution entry for delegated work. Use mode=main to execute inline in the current loop "
+                        + "(no sub-agent), or mode=subagent to isolate work in a sub-agent. Provide optional agentRef=instance:<id> "
+                        + "to prefix the sub-agent system prompt, or tasks[] for a DAG of parallel sub-agents (requires mode=subagent).")
+                .parametersSchemaJson(SubAgentConstants.DELEGATE_SCHEMA)
+                .execBinding(Map.of()).build());
+    }
+
+    /** ask_clarification is omitted for autonomous tasks so the model cannot ask the user questions. */
+    private void addClarificationTool(boolean noClarification, List<RuntimeTool> result) {
+        if (noClarification) {
+            return;
         }
-        // Register wait by default: a suspend-resume tool available globally (no user presence needed, hence no noClarification exemption).
-        // Shaped like ask_clarification: no SPI bean, no DB seed, registered directly.
-        {
-            long waitId = BuiltinToolEnum.WAIT.getId();
-            Map<String, Object> waitBinding = new HashMap<>();
-            waitBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, WaitConstants.INTERNAL_NAME);
-            result.add(RuntimeTool.builder()
-                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                    .capabilityId(waitId)
-                    .llmToolName(LLM_PREFIX_BUILTIN + waitId)
-                    .toolRef(ToolRefs.builtin(WaitConstants.INTERNAL_NAME))
-                    .displayName(WaitConstants.DISPLAY_NAME)
-                    .displayNameCn(WaitConstants.DISPLAY_NAME_CN)
-                    .displayNameEn(WaitConstants.DISPLAY_NAME)
-                    .description(WaitConstants.DESCRIPTION)
-                    .parametersSchemaJson(WAIT_PARAM_SCHEMA)
-                    .execBinding(waitBinding).build());
+        long clarificationId = BuiltinToolEnum.ASK_CLARIFICATION.getId();
+        String clarificationLlmName = LLM_PREFIX_BUILTIN + clarificationId;
+        Map<String, Object> clarificationBinding = new HashMap<>();
+        clarificationBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ChatClarification.INTERNAL_NAME);
+        result.add(RuntimeTool.builder()
+                .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                .capabilityId(clarificationId)
+                .llmToolName(clarificationLlmName)
+                .toolRef(ToolRefs.builtin(ChatClarification.INTERNAL_NAME))
+                .displayName(ChatClarification.DISPLAY_NAME)
+                .displayNameCn(ChatClarification.DISPLAY_NAME_CN)
+                .displayNameEn(ChatClarification.DISPLAY_NAME)
+                .description(ChatClarification.DESCRIPTION)
+                .parametersSchemaJson(CLARIFICATION_PARAM_SCHEMA)
+                .execBinding(clarificationBinding).build());
+    }
+
+    /** wait is global: suspend-resume needs no user presence, hence no noClarification exemption. */
+    private void addWaitTool(List<RuntimeTool> result) {
+        long waitId = BuiltinToolEnum.WAIT.getId();
+        Map<String, Object> waitBinding = new HashMap<>();
+        waitBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, WaitConstants.INTERNAL_NAME);
+        result.add(RuntimeTool.builder()
+                .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                .capabilityId(waitId)
+                .llmToolName(LLM_PREFIX_BUILTIN + waitId)
+                .toolRef(ToolRefs.builtin(WaitConstants.INTERNAL_NAME))
+                .displayName(WaitConstants.DISPLAY_NAME)
+                .displayNameCn(WaitConstants.DISPLAY_NAME_CN)
+                .displayNameEn(WaitConstants.DISPLAY_NAME)
+                .description(WaitConstants.DESCRIPTION)
+                .parametersSchemaJson(WAIT_PARAM_SCHEMA)
+                .execBinding(waitBinding).build());
+    }
+
+    /** read_tool_result reads back historical tool results omitted by the context budget. */
+    private void addReadToolResultTool(List<CapabilityVO> capabilities, List<RuntimeTool> result) {
+        if (capabilities == null || capabilities.isEmpty()) {
+            return;
         }
-        // Register read_tool_result by default: read back historical browser/tool results omitted by the context budget.
-        if (capabilities != null && !capabilities.isEmpty()) {
-            long readId = BuiltinToolEnum.READ_TOOL_RESULT.getId();
-            Map<String, Object> readBinding = new HashMap<>();
-            readBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ToolResultReadConstants.INTERNAL_NAME);
-            result.add(RuntimeTool.builder()
-                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                    .capabilityId(readId)
-                    .llmToolName(LLM_PREFIX_BUILTIN + readId)
-                    .toolRef(ToolRefs.builtin(ToolResultReadConstants.INTERNAL_NAME))
-                    .displayName(ToolResultReadConstants.DISPLAY_NAME)
-                    .displayNameCn(ToolResultReadConstants.DISPLAY_NAME_CN)
-                    .displayNameEn(ToolResultReadConstants.DISPLAY_NAME)
-                    .description(ToolResultReadConstants.DESCRIPTION)
-                    .parametersSchemaJson(ToolResultReadConstants.PARAM_SCHEMA)
-                    .execBinding(readBinding).build());
-        }
-        // Register progress by default: report intermediate progress explicitly, so the model does not disguise intermediate turns as plain text.
-        {
-            long progressId = BuiltinToolEnum.PROGRESS.getId();
-            Map<String, Object> progressBinding = new HashMap<>();
-            progressBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ProgressConstants.INTERNAL_NAME);
-            result.add(RuntimeTool.builder()
-                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                    .capabilityId(progressId)
-                    .llmToolName(LLM_PREFIX_BUILTIN + progressId)
-                    .toolRef(ToolRefs.builtin(ProgressConstants.INTERNAL_NAME))
-                    .displayName(ProgressConstants.DISPLAY_NAME)
-                    .displayNameCn(ProgressConstants.DISPLAY_NAME_CN)
-                    .displayNameEn(ProgressConstants.DISPLAY_NAME)
-                    .description(ProgressConstants.DESCRIPTION)
-                    .parametersSchemaJson(PROGRESS_PARAM_SCHEMA)
-                    .execBinding(progressBinding).build());
-        }
-        // Register finish by default: the only legal way to end an agentic run.
-        // "No tool call" may mean done or may mean giving up; silence alone cannot distinguish them — finish turns it into an explicit declaration.
-        // Pure chat instances (no real capabilities and not autonomous) do not get it, so the model cannot replace a normal answer with a terse summary;
-        // at runtime, "were tools actually used" adds another layer of protection (SessionRunner).
-        //
-        // The contract requires finish to be registered unconditionally: a STRICT_FINISH run without finish has no
-        // legal way to finalize (a resume path once missed finish because noClarification was lost, leaving the worker spinning
-        // until it was stopped manually). This criterion must not depend on whether noClarification / capabilities hold.
+        long readId = BuiltinToolEnum.READ_TOOL_RESULT.getId();
+        Map<String, Object> readBinding = new HashMap<>();
+        readBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ToolResultReadConstants.INTERNAL_NAME);
+        result.add(RuntimeTool.builder()
+                .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                .capabilityId(readId)
+                .llmToolName(LLM_PREFIX_BUILTIN + readId)
+                .toolRef(ToolRefs.builtin(ToolResultReadConstants.INTERNAL_NAME))
+                .displayName(ToolResultReadConstants.DISPLAY_NAME)
+                .displayNameCn(ToolResultReadConstants.DISPLAY_NAME_CN)
+                .displayNameEn(ToolResultReadConstants.DISPLAY_NAME)
+                .description(ToolResultReadConstants.DESCRIPTION)
+                .parametersSchemaJson(ToolResultReadConstants.PARAM_SCHEMA)
+                .execBinding(readBinding).build());
+    }
+
+    /** progress reports intermediate progress explicitly instead of disguising it as plain text. */
+    private void addProgressTool(List<RuntimeTool> result) {
+        long progressId = BuiltinToolEnum.PROGRESS.getId();
+        Map<String, Object> progressBinding = new HashMap<>();
+        progressBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, ProgressConstants.INTERNAL_NAME);
+        result.add(RuntimeTool.builder()
+                .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                .capabilityId(progressId)
+                .llmToolName(LLM_PREFIX_BUILTIN + progressId)
+                .toolRef(ToolRefs.builtin(ProgressConstants.INTERNAL_NAME))
+                .displayName(ProgressConstants.DISPLAY_NAME)
+                .displayNameCn(ProgressConstants.DISPLAY_NAME_CN)
+                .displayNameEn(ProgressConstants.DISPLAY_NAME)
+                .description(ProgressConstants.DESCRIPTION)
+                .parametersSchemaJson(PROGRESS_PARAM_SCHEMA)
+                .execBinding(progressBinding).build());
+    }
+
+    /**
+     * finish is the only legal way to end an agentic run.
+     *
+     * <p>The contract requires it unconditionally for STRICT_FINISH runs: a resume path once
+     * missed finish because noClarification was lost, leaving the worker spinning.
+     */
+    private void addFinishTool(List<CapabilityVO> capabilities, boolean noClarification,
+                               RunVO run, List<RuntimeTool> result) {
         boolean strictFinish = CompletionProtocol.from(
                 run == null ? null : run.getCompletionProtocol()) == CompletionProtocol.STRICT_FINISH;
-        if (noClarification || (capabilities != null && !capabilities.isEmpty()) || strictFinish) {
-            long finishId = BuiltinToolEnum.FINISH.getId();
-            Map<String, Object> finishBinding = new HashMap<>();
-            finishBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, FinishConstants.INTERNAL_NAME);
-            result.add(RuntimeTool.builder()
-                    .capabilityType(CAPABILITY_TYPE_BUILTIN)
-                    .capabilityId(finishId)
-                    .llmToolName(LLM_PREFIX_BUILTIN + finishId)
-                    .toolRef(ToolRefs.builtin(FinishConstants.INTERNAL_NAME))
-                    .displayName(FinishConstants.DISPLAY_NAME)
-                    .displayNameCn(FinishConstants.DISPLAY_NAME_CN)
-                    .displayNameEn(FinishConstants.DISPLAY_NAME)
-                    .description(FinishConstants.DESCRIPTION)
-                    .parametersSchemaJson(FINISH_PARAM_SCHEMA)
-                    .execBinding(finishBinding).build());
+        if (!noClarification && (capabilities == null || capabilities.isEmpty()) && !strictFinish) {
+            return;
         }
-        if (run != null && RunMode.from(run.getRunMode()).readOnly()) {
-            result.removeIf(tool -> !READ_ONLY_CONTROL_TOOLS.contains(tool.getLlmToolName())
-                    && ToolAccessMode.from(tool.getAccessMode()) != ToolAccessMode.READ);
+        long finishId = BuiltinToolEnum.FINISH.getId();
+        Map<String, Object> finishBinding = new HashMap<>();
+        finishBinding.put(ExecBindingKeys.BUILTIN_INTERNAL_NAME, FinishConstants.INTERNAL_NAME);
+        result.add(RuntimeTool.builder()
+                .capabilityType(CAPABILITY_TYPE_BUILTIN)
+                .capabilityId(finishId)
+                .llmToolName(LLM_PREFIX_BUILTIN + finishId)
+                .toolRef(ToolRefs.builtin(FinishConstants.INTERNAL_NAME))
+                .displayName(FinishConstants.DISPLAY_NAME)
+                .displayNameCn(FinishConstants.DISPLAY_NAME_CN)
+                .displayNameEn(FinishConstants.DISPLAY_NAME)
+                .description(FinishConstants.DESCRIPTION)
+                .parametersSchemaJson(FINISH_PARAM_SCHEMA)
+                .execBinding(finishBinding).build());
+    }
+
+    /** READ_ONLY runs only keep READ tools plus the explicitly allowed control tools. */
+    private void applyReadOnlyFilter(RunVO run, List<RuntimeTool> result) {
+        if (run == null || !RunMode.from(run.getRunMode()).readOnly()) {
+            return;
         }
+        result.removeIf(tool -> !READ_ONLY_CONTROL_TOOLS.contains(tool.getLlmToolName())
+                && ToolAccessMode.from(tool.getAccessMode()) != ToolAccessMode.READ);
+    }
+
+    private List<RuntimeTool> dedupeByLlmName(List<RuntimeTool> tools) {
         Set<String> seen = new HashSet<>();
         List<RuntimeTool> deduped = new ArrayList<>();
-        for (RuntimeTool t : result) {
-            if (seen.add(t.getLlmToolName())) {
-                deduped.add(t);
+        for (RuntimeTool tool : tools) {
+            if (seen.add(tool.getLlmToolName())) {
+                deduped.add(tool);
             }
         }
         return deduped;

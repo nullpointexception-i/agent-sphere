@@ -1,4 +1,3 @@
-import { PERM } from '@/constants/permissions';
 import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import {
@@ -12,6 +11,7 @@ import {
   Typography,
 } from 'antd';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
 import type { ImConversation } from '@/services/agentSphere/im';
 
 interface Props {

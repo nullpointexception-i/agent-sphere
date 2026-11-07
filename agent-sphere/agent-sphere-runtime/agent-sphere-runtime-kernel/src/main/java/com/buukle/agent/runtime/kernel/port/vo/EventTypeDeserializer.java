@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.port.vo;
 
 import com.buukle.agent.common.event.EventType;
+import com.buukle.agent.common.event.UserInLoopRecordStatus;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
@@ -28,10 +29,10 @@ public class EventTypeDeserializer extends JsonDeserializer<EventType> {
                 CompactionStatus.class,
                 UserInLoopRecordStatus.class,
                 FlowEventType.class,
-                SessionStatus.class,
+                SessionEventType.class,
                 ChromeCommandEventType.class,
                 ClarificationStatus.class,
-                ToolApprovalStatus.class);
+                ToolApprovalEvent.class);
         for (Class<? extends Enum<?>> type : types) {
             for (Object constant : type.getEnumConstants()) {
                 EventType eventType = (EventType) constant;

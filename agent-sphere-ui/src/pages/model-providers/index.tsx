@@ -1,4 +1,3 @@
-import { PERM } from '@/constants/permissions';
 import {
   BranchesOutlined,
   DeleteOutlined,
@@ -12,6 +11,7 @@ import { useIntl, useLocation } from '@umijs/max';
 import { App, Button, Card, Form, Input, Modal, Tag } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
 import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -21,14 +21,7 @@ import { useStyles } from './style';
 
 export default function ModelProviders() {
   const { message, modal } = App.useApp();
-  let intl: any;
-  try {
-    intl = useIntl();
-  } catch {
-    intl = {
-      formatMessage: ({ id, defaultMessage }: any) => defaultMessage || id,
-    };
-  }
+  const intl = useIntl();
   const { styles } = useStyles();
   const [providers, setProviders] = useState<any[]>([]);
 

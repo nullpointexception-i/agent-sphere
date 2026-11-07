@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.runtime.kernel.runner.support.SessionInputManager;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -11,7 +12,7 @@ import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
-import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
 import com.buukle.agent.runtime.kernel.model.invoke.KernelLlmService;
@@ -118,8 +119,8 @@ class SessionRunnerLoopBudgetTest {
 
     private static List<ChatMessageDTO> baseMessages() {
         List<ChatMessageDTO> messages = new ArrayList<>();
-        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM).setContent("sys"));
-        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("hi"));
+        messages.add(new ChatMessageDTO().setRole(LlmRoles.SYSTEM).setContent("sys"));
+        messages.add(new ChatMessageDTO().setRole(LlmRoles.USER).setContent("hi"));
         return messages;
     }
 
@@ -224,9 +225,9 @@ class SessionRunnerLoopBudgetTest {
             applyLoopBudget(messages, loop, MAX_LOOP);
             assertEquals(1, budgetCount(messages), "第 " + (loop + 1) + " 轮后预算段应恒为 1 份");
             messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_ASSISTANT).setContent("calling"));
+                    .setRole(LlmRoles.ASSISTANT).setContent("calling"));
             messages.add(new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_TOOL).setToolCallId("t" + loop).setContent("{}"));
+                    .setRole(LlmRoles.TOOL).setToolCallId("t" + loop).setContent("{}"));
         }
 
         // The last one must be the current round's (5/128); stale copies must not linger in the middle of history
@@ -242,7 +243,7 @@ class SessionRunnerLoopBudgetTest {
     void removesStaleHardInstructionFromEarlierLoop() throws Exception {
         List<ChatMessageDTO> messages = baseMessages();
         messages.add(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_SYSTEM).setContent(RunnerConstants.FINAL_TURN_INSTRUCTION));
+                .setRole(LlmRoles.SYSTEM).setContent(RunnerConstants.FINAL_TURN_INSTRUCTION));
 
         applyLoopBudget(messages, 3, MAX_LOOP);
 

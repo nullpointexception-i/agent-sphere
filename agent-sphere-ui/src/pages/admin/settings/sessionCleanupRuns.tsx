@@ -1,8 +1,8 @@
-import { CLEANUP_RUN_STATUS } from '@/constants/status';
 import { ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Drawer, Select, Space, Table, Tag } from 'antd';
 import { useRef, useState } from 'react';
+import { CLEANUP_RUN_STATUS, STATUS } from '@/constants/status';
 import type { SessionCleanupRun } from '@/services/agentSphere/api';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
@@ -94,28 +94,28 @@ export default function SessionCleanupRunsDrawer({ open, onClose }: Props) {
           }}
           options={[
             {
-              value: 'RUNNING',
+              value: STATUS.CLEANUP.RUNNING,
               label: t(
                 'pages.admin.settings.cleanup.runs.statusRunning',
                 'Running',
               ),
             },
             {
-              value: 'SUCCESS',
+              value: STATUS.CLEANUP.SUCCESS,
               label: t(
                 'pages.admin.settings.cleanup.runs.statusSuccess',
                 'Success',
               ),
             },
             {
-              value: 'FAILED',
+              value: STATUS.CLEANUP.FAILED,
               label: t(
                 'pages.admin.settings.cleanup.runs.statusFailed',
                 'Failed',
               ),
             },
             {
-              value: 'SKIPPED',
+              value: STATUS.CLEANUP.SKIPPED,
               label: t(
                 'pages.admin.settings.cleanup.runs.statusSkipped',
                 'Skipped',

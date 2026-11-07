@@ -1,5 +1,3 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
-import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -28,6 +26,9 @@ import {
 import type dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { PERM } from '@/constants/permissions';
+import { STATUS } from '@/constants/status';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -182,7 +183,7 @@ export default function CompletionsList() {
       key: 'status',
       width: 90,
       render: (status: any) =>
-        status === 'ACTIVE' ? (
+        status === STATUS.ACTIVE ? (
           <Tag color="green">
             {t('pages.admin.completions.statusActive', 'Active')}
           </Tag>
@@ -543,7 +544,7 @@ export default function CompletionsList() {
     {
       label: t('pages.admin.completions.status', 'Status'),
       value:
-        viewRecord?.status === 'ACTIVE'
+        viewRecord?.status === STATUS.ACTIVE
           ? t('pages.admin.completions.statusActive', 'Active')
           : viewRecord?.status || '-',
     },

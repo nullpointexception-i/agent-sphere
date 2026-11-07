@@ -1,9 +1,10 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { CopyOutlined, EyeOutlined } from '@ant-design/icons';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { App, Button, Drawer, Space, Tag } from 'antd';
 import { useRef, useState } from 'react';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { STATUS } from '@/constants/status';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 
@@ -87,7 +88,11 @@ export default function TaskArtifactList() {
       key: 'status',
       width: 100,
       render: (v: any) =>
-        v ? <Tag color={v === 'ACTIVE' ? 'green' : 'default'}>{v}</Tag> : '-',
+        v ? (
+          <Tag color={v === STATUS.ACTIVE ? 'green' : 'default'}>{v}</Tag>
+        ) : (
+          '-'
+        ),
     },
     {
       title: t('pages.table.created', 'Created'),

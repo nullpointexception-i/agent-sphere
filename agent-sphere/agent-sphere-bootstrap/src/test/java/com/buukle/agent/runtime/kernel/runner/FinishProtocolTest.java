@@ -2,6 +2,7 @@ package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ExecuteContext;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.runtime.kernel.runner.support.SessionInputManager;
 import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -16,7 +17,7 @@ import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
 import com.buukle.agent.runtime.kernel.constants.FinishConstants;
-import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.contract.CompactionOutcome;
 import com.buukle.agent.runtime.kernel.contract.TurnOutcome;
@@ -155,7 +156,7 @@ class FinishProtocolTest {
 
     private TurnResult runTurn(boolean skipCompaction) throws Exception {
         List<ChatMessageDTO> messages = new ArrayList<>();
-        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("do it"));
+        messages.add(new ChatMessageDTO().setRole(LlmRoles.USER).setContent("do it"));
         Method m = SessionRunner.class.getDeclaredMethod(
                 "runTurn", Long.class, Long.class, List.class, List.class, List.class,
                 KernelContext.class, AtomicReference.class, boolean.class,
@@ -238,7 +239,7 @@ class FinishProtocolTest {
                 new CompactionService.CompactionDecision(true, 0, 0, 0, 95_000, 100_000, 100_000));
         when(compactionService.compact(any(), any(), any())).thenReturn(CompactionOutcome.NO_HISTORY);
         List<ChatMessageDTO> rebuilt = List.of(
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("tail"));
+                new ChatMessageDTO().setRole(LlmRoles.USER).setContent("tail"));
         when(compactionService.compactRun(any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(new RunCompactionResult(CompactionOutcome.COMPLETED, rebuilt, 1, 9L, 0, 0));
 
@@ -254,7 +255,7 @@ class FinishProtocolTest {
     @Test
     void silentTurnNudge_isReplacedInPlaceInsteadOfAccumulating() throws Exception {
         List<ChatMessageDTO> messages = new ArrayList<>();
-        messages.add(new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("hi"));
+        messages.add(new ChatMessageDTO().setRole(LlmRoles.USER).setContent("hi"));
 
         applyNudge(messages, 1);
         applyNudge(messages, 2);

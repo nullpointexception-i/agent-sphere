@@ -4,6 +4,7 @@ import type { SenderRef } from '@ant-design/x/es/sender/interface';
 import { useIntl } from '@umijs/max';
 import { App, Tag, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TIMING } from '@/constants/timing';
 import { useStyles } from '../../style';
 import { useVoiceInput } from '../chat/useVoiceInput';
 
@@ -62,7 +63,7 @@ export default function Landing({
   }, [instances, chosenInstance]);
 
   useEffect(() => {
-    const t = setTimeout(() => setDataLoaded(true), 3000);
+    const t = setTimeout(() => setDataLoaded(true), TIMING.LANDING_LOAD_MS);
     return () => clearTimeout(t);
   }, []);
 

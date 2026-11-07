@@ -1,5 +1,6 @@
 package com.buukle.agent.tasks.service.impl;
 
+import com.buukle.agent.common.constant.HttpHeaders;
 import com.buukle.agent.tasks.domain.AgentTask;
 import com.buukle.agent.tasks.dtvo.TaskCallbackBody;
 import com.buukle.agent.tasks.service.TaskCallbackService;
@@ -18,8 +19,8 @@ import java.time.Duration;
 @Service
 public class TaskCallbackServiceImpl implements TaskCallbackService {
 
-    private static final String HEADER_CONTENT_TYPE = "Content-Type";
-    private static final String APPLICATION_JSON = "application/json";
+    private static final String HEADER_CONTENT_TYPE = HttpHeaders.CONTENT_TYPE;
+    private static final String APPLICATION_JSON = HttpHeaders.APPLICATION_JSON;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 

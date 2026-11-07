@@ -10,7 +10,7 @@ import com.buukle.agent.runtime.kernel.contract.TurnToolCall;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
-import com.buukle.agent.runtime.kernel.port.vo.ToolApprovalStatus;
+import com.buukle.agent.runtime.kernel.port.vo.ToolApprovalEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
@@ -55,7 +55,7 @@ public class ToolApprovalService {
         String callsJson = callsJson(calls);
         approvalSpi.createPending(approvalId, sessionId, runId, callsJson);
         eventPublisher.publishEvent(new RuntimeEventVO(
-                ToolApprovalStatus.TOOL_APPROVAL_PENDING,
+                ToolApprovalEvent.TOOL_APPROVAL_PENDING,
                 RuntimeEventDataVO.builder()
                         .sessionId(sessionId)
                         .runId(runId)
@@ -103,7 +103,7 @@ public class ToolApprovalService {
             }
         }
         eventPublisher.publishEvent(new RuntimeEventVO(
-                ToolApprovalStatus.TOOL_APPROVAL_RESPONDED,
+                ToolApprovalEvent.TOOL_APPROVAL_RESPONDED,
                 RuntimeEventDataVO.builder()
                         .sessionId(sessionId)
                         .runId(runId)
@@ -227,7 +227,7 @@ public class ToolApprovalService {
 
     private void publishDismissed(Long sessionId, Long runId, String approvalId) {
         eventPublisher.publishEvent(new RuntimeEventVO(
-                ToolApprovalStatus.TOOL_APPROVAL_DISMISSED,
+                ToolApprovalEvent.TOOL_APPROVAL_DISMISSED,
                 RuntimeEventDataVO.builder()
                         .sessionId(sessionId)
                         .runId(runId)

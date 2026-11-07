@@ -8,7 +8,7 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.domain.AgentSession;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
-import com.buukle.agent.instance.dtvo.enums.SessionEnum;
+import com.buukle.agent.instance.dtvo.enums.SessionStatus;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.InstanceMapper;
@@ -53,7 +53,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     public SessionVO getSession(Long id) {
         AgentSession session = getById(id);
         if (session == null) throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);
-        if (SessionEnum.STATUS_CLOSED.equals(session.getStatus()))
+        if (SessionStatus.STATUS_CLOSED.equals(session.getStatus()))
             throw new BizException(InstanceErrorCode.SESSION_CLOSED);
         return sessionConverter.toVO(session);
     }
@@ -80,7 +80,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     @Override
     public List<SessionVO> listSessions(int offset, int limit, String keyword) {
         List<AgentSession> sessions = lambdaQuery()
-                .eq(AgentSession::getStatus, SessionEnum.STATUS_ACTIVE)
+                .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
                 .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword)
                 .orderByDesc(AgentSession::getUpdatedAt)
                 .last("OFFSET " + offset + " LIMIT " + limit)
@@ -92,7 +92,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     public void closeSession(Long id) {
         AgentSession session = getById(id);
         if (session == null) throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);
-        session.setStatus(SessionEnum.STATUS_CLOSED);
+        session.setStatus(SessionStatus.STATUS_CLOSED);
         updateById(session);
     }
 
@@ -101,7 +101,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         if (ids == null || ids.isEmpty()) return;
         lambdaUpdate()
                 .in(AgentSession::getId, ids)
-                .set(AgentSession::getStatus, SessionEnum.STATUS_CLOSED)
+                .set(AgentSession::getStatus, SessionStatus.STATUS_CLOSED)
                 .update();
     }
 

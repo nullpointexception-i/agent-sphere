@@ -11,7 +11,7 @@ import com.buukle.agent.runtime.kernel.port.vo.PreparedAttachment;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
-import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
+import com.buukle.agent.runtime.kernel.runner.support.SessionInputManager;
 import com.buukle.agent.runtime.orchestration.pipeline.ContextPreparer;
 import com.buukle.agent.runtime.orchestration.pipeline.RuntimeValidator;
 import com.buukle.agent.runtime.orchestration.pipeline.ValidationResult;

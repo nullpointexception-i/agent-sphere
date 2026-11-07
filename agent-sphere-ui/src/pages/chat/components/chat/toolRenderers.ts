@@ -1,3 +1,5 @@
+import { TODO_STATUS } from '@/constants/timeline';
+
 /**
  * Pure predicate/summary logic for friendly tool-card rendering.
  * Free of React / antd so it is easy to unit test with jest.
@@ -463,7 +465,7 @@ export function todoProgress(todos: TodoItem[]): {
   total: number;
 } {
   const total = todos.length;
-  const done = todos.filter((t) => t.status === 'completed').length;
+  const done = todos.filter((t) => t.status === TODO_STATUS.COMPLETED).length;
   return { done, total };
 }
 

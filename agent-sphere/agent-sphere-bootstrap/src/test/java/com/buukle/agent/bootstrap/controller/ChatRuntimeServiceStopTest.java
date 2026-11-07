@@ -8,7 +8,7 @@ import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
-import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
+import com.buukle.agent.runtime.kernel.runner.support.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.orchestration.handler.TimelineRecorder;

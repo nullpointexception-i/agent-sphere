@@ -1,5 +1,3 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
-import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -31,6 +29,8 @@ import {
 import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';

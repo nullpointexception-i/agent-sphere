@@ -1,5 +1,6 @@
 package com.buukle.agent.common.exception;
 
+import com.buukle.agent.common.constant.HttpHeaders;
 import com.buukle.agent.common.error.CommonErrorCode;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
@@ -61,7 +62,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleUnknown(Exception e, HttpServletResponse response) {
-        if ("text/event-stream".equals(response.getContentType())) {
+        if (HttpHeaders.TEXT_EVENT_STREAM.equals(response.getContentType())) {
 //            log.warn("warnSSE client disconnected: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }

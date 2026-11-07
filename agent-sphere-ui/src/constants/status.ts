@@ -12,18 +12,33 @@ export interface StatusMeta {
 export const SUPER_AGENT_STATUS: Record<string, StatusMeta> = {
   ACTIVE: { color: 'green', labelKey: 'pages.superAgent.agentStatus.active' },
   PAUSED: { color: 'orange', labelKey: 'pages.superAgent.agentStatus.paused' },
-  ARCHIVED: { color: 'default', labelKey: 'pages.superAgent.agentStatus.archived' },
+  ARCHIVED: {
+    color: 'default',
+    labelKey: 'pages.superAgent.agentStatus.archived',
+  },
 };
 
 export const WORK_ITEM_STATUS: Record<string, StatusMeta> = {
   QUEUED: { color: 'blue', labelKey: 'pages.superAgent.workStatus.queued' },
-  DISPATCHING: { color: 'processing', labelKey: 'pages.superAgent.workStatus.dispatching' },
-  RUNNING: { color: 'processing', labelKey: 'pages.superAgent.workStatus.running' },
+  DISPATCHING: {
+    color: 'processing',
+    labelKey: 'pages.superAgent.workStatus.dispatching',
+  },
+  RUNNING: {
+    color: 'processing',
+    labelKey: 'pages.superAgent.workStatus.running',
+  },
   WAITING: { color: 'gold', labelKey: 'pages.superAgent.workStatus.waiting' },
-  COMPLETED: { color: 'green', labelKey: 'pages.superAgent.workStatus.completed' },
+  COMPLETED: {
+    color: 'green',
+    labelKey: 'pages.superAgent.workStatus.completed',
+  },
   DONE: { color: 'green', labelKey: 'pages.superAgent.workStatus.completed' },
   FAILED: { color: 'red', labelKey: 'pages.superAgent.workStatus.failed' },
-  CANCELLED: { color: 'default', labelKey: 'pages.superAgent.workStatus.cancelled' },
+  CANCELLED: {
+    color: 'default',
+    labelKey: 'pages.superAgent.workStatus.cancelled',
+  },
 };
 
 export const TASK_STATUS: Record<string, StatusMeta> = {
@@ -31,7 +46,10 @@ export const TASK_STATUS: Record<string, StatusMeta> = {
   RUNNING: { color: 'processing', labelKey: 'pages.admin.tasks.statusRunning' },
   COMPLETED: { color: 'green', labelKey: 'pages.admin.tasks.statusCompleted' },
   FAILED: { color: 'red', labelKey: 'pages.admin.tasks.statusFailed' },
-  CANCELLED: { color: 'default', labelKey: 'pages.admin.tasks.statusCancelled' },
+  CANCELLED: {
+    color: 'default',
+    labelKey: 'pages.admin.tasks.statusCancelled',
+  },
 };
 
 export const IM_TASK_STATUS: Record<string, StatusMeta> = {
@@ -83,17 +101,70 @@ export const SKILL_SYNC_RUN_STATUS: Record<string, StatusMeta> = {
   },
 };
 
+export const STATUS = {
+  RUN: {
+    QUEUED: 'QUEUED',
+    PENDING: 'PENDING',
+    RUNNING: 'RUNNING',
+    COMPLETED: 'COMPLETED',
+    FAILED: 'FAILED',
+    CANCELLED: 'CANCELLED',
+    AWAITING_USER: 'AWAITING_USER',
+    WAITING: 'WAITING',
+  },
+  WORK_ITEM: {
+    QUEUED: 'QUEUED',
+    DISPATCHING: 'DISPATCHING',
+    RUNNING: 'RUNNING',
+    WAITING: 'WAITING',
+    BLOCKED: 'BLOCKED',
+    COMPLETED: 'COMPLETED',
+    DONE: 'DONE',
+    FAILED: 'FAILED',
+    CANCELLED: 'CANCELLED',
+  },
+  TASK: {
+    QUEUED: 'QUEUED',
+    RUNNING: 'RUNNING',
+    COMPLETED: 'COMPLETED',
+    FAILED: 'FAILED',
+    CANCELLED: 'CANCELLED',
+  },
+  CLEANUP: {
+    RUNNING: 'RUNNING',
+    SUCCESS: 'SUCCESS',
+    FAILED: 'FAILED',
+    SKIPPED: 'SKIPPED',
+  },
+  SKILL_SYNC: {
+    RUNNING: 'RUNNING',
+    SUCCESS: 'SUCCESS',
+    FAILED: 'FAILED',
+    SKIPPED: 'SKIPPED',
+  },
+  ACTIVE: 'ACTIVE',
+  DISABLED: 'DISABLED',
+  ENABLED: 'ENABLED',
+} as const;
+
 /** Work-item states that still occupy a Worker slot. */
-export const WORK_ITEM_ACTIVE_STATUSES = new Set([
-  'QUEUED',
-  'DISPATCHING',
-  'RUNNING',
-  'WAITING',
+export const WORK_ITEM_ACTIVE_STATUSES = new Set<string>([
+  STATUS.WORK_ITEM.QUEUED,
+  STATUS.WORK_ITEM.DISPATCHING,
+  STATUS.WORK_ITEM.RUNNING,
+  STATUS.WORK_ITEM.WAITING,
 ]);
 
 /** Run states that are terminal. */
-export const RUN_TERMINAL_STATUSES = new Set([
-  'COMPLETED',
-  'FAILED',
-  'CANCELLED',
+export const RUN_TERMINAL_STATUSES = new Set<string>([
+  STATUS.RUN.COMPLETED,
+  STATUS.RUN.FAILED,
+  STATUS.RUN.CANCELLED,
+]);
+
+/** Background task records shared by session cleanup and skill sync. */
+export const RECORDED_TASK_TERMINAL_STATUSES = new Set<string>([
+  STATUS.CLEANUP.SUCCESS,
+  STATUS.CLEANUP.FAILED,
+  STATUS.CLEANUP.SKIPPED,
 ]);

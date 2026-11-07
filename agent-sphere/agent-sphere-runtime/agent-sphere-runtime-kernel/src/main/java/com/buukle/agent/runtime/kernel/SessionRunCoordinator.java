@@ -3,7 +3,7 @@ package com.buukle.agent.runtime.kernel;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
-import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
+import com.buukle.agent.runtime.kernel.runner.support.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -118,6 +118,10 @@ public class SessionRunCoordinator {
 
     private org.redisson.api.RSet<Long> activeSessions() {
         return redissonClient.getSet(DistributedRuntimeConstants.KEY_ACTIVE_SESSIONS);
+    }
+
+    public static boolean isRunningState(String state) {
+        return State.RUNNING.name().equals(state) || State.RUNNING_WITH_PENDING.name().equals(state);
     }
 
     private RBucket<String> stateBucket(Long sessionId) {

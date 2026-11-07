@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TIMELINE_STATE } from '@/constants/timeline';
 import type { SessionInputDecision } from '@/services/agentSphere/im';
 import { tw } from './i18n';
 import { useStyles } from './style';
@@ -116,7 +117,7 @@ export function AgentInputCard({
   ) => Promise<boolean>;
 }) {
   const { styles } = useStyles();
-  const pending = card.status === 'PENDING';
+  const pending = card.status === TIMELINE_STATE.PENDING;
   const clarification = card.cardType === ROUTER_CLARIFICATION;
   const approval = card.cardType === ROUTER_APPROVAL;
   const [picked, setPicked] = useState<number[]>([]);
@@ -133,7 +134,7 @@ export function AgentInputCard({
           </span>
           <span
             className={`${styles.taskCardStatus} ${
-              card.status === 'ANSWERED'
+              card.status === TIMELINE_STATE.ANSWERED
                 ? styles.taskCardStatusDone
                 : styles.taskCardStatusFailed
             }`}

@@ -41,16 +41,24 @@ function TocPanel<T extends TocItemBase>({
           })}
         </div>
       )}
-      {items.map((item, i) => (
-        <div
-          key={i}
-          onClick={() => onJump(item)}
-          className={`${styles.tocItem}${item.level === 1 ? ` ${styles.tocItemLevel1}` : ''}`}
-          style={{ paddingLeft: 12 + (item.level - 1) * 16 }}
-        >
-          {item.text}
-        </div>
-      ))}
+      {(() => {
+        const seen = new Map<string, number>();
+        return items.map((item) => {
+          const base = `${item.level}-${item.text}`;
+          const occurrence = seen.get(base) ?? 0;
+          seen.set(base, occurrence + 1);
+          return (
+            <div
+              key={`${base}-${occurrence}`}
+              onClick={() => onJump(item)}
+              className={`${styles.tocItem}${item.level === 1 ? ` ${styles.tocItemLevel1}` : ''}`}
+              style={{ paddingLeft: 12 + (item.level - 1) * 16 }}
+            >
+              {item.text}
+            </div>
+          );
+        });
+      })()}
     </div>
   );
 }

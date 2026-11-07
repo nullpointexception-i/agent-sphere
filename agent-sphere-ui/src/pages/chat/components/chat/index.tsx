@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { STATUS } from '@/constants/status';
 import { useStyles } from '../../style';
 import ClarificationDrawer, {
   type ClarificationBatch,
@@ -276,7 +277,7 @@ export default function ChatMain({
                 subAgentLive={subAgentLive}
                 preparingTool={preparingTool}
                 retryState={
-                  runtimeState?.runStatus === 'WAITING' &&
+                  runtimeState?.runStatus === STATUS.RUN.WAITING &&
                   runtimeState?.waitKind === 'LLM_RETRY' &&
                   runtimeState?.runId != null
                     ? {

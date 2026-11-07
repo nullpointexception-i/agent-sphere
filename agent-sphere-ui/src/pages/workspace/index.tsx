@@ -1,4 +1,3 @@
-import { API_PATHS } from '@/constants/endpoints';
 import {
   AudioOutlined,
   CheckOutlined,
@@ -47,6 +46,8 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { API_PATHS } from '@/constants/endpoints';
+import { STATUS } from '@/constants/status';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 import { useReconnectingSse } from '@/hooks/useReconnectingSse';
 import { agentApi } from '@/services/agentSphere/api';
@@ -72,243 +73,39 @@ import {
 } from './AgentInputCard';
 import { AgentStreamBubble } from './AgentStreamBubble';
 import {
+  AGENT_STREAM_PHASE,
   applyAgentStreamEvent,
   beginAgentStream,
   finalizeAgentStream,
   resetAgentStream,
   useAgentStream,
 } from './agentStreamStore';
+import {
+  conversationAvatar,
+  conversationDisplayName,
+  conversationPreview,
+  fullTime,
+  isSameUser,
+  isSelfConversation,
+  isSelfParticipants,
+  isSelfUser,
+  listTime,
+  mergeConversation,
+  mergeMessages,
+  messageTime,
+  otherUserParticipant,
+  positionLabel,
+  sortConversations,
+  statusLabel,
+  taskCardOf,
+  taskStatusLabel,
+} from './conversationModel';
 import { tw } from './i18n';
 import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
 
 type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'me';
-
-function statusLabel(status?: string) {
-  switch (status) {
-    case 'ACTIVE':
-      return tw('status.active', 'Active');
-    case 'PAUSED':
-      return tw('status.paused', 'Paused');
-    case 'ARCHIVED':
-      return tw('status.archived', 'Archived');
-    default:
-      return status || tw('status.unknown', 'Unknown');
-  }
-}
-
-/** Position names are stored on the agent; pick by current UI language. */
-function positionLabel(
-  agent?: {
-    positionNameCn?: string;
-    positionNameEn?: string;
-  } | null,
-) {
-  if (!agent) return '';
-  const isEnglish = getLocale() === 'en-US';
-  return (
-    (isEnglish ? agent.positionNameEn : agent.positionNameCn) ||
-    agent.positionNameCn ||
-    agent.positionNameEn ||
-    ''
-  );
-}
-
-function isSameUser(participant: ImParticipant | undefined, me: any) {
-  if (!participant || !me) return false;
-  if (participant.username && me.username) {
-    return participant.username === me.username;
-  }
-  return Number(participant.participantId) === Number(me.id);
-}
-
-function isSelfParticipants(participants: ImParticipant[], me: any) {
-  if (participants.some((p) => p.participantType === 'AGENT')) return false;
-  const users = participants.filter(
-    (participant) => participant.participantType === 'USER',
-  );
-  return users.length > 0 && users.every((user) => isSameUser(user, me));
-}
-
-function isSelfConversation(conversation: ImConversation, me: any) {
-  if (conversation.type === 'GROUP') return false;
-  if (conversation.selfConversation != null) {
-    return conversation.selfConversation;
-  }
-  return isSelfParticipants(conversation.participants || [], me);
-}
-
-function isSelfUser(user: any, me: any) {
-  if (!user || !me) return false;
-  if (user.username && me.username) {
-    return user.username === me.username;
-  }
-  return Number(user.id) === Number(me.id);
-}
-
-function otherUserParticipant(conversation: ImConversation, me: any) {
-  if (conversation.type === 'GROUP') return undefined;
-  return conversation.participants?.find(
-    (participant) =>
-      participant.participantType === 'USER' && !isSameUser(participant, me),
-  );
-}
-
-function conversationDisplayName(conversation: ImConversation, me: any) {
-  if (conversation.type === 'GROUP') {
-    return (
-      conversation.remark ||
-      conversation.title ||
-      tw('conversation.unnamedGroup', 'Untitled group')
-    );
-  }
-  if (isSelfConversation(conversation, me)) {
-    return tw('conversation.self', 'Myself');
-  }
-  const other = otherUserParticipant(conversation, me);
-  return (
-    conversation.displayName ||
-    other?.displayName ||
-    conversation.title ||
-    tw('conversation.dm', 'Direct chat')
-  );
-}
-
-function conversationPreview(conversation: ImConversation) {
-  const lastMessage = (conversation as any).lastMessage;
-  if (!lastMessage) {
-    return conversation.purpose || tw('conversation.noMessages', 'No messages');
-  }
-  const card = taskCardOf(lastMessage);
-  if (card) {
-    return (
-      card.title ||
-      card.summary ||
-      tw('chat.taskFallback', 'Task') ||
-      tw('conversation.noMessages', 'No messages')
-    );
-  }
-  return (
-    messageText(lastMessage) || tw('conversation.noMessages', 'No messages')
-  );
-}
-
-function conversationAvatar(conversation: ImConversation, me: any) {
-  if (isSelfConversation(conversation, me)) {
-    return me?.avatar;
-  }
-  return conversation.avatar || otherUserParticipant(conversation, me)?.avatar;
-}
-
-function sortConversations(conversations: ImConversation[]) {
-  return [...conversations].sort((left, right) => {
-    const pinned = Number(Boolean(right.pinned)) - Number(Boolean(left.pinned));
-    if (pinned !== 0) return pinned;
-    const leftAt = left.lastMessageAt ? dayjs(left.lastMessageAt).valueOf() : 0;
-    const rightAt = right.lastMessageAt
-      ? dayjs(right.lastMessageAt).valueOf()
-      : 0;
-    return rightAt - leftAt || right.id - left.id;
-  });
-}
-
-function mergeConversation(
-  conversations: ImConversation[],
-  conversation: ImConversation,
-) {
-  const exists = conversations.some((item) => item.id === conversation.id);
-  const next = exists
-    ? conversations.map((item) =>
-        item.id === conversation.id ? conversation : item,
-      )
-    : [conversation, ...conversations];
-  return sortConversations(next);
-}
-
-function listTime(value?: string) {
-  if (!value) return '';
-  const time = dayjs(value);
-  if (!time.isValid()) return '';
-  const now = dayjs();
-  if (time.isSame(now, 'day')) return time.format('HH:mm');
-  if (time.isSame(now.subtract(1, 'day'), 'day')) {
-    return tw('time.yesterday', 'Yesterday');
-  }
-  if (time.isSame(now, 'year')) {
-    return tw('time.monthDay', '{month}/{day}', {
-      month: time.month() + 1,
-      day: time.date(),
-    });
-  }
-  return time.format('YYYY/M/D');
-}
-
-function messageTime(value?: string) {
-  if (!value) return '';
-  const time = dayjs(value);
-  return time.isValid() ? time.format('HH:mm') : '';
-}
-
-function fullTime(value?: string) {
-  if (!value) return '-';
-  const time = dayjs(value);
-  return time.isValid() ? time.format('YYYY-MM-DD HH:mm') : '-';
-}
-
-type TaskCardView = {
-  title?: string;
-  status?: string;
-  summary?: string;
-  workItemId?: number;
-  /** Router input cards (ROUTER_CLARIFICATION / ROUTER_APPROVAL) only. */
-  cardType?: string;
-  inputId?: string;
-  description?: string;
-  multiple?: boolean;
-  options?: string;
-  toolCallsJson?: string;
-};
-
-function taskCardOf(message: ImMessage): TaskCardView | null {
-  const content = parsedContent(message);
-  if (!content?.cardType) return null;
-  return content as TaskCardView;
-}
-
-function taskStatusLabel(status?: string) {
-  switch (status) {
-    case 'QUEUED':
-      return tw('chat.taskStatus.queued', 'Queued');
-    case 'DISPATCHING':
-      return tw('chat.taskStatus.dispatching', 'Preparing');
-    case 'RUNNING':
-      return tw('chat.taskStatus.running', 'Running');
-    case 'WAITING':
-      return tw('chat.taskStatus.waiting', 'Waiting');
-    case 'COMPLETED':
-    case 'DONE':
-      return tw('chat.taskStatus.completed', 'Completed');
-    case 'FAILED':
-      return tw('chat.taskStatus.failed', 'Failed');
-    case 'CANCELLED':
-      return tw('chat.taskStatus.cancelled', 'Cancelled');
-    case 'PENDING':
-      return tw('chat.taskStatus.pending', 'Awaiting reply');
-    case 'ANSWERED':
-      return tw('chat.taskStatus.answered', 'Answered');
-    default:
-      return status || tw('chat.taskStatus.unknown', 'Unknown');
-  }
-}
-
-function mergeMessages(older: ImMessage[], current: ImMessage[]) {
-  const byId = new Map<number, ImMessage>();
-  for (const message of [...older, ...current]) {
-    byId.set(message.id, message);
-  }
-  return [...byId.values()].sort((left, right) => left.seq - right.seq);
-}
 
 export default function WorkspacePage() {
   const { styles } = useStyles();
@@ -556,7 +353,7 @@ function HomeTab({
                       {agent.name}
                       <span
                         className={
-                          agent.status === 'ACTIVE'
+                          agent.status === STATUS.ACTIVE
                             ? styles.statusText
                             : styles.statusPaused
                         }
@@ -724,7 +521,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
   const startChat = async () => {
     if (!editingAgent || startingChat) return;
-    if (editingAgent.status !== 'ACTIVE') {
+    if (editingAgent.status !== STATUS.ACTIVE) {
       message.warning(
         tw(
           'avatars.chatPaused',
@@ -766,7 +563,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
   const toggle = async (agent: SuperAgent) => {
     const updated =
-      agent.status === 'ACTIVE'
+      agent.status === STATUS.ACTIVE
         ? await superAgentApi.pause(agent.id)
         : await superAgentApi.resume(agent.id);
     setEditingAgent(updated);
@@ -840,7 +637,9 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   <div className={styles.rowTitle}>
                     {agent.name}
                     <Tag
-                      color={agent.status === 'ACTIVE' ? 'green' : 'default'}
+                      color={
+                        agent.status === STATUS.ACTIVE ? 'green' : 'default'
+                      }
                     >
                       {statusLabel(agent.status)}
                     </Tag>
@@ -1082,7 +881,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                 <div className={styles.avatarStatusRow}>
                   <span
                     className={`${styles.avatarStatusDot} ${
-                      editingAgent?.status === 'ACTIVE'
+                      editingAgent?.status === STATUS.ACTIVE
                         ? ''
                         : styles.avatarStatusDotPaused
                     }`}
@@ -1100,7 +899,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                 </div>
               </div>
 
-              {editingAgent?.status !== 'ACTIVE' ? (
+              {editingAgent?.status !== STATUS.ACTIVE ? (
                 <div className={styles.avatarPausedHint}>
                   {tw(
                     'avatars.chatPaused',
@@ -1115,7 +914,7 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   block
                   icon={<MessageOutlined />}
                   loading={startingChat}
-                  disabled={editingAgent?.status !== 'ACTIVE'}
+                  disabled={editingAgent?.status !== STATUS.ACTIVE}
                   className={styles.avatarDetailPrimary}
                   onClick={startChat}
                 >
@@ -1135,12 +934,12 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                     className={`${styles.avatarSecondaryButton} ${styles.avatarPauseButton}`}
                     onClick={() => editingAgent && toggle(editingAgent)}
                   >
-                    {editingAgent?.status === 'ACTIVE' ? (
+                    {editingAgent?.status === STATUS.ACTIVE ? (
                       <PauseCircleOutlined />
                     ) : (
                       <PlayCircleOutlined />
                     )}
-                    {editingAgent?.status === 'ACTIVE'
+                    {editingAgent?.status === STATUS.ACTIVE
                       ? tw('avatars.pause', 'Pause avatar')
                       : tw('avatars.resume', 'Resume avatar')}
                   </button>
@@ -2081,7 +1880,7 @@ function ChatDetail({
     }
     superAgentApi
       .get(chatAgentId)
-      .then((agent) => setAgentPaused(agent.status !== 'ACTIVE'))
+      .then((agent) => setAgentPaused(agent.status !== STATUS.ACTIVE))
       .catch(() => setAgentPaused(false));
   }, [conversationId, chatAgentId]);
 
@@ -2224,7 +2023,10 @@ function ChatDetail({
 
   // Authoritative message fallback: fetch one incremental batch when the stream is completed but message_created arrives late / is lost.
   useEffect(() => {
-    if (agentStream?.phase !== 'done' || !agentStream.finalized) {
+    if (
+      agentStream?.phase !== AGENT_STREAM_PHASE.DONE ||
+      !agentStream.finalized
+    ) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -2248,7 +2050,10 @@ function ChatDetail({
 
   // Waiting-state fallback: avoid the "processing" bubble staying forever when an event is lost.
   useEffect(() => {
-    if (agentStream?.phase !== 'waiting' || agentStream.runId) {
+    if (
+      agentStream?.phase !== AGENT_STREAM_PHASE.WAITING ||
+      agentStream.runId
+    ) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -2662,11 +2467,12 @@ function ChatDetail({
                               </span>
                               <span
                                 className={`${styles.taskCardStatus} ${
-                                  card.status === 'COMPLETED' ||
-                                  card.status === 'DONE'
+                                  card.status === STATUS.WORK_ITEM.COMPLETED ||
+                                  card.status === STATUS.WORK_ITEM.DONE
                                     ? styles.taskCardStatusDone
-                                    : card.status === 'FAILED' ||
-                                        card.status === 'CANCELLED'
+                                    : card.status === STATUS.WORK_ITEM.FAILED ||
+                                        card.status ===
+                                          STATUS.WORK_ITEM.CANCELLED
                                       ? styles.taskCardStatusFailed
                                       : styles.taskCardStatusRunning
                                 }`}
@@ -2717,7 +2523,7 @@ function ChatDetail({
             // beginAgentStream fires pre-send, so "waiting" would otherwise
             // render above a message the list does not show yet.
             hidden={
-              agentStream.phase === 'waiting' &&
+              agentStream.phase === AGENT_STREAM_PHASE.WAITING &&
               messages[messages.length - 1]?.senderType !== 'USER'
             }
           />
@@ -3026,7 +2832,7 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
   };
 
   const openAgentChat = async (agent: SuperAgent) => {
-    if (agent.status !== 'ACTIVE') {
+    if (agent.status !== STATUS.ACTIVE) {
       message.warning(
         tw(
           'avatars.chatPaused',
@@ -3095,7 +2901,9 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   <div
                     key={agent.id}
                     className={styles.row}
-                    style={{ opacity: agent.status === 'ACTIVE' ? 1 : 0.6 }}
+                    style={{
+                      opacity: agent.status === STATUS.ACTIVE ? 1 : 0.6,
+                    }}
                     onClick={() => openAgentChat(agent)}
                   >
                     <Avatar
@@ -3112,7 +2920,7 @@ function ContactsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                         </span>
                         <Tag
                           color={
-                            agent.status === 'ACTIVE' ? 'green' : 'default'
+                            agent.status === STATUS.ACTIVE ? 'green' : 'default'
                           }
                         >
                           {statusLabel(agent.status)}

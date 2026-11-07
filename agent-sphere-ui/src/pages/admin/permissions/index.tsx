@@ -1,5 +1,3 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
-import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   App,
@@ -14,6 +12,8 @@ import {
 } from 'antd';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 
 const PERM_TYPES = ['MENU', 'BUTTON'];

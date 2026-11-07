@@ -1,3 +1,4 @@
+import { TIMING } from './constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApiClient, RuntimeStateVO, TimelineQuery } from './api';
 import { connectSse } from './sse';
@@ -774,7 +775,7 @@ export function useTimelineStream(api: ApiClient): TimelineStream {
         if (sessionIdRef.current !== sessionId) return;
         clearReconnectTimer();
         const attempt = reconnectAttemptRef.current++;
-        const delay = Math.min(1000 * 2 ** attempt, 30000);
+        const delay = Math.min(TIMING.SSE_RECONNECT_BASE_MS * 2 ** attempt, TIMING.SSE_RECONNECT_MAX_MS);
         reconnectTimerRef.current = window.setTimeout(() => {
           reconnectTimerRef.current = null;
           if (sessionIdRef.current !== sessionId) return;

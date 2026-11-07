@@ -1,4 +1,3 @@
-import { API_PATHS } from '@/constants/endpoints';
 import {
   EyeOutlined,
   HomeOutlined,
@@ -23,6 +22,7 @@ import type { MenuProps } from 'antd';
 import { Avatar, Button, Dropdown, Layout, Menu, Space } from 'antd';
 import { startTransition } from 'react';
 import { LangDropdown } from '@/components/RightContent';
+import { API_PATHS } from '@/constants/endpoints';
 import { useCan } from '@/hooks/usePermission';
 import { clearStoredUser, ssoDisplayName } from '@/utils/auth';
 

@@ -7,10 +7,10 @@ public final class LlmApiConstants {
     public static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
     // Headers
     public static final String HEADER_AUTHORIZATION = HttpHeaders.AUTHORIZATION;
-    public static final String HEADER_CONTENT_TYPE = "Content-Type";
-    public static final String HEADER_ACCEPT = "Accept";
-    public static final String APPLICATION_JSON = "application/json";
-    public static final String TEXT_EVENT_STREAM = "text/event-stream";
+    public static final String HEADER_CONTENT_TYPE = HttpHeaders.CONTENT_TYPE;
+    public static final String HEADER_ACCEPT = HttpHeaders.ACCEPT;
+    public static final String APPLICATION_JSON = HttpHeaders.APPLICATION_JSON;
+    public static final String TEXT_EVENT_STREAM = HttpHeaders.TEXT_EVENT_STREAM;
     public static final String BEARER_PREFIX = HttpHeaders.BEARER_PREFIX;
     // SSE
     public static final String SSE_DATA_PREFIX = "data: ";

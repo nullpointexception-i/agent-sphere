@@ -14,6 +14,7 @@ import com.buukle.agent.capability.builtin.tool.webfetch.util.BrowserProfileMana
 import com.buukle.agent.capability.builtin.tool.webfetch.util.FetchRetryPolicy;
 import com.buukle.agent.capability.builtin.tool.webfetch.util.JsRenderer;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.HttpHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -31,7 +32,7 @@ import java.time.Duration;
 public class CapabilityBuiltinToolWebFetch implements CapabilityBuiltinToolSpi {
 
     private static final String DESCRIPTION = "Fetch web page content by URL";
-    private static final String HEADER_CONTENT_TYPE = "Content-Type";
+    private static final String HEADER_CONTENT_TYPE = HttpHeaders.CONTENT_TYPE;
 
     private final HttpClient httpClient;
     private final int defaultReadTimeoutSeconds;

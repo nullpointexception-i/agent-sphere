@@ -1,5 +1,3 @@
-import { localizeApiError } from '@/utils/errorMessage';
-import { API_PATHS } from '@/constants/endpoints';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import {
@@ -12,6 +10,10 @@ import {
 import { App } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SetModelRouteModal from '@/components/SetModelRouteModal';
+import { API_PATHS } from '@/constants/endpoints';
+import { STATUS } from '@/constants/status';
+import { TIMELINE_STATE } from '@/constants/timeline';
+import { TIMING } from '@/constants/timing';
 import {
   DOCWRITE_TOOL_NAME,
   TODOWRITE_TOOL_NAME,
@@ -19,6 +21,7 @@ import {
 } from '@/constants/toolCall';
 import { agentApi } from '@/services/agentSphere/api';
 import { getToken } from '@/utils/auth';
+import { localizeApiError } from '@/utils/errorMessage';
 import { connectSse } from '@/utils/sse';
 import type { ClarificationBatch } from './components/ClarificationDrawer';
 import ChatMain from './components/chat';
@@ -253,7 +256,7 @@ export default function Chat() {
       const haveId = r.content?.clarificationId;
       if (wantId != null && haveId != null) {
         if (String(haveId) !== String(wantId)) return r;
-      } else if (r.state !== 'PENDING') {
+      } else if (r.state !== TIMELINE_STATE.PENDING) {
         // When there is no id to compare, only change rows awaiting a reply; never overwrite finalized rows
         return r;
       }
@@ -268,7 +271,7 @@ export default function Chat() {
   const cancelPendingClarificationsLocally = () =>
     setTimeline((prev) =>
       prev.map((r) =>
-        r.kind === 'clarification' && r.state === 'PENDING'
+        r.kind === 'clarification' && r.state === TIMELINE_STATE.PENDING
           ? { ...r, state: 'CANCELLED' }
           : r,
       ),
@@ -303,7 +306,7 @@ export default function Chat() {
           if (
             existingRow &&
             incoming.kind === 'assistant' &&
-            (!incoming.state || incoming.state === 'RUNNING') &&
+            (!incoming.state || incoming.state === TIMELINE_STATE.RUNNING) &&
             !(incoming.content?.text ?? '').trim() &&
             !(incoming.content?.thinking ?? '').trim() &&
             ((existingRow.content?.text ?? '').trim() ||
@@ -321,7 +324,7 @@ export default function Chat() {
           // clarificationKey comment).
           if (
             incoming.kind === 'clarification' &&
-            incoming.state === 'PENDING'
+            incoming.state === TIMELINE_STATE.PENDING
           ) {
             const key = clarificationKey(
               incoming.runId,
@@ -360,7 +363,7 @@ export default function Chat() {
           next.push({
             seq,
             kind: 'assistant',
-            status: 'RUNNING',
+            status: TIMELINE_STATE.RUNNING,
             content: { ...delta },
           });
           indexBySeq.set(seq, next.length - 1);
@@ -685,7 +688,10 @@ export default function Chat() {
   useEffect(() => {
     if (!currentSession?.id || queuedMessages.length === 0) return;
     const sid = currentSession.id;
-    const timer = window.setInterval(() => void refreshQueue(sid), 2000);
+    const timer = window.setInterval(
+      () => void refreshQueue(sid),
+      TIMING.QUEUE_REFRESH_MS,
+    );
     return () => window.clearInterval(timer);
   }, [currentSession?.id, queuedMessages.length]);
 
@@ -1071,8 +1077,11 @@ export default function Chat() {
     const timer = window.setInterval(() => {
       void refreshPendingToolApproval(sid);
       void refreshPendingClarifications(sid);
-    }, 2000);
-    const stop = window.setTimeout(() => window.clearInterval(timer), 30000);
+    }, TIMING.APPROVAL_POLL_MS);
+    const stop = window.setTimeout(
+      () => window.clearInterval(timer),
+      TIMING.APPROVAL_POLL_TIMEOUT_MS,
+    );
     return () => {
       window.clearInterval(timer);
       window.clearTimeout(stop);
@@ -1184,7 +1193,7 @@ export default function Chat() {
                       seq: -(Math.abs(liveSubId) + 1),
                       kind: 'subagent',
                       refSubAgentRunId: liveSubId,
-                      status: 'RUNNING',
+                      status: TIMELINE_STATE.RUNNING,
                       title:
                         d?.displayNameCn ||
                         d?.displayName ||
@@ -1917,7 +1926,7 @@ export default function Chat() {
         runMode,
         reasoningEffort,
       );
-      if (res?.status === 'QUEUED') {
+      if (res?.status === STATUS.RUN.QUEUED) {
         setQueuedMessages((prev) => [
           ...prev,
           { queueId: res.queueId, text: msg, createdAt: Date.now() },
@@ -1980,8 +1989,10 @@ export default function Chat() {
       history.push(`/chat/${vo.id}`);
     } catch (e: any) {
       setSending(false);
-      const errMsg =
-        localizeApiError(e?.data, e?.message || 'Failed to create session');
+      const errMsg = localizeApiError(
+        e?.data,
+        e?.message || 'Failed to create session',
+      );
       message.error(errMsg);
     }
   };

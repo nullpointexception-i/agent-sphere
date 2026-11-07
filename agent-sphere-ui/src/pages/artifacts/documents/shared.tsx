@@ -1,9 +1,9 @@
-import { API_PATHS } from '@/constants/endpoints';
 import { MenuOutlined } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
 import { useIntl, useParams } from '@umijs/max';
 import { Button, Result, Spin, Typography } from 'antd';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { API_PATHS } from '@/constants/endpoints';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { useStyles } from './style';
 import { type TocItemBase, TocPanel } from './TocPanel';

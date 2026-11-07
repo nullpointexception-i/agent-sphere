@@ -12,7 +12,7 @@ import com.buukle.agent.runtime.kernel.port.vo.FlowEventType;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
-import com.buukle.agent.runtime.kernel.port.vo.ToolApprovalStatus;
+import com.buukle.agent.runtime.kernel.port.vo.ToolApprovalEvent;
 import com.buukle.agent.superagent.spi.SessionInputCommand;
 import com.buukle.agent.superagent.spi.SessionInputResolveCommand;
 import com.buukle.agent.superagent.spi.SessionInputSpi;
@@ -88,7 +88,7 @@ public class RouterInputBridge {
         }
         if (event.getEventType() instanceof ClarificationStatus clarify) {
             handleClarification(clarify, data, session);
-        } else if (event.getEventType() instanceof ToolApprovalStatus approval) {
+        } else if (event.getEventType() instanceof ToolApprovalEvent approval) {
             handleApproval(approval, data, session);
         } else if (event.getEventType() instanceof RunStatus runStatus && isTerminal(runStatus)) {
             spi().ifPresent(spi -> spi.projectRunTerminal(data.getRunId()));
@@ -126,7 +126,7 @@ public class RouterInputBridge {
         }
     }
 
-    private void handleApproval(ToolApprovalStatus approval, RuntimeEventDataVO data,
+    private void handleApproval(ToolApprovalEvent approval, RuntimeEventDataVO data,
                                 SessionInfo session) {
         if (data.getApprovalId() == null) {
             return;

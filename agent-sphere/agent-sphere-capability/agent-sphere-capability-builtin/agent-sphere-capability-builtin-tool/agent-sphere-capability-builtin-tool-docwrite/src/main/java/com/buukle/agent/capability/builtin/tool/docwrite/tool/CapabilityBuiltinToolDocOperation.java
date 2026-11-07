@@ -191,134 +191,37 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
 
     private DocWriteResultVO handlePatch(DocWriteExecuteContext ctx, Long documentId) {
         if (documentId == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setAction(ACTION_PATCH);
-            r.setPreview("documentId is required");
-            return r;
+            return patchError(null, "documentId is required");
         }
         String op = ctx.getOperation();
         if (op == null || op.isBlank()) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setDocumentId(documentId);
-            r.setAction(ACTION_PATCH);
-            r.setPreview("operation is required (replace_section, insert_after, replace_text)");
-            return r;
+            return patchError(documentId, "operation is required (replace_section, insert_after, replace_text)");
         }
         DocumentVO doc = documentSpi.getById(documentId);
         if (doc == null) {
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setDocumentId(documentId);
-            r.setAction(ACTION_PATCH);
-            r.setPreview("Document not found: " + documentId);
-            return r;
+            return patchError(documentId, "Document not found: " + documentId);
         }
 
         String content = doc.getContent() != null ? doc.getContent() : "";
         String title = doc.getTitle();
-        String newContent;
-
+        PatchOutcome outcome;
         try {
-            switch (op) {
-                case OP_REPLACE_SECTION -> {
-                    String headingSearch = ctx.getHeadingSearch();
-                if (headingSearch == null || headingSearch.isBlank()) {
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("headingSearch is required for replace_section");
-                    return r;
-                }
-                String section = MarkdownParser.extractSection(content, headingSearch);
-                if (section == null) {
-                    List<HeadingInfo> headings = MarkdownParser.parseHeadings(content);
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("Section not found: \"" + headingSearch + "\". Available headings:");
-                    r.setHeadings(headings);
-                    r.setTotalLines(content.split("\n", -1).length);
-                    return r;
-                }
-                String newSection = ctx.getContent();
-                if (newSection == null) newSection = "";
-                String replaced = MarkdownParser.replaceSection(content, section, newSection);
-                if (replaced == null) {
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("Section found but replacement failed — possible encoding or whitespace mismatch. Use get(sectionHeading=...) to verify the section content before retrying.");
-                    return r;
-                }
-                newContent = replaced;
-            }
-            case OP_INSERT_AFTER -> {
-                String headingSearch = ctx.getHeadingSearch();
-                if (headingSearch == null || headingSearch.isBlank()) {
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("headingSearch is required for insert_after");
-                    return r;
-                }
-                String inserted = MarkdownParser.insertAfterSection(content, headingSearch, ctx.getContent());
-                if (inserted == null) {
-                    List<HeadingInfo> headings = MarkdownParser.parseHeadings(content);
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("Heading not found: \"" + headingSearch + "\". Available headings:");
-                    r.setHeadings(headings);
-                    r.setTotalLines(content.split("\n", -1).length);
-                    return r;
-                }
-                newContent = inserted;
-            }
-            case OP_REPLACE_TEXT -> {
-                String searchText = ctx.getSearchText();
-                String replaceText = ctx.getReplaceText();
-                if (searchText == null || searchText.isBlank() || replaceText == null) {
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("searchText and replaceText are required for replace_text");
-                    return r;
-                }
-                String replaced = MarkdownParser.replaceFirst(content, searchText, replaceText);
-                if (replaced == null) {
-                    int first = content.indexOf(searchText);
-                    if (first == -1) {
-                        DocWriteResultVO r = new DocWriteResultVO();
-                        r.setDocumentId(documentId);
-                        r.setAction(ACTION_PATCH);
-                        r.setPreview("Text not found: \"" + searchText + "\". Use get(action=get, documentId=" + documentId + ") to verify the text.");
-                        return r;
-                    }
-                    int second = content.indexOf(searchText, first + searchText.length());
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("Text found " + (second != -1 ? "multiple" : "unexpected") + " times. Use a more specific searchText or use get to confirm.");
-                    return r;
-                }
-                newContent = replaced;
-            }
-                default -> {
-                    DocWriteResultVO r = new DocWriteResultVO();
-                    r.setDocumentId(documentId);
-                    r.setAction(ACTION_PATCH);
-                    r.setPreview("Unknown operation: " + op + ". Supported: replace_section, insert_after, replace_text");
-                    return r;
-                }
-            }
+            outcome = switch (op) {
+                case OP_REPLACE_SECTION -> replaceSection(ctx, documentId, content);
+                case OP_INSERT_AFTER -> insertAfter(ctx, documentId, content);
+                case OP_REPLACE_TEXT -> replaceText(ctx, documentId, content);
+                default -> PatchOutcome.error(patchError(documentId,
+                        "Unknown operation: " + op + ". Supported: replace_section, insert_after, replace_text"));
+            };
         } catch (Exception e) {
             log.warn("patch failed documentId={} op={}", documentId, op, e);
-            DocWriteResultVO r = new DocWriteResultVO();
-            r.setDocumentId(documentId);
-            r.setAction(ACTION_PATCH);
-            r.setPreview("Internal error: " + e.getMessage());
-            return r;
+            return patchError(documentId, "Internal error: " + e.getMessage());
+        }
+        if (outcome.error() != null) {
+            return outcome.error();
         }
 
+        String newContent = outcome.content();
         documentSpi.update(documentId, title, newContent);
         String preview = newContent.length() > PREVIEW_LENGTH ? newContent.substring(0, PREVIEW_LENGTH) + "..." : newContent;
         DocWriteResultVO r = new DocWriteResultVO();
@@ -327,6 +230,91 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
         r.setAction(ACTION_PATCH);
         r.setPreview(preview);
         return r;
+    }
+
+    private PatchOutcome replaceSection(DocWriteExecuteContext ctx, Long documentId, String content) {
+        String headingSearch = ctx.getHeadingSearch();
+        if (headingSearch == null || headingSearch.isBlank()) {
+            return PatchOutcome.error(patchError(documentId, "headingSearch is required for replace_section"));
+        }
+        String section = MarkdownParser.extractSection(content, headingSearch);
+        if (section == null) {
+            return PatchOutcome.error(
+                    patchSectionNotFound(documentId, content, "Section not found: \"" + headingSearch + "\". Available headings:"));
+        }
+        String newSection = ctx.getContent();
+        if (newSection == null) {
+            newSection = "";
+        }
+        String replaced = MarkdownParser.replaceSection(content, section, newSection);
+        if (replaced == null) {
+            return PatchOutcome.error(patchError(documentId,
+                    "Section found but replacement failed — possible encoding or whitespace mismatch. "
+                            + "Use get(sectionHeading=...) to verify the section content before retrying."));
+        }
+        return PatchOutcome.ok(replaced);
+    }
+
+    private PatchOutcome insertAfter(DocWriteExecuteContext ctx, Long documentId, String content) {
+        String headingSearch = ctx.getHeadingSearch();
+        if (headingSearch == null || headingSearch.isBlank()) {
+            return PatchOutcome.error(patchError(documentId, "headingSearch is required for insert_after"));
+        }
+        String inserted = MarkdownParser.insertAfterSection(content, headingSearch, ctx.getContent());
+        if (inserted == null) {
+            return PatchOutcome.error(
+                    patchSectionNotFound(documentId, content, "Heading not found: \"" + headingSearch + "\". Available headings:"));
+        }
+        return PatchOutcome.ok(inserted);
+    }
+
+    private PatchOutcome replaceText(DocWriteExecuteContext ctx, Long documentId, String content) {
+        String searchText = ctx.getSearchText();
+        String replaceText = ctx.getReplaceText();
+        if (searchText == null || searchText.isBlank() || replaceText == null) {
+            return PatchOutcome.error(patchError(documentId,
+                    "searchText and replaceText are required for replace_text"));
+        }
+        String replaced = MarkdownParser.replaceFirst(content, searchText, replaceText);
+        if (replaced != null) {
+            return PatchOutcome.ok(replaced);
+        }
+        int first = content.indexOf(searchText);
+        if (first == -1) {
+            return PatchOutcome.error(patchError(documentId, "Text not found: \"" + searchText
+                    + "\". Use get(action=get, documentId=" + documentId + ") to verify the text."));
+        }
+        int second = content.indexOf(searchText, first + searchText.length());
+        return PatchOutcome.error(patchError(documentId, "Text found "
+                + (second != -1 ? "multiple" : "unexpected")
+                + " times. Use a more specific searchText or use get to confirm."));
+    }
+
+    private DocWriteResultVO patchError(Long documentId, String message) {
+        DocWriteResultVO r = new DocWriteResultVO();
+        r.setDocumentId(documentId);
+        r.setAction(ACTION_PATCH);
+        r.setPreview(message);
+        return r;
+    }
+
+    private DocWriteResultVO patchSectionNotFound(Long documentId, String content, String message) {
+        List<HeadingInfo> headings = MarkdownParser.parseHeadings(content);
+        DocWriteResultVO r = patchError(documentId, message);
+        r.setHeadings(headings);
+        r.setTotalLines(content.split("\n", -1).length);
+        return r;
+    }
+
+    /** Either the patched content or the error result. */
+    private record PatchOutcome(String content, DocWriteResultVO error) {
+        static PatchOutcome ok(String content) {
+            return new PatchOutcome(content, null);
+        }
+
+        static PatchOutcome error(DocWriteResultVO error) {
+            return new PatchOutcome(null, error);
+        }
     }
 
     private Long resolveInstanceId(Long sessionId) {

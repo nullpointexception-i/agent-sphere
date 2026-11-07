@@ -105,7 +105,9 @@ export default function UsageTrend({
         } else if (incoming.length) {
           setPoints((prev) => {
             const map = new Map<number, UsagePoint>(prev.map((p) => [p.id, p]));
-            incoming.forEach((p) => map.set(p.id, p));
+            incoming.forEach((p) => {
+              map.set(p.id, p);
+            });
             return [...map.values()].sort((a, b) => a.id - b.id).slice(-LIMIT);
           });
           lastIdRef.current = Math.max(
@@ -185,7 +187,9 @@ export default function UsageTrend({
 
   const chartData = useMemo(() => {
     const seqById = new Map<number, number>();
-    points.forEach((p, i) => seqById.set(p.id, i + 1));
+    points.forEach((p, i) => {
+      seqById.set(p.id, i + 1);
+    });
     return visiblePoints.flatMap((p) =>
       metrics.map((m) => ({
         x: seqById.get(p.id) ?? 0,
@@ -198,7 +202,9 @@ export default function UsageTrend({
 
   useEffect(() => {
     const seqById = new Map<number, number>();
-    points.forEach((p, i) => seqById.set(p.id, i + 1));
+    points.forEach((p, i) => {
+      seqById.set(p.id, i + 1);
+    });
     const xs = visiblePoints.map((p) => seqById.get(p.id) ?? 0);
     domainRef.current = {
       min: xs.length ? Math.min(...xs) : 1,

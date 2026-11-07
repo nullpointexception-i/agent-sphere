@@ -170,25 +170,13 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 }
             }
             attempts++;
-            int chunkCount = 0;
-            // Last non-empty finish_reason in this stream: OpenAI-compatible APIs only send it in the last
-            // chunk. It used to be discarded here and hardcoded to "stop" at the end, so length (truncation)
-            // / content_filter were treated as normal completion.
-            String lastFinishReason = null;
+            StreamAccumulator acc = new StreamAccumulator(onEvent);
             java.util.concurrent.Future<?> readTimeoutFuture = null;
             try {
-                StringBuilder contentBuilder = new StringBuilder();
-                StringBuilder reasoningBuilder = new StringBuilder();
                 String url = baseUrl + LlmApiConstants.CHAT_COMPLETIONS_PATH;
                 log.info("LLM stream request: model={}, url={}, body={}", modelName, url, truncate(requestBody));
 
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
-                        .header(LlmApiConstants.HEADER_CONTENT_TYPE, LlmApiConstants.APPLICATION_JSON)
-                        .header(LlmApiConstants.HEADER_AUTHORIZATION, LlmApiConstants.BEARER_PREFIX + apiKey)
-                        .header(LlmApiConstants.HEADER_ACCEPT, LlmApiConstants.TEXT_EVENT_STREAM)
-                        .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                        .build();
+                HttpRequest request = buildStreamRequest(url, apiKey, requestBody);
 
                 // Separate short timeout for response headers: fail fast and retry when the TLS handshake /
                 // response headers hang; the 120s response-body read timeout must not be reused here.
@@ -214,103 +202,21 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 }
                 log.info("LLM stream response: status={}", response.statusCode());
 
-                ToolStream toolStream = new ToolStream(onEvent);
+                ToolStream toolStream = acc.toolStream;
                 // Response headers are ready: for the body phase, use a scheduled interrupt as the read-timeout
                 // fallback (cancelled each round to avoid a leftover interrupt).
                 readTimeoutFuture = READ_TIMEOUT_SCHEDULER.schedule(
                         Thread.currentThread()::interrupt, streamReadTimeoutSeconds, TimeUnit.SECONDS);
-                AtomicReference<JsonNode> usageRef = new AtomicReference<>();
-                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.startsWith(LlmApiConstants.SSE_DATA_PREFIX)) {
-                            String data = line.substring(LlmApiConstants.SSE_DATA_PREFIX.length()).trim();
-                            if (LlmApiConstants.SSE_DONE_MARKER.equals(data)) break;
-                            chunkCount++;
-                            try {
-                                JsonNode chunk = JsonUtils.parse(data, JsonNode.class);
-                                // Final usage frame (stream_options.include_usage): choices is empty, usage sits at
-                                // the chunk top level; keep the last non-null one.
-                                if (chunk != null && chunk.has(LlmApiConstants.FIELD_USAGE)
-                                        && !chunk.get(LlmApiConstants.FIELD_USAGE).isNull()) {
-                                    usageRef.set(chunk.get(LlmApiConstants.FIELD_USAGE));
-                                }
-                                if (chunk != null && chunk.has(LlmApiConstants.FIELD_CHOICES)
-                                        && chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
-                                        && chunk.get(LlmApiConstants.FIELD_CHOICES).size() > 0) {
-                                    JsonNode choice = chunk.get(LlmApiConstants.FIELD_CHOICES).get(0);
-                                    if (choice.has(LlmApiConstants.FIELD_FINISH_REASON)
-                                            && !choice.get(LlmApiConstants.FIELD_FINISH_REASON).isNull()) {
-                                        String finishReason = choice.get(LlmApiConstants.FIELD_FINISH_REASON).asText();
-                                        if (finishReason != null && !finishReason.isBlank()) {
-                                            lastFinishReason = finishReason;
-                                        }
-                                        log.debug("LLM finish_reason: {}", finishReason);
-                                    }
-                                    JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
-                                    if (delta != null) {
-                                        // Dual-field compatibility: vLLM/Qwen3 use reasoning, DeepSeek/Zhipu use reasoning_content.
-                                        String r = LlmStreamUtils.firstTextual(delta,
-                                                LlmApiConstants.FIELD_REASONING,
-                                                LlmApiConstants.FIELD_REASONING_CONTENT);
-                                        if (r != null && !r.isEmpty()) {
-                                            reasoningBuilder.append(r);
-                                            onEvent.accept(new LLMEvent.ReasoningDelta(r));
-                                        }
-                                        if (delta.has(LlmApiConstants.FIELD_CONTENT)
-                                                && delta.get(LlmApiConstants.FIELD_CONTENT).isTextual()) {
-                                            String c = delta.get(LlmApiConstants.FIELD_CONTENT).asText();
-                                            if (!c.isEmpty()) {
-                                                contentBuilder.append(c);
-                                                onEvent.accept(new LLMEvent.TextDelta(c));
-                                            }
-                                        }
-                                        chatResponseAdapter.adaptResponse(choice, toolStream, company);
-                                    }
-                                }
-                            } catch (Exception ignored) {
-                            }
-                        }
-                    }
-                }
+                consumeStreamBody(response, company, onEvent, acc);
                 toolStream.finishAll();
 
-                if (toolStream.isEmpty()) {
-                    ContentToolCallResult ctcr = chatResponseAdapter.extractToolCalls(contentBuilder.toString(), company);
-                    if (ctcr.isEmpty()) {
-                        ctcr = chatResponseAdapter.extractToolCalls(reasoningBuilder.toString(), company);
-                    }
-                    if (!ctcr.isEmpty()) {
-                        contentBuilder.setLength(0);
-                        if (ctcr.cleanedContent() != null) {
-                            contentBuilder.append(ctcr.cleanedContent());
-                        }
-                        for (ContentToolCallResult.ContentToolCall tc : ctcr.toolCalls()) {
-                            String callId = LlmApiConstants.PARSED_CALL_ID_PREFIX + System.nanoTime();
-                            onEvent.accept(new LLMEvent.ToolCall(callId, tc.name(), tc.arguments()));
-                        }
-                    }
-                }
+                emitContentToolCalls(acc, company, onEvent);
 
-                Map<String, Object> usage = usageRef.get() == null ? Map.of()
-                        : JsonUtils.getMapper().convertValue(usageRef.get(),
-                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
-                        });
-                String content = contentBuilder.toString();
-                String reasoning = reasoningBuilder.toString();
+                Map<String, Object> usage = toUsageMap(acc.usage.get());
                 TokenUsage usageModel = TokenUsage.from(usage);
-                log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}, usage={}, cached={}/{}",
-                        modelName, chunkCount, content.length(), reasoning.length(),
-                        usage.isEmpty() ? "-" : usage.getOrDefault("total_tokens", "-"),
-                        usageModel == null ? "-" : usageModel.getCacheHitTokens(),
-                        usageModel == null ? "-" : usageModel.getCacheMissTokens());
-                String finishReason = lastFinishReason != null && !lastFinishReason.isBlank()
-                        ? lastFinishReason : com.buukle.agent.model.dtvo.complete.FinishReason.STOP;
-                if (!com.buukle.agent.model.dtvo.complete.FinishReason.STOP.equals(finishReason)
-                        && !com.buukle.agent.model.dtvo.complete.FinishReason.TOOL_CALLS.equals(finishReason)) {
-                    log.warn("LLM stream ended with abnormal finish_reason: model={}, reason={}, chunks={}",
-                            modelName, finishReason, chunkCount);
-                }
+                logStreamCompleted(modelName, acc, usage, usageModel);
+                String finishReason = resolveFinishReason(acc.lastFinishReason);
+                warnOnAbnormalFinish(modelName, finishReason, acc.chunkCount);
                 onEvent.accept(new LLMEvent.Finish(finishReason, usage));
                 onDone.run();
                 if (readTimeoutFuture != null) {
@@ -331,16 +237,16 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                     metrics.increment(AgentMetrics.LLM_STREAM_HANDSHAKE_FAILED, "model", modelName);
                 }
                 // Transient transport failure (EOF/disconnect, no chunk received) -> retry; timeout/cancel -> no retry.
-                if (attempt < streamMaxRetries && chunkCount == 0 && !userTimedOut) {
+                if (attempt < streamMaxRetries && acc.chunkCount == 0 && !userTimedOut) {
                     retryCount++;
                     metrics.increment(AgentMetrics.LLM_STREAM_RETRY, "model", modelName);
                     log.warn("LLM stream failed, will retry: model={}, attempt={}/{}, timedOut={}, chunks={}, errorType={}, handshake={}, err={}",
-                            modelName, attempt + 1, streamMaxRetries + 1, userTimedOut, chunkCount,
+                            modelName, attempt + 1, streamMaxRetries + 1, userTimedOut, acc.chunkCount,
                             lastErrorType, handshake, e.toString());
                     continue;
                 }
                 log.error("LLM stream failed: model={}, timedOut={}, chunks={}, retried={}, errorType={}, handshake={}",
-                        modelName, userTimedOut, chunkCount, attempt, lastErrorType, handshake, e);
+                        modelName, userTimedOut, acc.chunkCount, attempt, lastErrorType, handshake, e);
                 // Report an explicit error instead of silently returning an empty result, so the upper layer can
                 // degrade the route / retry the task.
                 onEvent.accept(new LLMEvent.Error(userTimedOut
@@ -352,6 +258,155 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
         }
         onDone.run();
         return stats(attempts, retryCount, handshakeFailed, lastErrorType, lastErrorMessage);
+    }
+
+    private HttpRequest buildStreamRequest(String url, String apiKey, String requestBody) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header(LlmApiConstants.HEADER_CONTENT_TYPE, LlmApiConstants.APPLICATION_JSON)
+                .header(LlmApiConstants.HEADER_AUTHORIZATION, LlmApiConstants.BEARER_PREFIX + apiKey)
+                .header(LlmApiConstants.HEADER_ACCEPT, LlmApiConstants.TEXT_EVENT_STREAM)
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+    }
+
+    /** Reads the SSE body and folds every data frame into the accumulator. */
+    private void consumeStreamBody(HttpResponse<java.io.InputStream> response, String company,
+                                   Consumer<LLMEvent> onEvent, StreamAccumulator acc) throws java.io.IOException {
+        try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!line.startsWith(LlmApiConstants.SSE_DATA_PREFIX)) {
+                    continue;
+                }
+                String data = line.substring(LlmApiConstants.SSE_DATA_PREFIX.length()).trim();
+                if (LlmApiConstants.SSE_DONE_MARKER.equals(data)) {
+                    break;
+                }
+                acc.chunkCount++;
+                try {
+                    applyChunk(JsonUtils.parse(data, JsonNode.class), company, onEvent, acc);
+                } catch (Exception ignored) {
+                    // A malformed frame must not abort the whole stream.
+                }
+            }
+        }
+    }
+
+    /** Applies one OpenAI-compatible chunk: usage frame, finish_reason, reasoning/content deltas. */
+    private void applyChunk(JsonNode chunk, String company, Consumer<LLMEvent> onEvent, StreamAccumulator acc) {
+        if (chunk == null) {
+            return;
+        }
+        // Final usage frame (stream_options.include_usage): choices is empty, usage sits at
+        // the chunk top level; keep the last non-null one.
+        if (chunk.has(LlmApiConstants.FIELD_USAGE) && !chunk.get(LlmApiConstants.FIELD_USAGE).isNull()) {
+            acc.usage.set(chunk.get(LlmApiConstants.FIELD_USAGE));
+        }
+        if (!chunk.has(LlmApiConstants.FIELD_CHOICES)
+                || !chunk.get(LlmApiConstants.FIELD_CHOICES).isArray()
+                || chunk.get(LlmApiConstants.FIELD_CHOICES).isEmpty()) {
+            return;
+        }
+        JsonNode choice = chunk.get(LlmApiConstants.FIELD_CHOICES).get(0);
+        String finishReason = textOrNull(choice, LlmApiConstants.FIELD_FINISH_REASON);
+        if (finishReason != null) {
+            acc.lastFinishReason = finishReason;
+            log.debug("LLM finish_reason: {}", finishReason);
+        }
+        JsonNode delta = choice.get(LlmApiConstants.FIELD_DELTA);
+        if (delta == null) {
+            return;
+        }
+        // Dual-field compatibility: vLLM/Qwen3 use reasoning, DeepSeek/Zhipu use reasoning_content.
+        String reasoning = LlmStreamUtils.firstTextual(delta,
+                LlmApiConstants.FIELD_REASONING,
+                LlmApiConstants.FIELD_REASONING_CONTENT);
+        if (reasoning != null && !reasoning.isEmpty()) {
+            acc.reasoning.append(reasoning);
+            onEvent.accept(new LLMEvent.ReasoningDelta(reasoning));
+        }
+        String content = textOrNull(delta, LlmApiConstants.FIELD_CONTENT);
+        if (content != null && !content.isEmpty()) {
+            acc.content.append(content);
+            onEvent.accept(new LLMEvent.TextDelta(content));
+        }
+        chatResponseAdapter.adaptResponse(choice, acc.toolStream, company);
+    }
+
+    /** Falls back to parsing tool calls out of the assistant text when no native tool_calls arrived. */
+    private void emitContentToolCalls(StreamAccumulator acc, String company, Consumer<LLMEvent> onEvent) {
+        if (!acc.toolStream.isEmpty()) {
+            return;
+        }
+        ContentToolCallResult parsed = chatResponseAdapter.extractToolCalls(acc.content.toString(), company);
+        if (parsed.isEmpty()) {
+            parsed = chatResponseAdapter.extractToolCalls(acc.reasoning.toString(), company);
+        }
+        if (parsed.isEmpty()) {
+            return;
+        }
+        acc.content.setLength(0);
+        if (parsed.cleanedContent() != null) {
+            acc.content.append(parsed.cleanedContent());
+        }
+        for (ContentToolCallResult.ContentToolCall toolCall : parsed.toolCalls()) {
+            String callId = LlmApiConstants.PARSED_CALL_ID_PREFIX + System.nanoTime();
+            onEvent.accept(new LLMEvent.ToolCall(callId, toolCall.name(), toolCall.arguments()));
+        }
+    }
+
+    private Map<String, Object> toUsageMap(JsonNode usageNode) {
+        return usageNode == null ? Map.of()
+                : JsonUtils.getMapper().convertValue(usageNode,
+                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                });
+    }
+
+    private void logStreamCompleted(String modelName, StreamAccumulator acc,
+                                    Map<String, Object> usage, TokenUsage usageModel) {
+        log.info("LLM stream completed: model={}, chunks={}, contentLen={}, reasoningLen={}, usage={}, cached={}/{}",
+                modelName, acc.chunkCount, acc.content.length(), acc.reasoning.length(),
+                usage.isEmpty() ? "-" : usage.getOrDefault("total_tokens", "-"),
+                usageModel == null ? "-" : usageModel.getCacheHitTokens(),
+                usageModel == null ? "-" : usageModel.getCacheMissTokens());
+    }
+
+    private String resolveFinishReason(String lastFinishReason) {
+        return lastFinishReason != null && !lastFinishReason.isBlank()
+                ? lastFinishReason
+                : com.buukle.agent.model.dtvo.complete.FinishReason.STOP;
+    }
+
+    private void warnOnAbnormalFinish(String modelName, String finishReason, int chunkCount) {
+        if (!com.buukle.agent.model.dtvo.complete.FinishReason.STOP.equals(finishReason)
+                && !com.buukle.agent.model.dtvo.complete.FinishReason.TOOL_CALLS.equals(finishReason)) {
+            log.warn("LLM stream ended with abnormal finish_reason: model={}, reason={}, chunks={}",
+                    modelName, finishReason, chunkCount);
+        }
+    }
+
+    /** Returns the trimmed textual value of a field, or null when absent/null/non-textual/blank. */
+    private static String textOrNull(JsonNode node, String field) {
+        if (node == null || !node.has(field) || !node.get(field).isTextual()) {
+            return null;
+        }
+        String value = node.get(field).asText();
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    /** Mutable per-attempt stream state (text/reasoning/usage/tool stream). */
+    private static final class StreamAccumulator {
+        private final ToolStream toolStream;
+        private final StringBuilder content = new StringBuilder();
+        private final StringBuilder reasoning = new StringBuilder();
+        private final AtomicReference<JsonNode> usage = new AtomicReference<>();
+        private int chunkCount;
+        private String lastFinishReason;
+
+        private StreamAccumulator(Consumer<LLMEvent> onEvent) {
+            this.toolStream = new ToolStream(onEvent);
+        }
     }
 
     /** Backoff for the Nth retry (N starts at 1); use the last entry once the list is exhausted. */

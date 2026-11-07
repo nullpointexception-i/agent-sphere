@@ -40,7 +40,7 @@ import com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver;
 import com.buukle.agent.runtime.kernel.port.KernelContext;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
-import com.buukle.agent.runtime.kernel.runner.SessionInputManager;
+import com.buukle.agent.runtime.kernel.runner.support.SessionInputManager;
 import com.buukle.agent.runtime.kernel.runner.SessionRunner;
 import com.buukle.agent.runtime.kernel.runner.sub.DelegateService;
 import com.buukle.agent.runtime.kernel.service.CliExecutorService;

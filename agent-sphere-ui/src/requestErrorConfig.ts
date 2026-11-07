@@ -1,7 +1,7 @@
-import { localizeApiError } from '@/utils/errorMessage';
 import type { RequestConfig } from '@umijs/max';
 import { getIntl } from '@umijs/max';
 import { clearStoredUser, getToken } from '@/utils/auth';
+import { localizeApiError } from '@/utils/errorMessage';
 import { showError } from '@/utils/globalMessage';
 
 export const errorConfig: RequestConfig = {

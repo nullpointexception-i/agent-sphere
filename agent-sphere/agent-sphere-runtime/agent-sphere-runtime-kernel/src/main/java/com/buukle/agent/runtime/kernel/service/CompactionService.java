@@ -25,7 +25,7 @@ import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.contract.CompactionOutcome;
 import com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
-import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
@@ -39,7 +39,7 @@ import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.prompt.CompactionPromptConstant;
-import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
+import com.buukle.agent.runtime.kernel.runner.tool.LiveToolResultPolicy;
 import com.buukle.agent.runtime.kernel.util.SummarySanitizer;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.util.json.JsonUtils;
@@ -383,7 +383,7 @@ public class CompactionService {
         if (messages != null) {
             List<ChatMessageDTO> leadingSystem = new ArrayList<>();
             for (ChatMessageDTO msg : messages) {
-                if (!LlmApiConstant.ROLE_SYSTEM.equals(msg.getRole())) {
+                if (!LlmRoles.SYSTEM.equals(msg.getRole())) {
                     break;
                 }
                 leadingSystem.add(msg);
@@ -823,15 +823,15 @@ public class CompactionService {
 
             // New messages: prefix (old run summary removed) → new run summary inserted at the end of the leading system → current user + tail
             List<ChatMessageDTO> prefix = new ArrayList<>(messages.subList(0, userIndex));
-            prefix.removeIf(m -> LlmApiConstant.ROLE_SYSTEM.equals(m.getRole())
+            prefix.removeIf(m -> LlmRoles.SYSTEM.equals(m.getRole())
                     && m.getContent() instanceof String s && s.startsWith(HistoryLoader.RUN_SUMMARY_PREFIX));
             int insertAt = 0;
             while (insertAt < prefix.size()
-                    && LlmApiConstant.ROLE_SYSTEM.equals(prefix.get(insertAt).getRole())) {
+                    && LlmRoles.SYSTEM.equals(prefix.get(insertAt).getRole())) {
                 insertAt++;
             }
             prefix.add(insertAt, new ChatMessageDTO()
-                    .setRole(LlmApiConstant.ROLE_SYSTEM)
+                    .setRole(LlmRoles.SYSTEM)
                     .setContent(HistoryLoader.RUN_SUMMARY_PREFIX + summary));
             List<ChatMessageDTO> tail = selection.tail();
             List<ChatMessageDTO> rebuilt = new ArrayList<>(prefix);
@@ -899,7 +899,7 @@ public class CompactionService {
             selectedStart = latestBrowser;
         }
         while (selectedStart > userIndex + 1
-                && LlmApiConstant.ROLE_TOOL.equals(messages.get(selectedStart).getRole())) {
+                && LlmRoles.TOOL.equals(messages.get(selectedStart).getRole())) {
             selectedStart--;
         }
         List<ChatMessageDTO> tail = new ArrayList<>();
@@ -924,7 +924,7 @@ public class CompactionService {
 
     private static boolean isWorkMessage(ChatMessageDTO m) {
         String role = m.getRole();
-        return role != null && !LlmApiConstant.ROLE_SYSTEM.equals(role);
+        return role != null && !LlmRoles.SYSTEM.equals(role);
     }
 
     private static long messageChars(ChatMessageDTO m) {
@@ -943,7 +943,7 @@ public class CompactionService {
         String browser = LiveToolResultPolicy.browserToolName();
         Map<String, String> callNames = new LinkedHashMap<>();
         for (ChatMessageDTO m : messages) {
-            if (LlmApiConstant.ROLE_ASSISTANT.equals(m.getRole()) && m.getToolCalls() != null) {
+            if (LlmRoles.ASSISTANT.equals(m.getRole()) && m.getToolCalls() != null) {
                 for (ToolCallDTO tc : m.getToolCalls()) {
                     if (tc.getId() != null && tc.getFunction() != null) {
                         callNames.put(tc.getId(), tc.getFunction().getName());
@@ -954,7 +954,7 @@ public class CompactionService {
         int latest = -1;
         for (int i = userIndex + 1; i < messages.size(); i++) {
             ChatMessageDTO m = messages.get(i);
-            if (LlmApiConstant.ROLE_TOOL.equals(m.getRole())
+            if (LlmRoles.TOOL.equals(m.getRole())
                     && browser.equals(callNames.get(m.getToolCallId()))) {
                 latest = i;
             }
@@ -969,7 +969,7 @@ public class CompactionService {
             String role = m.getRole() != null ? m.getRole() : "unknown";
             String content = contentText(m.getContent());
             if (content != null && !content.isBlank()) {
-                int cap = LlmApiConstant.ROLE_TOOL.equals(role)
+                int cap = LlmRoles.TOOL.equals(role)
                         ? RUN_COMPACTION_TOOL_RESULT_MAX_CHARS : RUN_COMPACTION_MESSAGE_MAX_CHARS;
                 sb.append(role).append(": ").append(truncateField(content, cap)).append('\n');
             }
@@ -1008,7 +1008,7 @@ public class CompactionService {
 
     private static boolean isGroupStart(ChatMessageDTO message) {
         String role = message.getRole();
-        return LlmApiConstant.ROLE_USER.equals(role) || LlmApiConstant.ROLE_ASSISTANT.equals(role);
+        return LlmRoles.USER.equals(role) || LlmRoles.ASSISTANT.equals(role);
     }
 
     /** Tail persistence: strips image data URLs, truncates over-long bodies, and controls the total size. */
@@ -1087,9 +1087,9 @@ public class CompactionService {
                     .setModel(route.getModelName())
                     .setStream(true)
                     .setMessages(List.of(
-                            new ChatMessageDTO().setRole(LlmApiConstant.ROLE_SYSTEM)
+                            new ChatMessageDTO().setRole(LlmRoles.SYSTEM)
                                     .setContent(CompactionPromptConstant.getSystemPrompt()),
-                            new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(messagesText)));
+                            new ChatMessageDTO().setRole(LlmRoles.USER).setContent(messagesText)));
             llmRequestConfigurer.applyGlobal(request);
             // The summary does not need thinking: the global config's thinking=true would spend the output budget on reasoning,
             // and it was observed that completion=4000, reasoning 5–11k, content empty (compaction fails outright).

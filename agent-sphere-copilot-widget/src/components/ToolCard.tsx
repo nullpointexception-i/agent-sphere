@@ -2,6 +2,7 @@
  * Tool card family rendering (ported from the main site's UmiJS ToolCard, with antd dependencies removed).
  * Works with the pure discriminators in `toolRenderers.ts`: todo/doc/generic plus a collapsible JSON block.
  */
+import { TODO_STATUS } from '../constants';
 import { useState } from 'react';
 import { DocIcon } from '../icons';
 import {
@@ -202,16 +203,16 @@ export function TodoCard({ content }: { content: ToolContent }) {
           <div key={`${t.content}-${i}`} className="aw-tool-todo-item">
             <span
               className={
-                t.status === 'completed'
+                t.status === TODO_STATUS.COMPLETED
                   ? 'aw-tool-todo-check done'
                   : 'aw-tool-todo-check'
               }
             >
-              {t.status === 'completed' ? '✓' : ''}
+              {t.status === TODO_STATUS.COMPLETED ? '✓' : ''}
             </span>
             <span
               className={
-                t.status === 'completed'
+                t.status === TODO_STATUS.COMPLETED
                   ? 'aw-tool-todo-text done'
                   : 'aw-tool-todo-text'
               }

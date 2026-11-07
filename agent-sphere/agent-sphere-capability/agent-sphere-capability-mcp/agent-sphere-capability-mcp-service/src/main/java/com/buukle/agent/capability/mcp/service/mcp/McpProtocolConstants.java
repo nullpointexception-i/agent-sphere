@@ -1,5 +1,8 @@
 package com.buukle.agent.capability.mcp.service.mcp;
 
+import com.buukle.agent.common.constant.HttpHeaders;
+import com.buukle.agent.common.constant.McpServerType;
+
 public final class McpProtocolConstants {
     // ---- Protocol ----
     public static final String PROTOCOL_VERSION = "2025-11-25";
@@ -25,8 +28,8 @@ public final class McpProtocolConstants {
     public static final String CLIENT_NAME_VALUE = "agent-sphere";
     public static final String CLIENT_VERSION_VALUE = "1.0.0";
     // ---- HTTP headers ----
-    public static final String HEADER_CONTENT_TYPE = "Content-Type";
-    public static final String HEADER_ACCEPT = "Accept";
+    public static final String HEADER_CONTENT_TYPE = HttpHeaders.CONTENT_TYPE;
+    public static final String HEADER_ACCEPT = HttpHeaders.ACCEPT;
     public static final String HEADER_MCP_SESSION_ID = "MCP-Session-Id";
     public static final String HEADER_MCP_PROTOCOL_VERSION = "MCP-Protocol-Version";
     /**
@@ -35,8 +38,8 @@ public final class McpProtocolConstants {
      * authentication headers such as Authorization on MCPs that already registered them.
      */
     public static final String HEADER_TASK_MCP_CREDENTIAL = "X-Task-Mcp-Credential";
-    public static final String CONTENT_TYPE_JSON = "application/json";
-    public static final String CONTENT_TYPE_SSE = "text/event-stream";
+    public static final String CONTENT_TYPE_JSON = HttpHeaders.APPLICATION_JSON;
+    public static final String CONTENT_TYPE_SSE = HttpHeaders.TEXT_EVENT_STREAM;
     public static final String ACCEPT_JSON_SSE = "application/json,text/event-stream";
     // ---- Endpoint defaults ----
     public static final String DEFAULT_SSE_PATH = "/sse";
@@ -64,7 +67,7 @@ public final class McpProtocolConstants {
     public static final int HTTP_ACCEPTED = 202;
     // ---- Server type values ----
     public static final String SERVER_TYPE_HTTP = "http";
-    public static final String SERVER_TYPE_SSE = "sse";
+    public static final String SERVER_TYPE_SSE = McpServerType.SSE;
     // ---- Default empty schema ----
     public static final String DEFAULT_EMPTY_SCHEMA = "{\"type\":\"object\",\"properties\":{}}";
 

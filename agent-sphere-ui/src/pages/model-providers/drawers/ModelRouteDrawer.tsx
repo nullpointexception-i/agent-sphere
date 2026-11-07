@@ -1,4 +1,3 @@
-import { PERM } from '@/constants/permissions';
 import {
   DeleteOutlined,
   EditOutlined,
@@ -21,6 +20,7 @@ import {
 } from 'antd';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 
@@ -55,14 +55,7 @@ function parseReasoningLevels(raw: any): string[] {
 
 export default function ModelRouteDrawer({ open, providerId, onClose }: Props) {
   const { message, modal } = App.useApp();
-  let intl: any;
-  try {
-    intl = useIntl();
-  } catch {
-    intl = {
-      formatMessage: ({ id, defaultMessage }: any) => defaultMessage || id,
-    };
-  }
+  const intl = useIntl();
   const [routes, setRoutes] = useState<any[]>([]);
   const [editingRoute, setEditingRoute] = useState<any>(null);
   const [routeFormOpen, setRouteFormOpen] = useState(false);

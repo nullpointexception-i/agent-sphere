@@ -1,6 +1,7 @@
 import { useIntl } from '@umijs/max';
 import { App, Button, Empty, Modal, Spin, Table, Tag } from 'antd';
 import { useEffect, useState } from 'react';
+import { TIMING } from '@/constants/timing';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import DetailModal from '../DetailModal';
@@ -15,7 +16,7 @@ interface InteractionModalProps {
 }
 
 const PAGE_SIZE = 10;
-const USAGE_REFRESH_MS = 5_000;
+const USAGE_REFRESH_MS = TIMING.USAGE_REFRESH_MS;
 
 const TYPE_COLORS: Record<string, string> = {
   LLM_REPLY: 'blue',

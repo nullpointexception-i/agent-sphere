@@ -1,5 +1,6 @@
 package com.buukle.agent.capability.builtin.tool.webfetch.util;
 
+import com.buukle.agent.common.constant.HttpHeaders;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -39,7 +40,7 @@ public record BrowserProfile(String userAgent, Map<String, String> headers) {
     public static BrowserProfile firefoxWin() {
         Map<String, String> h = baseHeaders();
         h.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0");
-        h.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        h.put(HttpHeaders.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         h.put("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.7");
         h.put("Upgrade-Insecure-Requests", "1");
         h.put("Sec-Fetch-Dest", "document");
@@ -52,7 +53,7 @@ public record BrowserProfile(String userAgent, Map<String, String> headers) {
     public static BrowserProfile safariMac() {
         Map<String, String> h = baseHeaders();
         h.put("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15");
-        h.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        h.put(HttpHeaders.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         h.put("Accept-Language", "zh-CN,zh-Hans;q=0.9");
         h.put("Sec-Fetch-Dest", "document");
         h.put("Sec-Fetch-Mode", "navigate");
@@ -63,7 +64,7 @@ public record BrowserProfile(String userAgent, Map<String, String> headers) {
 
     private static Map<String, String> baseHeaders() {
         Map<String, String> h = new LinkedHashMap<>();
-        h.put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        h.put(HttpHeaders.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         h.put("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
         h.put("Accept-Encoding", "gzip, deflate, br");
         h.put("Cache-Control", "no-cache");

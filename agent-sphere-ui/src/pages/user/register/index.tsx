@@ -1,4 +1,3 @@
-import { localizeApiError } from '@/utils/errorMessage';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
 import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history, SelectLang, useIntl } from '@umijs/max';
@@ -6,6 +5,7 @@ import { Alert, App } from 'antd';
 import React, { useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { setStoredUser } from '@/utils/auth';
+import { localizeApiError } from '@/utils/errorMessage';
 import { labelWithRule } from '@/utils/labelWithRule';
 import Settings from '../../../../config/defaultSettings';
 import { useStyles } from './style';

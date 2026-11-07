@@ -1,5 +1,3 @@
-import { SUPER_AGENT_STATUS, WORK_ITEM_ACTIVE_STATUSES, WORK_ITEM_STATUS } from '@/constants/status';
-import { PERM } from '@/constants/permissions';
 import {
   AlertOutlined,
   BarChartOutlined,
@@ -31,6 +29,13 @@ import {
 } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
+import {
+  STATUS,
+  SUPER_AGENT_STATUS,
+  WORK_ITEM_ACTIVE_STATUSES,
+  WORK_ITEM_STATUS,
+} from '@/constants/status';
 import { dictApi, type SystemDicEntry } from '@/services/agentSphere/dict';
 import {
   type SuperAgent,
@@ -158,7 +163,7 @@ export default function SuperAgentPage() {
   };
 
   const toggle = async (record: SuperAgent) => {
-    const pause = record.status === 'ACTIVE';
+    const pause = record.status === STATUS.ACTIVE;
     modal.confirm({
       title: pause
         ? t(
@@ -280,7 +285,7 @@ export default function SuperAgentPage() {
 
   const toggleChannel = async (record: any) => {
     if (!insightAgent) return;
-    const next = record.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+    const next = record.status === STATUS.ACTIVE ? 'DISABLED' : 'ACTIVE';
     await superAgentApi.updateChannelStatus(insightAgent.id, record.id, next);
     await openInsight(insightAgent, 'channels');
   };
@@ -388,7 +393,7 @@ export default function SuperAgentPage() {
             type="link"
             size="small"
             icon={
-              record.status === 'ACTIVE' ? (
+              record.status === STATUS.ACTIVE ? (
                 <PauseCircleOutlined />
               ) : (
                 <PlayCircleOutlined />
@@ -396,7 +401,7 @@ export default function SuperAgentPage() {
             }
             onClick={() => toggle(record)}
           >
-            {record.status === 'ACTIVE'
+            {record.status === STATUS.ACTIVE
               ? t('pages.superAgent.pause', 'Pause')
               : t('pages.superAgent.resume', 'Resume')}
           </Button>
@@ -461,7 +466,8 @@ export default function SuperAgentPage() {
           </Button>
         ) : null,
         <Can key="retry" code={PERM.superAgentUpdate}>
-          {record.status === 'FAILED' || record.status === 'CANCELLED' ? (
+          {record.status === STATUS.WORK_ITEM.FAILED ||
+          record.status === STATUS.WORK_ITEM.CANCELLED ? (
             <Button
               type="link"
               size="small"
@@ -473,9 +479,7 @@ export default function SuperAgentPage() {
           ) : null}
         </Can>,
         <Can key="cancel" code={PERM.superAgentUpdate}>
-          {WORK_ITEM_ACTIVE_STATUSES.has(
-            record.status,
-          ) ? (
+          {WORK_ITEM_ACTIVE_STATUSES.has(record.status) ? (
             <Button
               type="link"
               size="small"
@@ -566,7 +570,7 @@ export default function SuperAgentPage() {
             size="small"
             onClick={() => toggleChannel(record)}
           >
-            {record.status === 'ACTIVE'
+            {record.status === STATUS.ACTIVE
               ? t('pages.superAgent.disable', 'Disable')
               : t('pages.superAgent.enable', 'Enable')}
           </Button>
@@ -763,7 +767,11 @@ export default function SuperAgentPage() {
                   <Space size={8}>
                     <Tag>{row.kind}</Tag>
                     <Tag
-                      color={row.state === 'COMPLETED' ? 'green' : 'default'}
+                      color={
+                        row.state === STATUS.WORK_ITEM.COMPLETED
+                          ? 'green'
+                          : 'default'
+                      }
                     >
                       {row.state ?? '-'}
                     </Tag>

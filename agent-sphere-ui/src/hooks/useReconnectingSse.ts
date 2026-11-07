@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { TIMING } from '@/constants/timing';
 import { getToken } from '@/utils/auth';
 import { connectSse } from '@/utils/sse';
-
-const MAX_RETRY_DELAY_MS = 30000;
 
 export interface ImStreamPayload {
   type?: string;
@@ -79,7 +78,10 @@ export function useReconnectingSse(
           },
           onError: () => {
             if (stopped) return;
-            const delay = Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** retry);
+            const delay = Math.min(
+              TIMING.SSE_RECONNECT_MAX_MS,
+              TIMING.SSE_RETRY_BASE_MS * 2 ** retry,
+            );
             retry += 1;
             timer = window.setTimeout(run, delay);
           },

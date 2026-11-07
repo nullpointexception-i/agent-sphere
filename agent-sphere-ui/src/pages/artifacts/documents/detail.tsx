@@ -1,4 +1,3 @@
-import { PERM } from '@/constants/permissions';
 import {
   ArrowLeftOutlined,
   MenuOutlined,
@@ -9,6 +8,7 @@ import { history, useIntl, useParams } from '@umijs/max';
 import { Button, Modal, Spin, Typography } from 'antd';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { PERM } from '@/constants/permissions';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';

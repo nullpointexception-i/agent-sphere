@@ -3,7 +3,7 @@ package com.buukle.agent.instance.service.converter;
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.instance.domain.AgentSession;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
-import com.buukle.agent.instance.dtvo.enums.SessionEnum;
+import com.buukle.agent.instance.dtvo.enums.SessionStatus;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import org.springframework.stereotype.Component;
 
@@ -39,7 +39,7 @@ public class SessionConverter {
         AgentSession session = new AgentSession();
         session.setTitle(dto.getTitle());
         session.setAgentInstanceId(dto.getAgentInstanceId());
-        session.setStatus(SessionEnum.STATUS_ACTIVE);
+        session.setStatus(SessionStatus.STATUS_ACTIVE);
         session.setCachedInRedis(false);
         session.setRunMode(RunMode.WRITE.name());
         session.setSessionType(dto.getSessionType() == null || dto.getSessionType().isBlank()

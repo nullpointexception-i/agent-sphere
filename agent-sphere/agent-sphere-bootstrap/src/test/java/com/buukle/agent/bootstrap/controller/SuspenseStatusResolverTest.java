@@ -3,7 +3,7 @@ package com.buukle.agent.bootstrap.controller;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.WaitConstants;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
-import com.buukle.agent.runtime.kernel.runner.SuspenseStatusResolver;
+import com.buukle.agent.runtime.kernel.runner.tool.SuspenseStatusResolver;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

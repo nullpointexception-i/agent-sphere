@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.runner.sub;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.common.constant.ToolApprovalDecision;
 import com.buukle.agent.common.constant.ToolSecurityLevel;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
@@ -40,8 +41,9 @@ import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeTool;
 import com.buukle.agent.runtime.kernel.port.vo.ToolCallStatus;
+import com.buukle.agent.runtime.kernel.port.vo.ToolDeniedResultVO;
 import com.buukle.agent.runtime.kernel.prompt.RunPromptBuilder;
-import com.buukle.agent.runtime.kernel.runner.LoopLimitResolver;
+import com.buukle.agent.runtime.kernel.runner.loop.LoopLimitResolver;
 import com.buukle.agent.runtime.kernel.service.ToolApprovalService;
 import com.buukle.agent.runtime.kernel.tool.ToolAccessGuard;
 import com.buukle.agent.runtime.kernel.tool.ToolExecutor;
@@ -134,11 +136,11 @@ public class SessionSubRunner {
         publishReasoning(policy.textStarted(displayName, prep.depth()), subRunToolId);
 
         List<ChatMessageDTO> messages = new ArrayList<>();
-        messages.add(new ChatMessageDTO().setRole("system").setContent(buildSystemPrompt(childCtx, subTools, subRunTool)));
-        messages.add(new ChatMessageDTO().setRole("user").setContent(rendered));
+        messages.add(new ChatMessageDTO().setRole(LlmRoles.SYSTEM).setContent(buildSystemPrompt(childCtx, subTools, subRunTool)));
+        messages.add(new ChatMessageDTO().setRole(LlmRoles.USER).setContent(rendered));
         String contactEnvelope = policy.contactEnvelope(subRunTool, argsJson);
         if (StringUtils.hasText(contactEnvelope)) {
-            messages.add(new ChatMessageDTO().setRole("user").setContent(contactEnvelope));
+            messages.add(new ChatMessageDTO().setRole(LlmRoles.USER).setContent(contactEnvelope));
         }
         log.debug("Sub-run dispatched: toolRef={} promptChars={} envelopeBytes={}",
                 subRunTool != null ? subRunTool.getToolRef() : null,
@@ -147,30 +149,10 @@ public class SessionSubRunner {
 
         // Generic sub-agent run: created on entry (agentType comes from the policy), status updated on exit;
         // parent_run_id is set to the owner of the current context (null at top level), forming the nested sub-agent chain.
-        AgentSubAgentRunVO subRun = null;
-        try {
-            subRun = subAgentRunSpi.start(childCtx.getSessionId(), childCtx.getRunId(),
-                    childCtx.getOwnerSubAgentRunId(),
-                    childCtx.getParentToolCallId(), policy.agentType(), policy.toolRef(subRunToolId), displayName);
-        } catch (Exception e) {
-            log.warn("Failed to start sub-agent run", e);
-        }
-        Long subAgentRunId = subRun != null ? subRun.getId() : null;
+        Long subAgentRunId = startSubAgentRun(childCtx, policy, subRunTool, subRunToolId, displayName);
         // Inner tool execution context: owner points to the current sub-run, so a nested delegate's parent_run_id points to it
         SubRunExecutionContext innerCtx = childCtx.child(childCtx.getDepth(), childCtx.getToolRefAncestry(),
                 childCtx.getParentToolCallId(), subAgentRunId);
-
-        // Unified Timeline: sub-agent header row (body is lazily resolved from agent_sub_agent_run; here we only mark and seal it)
-        try {
-            AgentTimelineSpi ts = timelineSpiProvider.getIfAvailable();
-            if (ts != null && subAgentRunId != null) {
-                ts.record(childCtx.getSessionId(), childCtx.getRunId(), TimelineKind.SUBAGENT.getCode(), null,
-                        TimelineState.RUNNING.getCode(), displayName,
-                        null, null, null, subAgentRunId, null);
-            }
-        } catch (Exception e) {
-            log.warn("Timeline sub-agent header row failed: {}", e.getMessage());
-        }
 
         StringBuilder allContent = new StringBuilder();
         Duration timeout = policy.executionTimeout();
@@ -189,23 +171,23 @@ public class SessionSubRunner {
 
         for (int loop = 0; loop < loopLimit.limit(); loop++) {
             if (cancelled(childCtx) || Thread.interrupted()) {
-                finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED.name());
+                finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED);
                 return policy.errorCancelled();
             }
             if (Instant.now().isAfter(deadline)) {
                 publishReasoning(policy.textTimeout(displayName), subRunToolId);
-                finishSubAgentRun(subAgentRunId, SubRunStatus.TIMEOUT.name());
+                finishSubAgentRun(subAgentRunId, SubRunStatus.TIMEOUT);
                 return policy.errorTimeout();
             }
             TurnResult turn = turn(messages, subTools, innerCtx, turnTimeout, subRunToolId,
                     subRunTool.getDisplayName(), subAgentRunId);
             if (turn.cancelled()) {
-                finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED.name());
+                finishSubAgentRun(subAgentRunId, SubRunStatus.CANCELLED);
                 return policy.errorCancelled();
             }
             if (turn.error() != null) {
                 publishReasoning(policy.textFailed(displayName), subRunToolId);
-                finishSubAgentRun(subAgentRunId, SubRunStatus.FAILED.name());
+                finishSubAgentRun(subAgentRunId, SubRunStatus.FAILED);
                 return policy.errorExecutionFailed(turn.error());
             }
             if (turn.content() != null) {
@@ -213,61 +195,100 @@ public class SessionSubRunner {
             }
             if (turn.toolCalls().isEmpty()) {
                 publishReasoning(policy.textCompleted(displayName), subRunToolId);
-                finishSubAgentRun(subAgentRunId, SubRunStatus.COMPLETED.name());
+                finishSubAgentRun(subAgentRunId, SubRunStatus.COMPLETED);
                 return truncate(allContent.toString(), policy.maxResultChars());
             }
             // Record each tool result of this turn (screenshot observations are injected after all tool messages are appended, so the assistant.tool_calls ↔ tool pairing is not broken)
-            Map<String, String> toolResults = new java.util.HashMap<>();
-            for (TurnToolCall tc : turn.toolCalls()) {
-                if (!containsTool(subTools, tc.name())) {
-                    messages.add(assistantToolCall(tc));
-                    messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id())
-                            .setContent(policy.errorNotAllowed(tc.name())));
-                    continue;
+            executeToolCalls(turn.toolCalls(), turn.reasoning(), messages, subTools, innerCtx, childCtx,
+                    subAgentRunId, subRunToolId, policy);
+        }
+        publishReasoning(policy.textSubLoopCapped(displayName), subRunToolId);
+        finishSubAgentRun(subAgentRunId, SubRunStatus.FAILED);
+        String finalValue = allContent.length() > 0 ? allContent.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG;
+        return truncate(normalizeStructuredOutput(finalValue), policy.maxResultChars());
+    }
+
+    /** Creates the sub-agent run row and its timeline header; failures are logged, never fatal. */
+    private Long startSubAgentRun(SubRunExecutionContext childCtx, SubRunPolicy policy, RuntimeTool subRunTool,
+                                  long subRunToolId, String displayName) {
+        Long subAgentRunId = null;
+        try {
+            AgentSubAgentRunVO subRun = subAgentRunSpi.start(childCtx.getSessionId(), childCtx.getRunId(),
+                    childCtx.getOwnerSubAgentRunId(),
+                    childCtx.getParentToolCallId(), policy.agentType(), policy.toolRef(subRunToolId), displayName);
+            subAgentRunId = subRun != null ? subRun.getId() : null;
+        } catch (Exception e) {
+            log.warn("Failed to start sub-agent run", e);
+        }
+        // Unified Timeline: sub-agent header row (body is lazily resolved from agent_sub_agent_run; here we only mark and seal it)
+        try {
+            AgentTimelineSpi ts = timelineSpiProvider.getIfAvailable();
+            if (ts != null && subAgentRunId != null) {
+                ts.record(childCtx.getSessionId(), childCtx.getRunId(), TimelineKind.SUBAGENT.getCode(), null,
+                        TimelineState.RUNNING.getCode(), displayName,
+                        null, null, null, subAgentRunId, null);
+            }
+        } catch (Exception e) {
+            log.warn("Timeline sub-agent header row failed: {}", e.getMessage());
+        }
+        return subAgentRunId;
+    }
+
+    /** Executes every tool call of one sub-agent turn and appends the paired tool messages. */
+    private void executeToolCalls(List<TurnToolCall> toolCalls, String reasoning, List<ChatMessageDTO> messages,
+                                  List<RuntimeTool> subTools, SubRunExecutionContext innerCtx,
+                                  SubRunExecutionContext childCtx, Long subAgentRunId, long subRunToolId,
+                                  SubRunPolicy policy) {
+        Map<String, String> toolResults = new java.util.HashMap<>();
+        for (TurnToolCall tc : toolCalls) {
+            if (!containsTool(subTools, tc.name())) {
+                messages.add(assistantToolCall(tc));
+                messages.add(new ChatMessageDTO().setRole(LlmRoles.TOOL).setToolCallId(tc.id())
+                        .setContent(policy.errorNotAllowed(tc.name())));
+                continue;
+            }
+            messages.add(assistantToolCallWithReasoning(tc, reasoning));
+            String publishId = policy.publishIdPrefix() + subRunToolId + "-" + tc.id();
+            eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
+                    RuntimeEventDataVO.builder()
+                            .sessionId(childCtx.getSessionId())
+                            .runId(childCtx.getRunId())
+                            .toolName(tc.name())
+                            .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
+                            .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
+                            .subAgentRunId(subAgentRunId)
+                            .parentToolCallId(childCtx.getParentToolCallId())
+                            .argumentsJson(tc.arguments())
+                            .publishId(publishId).build()));
+            String result;
+            try {
+                RuntimeTool executed = subTools.stream()
+                        .filter(t -> tc.name().equals(t.getLlmToolName()))
+                        .findFirst().orElse(null);
+                String runMode = innerCtx.getKernelContext() != null
+                        && innerCtx.getKernelContext().getRun() != null
+                        ? innerCtx.getKernelContext().getRun().getRunMode() : null;
+                String accessDenied = ToolAccessGuard.denyReason(executed, tc.arguments(), runMode);
+                boolean approvalDenied = false;
+                if (accessDenied == null && executed != null
+                        && ToolSecurityLevel.from(executed.getSecurityLevel()).requiresApproval()) {
+                    if (toolApprovalGrantSpi.isDenied(childCtx.getSessionId(), childCtx.getRunId(),
+                            executed.getToolRef())) {
+                        approvalDenied = true;
+                    } else if (!toolApprovalGrantSpi.isGranted(childCtx.getSessionId(), childCtx.getRunId(),
+                            executed.getToolRef(), executed.getApprovalScope())) {
+                        // Sub-agents execute synchronously and have no suspend/resume channel, so they cannot request user approval.
+                        approvalDenied = true;
+                    }
                 }
-                messages.add(assistantToolCallWithReasoning(tc, turn.reasoning()));
-                String publishId = policy.publishIdPrefix() + subRunToolId + "-" + tc.id();
-                eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.RUNNING,
-                        RuntimeEventDataVO.builder()
-                                .sessionId(childCtx.getSessionId())
-                                .runId(childCtx.getRunId())
-                                .toolName(tc.name())
-                                .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
-                                .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
-                                .subAgentRunId(subAgentRunId)
-                                .parentToolCallId(childCtx.getParentToolCallId())
-                                .argumentsJson(tc.arguments())
-                                .publishId(publishId).build()));
-                String result;
-                try {
-                    RuntimeTool executed = subTools.stream()
-                            .filter(t -> tc.name().equals(t.getLlmToolName()))
-                            .findFirst().orElse(null);
-                    String runMode = innerCtx.getKernelContext() != null
-                            && innerCtx.getKernelContext().getRun() != null
-                            ? innerCtx.getKernelContext().getRun().getRunMode() : null;
-                    String accessDenied = ToolAccessGuard.denyReason(executed, tc.arguments(), runMode);
-                    boolean approvalDenied = false;
-                    if (accessDenied == null && executed != null
-                            && ToolSecurityLevel.from(executed.getSecurityLevel()).requiresApproval()) {
-                        if (toolApprovalGrantSpi.isDenied(childCtx.getSessionId(), childCtx.getRunId(),
-                                executed.getToolRef())) {
-                            approvalDenied = true;
-                        } else if (!toolApprovalGrantSpi.isGranted(childCtx.getSessionId(), childCtx.getRunId(),
-                                executed.getToolRef(), executed.getApprovalScope())) {
-                            // Sub-agents execute synchronously and have no suspend/resume channel, so they cannot request user approval.
-                            approvalDenied = true;
-                        }
-                    }
-                    if (accessDenied != null) {
-                        result = accessDenied;
-                    } else if (approvalDenied) {
-                        result = "{\"error\":\"USER_DENIED\",\"message\":\"User denied this tool call. "
-                                + "Do not retry this tool in this run.\",\"tool\":\"" + tc.name() + "\"}";
-                    } else {
-                        result = toolExecutor.execute(tc, innerCtx, subTools);
-                    }
-eventPublisher.publishEvent(new RuntimeEventVO(
+                if (accessDenied != null) {
+                    result = accessDenied;
+                } else if (approvalDenied) {
+                    result = ToolDeniedResultVO.of(tc.name()).toString();
+                } else {
+                    result = toolExecutor.execute(tc, innerCtx, subTools);
+                }
+                eventPublisher.publishEvent(new RuntimeEventVO(
                         approvalDenied || accessDenied != null ? ToolCallStatus.FAILED : ToolCallStatus.SUCCEEDED,
                         RuntimeEventDataVO.builder()
                                 .sessionId(childCtx.getSessionId())
@@ -281,9 +302,9 @@ eventPublisher.publishEvent(new RuntimeEventVO(
                                 .errorMessage(approvalDenied ? "User denied tool execution"
                                         : (accessDenied != null ? "Read-only tool access denied" : null))
                                 .publishId(publishId).build()));
-                } catch (Exception e) {
-                    result = "{\"error\":\"" + e.getMessage() + "\"}";
-eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
+            } catch (Exception e) {
+                result = "{\"error\":\"" + e.getMessage() + "\"}";
+                eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                         RuntimeEventDataVO.builder()
                                 .sessionId(childCtx.getSessionId())
                                 .runId(childCtx.getRunId())
@@ -294,34 +315,29 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                                 .parentToolCallId(childCtx.getParentToolCallId())
                                 .errorMessage(e.getMessage())
                                 .publishId(publishId).build()));
-                }
-                messages.add(new ChatMessageDTO().setRole("tool").setToolCallId(tc.id()).setContent(result));
-                toolResults.put(tc.id(), result);
             }
-            // Append all tool result messages first, then inject screenshot observations uniformly, so each tool message stays adjacent to its assistant.tool_calls and they do not interrupt each other
-            for (TurnToolCall tc : turn.toolCalls()) {
-                screenshotSupport().injectScreenshotObservation(childCtx.getSessionId(), subAgentRunId, messages,
-                        toolResults.getOrDefault(tc.id(), ""));
-            }
+            messages.add(new ChatMessageDTO().setRole(LlmRoles.TOOL).setToolCallId(tc.id()).setContent(result));
+            toolResults.put(tc.id(), result);
         }
-        publishReasoning(policy.textSubLoopCapped(displayName), subRunToolId);
-        finishSubAgentRun(subAgentRunId, SubRunStatus.FAILED.name());
-        String finalValue = allContent.length() > 0 ? allContent.toString() : RunnerConstants.FALLBACK_COMPLETE_MSG;
-        return truncate(normalizeStructuredOutput(finalValue), policy.maxResultChars());
+        // Append all tool result messages first, then inject screenshot observations uniformly, so each tool message stays adjacent to its assistant.tool_calls and they do not interrupt each other
+        for (TurnToolCall tc : toolCalls) {
+            screenshotSupport().injectScreenshotObservation(childCtx.getSessionId(), subAgentRunId, messages,
+                    toolResults.getOrDefault(tc.id(), ""));
+        }
     }
 
-    private void finishSubAgentRun(Long subAgentRunId, String status) {
+    private void finishSubAgentRun(Long subAgentRunId, SubRunStatus status) {
         if (subAgentRunId == null) {
             return;
         }
         try {
-            subAgentRunSpi.finish(subAgentRunId, status);
+            subAgentRunSpi.finish(subAgentRunId, status.name());
             AgentTimelineSpi ts = timelineSpiProvider.getIfAvailable();
             if (ts != null) {
                 String state = switch (status) {
-                    case "COMPLETED" -> TimelineState.COMPLETED.getCode();
-                    case "TIMEOUT" -> TimelineState.TIMEOUT.getCode();
-                    case "CANCELLED" -> TimelineState.CANCELLED.getCode();
+                    case COMPLETED -> TimelineState.COMPLETED.getCode();
+                    case TIMEOUT -> TimelineState.TIMEOUT.getCode();
+                    case CANCELLED -> TimelineState.CANCELLED.getCode();
                     default -> TimelineState.FAILED.getCode();
                 };
                 ts.updateBySubAgentRun(subAgentRunId, state);
@@ -339,40 +355,12 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
         List<TurnToolCall> toolCalls = new CopyOnWriteArrayList<>();
         AtomicReference<String> errorRef = new AtomicReference<>();
         AtomicReference<Boolean> cancelledRef = new AtomicReference<>(false);
-        List<ModelRouteFullVO> routes = routeListBuilder.fromContext(ctx.getKernelContext());
-        if (routes.isEmpty() && ctx.getKernelContext() != null
-                && ctx.getKernelContext().getAgentInstance() != null) {
-            routes = routeListBuilder.fromInstance(ctx.getKernelContext().getAgentInstance().getId());
-        }
+        List<ModelRouteFullVO> routes = resolveRoutes(ctx);
         if (routes.isEmpty()) {
             return TurnResult.errorResult("no model route available");
         }
         // Image attachments/screenshot observations: no image-capable route → strip images and degrade to plain text (same as the main agent; do not block)
-        if (ScreenshotObservationSupport.hasAttachmentImage(messages)) {
-            boolean anyCapable = false;
-            for (ModelRouteFullVO r : routes) {
-                if (Boolean.TRUE.equals(r.getSupportsAttachment())) {
-                    anyCapable = true;
-                    break;
-                }
-            }
-            if (!anyCapable) {
-                log.info("No attachment-capable sub-route, degrading to text: session={}, sub={}",
-                        ctx.getSessionId(), subAgentRunId);
-                ScreenshotObservationSupport.stripImageParts(messages);
-                eventPublisher.publishEvent(new RuntimeEventVO(
-                        FlowEventType.REASONING_TOKEN,
-                        RuntimeEventDataVO.builder()
-                                .sessionId(ctx.getSessionId())
-                                .runId(ctx.getRunId())
-                                .subAgentRunId(subAgentRunId)
-                                .parentToolCallId(ctx.getParentToolCallId())
-                                .response("⚠️ The current route does not support images; continuing with text only")
-                                .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
-                                .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                .publishId(UUID.randomUUID().toString()).build()));
-            }
-        }
+        degradeUnsupportedImages(routes, messages, ctx, subAgentRunId);
         try {
             fallbackRouteExecutor.execute(routes, (i, route) -> {
                 if (cancelled(ctx)) {
@@ -404,85 +392,15 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
                 CountDownLatch done = new CountDownLatch(1);
                 CompletableFuture<Void> future = kernelLlmService.stream(
                         route.getCompany(), route.getBaseUrl(), apiKey, route.getModelName(), request,
-                        event -> {
-                            switch (event) {
-                                case LLMEvent.TextDelta t -> {
-                                    contentRef.updateAndGet(c -> c + t.text());
-                                    // Publish sub-agent model replies as they stream (for the frontend sub-card to show the reply)
-                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
-                                            RuntimeEventDataVO.builder()
-                                                    .sessionId(ctx.getSessionId())
-                                                    .runId(ctx.getRunId())
-                                                    .nodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
-                                                    .subAgentRunId(subAgentRunId)
-                                                    .parentToolCallId(ctx.getParentToolCallId())
-                                                    .response(t.text())
-                                                    .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + UUID.randomUUID().toString().substring(0, 8)).build()));
-                                }
-                                case LLMEvent.ReasoningDelta r -> {
-                                    boolean firstDelta = reasoningRef.get().isBlank();
-                                    reasoningRef.updateAndGet(c -> c + r.text());
-                                    // Add a sentinel line on the first frame so the frontend starts a new sub-run segment; later frames are appended to the current segment as-is
-                                    String responseText = r.text();
-                                    if (firstDelta) {
-                                        String name = displayName != null && !displayName.isBlank()
-                                                ? displayName : String.valueOf(subRunToolId);
-                                        responseText = subRunPolicy.markerPrefix() + subRunToolId + ": " + name + "\n" + responseText;
-                                    }
-                                    RuntimeEventDataVO data = RuntimeEventDataVO.builder()
-                                            .sessionId(ctx.getSessionId())
-                                            .runId(ctx.getRunId())
-                                            .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
-                                            .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
-                                            .publishId(UUID.randomUUID().toString())
-                                            .subAgentRunId(subAgentRunId)
-                                            .parentToolCallId(ctx.getParentToolCallId())
-                                            // Tag sub-agent thinking with the sub-run marker throughout: the frontend routes it to the sub-card by nodeName
-                                            .nodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
-                                            // First-frame marker: the frontend starts a new LLM turn from it (no need to parse a sentinel prefix)
-                                            .firstFrame(firstDelta)
-                                            .response(responseText).build();
-                                    eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN, data));
-                                }
-                                case LLMEvent.ToolCall tc -> {
-                                    toolCalls.add(new TurnToolCall(tc.id(), tc.name(), tc.arguments()));
-                                    eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
-                                            RuntimeEventDataVO.builder()
-                                                    .sessionId(ctx.getSessionId())
-                                                    .runId(ctx.getRunId())
-                                                    .toolName(tc.name())
-                                                    .displayNameCn(toolExecutor.resolveDisplayName(tc.name(), subTools))
-                                                    .displayNameEn(toolExecutor.resolveDisplayNameEn(tc.name(), subTools))
-                                                    .argumentsJson(tc.arguments())
-                                                    .subAgentRunId(subAgentRunId)
-                                                    .parentToolCallId(ctx.getParentToolCallId())
-                                                    .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + tc.id()).build()));
-                                }
-                                case LLMEvent.Error e -> errorRef.set(e.message());
-                                default -> {
-                                }
-                            }
-                        },
+                        event -> handleLlmEvent(event, contentRef, reasoningRef, toolCalls, errorRef,
+                                ctx, subTools, subAgentRunId, subRunToolId, displayName),
                         new LlmInteractionMeta().setRunId(ctx.getRunId()).setSessionId(ctx.getSessionId())
                                 .setSubAgentRunId(subAgentRunId)
                                 .setInteractionType(subRunPolicy.interactionType()));
                 future.whenComplete((v, ex) -> done.countDown());
-                try {
-                    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
-                    while (!done.await(1, TimeUnit.SECONDS)) {
-                        if (cancelled(ctx) || Thread.interrupted()) {
-                            cancelledRef.set(true);
-                            future.cancel(true);
-                            throw new RuntimeException("Sub Agent cancelled");
-                        }
-                        if (System.nanoTime() >= deadline) {
-                            future.cancel(true);
-                            throw new RuntimeException("Sub Agent turn timed out after " + turnTimeout + "s");
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(e);
+                if (awaitTurn(future, done, ctx, turnTimeout)) {
+                    cancelledRef.set(true);
+                    throw new RuntimeException("Sub Agent cancelled");
                 }
                 String error = errorRef.get();
                 if (error != null) {
@@ -499,6 +417,140 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
             return TurnResult.cancelledResult();
         }
         return new TurnResult(contentRef.get(), toolCalls, errorRef.get(), false, reasoningRef.get());
+    }
+
+    private List<ModelRouteFullVO> resolveRoutes(SubRunExecutionContext ctx) {
+        List<ModelRouteFullVO> routes = routeListBuilder.fromContext(ctx.getKernelContext());
+        if (routes.isEmpty() && ctx.getKernelContext() != null
+                && ctx.getKernelContext().getAgentInstance() != null) {
+            routes = routeListBuilder.fromInstance(ctx.getKernelContext().getAgentInstance().getId());
+        }
+        return routes;
+    }
+
+    /** Degrades to text when the selected routes cannot accept image attachments. */
+    private void degradeUnsupportedImages(List<ModelRouteFullVO> routes, List<ChatMessageDTO> messages,
+                                          SubRunExecutionContext ctx, Long subAgentRunId) {
+        if (!ScreenshotObservationSupport.hasAttachmentImage(messages)) {
+            return;
+        }
+        boolean anyCapable = routes.stream().anyMatch(r -> Boolean.TRUE.equals(r.getSupportsAttachment()));
+        if (anyCapable) {
+            return;
+        }
+        log.info("No attachment-capable sub-route, degrading to text: session={}, sub={}",
+                ctx.getSessionId(), subAgentRunId);
+        ScreenshotObservationSupport.stripImageParts(messages);
+        eventPublisher.publishEvent(new RuntimeEventVO(
+                FlowEventType.REASONING_TOKEN,
+                RuntimeEventDataVO.builder()
+                        .sessionId(ctx.getSessionId())
+                        .runId(ctx.getRunId())
+                        .subAgentRunId(subAgentRunId)
+                        .parentToolCallId(ctx.getParentToolCallId())
+                        .response("⚠️ The current route does not support images; continuing with text only")
+                        .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_SYSTEM)
+                        .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                        .publishId(UUID.randomUUID().toString()).build()));
+    }
+
+    private void handleLlmEvent(LLMEvent event, AtomicReference<String> contentRef,
+                                AtomicReference<String> reasoningRef, List<TurnToolCall> toolCalls,
+                                AtomicReference<String> errorRef, SubRunExecutionContext ctx,
+                                List<RuntimeTool> subTools, Long subAgentRunId, long subRunToolId,
+                                String displayName) {
+        switch (event) {
+            case LLMEvent.TextDelta t -> onTextDelta(t, contentRef, ctx, subAgentRunId, subRunToolId);
+            case LLMEvent.ReasoningDelta r ->
+                    onReasoningDelta(r, reasoningRef, ctx, subAgentRunId, subRunToolId, displayName);
+            case LLMEvent.ToolCall tc -> onToolCall(tc, toolCalls, ctx, subTools, subAgentRunId, subRunToolId);
+            case LLMEvent.Error e -> errorRef.set(e.message());
+            default -> {
+            }
+        }
+    }
+
+    private void onTextDelta(LLMEvent.TextDelta delta, AtomicReference<String> contentRef,
+                             SubRunExecutionContext ctx, Long subAgentRunId, long subRunToolId) {
+        contentRef.updateAndGet(c -> c + delta.text());
+        // Publish sub-agent model replies as they stream (for the frontend sub-card to show the reply).
+        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.CONTENT_TOKEN,
+                RuntimeEventDataVO.builder()
+                        .sessionId(ctx.getSessionId())
+                        .runId(ctx.getRunId())
+                        .nodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
+                        .subAgentRunId(subAgentRunId)
+                        .parentToolCallId(ctx.getParentToolCallId())
+                        .response(delta.text())
+                        .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-"
+                                + UUID.randomUUID().toString().substring(0, 8)).build()));
+    }
+
+    private void onReasoningDelta(LLMEvent.ReasoningDelta delta, AtomicReference<String> reasoningRef,
+                                  SubRunExecutionContext ctx, Long subAgentRunId, long subRunToolId,
+                                  String displayName) {
+        boolean firstDelta = reasoningRef.get().isBlank();
+        reasoningRef.updateAndGet(c -> c + delta.text());
+        // Add a sentinel line on the first frame so the frontend starts a new sub-run segment; later frames are appended as-is.
+        String responseText = delta.text();
+        if (firstDelta) {
+            String name = displayName != null && !displayName.isBlank()
+                    ? displayName : String.valueOf(subRunToolId);
+            responseText = subRunPolicy.markerPrefix() + subRunToolId + ": " + name + "\n" + responseText;
+        }
+        RuntimeEventDataVO data = RuntimeEventDataVO.builder()
+                .sessionId(ctx.getSessionId())
+                .runId(ctx.getRunId())
+                .reasoningType(RuntimeEventTypeConstant.REASONING_TYPE_LLM)
+                .reasoningSubType(RuntimeEventTypeConstant.REASONING_SUB_TYPE_MODEL_REASON)
+                .publishId(UUID.randomUUID().toString())
+                .subAgentRunId(subAgentRunId)
+                .parentToolCallId(ctx.getParentToolCallId())
+                // Tag sub-agent thinking with the sub-run marker throughout: the frontend routes it to the sub-card by nodeName.
+                .nodeName(subRunPolicy.nodeNamePrefix() + subRunToolId)
+                // First-frame marker: the frontend starts a new LLM turn from it (no need to parse a sentinel prefix).
+                .firstFrame(firstDelta)
+                .response(responseText).build();
+        eventPublisher.publishEvent(new RuntimeEventVO(FlowEventType.REASONING_TOKEN, data));
+    }
+
+    private void onToolCall(LLMEvent.ToolCall toolCall, List<TurnToolCall> toolCalls,
+                            SubRunExecutionContext ctx, List<RuntimeTool> subTools, Long subAgentRunId,
+                            long subRunToolId) {
+        toolCalls.add(new TurnToolCall(toolCall.id(), toolCall.name(), toolCall.arguments()));
+        eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.PENDING,
+                RuntimeEventDataVO.builder()
+                        .sessionId(ctx.getSessionId())
+                        .runId(ctx.getRunId())
+                        .toolName(toolCall.name())
+                        .displayNameCn(toolExecutor.resolveDisplayName(toolCall.name(), subTools))
+                        .displayNameEn(toolExecutor.resolveDisplayNameEn(toolCall.name(), subTools))
+                        .argumentsJson(toolCall.arguments())
+                        .subAgentRunId(subAgentRunId)
+                        .parentToolCallId(ctx.getParentToolCallId())
+                        .publishId(subRunPolicy.publishIdPrefix() + subRunToolId + "-" + toolCall.id()).build()));
+    }
+
+    /** Waits for one LLM turn; returns true when cancellation was observed, throws on timeout. */
+    private boolean awaitTurn(CompletableFuture<Void> future, CountDownLatch done,
+                              SubRunExecutionContext ctx, long turnTimeout) {
+        try {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(turnTimeout);
+            while (!done.await(1, TimeUnit.SECONDS)) {
+                if (cancelled(ctx) || Thread.interrupted()) {
+                    future.cancel(true);
+                    return true;
+                }
+                if (System.nanoTime() >= deadline) {
+                    future.cancel(true);
+                    throw new RuntimeException("Sub Agent turn timed out after " + turnTimeout + "s");
+                }
+            }
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
     }
 
     private String buildSystemPrompt(SubRunExecutionContext ctx, List<RuntimeTool> subTools, RuntimeTool tool) {
@@ -532,7 +584,7 @@ eventPublisher.publishEvent(new RuntimeEventVO(ToolCallStatus.FAILED,
     }
 
     private ChatMessageDTO assistantToolCallWithReasoning(TurnToolCall tc, String reasoning) {
-        ChatMessageDTO msg = new ChatMessageDTO().setRole("assistant").setToolCalls(List.of(
+        ChatMessageDTO msg = new ChatMessageDTO().setRole(LlmRoles.ASSISTANT).setToolCalls(List.of(
                 ToolCallDTO.builder()
                         .id(tc.id())
                         .type(RunnerConstants.TOOL_TYPE_FUNCTION)

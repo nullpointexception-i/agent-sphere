@@ -1,5 +1,3 @@
-import { API_PATHS } from '@/constants/endpoints';
-import { PERM } from '@/constants/permissions';
 import {
   DisconnectOutlined,
   KeyOutlined,
@@ -11,6 +9,8 @@ import { history, request as umiRequest, useIntl, useModel } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Spin } from 'antd';
 import React, { startTransition } from 'react';
+import { API_PATHS } from '@/constants/endpoints';
+import { PERM } from '@/constants/permissions';
 import { clearStoredUser } from '@/utils/auth';
 import HeaderDropdown from '../HeaderDropdown';
 

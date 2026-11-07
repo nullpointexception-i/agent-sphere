@@ -1,34 +1,34 @@
 import { Avatar } from 'antd';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { ImParticipant } from '@/services/agentSphere/im';
-import type { AgentStreamState } from './agentStreamStore';
+import { AGENT_STREAM_PHASE, type AgentStreamState } from './agentStreamStore';
 import { tw } from './i18n';
 import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, initials } from './shared';
 import { useStyles } from './style';
 
 function streamStatusLabel(state: AgentStreamState) {
-  if (state.phase === 'failed') {
+  if (state.phase === AGENT_STREAM_PHASE.FAILED) {
     return state.errorMessage
       ? `${tw('chat.agentStreamFailed', 'Reply failed')} · ${state.errorMessage}`
       : tw('chat.agentStreamFailed', 'Reply failed');
   }
-  if (state.phase === 'waiting') {
+  if (state.phase === AGENT_STREAM_PHASE.WAITING) {
     return tw('chat.agentWaiting', 'Processing…');
   }
-  if (state.phase === 'tool') {
+  if (state.phase === AGENT_STREAM_PHASE.TOOL) {
     const tool = state.displayName || state.toolName || '';
     return tool
       ? tw('chat.agentToolCalling', 'Calling {tool}', { tool })
       : tw('chat.agentWaiting', 'Processing…');
   }
-  if (state.phase === 'thinking') {
+  if (state.phase === AGENT_STREAM_PHASE.THINKING) {
     return tw('chat.agentThinking', 'Thinking…');
   }
-  if (state.phase === 'awaiting') {
+  if (state.phase === AGENT_STREAM_PHASE.AWAITING) {
     return tw('chat.agentAwaitingUser', 'Waiting for your reply');
   }
-  if (state.phase === 'reply') {
+  if (state.phase === AGENT_STREAM_PHASE.REPLY) {
     return tw('chat.agentReplying', 'Replying');
   }
   return tw('chat.agentDone', 'Done');
@@ -138,7 +138,7 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
   }, [state.startedAt, state.finalized]);
 
   useEffect(() => {
-    if (state.phase === 'thinking') {
+    if (state.phase === AGENT_STREAM_PHASE.THINKING) {
       return;
     }
     // Freeze how long reasoning took, shown later as "thought for Xs".
@@ -153,16 +153,18 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
   if (hidden) {
     return null;
   }
-  if (state.phase === 'done' && !state.thinking) {
+  if (state.phase === AGENT_STREAM_PHASE.DONE && !state.thinking) {
     return null;
   }
 
   const agentName = agent?.displayName || tw('chat.agent', 'Digital avatar');
   const streaming = !state.finalized;
-  const liveThinking = state.phase === 'thinking' && streaming;
+  const liveThinking = state.phase === AGENT_STREAM_PHASE.THINKING && streaming;
   const showPlaceholder =
-    !state.reply && state.phase !== 'failed' && state.phase !== 'done';
-  const awaiting = state.phase === 'awaiting';
+    !state.reply &&
+    state.phase !== AGENT_STREAM_PHASE.FAILED &&
+    state.phase !== 'done';
+  const awaiting = state.phase === AGENT_STREAM_PHASE.AWAITING;
 
   return (
     <div className={styles.agentStreamRow}>
@@ -203,7 +205,7 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
             )}
           </div>
         ) : null}
-        {state.phase === 'failed' && state.errorMessage ? (
+        {state.phase === AGENT_STREAM_PHASE.FAILED && state.errorMessage ? (
           <div className={styles.agentStreamError}>{state.errorMessage}</div>
         ) : null}
       </div>

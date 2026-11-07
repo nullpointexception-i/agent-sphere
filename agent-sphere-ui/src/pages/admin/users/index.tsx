@@ -1,9 +1,10 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
-import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import { App, Button, Checkbox, Modal, Space, Table, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { PERM } from '@/constants/permissions';
+import { STATUS } from '@/constants/status';
 import { agentApi } from '@/services/agentSphere/api';
 
 interface UserItem {
@@ -133,7 +134,7 @@ export default function AdminUsers() {
       dataIndex: 'status',
       key: 'status',
       render: (s: string) => (
-        <Tag color={s === 'ACTIVE' ? 'green' : 'default'}>{s || '-'}</Tag>
+        <Tag color={s === STATUS.ACTIVE ? 'green' : 'default'}>{s || '-'}</Tag>
       ),
     },
     {

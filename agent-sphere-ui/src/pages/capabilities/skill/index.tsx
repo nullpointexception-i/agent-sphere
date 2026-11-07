@@ -1,5 +1,3 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
-import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -16,6 +14,8 @@ import {
 } from '@ant-design/pro-components';
 import XMarkdown from '@ant-design/x-markdown';
 import { useIntl } from '@umijs/max';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { PERM } from '@/constants/permissions';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import {
   App,

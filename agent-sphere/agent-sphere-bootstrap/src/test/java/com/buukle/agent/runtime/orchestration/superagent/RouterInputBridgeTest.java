@@ -11,7 +11,7 @@ import com.buukle.agent.runtime.kernel.port.vo.ClarificationStatus;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventVO;
 import com.buukle.agent.runtime.kernel.port.vo.RuntimeEventDataVO;
-import com.buukle.agent.runtime.kernel.port.vo.ToolApprovalStatus;
+import com.buukle.agent.runtime.kernel.port.vo.ToolApprovalEvent;
 import com.buukle.agent.superagent.spi.SessionInputCommand;
 import com.buukle.agent.superagent.spi.SessionInputResolveCommand;
 import com.buukle.agent.superagent.spi.SessionInputSpi;
@@ -124,7 +124,7 @@ class RouterInputBridgeTest {
 
     @Test
     void approvalPendingProjectsApprovalCommand() {
-        bridge.onEvent(new RuntimeEventVO(ToolApprovalStatus.TOOL_APPROVAL_PENDING,
+        bridge.onEvent(new RuntimeEventVO(ToolApprovalEvent.TOOL_APPROVAL_PENDING,
                 RuntimeEventDataVO.builder()
                         .sessionId(SESSION_ID).runId(RUN_ID)
                         .approvalId("ap1abc456").prompt("需要确认工具调用")

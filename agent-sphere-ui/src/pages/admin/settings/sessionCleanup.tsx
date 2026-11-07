@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Button, Descriptions, Modal, Progress, Table, Tag } from 'antd';
+import { STATUS } from '@/constants/status';
 import type { SessionCleanupRun } from '@/services/agentSphere/api';
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
   onConfirm: () => void;
 }
 
-const RUNNING = 'RUNNING';
+const RUNNING = STATUS.CLEANUP.RUNNING;
 
 /**
  * Session cleanup run panel.
@@ -118,7 +119,7 @@ export default function SessionCleanupRunPanel({
             </div>
           )}
 
-          {run.status === 'SKIPPED' && (
+          {run.status === STATUS.CLEANUP.SKIPPED && (
             <Alert
               type="warning"
               showIcon
@@ -132,7 +133,7 @@ export default function SessionCleanupRunPanel({
               }
             />
           )}
-          {run.status === 'FAILED' && (
+          {run.status === STATUS.CLEANUP.FAILED && (
             <Alert
               type="error"
               showIcon
@@ -158,7 +159,7 @@ export default function SessionCleanupRunPanel({
             />
           )}
 
-          {!running && dryRun && run.status === 'SUCCESS' && (
+          {!running && dryRun && run.status === STATUS.CLEANUP.SUCCESS && (
             <Alert
               type="warning"
               showIcon
@@ -169,7 +170,7 @@ export default function SessionCleanupRunPanel({
               )}
             />
           )}
-          {!running && !dryRun && run.status === 'SUCCESS' && (
+          {!running && !dryRun && run.status === STATUS.CLEANUP.SUCCESS && (
             <Alert
               type="error"
               showIcon

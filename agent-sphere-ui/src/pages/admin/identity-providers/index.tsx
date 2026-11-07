@@ -1,4 +1,3 @@
-import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   App,
@@ -14,6 +13,7 @@ import {
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 
 export default function AdminIdentityProviders() {

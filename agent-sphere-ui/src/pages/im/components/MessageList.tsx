@@ -1,5 +1,3 @@
-import { IM_TASK_STATUS, WORK_ITEM_ACTIVE_STATUSES } from '@/constants/status';
-import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   Button,
@@ -14,6 +12,12 @@ import {
 import type { RefObject } from 'react';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
+import {
+  IM_TASK_STATUS,
+  STATUS,
+  WORK_ITEM_ACTIVE_STATUSES,
+} from '@/constants/status';
 import { type ImMessage, imApi } from '@/services/agentSphere/im';
 import { messageText, parsedContent } from './messageUtils';
 
@@ -94,10 +98,9 @@ function TaskCard({
   const status = String(content.status ?? '');
   const intl = useIntl();
   const cfg = TASK_STATUS[status];
-  const canRetry = status === 'FAILED' || status === 'CANCELLED';
-  const canCancel = WORK_ITEM_ACTIVE_STATUSES.has(
-    status,
-  );
+  const canRetry =
+    status === STATUS.WORK_ITEM.FAILED || status === STATUS.WORK_ITEM.CANCELLED;
+  const canCancel = WORK_ITEM_ACTIVE_STATUSES.has(status);
   return (
     <div
       style={{

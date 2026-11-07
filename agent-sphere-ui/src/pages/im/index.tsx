@@ -1,4 +1,3 @@
-import { API_PATHS } from '@/constants/endpoints';
 import { SettingOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
@@ -19,6 +18,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { API_PATHS } from '@/constants/endpoints';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 import { useReconnectingSse } from '@/hooks/useReconnectingSse';
 import {

@@ -1,4 +1,3 @@
-import { PERM } from '@/constants/permissions';
 import {
   ArrowLeftOutlined,
   BoldOutlined,
@@ -28,12 +27,38 @@ import {
 } from 'react';
 import { Markdown } from 'tiptap-markdown';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 import { useStyles } from './style';
 import { type TocItemBase, TocPanel } from './TocPanel';
 
 interface TocItem extends TocItemBase {
   pos: number;
+}
+
+/** Small editor toolbar button; module-level so hook usage stays valid. */
+function ToolbarBtn({
+  onClick,
+  icon,
+  title: tooltip,
+  active,
+}: {
+  onClick: () => void;
+  icon: React.ReactNode;
+  title: string;
+  active?: boolean;
+}) {
+  const { styles } = useStyles();
+  return (
+    <Button
+      type={active ? 'primary' : 'text'}
+      size="small"
+      icon={icon}
+      onClick={onClick}
+      title={tooltip}
+      className={styles.toolbarBtn}
+    />
+  );
 }
 
 export default function DocumentEdit() {
@@ -202,27 +227,6 @@ export default function DocumentEdit() {
 
     setTimeout(() => overlay.remove(), 700);
   };
-
-  const ToolbarBtn = ({
-    onClick,
-    icon,
-    title: tooltip,
-    active,
-  }: {
-    onClick: () => void;
-    icon: React.ReactNode;
-    title: string;
-    active?: boolean;
-  }) => (
-    <Button
-      type={active ? 'primary' : 'text'}
-      size="small"
-      icon={icon}
-      onClick={onClick}
-      title={tooltip}
-      className={styles.toolbarBtn}
-    />
-  );
 
   const toggleHeading = (level: 1 | 2 | 3) => {
     if (!editor) return;

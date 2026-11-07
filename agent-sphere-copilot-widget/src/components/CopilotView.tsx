@@ -1,3 +1,4 @@
+import { RUN_STATE } from '../constants';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { UIEvent } from 'react';
 import { ApiError, createApi, stopSession } from '../api';
@@ -904,7 +905,7 @@ export function CopilotView({ config, user }: CopilotViewProps) {
                   }}
                   preparingTool={timeline.preparingTool}
                   retryState={
-                    timeline.runtimeState?.runStatus === 'WAITING' &&
+                    timeline.runtimeState?.runStatus === RUN_STATE.WAITING &&
                     timeline.runtimeState?.waitKind === 'LLM_RETRY' &&
                     timeline.runtimeState?.runId != null
                       ? {

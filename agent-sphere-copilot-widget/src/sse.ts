@@ -1,3 +1,4 @@
+import { TIMING } from './constants';
 export interface SseCallbacks {
   onMessage?: (payload: string) => void;
   onOpen?: () => void;
@@ -16,7 +17,7 @@ export async function connectSse(
   callbacks: SseCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
-  const CONNECT_TIMEOUT_MS = 20000;
+  const CONNECT_TIMEOUT_MS = TIMING.SSE_CONNECT_TIMEOUT_MS;
   const controller = new AbortController();
   const abortFromExternal = () => controller.abort();
   if (signal) {

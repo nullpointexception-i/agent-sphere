@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-/** Poll interval: long tasks persist progress after each batch; 1s keeps up cheaply */
-const POLL_INTERVAL_MS = 1000;
-
-const TERMINAL_STATUS = ['SUCCESS', 'FAILED', 'SKIPPED'];
+import { RECORDED_TASK_TERMINAL_STATUSES, STATUS } from '@/constants/status';
+import { TIMING } from '@/constants/timing';
 
 /**
  * Polls the execution record of a "long-running background task" until it reaches a
@@ -56,7 +53,7 @@ export function useRecordedTask<T extends { status: string; stale?: boolean }>(
         const next = await fetchOne(runId);
         if (cancelled || stoppedRef.current) return;
         setRecord(next);
-        if (TERMINAL_STATUS.includes(next.status) || next.stale) {
+        if (RECORDED_TASK_TERMINAL_STATUSES.has(next.status) || next.stale) {
           stoppedRef.current = true;
           onFinishRef.current?.(next);
           return;
@@ -67,7 +64,7 @@ export function useRecordedTask<T extends { status: string; stale?: boolean }>(
         if (cancelled || stoppedRef.current) return;
       }
       if (!cancelled && !stoppedRef.current) {
-        timerRef.current = setTimeout(tick, POLL_INTERVAL_MS);
+        timerRef.current = setTimeout(tick, TIMING.POLL_INTERVAL_MS);
       }
     };
 
@@ -85,6 +82,7 @@ export function useRecordedTask<T extends { status: string; stale?: boolean }>(
   return {
     record,
     stop,
-    running: !!record && record.status === 'RUNNING' && !record.stale,
+    running:
+      !!record && record.status === STATUS.CLEANUP.RUNNING && !record.stale,
   };
 }

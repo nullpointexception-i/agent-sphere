@@ -1,8 +1,8 @@
-import { SKILL_SYNC_RUN_STATUS } from '@/constants/status';
 import { ProTable } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import { Drawer, Select, Space, Table, Tag } from 'antd';
 import { useRef, useState } from 'react';
+import { SKILL_SYNC_RUN_STATUS, STATUS } from '@/constants/status';
 import type { SkillSyncRun } from '@/services/agentSphere/api';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
@@ -82,19 +82,19 @@ export default function SkillSyncRunsDrawer({ open, onClose }: Props) {
           }}
           options={[
             {
-              value: 'RUNNING',
+              value: STATUS.SKILL_SYNC.RUNNING,
               label: t('pages.admin.settings.skillSyncRuns.running', 'Running'),
             },
             {
-              value: 'SUCCESS',
+              value: STATUS.SKILL_SYNC.SUCCESS,
               label: t('pages.admin.settings.skillSyncRuns.success', 'Done'),
             },
             {
-              value: 'FAILED',
+              value: STATUS.SKILL_SYNC.FAILED,
               label: t('pages.admin.settings.skillSyncRuns.failed', 'Failed'),
             },
             {
-              value: 'SKIPPED',
+              value: STATUS.SKILL_SYNC.SKIPPED,
               label: t('pages.admin.settings.skillSyncRuns.skipped', 'Skipped'),
             },
           ]}

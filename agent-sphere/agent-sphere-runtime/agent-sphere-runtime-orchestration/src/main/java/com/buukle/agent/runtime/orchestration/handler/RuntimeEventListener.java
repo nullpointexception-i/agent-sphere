@@ -2,7 +2,10 @@ package com.buukle.agent.runtime.orchestration.handler;
 
 
 
-import com.buukle.agent.common.event.EventType;import com.buukle.agent.instance.dtvo.enums.RunStatus;import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.event.EventType;
+import com.buukle.agent.common.event.UserInLoopRecordStatus;
+import com.buukle.agent.instance.dtvo.enums.RunStatus;
+import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.eventbus.DistributedRuntimeConstants;
 import com.buukle.agent.infrastructure.eventbus.RedisEventBus;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
@@ -17,10 +20,10 @@ import com.buukle.agent.instance.spi.AgentUserInLoopRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.spi.ToolApprovalSpi;
-import com.buukle.agent.runtime.kernel.ReasoningBufferStore;
+import com.buukle.agent.runtime.kernel.support.ReasoningBufferStore;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
 import com.buukle.agent.runtime.kernel.constants.RuntimeEventTypeConstant;
-import com.buukle.agent.runtime.kernel.runner.LiveToolResultPolicy;
+import com.buukle.agent.runtime.kernel.runner.tool.LiveToolResultPolicy;
 import com.buukle.agent.runtime.kernel.port.vo.*;
 import com.buukle.agent.runtime.kernel.util.ToolResultCompressor;
 import com.buukle.agent.runtime.orchestration.chrome.ChromeCommandEnvelope;
@@ -56,7 +59,7 @@ public class RuntimeEventListener {
         return switch (type) {
             case ToolCallStatus t -> wrapReasoning(event, data, toolCallSubType(t));
             case CompactionStatus c -> wrapReasoning(event, data, compactSubType(c));
-            case SessionStatus s -> wrapReasoning(event, data, sessionSubType(s));
+            case SessionEventType s -> wrapReasoning(event, data, sessionSubType(s));
             case RunStatus r -> wrapReasoning(event, data, runSubType(r));
             default -> new RuntimeEventVO(type, data);
         };
@@ -80,7 +83,7 @@ public class RuntimeEventListener {
         };
     }
 
-    private static String sessionSubType(SessionStatus s) {
+    private static String sessionSubType(SessionEventType s) {
         return switch (s) {
             case TITLE_UPDATED -> RuntimeEventTypeConstant.REASONING_SUB_TYPE_SESSION_UPDATED;
         };
@@ -166,10 +169,10 @@ public class RuntimeEventListener {
             case ToolCallStatus s -> handleToolCallLifecycle(data, s);
             case UserInLoopRecordStatus s -> handleUserInLoopLifecycle(data, s);
             case CompactionStatus s -> data = handleCompaction(data, s);
-            case SessionStatus s -> handleSessionLifecycle(data, s);
+            case SessionEventType s -> handleSessionLifecycle(data, s);
             case FlowEventType f -> data = handleFlow(data, f);
             case ClarificationStatus s -> handleClarification(data, s);
-            case ToolApprovalStatus s -> handleToolApproval(data, s);
+            case ToolApprovalEvent s -> handleToolApproval(data, s);
             // Chrome commands now travel as their own record event (ChromeCommandEvent).
             case ChromeCommandEventType ignored -> {
             }
@@ -274,9 +277,9 @@ public class RuntimeEventListener {
             return null;
         }
         String hint = switch (String.valueOf(data.getRetryHint())) {
-            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_PROVIDER_BUSY -> "Upstream model service is busy";
-            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_CONNECT_TIMEOUT -> "Timed out connecting to the model service";
-            case com.buukle.agent.runtime.kernel.runner.LlmRetryPolicy.HINT_RATE_LIMITED -> "Too many requests";
+            case com.buukle.agent.runtime.kernel.runner.turn.LlmRetryPolicy.HINT_PROVIDER_BUSY -> "Upstream model service is busy";
+            case com.buukle.agent.runtime.kernel.runner.turn.LlmRetryPolicy.HINT_CONNECT_TIMEOUT -> "Timed out connecting to the model service";
+            case com.buukle.agent.runtime.kernel.runner.turn.LlmRetryPolicy.HINT_RATE_LIMITED -> "Too many requests";
             default -> "Model call failed";
         };
         StringBuilder sb = new StringBuilder("⚠ ").append(hint).append(", retrying automatically");
@@ -389,7 +392,7 @@ public class RuntimeEventListener {
                 data.getClarificationId(), state, data.getPrompt());
     }
 
-    private void handleToolApproval(RuntimeEventDataVO data, ToolApprovalStatus status) {
+    private void handleToolApproval(RuntimeEventDataVO data, ToolApprovalEvent status) {
         if (data.getRunId() == null || data.getApprovalId() == null) {
             return;
         }
@@ -530,6 +533,6 @@ public class RuntimeEventListener {
         }
     }
 
-    private void handleSessionLifecycle(RuntimeEventDataVO data, SessionStatus status) {
+    private void handleSessionLifecycle(RuntimeEventDataVO data, SessionEventType status) {
     }
 }

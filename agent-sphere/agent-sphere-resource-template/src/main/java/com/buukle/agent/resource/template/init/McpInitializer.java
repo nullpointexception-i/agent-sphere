@@ -3,6 +3,7 @@ package com.buukle.agent.resource.template.init;
 import com.buukle.agent.capability.mcp.dtvo.dto.CreateMcpDTO;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
+import com.buukle.agent.common.constant.McpServerType;
 import com.buukle.agent.resource.template.ResourceExistsException;
 import com.buukle.agent.resource.template.ResourceInitContext;
 import com.buukle.agent.resource.template.ResourceInitializer;
@@ -38,7 +39,7 @@ public class McpInitializer implements ResourceInitializer {
         CreateMcpDTO dto = new CreateMcpDTO();
         dto.setName(name);
         dto.setServerUrl(descriptor.path("serverUrl").asText(null));
-        dto.setServerType(descriptor.path("serverType").asText("stdio"));
+        dto.setServerType(descriptor.path("serverType").asText(McpServerType.STDIO));
         mcpSpi.createMcp(dto);
     }
 }

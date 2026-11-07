@@ -1,4 +1,3 @@
-import { API_PATHS } from '@/constants/endpoints';
 import type { Settings as LayoutSettings } from '@ant-design/pro-components';
 import { SettingDrawer } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
@@ -11,6 +10,7 @@ import {
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import React, { useEffect } from 'react';
+import { API_PATHS } from '@/constants/endpoints';
 
 dayjs.extend(relativeTime);
 

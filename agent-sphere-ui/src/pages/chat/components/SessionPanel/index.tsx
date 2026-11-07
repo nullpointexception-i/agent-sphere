@@ -5,6 +5,7 @@ import {
 } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Divider, Empty, Tabs, Tag } from 'antd';
+import { TODO_STATUS } from '@/constants/timeline';
 import { cacheHitRate, contextUsagePercent, formatTokens } from '../Usage';
 
 interface TodoItem {
@@ -203,7 +204,7 @@ export default function SessionPanel({
           ) : (
             todos.map((t, i) => (
               <div
-                key={i}
+                key={`${t.skillId ?? ''}-${t.stepId ?? ''}-${t.content}`}
                 style={{
                   padding: '4px 0',
                   fontSize: 13,
@@ -216,8 +217,10 @@ export default function SessionPanel({
                 <span
                   style={{
                     textDecoration:
-                      t.status === 'cancelled' ? 'line-through' : undefined,
-                    opacity: t.status === 'cancelled' ? 0.5 : 1,
+                      t.status === TODO_STATUS.CANCELLED
+                        ? 'line-through'
+                        : undefined,
+                    opacity: t.status === TODO_STATUS.CANCELLED ? 0.5 : 1,
                     flex: 1,
                   }}
                 >
@@ -370,7 +373,7 @@ export default function SessionPanel({
                   ) : (
                     authorizedTools.map((tool, i) => (
                       <div
-                        key={`${tool.toolRef}-${tool.scope}-${i}`}
+                        key={`${tool.toolRef}-${tool.scope}`}
                         style={{
                           display: 'flex',
                           alignItems: 'center',

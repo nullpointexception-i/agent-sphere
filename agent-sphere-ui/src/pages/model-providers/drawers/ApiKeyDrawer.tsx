@@ -1,9 +1,9 @@
-import { PERM } from '@/constants/permissions';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { App, Button, Drawer, Form, Input, Modal, Radio, Table } from 'antd';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -24,14 +24,7 @@ export default function ApiKeyDrawer({
   onClose,
 }: Props) {
   const { message, modal } = App.useApp();
-  let intl: any;
-  try {
-    intl = useIntl();
-  } catch {
-    intl = {
-      formatMessage: ({ id, defaultMessage }: any) => defaultMessage || id,
-    };
-  }
+  const intl = useIntl();
   const [keys, setKeys] = useState<any[]>([]);
   const [editingKey, setEditingKey] = useState<any>(null);
   const [keyFormOpen, setKeyFormOpen] = useState(false);

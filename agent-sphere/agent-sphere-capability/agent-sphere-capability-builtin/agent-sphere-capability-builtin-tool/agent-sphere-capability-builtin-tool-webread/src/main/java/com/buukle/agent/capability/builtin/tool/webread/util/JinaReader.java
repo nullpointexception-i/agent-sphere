@@ -27,14 +27,14 @@ import java.util.Map;
 public class JinaReader {
 
     private static final String HEADER_AUTHORIZATION = HttpHeaders.AUTHORIZATION;
-    private static final String HEADER_CONTENT_TYPE = "Content-Type";
-    private static final String HEADER_ACCEPT = "Accept";
+    private static final String HEADER_CONTENT_TYPE = HttpHeaders.CONTENT_TYPE;
+    private static final String HEADER_ACCEPT = HttpHeaders.ACCEPT;
     private static final String HEADER_ENGINE = "X-Engine";
     private static final String HEADER_RETURN_FORMAT = "X-Return-Format";
     private static final String HEADER_TIMEOUT = "X-Timeout";
 
     private static final String BEARER_PREFIX = HttpHeaders.BEARER_PREFIX;
-    private static final String APPLICATION_JSON = "application/json";
+    private static final String APPLICATION_JSON = HttpHeaders.APPLICATION_JSON;
     private static final String RETURN_FORMAT_MARKDOWN = "markdown";
 
     private static final String FIELD_URL = "url";

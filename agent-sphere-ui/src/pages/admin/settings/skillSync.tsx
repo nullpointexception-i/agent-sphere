@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { Alert, Descriptions, Modal, Progress, Table, Tag } from 'antd';
+import { STATUS } from '@/constants/status';
 import type { SkillSyncRun } from '@/services/agentSphere/api';
 
 interface Props {
@@ -27,7 +28,7 @@ export default function SkillSyncRunPanel({ open, run, onClose }: Props) {
     values?: Record<string, any>,
   ) => intl.formatMessage({ id, defaultMessage }, values);
 
-  const running = run?.status === 'RUNNING';
+  const running = run?.status === STATUS.SKILL_SYNC.RUNNING;
   const scanned = run?.scannedCount ?? 0;
   const processed = run?.handled ?? 0;
   // The denominator is "replicas scanned this round"; it updates as the round progresses.
@@ -76,7 +77,7 @@ export default function SkillSyncRunPanel({ open, run, onClose }: Props) {
             </div>
           )}
 
-          {run.status === 'SKIPPED' && (
+          {run.status === STATUS.SKILL_SYNC.SKIPPED && (
             <Alert
               type="warning"
               showIcon
@@ -90,7 +91,7 @@ export default function SkillSyncRunPanel({ open, run, onClose }: Props) {
               }
             />
           )}
-          {run.status === 'FAILED' && (
+          {run.status === STATUS.SKILL_SYNC.FAILED && (
             <Alert
               type="error"
               showIcon
@@ -185,16 +186,18 @@ export default function SkillSyncRunPanel({ open, run, onClose }: Props) {
               ]}
             />
           )}
-          {!running && run.status === 'SUCCESS' && details.length === 0 && (
-            <Alert
-              type="success"
-              showIcon
-              message={t(
-                'pages.admin.settings.skillSync.allSynced',
-                'All copies are already up to date.',
-              )}
-            />
-          )}
+          {!running &&
+            run.status === STATUS.SKILL_SYNC.SUCCESS &&
+            details.length === 0 && (
+              <Alert
+                type="success"
+                showIcon
+                message={t(
+                  'pages.admin.settings.skillSync.allSynced',
+                  'All copies are already up to date.',
+                )}
+              />
+            )}
         </>
       ) : (
         <Alert

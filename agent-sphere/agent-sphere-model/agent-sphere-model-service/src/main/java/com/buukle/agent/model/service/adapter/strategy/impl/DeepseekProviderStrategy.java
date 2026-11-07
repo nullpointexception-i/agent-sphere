@@ -1,5 +1,6 @@
 package com.buukle.agent.model.service.adapter.strategy.impl;
 
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.common.constant.ReasoningEffort;
 import com.buukle.agent.model.dtvo.dto.complete.ChatCompletionRequestDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class DeepseekProviderStrategy implements ProviderStrategy {
 
-    private static final String ROLE_ASSISTANT = "assistant";
+    private static final String ROLE_ASSISTANT = LlmRoles.ASSISTANT;
     private static final String THINKING_ENABLED = "enabled";
     private static final String THINKING_DISABLED = "disabled";
 

@@ -29,6 +29,30 @@ import {
   ToolOutlined,
 } from '@ant-design/icons';
 import XMarkdown from '@ant-design/x-markdown';
+import {
+  COMPLETED_TIMELINE_STATES,
+  TIMELINE_STATE,
+  TODO_STATUS,
+} from '@/constants/timeline';
+import { TIMING } from '@/constants/timing';
+import {
+  DEFAULT_RENDER_LIMIT,
+  displayState,
+  formatDuration,
+  formatWaitClock,
+  formatWaitDuration,
+  isInternalToolRow,
+  isSucceededState,
+  KIND_LABEL_KEY,
+  parallelGroupKey,
+  parseJsonArray,
+  parseWaitView,
+  prettyJsonSafe,
+  RENDER_LIMIT_STEP,
+  subAgentMemberKey,
+  TEXT_MATCH_MODE_LABEL,
+  toFiniteNumber,
+} from './timelineModel';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { useIntl } from '@umijs/max';
 import {
@@ -79,11 +103,6 @@ import {
  * The timeline snapshot state is only a fallback when content is missing and does not take part
  * in any control decisions.
  */
-const displayState = (row: any): string | undefined =>
-  row?.kind === 'run_status'
-    ? (row?.state ?? row?.content?.state)
-    : (row?.content?.state ?? row?.state);
-
 /**
  * Streaming Markdown throttling: content changes on every token, but re-parsing the whole block
  * does not need 60fps.
@@ -121,54 +140,6 @@ interface TimelineListProps {
   } | null;
 }
 
-const KIND_LABEL_KEY: Record<string, string> = {
-  user: 'pages.chat.timeline.kind.user',
-  assistant: 'pages.chat.timeline.kind.assistant',
-  tool: 'pages.chat.timeline.kind.tool',
-  clarification: 'pages.chat.timeline.kind.clarification',
-  tool_approval: 'pages.chat.timeline.kind.toolApproval',
-  subagent: 'pages.chat.timeline.kind.subagent',
-  compaction: 'pages.chat.timeline.kind.compaction',
-  run_status: 'pages.chat.timeline.kind.runStatus',
-  error: 'pages.chat.timeline.kind.error',
-};
-
-// DOM cap for long sessions: beyond this only the latest N rows are rendered, with a
-// "show earlier" button at the top.
-// Prevents 1000+ Markdown/screenshot rows from mounting at once and dropping scroll frames.
-const DEFAULT_RENDER_LIMIT = 300;
-const RENDER_LIMIT_STEP = 200;
-
-// Internal protocol tools: the finish answer is already shown as assistant body text, and
-// ask_clarification is shown by the clarification row.
-const FINISH_TOOL_NAME = 'builtin_12';
-const ASK_CLARIFICATION_TOOL_NAME = 'builtin_7';
-
-function isInternalToolRow(row: any): boolean {
-  if (!row || row.kind !== 'tool') {
-    return false;
-  }
-  const content = row.content;
-  return (
-    content?.toolName === FINISH_TOOL_NAME ||
-    content?.toolName === ASK_CLARIFICATION_TOOL_NAME ||
-    content?.displayName === '完成任务' ||
-    content?.displayName === 'Finish' ||
-    content?.displayName === '请求澄清' ||
-    content?.displayName === 'Ask Clarification'
-  );
-}
-
-function formatDuration(ms?: number) {
-  if (ms == null || Number.isNaN(ms) || ms < 0) return '';
-  if (ms < 1000) return '<1s';
-  const totalSec = Math.round(ms / 1000);
-  if (totalSec < 60) return `${totalSec}s`;
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return s ? `${m}m${s}s` : `${m}m`;
-}
-
 /** Assistant RUNNING state: a bouncing dot (not rendered, simply gone, in terminal states). */
 function RunningDot() {
   const { styles } = useStyles();
@@ -191,7 +162,10 @@ function CopyButton({ text }: { text: string }) {
           intl.formatMessage({ id: 'chat.copied', defaultMessage: 'Copied' }),
         );
         if (timer.current) window.clearTimeout(timer.current);
-        timer.current = window.setTimeout(() => setCopied(false), 2000);
+        timer.current = window.setTimeout(
+          () => setCopied(false),
+          TIMING.COPY_RESET_MS,
+        );
       })
       .catch(() =>
         message.error(
@@ -232,12 +206,14 @@ function CopyButton({ text }: { text: string }) {
 
 function StateTag({ state, small }: { state?: string; small?: boolean }) {
   const color =
-    state === 'COMPLETED' || state === 'succeeded' || state === 'ANSWERED'
+    state === TIMELINE_STATE.COMPLETED ||
+    state === TIMELINE_STATE.TOOL_SUCCEEDED ||
+    state === 'ANSWERED'
       ? 'success'
-      : state === 'FAILED' ||
-          state === 'failed' ||
-          state === 'CANCELLED' ||
-          state === 'TIMEOUT'
+      : state === TIMELINE_STATE.FAILED ||
+          state === TIMELINE_STATE.TOOL_FAILED ||
+          state === TIMELINE_STATE.CANCELLED ||
+          state === TIMELINE_STATE.TIMEOUT
         ? 'error'
         : 'processing';
   return (
@@ -247,7 +223,7 @@ function StateTag({ state, small }: { state?: string; small?: boolean }) {
         small ? { margin: 0, fontSize: 11, color: '#8c8c8c' } : { margin: 0 }
       }
     >
-      {state || 'RUNNING'}
+      {state || TIMELINE_STATE.RUNNING}
     </Tag>
   );
 }
@@ -299,7 +275,8 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
   const reply = typeof content.reply === 'string' ? content.reply.trim() : '';
   const hasThinking = thinking.length > 0 && thinking !== '{}';
   const hasReply = reply.length > 0 && reply !== '{}';
-  const isRunning = !displayState(row) || displayState(row) === 'RUNNING';
+  const isRunning =
+    !displayState(row) || displayState(row) === TIMELINE_STATE.RUNNING;
   const streaming = Boolean(isLatest && isRunning);
   const renderedReply = useThrottledValue(reply, streaming ? 120 : 0);
   const [thinkingOpen, setThinkingOpen] = useState(
@@ -547,7 +524,7 @@ function formatToolDuration(ms?: number) {
 }
 
 /** Durations beyond this are treated as slow tools (red + ⚠). */
-const SLOW_TOOL_MS = 5000;
+const SLOW_TOOL_MS = TIMING.SLOW_TOOL_MS;
 
 /** Tool duration: over 5s is a slow tool, flagged in red with ⚠. */
 function ToolDuration({ ms }: { ms?: number }) {
@@ -760,7 +737,7 @@ function TodoCard({ content }: { content: any }) {
               }}
             >
               <Checkbox
-                checked={t.status === 'completed'}
+                checked={t.status === TODO_STATUS.COMPLETED}
                 indeterminate={st.indeterminate}
                 disabled
               />
@@ -1206,90 +1183,24 @@ function ToolCard({ row }: any) {
   );
 }
 
-function toFiniteNumber(value: any): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function formatWaitDuration(ms?: number | null): string | null {
-  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
-  const seconds = Math.max(1, Math.round(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return rest === 0 ? `${minutes}m` : `${minutes}m${rest}s`;
-}
-
-function formatWaitClock(
-  value: string | null,
-  epochMs: number | null,
-): string | null {
-  const date =
-    epochMs != null
-      ? new Date(epochMs)
-      : value
-        ? new Date(value.replace(' ', 'T'))
-        : null;
-  if (!date || Number.isNaN(date.getTime())) return null;
-  return date.toLocaleTimeString('zh-CN', { hour12: false });
-}
-
-function parseWaitView(content: any) {
-  const meta = content?.meta ?? {};
-  let args: any = null;
-  let artifact: any = null;
-  try {
-    args = content?.args ? JSON.parse(content.args) : null;
-  } catch {
-    // ignore malformed args
-  }
-  try {
-    artifact = content?.artifact ? JSON.parse(content.artifact) : null;
-  } catch {
-    // ignore malformed artifact
-  }
-  return {
-    waitMs: toFiniteNumber(meta.waitMs) ?? toFiniteNumber(args?.ms),
-    elapsedMs:
-      toFiniteNumber(meta.elapsedMs) ??
-      toFiniteNumber(artifact?.elapsed_ms) ??
-      toFiniteNumber(meta.durationMs) ??
-      toFiniteNumber(args?.ms),
-    startedAtMs: toFiniteNumber(meta.startedAtMs),
-    resumedAtMs:
-      toFiniteNumber(meta.resumedAtMs) ??
-      toFiniteNumber(artifact?.resumed_at_ms),
-    resumedAtRaw:
-      typeof meta.resumedAt === 'string'
-        ? meta.resumedAt
-        : typeof artifact?.resumed_at === 'string'
-          ? artifact.resumed_at
-          : null,
-    error: typeof meta.error === 'string' ? meta.error : null,
-  };
-}
-
 function WaitCard({ row }: any) {
   const intl = useIntl();
   const content = row?.content ?? {};
   const state = String(displayState(row) ?? '').toLowerCase();
-  const failed = state === 'failed' || state === 'error';
-  const cancelled = state === 'cancelled';
+  const failed = state === TIMELINE_STATE.TOOL_FAILED || state === 'error';
+  const cancelled = state === TIMELINE_STATE.TOOL_CANCELLED;
   const completed =
-    !failed &&
-    !cancelled &&
-    ['succeeded', 'completed', 'success'].includes(state);
+    !failed && !cancelled && COMPLETED_TIMELINE_STATES.includes(state);
   const waiting = !failed && !cancelled && !completed;
 
   const view = parseWaitView(content);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!waiting) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(
+      () => setNow(Date.now()),
+      TIMING.CLOCK_TICK_MS,
+    );
     return () => window.clearInterval(timer);
   }, [waiting]);
 
@@ -1595,22 +1506,6 @@ function CurrentTimeCard({ content, state }: any) {
   );
 }
 
-const TEXT_MATCH_MODE_LABEL: Record<string, string> = {
-  EXACT: 'pages.chat.tool.modeExact',
-  IGNORE_CASE: 'pages.chat.tool.modeIgnoreCase',
-  TRIMMED: 'pages.chat.tool.modeTrimmed',
-  IGNORE_CASE_TRIMMED: 'pages.chat.tool.modeIgnoreCaseTrimmed',
-};
-
-function prettyJsonSafe(raw?: string) {
-  if (!raw) return '';
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2);
-  } catch {
-    return raw;
-  }
-}
-
 /** Text-contains check: results take priority; arguments keep only needle/mode/length, avoiding two raw JSON blocks. */
 function TextContainsCard({ content, state }: any) {
   const intl = useIntl();
@@ -1806,10 +1701,6 @@ function TextContainsCard({ content, state }: any) {
   );
 }
 
-function isSucceededState(state: any) {
-  return String(state ?? '').toLowerCase() === 'succeeded';
-}
-
 function ProgressCard({ content, state }: any) {
   const intl = useIntl();
   const view = progressView(content);
@@ -1825,7 +1716,9 @@ function ProgressCard({ content, state }: any) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <SyncOutlined
-          spin={String(state ?? '').toLowerCase() === 'running'}
+          spin={
+            String(state ?? '').toLowerCase() === TIMELINE_STATE.TOOL_RUNNING
+          }
           style={{ fontSize: 12, color: '#1677ff' }}
         />
         <Typography.Text strong style={{ fontSize: 12, color: '#595959' }}>
@@ -2438,16 +2331,6 @@ function BrowserCard({ content, state }: any) {
   );
 }
 
-function parseJsonArray(raw?: string): any[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
 function ToolApprovalCard({ row }: any) {
   const intl = useIntl();
   const content = row.content || {};
@@ -2462,12 +2345,12 @@ function ToolApprovalCard({ row }: any) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <SafetyCertificateOutlined style={{ fontSize: 13, color: '#8c8c8c' }} />
         <Typography.Text strong style={{ fontSize: 12, color: '#8c8c8c' }}>
-          {displayState(row) === 'PENDING'
+          {displayState(row) === TIMELINE_STATE.PENDING
             ? intl.formatMessage({
                 id: 'pages.chat.tool.approvalWaiting',
                 defaultMessage: 'Waiting for tool approval',
               })
-            : displayState(row) === 'CANCELLED'
+            : displayState(row) === TIMELINE_STATE.CANCELLED
               ? intl.formatMessage({
                   id: 'pages.chat.tool.approvalCancelled',
                   defaultMessage: 'Tool approval cancelled',
@@ -2563,7 +2446,8 @@ function ClarificationCard({ row }: any) {
     }
   }
   const cancelled =
-    content.response === '__dismissed__' || displayState(row) === 'CANCELLED';
+    content.response === '__dismissed__' ||
+    displayState(row) === TIMELINE_STATE.CANCELLED;
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2598,7 +2482,7 @@ function ClarificationCard({ row }: any) {
             {description}
           </Typography.Paragraph>
         ) : null}
-        {displayState(row) === 'PENDING' ? (
+        {displayState(row) === TIMELINE_STATE.PENDING ? (
           <Typography.Text type="secondary">
             {intl.formatMessage({
               id: 'pages.chat.tool.waitingInDrawer',
@@ -2822,7 +2706,7 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   const [activeToolKey, setActiveToolKey] = useState<string | null>(null);
   const stepsBoxRef = useRef<HTMLDivElement | null>(null);
   const subId = row.refSubAgentRunId;
-  const isRunning = displayState(row) === 'RUNNING';
+  const isRunning = displayState(row) === TIMELINE_STATE.RUNNING;
   const live = subId != null && isRunning ? (subAgentLive?.[subId] ?? []) : [];
 
   // Consistent with list.map keys: historical steps use the primary key, SSE live steps use publishId/index
@@ -2891,7 +2775,11 @@ function SubAgentCard({ row, loadSubAgentSteps, subAgentLive }: any) {
   useEffect(() => {
     const prev = prevStateRef.current;
     prevStateRef.current = displayState(row);
-    if (prev === 'RUNNING' && displayState(row) !== 'RUNNING' && open) {
+    if (
+      prev === TIMELINE_STATE.RUNNING &&
+      displayState(row) !== TIMELINE_STATE.RUNNING &&
+      open
+    ) {
       sync();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3086,19 +2974,6 @@ function UserImages({
   );
 }
 
-function subAgentMemberKey(row: any): string {
-  const id = row?.refSubAgentRunId;
-  return String(id ?? row?.seq ?? Math.random());
-}
-
-/** Grouping key for parallel sub-agents in the same batch: shared parentToolCallId (derived from the same delegate call). */
-function parallelGroupKey(row: any): string | null {
-  if (row?.kind !== 'subagent') return null;
-  const pid = row?.content?.parentToolCallId;
-  if (pid == null || pid === '') return null;
-  return String(pid);
-}
-
 /**
  * Horizontal tab container for parallel sub-agents in the same batch: the tab strip scrolls horizontally natively,
  * and panels reuse SubAgentCard (live aggregation / expansion / step loading logic unchanged).
@@ -3114,7 +2989,9 @@ function ParallelSubAgentTabsImpl({
   const [activeKey, setActiveKey] = useState<string | undefined>(undefined);
   const effectiveKey =
     activeKey != null && keys.includes(activeKey) ? activeKey : keys[0];
-  const anyRunning = members.some((m: any) => m.state === 'RUNNING');
+  const anyRunning = members.some(
+    (m: any) => m.state === TIMELINE_STATE.RUNNING,
+  );
   return (
     <div
       style={{
@@ -3164,7 +3041,7 @@ function ParallelSubAgentTabsImpl({
             label: (
               <span>
                 {name}{' '}
-                {m.state === 'RUNNING' ? (
+                {m.state === TIMELINE_STATE.RUNNING ? (
                   <RunningDot />
                 ) : (
                   <StateTag state={m.state} small />
@@ -3241,9 +3118,10 @@ function RowCardImpl({
   // Compaction row: divider + live output of the compaction model (tokens appended while generating; after refresh it uses summary_after)
   if (row.kind === 'compaction') {
     const text = row.content?.text || '';
-    const running = displayState(row) === 'RUNNING';
+    const running = displayState(row) === TIMELINE_STATE.RUNNING;
     const failed =
-      displayState(row) === 'FAILED' || displayState(row) === 'failed';
+      displayState(row) === TIMELINE_STATE.FAILED ||
+      displayState(row) === TIMELINE_STATE.TOOL_FAILED;
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
@@ -3289,10 +3167,13 @@ function RowCardImpl({
   if (row.kind === 'run_status') {
     const state = displayState(row);
     const terminal =
-      state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED';
+      state === TIMELINE_STATE.COMPLETED ||
+      state === TIMELINE_STATE.FAILED ||
+      state === TIMELINE_STATE.CANCELLED;
     const duration = formatDuration(row.content?.durationMs);
     const usage = row.content?.usage;
-    const isRunFailed = state === 'FAILED' || state === 'failed';
+    const isRunFailed =
+      state === TIMELINE_STATE.FAILED || state === TIMELINE_STATE.TOOL_FAILED;
     // The backend failure text's "❌" cross is too heavy; strip it and draw a
     // thin red cross at the same font size as the row text.
     const text = (row.content?.text || row.title || '')
@@ -3317,7 +3198,7 @@ function RowCardImpl({
     const retryActive =
       retryState != null &&
       Number(row.runId) === Number(retryState.runId) &&
-      state === 'WAITING' &&
+      state === TIMELINE_STATE.WAITING &&
       String(row.subtype ?? '').toUpperCase() === 'LLM_RETRY';
     const retryTarget = retryActive
       ? Date.now() + Math.max(0, Number(retryState.remainingMs) || 0)
@@ -3325,17 +3206,17 @@ function RowCardImpl({
     return (
       <div style={{ width: '100%', maxWidth: 940, margin: '2px auto' }}>
         <Divider plain style={{ margin: '4px 0', fontSize: 12, color: '#999' }}>
-          {state === 'RUNNING' ? (
+          {state === TIMELINE_STATE.RUNNING ? (
             <LoadingOutlined spin style={{ fontSize: 12 }} />
-          ) : state === 'WAITING' ? (
+          ) : state === TIMELINE_STATE.WAITING ? (
             <ClockCircleOutlined style={{ fontSize: 12, color: '#1677ff' }} />
           ) : state === 'RESUMED' ? (
             <SyncOutlined style={{ fontSize: 12, color: '#1677ff' }} />
           ) : isRunFailed ? (
             <CloseCircleOutlined style={{ fontSize: 12, color: '#ff4d4f' }} />
-          ) : state === 'AWAITING_USER' ? (
+          ) : state === TIMELINE_STATE.AWAITING_USER ? (
             <PauseCircleOutlined style={{ fontSize: 12 }} />
-          ) : state === 'CANCELLED' ? (
+          ) : state === TIMELINE_STATE.CANCELLED ? (
             <StopOutlined style={{ fontSize: 12 }} />
           ) : (
             <CheckCircleOutlined style={{ fontSize: 12 }} />
@@ -3448,7 +3329,8 @@ function RowCardImpl({
               </Tag>
               <StateTag state={displayState(row)} />
             </div>
-          ) : row.kind === 'assistant' && displayState(row) === 'RUNNING' ? (
+          ) : row.kind === 'assistant' &&
+            displayState(row) === TIMELINE_STATE.RUNNING ? (
             <div style={{ marginBottom: 2 }}>
               <RunningDot />
             </div>

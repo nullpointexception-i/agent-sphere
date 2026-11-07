@@ -1,6 +1,7 @@
 package com.buukle.agent.runtime.kernel.runner;
 
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.runtime.kernel.runner.support.SessionInputManager;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
@@ -13,7 +14,7 @@ import com.buukle.agent.model.dtvo.vo.ModelRouteFullVO;
 import com.buukle.agent.model.spi.ApiKeySpi;
 import com.buukle.agent.runtime.kernel.config.FallbackRouteExecutor;
 import com.buukle.agent.runtime.kernel.config.RouteListBuilder;
-import com.buukle.agent.runtime.kernel.constants.LlmApiConstant;
+import com.buukle.agent.common.constant.LlmRoles;
 import com.buukle.agent.runtime.kernel.contract.TurnOutcome;
 import com.buukle.agent.runtime.kernel.contract.TurnResult;
 import com.buukle.agent.runtime.kernel.loader.HistoryLoader;
@@ -124,14 +125,14 @@ class SessionRunnerAttachmentTest {
     @Test
     void hasAttachmentImage_stringContent_false() {
         List<ChatMessageDTO> messages = List.of(
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("你好"));
+                new ChatMessageDTO().setRole(LlmRoles.USER).setContent("你好"));
         assertFalse(SessionRunner.hasAttachmentImage(messages));
     }
 
     @Test
     void hasAttachmentImage_lastNotUser_false() {
         List<ChatMessageDTO> messages = List.of(
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("你好"),
+                new ChatMessageDTO().setRole(LlmRoles.USER).setContent("你好"),
                 new ChatMessageDTO().setRole("assistant").setContent("好的"));
         assertFalse(SessionRunner.hasAttachmentImage(messages));
     }
@@ -139,7 +140,7 @@ class SessionRunnerAttachmentTest {
     @Test
     void hasAttachmentImage_textPartsOnly_false() {
         List<ChatMessageDTO> messages = List.of(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_USER)
+                .setRole(LlmRoles.USER)
                 .setContent(List.of(new ChatMessagePartDTO()
                         .setType(ChatMessagePartDTO.TYPE_TEXT).setText("你好"))));
         assertFalse(SessionRunner.hasAttachmentImage(messages));
@@ -148,7 +149,7 @@ class SessionRunnerAttachmentTest {
     @Test
     void hasAttachmentImage_withImagePart_true() {
         List<ChatMessageDTO> messages = List.of(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_USER)
+                .setRole(LlmRoles.USER)
                 .setContent(List.of(
                         new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_TEXT).setText("看图"),
                         new ChatMessagePartDTO()
@@ -230,7 +231,7 @@ class SessionRunnerAttachmentTest {
     @Test
     void stripImageParts_textWithImage_collapsesToTextOnly() {
         List<ChatMessageDTO> messages = new ArrayList<>(List.of(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_USER)
+                .setRole(LlmRoles.USER)
                 .setContent(List.of(
                         new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_TEXT).setText("看图"),
                         new ChatMessagePartDTO()
@@ -245,7 +246,7 @@ class SessionRunnerAttachmentTest {
     @Test
     void stripImageParts_imageOnly_fallsBackToPlaceholder() {
         List<ChatMessageDTO> messages = new ArrayList<>(List.of(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_USER)
+                .setRole(LlmRoles.USER)
                 .setContent(List.of(new ChatMessagePartDTO()
                         .setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
                         .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl("data:image/png;base64,AAAA"))))));
@@ -258,7 +259,7 @@ class SessionRunnerAttachmentTest {
     @Test
     void stripImageParts_noUserParts_unchanged() {
         List<ChatMessageDTO> messages = new ArrayList<>(List.of(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_USER)
+                .setRole(LlmRoles.USER)
                 .setContent("纯文本")));
 
         SessionRunner.stripImageParts(messages);
@@ -269,7 +270,7 @@ class SessionRunnerAttachmentTest {
     @Test
     void stripImageParts_lastNotUser_unchanged() {
         List<ChatMessageDTO> messages = new ArrayList<>(List.of(
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent(
+                new ChatMessageDTO().setRole(LlmRoles.USER).setContent(
                         List.of(new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_IMAGE_URL)
                                 .setImageUrl(new ChatMessagePartDTO.ImageUrl().setUrl("data:image/png;base64,AAAA")))),
                 new ChatMessageDTO().setRole("tool").setContent("done")));
@@ -302,7 +303,7 @@ class SessionRunnerAttachmentTest {
         assertEquals(TurnOutcome.COMPLETE, result.outcome());
         // Images stripped: the last USER message degrades to plain text
         ChatMessageDTO last = messages.get(messages.size() - 1);
-        assertEquals(LlmApiConstant.ROLE_USER, last.getRole());
+        assertEquals(LlmRoles.USER, last.getRole());
         assertEquals("看图", last.getContent());
         // All routes are still executed (not filtered, no error)
         ArgumentCaptor<List<ModelRouteFullVO>> captor = ArgumentCaptor.forClass(List.class);
@@ -346,7 +347,7 @@ class SessionRunnerAttachmentTest {
                 .when(fallbackRouteExecutor).execute(any(), any());
 
         List<ChatMessageDTO> textMessages = List.of(
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_USER).setContent("你好"));
+                new ChatMessageDTO().setRole(LlmRoles.USER).setContent("你好"));
         invokeRunTurn(textMessages, ctxWithModelRoute(routes));
 
         ArgumentCaptor<List<ModelRouteFullVO>> captor = ArgumentCaptor.forClass(List.class);
@@ -367,7 +368,7 @@ class SessionRunnerAttachmentTest {
 
     private static List<ChatMessageDTO> imagePartsMessages() {
         return List.of(new ChatMessageDTO()
-                .setRole(LlmApiConstant.ROLE_USER)
+                .setRole(LlmRoles.USER)
                 .setContent(List.of(
                         new ChatMessagePartDTO().setType(ChatMessagePartDTO.TYPE_TEXT).setText("看图"),
                         new ChatMessagePartDTO()
@@ -406,7 +407,7 @@ class SessionRunnerAttachmentTest {
         invokeInjectScreenshot(messages, toolResult);
 
         assertEquals(1, messages.size());
-        assertEquals(LlmApiConstant.ROLE_USER, messages.get(0).getRole());
+        assertEquals(LlmRoles.USER, messages.get(0).getRole());
         List<?> parts = (List<?>) messages.get(0).getContent();
         assertEquals(2, parts.size());
         ChatMessagePartDTO text = (ChatMessagePartDTO) parts.get(0);
@@ -468,9 +469,9 @@ class SessionRunnerAttachmentTest {
                 ToolCallDTO.builder().id("c2").type("function")
                         .function(FunctionDefinitionDTO.builder().name("builtin_2").arguments("{}").build()).build());
         List<ChatMessageDTO> messages = new ArrayList<>(List.of(
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_ASSISTANT).setToolCalls(toolCalls),
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_TOOL).setToolCallId("c1").setContent("tool-res-c1"),
-                new ChatMessageDTO().setRole(LlmApiConstant.ROLE_TOOL).setToolCallId("c2").setContent("tool-res-c2")));
+                new ChatMessageDTO().setRole(LlmRoles.ASSISTANT).setToolCalls(toolCalls),
+                new ChatMessageDTO().setRole(LlmRoles.TOOL).setToolCallId("c1").setContent("tool-res-c1"),
+                new ChatMessageDTO().setRole(LlmRoles.TOOL).setToolCallId("c2").setContent("tool-res-c2")));
 
         // Deferred injection matching the fixed Runner: all tool messages are appended first, and the observation is appended at the end of the batch
         invokeInjectScreenshot(messages,
@@ -478,12 +479,12 @@ class SessionRunnerAttachmentTest {
 
         assertEquals(4, messages.size());
         ChatMessageDTO last = messages.get(3);
-        assertEquals(LlmApiConstant.ROLE_USER, last.getRole());
+        assertEquals(LlmRoles.USER, last.getRole());
         assertTrue(last.getContent() instanceof List<?>, "截图观察应以 parts 追加在全部 tool 消息之后");
         // The first three keep their order: assistant + two consecutive tool messages (no USER interleaved)
-        assertEquals(LlmApiConstant.ROLE_ASSISTANT, messages.get(0).getRole());
-        assertEquals(LlmApiConstant.ROLE_TOOL, messages.get(1).getRole());
-        assertEquals(LlmApiConstant.ROLE_TOOL, messages.get(2).getRole());
+        assertEquals(LlmRoles.ASSISTANT, messages.get(0).getRole());
+        assertEquals(LlmRoles.TOOL, messages.get(1).getRole());
+        assertEquals(LlmRoles.TOOL, messages.get(2).getRole());
     }
 
     private void invokeInjectScreenshot(List<ChatMessageDTO> messages, String toolResult) throws Exception {

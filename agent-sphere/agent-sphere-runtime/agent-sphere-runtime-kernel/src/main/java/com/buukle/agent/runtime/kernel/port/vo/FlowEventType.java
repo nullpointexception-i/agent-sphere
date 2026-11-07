@@ -1,7 +1,9 @@
 package com.buukle.agent.runtime.kernel.port.vo;
 
 
-import com.buukle.agent.common.event.EventType;public enum FlowEventType implements EventType {
+import com.buukle.agent.common.event.EventType;
+
+public enum FlowEventType implements EventType {
     REASONING_TOKEN("reasoning_token"),
     CONTENT_TOKEN("content_token");
 

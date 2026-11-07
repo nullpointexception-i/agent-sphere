@@ -1,6 +1,3 @@
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
-import { TASK_STATUS } from '@/constants/status';
-import { PERM } from '@/constants/permissions';
 import {
   ClearOutlined,
   EyeOutlined,
@@ -13,6 +10,9 @@ import { App, Button, DatePicker, Form, Input, Modal, Select, Tag } from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
+import { PERM } from '@/constants/permissions';
+import { STATUS, TASK_STATUS } from '@/constants/status';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
@@ -137,7 +137,8 @@ export default function TaskList() {
             icon={<EyeOutlined />}
             onClick={() => openDetail(record)}
           />
-          {(record.status === 'RUNNING' || record.status === 'QUEUED') && (
+          {(record.status === STATUS.TASK.RUNNING ||
+            record.status === STATUS.TASK.QUEUED) && (
             <Can code={PERM.adminTasksUpdate}>
               <Button
                 type="link"

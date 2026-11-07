@@ -1,4 +1,3 @@
-import { PERM } from '@/constants/permissions';
 import { useIntl } from '@umijs/max';
 import {
   App,
@@ -14,6 +13,8 @@ import {
 } from 'antd';
 import { useEffect, useState } from 'react';
 import { Can } from '@/components/Can';
+import { PERM } from '@/constants/permissions';
+import { STATUS } from '@/constants/status';
 import {
   DIC_TYPE_POSITION,
   dictApi,
@@ -58,7 +59,7 @@ export default function AdminDictionaries() {
       record || {
         dicType: typeFilter || DIC_TYPE_POSITION,
         sortNo: 0,
-        status: 'ACTIVE',
+        status: STATUS.ACTIVE,
       },
     );
     setEditOpen(true);
@@ -131,8 +132,8 @@ export default function AdminDictionaries() {
       dataIndex: 'status',
       width: 100,
       render: (value: string) => (
-        <Tag color={value === 'ACTIVE' ? 'green' : 'default'}>
-          {value === 'ACTIVE'
+        <Tag color={value === STATUS.ACTIVE ? 'green' : 'default'}>
+          {value === STATUS.ACTIVE
             ? t('pages.admin.dictionaries.active', 'Active')
             : t('pages.admin.dictionaries.disabled', 'Disabled')}
         </Tag>
@@ -280,7 +281,7 @@ export default function AdminDictionaries() {
             <Select
               options={[
                 {
-                  value: 'ACTIVE',
+                  value: STATUS.ACTIVE,
                   label: t('pages.admin.dictionaries.active', 'Active'),
                 },
                 {

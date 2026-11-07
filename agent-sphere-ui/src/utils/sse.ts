@@ -1,3 +1,5 @@
+import { TIMING } from '@/constants/timing';
+
 export type SseCallbacks = {
   onMessage?: (payload: string) => void;
   onEvent?: (eventType: string, payload: string) => void;
@@ -15,7 +17,7 @@ export async function connectSse(
   // and neither resolves nor rejects,
   // onError must be triggered so the caller can go through reconnect backoff; otherwise SSE never
   // connects (recoverable only by a manual refresh).
-  const CONNECT_TIMEOUT_MS = 20000;
+  const CONNECT_TIMEOUT_MS = TIMING.SSE_CONNECT_TIMEOUT_MS;
   const controller = new AbortController();
   const abortFromExternal = () => controller.abort();
   if (signal) {

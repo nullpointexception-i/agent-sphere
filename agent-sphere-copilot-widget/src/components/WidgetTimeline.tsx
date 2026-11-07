@@ -1,3 +1,4 @@
+import { RUN_STATE, TIMING, TOOL_STATE } from '../constants';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Markdown } from '../markdown';
@@ -79,7 +80,7 @@ export interface WidgetTimelineProps {
 const FINISH_TOOL_NAME = 'builtin_12';
 const ASK_CLARIFICATION_TOOL_NAME = 'builtin_7';
 /** Above this duration a tool is considered slow (red + warning). */
-const SLOW_TOOL_MS = 5000;
+const SLOW_TOOL_MS = TIMING.SLOW_TOOL_MS;
 
 function isInternalToolRow(row: TimelineRow): boolean {
   if (!row || row.kind !== 'tool') {
@@ -129,7 +130,7 @@ function StateTag({ state }: { state?: string | number | null }) {
       className="aw-tl-state"
       style={{ color, background: `${color}1a` }}
     >
-      {state == null ? 'RUNNING' : String(state)}
+      {state == null ? RUN_STATE.RUNNING : String(state)}
     </span>
   );
 }
@@ -154,7 +155,7 @@ function CopyBtn({ text }: { text: string }) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      window.setTimeout(() => setCopied(false), TIMING.COPY_RESET_MS);
     } catch {
       // Fail silently when the clipboard is unavailable
     }
@@ -179,14 +180,14 @@ function AssistantRow({ row }: { row: TimelineRow }) {
   const thinking = c.thinking || '';
   const reply = c.reply || '';
   const [thinkingOpen, setThinkingOpen] = useState(
-    !displayState(row) || displayState(row) === 'RUNNING',
+    !displayState(row) || displayState(row) === RUN_STATE.RUNNING,
   );
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   const thinkBoxRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const shouldCollapse =
       reply.trim().length > 0 ||
-      (!!displayState(row) && displayState(row) !== 'RUNNING');
+      (!!displayState(row) && displayState(row) !== RUN_STATE.RUNNING);
     if (!autoCollapsed && shouldCollapse) {
       setAutoCollapsed(true);
       setThinkingOpen(false);
@@ -475,7 +476,7 @@ function TextContainsRow({
   const matched = !failed && view.hit === true;
   const unknown = !failed && view.hit === null;
   const background = failed ? '#fff1f0' : matched ? '#f6ffed' : unknown ? '#f0f5ff' : '#fafafa';
-  const showState = failed || String(state ?? '').toLowerCase() !== 'succeeded';
+  const showState = failed || String(state ?? '').toLowerCase() !== TOOL_STATE.SUCCEEDED;
   return (
     <div
       style={{
@@ -575,7 +576,7 @@ function TextContainsRow({
 }
 
 function isSucceededState(state?: string | null) {
-  return String(state ?? '').toLowerCase() === 'succeeded';
+  return String(state ?? '').toLowerCase() === TOOL_STATE.SUCCEEDED;
 }
 
 function ProgressRow({ content, state }: { content: any; state?: string | null }) {
@@ -1152,17 +1153,17 @@ function parseWaitView(content: any) {
 
 function WaitRow({ content, state }: { content: any; state?: string | null }) {
   const normalized = String(state ?? '').toLowerCase();
-  const failed = normalized === 'failed' || normalized === 'error';
-  const cancelled = normalized === 'cancelled';
+  const failed = normalized === TOOL_STATE.FAILED || normalized === TOOL_STATE.ERROR;
+  const cancelled = normalized === TOOL_STATE.CANCELLED;
   const completed =
-    !failed && !cancelled && ['succeeded', 'completed', 'success'].includes(normalized);
+    !failed && !cancelled && ([TOOL_STATE.SUCCEEDED, TOOL_STATE.COMPLETED, TOOL_STATE.SUCCESS] as string[]).includes(normalized);
   const waiting = !failed && !cancelled && !completed;
 
   const view = parseWaitView(content);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!waiting) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    const timer = window.setInterval(() => setNow(Date.now()), TIMING.CLOCK_TICK_MS);
     return () => window.clearInterval(timer);
   }, [waiting]);
 
@@ -1358,7 +1359,7 @@ function ClarifyRow({
       text = String(c.response);
     }
   }
-  const cancelled = c.response === '__dismissed__' || displayState(row) === 'CANCELLED';
+  const cancelled = c.response === '__dismissed__' || displayState(row) === RUN_STATE.CANCELLED;
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1370,7 +1371,7 @@ function ClarifyRow({
         {description ? (
           <div style={{ whiteSpace: 'pre-wrap', color: '#4b5563', fontSize: 12 }}>{description}</div>
         ) : null}
-        {displayState(row) === 'PENDING' ? (
+        {displayState(row) === RUN_STATE.PENDING ? (
           'Answer in the panel below'
         ) : (
           <>
@@ -1433,7 +1434,7 @@ fontSize: 11,
           </span>
         ) : null}
         <StateTag
-          state={s.success === false ? 'FAILED' : s.running ? 'RUNNING' : 'COMPLETED'}
+          state={s.success === false ? RUN_STATE.FAILED : s.running ? RUN_STATE.RUNNING : RUN_STATE.COMPLETED}
         />
       </div>
       {s.reasoning ? (
@@ -1534,7 +1535,7 @@ function SubAgentCard({
   const [activeToolKey, setActiveToolKey] = useState<string | null>(null);
   const stepsBoxRef = useRef<HTMLDivElement | null>(null);
   const subId = row.refSubAgentRunId;
-  const isRunning = displayState(row) === 'RUNNING';
+  const isRunning = displayState(row) === RUN_STATE.RUNNING;
   const live = subId != null && isRunning ? (subAgentLiveMap[subId] ?? []) : [];
 
   const stepKey = (s: any, i: number) =>
@@ -1595,7 +1596,7 @@ function SubAgentCard({
   useEffect(() => {
     const prev = prevStateRef.current;
     prevStateRef.current = displayState(row);
-    if (prev === 'RUNNING' && displayState(row) !== 'RUNNING' && open) {
+    if (prev === 'RUNNING' && displayState(row) !== RUN_STATE.RUNNING && open) {
       sync();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1779,8 +1780,8 @@ function RowView({
 
   if (row.kind === 'compaction') {
     const text = c.text || '';
-    const running = displayState(row) === 'RUNNING';
-    const failed = displayState(row) === 'FAILED' || displayState(row) === 'failed';
+    const running = displayState(row) === RUN_STATE.RUNNING;
+    const failed = displayState(row) === RUN_STATE.FAILED || displayState(row) === TOOL_STATE.FAILED;
     return (
       <div className="aw-tl-compaction">
         <div className="aw-tl-divider">
@@ -1807,7 +1808,7 @@ function RowView({
   if (row.kind === 'run_status') {
     const state = displayState(row);
     const terminal =
-      state === 'COMPLETED' || state === 'FAILED' || state === 'CANCELLED';
+      state === RUN_STATE.COMPLETED || state === RUN_STATE.FAILED || state === RUN_STATE.CANCELLED;
     const duration = formatDuration(c.durationMs);
     const rawText = String(c.text || row.title || '');
     // Strip the backend status prefix (error/stop/pause/hourglass/play), using a red cross for failures
@@ -1818,26 +1819,26 @@ function RowView({
       terminal ? c.modelName : '',
     ].filter((p): p is string => !!p);
     const failed =
-      /fail|失败|错误/i.test(text) || String(displayState(row)) === 'FAILED';
+      /fail|失败|错误/i.test(text) || String(displayState(row)) === RUN_STATE.FAILED;
     const retryActive =
       retryState != null &&
       Number(row.runId) === Number(retryState.runId) &&
-      state === 'WAITING' &&
+      state === RUN_STATE.WAITING &&
       String(row.subtype ?? '').toUpperCase() === 'LLM_RETRY';
     const retryTarget = retryActive
       ? Date.now() + Math.max(0, Number(retryState.remainingMs) || 0)
       : null;
     return (
       <div className="aw-tl-divider">
-        {state === 'RUNNING' ? (
+        {state === RUN_STATE.RUNNING ? (
           <span className="aw-running-dot" />
-        ) : state === 'WAITING' ? (
+        ) : state === RUN_STATE.WAITING ? (
           <ClockIcon />
         ) : state === 'RESUMED' ? (
           <RefreshIcon size={12} />
         ) : failed ? (
           <CloseIcon size={12} className="aw-icon-failed" />
-        ) : state === 'AWAITING_USER' ? (
+        ) : state === RUN_STATE.AWAITING_USER ? (
           <PauseIcon size={12} />
         ) : (
           <CheckIcon size={12} />

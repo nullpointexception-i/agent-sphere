@@ -1,14 +1,27 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { TIMELINE_STATE } from '@/constants/timeline';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 
+/** UI phases of the workspace streaming bubble. */
+export const AGENT_STREAM_PHASE = {
+  WAITING: 'waiting',
+  THINKING: 'thinking',
+  TOOL: 'tool',
+  REPLY: 'reply',
+  AWAITING: 'awaiting',
+  DONE: 'done',
+  FAILED: 'failed',
+} as const;
+
 export type AgentStreamPhase =
-  | 'waiting'
-  | 'thinking'
-  | 'tool'
-  | 'reply'
-  | 'awaiting'
-  | 'done'
-  | 'failed';
+  (typeof AGENT_STREAM_PHASE)[keyof typeof AGENT_STREAM_PHASE];
+
+/** Phase field of a raw `agent_stream` SSE event. */
+export const STREAM_EVENT_PHASE = {
+  THINKING: 'thinking',
+  REPLY: 'reply',
+  STATUS: 'status',
+} as const;
 
 export interface AgentStreamState {
   conversationId: number;
@@ -71,7 +84,7 @@ function currentState(conversationId: number): AgentStreamState | undefined {
 function beginState(conversationId: number): AgentStreamState {
   return {
     conversationId,
-    phase: 'waiting',
+    phase: AGENT_STREAM_PHASE.WAITING,
     thinking: '',
     reply: '',
     startedAt: Date.now(),
@@ -103,7 +116,7 @@ export function finalizeAgentStream(conversationId: number, finalSeq?: number) {
   if (!state || state.finalized) return;
   store.states.set(conversationId, {
     ...state,
-    phase: 'done',
+    phase: AGENT_STREAM_PHASE.DONE,
     finalized: true,
     finalSeq,
   });
@@ -115,7 +128,7 @@ export function failAgentStream(conversationId: number, message: string) {
   if (!state) return;
   store.states.set(conversationId, {
     ...state,
-    phase: 'failed',
+    phase: AGENT_STREAM_PHASE.FAILED,
     finalized: true,
     errorMessage: message,
   });
@@ -124,16 +137,24 @@ export function failAgentStream(conversationId: number, message: string) {
 
 function phaseFromEvent(state: AgentStreamState, event: ImStreamPayload) {
   const status = event.streamStatus;
-  if (status === 'failed' || status === 'cancelled')
-    return 'failed' as AgentStreamPhase;
-  if (status === 'completed') return 'done' as AgentStreamPhase;
+  if (
+    status === TIMELINE_STATE.TOOL_FAILED ||
+    status === TIMELINE_STATE.TOOL_CANCELLED
+  )
+    return AGENT_STREAM_PHASE.FAILED;
+  if (status === TIMELINE_STATE.TOOL_COMPLETED) return AGENT_STREAM_PHASE.DONE;
   // Router parked on a clarification/approval: keep the bubble as "waiting for
   // the user"; the resumed run re-emits STARTED and later phases take over.
-  if (status === 'awaiting_user') return 'awaiting' as AgentStreamPhase;
-  if (event.phase === 'thinking') return 'thinking' as AgentStreamPhase;
-  if (event.phase === 'reply') return 'reply' as AgentStreamPhase;
-  if (event.phase === 'status' && String(status ?? '').startsWith('tool_')) {
-    return 'tool' as AgentStreamPhase;
+  if (status === TIMELINE_STATE.TOOL_AWAITING_USER)
+    return AGENT_STREAM_PHASE.AWAITING;
+  if (event.phase === STREAM_EVENT_PHASE.THINKING)
+    return AGENT_STREAM_PHASE.THINKING;
+  if (event.phase === STREAM_EVENT_PHASE.REPLY) return AGENT_STREAM_PHASE.REPLY;
+  if (
+    event.phase === STREAM_EVENT_PHASE.STATUS &&
+    String(status ?? '').startsWith('tool_')
+  ) {
+    return AGENT_STREAM_PHASE.TOOL;
   }
   return state.phase;
 }
@@ -158,7 +179,8 @@ export function applyAgentStreamEvent(event: ImStreamPayload) {
   }
 
   const seq = event.streamSeq ?? 0;
-  const streamSeq = event.phase === 'status' ? existing.lastStreamSeq : seq;
+  const streamSeq =
+    event.phase === STREAM_EVENT_PHASE.STATUS ? existing.lastStreamSeq : seq;
   if (event.phase !== 'status' && seq && seq <= existing.lastStreamSeq) {
     return;
   }
@@ -174,20 +196,23 @@ export function applyAgentStreamEvent(event: ImStreamPayload) {
     lastStreamSeq: streamSeq || existing.lastStreamSeq,
   };
 
-  if (event.phase === 'thinking') {
+  if (event.phase === STREAM_EVENT_PHASE.THINKING) {
     next.thinking = existing.thinking + (event.delta ?? '');
-  } else if (event.phase === 'reply') {
+  } else if (event.phase === STREAM_EVENT_PHASE.REPLY) {
     next.reply = existing.reply + (event.delta ?? '');
-  } else if (event.phase === 'status') {
+  } else if (event.phase === STREAM_EVENT_PHASE.STATUS) {
     const status = String(event.streamStatus ?? '');
     if (status.startsWith('tool_')) {
       next.toolName = event.toolName ?? undefined;
       next.displayName = event.displayName ?? undefined;
-      if (status === 'tool_pending') {
+      if (status === TIMELINE_STATE.TOOL_PENDING) {
         // Tool turn started: the reply draft restarts after the tool completes.
         next.reply = '';
       }
-    } else if (status === 'failed' || status === 'cancelled') {
+    } else if (
+      status === TIMELINE_STATE.TOOL_FAILED ||
+      status === TIMELINE_STATE.TOOL_CANCELLED
+    ) {
       next.errorMessage = event.errorMessage ?? undefined;
     }
   }
@@ -218,10 +243,10 @@ export function useAgentStream(conversationId: number) {
 
   useEffect(() => {
     // Prune finalized streams once the authoritative message has been merged.
-    if (state?.finalized && state.phase === 'done') {
+    if (state?.finalized && state.phase === AGENT_STREAM_PHASE.DONE) {
       const timer = window.setTimeout(() => {
         const current = currentState(conversationId);
-        if (current?.finalized && current.phase === 'done') {
+        if (current?.finalized && current.phase === AGENT_STREAM_PHASE.DONE) {
           store.states.delete(conversationId);
           notify(conversationId);
         }
@@ -242,7 +267,10 @@ export function useAgentStream(conversationId: number) {
     const timer = window.setInterval(() => {
       const current = currentState(conversationId);
       if (!current || current.finalized) return;
-      if (current.phase === 'tool' || current.phase === 'awaiting') {
+      if (
+        current.phase === AGENT_STREAM_PHASE.TOOL ||
+        current.phase === AGENT_STREAM_PHASE.AWAITING
+      ) {
         return;
       }
       const now = Date.now();
