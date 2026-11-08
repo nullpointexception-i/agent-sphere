@@ -311,28 +311,10 @@ public class ImConversationServiceImpl implements ImConversationService {
 
             List<ImParticipant> members = membersByConversation.getOrDefault(conversation.getId(), List.of());
             summary.setParticipantCount(members.size());
-            summary.setSelfConversation(false);
-            if (ImConversationType.DM.equals(conversation.getType())) {
-                boolean hasAgent = members.stream()
-                        .anyMatch(member -> ImParticipantType.AGENT.equals(member.getParticipantType()));
-                ImParticipant other = members.stream()
-                        .filter(member -> ImParticipantType.USER.equals(member.getParticipantType()))
-                        .filter(member -> !userId.equals(member.getParticipantId()))
-                        .findFirst().orElse(null);
-                if (other != null) {
-                    UserIdentityVO identity = identities.get(other.getParticipantId());
-                    summary.setDisplayName(currentDisplayName(identity, other.getDisplayName()));
-                    summary.setAvatar(identity == null ? null : identity.getAvatar());
-                } else if (!hasAgent) {
-                    summary.setSelfConversation(true);
-                } else {
-                    summary.setDisplayName(members.stream()
-                            .filter(member -> ImParticipantType.AGENT.equals(member.getParticipantType()))
-                            .map(ImParticipant::getDisplayName)
-                            .filter(Objects::nonNull)
-                            .findFirst().orElse(conversation.getTitle()));
-                }
-            }
+            ConversationDisplay display = resolveDisplay(conversation, userId, members, identities);
+            summary.setDisplayName(display.displayName());
+            summary.setAvatar(display.avatar());
+            summary.setSelfConversation(display.selfConversation());
             result.put(conversation.getId(), summary);
         }
         return result;
@@ -837,12 +819,14 @@ public class ImConversationServiceImpl implements ImConversationService {
                 Wrappers.<ImParticipant>lambdaQuery()
                         .eq(ImParticipant::getConversationId, conversation.getId())
                         .orderByAsc(ImParticipant::getId)));
-        Map<Long, UserIdentityVO> identities = ImConversationType.DM.equals(conversation.getType())
-                ? identitiesOf(participants)
-                : Map.of();
+        Map<Long, UserIdentityVO> identities = identitiesOf(participants);
         vo.setParticipants(participants.stream()
                 .map(participant -> toParticipantVO(participant, identities))
                 .toList());
+        ConversationDisplay display = resolveDisplay(conversation, userId, participants, identities);
+        vo.setDisplayName(display.displayName());
+        vo.setAvatar(display.avatar());
+        vo.setSelfConversation(display.selfConversation());
         return vo;
     }
 
@@ -939,7 +923,10 @@ public class ImConversationServiceImpl implements ImConversationService {
             return Map.of();
         }
         try {
-            return userSpi.identityMap(userIds);
+            // Resolve identities outside the caller's self-only scope: a DM/group counterpart may
+            // belong to another tenant branch, and a missing identity makes the UI fall back to the
+            // stored title (which can be the current user's own name).
+            return systemRead(() -> userSpi.identityMap(userIds));
         } catch (Exception e) {
             log.warn("Failed to load participant identities", e);
             return Map.of();
@@ -997,7 +984,78 @@ public class ImConversationServiceImpl implements ImConversationService {
         return vo;
     }
 
+    /** Resolved counterpart name/avatar for a conversation row or detail response. */
+    record ConversationDisplay(String displayName, String avatar, boolean selfConversation) {
+    }
+
+    static ConversationDisplay resolveDisplay(ImConversation conversation, Long userId,
+                                              List<ImParticipant> members,
+                                              Map<Long, UserIdentityVO> identities) {
+        return resolveDisplay(conversation, userId, members, identities,
+                AuthContext.getDisplayName(), AuthContext.getUsername());
+    }
+
+    /**
+     * DM: show the other user (or the agent). Two-person group: the workspace names the group
+     * after the invitee, so when the title is the current user's own name, show the other member.
+     * Larger groups and custom titles keep using the stored title.
+     */
+    static ConversationDisplay resolveDisplay(ImConversation conversation, Long userId,
+                                              List<ImParticipant> members,
+                                              Map<Long, UserIdentityVO> identities,
+                                              String selfDisplayName,
+                                              String selfUsername) {
+        if (ImConversationType.DM.equals(conversation.getType())) {
+            boolean hasAgent = members.stream()
+                    .anyMatch(member -> ImParticipantType.AGENT.equals(member.getParticipantType()));
+            ImParticipant other = members.stream()
+                    .filter(member -> ImParticipantType.USER.equals(member.getParticipantType()))
+                    .filter(member -> !userId.equals(member.getParticipantId()))
+                    .findFirst().orElse(null);
+            if (other != null) {
+                UserIdentityVO identity = identities.get(other.getParticipantId());
+                return new ConversationDisplay(currentDisplayName(identity, other.getDisplayName()),
+                        identity == null ? null : identity.getAvatar(), false);
+            }
+            if (!hasAgent) {
+                return new ConversationDisplay(null, null, true);
+            }
+            String agentName = members.stream()
+                    .filter(member -> ImParticipantType.AGENT.equals(member.getParticipantType()))
+                    .map(ImParticipant::getDisplayName)
+                    .filter(Objects::nonNull)
+                    .findFirst().orElse(conversation.getTitle());
+            return new ConversationDisplay(agentName, null, false);
+        }
+
+        long userCount = members.stream()
+                .filter(member -> ImParticipantType.USER.equals(member.getParticipantType()))
+                .count();
+        List<ImParticipant> otherUsers = members.stream()
+                .filter(member -> ImParticipantType.USER.equals(member.getParticipantType()))
+                .filter(member -> !userId.equals(member.getParticipantId()))
+                .toList();
+        if (userCount == 2 && otherUsers.size() == 1
+                && isSelfTitle(conversation.getTitle(), selfDisplayName, selfUsername)) {
+            ImParticipant other = otherUsers.get(0);
+            UserIdentityVO identity = identities.get(other.getParticipantId());
+            return new ConversationDisplay(currentDisplayName(identity, other.getDisplayName()),
+                    identity == null ? null : identity.getAvatar(), false);
+        }
+        return new ConversationDisplay(null, null, false);
+    }
+
+    private static boolean isSelfTitle(String title, String selfDisplayName, String selfUsername) {
+        if (title == null || title.isBlank()) {
+            return true;
+        }
+        return title.equals(selfDisplayName) || title.equals(selfUsername);
+    }
+
     private static String currentDisplayName(UserIdentityVO identity, String fallback) {
+        if (identity == null) {
+            return fallback;
+        }
         if (identity.getDisplayName() != null && !identity.getDisplayName().isBlank()) {
             return identity.getDisplayName();
         }

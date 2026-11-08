@@ -39,6 +39,7 @@ function conversationLabel(
   if (conversation.type === 'GROUP') {
     return (
       conversation.remark ||
+      conversation.displayName ||
       conversation.title ||
       intl.formatMessage({ id: 'pages.im.group', defaultMessage: 'Group' })
     );

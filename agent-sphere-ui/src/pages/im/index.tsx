@@ -641,7 +641,10 @@ export default function ImPage() {
 
   const activeName = active
     ? active.type === 'GROUP'
-      ? active.remark || active.title || t('pages.im.group', '群聊')
+      ? active.remark ||
+        active.displayName ||
+        active.title ||
+        t('pages.im.group', '群聊')
       : active.displayName || active.title || t('pages.im.dm', '单聊')
     : '';
 

@@ -2545,6 +2545,7 @@ function ChatDetail({
     if (conversation.type === 'GROUP') {
       return (
         conversation.remark ||
+        conversation.displayName ||
         conversation.title ||
         tw('conversation.unnamedGroup', 'Untitled group')
       );
@@ -2567,7 +2568,7 @@ function ChatDetail({
             shape={isGroup ? 'square' : 'circle'}
             src={
               isGroup
-                ? undefined
+                ? conversation.avatar
                 : selfConversation
                   ? me?.avatar
                   : otherParticipant?.avatar

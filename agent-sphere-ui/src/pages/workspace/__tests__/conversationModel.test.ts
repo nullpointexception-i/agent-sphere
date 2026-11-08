@@ -81,6 +81,32 @@ describe('conversationModel', () => {
     ).toBe('Myself');
   });
 
+  it('uses the server displayName for two-person groups and remark first', () => {
+    expect(
+      conversationDisplayName(
+        conversation({ type: 'GROUP', title: 'Alice', displayName: 'Bob' }),
+        me,
+      ),
+    ).toBe('Bob');
+    expect(
+      conversationDisplayName(
+        conversation({
+          type: 'GROUP',
+          title: 'Alice',
+          displayName: 'Bob',
+          remark: 'Team',
+        }),
+        me,
+      ),
+    ).toBe('Team');
+    expect(
+      conversationAvatar(
+        conversation({ type: 'GROUP', avatar: 'bob.png' }),
+        me,
+      ),
+    ).toBe('bob.png');
+  });
+
   it('builds previews from task cards and text', () => {
     expect(
       conversationPreview(

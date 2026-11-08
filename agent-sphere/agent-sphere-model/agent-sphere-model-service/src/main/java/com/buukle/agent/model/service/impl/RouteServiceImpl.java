@@ -8,6 +8,7 @@ import com.buukle.agent.model.domain.AgentApiKey;
 import com.buukle.agent.model.domain.AgentModelProvider;
 import com.buukle.agent.model.domain.AgentModelRoute;
 import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
+import com.buukle.agent.model.dtvo.enums.ModelProviderEnum;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.exception.ModelErrorCode;
 import com.buukle.agent.model.repository.ApiKeyMapper;
@@ -32,6 +33,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     @Override
     @Transactional
     public ModelRouteVO createRoute(CreateRouteDTO dto) {
+        assertProviderSelectable(dto.getProviderId());
         validateFallbacks(null, dto);
         if (Boolean.TRUE.equals(dto.getIsDefault())) {
             baseMapper.clearDefault(currentOwner());
@@ -50,7 +52,9 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     @Override
     public ModelRouteVO getRoute(Long id) {
         AgentModelRoute route = getById(id);
-        if (route == null) throw new BizException(ModelErrorCode.ROUTE_NOT_FOUND);
+        if (route == null || !providerSelectable(route.getProviderId())) {
+            throw new BizException(ModelErrorCode.ROUTE_NOT_FOUND);
+        }
         ModelRouteVO vo = routeConverter.toVO(route);
         enrichFallbackNames(vo);
         enrichApiKeyConfigured(vo);
@@ -62,7 +66,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     @Transactional
     public ModelRouteVO setDefault(Long id) {
         AgentModelRoute route = getById(id);
-        if (route == null) {
+        if (route == null || !providerSelectable(route.getProviderId())) {
             throw new BizException(ModelErrorCode.ROUTE_NOT_FOUND);
         }
         baseMapper.clearDefault(currentOwner());
@@ -76,7 +80,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     @Override
     public ModelRouteVO getDefaultRoute() {
         AgentModelRoute route = baseMapper.selectDefault(currentOwner());
-        if (route == null) {
+        if (route == null || !providerSelectable(route.getProviderId())) {
             return null;
         }
         ModelRouteVO vo = routeConverter.toVO(route);
@@ -89,6 +93,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     @Override
     @Transactional
     public ModelRouteVO updateRoute(Long id, CreateRouteDTO dto) {
+        assertProviderSelectable(dto.getProviderId());
         validateFallbacks(id, dto);
         if (Boolean.TRUE.equals(dto.getIsDefault())) {
             baseMapper.clearDefault(currentOwner());
@@ -119,6 +124,9 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
 
     @Override
     public List<ModelRouteVO> listRoutesByProvider(Long providerId, String keyword) {
+        if (!providerExists(providerId)) {
+            return List.of();
+        }
         List<AgentModelRoute> routes = lambdaQuery()
                 .eq(AgentModelRoute::getProviderId, providerId)
                 .like(keyword != null && !keyword.isBlank(), AgentModelRoute::getModelName, keyword)
@@ -137,7 +145,15 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
                 .like(keyword != null && !keyword.isBlank(), AgentModelRoute::getModelName, keyword)
                 .orderByDesc(AgentModelRoute::getCreatedAt)
                 .list();
-        List<ModelRouteVO> vos = routes.stream().map(routeConverter::toVO).toList();
+        // Routes whose provider was deleted (or disabled) must not be offered by any model
+        // selector. Provider lookup applies logic-delete and the current tenant/owner scope.
+        Set<Long> selectableProviders = selectableProviderIds(routes.stream()
+                .map(AgentModelRoute::getProviderId)
+                .toList());
+        List<ModelRouteVO> vos = routes.stream()
+                .filter(route -> selectableProviders.contains(route.getProviderId()))
+                .map(routeConverter::toVO)
+                .toList();
         enrichFallbackNames(vos);
         enrichApiKeyConfigured(vos);
         enrichProviderName(vos);
@@ -154,6 +170,40 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
             return username;
         }
         return "system";
+    }
+
+    /** A route can only be selected/used while its provider still exists and is active. */
+    private boolean providerSelectable(Long providerId) {
+        if (providerId == null) {
+            return false;
+        }
+        AgentModelProvider provider = modelProviderMapper.selectById(providerId);
+        return provider != null && ModelProviderEnum.STATUS_ACTIVE.equals(provider.getStatus());
+    }
+
+    /** Management list: a disabled provider's routes remain viewable, but a deleted provider's do not. */
+    private boolean providerExists(Long providerId) {
+        return providerId != null && modelProviderMapper.selectById(providerId) != null;
+    }
+
+    /** Batch version of {@link #providerSelectable(Long)} for list endpoints. */
+    private Set<Long> selectableProviderIds(Collection<Long> providerIds) {
+        Set<Long> ids = providerIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Set.of();
+        }
+        return modelProviderMapper.selectBatchIds(ids).stream()
+                .filter(provider -> ModelProviderEnum.STATUS_ACTIVE.equals(provider.getStatus()))
+                .map(AgentModelProvider::getId)
+                .collect(Collectors.toSet());
+    }
+
+    private void assertProviderSelectable(Long providerId) {
+        if (!providerSelectable(providerId)) {
+            throw new BizException(ModelErrorCode.PROVIDER_NOT_FOUND);
+        }
     }
 
     private void enrichApiKeyConfigured(ModelRouteVO vo) {

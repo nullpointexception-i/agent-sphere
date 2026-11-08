@@ -21,6 +21,9 @@ public class ConversationVO implements Serializable {
     private Boolean pinned;
     private Boolean muted;
     private String remark;
+    private String displayName;
+    private String avatar;
+    private Boolean selfConversation;
     private MessageVO lastMessage;
     private MessageVO pinnedMessage;
     private List<ParticipantVO> participants;

@@ -87,6 +87,7 @@ export function conversationDisplayName(conversation: ImConversation, me: any) {
   if (conversation.type === 'GROUP') {
     return (
       conversation.remark ||
+      conversation.displayName ||
       conversation.title ||
       tw('conversation.unnamedGroup', 'Untitled group')
     );
@@ -125,6 +126,9 @@ export function conversationPreview(conversation: ImConversation) {
 export function conversationAvatar(conversation: ImConversation, me: any) {
   if (isSelfConversation(conversation, me)) {
     return me?.avatar;
+  }
+  if (conversation.type === 'GROUP') {
+    return conversation.avatar;
   }
   return conversation.avatar || otherUserParticipant(conversation, me)?.avatar;
 }
