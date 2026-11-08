@@ -6,7 +6,7 @@
  * browser_operation commands into tabs and reports results via HTTP callback.
  */
 import { cdpClient } from './lib/cdp-client.js';
-import { tabManager } from './lib/tab-manager.js';
+import { tabManager, FOCUS_RELEASE_ALARM } from './lib/tab-manager.js';
 import { okResult, okWarning, failResult, ErrorCategory } from './lib/result.js';
 import { ensureOffscreenDocument, askOffscreen } from './lib/offscreen-bridge.js';
 import { loadSessionState, saveSessionState } from './lib/session-state.js';
@@ -109,6 +109,10 @@ function startOffscreenKeepalive() {
         if (!ok) console.warn('[AgentSphere] Offscreen document unavailable');
       });
     }
+    // Durable fallback when the service worker was evicted before the idle setTimeout fired.
+    if (alarm.name === FOCUS_RELEASE_ALARM) {
+      void tabManager.releaseFocus();
+    }
   });
 }
 startOffscreenKeepalive();
@@ -190,6 +194,8 @@ function loadConfiguredUrls(done) {
     mainUrl = s.mainUrl || '';
     // Cursor trail is on by default (only an explicit false turns it off)
     agentCursor.setEnabled(s.agentCursor !== false);
+    // Hidden/occluded agent windows are throttled by Chrome; default auto-focuses only when that happens.
+    tabManager.setBackgroundFocusMode(s.backgroundFocusMode);
     // Browser operation metrics are **off** by default: data stays in local storage.local, but details contain page element text,
     // so the user must opt in explicitly. When disabled, record* returns on the first line with zero collection overhead.
     browserMetrics.setEnabled(s.browserMetrics === true);
@@ -213,6 +219,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
         : [];
     mainUrl = s.mainUrl || '';
     agentCursor.setEnabled(s.agentCursor !== false);
+    tabManager.setBackgroundFocusMode(s.backgroundFocusMode);
     browserMetrics.setEnabled(s.browserMetrics === true);
     browserMetrics.setSampleRate(s.browserMetricAudit === true
       ? Math.max(0, Math.min(100, Number(s.browserMetricSample) || 5)) / 100
@@ -1219,6 +1226,8 @@ async function completeNavigate(commandId, sessionId, tabId, navT0, requestedUrl
  * while the page actually stays on the intercept page", and the model treated that false success as a recovery attempt.
  */
 async function navigateExistingTab(commandId, sessionId, tabId, params, navT0, extra = {}) {
+  // Focus before navigation: the page's own timers/lazy loading must not start out throttled.
+  await tabManager.ensureForeground(tabId);
   let liveUrl = await tabManager.readPageUrl(tabId);
   if (liveUrl == null && await tabManager.ensureContentScript(tabId)) {
     liveUrl = await tabManager.readPageUrl(tabId);
@@ -1262,8 +1271,9 @@ async function handleNavigate(commandId, params, sessionId) {
     }
   }
 
-  // Isolated plugin window: active:true only applies inside that window; the window itself is created with focused:false,
-  // so it does not steal the user's current window focus. Background tabs are throttled by Chrome, so the tab must stay active within the window.
+  // Isolated plugin window: active:true only applies inside that window. The window is created
+  // unfocused so it does not steal the user's current focus, then ensureForeground() below lifts
+  // Chrome's hidden-tab throttling when needed (see TabManager background compatibility modes).
   const tab = await tabManager.openInPluginWindow(params.url);
   if (!tab?.id) {
     sendCallbackSafe(commandId, failResult('Failed to open tab in the AgentSphere window', ErrorCategory.NO_TAB), null, sessionId);
@@ -1275,6 +1285,8 @@ async function handleNavigate(commandId, params, sessionId) {
     sendCallbackSafe(commandId, failResult('AgentSphere window state is not initialized; reload the extension', ErrorCategory.NO_TAB), tab.id, sessionId);
     return;
   }
+  // Focus before waiting for load so the new page's scripts are not throttled while it initialises.
+  await tabManager.ensureForeground(tab.id);
   await tabManager.waitForTabComplete(tab.id, 10000);
   await waitIdle(tab.id);
   if (!await tabManager.ensureContentScript(tab.id)) {

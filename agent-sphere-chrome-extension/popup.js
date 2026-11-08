@@ -1,5 +1,5 @@
 (function () {
-  const DEFAULT_SETTINGS = { frontendUrls: ['https://bole.buukle.top'], mainUrl: 'https://as.buukle.top', backendUrl: 'https://as.buukle.top', agentCursor: true, browserMetrics: false, browserMetricAudit: false, browserMetricSample: 5 };
+  const DEFAULT_SETTINGS = { frontendUrls: ['https://bole.buukle.top'], mainUrl: 'https://as.buukle.top', backendUrl: 'https://as.buukle.top', agentCursor: true, backgroundFocusMode: 'auto', browserMetrics: false, browserMetricAudit: false, browserMetricSample: 5 };
 
   // ---- Version and upgrade notice ----
   // The extension is installed as "Load unpacked" (a Release zip attachment) and manifest has no update_url, so Chrome never auto-updates it.
@@ -146,6 +146,7 @@
       mainUrl: document.getElementById('inputMain').value.trim() || DEFAULT_SETTINGS.mainUrl,
       backendUrl: document.getElementById('inputBackend').value.trim() || DEFAULT_SETTINGS.backendUrl,
       agentCursor: document.getElementById('inputAgentCursor').checked,
+      backgroundFocusMode: document.getElementById('inputBackgroundFocus').value || DEFAULT_SETTINGS.backgroundFocusMode,
       browserMetrics: document.getElementById('inputBrowserMetrics').checked,
       browserMetricAudit: document.getElementById('inputMetricAudit').checked,
       browserMetricSample: (() => {
@@ -649,6 +650,11 @@
     if (me !== document.activeElement) me.value = settings.mainUrl || '';
     if (be !== document.activeElement) be.value = settings.backendUrl || '';
     if (cur) cur.checked = settings.agentCursor !== false;
+
+    const bf = document.getElementById('inputBackgroundFocus');
+    if (bf && bf !== document.activeElement) {
+      bf.value = settings.backgroundFocusMode || DEFAULT_SETTINGS.backgroundFocusMode;
+    }
 
     const bm = document.getElementById('inputBrowserMetrics');
     const ba = document.getElementById('inputMetricAudit');

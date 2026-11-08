@@ -70,6 +70,8 @@
     .field > label { display: block; font-size: 11px; font-weight: 600; color: #8e8e93; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
     .field input:not([type="checkbox"]) { width: 100%; padding: 8px 10px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 13px; outline: none; transition: border-color .2s; background: #ffffff; color: #1f2328; }
     .field input:not([type="checkbox"]):focus { border-color: #0a84ff; }
+    .field select { width: 100%; padding: 8px 10px; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 13px; outline: none; transition: border-color .2s; background: #ffffff; color: #1f2328; }
+    .field select:focus { border-color: #0a84ff; }
 
     /* Switch rows (replaces native checkboxes — those render inconsistently
        across platforms and read as clutter next to the card's rounded inputs). */
@@ -257,6 +259,15 @@
               <span class="sub">Local-only accuracy tracking. Stored in this browser, never uploaded.</span>
             </span>
           </label>
+        </div>
+        <div class="field">
+          <label>Background compatibility</label>
+          <select id="inputBackgroundFocus">
+            <option value="auto">Auto: focus only when Chrome throttles the agent window (recommended)</option>
+            <option value="always">Always: keep the agent window focused while working</option>
+            <option value="never">Never: run in the background (tasks may fail on throttled sites)</option>
+          </select>
+          <div class="help-text">Chrome pauses timers and rendering in hidden or fully covered windows. Auto brings the agent window forward only when that happens, then returns focus after 30 seconds idle. If a site still stalls, switch to Always.</div>
         </div>
         <div class="switch-group" id="auditGroup">
           <label class="switch">

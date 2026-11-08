@@ -10,6 +10,15 @@ const PLUGIN_WINDOW_SIZE = { width: 1280, height: 860 };
 const PLUGIN_WINDOW_OFFSET = 40;
 const PLUGIN_WINDOW_LAYOUT = 1;
 
+// Background compatibility: Chrome throttles hidden/occluded tabs (rAF paused, timers clamped
+// to >=1s, down to ~1/minute after 5 minutes hidden). "auto" focuses the isolated window only
+// when the page really is hidden; "always" keeps it focused before every command; "never" keeps
+// the legacy unfocused behavior.
+const FOCUS_MODES = new Set(['auto', 'always', 'never']);
+// Return focus to the user's window after this much command-free time.
+const FOCUS_IDLE_RELEASE_MS = 30000;
+export const FOCUS_RELEASE_ALARM = 'agent-focus-release';
+
 // content script sendMessage may never reply while a tab navigates/rebuilds -> add a timeout to keep commands from hanging.
 function withTimeout(promise, ms, error) {
   return new Promise((resolve, reject) => {
@@ -38,6 +47,13 @@ export class TabManager {
     this.controlledBySession = new Map();
     // Cache of tabs that already have content scripts injected (avoids re-injecting + a 300ms pause on every command)
     this.injectedTabs = new Set();
+
+    // Focus handling for background compatibility. focusOwned means this worker brought the
+    // isolated window to the foreground and should give focus back when the task goes idle.
+    this.backgroundFocusMode = 'auto';
+    this.focusOwned = false;
+    this.focusRestoreWindowId = null;
+    this.focusReleaseTimer = null;
 
     // Follow tabs opened by the controlled tab (target=_blank / window.open),
     // but only when the opener is already in the isolated plugin window.
@@ -106,7 +122,16 @@ export class TabManager {
 
     chrome.windows.onRemoved.addListener((windowId) => {
       if (windowId !== this.pluginWindowId) return;
+      this.clearFocusOwnership();
       void this.clearPluginState();
+    });
+
+    // If the user moves focus away from the isolated window, drop ownership: the user already
+    // has the window they want, so a later release must not pull focus back to an older one.
+    chrome.windows.onFocusChanged.addListener((windowId) => {
+      if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+      if (this.pluginWindowId != null && Number(windowId) === Number(this.pluginWindowId)) return;
+      this.clearFocusOwnership();
     });
   }
 
@@ -420,6 +445,8 @@ export class TabManager {
       await saveSessionState({ controlledTabId: tab.id });
       await this.injectContentScript(tab.id);
       await this.groupTab(tab.id);
+      // A followed child tab may start loading while hidden; lift throttling the same way navigate does.
+      await this.ensureForeground(tab.id);
       this.tabFollowPending = {
         newTabId: tab.id,
         url: tab.pendingUrl || tab.url || '',
@@ -450,6 +477,93 @@ export class TabManager {
     return this.controlledTabId;
   }
 
+  /** Background compatibility mode: auto (default) / always / never. */
+  setBackgroundFocusMode(mode) {
+    this.backgroundFocusMode = FOCUS_MODES.has(mode) ? mode : 'auto';
+  }
+
+  /** The document's visibilityState, or null when the tab cannot be scripted (navigating/restricted). */
+  async pageVisibility(tabId) {
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => document.visibilityState,
+      });
+      return result || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Drop focus ownership without moving focus (the user already has the window they want). */
+  clearFocusOwnership() {
+    this.focusOwned = false;
+    this.focusRestoreWindowId = null;
+    if (this.focusReleaseTimer) {
+      clearTimeout(this.focusReleaseTimer);
+      this.focusReleaseTimer = null;
+    }
+    chrome.alarms.clear(FOCUS_RELEASE_ALARM).catch(() => {});
+    void clearSessionState('focusOwned');
+    void clearSessionState('focusRestoreWindowId');
+  }
+
+  scheduleFocusRelease() {
+    if (this.focusReleaseTimer) clearTimeout(this.focusReleaseTimer);
+    this.focusReleaseTimer = setTimeout(() => {
+      this.focusReleaseTimer = null;
+      void this.releaseFocus();
+    }, FOCUS_IDLE_RELEASE_MS);
+    // setTimeout does not survive service-worker eviction; the alarm is the durable fallback.
+    chrome.alarms.create(FOCUS_RELEASE_ALARM, { when: Date.now() + FOCUS_IDLE_RELEASE_MS });
+  }
+
+  /** Bring the isolated window forward and remember the window the user was on. */
+  async focusAgentWindow(wid) {
+    const focused = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+    if (focused && Number(focused.id) !== Number(wid)) {
+      this.focusOwned = true;
+      this.focusRestoreWindowId = focused.id;
+    }
+    if (this.focusOwned) {
+      // Persist so the alarm can still return focus after service-worker eviction.
+      void saveSessionState({ focusOwned: true, focusRestoreWindowId: this.focusRestoreWindowId });
+    }
+    const win = await chrome.windows.get(wid).catch(() => null);
+    if (win?.state === 'minimized') {
+      await chrome.windows.update(wid, { state: 'normal' }).catch(() => {});
+    }
+    await chrome.windows.update(wid, { focused: true }).catch(() => {});
+    this.scheduleFocusRelease();
+  }
+
+  /** Return focus to the window the user was on before the agent took it. */
+  async releaseFocus() {
+    if (this.focusReleaseTimer) {
+      clearTimeout(this.focusReleaseTimer);
+      this.focusReleaseTimer = null;
+    }
+    chrome.alarms.clear(FOCUS_RELEASE_ALARM).catch(() => {});
+    if (!this.focusOwned) {
+      // The service worker may have been evicted since the focus was taken: restore ownership
+      // from storage.session so the alarm fallback still works.
+      const st = await loadSessionState();
+      if (st.focusOwned !== true) return;
+      this.focusOwned = true;
+      this.focusRestoreWindowId = st.focusRestoreWindowId ?? null;
+    }
+    this.focusOwned = false;
+    const rid = this.focusRestoreWindowId;
+    this.focusRestoreWindowId = null;
+    void clearSessionState('focusOwned');
+    void clearSessionState('focusRestoreWindowId');
+    if (rid == null) return;
+    const target = await chrome.windows.get(rid).catch(() => null);
+    if (!target) return;
+    await chrome.windows.update(rid, { focused: true }).catch(() => {});
+    console.log('[AgentSphere] focus released to user window', rid);
+  }
+
   /**
    * Bring the controlled tab to the foreground (the active tab within its window).
    *
@@ -459,8 +573,9 @@ export class TabManager {
    * wastes several extra seconds and, stacked together, frequently hits the backend action timeout.
    *
    * <p>Only tabs inside the isolated plugin window may be activated; tabs in the user's window are never touched.
-   * Deliberately only `tabs.update({active:true})`, never `windows.update({focused:true})`:
-   * when the window is visible but unfocused the active tab is usually already counted as `visible`, which lifts throttling without stealing the user's OS focus.
+   * On Windows an unfocused window that is fully covered is reported as `hidden` (native window occlusion),
+   * so activating the tab alone does not lift throttling. In that case the window itself is focused when the
+   * configured background compatibility mode allows it, and focus is returned after an idle period.
    */
   async ensureForeground(tabId) {
     if (!tabId) return;
@@ -477,6 +592,21 @@ export class TabManager {
       if (!tab.active) {
         await chrome.tabs.update(tabId, { active: true });
       }
+
+      if (this.backgroundFocusMode === 'never') return;
+      const visibility = this.backgroundFocusMode === 'always' ? 'hidden' : await this.pageVisibility(tabId);
+      // A genuinely visible page is not throttled, so do not steal focus; just extend the focus lease.
+      if (visibility === 'visible') {
+        if (this.focusOwned) this.scheduleFocusRelease();
+        return;
+      }
+      const focused = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+      if (focused && Number(focused.id) === Number(wid)) {
+        if (this.focusOwned) this.scheduleFocusRelease();
+        return;
+      }
+      console.log('[AgentSphere] agent window hidden, focusing to lift throttling', { tabId, wid, visibility });
+      await this.focusAgentWindow(wid);
     } catch (e) {
       // The tab is closed or not managed by this window: do not block the caller; later actions will each report their own error
     }

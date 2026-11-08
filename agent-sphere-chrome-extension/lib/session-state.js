@@ -23,6 +23,8 @@ const KEYS = [
   'controlledTabId',
   'tabSessionId',
   'tabSessionTabIds',
+  'focusOwned',
+  'focusRestoreWindowId',
 ];
 
 export async function loadSessionState() {

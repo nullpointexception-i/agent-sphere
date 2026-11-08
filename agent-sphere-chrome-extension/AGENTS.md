@@ -40,6 +40,7 @@ page-script.js — MAIN-world auth/session bridge
 - **executeJS results** carry `method`, `resultType`, and optional `warning`.
 - **Timeout layering**: extension `EXECJS_TIMEOUT_MS` (27s) < backend `EXECUTEJS_TIMEOUT_SECONDS` (30s) < `COMMAND_LEASE_MS` (60s).
 - **Tab grouping**: all agent tabs live in a dedicated agent window/group; user tabs are never reused or navigated. `tabGroups` + `offscreen` permissions are required.
+- **Background compatibility**: `backgroundFocusMode` (`auto` default) probes `document.visibilityState`; a hidden/occluded agent window is focused before navigation and actions so Chrome does not pause rAF / clamp timers. `always` focuses every command, `never` keeps the legacy behavior. Focus returns to the user's window after 30s idle (alarm fallback for service-worker eviction).
 - **Session-scoped tabs**: `findReusableTab()` only considers tabs registered to the current session; never fall back to any tab in the agent window.
 - **navigate must verify the real page**: read `location.href` via `agent_sphere_ping`, not `chrome.tabs.url` (stale during redirects).
 - **Results** include `errorCategory` (`not_found`/`csp_blocked`/`detached`/`inject_failed`/`timeout`/`no_tab`) and `method`.
@@ -63,6 +64,7 @@ node -e "const vm=require('vm'),fs=require('fs'); for (const f of ['content.js',
 
 - Log in on a widget/main site → Task badge on.
 - `navigate`: separate unfocused agent window opens; tabs land in the `AgentSphere` group; user window stays active.
+- Hidden/occluded agent window: the next navigate/action brings it forward (auto mode) and completes; focus returns after 30s idle.
 - `navigate` twice with the same URL: reuse only inside the agent window.
 - executeJS on a normal site (scripting) and a strict-CSP site (debugger).
 - Cross-site navigation mid-task → next executeJS recovers.
