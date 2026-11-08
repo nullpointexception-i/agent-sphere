@@ -20,6 +20,9 @@ public interface SessionSpi {
 
     SessionVO updateRunMode(Long id, String runMode);
 
+    /** Latest active training session for this agent and creator, or null. */
+    SessionVO findActiveTrainingSession(Long superAgentId, String createdBy);
+
     void updateSummary(Long sessionId, String summary, String summaryUpdatedAt, Long modelRouteId);
 
     void updateSummaryManually(Long sessionId, String summary);

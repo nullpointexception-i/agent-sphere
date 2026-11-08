@@ -59,6 +59,40 @@ class SuperAgentDirectoryServiceImplTest {
         assertEquals(CommonErrorCode.FORBIDDEN.getCode(), error.getErrorCode());
     }
 
+    @Test
+    void resolveForGroupChat_allowsPublicActiveAgent() {
+        AgentSuperAgent agent = agent(2L);
+        agent.setPublicVisible(true);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+
+        ChatAgentIdentity identity = service.resolveForGroupChat(7L, 1L);
+
+        assertEquals(7L, identity.agentId());
+    }
+
+    @Test
+    void resolveForGroupChat_rejectsPrivateOtherUsersAgent() {
+        when(superAgentMapper.selectById(7L)).thenReturn(agent(2L));
+
+        BizException error = assertThrows(BizException.class,
+                () -> service.resolveForGroupChat(7L, 1L));
+
+        assertEquals(CommonErrorCode.FORBIDDEN.getCode(), error.getErrorCode());
+    }
+
+    @Test
+    void resolveForGroupChat_rejectsPausedPublicAgent() {
+        AgentSuperAgent agent = agent(2L);
+        agent.setPublicVisible(true);
+        agent.setStatus(SuperAgentStatus.PAUSED);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+
+        BizException error = assertThrows(BizException.class,
+                () -> service.resolveForGroupChat(7L, 1L));
+
+        assertEquals(CommonErrorCode.PARAM_INVALID.getCode(), error.getErrorCode());
+    }
+
     private static AgentSuperAgent agent(Long ownerUserId) {
         AgentSuperAgent agent = new AgentSuperAgent();
         agent.setId(7L);

@@ -67,6 +67,13 @@ public class ToolApprovalService {
 
     /** Resolve from the bottom drawer. decisionsJson = [{callId, decision}]. */
     public boolean resolve(Long sessionId, Long runId, String approvalId, String decisionsJson) {
+        return resolve(sessionId, runId, approvalId, decisionsJson, null);
+    }
+
+    /** Resolve and record who actually approved the batch. */
+    public boolean resolve(Long sessionId, Long runId, String approvalId, String decisionsJson,
+                           String approvedBy) {
+        String approver = approvedBy == null || approvedBy.isBlank() ? "user" : approvedBy;
         ToolApprovalVO approval = approvalSpi.getByApprovalId(approvalId);
         if (approval == null || !ToolApprovalState.PENDING.equals(approval.getStatus())) {
             return false;
@@ -76,7 +83,7 @@ public class ToolApprovalService {
         if (decisions == null) {
             return false;
         }
-        approvalSpi.resolve(approvalId, decisionsJson, ToolApprovalState.APPROVED, "user");
+        approvalSpi.resolve(approvalId, decisionsJson, ToolApprovalState.APPROVED, approver);
         for (Map<String, Object> row : rows) {
             if (!pending(row)) {
                 continue;
@@ -93,13 +100,13 @@ public class ToolApprovalService {
                 securityLevel = "L2";
             }
             if (d == ToolApprovalDecision.DENY) {
-                grantSpi.deny(sessionId, runId, toolRef, "user");
+                grantSpi.deny(sessionId, runId, toolRef, approver);
             } else if (d == ToolApprovalDecision.ALLOW_SESSION) {
                 grantSpi.grant(sessionId, runId, toolRef, displayName, securityLevel,
-                        ToolApprovalScope.SESSION.name(), "user");
+                        ToolApprovalScope.SESSION.name(), approver);
             } else if (d == ToolApprovalDecision.ALLOW_RUN) {
                 grantSpi.grant(sessionId, runId, toolRef, displayName, securityLevel,
-                        ToolApprovalScope.RUN.name(), "user");
+                        ToolApprovalScope.RUN.name(), approver);
             }
         }
         eventPublisher.publishEvent(new RuntimeEventVO(

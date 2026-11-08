@@ -1,11 +1,13 @@
 import {
   AppstoreOutlined,
   AudioOutlined,
+  BellOutlined,
   CheckOutlined,
   CloseOutlined,
   ContactsOutlined,
   DeleteOutlined,
   EditOutlined,
+  ExperimentOutlined,
   GlobalOutlined,
   HomeOutlined,
   LogoutOutlined,
@@ -32,6 +34,7 @@ import {
 import {
   App,
   Avatar,
+  Badge,
   Button,
   Drawer,
   Dropdown,
@@ -48,7 +51,7 @@ import {
 import dayjs from 'dayjs';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { API_PATHS } from '@/constants/endpoints';
-import { STATUS } from '@/constants/status';
+import { STATUS, SUPER_AGENT_STATUS_CODE } from '@/constants/status';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 import { useReconnectingSse } from '@/hooks/useReconnectingSse';
 import { agentApi } from '@/services/agentSphere/api';
@@ -62,11 +65,12 @@ import {
   type SessionInputDecision,
 } from '@/services/agentSphere/im';
 import {
+  type PublicSuperAgent,
   type SuperAgent,
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
-import { messageText, parsedContent } from '../im/components/messageUtils';
+import { messageText } from '../im/components/messageUtils';
 import {
   AgentInputCard,
   ROUTER_APPROVAL,
@@ -81,6 +85,8 @@ import {
   resetAgentStream,
   useAgentStream,
 } from './agentStreamStore';
+import { ApprovalInboxDrawer } from './approval/ApprovalInboxDrawer';
+import { usePendingApprovals } from './approval/usePendingApprovals';
 import {
   conversationAvatar,
   conversationDisplayName,
@@ -94,7 +100,6 @@ import {
   mergeConversation,
   mergeMessages,
   messageTime,
-  otherUserParticipant,
   positionLabel,
   sortConversations,
   statusLabel,
@@ -105,6 +110,7 @@ import { tw } from './i18n';
 import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
+import { TrainingPanel } from './training/TrainingPanel';
 
 type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'me';
 
@@ -115,6 +121,14 @@ export default function WorkspacePage() {
   const me = getStoredUser() || initialState?.currentUser;
   const [tab, setTab] = useState<Tab>('home');
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [trainingAgent, setTrainingAgent] = useState<SuperAgent | null>(null);
+  const {
+    items: pendingApprovals,
+    loading: approvalsLoading,
+    reload: reloadApprovals,
+    count: pendingApprovalCount,
+  } = usePendingApprovals();
 
   const openChat = (id: number) => {
     setConversationId(id);
@@ -122,42 +136,67 @@ export default function WorkspacePage() {
   };
 
   return (
-    <div className={styles.backdrop}>
-      <div className={styles.app}>
-        <SideRail tab={tab} onChange={setTab} me={me} styles={styles} />
-        <div className={styles.main} id="workspace-main">
-          {tab === 'chat' ? (
-            <ChatTab
-              conversationId={conversationId}
-              onOpenChat={setConversationId}
-              onCloseChat={() => setConversationId(null)}
-            />
-          ) : (
-            <>
-              <TopBar me={me} />
-              <div className={styles.content}>
-                {tab === 'home' ? (
-                  <HomeTab
-                    onOpenAvatars={() => setTab('avatars')}
-                    onOpenChatList={() => setTab('chat')}
-                    onOpenChat={openChat}
-                  />
-                ) : null}
-                {tab === 'avatars' ? (
-                  <AvatarsTab onOpenChat={openChat} />
-                ) : null}
-                {tab === 'contacts' ? (
-                  <ContactsTab onOpenChat={openChat} />
-                ) : null}
-                {tab === 'me' ? (
-                  <MeTab me={me} onOpenAvatars={() => setTab('avatars')} />
-                ) : null}
-              </div>
-            </>
-          )}
+    <>
+      <div className={styles.backdrop}>
+        <div className={styles.app}>
+          <SideRail
+            tab={tab}
+            onChange={setTab}
+            me={me}
+            styles={styles}
+            pendingCount={pendingApprovalCount}
+            onOpenApprovals={() => setApprovalOpen(true)}
+          />
+          <div className={styles.main} id="workspace-main">
+            {tab === 'chat' ? (
+              <ChatTab
+                conversationId={conversationId}
+                onOpenChat={setConversationId}
+                onCloseChat={() => setConversationId(null)}
+              />
+            ) : (
+              <>
+                <TopBar me={me} />
+                <div className={styles.content}>
+                  {tab === 'home' ? (
+                    <HomeTab
+                      onOpenAvatars={() => setTab('avatars')}
+                      onOpenChatList={() => setTab('chat')}
+                      onOpenChat={openChat}
+                    />
+                  ) : null}
+                  {tab === 'avatars' ? (
+                    <AvatarsTab
+                      onOpenChat={openChat}
+                      onStartTraining={(agent) => setTrainingAgent(agent)}
+                    />
+                  ) : null}
+                  {tab === 'contacts' ? (
+                    <ContactsTab onOpenChat={openChat} />
+                  ) : null}
+                  {tab === 'me' ? (
+                    <MeTab me={me} onOpenAvatars={() => setTab('avatars')} />
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+      {trainingAgent ? (
+        <TrainingPanel
+          agent={trainingAgent}
+          onExit={() => setTrainingAgent(null)}
+        />
+      ) : null}
+      <ApprovalInboxDrawer
+        open={approvalOpen}
+        items={pendingApprovals}
+        loading={approvalsLoading}
+        onClose={() => setApprovalOpen(false)}
+        onReload={() => void reloadApprovals()}
+      />
+    </>
   );
 }
 
@@ -208,11 +247,15 @@ function SideRail({
   onChange,
   me,
   styles,
+  pendingCount,
+  onOpenApprovals,
 }: {
   tab: Tab;
   onChange: (tab: Tab) => void;
   me: any;
   styles: any;
+  pendingCount: number;
+  onOpenApprovals: () => void;
 }) {
   const items: { key: Tab; label: string; icon: ReactNode }[] = [
     { key: 'home', label: tw('nav.home', 'Home'), icon: <HomeOutlined /> },
@@ -244,6 +287,20 @@ function SideRail({
         </div>
       ))}
       <div className={styles.railSpacer} />
+      <div
+        className={styles.railItem}
+        title={tw('approval.title', 'Pending approvals')}
+        onClick={onOpenApprovals}
+      >
+        <span className={styles.railIcon}>
+          <Badge count={pendingCount} size="small" offset={[2, -2]}>
+            <BellOutlined />
+          </Badge>
+        </span>
+        <span className={styles.railLabel}>
+          {tw('approval.short', 'Approvals')}
+        </span>
+      </div>
       <div
         className={styles.railItem}
         title={tw('app.operations', 'console')}
@@ -470,13 +527,20 @@ function ConversationRow({
   );
 }
 
-function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
+function AvatarsTab({
+  onOpenChat,
+  onStartTraining,
+}: {
+  onOpenChat: (id: number) => void;
+  onStartTraining: (agent: SuperAgent) => void;
+}) {
   const { styles } = useStyles();
   const { message, modal } = App.useApp();
   const [loading, setLoading] = useState(true);
   const [agents, setAgents] = useState<SuperAgent[]>([]);
   const [positions, setPositions] = useState<SystemDicEntry[]>([]);
   const [startingChat, setStartingChat] = useState(false);
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
@@ -563,6 +627,44 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
       message.error(tw('avatars.chatFailed', 'Failed to start chat'));
     } finally {
       setStartingChat(false);
+    }
+  };
+
+  const startTraining = () => {
+    if (!editingAgent) return;
+    if (editingAgent.status === SUPER_AGENT_STATUS_CODE.ARCHIVED) {
+      message.warning(
+        tw('training.archived', 'Archived avatars cannot enter training mode.'),
+      );
+      return;
+    }
+    const agent = editingAgent;
+    setEditingAgent(null);
+    onStartTraining(agent);
+  };
+
+  const toggleVisibility = async (checked: boolean) => {
+    if (!editingAgent || visibilitySaving) return;
+    setVisibilitySaving(true);
+    try {
+      const updated = await superAgentApi.updateVisibility(
+        editingAgent.id,
+        checked,
+      );
+      setEditingAgent(updated);
+      load();
+      message.success(
+        checked
+          ? tw(
+              'avatars.publicOn',
+              'This avatar is now visible in group creation',
+            )
+          : tw('avatars.publicOff', 'This avatar is now private'),
+      );
+    } catch {
+      message.error(tw('common.saveFailed', 'Save failed'));
+    } finally {
+      setVisibilitySaving(false);
     }
   };
 
@@ -669,6 +771,11 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                     </Tag>
                     {positionLabel(agent) ? (
                       <Tag color="purple">{positionLabel(agent)}</Tag>
+                    ) : null}
+                    {agent.publicVisible ? (
+                      <Tag color="cyan">
+                        {tw('avatars.publicTag', 'Public')}
+                      </Tag>
                     ) : null}
                   </div>
                   <div className={styles.rowDesc}>
@@ -916,6 +1023,28 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
 
               <div className={styles.avatarDetailSection}>
                 <div className={styles.avatarDetailLabel}>
+                  {tw('avatars.publicVisible', 'Visible in group creation')}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Switch
+                    checked={Boolean(editingAgent?.publicVisible)}
+                    loading={visibilitySaving}
+                    disabled={
+                      editingAgent?.status === SUPER_AGENT_STATUS_CODE.ARCHIVED
+                    }
+                    onChange={(checked) => void toggleVisibility(checked)}
+                  />
+                  <span style={{ fontSize: 12, color: '#8c8c8c' }}>
+                    {tw(
+                      'avatars.publicVisibleHint',
+                      'Other members of this tenant can add the avatar to a group chat.',
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.avatarDetailSection}>
+                <div className={styles.avatarDetailLabel}>
                   {tw('avatars.createdAtLabel', 'Created')}
                 </div>
                 <div className={styles.avatarDetailValue}>
@@ -943,6 +1072,17 @@ function AvatarsTab({ onOpenChat }: { onOpenChat: (id: number) => void }) {
                   onClick={startChat}
                 >
                   {tw('avatars.startChat', 'Start chat')}
+                </Button>
+                <Button
+                  block
+                  icon={<ExperimentOutlined />}
+                  style={{ marginTop: 8 }}
+                  disabled={
+                    editingAgent?.status === SUPER_AGENT_STATUS_CODE.ARCHIVED
+                  }
+                  onClick={startTraining}
+                >
+                  {tw('training.open', 'Training mode')}
                 </Button>
                 <div className={styles.avatarSecondaryActions}>
                   <button
@@ -1109,6 +1249,9 @@ function ChatTab({
   const [groupOpen, setGroupOpen] = useState(false);
   const [groupKeyword, setGroupKeyword] = useState('');
   const [groupMembers, setGroupMembers] = useState<number[]>([]);
+  const [groupAgents, setGroupAgents] = useState<number[]>([]);
+  const [publicAvatars, setPublicAvatars] = useState<PublicSuperAgent[]>([]);
+  const [publicAvatarsLoading, setPublicAvatarsLoading] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -1331,6 +1474,8 @@ function ChatTab({
     setGroupOpen(true);
     setGroupKeyword('');
     setGroupMembers([]);
+    setGroupAgents([]);
+    setPublicAvatars([]);
     if (contacts.length > 0) return;
     setContactsLoading(true);
     agentApi.workspaceContacts
@@ -1338,6 +1483,73 @@ function ChatTab({
       .then((page: any) => setContacts(page.records || page || []))
       .catch(() => setContacts([]))
       .finally(() => setContactsLoading(false));
+  };
+
+  useEffect(() => {
+    if (!groupOpen) return;
+    const owners = [...groupMembers, me?.id].filter((value): value is number =>
+      Number.isFinite(Number(value)),
+    );
+    setPublicAvatarsLoading(true);
+    superAgentApi
+      .publicAvatars(owners)
+      .then((rows) => setPublicAvatars(Array.isArray(rows) ? rows : []))
+      .catch(() => setPublicAvatars([]))
+      .finally(() => setPublicAvatarsLoading(false));
+  }, [groupOpen, groupMembers, me?.id]);
+
+  const publicAvatarsByOwner = publicAvatars.reduce<
+    Record<number, PublicSuperAgent[]>
+  >((groups, agent) => {
+    if (!groups[agent.ownerUserId]) groups[agent.ownerUserId] = [];
+    groups[agent.ownerUserId].push(agent);
+    return groups;
+  }, {});
+
+  const toggleAgent = (id: number) => {
+    setGroupAgents((previous) =>
+      previous.includes(id)
+        ? previous.filter((value) => value !== id)
+        : [...previous, id],
+    );
+  };
+
+  const renderAgentChips = (ownerId?: number) => {
+    const list = ownerId == null ? [] : (publicAvatarsByOwner[ownerId] ?? []);
+    if (list.length === 0) return null;
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 6,
+          margin: '4px 0 10px 44px',
+        }}
+      >
+        {list.map((agent) => {
+          const active = groupAgents.includes(agent.id);
+          return (
+            <button
+              key={agent.id}
+              type="button"
+              onClick={() => toggleAgent(agent.id)}
+              style={{
+                border: active ? '1px solid #7c6cff' : '1px solid #e4e4e7',
+                background: active ? '#f1efff' : '#fff',
+                color: active ? '#5b4bdb' : '#52525b',
+                borderRadius: 999,
+                padding: '3px 10px',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+              title={agent.description || agent.name}
+            >
+              {agent.name}
+            </button>
+          );
+        })}
+      </div>
+    );
   };
 
   const createGroup = async () => {
@@ -1357,13 +1569,23 @@ function ChatTab({
         .slice(0, 64) || tw('chat.groupDefaultName', 'Group');
     setCreatingGroup(true);
     try {
+      const allowedOwners = new Set<number>([
+        ...groupMembers.map(Number),
+        ...(me?.id ? [Number(me.id)] : []),
+      ]);
+      const agentIds = groupAgents.filter((id) => {
+        const agent = publicAvatars.find((item) => item.id === id);
+        return Boolean(agent && allowedOwners.has(agent.ownerUserId));
+      });
       const conversation = await imApi.createConversation({
         type: 'GROUP',
         title,
-        participantUserIds: groupMembers,
+        participantUserIds: groupMembers.map(Number),
+        agentIds,
       });
       setGroupOpen(false);
       setGroupMembers([]);
+      setGroupAgents([]);
       setConversations((previous) => mergeConversation(previous, conversation));
       openConversation(conversation.id, conversation.lastSeq);
       reloadList();
@@ -1401,10 +1623,19 @@ function ChatTab({
     return left.localeCompare(right);
   });
   const toggleMember = (id: number) => {
-    setGroupMembers((previous) =>
-      previous.includes(id)
-        ? previous.filter((item) => item !== id)
-        : [...previous, id],
+    const nextMembers = groupMembers.includes(id)
+      ? groupMembers.filter((item) => item !== id)
+      : [...groupMembers, id];
+    setGroupMembers(nextMembers);
+    const allowedOwners = new Set<number>([
+      ...nextMembers.map(Number),
+      ...(me?.id ? [Number(me.id)] : []),
+    ]);
+    setGroupAgents((previous) =>
+      previous.filter((agentId) => {
+        const agent = publicAvatars.find((item) => item.id === agentId);
+        return Boolean(agent && allowedOwners.has(agent.ownerUserId));
+      }),
     );
   };
 
@@ -1740,27 +1971,48 @@ function ChatTab({
                 </div>
               ) : (
                 selectedContacts.map((user) => (
-                  <div key={user.id} className={styles.groupSelectedRow}>
-                    <Avatar
-                      size={34}
-                      src={user.avatar}
-                      style={avatarStyle(displayName(user))}
-                    >
-                      {initials(displayName(user))}
-                    </Avatar>
-                    <span className={styles.groupSelectedName}>
-                      {displayName(user)}
-                    </span>
-                    <button
-                      type="button"
-                      className={styles.groupRemove}
-                      onClick={() => toggleMember(user.id)}
-                    >
-                      <CloseOutlined />
-                    </button>
+                  <div key={user.id}>
+                    <div className={styles.groupSelectedRow}>
+                      <Avatar
+                        size={34}
+                        src={user.avatar}
+                        style={avatarStyle(displayName(user))}
+                      >
+                        {initials(displayName(user))}
+                      </Avatar>
+                      <span className={styles.groupSelectedName}>
+                        {displayName(user)}
+                      </span>
+                      <button
+                        type="button"
+                        className={styles.groupRemove}
+                        onClick={() => toggleMember(user.id)}
+                      >
+                        <CloseOutlined />
+                      </button>
+                    </div>
+                    {renderAgentChips(Number(user.id))}
                   </div>
                 ))
               )}
+              {me?.id ? (
+                <div style={{ marginTop: 8 }}>
+                  <div className={styles.groupSelectedRow}>
+                    <Avatar
+                      size={34}
+                      src={me.avatar}
+                      style={avatarStyle(displayName(me))}
+                    >
+                      {initials(displayName(me))}
+                    </Avatar>
+                    <span className={styles.groupSelectedName}>
+                      {tw('chat.myPublicAvatars', 'My public avatars')}
+                    </span>
+                    {publicAvatarsLoading ? <Spin size="small" /> : null}
+                  </div>
+                  {renderAgentChips(Number(me.id))}
+                </div>
+              ) : null}
             </div>
             <div className={styles.groupFooter}>
               <Button

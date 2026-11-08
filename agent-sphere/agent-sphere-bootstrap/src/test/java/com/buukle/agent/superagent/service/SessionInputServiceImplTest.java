@@ -1,6 +1,7 @@
 package com.buukle.agent.superagent.service;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -18,6 +19,7 @@ import com.buukle.agent.superagent.spi.SessionInputResolveCommand;
 import com.buukle.agent.superagent.spi.SessionInputStatus;
 import com.buukle.agent.superagent.spi.SessionInputType;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -69,6 +71,8 @@ class SessionInputServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        AuthContext.setUserId(9L);
+        AuthContext.setUsername("owner");
         when(resumePortProvider.getIfAvailable()).thenReturn(resumePort);
         service = new SessionInputServiceImpl(inputMapper, outboundMapper, wakePublisher,
                 superAgentMapper, userSpi, new AgentMetrics(registryProvider), resumePortProvider);
@@ -80,6 +84,11 @@ class SessionInputServiceImplTest {
         UserVO owner = new UserVO();
         owner.setUsername("owner");
         when(userSpi.getByUserId(9L)).thenReturn(owner);
+    }
+
+    @AfterEach
+    void tearDown() {
+        AuthContext.clear();
     }
 
     @Test
@@ -170,7 +179,7 @@ class SessionInputServiceImplTest {
                 "[{\"callId\":\"call_1\",\"decision\":\"ALLOW_ONCE\"}]");
 
         verify(resumePort).resolveApproval(SESSION_ID, RUN_ID, "ap1abc456",
-                "[{\"callId\":\"call_1\",\"decision\":\"ALLOW_ONCE\"}]");
+                "[{\"callId\":\"call_1\",\"decision\":\"ALLOW_ONCE\"}]", "owner");
         verify(inputMapper, atLeastOnce()).updateById(any(AgentSessionInput.class));
     }
 

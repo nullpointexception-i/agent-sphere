@@ -96,6 +96,7 @@ export interface CreateConversationInput {
   title?: string;
   purpose?: string;
   participantUserIds?: number[];
+  agentIds?: number[];
   gateConfig?: string;
 }
 

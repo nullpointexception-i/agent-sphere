@@ -9,6 +9,7 @@ import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.superagent.dtvo.dto.CreateSuperAgentDTO;
+import com.buukle.agent.superagent.dtvo.dto.UpdateVisibilityDTO;
 import com.buukle.agent.superagent.service.SuperAgentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping(ApiPrefix.V1 + "/super-agents")
@@ -42,6 +45,14 @@ public class SuperAgentController extends BaseController {
     @GetMapping
     public ResponseEntity<?> list(@RequestParam(required = false) Integer limit) {
         return ok(superAgentService.list(limit == null ? 0 : limit));
+    }
+
+    /** Public avatar picker for group creation; never exposes prompts or instance ids. */
+    @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
+    @GetMapping("/public")
+    public ResponseEntity<?> listPublic(
+            @RequestParam(required = false) List<Long> ownerUserIds) {
+        return ok(superAgentService.listPublic(ownerUserIds));
     }
 
     @RequirePermission(PermissionCodes.SUPER_AGENT_READ)
@@ -69,6 +80,14 @@ public class SuperAgentController extends BaseController {
     public ResponseEntity<?> delete(@PathVariable Long id) {
         superAgentService.delete(id);
         return deleted();
+    }
+
+    @AuditLog(action = "UPDATE", resourceType = "SuperAgent", resourceId = "#id")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_UPDATE)
+    @PatchMapping("/{id}/visibility")
+    public ResponseEntity<?> updateVisibility(@PathVariable Long id,
+                                              @RequestBody UpdateVisibilityDTO dto) {
+        return ok(superAgentService.updateVisibility(id, dto.isPublicVisible()));
     }
 
     @AuditLog(action = "PAUSE", resourceType = "SuperAgent", resourceId = "#id")

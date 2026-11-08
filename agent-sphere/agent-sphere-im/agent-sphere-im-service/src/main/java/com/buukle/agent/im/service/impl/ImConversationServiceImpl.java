@@ -91,6 +91,8 @@ public class ImConversationServiceImpl implements ImConversationService {
         if (!ImConversationType.DM.equals(type) && !ImConversationType.GROUP.equals(type)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "type must be DM or GROUP");
         }
+        List<ChatAgentIdentity> groupAgents = ImConversationType.GROUP.equals(type)
+                ? resolveGroupAgents(dto.getAgentIds(), userId) : List.of();
         if (ImConversationType.DM.equals(type)) {
             Long otherUserId = firstOtherUser(dto.getParticipantUserIds(), userId);
             ImConversation existing = findExistingDm(userId, otherUserId, null);
@@ -118,6 +120,10 @@ public class ImConversationServiceImpl implements ImConversationService {
                 addParticipantInternal(conversation.getId(), participantUserId,
                         ImParticipantType.USER, ImParticipantRole.MEMBER, null);
             }
+        }
+        for (ChatAgentIdentity agent : groupAgents) {
+            addParticipantInternal(conversation.getId(), agent.agentId(),
+                    ImParticipantType.AGENT, ImParticipantRole.BOT, agent.name());
         }
         publishToMembersAfterCommit(conversation.getId(), ImStreamEvent.builder()
                 .type(ImStreamEventType.CONVERSATION_CREATED)
@@ -493,9 +499,18 @@ public class ImConversationServiceImpl implements ImConversationService {
         if (!ImParticipantType.USER.equals(type) && !ImParticipantType.AGENT.equals(type)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "participantType must be USER or AGENT");
         }
+        String displayName = dto.getDisplayName();
+        if (ImParticipantType.AGENT.equals(type)) {
+            SuperAgentDirectorySpi directory = requireDirectory();
+            ChatAgentIdentity identity = directory.resolveForGroupChat(
+                    dto.getParticipantId(), userId);
+            if (displayName == null || displayName.isBlank()) {
+                displayName = identity.name();
+            }
+        }
         String role = dto.getRole() == null ? ImParticipantRole.MEMBER : dto.getRole().toUpperCase();
         ImParticipant participant = addParticipantInternal(conversationId, dto.getParticipantId(),
-                type, role, dto.getDisplayName());
+                type, role, displayName);
         publishToMembersAfterCommit(conversationId, ImStreamEvent.builder()
                 .type(ImStreamEventType.PARTICIPANT_CHANGED)
                 .conversationId(conversationId)
@@ -723,6 +738,33 @@ public class ImConversationServiceImpl implements ImConversationService {
             }
         }
         return null;
+    }
+
+    /**
+     * Validate every initial agent before the conversation row is inserted so a
+     * forbidden/private avatar cannot leave a half-created group behind.
+     */
+    private List<ChatAgentIdentity> resolveGroupAgents(List<Long> agentIds, Long userId) {
+        if (agentIds == null || agentIds.isEmpty()) {
+            return List.of();
+        }
+        SuperAgentDirectorySpi directory = requireDirectory();
+        List<ChatAgentIdentity> result = new ArrayList<>();
+        for (Long agentId : new LinkedHashSet<>(agentIds)) {
+            if (agentId != null) {
+                result.add(directory.resolveForGroupChat(agentId, userId));
+            }
+        }
+        return result;
+    }
+
+    private SuperAgentDirectorySpi requireDirectory() {
+        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+        if (directory == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "super-agent directory is unavailable");
+        }
+        return directory;
     }
 
     private ImParticipant addParticipantInternal(Long conversationId, Long participantId,

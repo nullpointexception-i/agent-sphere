@@ -36,8 +36,14 @@ public class RouterInputResumeService implements RouterInputResumePort {
 
     @Override
     public void resolveApproval(Long sessionId, Long runId, String approvalId, String decisionsJson) {
-        withOwnerContext(sessionId, () ->
-                chatRuntimeService.resolveToolApproval(sessionId, runId, approvalId, decisionsJson));
+        resolveApproval(sessionId, runId, approvalId, decisionsJson, null);
+    }
+
+    @Override
+    public void resolveApproval(Long sessionId, Long runId, String approvalId,
+                                String decisionsJson, String approvedBy) {
+        withOwnerContext(sessionId, () -> chatRuntimeService.resolveToolApproval(
+                sessionId, runId, approvalId, decisionsJson, approvedBy));
     }
 
     private void withOwnerContext(Long sessionId, Runnable action) {

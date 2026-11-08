@@ -227,4 +227,69 @@ export default {
     'The key is stored securely and never displayed in plain text.',
   'workspace.me.keyPlaceholder': 'Enter API Key',
   'workspace.me.currentDefault': ' (current)',
+
+  'workspace.common.retry': 'Retry',
+  'workspace.common.refresh': 'Refresh',
+  'workspace.approval.title': 'Pending approvals',
+  'workspace.approval.short': 'Approvals',
+  'workspace.approval.empty': 'No pending approvals',
+  'workspace.approval.deny': 'Do not allow',
+  'workspace.approval.once': 'Allow once',
+  'workspace.approval.run': 'Allow for this run',
+  'workspace.approval.session': 'Allow for this session',
+  'workspace.approval.arguments': 'Arguments',
+  'workspace.approval.submit': 'Submit',
+  'workspace.approval.submitted': 'Approval submitted',
+  'workspace.approval.submitFailed': 'Failed to submit approval',
+  'workspace.approval.denyAll': 'Deny all',
+  'workspace.approval.denyAllConfirm': 'Deny all tool calls in this batch?',
+  'workspace.approval.callsMissing':
+    'Tool call details are unavailable; handle it in the console.',
+  'workspace.approval.unknownAgent': 'Avatar',
+
+  'workspace.training.open': 'Training mode',
+  'workspace.training.mode': 'Training',
+  'workspace.training.subtitle':
+    'Talk directly to the Worker and evolve its capabilities',
+  'workspace.training.exit': 'Exit training',
+  'workspace.training.capabilities': 'Capabilities',
+  'workspace.training.newSession': 'New session',
+  'workspace.training.resetTitle': 'Start a new training session?',
+  'workspace.training.resetContent':
+    'The current training context will be closed. Capability bindings are kept.',
+  'workspace.training.resetOk': 'New session',
+  'workspace.training.resetFailed': 'Failed to reset the session',
+  'workspace.training.loadFailed': 'Failed to open training mode',
+  'workspace.training.workerCapabilities': 'Worker capabilities',
+  'workspace.training.workerHint':
+    'Training uses the same Worker instance as production tasks. Changes apply to the next run.',
+  'workspace.training.impact':
+    'Capability edits affect this avatar’s real Worker tasks.',
+  'workspace.training.configure': 'Configure capabilities',
+  'workspace.training.workerMissing':
+    'Worker instance is still loading; reopen this panel if it does not appear.',
+  'workspace.training.empty':
+    'Talk directly to the Worker. Ask it to demonstrate a capability, then adjust the bindings on the right.',
+  'workspace.training.placeholder':
+    'Describe what you want the Worker to learn or test…',
+  'workspace.training.send': 'Send',
+  'workspace.training.stop': 'Stop',
+  'workspace.training.sendFailed': 'Failed to send message',
+  'workspace.training.stopFailed': 'Failed to stop the run',
+  'workspace.training.replyFailed': 'Failed to submit the answer',
+  'workspace.training.approvalFailed': 'Failed to submit approval',
+  'workspace.training.approvalNotice':
+    'The Worker is waiting for an L2 tool approval.',
+  'workspace.training.clarificationNotice':
+    'The Worker is waiting for your answer in the conversation above.',
+  'workspace.training.archived': 'Archived avatars cannot enter training mode.',
+
+  'workspace.avatars.publicVisible': 'Visible in group creation',
+  'workspace.avatars.publicVisibleHint':
+    'Other members of this tenant can add the avatar to a group chat.',
+  'workspace.avatars.publicTag': 'Public',
+  'workspace.avatars.publicOn': 'This avatar is now visible in group creation',
+  'workspace.avatars.publicOff': 'This avatar is now private',
+
+  'workspace.chat.myPublicAvatars': 'My public avatars',
 };

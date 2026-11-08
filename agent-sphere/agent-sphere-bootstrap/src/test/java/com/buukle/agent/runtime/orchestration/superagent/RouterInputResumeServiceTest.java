@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
@@ -67,12 +68,25 @@ class RouterInputResumeServiceTest {
         doAnswer(inv -> {
             assertEquals("owner", AuthContext.getUsername());
             return null;
-        }).when(chatRuntimeService).resolveToolApproval(anyLong(), anyLong(), anyString(), anyString());
+        }).when(chatRuntimeService).resolveToolApproval(
+                anyLong(), anyLong(), anyString(), anyString(), any());
 
         service.resolveApproval(SESSION_ID, RUN_ID, "ap1abc456", "[{\"callId\":\"c1\"}]");
 
         verify(chatRuntimeService).resolveToolApproval(SESSION_ID, RUN_ID, "ap1abc456",
-                "[{\"callId\":\"c1\"}]");
+                "[{\"callId\":\"c1\"}]", null);
+    }
+
+    @Test
+    void resolveApprovalPassesRealApprover() {
+        stubOwnerSession("owner");
+        RouterInputResumeService service = new RouterInputResumeService(sessionSpi, chatRuntimeService);
+
+        service.resolveApproval(SESSION_ID, RUN_ID, "ap1abc456",
+                "[{\"callId\":\"c1\"}]", "alice");
+
+        verify(chatRuntimeService).resolveToolApproval(SESSION_ID, RUN_ID, "ap1abc456",
+                "[{\"callId\":\"c1\"}]", "alice");
     }
 
     @Test

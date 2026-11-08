@@ -628,15 +628,10 @@ export default function ImPage() {
       participantUserIds: (values.participantUserIds ?? [])
         .map((value: string | number) => Number(value))
         .filter((value: number) => Number.isFinite(value)),
+      agentIds: (values.agentIds ?? [])
+        .map((value: string | number) => Number(value))
+        .filter((value: number) => Number.isFinite(value)),
     });
-    for (const agentId of values.agentIds ?? []) {
-      const agent = agentOptions.find((item) => item.id === Number(agentId));
-      await imApi.addParticipant(created.id, {
-        participantType: 'AGENT',
-        participantId: Number(agentId),
-        displayName: agent?.name || '数字员工',
-      });
-    }
     toast.success(t('pages.im.created', 'Conversation created'));
     setCreateOpen(false);
     createForm.resetFields();

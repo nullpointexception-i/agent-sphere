@@ -721,6 +721,12 @@ public class ChatRuntimeService {
     }
 
     public void resolveToolApproval(Long sessionId, Long runId, String approvalId, String decisionsJson) {
+        resolveToolApproval(sessionId, runId, approvalId, decisionsJson,
+                AuthContext.getUsername());
+    }
+
+    public void resolveToolApproval(Long sessionId, Long runId, String approvalId,
+                                    String decisionsJson, String approvedBy) {
         assertSessionOwnership(sessionId);
         ToolApprovalVO approval = toolApprovalService.getByApprovalId(approvalId);
         if (approval == null
@@ -729,7 +735,7 @@ public class ChatRuntimeService {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Tool approval not found");
         }
         if (ToolApprovalState.PENDING.equals(approval.getStatus())) {
-            if (!toolApprovalService.resolve(sessionId, runId, approvalId, decisionsJson)) {
+            if (!toolApprovalService.resolve(sessionId, runId, approvalId, decisionsJson, approvedBy)) {
                 throw new BizException(CommonErrorCode.PARAM_INVALID,
                         "Tool approval is not pending or decisions are invalid");
             }

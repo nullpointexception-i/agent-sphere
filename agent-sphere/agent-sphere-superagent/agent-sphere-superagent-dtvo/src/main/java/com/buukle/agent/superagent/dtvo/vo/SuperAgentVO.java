@@ -11,6 +11,7 @@ public class SuperAgentVO implements Serializable {
     private String agentKey;
     private String name;
     private String description;
+    private Boolean publicVisible;
     private Long routerInstanceId;
     private Long workerInstanceId;
     private String positionCode;

@@ -1,5 +1,6 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantScopeHolder;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -240,11 +241,23 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             if (input == null) {
                 throw new BizException(CommonErrorCode.PARAM_INVALID, "Pending approval not found");
             }
+            // Approval cards are visible to the whole group, but only the avatar
+            // owner (or a platform super admin) may authorize the tool calls.
+            if (input.getTenantId() != null) {
+                TenantContext.set(input.getTenantId());
+            }
+            AgentSuperAgent owner = superAgentMapper.selectById(input.getSuperAgentId());
+            if (owner == null
+                    || (!AuthContext.isSuperAdmin()
+                        && !java.util.Objects.equals(AuthContext.getUserId(), owner.getOwnerUserId()))) {
+                throw new BizException(CommonErrorCode.FORBIDDEN);
+            }
             RouterInputResumePort port = resumePortProvider.getIfAvailable();
             if (port == null) {
                 throw new BizException(CommonErrorCode.PARAM_INVALID, "Approval resume is unavailable");
             }
-            port.resolveApproval(input.getSessionId(), input.getRunId(), inputId, decisionsJson);
+            port.resolveApproval(input.getSessionId(), input.getRunId(), inputId,
+                    decisionsJson, AuthContext.getUsername());
             // Mirror answerRouterClarification: the resume path already resolved the
             // synchronously published event; a duplicate ANSWERED card outbound would
             // abort the caller's transaction via the swallowed duplicate key.

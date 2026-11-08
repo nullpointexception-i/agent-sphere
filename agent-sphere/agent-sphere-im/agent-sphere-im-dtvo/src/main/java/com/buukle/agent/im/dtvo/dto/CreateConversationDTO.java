@@ -19,6 +19,8 @@ public class CreateConversationDTO implements Serializable {
     private String purpose;
     /** Initial members (user IDs, excluding the creator). */
     private List<Long> participantUserIds;
+    /** Initial Super-Agent participants (owner avatars or public avatars). */
+    private List<Long> agentIds;
     /** Group-level dispatch rules (JSON string). */
     private String gateConfig;
 }

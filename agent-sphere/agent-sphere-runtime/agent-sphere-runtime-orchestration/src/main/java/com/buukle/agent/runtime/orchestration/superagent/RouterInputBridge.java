@@ -139,7 +139,7 @@ public class RouterInputBridge {
             case TOOL_APPROVAL_PENDING -> spi.projectPending(new SessionInputCommand(
                     session.agentId(), session.threadId(), data.getSessionId(), data.getRunId(),
                     SessionInputType.APPROVAL, data.getApprovalId(),
-                    data.getPrompt(), null, null, null,
+                    approvalTitle(session, data.getPrompt()), null, null, null,
                     data.getToolCallsJson()));
             case TOOL_APPROVAL_RESPONDED -> spi.projectResolved(resolveCommand(
                     SessionInputType.APPROVAL, data.getApprovalId(),
@@ -181,9 +181,13 @@ public class RouterInputBridge {
         SessionInfo info = null;
         try {
             SessionVO session = sessionSpi.getSession(sessionId);
-            if (session != null && SessionType.ROUTER.equals(session.getSessionType())
-                    && session.getSuperAgentId() != null && session.getThreadId() != null) {
-                info = new SessionInfo(session.getThreadId(), session.getSuperAgentId());
+            boolean parkedSession = session != null
+                    && (SessionType.ROUTER.equals(session.getSessionType())
+                        || SessionType.WORKER.equals(session.getSessionType()));
+            if (parkedSession && session.getSuperAgentId() != null
+                    && session.getThreadId() != null) {
+                info = new SessionInfo(session.getThreadId(), session.getSuperAgentId(),
+                        session.getSessionType());
             }
         } catch (Exception e) {
             log.debug("Router session lookup failed: session={}, error={}", sessionId, e.getMessage());
@@ -226,7 +230,14 @@ public class RouterInputBridge {
         return fallback;
     }
 
-    private record SessionInfo(Long threadId, Long agentId) {
+    private static String approvalTitle(SessionInfo session, String prompt) {
+        String base = prompt == null || prompt.isBlank()
+                ? "Tool call requires confirmation" : prompt;
+        return SessionType.WORKER.equals(session.sessionType())
+                ? "Worker: " + base : base;
+    }
+
+    private record SessionInfo(Long threadId, Long agentId, String sessionType) {
     }
 
     private record CachedSession(SessionInfo info, long expiresAt) {

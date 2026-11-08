@@ -9,6 +9,7 @@ import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.domain.AgentSession;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.enums.SessionStatus;
+import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.exception.InstanceErrorCode;
 import com.buukle.agent.instance.repository.InstanceMapper;
@@ -75,6 +76,22 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         session.setRunMode(com.buukle.agent.common.constant.RunMode.from(runMode).name());
         updateById(session);
         return sessionConverter.toVO(session);
+    }
+
+    @Override
+    public SessionVO findActiveTrainingSession(Long superAgentId, String createdBy) {
+        if (superAgentId == null || createdBy == null || createdBy.isBlank()) {
+            return null;
+        }
+        AgentSession session = lambdaQuery()
+                .eq(AgentSession::getSuperAgentId, superAgentId)
+                .eq(AgentSession::getSessionType, SessionType.TRAINING)
+                .eq(AgentSession::getCreatedBy, createdBy)
+                .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
+                .orderByDesc(AgentSession::getId)
+                .last("LIMIT 1")
+                .one();
+        return session == null ? null : sessionConverter.toVO(session);
     }
 
     @Override

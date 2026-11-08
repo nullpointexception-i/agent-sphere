@@ -9,6 +9,12 @@ export interface StatusMeta {
   labelKey: string;
 }
 
+export const SUPER_AGENT_STATUS_CODE = {
+  ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
+  ARCHIVED: 'ARCHIVED',
+} as const;
+
 export const SUPER_AGENT_STATUS: Record<string, StatusMeta> = {
   ACTIVE: { color: 'green', labelKey: 'pages.superAgent.agentStatus.active' },
   PAUSED: { color: 'orange', labelKey: 'pages.superAgent.agentStatus.paused' },

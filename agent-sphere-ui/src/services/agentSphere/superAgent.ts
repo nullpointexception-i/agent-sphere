@@ -10,6 +10,7 @@ export interface SuperAgent {
   agentKey?: string;
   name: string;
   description?: string;
+  publicVisible?: boolean;
   routerInstanceId?: number;
   workerInstanceId?: number;
   positionCode?: string;
@@ -38,6 +39,47 @@ export interface SuperAgentInstances {
     modelRouteId?: number;
     createdBy?: string;
   };
+}
+
+export interface PublicSuperAgent {
+  id: number;
+  ownerUserId: number;
+  name: string;
+  description?: string;
+  positionCode?: string;
+  positionNameCn?: string;
+  positionNameEn?: string;
+  status: string;
+}
+
+export interface PendingApproval {
+  approvalId: string;
+  sessionId: number;
+  runId: number;
+  sessionType?: string;
+  superAgentId?: number;
+  agentName?: string;
+  workItemId?: number;
+  sessionTitle?: string;
+  toolCallsJson?: string;
+  createdAt?: string;
+}
+
+export interface ApprovalDecision {
+  callId: string;
+  decision: string;
+}
+
+export interface TrainingSession {
+  sessionId: number;
+  superAgentId: number;
+  workerInstanceId: number;
+  status?: string;
+}
+
+export interface TrainingChatResult {
+  runId?: number;
+  status?: string;
 }
 
 export interface WorkItem {
@@ -139,5 +181,43 @@ export const superAgentApi = {
     request<any>(
       `${BASE}/super-agents/${agentId}/channels/${channelId}/status?status=${status}`,
       { method: 'PATCH' },
+    ),
+  updateVisibility: (agentId: number, publicVisible: boolean) =>
+    request<SuperAgent>(`${BASE}/super-agents/${agentId}/visibility`, {
+      method: 'PATCH',
+      data: { publicVisible },
+    }),
+  publicAvatars: (ownerUserIds?: number[]) =>
+    request<PublicSuperAgent[]>(`${BASE}/super-agents/public`, {
+      params:
+        ownerUserIds && ownerUserIds.length > 0
+          ? { ownerUserIds: ownerUserIds.join(',') }
+          : undefined,
+    }),
+  pendingApprovals: () =>
+    request<PendingApproval[]>(`${BASE}/super-agents/approvals/pending`),
+  resolveApproval: (approvalId: string, decisions: ApprovalDecision[]) =>
+    request<void>(`${BASE}/super-agents/approvals/${approvalId}/resolve`, {
+      method: 'POST',
+      data: { decisions },
+    }),
+  trainingSession: (agentId: number) =>
+    request<TrainingSession>(
+      `${BASE}/super-agents/${agentId}/training-sessions`,
+      { method: 'POST' },
+    ),
+  sendTrainingMessage: (
+    agentId: number,
+    sessionId: number,
+    data: { message: string; runMode?: string; modelRouteId?: number },
+  ) =>
+    request<TrainingChatResult>(
+      `${BASE}/super-agents/${agentId}/training-sessions/${sessionId}/messages`,
+      { method: 'POST', data },
+    ),
+  resetTrainingSession: (agentId: number, sessionId: number) =>
+    request<void>(
+      `${BASE}/super-agents/${agentId}/training-sessions/${sessionId}/reset`,
+      { method: 'POST' },
     ),
 };

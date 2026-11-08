@@ -18,6 +18,7 @@ import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.dtvo.dto.CreateSuperAgentDTO;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentInstancesVO;
+import com.buukle.agent.superagent.dtvo.vo.SuperAgentPublicVO;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentVO;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.AgentRouterPromptService;
@@ -32,6 +33,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -216,6 +219,49 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         return toVO(agent);
     }
 
+    @Override
+    public SuperAgentVO updateVisibility(Long id, boolean publicVisible) {
+        AgentSuperAgent agent = requireOwned(id);
+        agent.setPublicVisible(publicVisible);
+        superAgentMapper.updateById(agent);
+        return toVO(agent);
+    }
+
+    @Override
+    public List<SuperAgentPublicVO> listPublic(List<Long> ownerUserIds) {
+        LinkedHashSet<Long> owners = new LinkedHashSet<>();
+        if (ownerUserIds != null) {
+            for (Long ownerUserId : ownerUserIds) {
+                if (ownerUserId != null) {
+                    owners.add(ownerUserId);
+                }
+            }
+        }
+        if (owners.isEmpty()) {
+            owners.add(currentUserId());
+        }
+        List<AgentSuperAgent> agents = superAgentMapper.selectList(
+                Wrappers.<AgentSuperAgent>lambdaQuery()
+                        .in(AgentSuperAgent::getOwnerUserId, owners)
+                        .eq(AgentSuperAgent::getPublicVisible, true)
+                        .eq(AgentSuperAgent::getStatus, SuperAgentStatus.ACTIVE)
+                        .orderByDesc(AgentSuperAgent::getId));
+        List<SuperAgentPublicVO> result = new ArrayList<>(agents.size());
+        for (AgentSuperAgent agent : agents) {
+            SuperAgentPublicVO vo = new SuperAgentPublicVO();
+            vo.setId(agent.getId());
+            vo.setOwnerUserId(agent.getOwnerUserId());
+            vo.setName(agent.getName());
+            vo.setDescription(agent.getDescription());
+            vo.setPositionCode(agent.getPositionCode());
+            vo.setPositionNameCn(agent.getPositionNameCn());
+            vo.setPositionNameEn(agent.getPositionNameEn());
+            vo.setStatus(agent.getStatus());
+            result.add(vo);
+        }
+        return result;
+    }
+
     private SystemDicEntry requirePosition(String positionCode) {
         if (positionCode == null || positionCode.isBlank()) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "role is required");
@@ -303,6 +349,7 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         vo.setAgentKey(agent.getAgentKey());
         vo.setName(agent.getName());
         vo.setDescription(agent.getDescription());
+        vo.setPublicVisible(Boolean.TRUE.equals(agent.getPublicVisible()));
         vo.setRouterInstanceId(agent.getRouterInstanceId());
         vo.setWorkerInstanceId(agent.getWorkerInstanceId());
         vo.setPositionCode(agent.getPositionCode());

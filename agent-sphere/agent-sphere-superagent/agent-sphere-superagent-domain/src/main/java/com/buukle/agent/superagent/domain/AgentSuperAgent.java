@@ -22,6 +22,8 @@ public class AgentSuperAgent {
     private String agentKey;
     private String name;
     private String description;
+    /** Exposed to same-tenant members when they create a group chat. */
+    private Boolean publicVisible;
     private Long routerInstanceId;
     private Long workerInstanceId;
     private String positionCode;

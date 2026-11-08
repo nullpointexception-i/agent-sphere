@@ -18,7 +18,7 @@ public class AgentSession {
     private String status;
     /** Session-level run mode preference: WRITE / READ_ONLY. */
     private String runMode;
-    /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG. */
+    /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / ROUTER / WORKER / TRAINING / WATCHDOG. */
     private String sessionType;
     /** Super-Agent ownership (used by ROUTER / WORKER / GROUP_ROUTER). */
     private Long superAgentId;
