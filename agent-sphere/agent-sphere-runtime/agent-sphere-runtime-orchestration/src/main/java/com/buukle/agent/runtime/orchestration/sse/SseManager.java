@@ -36,7 +36,7 @@ public class SseManager {
 
     /** One user-level SSE connection (with device info, used for targeted delivery and the registry). */
     public record UserConnection(String connectionId, String username, String deviceId, String deviceName,
-                                 String source, long connectedAt, SseEmitter emitter) {
+                                 String source, String extensionVersion, long connectedAt, SseEmitter emitter) {
     }
 
     public SseManager(AgentRuntimeProperties properties, SseEventCache sseEventCache,
@@ -83,7 +83,8 @@ public class SseManager {
                         // Also renew and rewrite the registry entry: after a Redis restart/eviction this self-heals within one heartbeat cycle
                         userConnectionRegistry.touch(username, new UserConnectionRegistry.ConnectionView(
                                 connection.connectionId(), connection.deviceId(), connection.deviceName(),
-                                connection.source(), connection.connectedAt(), System.currentTimeMillis()));
+                                connection.source(), connection.extensionVersion(),
+                                connection.connectedAt(), System.currentTimeMillis()));
                     } catch (Exception e) {
                         removeUserConnection(username, connection.connectionId());
                     }
@@ -170,7 +171,8 @@ public class SseManager {
      * Register a user-level SSE connection. A user may have several (multiple browsers);
      * they are registered uniformly by {@link UserConnectionRegistry} and delivery is device-targeted.
      */
-    public SseEmitter registerUser(String username, String deviceId, String deviceName, String source) {
+    public SseEmitter registerUser(String username, String deviceId, String deviceName, String source,
+                                   String extensionVersion) {
         // Same device reconnecting: close its old connection on this replica first, so the old connection's "ghost heartbeat" cannot write the registry entry back
         Map<String, UserConnection> existing = userConnections.get(username);
         if (existing != null && deviceId != null && !deviceId.isBlank()) {
@@ -189,9 +191,9 @@ public class SseManager {
         String connectionId = UUID.randomUUID().toString();
         SseEmitter emitter = new SseEmitter(0L);
         UserConnection connection = new UserConnection(connectionId, username, deviceId, deviceName, source,
-                System.currentTimeMillis(), emitter);
+                extensionVersion, System.currentTimeMillis(), emitter);
         userConnections.computeIfAbsent(username, k -> new ConcurrentHashMap<>()).put(connectionId, connection);
-        userConnectionRegistry.register(username, connectionId, deviceId, deviceName, source,
+        userConnectionRegistry.register(username, connectionId, deviceId, deviceName, source, extensionVersion,
                 connection.connectedAt());
 
         Runnable cleanup = () -> removeUserConnection(username, connectionId);

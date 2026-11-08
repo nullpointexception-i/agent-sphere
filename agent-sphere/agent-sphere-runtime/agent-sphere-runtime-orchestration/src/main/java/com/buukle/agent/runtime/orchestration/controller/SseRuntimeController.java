@@ -21,6 +21,8 @@ public class SseRuntimeController {
     /** Device identifier reported by the extension (used for connection registration / device selection). */
     public static final String HEADER_DEVICE_ID = "X-Device-Id";
     public static final String HEADER_DEVICE_NAME = "X-Device-Name";
+    /** Installed extension version; absent on extensions older than the version-gate release. */
+    public static final String HEADER_EXTENSION_VERSION = "X-Extension-Version";
 
     private final SseRuntimeService sseRuntimeService;
 
@@ -34,7 +36,8 @@ public class SseRuntimeController {
     public SseEmitter streamUser(HttpServletRequest request) {
         return sseRuntimeService.streamUser(
                 request.getHeader(HEADER_DEVICE_ID),
-                decodeHeader(request.getHeader(HEADER_DEVICE_NAME)));
+                decodeHeader(request.getHeader(HEADER_DEVICE_NAME)),
+                request.getHeader(HEADER_EXTENSION_VERSION));
     }
 
     /** Device names may contain non-ASCII characters; the extension URL-encodes them. Decode here, returning the input unchanged on failure. */

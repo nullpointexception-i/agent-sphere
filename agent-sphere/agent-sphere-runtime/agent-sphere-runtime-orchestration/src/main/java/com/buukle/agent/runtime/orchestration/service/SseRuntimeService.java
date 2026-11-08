@@ -26,12 +26,13 @@ public class SseRuntimeService {
     }
 
     /** User-level task command stream (persistent browser extension connection, independent of any session). */
-    public SseEmitter streamUser(String deviceId, String deviceName) {
+    public SseEmitter streamUser(String deviceId, String deviceName, String extensionVersion) {
         String username = AuthContext.getUsername();
         if (username == null || username.isBlank()) {
             throw new BizException(CommonErrorCode.UNAUTHORIZED);
         }
-        return sseManager.registerUser(username, deviceId, deviceName, resolveSource(AuthContext.getToken()));
+        return sseManager.registerUser(username, deviceId, deviceName,
+                resolveSource(AuthContext.getToken()), extensionVersion);
     }
 
     /** Connection source surface (CONSOLE/WIDGET): shown in the device list, looked up by token hash. */

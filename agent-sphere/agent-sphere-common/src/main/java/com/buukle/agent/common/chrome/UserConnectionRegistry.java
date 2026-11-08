@@ -50,7 +50,7 @@ public class UserConnectionRegistry {
 
     /** One live connection. {@code connectedAt} is fixed at connect time and preserved across heartbeat rewrites (so ordering survives a Redis restart). */
     public record ConnectionView(String connectionId, String deviceId, String deviceName,
-                                 String source, long connectedAt, long lastSeen) {
+                                 String source, String extensionVersion, long connectedAt, long lastSeen) {
     }
 
     /** Routing result. */
@@ -71,11 +71,11 @@ public class UserConnectionRegistry {
 
     /** Registers a connection. */
     public void register(String username, String connectionId, String deviceId, String deviceName,
-                         String source, long connectedAt) {
+                         String source, String extensionVersion, long connectedAt) {
         if (username == null || connectionId == null) {
             return;
         }
-        write(username, new ConnectionView(connectionId, deviceId, deviceName, source,
+        write(username, new ConnectionView(connectionId, deviceId, deviceName, source, extensionVersion,
                 connectedAt, System.currentTimeMillis()));
         // Keep only one connection per device: an extension reconnect changes connectionId, and the
         // old connection may not have been declared disconnected yet (after a client abort the TCP
@@ -92,8 +92,8 @@ public class UserConnectionRegistry {
             return;
         }
         write(username, new ConnectionView(connection.connectionId(), connection.deviceId(),
-                connection.deviceName(), connection.source(), connection.connectedAt(),
-                System.currentTimeMillis()));
+                connection.deviceName(), connection.source(), connection.extensionVersion(),
+                connection.connectedAt(), System.currentTimeMillis()));
     }
 
     public void unregister(String username, String connectionId) {

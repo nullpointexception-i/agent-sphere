@@ -5,7 +5,10 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.buukle.agent.common.mcp.TaskMcpCredentialStore;
 import com.buukle.agent.util.markdown.MarkdownRenderer;
+import com.buukle.agent.common.chrome.UserConnectionRegistry;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.config.SystemConfigKeys;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TaskLoopLimitHolder;
 import com.buukle.agent.common.context.TenantContext;
@@ -38,12 +41,14 @@ import com.buukle.agent.tasks.dtvo.TaskArtifactVO;
 import com.buukle.agent.tasks.dtvo.TaskExecutionLogVO;
 import com.buukle.agent.tasks.dtvo.TaskVO;
 import com.buukle.agent.tasks.dtvo.enums.TaskEnum;
+import com.buukle.agent.tasks.exception.TasksErrorCode;
 import com.buukle.agent.tasks.repository.AgentTaskArtifactMapper;
 import com.buukle.agent.tasks.repository.AgentTaskMapper;
 import com.buukle.agent.tasks.service.AgentTaskService;
 import com.buukle.agent.tasks.service.TaskCallbackService;
 import com.buukle.agent.tasks.service.TaskContractValidator;
 import com.buukle.agent.util.json.JsonUtils;
+import com.buukle.agent.common.util.VersionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -88,6 +93,11 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private static final String PHASE_EXECUTE = "execute";
     private static final String PHASE_EXTRACT = "extract";
     private static final String PHASE_REFINE = "refine";
+    /**
+     * External business type of browser-automation tasks (Bole sourcing). Only these are gated by the
+     * extension version: resume parsing and other LLM-only task types do not need the browser.
+     */
+    private static final String BUSINESS_TYPE_BROWSER_TASK = "task";
     /** Failure reason returned to the caller (sent in the callback's remark field). */
     private static final String REASON_LOOP_LIMIT = "The task reached the maximum number of execution turns and was forcibly truncated on the final turn; the model could not finalize";
 
@@ -104,6 +114,8 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private final AgentLlmInteractionRecordSpi llmInteractionRecordSpi;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final TaskMcpCredentialStore taskMcpCredentialStore;
+    private final SystemConfigSpi systemConfigSpi;
+    private final UserConnectionRegistry userConnectionRegistry;
 
     @Value("${hri-ai.tasks.poll-interval:2s}")
     private Duration pollInterval;
@@ -135,6 +147,9 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     @Override
     public TaskVO submit(CreateTaskDTO dto, CallerAuth auth) {
         ResolvedIdentityVO identity = resolveIdentity(auth);
+        if (BUSINESS_TYPE_BROWSER_TASK.equals(auth.businessType())) {
+            assertExtensionVersion(identity.getUsername());
+        }
         InstanceVO instance = resolveInstanceByBusinessType(auth.businessType(), identity.getUsername());
 
         // The external task API has no tenant scope: without this, audit fills tenant_id=0 and
@@ -413,6 +428,49 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                 .filter(i -> ownerUsername == null || ownerUsername.equals(i.getCreatedBy()))
                 .findFirst()
                 .orElseThrow(() -> new BizException(CommonErrorCode.FORBIDDEN, "no available instance for businessType"));
+    }
+
+    /**
+     * Browser-extension compatibility gate.
+     *
+     * <p>The extension reports its installed version on the task SSE connection. When the
+     * administrator has configured {@code plugin.min-extension-version}, tasks for the selected
+     * execution device are rejected before any task/session row is created, so the caller gets a
+     * clear "update the extension" error instead of a task that fails midway.
+     *
+     * <p>Only an explicitly selected target is checked ({@code OK}/{@code DEGRADED}). No online
+     * extension ({@code EMPTY}) or multiple devices without a choice ({@code NEEDS_SELECTION})
+     * keeps the previous behavior; those are separate failure modes.
+     */
+    private void assertExtensionVersion(String username) {
+        String minVersion;
+        try {
+            minVersion = systemConfigSpi.get(SystemConfigKeys.PLUGIN_MIN_EXTENSION_VERSION);
+        } catch (Exception e) {
+            // Config lookup failure must not break task submission; treat it as "gate disabled".
+            log.warn("Extension version gate skipped: failed to read {}: {}",
+                    SystemConfigKeys.PLUGIN_MIN_EXTENSION_VERSION, e.getMessage());
+            return;
+        }
+        if (!StringUtils.hasText(minVersion)) {
+            return;
+        }
+        UserConnectionRegistry.Selection selection = userConnectionRegistry.pick(username);
+        if (selection == null
+                || (selection.state() != UserConnectionRegistry.SelectionState.OK
+                && selection.state() != UserConnectionRegistry.SelectionState.DEGRADED)) {
+            return;
+        }
+        String currentVersion = selection.target().extensionVersion();
+        if (VersionUtils.isAtLeast(currentVersion, minVersion)) {
+            return;
+        }
+        String current = StringUtils.hasText(currentVersion) ? currentVersion : "unknown";
+        log.warn("Extension version gate rejected task: user={} current={} required={}",
+                username, current, minVersion);
+        throw new BizException(TasksErrorCode.EXTENSION_VERSION_TOO_LOW,
+                "Browser extension " + current + " is lower than required " + minVersion,
+                "Update the browser extension to " + minVersion + " or later");
     }
 
     /** Resolves the caller identity: external (code+subject) is looked up via SSO, internal (admin UI) uses AuthContext; failure → 401. */

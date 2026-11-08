@@ -3,6 +3,9 @@ package com.buukle.agent.bootstrap.controller;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.chrome.UserConnectionRegistry;
+import com.buukle.agent.common.config.SystemConfigKeys;
+import com.buukle.agent.common.config.SystemConfigSpi;
 import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
@@ -64,6 +67,7 @@ import static org.mockito.Mockito.verify;
 class AgentTaskServiceTest {
 
     private static final CallerAuth AUTH = CallerAuth.of("bole", "elvin", "sourcing");
+    private static final CallerAuth BROWSER_AUTH = CallerAuth.of("bole", "elvin", "task");
 
     @Mock
     AgentTaskMapper taskMapper;
@@ -87,6 +91,10 @@ class AgentTaskServiceTest {
     TaskContractValidator contractValidator;
     @Mock
     AgentRuntimeProperties runtimeProperties;
+    @Mock
+    SystemConfigSpi systemConfigSpi;
+    @Mock
+    UserConnectionRegistry userConnectionRegistry;
 
     @InjectMocks
     AgentTaskServiceImpl taskService;
@@ -221,6 +229,96 @@ class AgentTaskServiceTest {
         dto.setBusinessType("sourcing");
 
         assertThrows(BizException.class, () -> taskService.submit(dto, AUTH));
+    }
+
+    @Test
+    void submit_extensionVersionTooLow_shouldRejectBeforeCreatingTask() {
+        stubIdentity();
+        given(systemConfigSpi.get(SystemConfigKeys.PLUGIN_MIN_EXTENSION_VERSION)).willReturn("1.0.171");
+        given(userConnectionRegistry.pick("elvin")).willReturn(selection("1.0.160"));
+
+        assertThrows(BizException.class, () -> taskService.submit(browserDto(), BROWSER_AUTH));
+
+        verify(taskMapper, never()).insert(any(AgentTask.class));
+        verify(instanceSpi, never()).listInstances(any(), any(), any());
+    }
+
+    /** Old extensions do not report a version: with a minimum configured they must be rejected. */
+    @Test
+    void submit_extensionVersionUnknown_shouldRejectWhenMinimumConfigured() {
+        stubIdentity();
+        given(systemConfigSpi.get(SystemConfigKeys.PLUGIN_MIN_EXTENSION_VERSION)).willReturn("1.0.171");
+        given(userConnectionRegistry.pick("elvin")).willReturn(selection(null));
+
+        assertThrows(BizException.class, () -> taskService.submit(browserDto(), BROWSER_AUTH));
+
+        verify(taskMapper, never()).insert(any(AgentTask.class));
+    }
+
+    @Test
+    void submit_extensionVersionMeetsMinimum_shouldProceed() {
+        stubIdentity();
+        given(systemConfigSpi.get(SystemConfigKeys.PLUGIN_MIN_EXTENSION_VERSION)).willReturn("1.0.171");
+        given(userConnectionRegistry.pick("elvin")).willReturn(selection("1.0.171"));
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(browserInstance(2L)));
+        SessionVO session = new SessionVO();
+        session.setId(11L);
+        given(sessionSpi.createSession(any(CreateSessionDTO.class))).willReturn(session);
+        ChatMessageResponseVO chatResp = new ChatMessageResponseVO();
+        chatResp.setRunId(22L);
+        given(chatRuntimeService.chat(anyLong(), any(SendMessageDTO.class))).willReturn(chatResp);
+        given(taskMapper.insert(any(AgentTask.class))).willAnswer(inv -> {
+            inv.<AgentTask>getArgument(0).setId(1L);
+            return 1;
+        });
+
+        assertNotNull(taskService.submit(browserDto(), BROWSER_AUTH));
+
+        verify(taskMapper).insert(any(AgentTask.class));
+    }
+
+    @Test
+    void submit_extensionVersionUnset_shouldSkipGate() {
+        stubIdentity();
+        given(instanceSpi.listInstances(any(), any(), any())).willReturn(List.of(browserInstance(2L)));
+        SessionVO session = new SessionVO();
+        session.setId(11L);
+        given(sessionSpi.createSession(any(CreateSessionDTO.class))).willReturn(session);
+        ChatMessageResponseVO chatResp = new ChatMessageResponseVO();
+        chatResp.setRunId(22L);
+        given(chatRuntimeService.chat(anyLong(), any(SendMessageDTO.class))).willReturn(chatResp);
+        given(taskMapper.insert(any(AgentTask.class))).willAnswer(inv -> {
+            inv.<AgentTask>getArgument(0).setId(1L);
+            return 1;
+        });
+
+        assertNotNull(taskService.submit(browserDto(), BROWSER_AUTH));
+    }
+
+    private static CreateTaskDTO browserDto() {
+        CreateTaskDTO dto = new CreateTaskDTO();
+        dto.setGoal("整理月报");
+        dto.setCode("bole");
+        dto.setSubject("elvin");
+        dto.setBusinessType("task");
+        return dto;
+    }
+
+    private static InstanceVO browserInstance(long id) {
+        InstanceVO instance = new InstanceVO();
+        instance.setId(id);
+        instance.setStatus("ENABLED");
+        instance.setBusinessType("task");
+        instance.setCreatedBy("elvin");
+        instance.setTenantId(2L);
+        return instance;
+    }
+
+    private static UserConnectionRegistry.Selection selection(String extensionVersion) {
+        UserConnectionRegistry.ConnectionView view = new UserConnectionRegistry.ConnectionView(
+                "c1", "d1", "Chrome", "WIDGET", extensionVersion, 1000L, System.currentTimeMillis());
+        return new UserConnectionRegistry.Selection(
+                UserConnectionRegistry.SelectionState.OK, view, List.of(view), null);
     }
 
     @Test

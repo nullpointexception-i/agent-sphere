@@ -57,17 +57,18 @@ class UserConnectionRegistryTest {
 
     private void addConnection(String connectionId, String deviceId, long connectedAt) {
         UserConnectionRegistry.ConnectionView view = new UserConnectionRegistry.ConnectionView(
-                connectionId, deviceId, "Chrome · " + deviceId, "WIDGET", connectedAt,
+                connectionId, deviceId, "Chrome · " + deviceId, "WIDGET", "1.0.171", connectedAt,
                 System.currentTimeMillis());
         stored.put(connectionId, toJson(view));
     }
 
     private static String toJson(UserConnectionRegistry.ConnectionView view) {
         return String.format("{\"connectionId\":\"%s\",\"deviceId\":%s,\"deviceName\":\"%s\","
-                        + "\"source\":\"%s\",\"connectedAt\":%d,\"lastSeen\":%d}",
+                        + "\"source\":\"%s\",\"extensionVersion\":%s,\"connectedAt\":%d,\"lastSeen\":%d}",
                 view.connectionId(),
                 view.deviceId() == null ? "null" : "\"" + view.deviceId() + "\"",
                 view.deviceName(), view.source(),
+                view.extensionVersion() == null ? "null" : "\"" + view.extensionVersion() + "\"",
                 view.connectedAt(), view.lastSeen());
     }
 
@@ -143,11 +144,12 @@ class UserConnectionRegistryTest {
 
     @Test
     void registerWithSameDevicePrunesOlderConnection() {
-        registry.register(USERNAME, "c-old", "d1", "Chrome", "WIDGET", 1000L);
-        registry.register(USERNAME, "c-new", "d1", "Chrome", "WIDGET", 2000L);
+        registry.register(USERNAME, "c-old", "d1", "Chrome", "WIDGET", "1.0.160", 1000L);
+        registry.register(USERNAME, "c-new", "d1", "Chrome", "WIDGET", "1.0.171", 2000L);
 
         assertEquals(1, stored.size());
         assertEquals("c-new", registry.list(USERNAME).get(0).connectionId());
+        assertEquals("1.0.171", registry.list(USERNAME).get(0).extensionVersion());
     }
 
     @Test

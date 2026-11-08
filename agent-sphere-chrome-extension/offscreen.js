@@ -96,6 +96,9 @@ function connectTaskSse() {
           'Authorization': `Bearer ${token}`,
           ...(deviceId ? { 'X-Device-Id': deviceId } : {}),
           ...(deviceName ? { 'X-Device-Name': encodeURIComponent(deviceName) } : {}),
+          // Runtime manifest version: the release workflow rewrites it from the tag (v1.0.NNN-alpha -> 1.0.NNN)
+          // when packaging the zip, so this is the installed artifact's version, not the repo literal.
+          'X-Extension-Version': chrome.runtime.getManifest().version,
         },
         signal: taskAbortController.signal,
       });
