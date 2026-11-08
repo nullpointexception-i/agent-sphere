@@ -7,7 +7,8 @@
 --   BOLE          users provisioned by the `bole` identity provider
 --
 -- Moved: the users, their roles, and their *usable* resources
---        (skills / hub entries / MCP / CLI / instances / bindings / super agents / channel bindings)
+--        (skills / hub entries / MCP / CLI / instances / bindings / super agents / channel bindings
+--         / model providers / model routes / API keys)
 -- Kept in DEFAULT: history (sessions, runs, timelines, IM messages/threads, audit log)
 -- Archived: mixed bole <-> non-bole IM conversations (status = ARCHIVED)
 --
@@ -21,6 +22,13 @@
 --   SELECT 'instances', count(*) FROM agent_instance i
 --     JOIN agent_user u ON u.username = i.created_by JOIN bole b ON b.uid = u.id WHERE i.delete_flag = 0;
 --   SELECT status, count(*) FROM im_conversation GROUP BY 1;
+--   -- model chain owned by bole users (all should move to BOLE):
+--   WITH bole AS (SELECT u.username FROM agent_user u
+--                 JOIN agent_sso_identity s ON s.agent_user_id = u.id AND s.provider_code = 'bole')
+--   SELECT 'routes', count(*) FROM agent_model_route WHERE created_by IN (SELECT username FROM bole)
+--   UNION ALL SELECT 'providers', count(*) FROM agent_model_provider WHERE created_by IN (SELECT username FROM bole)
+--   UNION ALL SELECT 'api_keys', count(*) FROM agent_api_key k JOIN agent_model_provider p ON p.id = k.provider_id
+--     WHERE p.created_by IN (SELECT username FROM bole);
 -- ============================================================
 
 \set ON_ERROR_STOP on
@@ -181,7 +189,38 @@ BEGIN
         WHERE tenant_id = v_default AND instance_id = ANY(v_instance_ids);
     END IF;
 
-    -- 7) Super agents and their channel config ------------------------------
+    -- 7) Model providers, routes and API keys --------------------------------
+    --    These tables are tenant-scoped too: a route left in DEFAULT is invisible
+    --    from BOLE and makes every run fail fast with "Route not found".
+    --    A provider moves only when none of its routes belongs to a non-bole user,
+    --    so DEFAULT routes never end up pointing at a BOLE provider.
+    UPDATE agent_model_provider p
+    SET tenant_id = v_bole, updated_at = NOW()
+    WHERE p.tenant_id = v_default
+      AND p.created_by = ANY(v_usernames)
+      AND NOT EXISTS (
+          SELECT 1 FROM agent_model_route r
+          WHERE r.provider_id = p.id
+            AND (r.created_by IS NULL OR NOT (r.created_by = ANY(v_usernames)))
+      );
+
+    -- Only move routes whose provider is now resolvable inside BOLE.
+    UPDATE agent_model_route r
+    SET tenant_id = v_bole, updated_at = NOW()
+    WHERE r.tenant_id = v_default
+      AND r.created_by = ANY(v_usernames)
+      AND (r.provider_id IS NULL
+           OR EXISTS (
+               SELECT 1 FROM agent_model_provider p
+               WHERE p.id = r.provider_id AND p.tenant_id = v_bole
+           ));
+
+    UPDATE agent_api_key k
+    SET tenant_id = v_bole, updated_at = NOW()
+    WHERE k.tenant_id = v_default
+      AND k.provider_id IN (SELECT id FROM agent_model_provider WHERE tenant_id = v_bole);
+
+    -- 8) Super agents and their channel config ------------------------------
     UPDATE agent_super_agent
     SET tenant_id = v_bole, updated_at = NOW()
     WHERE tenant_id = v_default AND owner_user_id = ANY(v_users);
@@ -196,7 +235,7 @@ BEGIN
         WHERE tenant_id = v_default AND super_agent_id = ANY(v_agent_ids);
     END IF;
 
-    -- 8) Archive mixed bole / non-bole IM conversations ---------------------
+    -- 9) Archive mixed bole / non-bole IM conversations ---------------------
     --    History stays in DEFAULT; archived rows are hidden from every list and read-only.
     UPDATE im_conversation c
     SET status = 'ARCHIVED', updated_at = NOW()
@@ -234,5 +273,15 @@ END $$;
 --   SELECT tenant_id, count(*) FROM agent_instance GROUP BY 1;
 --   SELECT tenant_id, count(*) FROM sys_user_tenant WHERE delete_flag = 0 GROUP BY 1;
 --   SELECT status, count(*) FROM im_conversation GROUP BY 1;
+--   -- model chain must have moved (BOLE rows appear, all BOLE instances resolve):
+--   SELECT 'routes' t, tenant_id, count(*) FROM agent_model_route GROUP BY 2
+--   UNION ALL SELECT 'providers', tenant_id, count(*) FROM agent_model_provider GROUP BY 2
+--   UNION ALL SELECT 'api_keys', tenant_id, count(*) FROM agent_api_key GROUP BY 2 ORDER BY 1,2;
+--   -- expect 0: every BOLE instance route resolves inside BOLE
+--   SELECT count(*) FROM agent_instance i
+--   JOIN sys_tenant t ON t.code = 'BOLE'
+--   LEFT JOIN agent_model_route r ON r.id = i.model_route_id AND r.tenant_id = t.id
+--   WHERE i.tenant_id = t.id AND i.delete_flag = 0
+--     AND i.model_route_id IS NOT NULL AND r.id IS NULL;
 
 COMMIT;
