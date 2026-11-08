@@ -2065,38 +2065,15 @@ export function SessionChat(props: SessionChatProps = {}) {
       .catch(() => {});
   }, []);
 
-  return (
-    <PageContainer
-      title={false}
-      breadcrumbRender={false}
-      ghost
-      style={
-        trainingMode
-          ? { padding: 0, margin: 0, height: '100%', flex: 1, minHeight: 0 }
-          : { paddingBlock: 0, margin: 0 }
-      }
-      header={{ title: undefined, style: { display: 'none' } }}
-      childrenContentStyle={
-        trainingMode
-          ? {
-              padding: 0,
-              height: '100%',
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }
-          : {
-              paddingBlock: 0,
-              paddingInline: 24,
-              height: 'calc(100vh - 160px)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }
-      }
-    >
-      <div className={styles.layout}>
+  const content = (
+    <>
+      <div
+        className={
+          trainingMode
+            ? `${styles.layout} ${styles.trainingLayout}`
+            : styles.layout
+        }
+      >
         {!trainingMode ? (
           <div className={styles.sidebarWrapper}>
             <div
@@ -2128,6 +2105,7 @@ export function SessionChat(props: SessionChatProps = {}) {
               currentSession={currentSession}
               instances={instances}
               trainingMode={trainingMode}
+              hideSessionPanel={trainingMode}
               selectedModelRouteId={selectedModelRouteId}
               onModelRouteChange={(id) => {
                 setSelectedModelRouteId(id);
@@ -2279,17 +2257,19 @@ export function SessionChat(props: SessionChatProps = {}) {
             />
           )}
         </div>
-        <SessionPanel
-          open={sessionPanelOpen}
-          onClose={() => setSessionPanelOpen(false)}
-          todos={todos}
-          toolStats={toolStats}
-          sessionUsage={sessionUsage}
-          maxInputTokens={
-            modelRoutes.find((r: any) => r.id === selectedModelRouteId)
-              ?.maxInputTokens
-          }
-        />
+        {!trainingMode ? (
+          <SessionPanel
+            open={sessionPanelOpen}
+            onClose={() => setSessionPanelOpen(false)}
+            todos={todos}
+            toolStats={toolStats}
+            sessionUsage={sessionUsage}
+            maxInputTokens={
+              modelRoutes.find((r: any) => r.id === selectedModelRouteId)
+                ?.maxInputTokens
+            }
+          />
+        ) : null}
       </div>
       <ExpandModal
         open={expandOpen}
@@ -2323,6 +2303,30 @@ export function SessionChat(props: SessionChatProps = {}) {
           refreshInstances();
         }}
       />
+    </>
+  );
+
+  if (trainingMode) {
+    return <div className={styles.trainingRoot}>{content}</div>;
+  }
+
+  return (
+    <PageContainer
+      title={false}
+      breadcrumbRender={false}
+      ghost
+      style={{ paddingBlock: 0, margin: 0 }}
+      header={{ title: undefined, style: { display: 'none' } }}
+      childrenContentStyle={{
+        paddingBlock: 0,
+        paddingInline: 24,
+        height: 'calc(100vh - 160px)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      {content}
     </PageContainer>
   );
 }

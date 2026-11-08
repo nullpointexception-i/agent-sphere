@@ -59,6 +59,9 @@ export const useStyles = createStyles(({ css }) => ({
     flex: 1;
     min-height: 0;
     display: flex;
+    gap: 16px;
+    padding: 16px;
+    background: #f5f6f9;
   `,
   chat: css`
     position: relative;
@@ -67,7 +70,9 @@ export const useStyles = createStyles(({ css }) => ({
     display: flex;
     flex-direction: column;
     background: #fff;
-    border-right: 1px solid #eef0f4;
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
+    overflow: hidden;
   `,
   scroll: css`
     flex: 1;
@@ -100,10 +105,12 @@ export const useStyles = createStyles(({ css }) => ({
     align-items: flex-end;
   `,
   rail: css`
-    width: 268px;
-    flex: 0 0 268px;
+    width: 280px;
+    flex: 0 0 280px;
     padding: 18px;
-    background: #fafafc;
+    background: #fff;
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     gap: 14px;

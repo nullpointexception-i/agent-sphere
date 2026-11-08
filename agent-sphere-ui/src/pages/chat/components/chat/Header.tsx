@@ -22,6 +22,8 @@ interface HeaderProps {
   sseConnected: boolean;
   sessionPanelOpen: boolean;
   onTogglePanel: () => void;
+  /** Training mode has no session panel; hide the toggle entirely. */
+  hideSessionPanel?: boolean;
 }
 
 export default function Header({
@@ -36,6 +38,7 @@ export default function Header({
   sseConnected,
   sessionPanelOpen,
   onTogglePanel,
+  hideSessionPanel = false,
 }: HeaderProps) {
   const intl = useIntl();
   const { message } = App.useApp();
@@ -306,7 +309,7 @@ export default function Header({
           alignItems: 'center',
         }}
       >
-        {!sessionPanelOpen && (
+        {!hideSessionPanel && !sessionPanelOpen && (
           <Button size="small" icon={<ToolOutlined />} onClick={onTogglePanel}>
             {intl.formatMessage({
               id: 'pages.chat.sessionPanel',

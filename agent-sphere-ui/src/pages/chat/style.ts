@@ -4,10 +4,29 @@ export const useStyles = createStyles(({ css, token }) => ({
   layout: css`
     display: flex;
     flex: 1;
+    min-height: 0;
+    min-width: 0;
     overflow: hidden;
     border-radius: ${token.borderRadius}px;
     background: ${token.colorBgContainer};
     box-shadow: ${token.boxShadowTertiary};
+  `,
+
+  /** Training host provides its own chrome: drop the console card look and fill the column. */
+  trainingLayout: css`
+    height: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  `,
+
+  trainingRoot: css`
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: ${token.colorBgContainer};
   `,
 
   sidebarWrapper: css`

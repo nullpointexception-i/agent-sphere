@@ -72,6 +72,8 @@ interface ChatMainProps {
    * allows the owner through, so the UX lock must be lifted here as well.
    */
   trainingMode?: boolean;
+  /** Training hides the console session panel (its Worker rail already shows the live state). */
+  hideSessionPanel?: boolean;
 }
 
 export default function ChatMain({
@@ -114,6 +116,7 @@ export default function ChatMain({
   queuedMessages = [],
   onWithdrawQueued,
   trainingMode = false,
+  hideSessionPanel = false,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const intl = useIntl();
@@ -261,6 +264,7 @@ export default function ChatMain({
         sseConnected={sseConnected}
         sessionPanelOpen={sessionPanelOpen}
         onTogglePanel={onTogglePanel}
+        hideSessionPanel={hideSessionPanel}
       />
       <div className={styles.chatStage}>
         {hasMessages ? (
