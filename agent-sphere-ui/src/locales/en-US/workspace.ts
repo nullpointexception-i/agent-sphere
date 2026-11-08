@@ -282,6 +282,8 @@ export default {
     'The Worker is waiting for an L2 tool approval.',
   'workspace.training.clarificationNotice':
     'The Worker is waiting for your answer in the conversation above.',
+  'workspace.training.clarificationFailed':
+    'Failed to submit the clarification',
   'workspace.training.archived': 'Archived avatars cannot enter training mode.',
 
   'workspace.avatars.publicVisible': 'Visible in group creation',

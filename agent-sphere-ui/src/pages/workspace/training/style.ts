@@ -61,6 +61,7 @@ export const useStyles = createStyles(({ css }) => ({
     display: flex;
   `,
   chat: css`
+    position: relative;
     flex: 1;
     min-width: 0;
     display: flex;

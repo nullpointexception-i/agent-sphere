@@ -6,6 +6,9 @@ import { TIMING } from '@/constants/timing';
 import { useReconnectingSse } from '@/hooks/useReconnectingSse';
 import { agentApi } from '@/services/agentSphere/api';
 import { superAgentApi } from '@/services/agentSphere/superAgent';
+import ClarificationDrawer, {
+  type ClarificationBatch,
+} from '../../chat/components/ClarificationDrawer';
 import TimelineList from '../../chat/components/chat/TimelineList';
 import ToolApprovalDrawer, {
   type ToolApprovalBatch,
@@ -42,6 +45,9 @@ export function TrainingChat({ agentId, sessionId }: Props) {
     null,
   );
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+  const [clarificationBatch, setClarificationBatch] =
+    useState<ClarificationBatch | null>(null);
+  const [clarificationSubmitting, setClarificationSubmitting] = useState(false);
   const [clarificationPending, setClarificationPending] = useState(false);
   const oldestSeqRef = useRef<number | null>(null);
   const newestSeqRef = useRef<number | null>(null);
@@ -127,6 +133,33 @@ export function TrainingChat({ agentId, sessionId }: Props) {
     }
   }, [sessionId]);
 
+  const refreshClarifications = useCallback(async () => {
+    try {
+      const rows = await agentApi.sessions.pendingClarifications(sessionId);
+      const pending = (rows || []).filter(
+        (row: any) => row?.clarificationId && row?.type !== 'tool_approval',
+      );
+      if (pending.length === 0) {
+        setClarificationBatch(null);
+        return;
+      }
+      setClarificationBatch({
+        runId: Number(pending[0].runId),
+        items: pending.map((row: any) => ({
+          clarificationId: String(row.clarificationId),
+          runId: Number(row.runId),
+          title: row.title,
+          type: row.type,
+          multiple: row.multiple === true,
+          options: row.options,
+          description: row.description,
+        })),
+      });
+    } catch {
+      // keep the current drawer on transient errors
+    }
+  }, [sessionId]);
+
   const refreshApproval = useCallback(async () => {
     try {
       const vo = await agentApi.toolApprovals.pending(sessionId);
@@ -165,21 +198,23 @@ export function TrainingChat({ agentId, sessionId }: Props) {
     void loadInitial();
     void refreshState();
     void refreshApproval();
+    void refreshClarifications();
     return () => {
       if (refreshTimerRef.current != null) {
         window.clearTimeout(refreshTimerRef.current);
       }
     };
-  }, [loadInitial, refreshApproval, refreshState]);
+  }, [loadInitial, refreshApproval, refreshClarifications, refreshState]);
 
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
       void refreshState();
       void refreshLatest();
+      void refreshClarifications();
     }, TIMING.APPROVAL_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [refreshLatest, refreshState, running]);
+  }, [refreshClarifications, refreshLatest, refreshState, running]);
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;
@@ -230,6 +265,16 @@ export function TrainingChat({ agentId, sessionId }: Props) {
       return;
     }
     if (
+      type === 'clarification_pending' ||
+      type === 'clarification_responded' ||
+      type === 'clarification_dismissed' ||
+      type === 'run_awaiting_user'
+    ) {
+      void refreshClarifications();
+      scheduleRefresh();
+      return;
+    }
+    if (
       type === 'TOOL_APPROVAL_RESPONDED' ||
       type === 'TOOL_APPROVAL_DISMISSED'
     ) {
@@ -265,7 +310,14 @@ export function TrainingChat({ agentId, sessionId }: Props) {
 
   const send = async () => {
     const value = text.trim();
-    if (!value || sending || running || approvalBatch || clarificationPending) {
+    if (
+      !value ||
+      sending ||
+      running ||
+      approvalBatch ||
+      clarificationBatch ||
+      clarificationPending
+    ) {
       return;
     }
     setSending(true);
@@ -322,6 +374,48 @@ export function TrainingChat({ agentId, sessionId }: Props) {
           row.clarificationId,
         );
       }
+      await agentApi.runs.sessionStop(sessionId);
+      await refreshState();
+    } catch {
+      // ignore
+    }
+  };
+
+  const resolveClarifications = async (
+    answers: Array<{
+      clarificationId: string;
+      selected?: string[];
+      text?: string;
+    }>,
+  ) => {
+    if (!clarificationBatch) return;
+    setClarificationSubmitting(true);
+    try {
+      await agentApi.sessions.resolveClarifications(
+        sessionId,
+        clarificationBatch.runId,
+        answers,
+      );
+      setClarificationBatch(null);
+      await refreshTail();
+      await refreshState();
+      await refreshClarifications();
+    } catch {
+      message.error(
+        tw(
+          'training.clarificationFailed',
+          'Failed to submit the clarification',
+        ),
+      );
+      await refreshClarifications();
+    } finally {
+      setClarificationSubmitting(false);
+    }
+  };
+
+  const cancelClarifications = async () => {
+    setClarificationBatch(null);
+    try {
       await agentApi.runs.sessionStop(sessionId);
       await refreshState();
     } catch {
@@ -426,7 +520,12 @@ export function TrainingChat({ agentId, sessionId }: Props) {
             type="primary"
             icon={<SendOutlined />}
             loading={sending}
-            disabled={!text.trim() || !!approvalBatch || clarificationPending}
+            disabled={
+              !text.trim() ||
+              !!approvalBatch ||
+              !!clarificationBatch ||
+              clarificationPending
+            }
             onClick={() => void send()}
           >
             {tw('training.send', 'Send')}
@@ -438,6 +537,13 @@ export function TrainingChat({ agentId, sessionId }: Props) {
         batch={approvalBatch}
         submitting={approvalSubmitting}
         onResolve={(decisions) => void resolveApproval(decisions)}
+      />
+      <ClarificationDrawer
+        open={!!clarificationBatch?.items?.length}
+        batch={clarificationBatch}
+        submitting={clarificationSubmitting}
+        onResolve={(answers) => void resolveClarifications(answers)}
+        onCancel={() => void cancelClarifications()}
       />
     </div>
   );
