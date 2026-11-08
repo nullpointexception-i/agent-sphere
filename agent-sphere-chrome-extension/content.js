@@ -39,7 +39,7 @@
         token,
         displayName: displayName || '',
         source: source || '',
-        baseUrl: settings.backendUrl || 'http://localhost:8080',
+        baseUrl: settings.backendUrl || 'https://as.buukle.top',
       }).catch(() => {});
     });
   }
@@ -68,7 +68,7 @@
   async function getSettings() {
     return new Promise((resolve) => {
       chrome.storage.local.get(['settings'], (data) => {
-        resolve(data.settings || { frontendUrl: 'http://localhost:8000', backendUrl: 'http://localhost:8080' });
+        resolve(data.settings || { frontendUrl: 'https://bole.buukle.top', backendUrl: 'https://as.buukle.top' });
       });
     });
   }
@@ -87,7 +87,7 @@
   async function resolveUser() {
     try {
       const settings = await getSettings();
-      const baseUrl = settings.backendUrl || 'http://localhost:8080';
+      const baseUrl = settings.backendUrl || 'https://as.buukle.top';
 
       // Prefer reading page storage directly (the content script shares the page origin and can access same-origin storage).
       // The widget token now lives in localStorage (one copy shared by all tabs of the same browser);

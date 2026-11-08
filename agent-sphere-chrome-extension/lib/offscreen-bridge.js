@@ -10,7 +10,7 @@ export async function queryOffscreenExists() {
       const contexts = await chrome.runtime.getContexts({
         contextTypes: ['OFFSCREEN_DOCUMENT'],
       });
-      return contexts.some((c) => c.url === chrome.runtime.getURL(OFFSCREEN_URL));
+      return contexts.some((c) => (c.documentUrl || c.url) === chrome.runtime.getURL(OFFSCREEN_URL));
     }
   } catch (e) {
     /* fall through to ping probe */
@@ -33,6 +33,7 @@ export async function ensureOffscreenDocument() {
     });
     return true;
   } catch (e) {
+    console.warn('[AgentSphere] Failed to create offscreen document:', e?.message || e);
     return false;
   }
 }

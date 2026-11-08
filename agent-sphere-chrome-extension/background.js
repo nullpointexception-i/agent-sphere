@@ -27,6 +27,17 @@ const commandMeta = new Map();
 /** Token that last triggered task:init: repeated reports of the same token from multiple tabs no longer reconnect. */
 let lastInitToken = '';
 const EXTENSION_VERSION = chrome.runtime.getManifest().version;
+/** Seed on first run so content scripts never fall back to a localhost backend before the popup is opened. */
+const DEFAULT_SETTINGS = {
+  frontendUrls: ['https://bole.buukle.top'],
+  mainUrl: 'https://as.buukle.top',
+  backendUrl: 'https://as.buukle.top',
+  agentCursor: true,
+  backgroundFocusMode: 'auto',
+  browserMetrics: false,
+  browserMetricAudit: false,
+  browserMetricSample: 5,
+};
 // Target origin of the last navigate: if the controlled tab leaves that site, refuse further actions (prevents wandering off).
 // Persisted to storage.session - if kept only in memory, assertControlledHost silently stops working after an SW restart.
 let targetOrigin = null;
@@ -178,6 +189,11 @@ function upgradeLegacySettings(settings) {
 
 function loadConfiguredUrls(done) {
   chrome.storage.local.get(['settings'], (data) => {
+    // First run: write defaults immediately. The popup also does this, but a user may never
+    // open it, and content.js would otherwise fall back to a localhost backend.
+    if (!data.settings) {
+      chrome.storage.local.set({ settings: DEFAULT_SETTINGS }).catch(() => {});
+    }
     // One-time migration: old http defaults -> https. Placed on the service worker's always-on startup path,
     // so it runs even if the user never opens the popup; the popup's storage.onChanged then re-reads and re-renders automatically.
     const upgraded = upgradeLegacySettings(data.settings);
@@ -185,7 +201,7 @@ function loadConfiguredUrls(done) {
       chrome.storage.local.set({ settings: upgraded }).catch(() => {});
       console.log('[AgentSphere] Migrated legacy http defaults to https');
     }
-    const s = upgraded || data.settings || {};
+    const s = upgraded || data.settings || DEFAULT_SETTINGS;
     frontendUrls = Array.isArray(s.frontendUrls)
       ? s.frontendUrls.filter(Boolean)
       : s.frontendUrl
@@ -293,7 +309,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           baseUrl = b;
         }
       }
-      sendResponse({ token: t, baseUrl: b, deviceId, deviceName });
+      sendResponse({ token: t, baseUrl: b, deviceId, deviceName, extensionVersion: EXTENSION_VERSION });
     })();
     return true; // async response
   }
