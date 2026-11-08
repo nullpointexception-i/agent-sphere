@@ -89,6 +89,13 @@ export default {
   'workspace.avatars.goEdit': '去修改 →',
   'workspace.avatars.editHint': '修改后会在下一次运行时生效',
   'workspace.avatars.saveEdit': '保存修改',
+  'workspace.avatars.model': '模型',
+  'workspace.avatars.modelMixed': 'Router 和 Worker 当前使用不同路由',
+  'workspace.avatars.modelPlaceholder': '选择模型路由',
+  'workspace.avatars.modelCurrent': '当前路由',
+  'workspace.avatars.modelHint': '同时作用于 Router 和 Worker，下次运行时生效',
+  'workspace.avatars.modelSaved': '模型路由已更新',
+  'workspace.avatars.modelNoKey': '该路由未配置 API Key',
 
   'workspace.chat.searchPlaceholder': '搜索聊天',
   'workspace.chat.newGroupTitle': '发起群聊',

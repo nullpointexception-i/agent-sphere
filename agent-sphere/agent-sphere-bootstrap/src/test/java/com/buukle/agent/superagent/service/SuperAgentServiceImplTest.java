@@ -5,6 +5,7 @@ import com.buukle.agent.common.dict.SystemDicConstants;
 import com.buukle.agent.common.dict.SystemDicEntry;
 import com.buukle.agent.common.dict.SystemDicSpi;
 import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.event.InstanceDeletedEvent;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
@@ -13,6 +14,7 @@ import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.dtvo.dto.CreateSuperAgentDTO;
+import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentVO;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.impl.SuperAgentServiceImpl;
@@ -184,6 +186,37 @@ class SuperAgentServiceImplTest {
                 prompts.getAllValues().get(1));
         assertEquals("TECH", agent.getPositionCode());
         assertEquals("技术专家", agent.getPositionNameCn());
+    }
+
+    @Test
+    void updateModelRoute_updatesRouterAndWorker() {
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setRouterInstanceId(11L);
+        agent.setWorkerInstanceId(12L);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+
+        service.updateModelRoute(7L, 33L);
+
+        verify(instanceSpi).setModelRoute(11L, 33L);
+        verify(instanceSpi).setModelRoute(12L, 33L);
+    }
+
+    @Test
+    void instanceDeleted_archivesOwningSuperAgent() {
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setStatus(SuperAgentStatus.ACTIVE);
+        agent.setRouterInstanceId(11L);
+        agent.setWorkerInstanceId(12L);
+        when(superAgentMapper.selectList(any())).thenReturn(List.of(agent));
+
+        service.onInstanceDeleted(new InstanceDeletedEvent(11L));
+
+        assertEquals(SuperAgentStatus.ARCHIVED, agent.getStatus());
+        verify(superAgentMapper).updateById(agent);
     }
 
     @Test

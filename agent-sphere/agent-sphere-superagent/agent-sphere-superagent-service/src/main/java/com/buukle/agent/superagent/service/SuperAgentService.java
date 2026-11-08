@@ -21,6 +21,9 @@ public interface SuperAgentService {
 
     SuperAgentVO update(Long id, CreateSuperAgentDTO dto);
 
+    /** Update the model route used by both Router and Worker instances. */
+    SuperAgentVO updateModelRoute(Long id, Long modelRouteId);
+
     void delete(Long id);
 
     SuperAgentVO pause(Long id);

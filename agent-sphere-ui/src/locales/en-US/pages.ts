@@ -822,6 +822,12 @@ export default {
   'pages.table.empty': 'No data',
   'pages.instances.capabilities': 'Capabilities',
   'pages.instances.modelRoute': 'Model',
+  'pages.instances.deleteManagedWarning':
+    'This is a Router/Worker instance owned by a digital avatar. Deleting it will archive the avatar.',
+  'pages.instances.batchDeleteManagedWarning':
+    'The selection contains Router/Worker instances. Deleting them will archive their owning digital avatars.',
+  'pages.instances.managedPromptHint':
+    'Router/Worker prompts are refreshed from the avatar on startup; other fields persist.',
   'pages.instances.capabilitiesSaveHint':
     'Changes take effect only after clicking Save.',
   'pages.instances.currentCapabilities': 'Current',

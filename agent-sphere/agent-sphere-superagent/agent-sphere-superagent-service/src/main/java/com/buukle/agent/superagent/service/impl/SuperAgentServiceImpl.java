@@ -8,6 +8,7 @@ import com.buukle.agent.common.dict.SystemDicConstants;
 import com.buukle.agent.common.dict.SystemDicEntry;
 import com.buukle.agent.common.dict.SystemDicSpi;
 import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.event.InstanceDeletedEvent;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
@@ -194,6 +195,54 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         }
         superAgentMapper.updateById(agent);
         return toVO(agent);
+    }
+
+    @Override
+    @Transactional
+    public SuperAgentVO updateModelRoute(Long id, Long modelRouteId) {
+        AgentSuperAgent agent = requireOwned(id);
+        if (modelRouteId == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "modelRouteId is required");
+        }
+        boolean updated = false;
+        if (agent.getRouterInstanceId() != null) {
+            instanceSpi.setModelRoute(agent.getRouterInstanceId(), modelRouteId);
+            updated = true;
+        }
+        if (agent.getWorkerInstanceId() != null) {
+            instanceSpi.setModelRoute(agent.getWorkerInstanceId(), modelRouteId);
+            updated = true;
+        }
+        if (!updated) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "avatar has no managed instances");
+        }
+        return toVO(agent);
+    }
+
+    /**
+     * Deleting a managed Router/Worker leaves the avatar without its execution chain. Archive the
+     * owning avatar so it cannot be scheduled with a dangling instance reference.
+     */
+    @EventListener
+    public void onInstanceDeleted(InstanceDeletedEvent event) {
+        Long instanceId = event == null ? null : event.getInstanceId();
+        if (instanceId == null) {
+            return;
+        }
+        List<AgentSuperAgent> agents = superAgentMapper.selectList(
+                Wrappers.<AgentSuperAgent>lambdaQuery()
+                        .and(w -> w.eq(AgentSuperAgent::getRouterInstanceId, instanceId)
+                                .or().eq(AgentSuperAgent::getWorkerInstanceId, instanceId)));
+        for (AgentSuperAgent agent : agents) {
+            if (!SuperAgentStatus.ARCHIVED.equals(agent.getStatus())) {
+                agent.setStatus(SuperAgentStatus.ARCHIVED);
+                superAgentMapper.updateById(agent);
+                log.info("Archived super agent {} after managed instance {} was deleted",
+                        agent.getId(), instanceId);
+            }
+        }
     }
 
     @Override

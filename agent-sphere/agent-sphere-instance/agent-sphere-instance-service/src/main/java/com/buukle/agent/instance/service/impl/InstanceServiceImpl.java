@@ -5,6 +5,7 @@ import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.myb
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.event.InstanceDeletedEvent;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.AvatarGenerator;
 import com.buukle.agent.instance.domain.AgentInstance;
@@ -18,7 +19,9 @@ import com.buukle.agent.instance.service.converter.InstanceConverter;
 import com.buukle.agent.model.spi.RouteSpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +32,7 @@ import java.util.List;
 public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstance> implements InstanceService {
     private final InstanceConverter instanceConverter;
     private final RouteSpi routeSpi;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public InstanceVO createInstance(CreateInstanceDTO dto) {
@@ -48,6 +52,14 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     @Override
     public InstanceVO updateInstance(Long id, CreateInstanceDTO dto) {
         requireOwnership(id);
+        AgentInstance existing = getById(id);
+        if (existing == null) {
+            throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
+        }
+        if (Boolean.TRUE.equals(existing.getSystemManaged())) {
+            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.FORBIDDEN,
+                    "System-managed instances cannot be edited");
+        }
         if (dto.getImage() != null && !dto.getImage().isBlank()) {
             byte[] decoded = java.util.Base64.getDecoder().decode(dto.getImage().contains(",") ? dto.getImage().split(",")[1] : dto.getImage());
             if (decoded.length > 2 * 1024 * 1024) {
@@ -60,6 +72,11 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
                 && CompletionProtocol.isInherit(dto.getCompletionProtocol());
         AgentInstance instance = instanceConverter.toDO(dto);
         instance.setId(id);
+        // Role, system ownership and lifecycle status are managed by the Super-Agent lifecycle,
+        // not by the generic instance edit form (which does not submit these fields).
+        instance.setInstanceRole(existing.getInstanceRole());
+        instance.setSystemManaged(existing.getSystemManaged());
+        instance.setStatus(existing.getStatus());
         updateById(instance);
         if (clearLoop) {
             // 0 = clear the override (set NULL); updateById ignores null fields, so an explicit set is required
@@ -99,18 +116,24 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     }
 
     @Override
+    @Transactional
     public void deleteInstance(Long id) {
         requireOwnership(id);
         removeById(id);
+        eventPublisher.publishEvent(new InstanceDeletedEvent(id));
     }
 
     @Override
+    @Transactional
     public void batchDeleteInstances(List<Long> ids) {
         if (ids == null || ids.isEmpty()) return;
         for (Long id : ids) {
             requireOwnership(id);
         }
         removeByIds(ids);
+        for (Long id : ids) {
+            eventPublisher.publishEvent(new InstanceDeletedEvent(id));
+        }
     }
 
     private void requireOwnership(Long id) {
@@ -171,9 +194,10 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     @Override
     public IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
                                            LocalDateTime endTime, String instanceRole) {
-        String role = instanceRole == null || instanceRole.isBlank()
-                ? InstanceRole.CHAT.value() : InstanceRole.normalize(instanceRole);
-        boolean allRoles = "ALL".equals(role);
+        String requestedRole = instanceRole == null || instanceRole.isBlank()
+                ? InstanceRole.CHAT.value() : instanceRole.trim().toUpperCase();
+        boolean allRoles = "ALL".equals(requestedRole);
+        String role = allRoles ? null : InstanceRole.normalize(requestedRole);
         Page<AgentInstance> p = lambdaQuery()
                 .eq(!allRoles, AgentInstance::getInstanceRole, role)
                 .and(w -> w.isNull(AgentInstance::getSystemManaged)

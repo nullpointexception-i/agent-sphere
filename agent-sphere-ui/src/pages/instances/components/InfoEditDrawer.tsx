@@ -134,6 +134,23 @@ export default function InfoEditDrawer({
         >
           <Input.TextArea rows={4} maxLength={5000} />
         </Form.Item>
+        {record?.instanceRole === 'ROUTER' ||
+        record?.instanceRole === 'WORKER' ? (
+          <div
+            style={{
+              marginTop: -6,
+              marginBottom: 12,
+              fontSize: 12,
+              color: '#8c8c8c',
+            }}
+          >
+            {intl.formatMessage({
+              id: 'pages.instances.managedPromptHint',
+              defaultMessage:
+                'Router/Worker prompts are refreshed from the avatar on startup; other fields persist.',
+            })}
+          </div>
+        ) : null}
         <Form.Item
           name="businessType"
           label={labelWithRule(

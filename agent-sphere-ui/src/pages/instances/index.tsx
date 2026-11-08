@@ -83,7 +83,6 @@ export default function InstanceList() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const [tableScrollY, setTableScrollY] = useState(400);
-  const roleReadOnly = instanceRole !== 'CHAT';
 
   useEffect(() => {
     const calc = () => setTableScrollY(window.innerHeight - 280);
@@ -199,7 +198,7 @@ export default function InstanceList() {
     {
       title: intl.formatMessage({ id: 'pages.table.actions' }),
       key: 'actions',
-      width: 200,
+      width: 260,
       render: (_: any, record: any) => (
         <>
           <Button
@@ -220,7 +219,7 @@ export default function InstanceList() {
               setDetailOpen(true);
             }}
           />
-          {record.instanceRole === 'CHAT' && (
+          {!record.systemManaged && (
             <>
               <Can code={PERM.instanceUpdate}>
                 <Button
@@ -233,46 +232,35 @@ export default function InstanceList() {
                   }}
                 />
               </Can>
-              <Button
-                type="link"
-                size="small"
-                icon={<ApiOutlined />}
-                onClick={() => {
-                  setEditing(record);
-                  setCapDrawerOpen(true);
-                }}
-              />
+              {canManageCaps && (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<ApiOutlined />}
+                  onClick={() => {
+                    setEditing(record);
+                    setCapDrawerOpen(true);
+                  }}
+                />
+              )}
+              {canBindModel && (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<CloudOutlined />}
+                  onClick={() => {
+                    setModelRouteInstance(record);
+                    setModelRouteModal(true);
+                  }}
+                />
+              )}
               <Can code={PERM.instanceDelete}>
                 <Button
                   type="link"
                   danger
                   size="small"
                   icon={<DeleteOutlined />}
-                  onClick={() => {
-                    modal.confirm({
-                      title: intl.formatMessage(
-                        {
-                          id: 'pages.deleteConfirm.title',
-                          defaultMessage: 'Delete {name}',
-                        },
-                        { name: 'instance' },
-                      ),
-                      content: intl.formatMessage(
-                        {
-                          id: 'pages.deleteConfirm.content',
-                          defaultMessage:
-                            'Are you sure you want to delete this {name}?',
-                        },
-                        { name: 'instance' },
-                      ),
-                      okType: 'danger',
-                      onOk: async () => {
-                        await agentApi.instances.delete(record.id);
-                        message.success('Deleted');
-                        actionRef.current?.reload();
-                      },
-                    });
-                  }}
+                  onClick={() => confirmDelete(record)}
                 />
               </Can>
             </>
@@ -299,6 +287,7 @@ export default function InstanceList() {
       setImagePreview('');
       form.resetFields();
       fetchData(1);
+      actionRef.current?.reload();
     } finally {
       setSubmitting(false);
     }
@@ -327,6 +316,40 @@ export default function InstanceList() {
       },
     },
   ];
+
+  const confirmDelete = (record: any) => {
+    const managed =
+      record.instanceRole === 'ROUTER' || record.instanceRole === 'WORKER';
+    modal.confirm({
+      title: intl.formatMessage(
+        {
+          id: 'pages.deleteConfirm.title',
+          defaultMessage: 'Delete {name}',
+        },
+        { name: record.name || 'instance' },
+      ),
+      content: managed
+        ? intl.formatMessage({
+            id: 'pages.instances.deleteManagedWarning',
+            defaultMessage:
+              'This is a Router/Worker instance owned by a digital avatar. Deleting it will archive the avatar.',
+          })
+        : intl.formatMessage(
+            {
+              id: 'pages.deleteConfirm.content',
+              defaultMessage: 'Are you sure you want to delete this {name}?',
+            },
+            { name: 'instance' },
+          ),
+      okType: 'danger',
+      onOk: async () => {
+        await agentApi.instances.delete(record.id);
+        message.success('Deleted');
+        fetchData(1);
+        actionRef.current?.reload();
+      },
+    });
+  };
 
   return (
     <PageContainer
@@ -357,6 +380,12 @@ export default function InstanceList() {
               icon={<DeleteOutlined />}
               disabled={selectedIds.size === 0}
               onClick={() => {
+                const selectedManaged = listData.some(
+                  (item) =>
+                    selectedIds.has(item.id) &&
+                    (item.instanceRole === 'ROUTER' ||
+                      item.instanceRole === 'WORKER'),
+                );
                 modal.confirm({
                   title: intl.formatMessage(
                     {
@@ -365,14 +394,20 @@ export default function InstanceList() {
                     },
                     { name: `${selectedIds.size} instances` },
                   ),
-                  content: intl.formatMessage(
-                    {
-                      id: 'pages.deleteConfirm.content',
-                      defaultMessage:
-                        'Are you sure you want to delete this {name}?',
-                    },
-                    { name: 'instance' },
-                  ),
+                  content: selectedManaged
+                    ? intl.formatMessage({
+                        id: 'pages.instances.batchDeleteManagedWarning',
+                        defaultMessage:
+                          'The selection contains Router/Worker instances. Deleting them will archive their owning digital avatars.',
+                      })
+                    : intl.formatMessage(
+                        {
+                          id: 'pages.deleteConfirm.content',
+                          defaultMessage:
+                            'Are you sure you want to delete this {name}?',
+                        },
+                        { name: 'instance' },
+                      ),
                   okType: 'danger',
                   onOk: async () => {
                     await agentApi.instances.batchDelete(
@@ -382,6 +417,7 @@ export default function InstanceList() {
                     setSelectedIds(new Set());
                     message.success('Deleted');
                     fetchData(1);
+                    actionRef.current?.reload();
                   },
                 });
               }}
@@ -475,7 +511,7 @@ export default function InstanceList() {
                 setTimeout(() => setRefreshKey((k) => k + 1), 0);
               }}
             />
-            {!roleReadOnly && (
+            {canDelete && (
               <Tooltip
                 title={intl.formatMessage({
                   id: 'pages.instances.batchOperation',
@@ -583,7 +619,7 @@ export default function InstanceList() {
                         })}
                       </span>
                     </div>,
-                    ...(item.instanceRole === 'CHAT' && canEdit
+                    ...(!item.systemManaged && canEdit
                       ? [
                           <div
                             key="edit"
@@ -608,7 +644,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(item.instanceRole === 'CHAT' && canManageCaps
+                    ...(!item.systemManaged && canManageCaps
                       ? [
                           <div
                             key="caps"
@@ -633,7 +669,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(item.instanceRole === 'CHAT' && canBindModel
+                    ...(!item.systemManaged && canBindModel
                       ? [
                           <div
                             key="model"
@@ -658,7 +694,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(item.instanceRole === 'CHAT' && canDelete
+                    ...(!item.systemManaged && canDelete
                       ? [
                           <div
                             key="delete"
@@ -668,31 +704,7 @@ export default function InstanceList() {
                               alignItems: 'center',
                               gap: 2,
                             }}
-                            onClick={() => {
-                              modal.confirm({
-                                title: intl.formatMessage(
-                                  {
-                                    id: 'pages.deleteConfirm.title',
-                                    defaultMessage: 'Delete {name}',
-                                  },
-                                  { name: 'instance' },
-                                ),
-                                content: intl.formatMessage(
-                                  {
-                                    id: 'pages.deleteConfirm.content',
-                                    defaultMessage:
-                                      'Are you sure you want to delete this {name}?',
-                                  },
-                                  { name: 'instance' },
-                                ),
-                                okType: 'danger',
-                                onOk: async () => {
-                                  await agentApi.instances.delete(item.id);
-                                  message.success('Deleted');
-                                  fetchData(1);
-                                },
-                              });
-                            }}
+                            onClick={() => confirmDelete(item)}
                           >
                             <DeleteOutlined />
                             <span style={{ fontSize: 11 }}>

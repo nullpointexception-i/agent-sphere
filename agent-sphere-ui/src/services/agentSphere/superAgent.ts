@@ -152,6 +152,11 @@ export const superAgentApi = {
       method: 'PATCH',
       data,
     }),
+  updateModelRoute: (id: number, modelRouteId: number) =>
+    request<SuperAgent>(`${BASE}/super-agents/${id}/model-route`, {
+      method: 'PATCH',
+      data: { modelRouteId },
+    }),
   usage: (agentId: number, days = 30) =>
     request<any[]>(`${BASE}/super-agents/${agentId}/usage`, {
       params: { days },

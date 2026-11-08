@@ -789,6 +789,12 @@ export default {
   'pages.table.empty': '暂无数据',
   'pages.instances.capabilities': '能力',
   'pages.instances.modelRoute': '模型',
+  'pages.instances.deleteManagedWarning':
+    '这是某个数字分身的 Router/Worker 实例。删除后，所属分身会被归档。',
+  'pages.instances.batchDeleteManagedWarning':
+    '所选实例中包含 Router/Worker。删除后，其所属数字分身会被归档。',
+  'pages.instances.managedPromptHint':
+    'Router/Worker 的提示词会在应用启动时由数字分身刷新；其他字段会保留。',
   'pages.instances.capabilitiesSaveHint': '点击保存按钮方可生效',
   'pages.instances.currentCapabilities': '当前已绑定',
   'pages.instances.autoInclude': '内置',

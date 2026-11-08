@@ -549,6 +549,12 @@ function AvatarsTab({
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editForm] = Form.useForm();
   const editName = Form.useWatch('name', editForm);
+  const [agentInstances, setAgentInstances] = useState<any>(null);
+  const [agentRoutes, setAgentRoutes] = useState<any[]>([]);
+  const [agentModelRouteId, setAgentModelRouteId] = useState<number | undefined>();
+  const [agentModelMixed, setAgentModelMixed] = useState(false);
+  const [agentModelLoading, setAgentModelLoading] = useState(false);
+  const [agentModelSaving, setAgentModelSaving] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -591,9 +597,42 @@ function AvatarsTab({
     }
   };
 
+  const loadAgentModel = async (agentId: number) => {
+    setAgentModelLoading(true);
+    setAgentInstances(null);
+    setAgentModelRouteId(undefined);
+    setAgentModelMixed(false);
+    try {
+      const [instances, routes] = await Promise.all([
+        superAgentApi.instances(agentId),
+        agentApi.routes.listAll(),
+      ]);
+      setAgentInstances(instances || null);
+      setAgentRoutes(routes || []);
+      const routerRoute = (instances as any)?.routerInstance?.modelRouteId;
+      const workerRoute = (instances as any)?.workerInstance?.modelRouteId;
+      const same = routerRoute != null && routerRoute === workerRoute;
+      setAgentModelRouteId(same ? routerRoute : undefined);
+      setAgentModelMixed(!same && (routerRoute != null || workerRoute != null));
+    } catch {
+      setAgentInstances(null);
+      setAgentRoutes([]);
+    } finally {
+      setAgentModelLoading(false);
+    }
+  };
+
+  const routeLabel = (routeId?: number) => {
+    if (routeId == null) return '-';
+    const route = agentRoutes.find((item) => item.id === routeId);
+    if (!route) return `#${routeId}`;
+    return `${route.providerName ? `${route.providerName} · ` : ''}${route.modelName}`;
+  };
+
   const openAgent = (agent: SuperAgent) => {
     setEditingAgent(agent);
     setAgentModalMode('view');
+    void loadAgentModel(agent.id);
   };
 
   const startEdit = () => {
@@ -683,6 +722,26 @@ function AvatarsTab({
       load();
     } finally {
       setEditSubmitting(false);
+    }
+  };
+
+  const changeAgentModelRoute = async (routeId: number) => {
+    if (!editingAgent || agentModelSaving) return;
+    const route = agentRoutes.find((item) => item.id === routeId);
+    if (route?.apiKeyConfigured === false) {
+      message.warning(tw('avatars.modelNoKey', 'This route has no API key'));
+      return;
+    }
+    setAgentModelSaving(true);
+    try {
+      await superAgentApi.updateModelRoute(editingAgent.id, routeId);
+      setAgentModelRouteId(routeId);
+      setAgentModelMixed(false);
+      message.success(tw('avatars.modelSaved', 'Model route updated'));
+    } catch {
+      message.error(tw('common.saveFailed', 'Save failed'));
+    } finally {
+      setAgentModelSaving(false);
     }
   };
 
@@ -1017,6 +1076,51 @@ function AvatarsTab({
                     }`}
                   />
                   {statusLabel(editingAgent?.status)}
+                </div>
+              </div>
+
+              <div className={styles.avatarDetailSection}>
+                <div className={styles.avatarDetailLabel}>
+                  {tw('avatars.model', 'Model')}
+                </div>
+                <Select
+                  className={styles.softField}
+                  loading={agentModelLoading}
+                  value={agentModelRouteId}
+                  placeholder={
+                    agentModelMixed
+                      ? tw(
+                          'avatars.modelMixed',
+                          'Router and Worker use different routes',
+                        )
+                      : tw('avatars.modelPlaceholder', 'Select a model route')
+                  }
+                  disabled={
+                    editingAgent?.status ===
+                      SUPER_AGENT_STATUS_CODE.ARCHIVED || agentModelSaving
+                  }
+                  onChange={(value) => void changeAgentModelRoute(value)}
+                  options={agentRoutes.map((route) => ({
+                    value: route.id,
+                    disabled: route.apiKeyConfigured === false,
+                    label: `${route.providerName ? `${route.providerName} · ` : ''}${route.modelName}`,
+                  }))}
+                  showSearch
+                  optionFilterProp="label"
+                />
+                {agentModelMixed ? (
+                  <div className={styles.fieldHint}>
+                    {tw('avatars.modelCurrent', 'Current routes')}: Router{' '}
+                    {routeLabel(agentInstances?.routerInstance?.modelRouteId)} /
+                    Worker{' '}
+                    {routeLabel(agentInstances?.workerInstance?.modelRouteId)}
+                  </div>
+                ) : null}
+                <div className={styles.fieldHint}>
+                  {tw(
+                    'avatars.modelHint',
+                    'Applies to both Router and Worker; takes effect on the next run.',
+                  )}
                 </div>
               </div>
 

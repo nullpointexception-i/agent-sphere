@@ -3,7 +3,6 @@ package com.buukle.agent.superagent.service.impl;
 
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
-import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.superagent.dtvo.vo.GroupRouterTemplateVO;
@@ -40,10 +39,7 @@ public class GroupRouterTemplateServiceImpl implements GroupRouterTemplateServic
             throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND,
                     "group router instance not found; enable super-agent and configure a model route first");
         }
-        CreateInstanceDTO dto = new CreateInstanceDTO();
-        dto.setName(instance.getName());
-        dto.setSystemPrompt(template);
-        instanceSpi.updateInstance(instance.getId(), dto);
+        instanceSpi.updateSystemPrompt(instance.getId(), template);
         return get();
     }
 }

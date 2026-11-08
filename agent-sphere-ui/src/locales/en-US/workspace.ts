@@ -94,6 +94,14 @@ export default {
   'workspace.avatars.goEdit': 'Edit →',
   'workspace.avatars.editHint': 'Changes take effect on the next run',
   'workspace.avatars.saveEdit': 'Save changes',
+  'workspace.avatars.model': 'Model',
+  'workspace.avatars.modelMixed': 'Router and Worker use different routes',
+  'workspace.avatars.modelPlaceholder': 'Select a model route',
+  'workspace.avatars.modelCurrent': 'Current routes',
+  'workspace.avatars.modelHint':
+    'Applies to both Router and Worker; takes effect on the next run',
+  'workspace.avatars.modelSaved': 'Model route updated',
+  'workspace.avatars.modelNoKey': 'This route has no API key',
 
   'workspace.chat.searchPlaceholder': 'Search chats',
   'workspace.chat.newGroupTitle': 'New group',
