@@ -772,26 +772,6 @@ export default function SkillList() {
               </Button>
             </Dropdown>
           </Can>
-          {record.mine && record.sourceSkillId && (
-            <Can code={PERM.capabilitySkillPublish}>
-              <Button
-                type="link"
-                size="small"
-                onClick={() =>
-                  handlePublishToHub({
-                    ...record,
-                    id: record.sourceSkillId,
-                    hubSkillId: record.id,
-                  })
-                }
-              >
-                {intl.formatMessage({
-                  id: 'pages.capabilities.skill.updateHub',
-                  defaultMessage: 'Update Hub',
-                })}
-              </Button>
-            </Can>
-          )}
         </>
       ),
     },
