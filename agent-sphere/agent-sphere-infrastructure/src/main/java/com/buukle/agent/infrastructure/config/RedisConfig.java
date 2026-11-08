@@ -3,6 +3,7 @@ package com.buukle.agent.infrastructure.config;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.codec.JsonJacksonCodec;
+import org.redisson.codec.Kryo5Codec;
 import org.redisson.config.Config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -53,6 +54,13 @@ public class RedisConfig {
                 .setConnectionPoolSize(32);
         if (codec != null) {
             config.setCodec(codec);
+        } else {
+            // Bind the Kryo class resolver to the application class loader. The default codec
+            // resolves class names with its own loader; under spring-boot-devtools that is the
+            // parent loader, so a decoded event would be a different Class object than the
+            // application's own (identical name, different loader) and every listener cast fails
+            // silently. In a normal (non-devtools) launch this is the same loader as before.
+            config.setCodec(new Kryo5Codec(RedisConfig.class.getClassLoader()));
         }
         return Redisson.create(config);
     }
