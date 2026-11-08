@@ -52,6 +52,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 public class OutboundDispatchScheduler {
 
+    /** {@code agent_outbound_message.remark} is VARCHAR(512); keep the failure write bounded. */
+    private static final int MAX_REMARK = 500;
+
     private static final String CHANNEL_IM = "IM_BUILTIN";
 
     private final AgentOutboundMessageMapper outboundMapper;
@@ -218,6 +221,8 @@ public class OutboundDispatchScheduler {
 
     private void fail(AgentOutboundMessage row, String reason, boolean retryable, String token) {
         int attempts = (row.getAttempts() == null ? 0 : row.getAttempts()) + 1;
+        String remark = reason == null || reason.length() <= MAX_REMARK
+                ? reason : reason.substring(0, MAX_REMARK);
         String status;
         LocalDateTime nextRetryAt = null;
         if (!retryable || attempts >= maxAttempts) {
@@ -235,7 +240,7 @@ public class OutboundDispatchScheduler {
                 .set(AgentOutboundMessage::getStatus, status)
                 .set(AgentOutboundMessage::getAttempts, attempts)
                 .set(AgentOutboundMessage::getNextRetryAt, nextRetryAt)
-                .set(AgentOutboundMessage::getRemark, reason)
+                .set(AgentOutboundMessage::getRemark, remark)
                 .set(AgentOutboundMessage::getLeaseToken, null)
                 .set(AgentOutboundMessage::getLeaseUntil, null));
         if (updated == 0) {
