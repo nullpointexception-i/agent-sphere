@@ -298,6 +298,31 @@ export default {
   'pages.capabilities.definition': 'Definition',
   'pages.capabilities.skill.tabs.mine': 'My Skills',
   'pages.capabilities.skill.tabs.hub': 'Skill Hub',
+  'pages.capabilities.skill.tabs.followed': 'Followed',
+  'pages.capabilities.skill.hubStatus': 'Skill Hub',
+  'pages.capabilities.skill.installedFromHub': 'Installed · hub v{version}',
+  'pages.capabilities.skill.hubNotPublished': 'Not published',
+  'pages.capabilities.skill.hubOutdated':
+    'Hub v{version} · local updates pending',
+  'pages.capabilities.skill.hubPublished': 'Hub v{version}',
+  'pages.capabilities.skill.hubVersion': 'Hub version',
+  'pages.capabilities.skill.publisher': 'Publisher',
+  'pages.capabilities.skill.updateHub': 'Update Hub',
+  'pages.capabilities.skill.updateHubConfirm':
+    'Update "{name}" in the tenant Skill Hub?',
+  'pages.capabilities.skill.publishHint':
+    'Every publish increments the hub version; members of this tenant and its child tenants can follow or install it.',
+  'pages.capabilities.skill.publishSuccess': 'Published as hub v{version}',
+  'pages.capabilities.skill.follow': 'Follow',
+  'pages.capabilities.skill.unfollow': 'Unfollow',
+  'pages.capabilities.skill.followSuccess':
+    'Following; always uses the latest hub version',
+  'pages.capabilities.skill.unfollowSuccess': 'Unfollowed',
+  'pages.capabilities.skill.followCount': 'Followers',
+  'pages.capabilities.skill.installAutoUpdate': 'Install + auto-update',
+  'pages.capabilities.skill.installAutoUpdateContent':
+    'A private copy is created and kept in sync with the hub automatically.',
+  'pages.capabilities.skill.reinstall': 'Install again',
   'pages.capabilities.skill.visibility': 'Visibility',
   'pages.capabilities.skill.visibilityPublic': 'Public',
   'pages.capabilities.skill.visibilityPrivate': 'Private',
@@ -801,6 +826,9 @@ export default {
     'Changes take effect only after clicking Save.',
   'pages.instances.currentCapabilities': 'Current',
   'pages.instances.autoInclude': 'Built-in',
+  'pages.instances.followedHubSkills': 'Followed hub skills',
+  'pages.instances.followedHubHint':
+    'Read-only reference: runs always use the latest tenant hub version; nothing is copied to your skills.',
   'pages.instances.selected': 'Selected',
   'pages.instances.select': 'Select',
   'pages.batchDelete': 'Delete ({count})',

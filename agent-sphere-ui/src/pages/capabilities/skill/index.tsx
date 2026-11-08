@@ -21,6 +21,7 @@ import {
   App,
   Button,
   DatePicker,
+  Dropdown,
   Form,
   Input,
   Modal,
@@ -34,7 +35,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
 import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
-import { getStoredUser } from '@/utils/auth';
 import { formatParamDate, formatTime } from '@/utils/format';
 import { labelWithRule } from '@/utils/labelWithRule';
 import SkillMarkdownEditor from './components/SkillMarkdownEditor';
@@ -80,6 +80,15 @@ interface SkillRecord {
   status?: string;
   visibility?: string;
   originSkillId?: number;
+  hubSkillId?: number;
+  hubVersion?: number;
+  publishedVersion?: number;
+  hasUnpublished?: boolean;
+  followed?: boolean;
+  publisherName?: string;
+  followCount?: number;
+  mine?: boolean;
+  installedSkillId?: number;
   installCount?: number;
   version?: number;
   autoUpdate?: boolean;
@@ -157,10 +166,12 @@ export default function SkillList() {
   const [tableScrollY, setTableScrollY] = useState(400);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [viewRecord, setViewRecord] = useState<SkillRecord | null>(null);
-  const [activeTab, setActiveTab] = useState<'mine' | 'hub'>('mine');
+  const [activeTab, setActiveTab] = useState<'mine' | 'hub' | 'followed'>(
+    'mine',
+  );
   const hubActionRef = useRef<any>(null);
+  const followedActionRef = useRef<any>(null);
   const canUpdate = useCan('capability:skill:update');
-  const currentUsername = getStoredUser()?.username ?? '';
 
   useEffect(() => {
     const calc = () => setTableScrollY(window.innerHeight - 280);
@@ -247,28 +258,60 @@ export default function SkillList() {
     },
     {
       title: intl.formatMessage({
-        id: 'pages.capabilities.skill.visibility',
-        defaultMessage: 'Visibility',
+        id: 'pages.capabilities.skill.hubStatus',
+        defaultMessage: 'Skill Hub',
       }),
-      dataIndex: 'visibility',
-      key: 'visibility',
-      width: 90,
-      render: (v: any) =>
-        v === 'PUBLIC' ? (
+      key: 'hubState',
+      width: 190,
+      render: (_, record: SkillRecord) => {
+        if (record.originSkillId) {
+          return (
+            <Tag color="blue">
+              {intl.formatMessage(
+                {
+                  id: 'pages.capabilities.skill.installedFromHub',
+                  defaultMessage: 'Installed · hub v{version}',
+                },
+                { version: record.originVersion ?? 1 },
+              )}
+            </Tag>
+          );
+        }
+        if (!record.hubSkillId) {
+          return (
+            <Tag>
+              {intl.formatMessage({
+                id: 'pages.capabilities.skill.hubNotPublished',
+                defaultMessage: 'Not published',
+              })}
+            </Tag>
+          );
+        }
+        if (record.hasUnpublished) {
+          return (
+            <Tag color="orange">
+              {intl.formatMessage(
+                {
+                  id: 'pages.capabilities.skill.hubOutdated',
+                  defaultMessage: 'Hub v{version} · local updates pending',
+                },
+                { version: record.hubVersion ?? 1 },
+              )}
+            </Tag>
+          );
+        }
+        return (
           <Tag color="gold">
-            {intl.formatMessage({
-              id: 'pages.capabilities.skill.visibilityPublic',
-              defaultMessage: 'Public',
-            })}
+            {intl.formatMessage(
+              {
+                id: 'pages.capabilities.skill.hubPublished',
+                defaultMessage: 'Hub v{version}',
+              },
+              { version: record.hubVersion ?? 1 },
+            )}
           </Tag>
-        ) : (
-          <Tag>
-            {intl.formatMessage({
-              id: 'pages.capabilities.skill.visibilityPrivate',
-              defaultMessage: 'Private',
-            })}
-          </Tag>
-        ),
+        );
+      },
     },
     {
       title: intl.formatMessage({
@@ -403,12 +446,12 @@ export default function SkillList() {
             <Button
               type="link"
               size="small"
-              onClick={() => handlePublish(record)}
+              onClick={() => handlePublishToHub(record)}
             >
-              {record.visibility === 'PUBLIC'
+              {record.hubSkillId
                 ? intl.formatMessage({
-                    id: 'pages.capabilities.skill.unpublish',
-                    defaultMessage: 'Unpublish',
+                    id: 'pages.capabilities.skill.updateHub',
+                    defaultMessage: 'Update Hub',
                   })
                 : intl.formatMessage({
                     id: 'pages.capabilities.skill.publish',
@@ -492,46 +535,71 @@ export default function SkillList() {
     }
   };
 
-  const handlePublish = (record: any) => {
-    const toPublic = record.visibility !== 'PUBLIC';
+  const handlePublishToHub = (record: any) => {
+    const published = Boolean(record.hubSkillId);
     modal.confirm({
-      title: toPublic
-        ? intl.formatMessage(
-            {
-              id: 'pages.capabilities.skill.publishConfirm',
-              defaultMessage: 'Publish "{name}" to the Skill Hub?',
-            },
-            { name: record.name },
-          )
-        : intl.formatMessage(
-            {
-              id: 'pages.capabilities.skill.unpublishConfirm',
-              defaultMessage:
-                'Unpublish "{name}"? Installed copies are unaffected.',
-            },
-            { name: record.name },
-          ),
+      title: intl.formatMessage(
+        {
+          id: published
+            ? 'pages.capabilities.skill.updateHubConfirm'
+            : 'pages.capabilities.skill.publishConfirm',
+          defaultMessage: published
+            ? 'Update "{name}" in the tenant Skill Hub?'
+            : 'Publish "{name}" to the tenant Skill Hub?',
+        },
+        { name: record.name },
+      ),
+      content: intl.formatMessage({
+        id: 'pages.capabilities.skill.publishHint',
+        defaultMessage:
+          'Every publish increments the hub version; members of this tenant and its child tenants can follow or install it.',
+      }),
       okText: intl.formatMessage({
         id: 'pages.modal.ok',
         defaultMessage: 'Confirm',
       }),
       onOk: async () => {
-        await agentApi.skill.publish(
-          record.id,
-          toPublic ? 'PUBLIC' : 'PRIVATE',
-        );
+        const res = await agentApi.skill.publishToHub(record.id);
         message.success(
-          intl.formatMessage({
-            id: 'pages.modal.saved',
-            defaultMessage: 'Saved',
-          }),
+          intl.formatMessage(
+            {
+              id: 'pages.capabilities.skill.publishSuccess',
+              defaultMessage: 'Published as hub v{version}',
+            },
+            { version: res?.version ?? 1 },
+          ),
         );
         actionRef.current?.reload();
       },
     });
   };
 
-  const handleInstall = (record: any) => {
+  const handleFollow = async (record: any) => {
+    try {
+      if (record.followed) {
+        await agentApi.skill.unfollow(record.id);
+        message.success(
+          intl.formatMessage({
+            id: 'pages.capabilities.skill.unfollowSuccess',
+            defaultMessage: 'Unfollowed',
+          }),
+        );
+      } else {
+        await agentApi.skill.follow(record.id);
+        message.success(
+          intl.formatMessage({
+            id: 'pages.capabilities.skill.followSuccess',
+            defaultMessage: 'Following the latest hub version',
+          }),
+        );
+      }
+      hubActionRef.current?.reload();
+    } catch {
+      message.error(intl.formatMessage({ id: 'pages.chat.saveFailed' }));
+    }
+  };
+
+  const handleInstallHub = (record: any, autoUpdate: boolean) => {
     modal.confirm({
       title: intl.formatMessage(
         {
@@ -541,22 +609,26 @@ export default function SkillList() {
         { name: record.name },
       ),
       content: intl.formatMessage({
-        id: 'pages.capabilities.skill.installConfirmContent',
-        defaultMessage:
-          'A copy will be added to your skills (private by default) and can be edited independently.',
+        id: autoUpdate
+          ? 'pages.capabilities.skill.installAutoUpdateContent'
+          : 'pages.capabilities.skill.installConfirmContent',
+        defaultMessage: autoUpdate
+          ? 'A private copy is created and kept in sync with the hub automatically.'
+          : 'A private copy is created at the current hub version and can be edited independently.',
       }),
       okText: intl.formatMessage({
         id: 'pages.modal.ok',
         defaultMessage: 'Confirm',
       }),
       onOk: async () => {
-        await agentApi.skill.install(record.id);
+        await agentApi.skill.installHub(record.id, autoUpdate);
         message.success(
           intl.formatMessage({
             id: 'pages.capabilities.skill.installSuccess',
             defaultMessage: 'Installed to my skills',
           }),
         );
+        hubActionRef.current?.reload();
         actionRef.current?.reload();
       },
     });
@@ -590,14 +662,24 @@ export default function SkillList() {
     },
     {
       title: intl.formatMessage({
-        id: 'pages.capabilities.skill.author',
-        defaultMessage: 'Author',
+        id: 'pages.capabilities.skill.publisher',
+        defaultMessage: 'Publisher',
       }),
-      dataIndex: 'createdBy',
-      key: 'createdBy',
+      dataIndex: 'publisherName',
+      key: 'publisherName',
       width: 120,
       ellipsis: true,
       render: (v: any) => v || '-',
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.skill.hubVersion',
+        defaultMessage: 'Hub version',
+      }),
+      dataIndex: 'version',
+      key: 'version',
+      width: 100,
+      render: (v: any) => `v${v ?? 1}`,
     },
     {
       title: intl.formatMessage({
@@ -610,9 +692,19 @@ export default function SkillList() {
       render: (v: any) => v ?? 0,
     },
     {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.skill.followCount',
+        defaultMessage: 'Followers',
+      }),
+      dataIndex: 'followCount',
+      key: 'followCount',
+      width: 90,
+      render: (v: any) => v ?? 0,
+    },
+    {
       title: intl.formatMessage({ id: 'pages.table.actions' }),
       key: 'actions',
-      width: 160,
+      width: 260,
       fixed: 'right',
       render: (_: any, record: any) => (
         <>
@@ -620,22 +712,86 @@ export default function SkillList() {
             type="link"
             size="small"
             icon={<EyeOutlined />}
-            onClick={() => setViewRecord(record)}
+            onClick={() => {
+              agentApi.skill
+                .hubDetail(record.id)
+                .then((detail: any) => setViewRecord({ ...record, ...detail }))
+                .catch(() => setViewRecord(record));
+            }}
           />
           <Can code={PERM.capabilitySkillInstall}>
-            {record.createdBy !== currentUsername && (
+            {!record.mine && (
               <Button
                 type="link"
                 size="small"
-                onClick={() => handleInstall(record)}
+                onClick={() => handleFollow(record)}
               >
-                {intl.formatMessage({
-                  id: 'pages.capabilities.skill.install',
-                  defaultMessage: 'Install',
-                })}
+                {record.followed
+                  ? intl.formatMessage({
+                      id: 'pages.capabilities.skill.unfollow',
+                      defaultMessage: 'Unfollow',
+                    })
+                  : intl.formatMessage({
+                      id: 'pages.capabilities.skill.follow',
+                      defaultMessage: 'Follow',
+                    })}
               </Button>
             )}
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'install',
+                    label: intl.formatMessage({
+                      id: 'pages.capabilities.skill.install',
+                      defaultMessage: 'Install',
+                    }),
+                    onClick: () => handleInstallHub(record, false),
+                  },
+                  {
+                    key: 'install-auto',
+                    label: intl.formatMessage({
+                      id: 'pages.capabilities.skill.installAutoUpdate',
+                      defaultMessage: 'Install + auto-update',
+                    }),
+                    onClick: () => handleInstallHub(record, true),
+                  },
+                ],
+              }}
+            >
+              <Button type="link" size="small">
+                {record.installedSkillId
+                  ? intl.formatMessage({
+                      id: 'pages.capabilities.skill.reinstall',
+                      defaultMessage: 'Install again',
+                    })
+                  : intl.formatMessage({
+                      id: 'pages.capabilities.skill.install',
+                      defaultMessage: 'Install',
+                    })}
+              </Button>
+            </Dropdown>
           </Can>
+          {record.mine && record.sourceSkillId && (
+            <Can code={PERM.capabilitySkillPublish}>
+              <Button
+                type="link"
+                size="small"
+                onClick={() =>
+                  handlePublishToHub({
+                    ...record,
+                    id: record.sourceSkillId,
+                    hubSkillId: record.id,
+                  })
+                }
+              >
+                {intl.formatMessage({
+                  id: 'pages.capabilities.skill.updateHub',
+                  defaultMessage: 'Update Hub',
+                })}
+              </Button>
+            </Can>
+          )}
         </>
       ),
     },
@@ -718,7 +874,7 @@ export default function SkillList() {
     <PageContainer title={false} breadcrumbRender={false}>
       <Tabs
         activeKey={activeTab}
-        onChange={(k) => setActiveTab(k as 'mine' | 'hub')}
+        onChange={(k) => setActiveTab(k as 'mine' | 'hub' | 'followed')}
         items={[
           {
             key: 'mine',
@@ -734,6 +890,13 @@ export default function SkillList() {
               defaultMessage: 'Skill Hub',
             }),
           },
+          {
+            key: 'followed',
+            label: intl.formatMessage({
+              id: 'pages.capabilities.skill.tabs.followed',
+              defaultMessage: 'Followed',
+            }),
+          },
         ]}
       />
       {activeTab === 'hub' ? (
@@ -743,7 +906,7 @@ export default function SkillList() {
           rowKey="id"
           search={false}
           options={false}
-          scroll={{ x: 1010, y: tableScrollY }}
+          scroll={{ x: 1200, y: tableScrollY }}
           pagination={{
             defaultPageSize: DEFAULT_PAGE_SIZE,
             showSizeChanger: true,
@@ -780,6 +943,28 @@ export default function SkillList() {
               maxLength={255}
             />,
           ]}
+        />
+      ) : activeTab === 'followed' ? (
+        <ProTable
+          key="followed"
+          actionRef={followedActionRef}
+          rowKey="id"
+          search={false}
+          options={false}
+          scroll={{ x: 1200, y: tableScrollY }}
+          pagination={{
+            defaultPageSize: DEFAULT_PAGE_SIZE,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: [5, 10, 20, 50],
+            style: { justifyContent: 'flex-start' },
+          }}
+          request={async () => {
+            const rows = await agentApi.skill.followed();
+            const list = Array.isArray(rows) ? rows : [];
+            return { data: list, total: list.length, success: true };
+          }}
+          columns={hubColumns}
         />
       ) : (
         <ProTable

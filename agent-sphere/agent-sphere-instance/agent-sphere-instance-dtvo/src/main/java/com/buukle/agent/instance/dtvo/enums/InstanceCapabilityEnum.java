@@ -5,6 +5,8 @@ import com.buukle.agent.common.constant.McpServerType;
 public final class InstanceCapabilityEnum {
     public static final String CAPABILITY_TYPE_MCP = "mcp";
     public static final String CAPABILITY_TYPE_SKILL = "skill";
+    /** A followed tenant-hub skill bound to an instance: read-only, always the latest hub version. */
+    public static final String CAPABILITY_TYPE_SKILL_HUB = "skill_hub";
     public static final String CAPABILITY_TYPE_CLI = "cli";
     public static final String CAPABILITY_TYPE_BUILTIN = "builtin";
     public static final String STATUS_ENABLED = "ENABLED";

@@ -9,6 +9,7 @@ import com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO;
 import com.buukle.agent.capability.skill.dtvo.dto.UpdateSkillStatusDTO;
 import com.buukle.agent.capability.skill.dtvo.enums.SkillSyncTriggerEnum;
 import com.buukle.agent.capability.skill.service.CapabilitySkillService;
+import com.buukle.agent.capability.skill.service.SkillHubService;
 import com.buukle.agent.capability.skill.service.impl.SkillSyncRunner;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
@@ -28,6 +29,7 @@ import java.time.LocalDateTime;
 @WithTenant
 public class CapabilitySkillController extends BaseController {
     private final CapabilitySkillService capabilitySkillService;
+    private final SkillHubService skillHubService;
     private final SkillSyncRunner skillSyncRunner;
 
     @AuditLog(action = "CREATE", resourceType = "Capability", resourceId = "#result?.body?.id")
@@ -98,7 +100,57 @@ public class CapabilitySkillController extends BaseController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String keyword) {
-        return ok(capabilitySkillService.pageHubSkills(page, size, keyword));
+        return ok(skillHubService.pageHubSkills(page, size, keyword));
+    }
+
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_READ)
+    @GetMapping("/hub/followed")
+    public ResponseEntity<?> followed() {
+        return ok(skillHubService.listFollowed());
+    }
+
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_READ)
+    @GetMapping("/hub/{hubId}")
+    public ResponseEntity<?> hubDetail(@PathVariable Long hubId) {
+        return ok(skillHubService.getHub(hubId));
+    }
+
+    @AuditLog(action = "PUBLISH", resourceType = "Capability", resourceId = "#id")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_PUBLISH)
+    @PostMapping("/{id}/publish")
+    public ResponseEntity<?> publish(@PathVariable Long id) {
+        return ok(skillHubService.publish(id));
+    }
+
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_READ)
+    @GetMapping("/{id}/publish-state")
+    public ResponseEntity<?> publishState(@PathVariable Long id) {
+        return ok(skillHubService.publishState(id));
+    }
+
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_INSTALL)
+    @PostMapping("/hub/{hubId}/follow")
+    public ResponseEntity<?> follow(@PathVariable Long hubId) {
+        skillHubService.follow(hubId);
+        return ok(true);
+    }
+
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_INSTALL)
+    @DeleteMapping("/hub/{hubId}/follow")
+    public ResponseEntity<?> unfollow(@PathVariable Long hubId) {
+        skillHubService.unfollow(hubId);
+        return ok(true);
+    }
+
+    @AuditLog(action = "INSTALL", resourceType = "Capability", resourceId = "#hubId")
+    @RequirePermission(PermissionCodes.CAPABILITY_SKILL_INSTALL)
+    @PostMapping("/hub/{hubId}/install")
+    public ResponseEntity<?> installFromHub(
+            @PathVariable Long hubId,
+            @RequestBody(required = false) java.util.Map<String, Object> body) {
+        boolean autoUpdate = body != null && body.get("autoUpdate") != null
+                && Boolean.parseBoolean(String.valueOf(body.get("autoUpdate")));
+        return created(skillHubService.install(hubId, autoUpdate));
     }
 
     @AuditLog(action = "PUBLISH", resourceType = "Capability", resourceId = "#id")

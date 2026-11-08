@@ -5,9 +5,11 @@ import com.buukle.agent.common.context.TenantScope;
 import com.buukle.agent.common.context.TenantScopeHolder;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.capability.skill.domain.CapabilitySkill;
+import com.buukle.agent.capability.skill.domain.CapabilitySkillHub;
 import com.buukle.agent.capability.skill.dtvo.dto.CreateSkillDTO;
 import com.buukle.agent.capability.skill.dtvo.enums.SkillCapabilityEnum;
 import com.buukle.agent.capability.skill.dtvo.enums.SkillSyncOutcome;
@@ -15,6 +17,7 @@ import com.buukle.agent.capability.skill.dtvo.enums.SkillVisibilityEnum;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.exception.CapabilitySkillErrorCode;
 import com.buukle.agent.capability.skill.repository.SkillMapper;
+import com.buukle.agent.capability.skill.repository.SkillHubMapper;
 import com.buukle.agent.capability.skill.service.CapabilitySkillService;
 import com.buukle.agent.capability.skill.service.converter.CapabilitySkillConverter;
 import com.buukle.agent.common.context.AuthContext;
@@ -28,6 +31,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -35,6 +40,7 @@ import java.util.List;
 @Primary
 public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, CapabilitySkill> implements CapabilitySkillService {
     private final CapabilitySkillConverter capabilitySkillConverter;
+    private final SkillHubMapper skillHubMapper;
 
     /** Operator used when auto-update syncs origin content (background tasks have no user context). */
     private static final String AUTO_UPDATE_OPERATOR = "skill-auto-update";
@@ -125,7 +131,9 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
                 .orderByDesc(CapabilitySkill::getCreatedAt)
                 .list();
         log.warn("listSkills result: {} rows", list.size());
-        return list.stream().map(capabilitySkillConverter::toVO).toList();
+        List<SkillVO> vos = list.stream().map(capabilitySkillConverter::toVO).collect(Collectors.toList());
+        attachHubState(list, vos);
+        return vos;
     }
 
     @Override
@@ -136,7 +144,38 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
                 .le(endTime != null, CapabilitySkill::getCreatedAt, endTime)
                 .orderByDesc(CapabilitySkill::getCreatedAt)
                 .page(new Page<>(page, size));
-        return p.convert(capabilitySkillConverter::toVO);
+        List<SkillVO> vos = p.getRecords().stream()
+                .map(capabilitySkillConverter::toVO).collect(Collectors.toList());
+        attachHubState(p.getRecords(), vos);
+        Page<SkillVO> result = new Page<>(p.getCurrent(), p.getSize(), p.getTotal());
+        result.setRecords(vos);
+        return result;
+    }
+
+    /** One extra query for the page: publish state shown by the "my skills" badges. */
+    private void attachHubState(List<CapabilitySkill> skills, List<SkillVO> vos) {
+        if (skills == null || skills.isEmpty() || vos == null || vos.isEmpty()) {
+            return;
+        }
+        List<Long> ids = skills.stream().map(CapabilitySkill::getId).toList();
+        Map<Long, CapabilitySkillHub> hubs = skillHubMapper.selectList(
+                        Wrappers.<CapabilitySkillHub>lambdaQuery()
+                                .in(CapabilitySkillHub::getSourceSkillId, ids))
+                .stream()
+                .collect(Collectors.toMap(CapabilitySkillHub::getSourceSkillId, h -> h, (a, b) -> a));
+        for (int i = 0; i < skills.size() && i < vos.size(); i++) {
+            SkillVO vo = vos.get(i);
+            CapabilitySkillHub hub = hubs.get(skills.get(i).getId());
+            if (hub == null) {
+                vo.setHasUnpublished(false);
+                continue;
+            }
+            vo.setHubSkillId(hub.getId());
+            vo.setHubVersion(hub.getVersion());
+            vo.setPublishedVersion(hub.getSourceVersion());
+            vo.setHasUnpublished((skills.get(i).getVersion() == null ? 0 : skills.get(i).getVersion())
+                    > (hub.getSourceVersion() == null ? 0 : hub.getSourceVersion()));
+        }
     }
 
     @Override
@@ -277,6 +316,9 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
 
     @Override
     public SkillSyncOutcome syncWithOutcome(CapabilitySkill copy) {
+        if (copy.getHubSkillId() != null) {
+            return syncFromHub(copy);
+        }
         CapabilitySkill source = getById(copy.getOriginSkillId());
         if (source == null) {
             // Origin deleted: the copy stays on old content with no alert at all - only this return value surfaces it in the execution record
@@ -304,6 +346,34 @@ public class CapabilitySkillServiceImpl extends ServiceImpl<SkillMapper, Capabil
                 .set(CapabilitySkill::getOriginVersion, sourceVersion)
                 .set(CapabilitySkill::getSyncedAt, LocalDateTime.now())
                 .set(CapabilitySkill::getSyncedFromVersion, sourceVersion)
+                .set(CapabilitySkill::getUpdatedBy, AUTO_UPDATE_OPERATOR)
+                .update();
+        return updated ? SkillSyncOutcome.UPDATED : SkillSyncOutcome.CONCURRENT_UPDATE;
+    }
+
+    /**
+     * Installed copy of a tenant hub entry: the hub has its own monotonically increasing version,
+     * independent of the local source skill. Content is copied from the hub snapshot.
+     */
+    private SkillSyncOutcome syncFromHub(CapabilitySkill copy) {
+        CapabilitySkillHub hub = skillHubMapper.selectById(copy.getHubSkillId());
+        if (hub == null) {
+            return SkillSyncOutcome.SOURCE_GONE;
+        }
+        int hubVersion = hub.getVersion() != null ? hub.getVersion() : 1;
+        int originVersion = copy.getOriginVersion() != null ? copy.getOriginVersion() : 1;
+        if (hubVersion <= originVersion) {
+            return SkillSyncOutcome.VERSION_NOT_AHEAD;
+        }
+        boolean updated = lambdaUpdate()
+                .eq(CapabilitySkill::getId, copy.getId())
+                .eq(CapabilitySkill::getOriginVersion, copy.getOriginVersion())
+                .set(CapabilitySkill::getName, hub.getName())
+                .set(CapabilitySkill::getDescription, hub.getDescription())
+                .set(CapabilitySkill::getDefinition, hub.getDefinition())
+                .set(CapabilitySkill::getOriginVersion, hubVersion)
+                .set(CapabilitySkill::getSyncedAt, LocalDateTime.now())
+                .set(CapabilitySkill::getSyncedFromVersion, hubVersion)
                 .set(CapabilitySkill::getUpdatedBy, AUTO_UPDATE_OPERATOR)
                 .update();
         return updated ? SkillSyncOutcome.UPDATED : SkillSyncOutcome.CONCURRENT_UPDATE;

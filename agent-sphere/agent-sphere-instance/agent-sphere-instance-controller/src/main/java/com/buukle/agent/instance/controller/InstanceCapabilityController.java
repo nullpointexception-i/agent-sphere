@@ -12,6 +12,7 @@ import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
+import com.buukle.agent.capability.skill.spi.SkillHubSpi;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.util.BaseController;
@@ -39,6 +40,7 @@ public class InstanceCapabilityController extends BaseController {
     private final InstanceCapabilityService instanceCapabilityService;
     private final CapabilityMcpSpi capabilityMcpSpi;
     private final CapabilitySkillSpi capabilitySkillSpi;
+    private final SkillHubSpi skillHubSpi;
     private final CapabilityCliSpi capabilityCliSpi;
     private final CapabilityBuiltinSpi capabilityBuiltinSpi;
 
@@ -71,11 +73,13 @@ public class InstanceCapabilityController extends BaseController {
         List<CapabilityVO> caps = instanceCapabilityService.getCapabilitiesByInstance(instanceId);
         List<Long> mcpIds = new ArrayList<>();
         List<Long> skillIds = new ArrayList<>();
+        List<Long> hubIds = new ArrayList<>();
         List<Long> cliIds = new ArrayList<>();
         for (CapabilityVO c : caps) {
             switch (c.getCapabilityType()) {
                 case "mcp" -> mcpIds.add(c.getCapabilityId());
                 case "skill" -> skillIds.add(c.getCapabilityId());
+                case "skill_hub" -> hubIds.add(c.getCapabilityId());
                 case "cli" -> cliIds.add(c.getCapabilityId());
             }
         }
@@ -86,6 +90,10 @@ public class InstanceCapabilityController extends BaseController {
         Map<Long, SkillVO> skillById = capabilitySkillSpi.listSkillsByIds(skillIds).stream()
                 .collect(Collectors.toMap(SkillVO::getId, Function.identity()));
         Map<Long, String> skillNames = skillById.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getName()));
+        Map<Long, SkillVO> hubById = skillHubSpi.listHubSkillsByIds(hubIds).stream()
+                .collect(Collectors.toMap(SkillVO::getId, Function.identity()));
+        Map<Long, String> hubNames = hubById.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getName()));
         Map<Long, CliVO> cliById = capabilityCliSpi.listClisByIds(cliIds).stream()
                 .collect(Collectors.toMap(CliVO::getId, Function.identity()));
@@ -102,6 +110,7 @@ public class InstanceCapabilityController extends BaseController {
             String name = switch (c.getCapabilityType()) {
                 case "mcp" -> mcpNames.get(c.getCapabilityId());
                 case "skill" -> skillNames.get(c.getCapabilityId());
+                case "skill_hub" -> hubNames.get(c.getCapabilityId());
                 case "cli" -> cliNames.get(c.getCapabilityId());
                 case "builtin" -> {
                     BuiltinToolVO b = builtinMap.get(c.getCapabilityId());
@@ -149,6 +158,13 @@ public class InstanceCapabilityController extends BaseController {
                 if (skill != null) {
                     vo.setDescription(skill.getDescription());
                     vo.setStatus(skill.getStatus());
+                }
+            }
+            if ("skill_hub".equals(c.getCapabilityType())) {
+                SkillVO hub = hubById.get(c.getCapabilityId());
+                if (hub != null) {
+                    vo.setDescription(hub.getDescription());
+                    vo.setStatus(hub.getStatus());
                 }
             }
             result.add(vo);

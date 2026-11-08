@@ -219,6 +219,7 @@ class ParallelSearchAgentLoopTest {
             run.setId(RUN_ID);
             run.setSessionId(SESSION_ID);
             ContextPreparer preparer = new ContextPreparer(bindings, mcp, mock(CapabilitySkillSpi.class),
+                    mock(com.buukle.agent.capability.skill.spi.SkillHubSpi.class),
                     mock(CapabilityCliSpi.class), builtin, properties);
             KernelContext ctx = preparer.prepare(run, ValidationResult.builder()
                     .agentInstance(instance).modelRoute(route).build(), OBJECTIVE);

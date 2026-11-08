@@ -18,6 +18,7 @@ import com.buukle.agent.instance.dtvo.vo.CapabilityVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.InstanceCapabilitySpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.capability.skill.spi.SkillHubSpi;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.CAPABILITY_TYPE_SKILL;
+import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.CAPABILITY_TYPE_SKILL_HUB;
 
 @Slf4j
 @Component
@@ -51,7 +53,15 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    /**
+     * Followed hub entries are exposed with an id offset so they never collide with local skill ids
+     * (two tables, two sequences). The LLM receives {@code HUB_ID_BASE + hub.id} and passes it back
+     * to {@code get}; the offset is stripped before resolving the hub row.
+     */
+    static final long HUB_ID_BASE = 1_000_000_000L;
+
     private final CapabilitySkillSpi skillSpi;
+    private final SkillHubSpi skillHubSpi;
     private final InstanceCapabilitySpi instanceCapabilitySpi;
     private final SessionSpi sessionSpi;
 
@@ -185,12 +195,21 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
 
     private List<SkillVO> boundSkills(Long instanceId) {
         List<Long> boundIds = new ArrayList<>();
+        List<Long> hubIds = new ArrayList<>();
         for (CapabilityVO cap : instanceCapabilitySpi.getCapabilitiesByInstance(instanceId)) {
             if (CAPABILITY_TYPE_SKILL.equals(cap.getCapabilityType())) {
                 boundIds.add(cap.getCapabilityId());
+            } else if (CAPABILITY_TYPE_SKILL_HUB.equals(cap.getCapabilityType())) {
+                hubIds.add(cap.getCapabilityId());
             }
         }
-        return skillSpi.listSkillsByIds(boundIds);
+        List<SkillVO> result = new ArrayList<>(skillSpi.listSkillsByIds(boundIds));
+        for (SkillVO hub : skillHubSpi.listHubSkillsByIds(hubIds)) {
+            // Expose a non-colliding id; handleGet strips the offset back to the hub row.
+            hub.setId(HUB_ID_BASE + hub.getId());
+            result.add(hub);
+        }
+        return result;
     }
 
     private List<SkillLibraryResultVO.SkillSummaryVO> skillSummaries(List<SkillVO> skills) {
@@ -239,7 +258,9 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
         if (!isSkillBound(session.instanceId(), skillId)) {
             return error(SkillLibraryAction.GET.value(), "Skill " + skillId + " is not bound to the current agent instance");
         }
-        SkillVO skill = skillSpi.getSkill(skillId);
+        SkillVO skill = skillId >= HUB_ID_BASE
+                ? skillHubSpi.getHubSkill(skillId - HUB_ID_BASE)
+                : skillSpi.getSkill(skillId);
         if (skill == null) {
             return error(SkillLibraryAction.GET.value(), "Skill not found: " + skillId);
         }
@@ -300,10 +321,13 @@ public class CapabilityBuiltinToolSkillLibrary implements CapabilityBuiltinToolS
     }
 
     private boolean isSkillBound(Long instanceId, Long skillId) {
+        boolean hub = skillId != null && skillId >= HUB_ID_BASE;
+        long boundId = hub ? skillId - HUB_ID_BASE : skillId;
+        String expectedType = hub ? CAPABILITY_TYPE_SKILL_HUB : CAPABILITY_TYPE_SKILL;
         for (CapabilityVO cap : instanceCapabilitySpi.getCapabilitiesByInstance(instanceId)) {
-            if (CAPABILITY_TYPE_SKILL.equals(cap.getCapabilityType())
+            if (expectedType.equals(cap.getCapabilityType())
                     && cap.getCapabilityId() != null
-                    && cap.getCapabilityId().equals(skillId)) {
+                    && cap.getCapabilityId() == boundId) {
                 return true;
             }
         }

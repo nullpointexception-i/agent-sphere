@@ -15,6 +15,7 @@ import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
+import com.buukle.agent.capability.skill.spi.SkillHubSpi;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.constant.RunMode;
@@ -86,6 +87,7 @@ public class ContextPreparer {
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
     private final CapabilitySkillSpi skillSpi;
+    private final SkillHubSpi skillHubSpi;
     private final CapabilityCliSpi cliSpi;
     private final CapabilityBuiltinSpi builtinSpi;
     private final AgentRuntimeProperties properties;
@@ -157,6 +159,12 @@ public class ContextPreparer {
                     }
                     case CAPABILITY_TYPE_SKILL -> {
                         SkillVO skill = skillSpi.getSkill(cap.getCapabilityId());
+                        if (skill != null) result.add(buildFull(cap, skill.getName(), skill.getDescription(),
+                                null, null, null, skill.getDefinition()));
+                    }
+                    case CAPABILITY_TYPE_SKILL_HUB -> {
+                        // Followed hub skill: read-only, always resolved from the current hub snapshot.
+                        SkillVO skill = skillHubSpi.getHubSkill(cap.getCapabilityId());
                         if (skill != null) result.add(buildFull(cap, skill.getName(), skill.getDescription(),
                                 null, null, null, skill.getDefinition()));
                     }

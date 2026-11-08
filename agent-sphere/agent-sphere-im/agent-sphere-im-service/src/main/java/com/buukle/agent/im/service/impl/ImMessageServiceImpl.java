@@ -18,6 +18,7 @@ import com.buukle.agent.im.domain.ImReadCursor;
 import com.buukle.agent.im.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.im.dtvo.dto.ImGateConfig;
 import com.buukle.agent.im.dtvo.enums.ImMessageStatus;
+import com.buukle.agent.im.dtvo.enums.ImConversationStatus;
 import com.buukle.agent.im.dtvo.enums.ImMessageType;
 import com.buukle.agent.im.dtvo.enums.ImParticipantType;
 import com.buukle.agent.im.dtvo.enums.ImConversationType;
@@ -96,6 +97,7 @@ public class ImMessageServiceImpl implements ImMessageService {
         if (conversation == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "conversation not found");
         }
+        assertActive(conversation);
         assertMember(conversationId, userId);
         assertAgentChattable(conversation, userId);
 
@@ -206,6 +208,7 @@ public class ImMessageServiceImpl implements ImMessageService {
         if (conversation == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "conversation not found");
         }
+        assertActive(conversation);
         if (clientMsgId != null && !clientMsgId.isBlank()) {
             ImMessage existing = systemRead(() -> messageMapper.selectOne(Wrappers.<ImMessage>lambdaQuery()
                     .eq(ImMessage::getConversationId, conversationId)
@@ -681,6 +684,15 @@ public class ImMessageServiceImpl implements ImMessageService {
             return JsonUtils.parse(json, Object.class);
         } catch (Exception e) {
             return json;
+        }
+    }
+
+    /** Archived conversations are read-only history: no new messages from users or agents. */
+    private static void assertActive(ImConversation conversation) {
+        // Null status is a legacy row; treat it as active, only an explicit non-active status blocks.
+        String status = conversation.getStatus();
+        if (status != null && !ImConversationStatus.ACTIVE.equals(status)) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "conversation is archived");
         }
     }
 

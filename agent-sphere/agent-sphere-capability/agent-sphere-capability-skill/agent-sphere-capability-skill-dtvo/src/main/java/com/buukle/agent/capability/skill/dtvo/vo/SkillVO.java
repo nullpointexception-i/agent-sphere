@@ -13,6 +13,10 @@ public class SkillVO implements Serializable {
     private String status;
     private String visibility;
     private Long originSkillId;
+    private Long hubSkillId;
+    private Integer hubVersion;
+    private Integer publishedVersion;
+    private Boolean hasUnpublished;
     private Integer installCount;
     private Integer version;
     private Integer originVersion;

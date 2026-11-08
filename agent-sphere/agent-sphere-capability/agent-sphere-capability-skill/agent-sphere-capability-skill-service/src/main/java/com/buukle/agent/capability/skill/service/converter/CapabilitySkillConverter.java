@@ -22,6 +22,7 @@ public class CapabilitySkillConverter {
         vo.setStatus(skill.getStatus());
         vo.setVisibility(skill.getVisibility());
         vo.setOriginSkillId(skill.getOriginSkillId());
+        vo.setHubSkillId(skill.getHubSkillId());
         vo.setInstallCount(skill.getInstallCount());
         vo.setVersion(skill.getVersion());
         vo.setOriginVersion(skill.getOriginVersion());

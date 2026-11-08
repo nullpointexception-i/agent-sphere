@@ -148,6 +148,7 @@ public class ImConversationServiceImpl implements ImConversationService {
         List<ImConversation> conversations = systemRead(() -> conversationMapper.selectList(
                 Wrappers.<ImConversation>lambdaQuery()
                         .in(ImConversation::getId, conversationIds)
+                        .eq(ImConversation::getStatus, ImConversationStatus.ACTIVE)
                         .orderByDesc(ImConversation::getLastMessageAt)
                         .orderByDesc(ImConversation::getId)));
         Map<Long, ImConversationSetting> settings = settingsOf(userId, conversationIds);

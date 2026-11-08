@@ -18,6 +18,8 @@ public class CapabilitySkill {
     private String visibility;
     /** Fork lineage: an installed copy points back to the source skill id; null for originals. */
     private Long originSkillId;
+    /** Hub entry this copy was installed from (null for originals and legacy copies). */
+    private Long hubSkillId;
     /** Number of times this skill has been copied/installed (accumulated on the source row). */
     private Integer installCount;
     /** Content version: bumped on every content edit of the source skill; 1 on creation. */

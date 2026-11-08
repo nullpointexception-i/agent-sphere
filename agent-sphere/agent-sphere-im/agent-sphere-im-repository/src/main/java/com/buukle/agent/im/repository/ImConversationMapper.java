@@ -63,6 +63,7 @@ public interface ImConversationMapper extends BaseMapper<ImConversation> {
              AND p.participant_id = #{userId}
              AND p.delete_flag = FALSE
             WHERE c.delete_flag = FALSE
+            AND c.status = 'ACTIVE'
             <if test="excludeIds != null and !excludeIds.isEmpty()">
               AND c.id NOT IN
               <foreach collection="excludeIds" item="id" open="(" separator="," close=")">

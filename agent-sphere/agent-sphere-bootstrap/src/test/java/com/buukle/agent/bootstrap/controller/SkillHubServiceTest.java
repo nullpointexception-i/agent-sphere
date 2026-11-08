@@ -6,6 +6,7 @@ import com.buukle.agent.capability.skill.domain.CapabilitySkill;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.exception.CapabilitySkillErrorCode;
 import com.buukle.agent.capability.skill.repository.SkillMapper;
+import com.buukle.agent.capability.skill.repository.SkillHubMapper;
 import com.buukle.agent.capability.skill.service.converter.CapabilitySkillConverter;
 import com.buukle.agent.capability.skill.service.impl.CapabilitySkillServiceImpl;
 import com.buukle.agent.common.context.AuthContext;
@@ -33,6 +34,9 @@ class SkillHubServiceTest {
     @Mock
     SkillMapper skillMapper;
 
+    @Mock
+    SkillHubMapper skillHubMapper;
+
     CapabilitySkillServiceImpl service;
 
     @BeforeEach
@@ -42,7 +46,7 @@ class SkillHubServiceTest {
                 new org.apache.ibatis.builder.MapperBuilderAssistant(
                         new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""),
                 CapabilitySkill.class);
-        service = new CapabilitySkillServiceImpl(new CapabilitySkillConverter());
+        service = new CapabilitySkillServiceImpl(new CapabilitySkillConverter(), skillHubMapper);
         // ServiceImpl.baseMapper lives in the parent CrudRepository (protected, no setter); inject the mock via reflection
         java.lang.reflect.Field f =
                 com.baomidou.mybatisplus.extension.repository.CrudRepository.class.getDeclaredField("baseMapper");

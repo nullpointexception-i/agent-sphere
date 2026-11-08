@@ -34,6 +34,12 @@ public interface TenantScopeSpi {
 
     boolean isTenantActive(Long tenantId);
 
+    /**
+     * The tenant itself plus every ancestor up to the root. Used by tenant-scoped hubs whose
+     * content is inherited by child tenants (the platform tenant's hub is platform-wide).
+     */
+    List<Long> ancestorTenantIds(Long tenantId);
+
     /** User ids assigned to any of the supplied tenants. Used for user/contact lists. */
     List<Long> listUserIdsInTenants(Set<Long> tenantIds);
 }

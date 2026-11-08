@@ -60,6 +60,7 @@ class ContextPreparerFinishTest {
 
         ContextPreparer preparer = new ContextPreparer(capabilitySpi,
                 mock(CapabilityMcpSpi.class), mock(CapabilitySkillSpi.class),
+                mock(com.buukle.agent.capability.skill.spi.SkillHubSpi.class),
                 mock(CapabilityCliSpi.class), builtin, properties);
 
         RunVO run = new RunVO();

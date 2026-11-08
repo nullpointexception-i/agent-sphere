@@ -174,7 +174,10 @@ public class SkillSyncRunner extends AbstractRecordedTask<SkillSyncRunVO, String
                             // was the root cause fixed here - it filtered by "install time", so
                             // old copies were never scanned again.
                             .eq(CapabilitySkill::getAutoUpdate, true)
-                            .isNotNull(CapabilitySkill::getOriginSkillId)
+                            // Copies follow either a hub entry (hub_skill_id) or, for legacy rows,
+                            // the local source skill (origin_skill_id).
+                            .and(w -> w.isNotNull(CapabilitySkill::getHubSkillId)
+                                    .or().isNotNull(CapabilitySkill::getOriginSkillId))
                             .orderByAsc(CapabilitySkill::getId));
             List<CapabilitySkill> copies = page.getRecords();
             if (copies.isEmpty()) {

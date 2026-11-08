@@ -35,6 +35,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class TenantScopeServiceImpl implements TenantScopeSpi {
 
+    private static final int MAX_TENANT_DEPTH = 32;
+
     private final SysTenantMapper tenantMapper;
     private final SysUserTenantMapper userTenantMapper;
 
@@ -220,6 +222,25 @@ public class TenantScopeServiceImpl implements TenantScopeSpi {
         }
         result.add(tenantId);
         result.addAll(descendantIds(tenantId));
+        return result;
+    }
+
+    @Override
+    public List<Long> ancestorTenantIds(Long tenantId) {
+        List<Long> result = new ArrayList<>();
+        if (tenantId == null) {
+            return result;
+        }
+        Long cursor = tenantId;
+        int depth = 0;
+        while (cursor != null && depth++ < MAX_TENANT_DEPTH) {
+            SysTenant tenant = tenantMapper.selectById(cursor);
+            if (tenant == null || !TenantConstants.STATUS_ACTIVE.equals(tenant.getStatus())) {
+                break;
+            }
+            result.add(cursor);
+            cursor = tenant.getPid();
+        }
         return result;
     }
 

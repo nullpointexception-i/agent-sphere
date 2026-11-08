@@ -456,6 +456,23 @@ export const agentApi = {
       }),
     publish: (id: number, visibility: string) =>
       request<any>(`${BASE}/capability/skill/${id}/visibility`, { method: 'PUT', data: { visibility } }),
+    /** Publish (or re-publish) a local skill into its tenant hub; version always increments. */
+    publishToHub: (id: number) =>
+      request<any>(`${BASE}/capability/skill/${id}/publish`, { method: 'POST' }),
+    publishState: (id: number) =>
+      request<any>(`${BASE}/capability/skill/${id}/publish-state`),
+    hubDetail: (hubId: number) =>
+      request<any>(`${BASE}/capability/skill/hub/${hubId}`),
+    followed: () => request<any[]>(`${BASE}/capability/skill/hub/followed`),
+    follow: (hubId: number) =>
+      request<any>(`${BASE}/capability/skill/hub/${hubId}/follow`, { method: 'POST' }),
+    unfollow: (hubId: number) =>
+      request<any>(`${BASE}/capability/skill/hub/${hubId}/follow`, { method: 'DELETE' }),
+    installHub: (hubId: number, autoUpdate: boolean) =>
+      request<any>(`${BASE}/capability/skill/hub/${hubId}/install`, {
+        method: 'POST',
+        data: { autoUpdate },
+      }),
     install: (id: number, data?: any) =>
       request<any>(`${BASE}/capability/skill/${id}/install`, { method: 'POST', data: data || {} }),
     setAutoUpdate: (id: number, enabled: boolean) =>
