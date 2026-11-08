@@ -67,6 +67,11 @@ interface ChatMainProps {
   onCancelClarifications?: () => void;
   queuedMessages?: any[];
   onWithdrawQueued?: (queueId: string) => void;
+  /**
+   * Training surface drives a Worker instance whose console switch is intentionally off; the server
+   * allows the owner through, so the UX lock must be lifted here as well.
+   */
+  trainingMode?: boolean;
 }
 
 export default function ChatMain({
@@ -108,6 +113,7 @@ export default function ChatMain({
   onCancelClarifications,
   queuedMessages = [],
   onWithdrawQueued,
+  trainingMode = false,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const intl = useIntl();
@@ -205,8 +211,10 @@ export default function ChatMain({
     Number(runtimeState?.pendingClarifications || 0) > 0;
 
   // Disable input when the instance has console sessions disabled (the server enforces this
-  // too; here it is only for consistent UX)
+  // too; here it is only for consistent UX). Training sessions are the exception: they are created
+  // on a Worker instance with the console switch off, and the server lets the owner drive them.
   const consoleBlocked =
+    !trainingMode &&
     instances.find((i: any) => i.id === currentSession?.agentInstanceId)
       ?.allowConsoleSession === false;
 

@@ -266,6 +266,8 @@ export default {
   'workspace.training.clarificationNotice':
     'Worker 正在等待你在上方对话中补充信息。',
   'workspace.training.clarificationFailed': '提交补充信息失败',
+  'workspace.training.sseConnected': '实时已连接',
+  'workspace.training.sseReconnecting': '实时重连中',
   'workspace.training.archived': '已归档的分身不能进入训练模式。',
 
   'workspace.avatars.publicVisible': '群聊可见',

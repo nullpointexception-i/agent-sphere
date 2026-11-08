@@ -359,6 +359,7 @@ export default {
   'pages.capabilities.approvalScope.session': '会话级',
   'pages.capabilities.approvalScope.run': 'Run 级',
   'pages.capabilities.approvalScope.once': '一次性',
+  'pages.chat.loadingSession': '正在加载会话…',
   'pages.chat.toolApproval.title': '需要确认工具调用',
   'pages.chat.toolApproval.deny': '不允许执行',
   'pages.chat.toolApproval.once': '允许执行一次',

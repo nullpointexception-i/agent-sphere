@@ -13,11 +13,11 @@ import type {
   TrainingSession,
 } from '@/services/agentSphere/superAgent';
 import { superAgentApi } from '@/services/agentSphere/superAgent';
+import { SessionChat } from '../../chat/SessionChat';
 import CapabilityEditDrawer from '../../instances/components/CapabilityEditDrawer';
 import { tw } from '../i18n';
 import { avatarStyle, initials } from '../shared';
 import { useStyles } from './style';
-import { TrainingChat } from './TrainingChat';
 
 interface Props {
   agent: SuperAgent;
@@ -43,6 +43,7 @@ export function TrainingPanel({ agent, onExit }: Props) {
   const [capOpen, setCapOpen] = useState(false);
   const [capCounts, setCapCounts] = useState<Record<string, number>>({});
   const [resetting, setResetting] = useState(false);
+  const [sseConnected, setSseConnected] = useState(false);
 
   const workerInstanceId =
     instances?.workerInstance?.id ?? session?.workerInstanceId;
@@ -150,6 +151,11 @@ export function TrainingPanel({ agent, onExit }: Props) {
           {tw('training.mode', 'Training')}
         </Tag>
         <Tag color="blue">Worker</Tag>
+        <Tag color={sseConnected ? 'green' : 'orange'}>
+          {sseConnected
+            ? tw('training.sseConnected', 'Live connected')
+            : tw('training.sseReconnecting', 'Reconnecting…')}
+        </Tag>
         <div className={styles.headerActions}>
           <Button
             icon={<SettingOutlined />}
@@ -195,11 +201,14 @@ export function TrainingPanel({ agent, onExit }: Props) {
         />
       ) : (
         <div className={styles.body}>
-          <TrainingChat
-            key={session.sessionId}
-            agentId={agent.id}
-            sessionId={session.sessionId}
-          />
+          <div className={styles.chat}>
+            <SessionChat
+              key={session.sessionId}
+              sessionId={session.sessionId}
+              trainingMode
+              onSseStatusChange={setSseConnected}
+            />
+          </div>
           <aside className={styles.rail}>
             <div className={styles.railTitle}>
               {tw('training.workerCapabilities', 'Worker capabilities')}

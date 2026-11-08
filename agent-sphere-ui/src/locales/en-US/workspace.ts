@@ -284,6 +284,8 @@ export default {
     'The Worker is waiting for your answer in the conversation above.',
   'workspace.training.clarificationFailed':
     'Failed to submit the clarification',
+  'workspace.training.sseConnected': 'Live connected',
+  'workspace.training.sseReconnecting': 'Reconnecting…',
   'workspace.training.archived': 'Archived avatars cannot enter training mode.',
 
   'workspace.avatars.publicVisible': 'Visible in group creation',

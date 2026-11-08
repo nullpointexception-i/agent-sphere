@@ -2,6 +2,8 @@ package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.event.SessionCreatedEvent;
+import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.SessionSurface;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfacePolicy;
 import com.buukle.agent.common.exception.BizException;
@@ -171,6 +173,15 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         AgentSession session = getById(sessionId);
         if (session == null) {
             throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);
+        }
+        // Training sessions are deliberately created on a Worker instance that has
+        // allowConsoleSession=false. The owner may drive the session from the console
+        // training surface; other users still cannot open it.
+        if (SessionType.TRAINING.equals(session.getSessionType())
+                && SessionSurfaceHolder.current() == SessionSurface.CONSOLE
+                && AuthContext.getUsername() != null
+                && AuthContext.getUsername().equals(session.getCreatedBy())) {
+            return;
         }
         AgentInstance instance = instanceMapper.selectById(session.getAgentInstanceId());
         if (instance == null) {

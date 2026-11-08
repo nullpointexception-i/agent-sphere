@@ -60,7 +60,6 @@ import {
   type ImConversation,
   type ImConversationSetting,
   type ImMessage,
-  type ImParticipant,
   imApi,
   type SessionInputDecision,
 } from '@/services/agentSphere/im';

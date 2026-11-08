@@ -372,6 +372,7 @@ export default {
   'pages.capabilities.approvalScope.session': 'Session',
   'pages.capabilities.approvalScope.run': 'Run',
   'pages.capabilities.approvalScope.once': 'Once',
+  'pages.chat.loadingSession': 'Loading session…',
   'pages.chat.toolApproval.title': 'Tool approval required',
   'pages.chat.toolApproval.deny': 'Do not allow',
   'pages.chat.toolApproval.once': 'Allow once',
