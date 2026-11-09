@@ -254,7 +254,11 @@ export function TrainingPanel({ agent, onExit }: Props) {
 
       {workerInstanceId ? (
         <CapabilityEditDrawer
-          record={{ id: workerInstanceId, name: `${agent.name} Worker` }}
+          record={{
+            id: workerInstanceId,
+            name: `${agent.name} Worker`,
+            instanceRole: 'WORKER',
+          }}
           open={capOpen}
           onClose={() => setCapOpen(false)}
           onSaved={() => void loadCapabilities(workerInstanceId)}

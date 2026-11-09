@@ -266,7 +266,7 @@ function Block({
   );
 }
 
-function AssistantCard({ row, sessionId, isLatest }: any) {
+function AssistantCard({ row, sessionId, isLatest, preparingTool }: any) {
   const intl = useIntl();
   const { message } = App.useApp();
   const content = row.content || {};
@@ -405,6 +405,32 @@ function AssistantCard({ row, sessionId, isLatest }: any) {
           <XMarkdown content={renderedReply} />
         </div>
       )}
+      {isLatest && preparingTool ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            color: '#8c8c8c',
+            marginTop: 6,
+          }}
+        >
+          <LoadingOutlined spin style={{ fontSize: 12 }} />
+          <span>
+            {preparingTool.name ||
+              intl.formatMessage({
+                id: 'pages.chat.tool.tool',
+                defaultMessage: 'Tool',
+              })}{' '}
+            ·{' '}
+            {intl.formatMessage({
+              id: 'pages.chat.tool.preparingArguments',
+              defaultMessage: 'Generating call arguments…',
+            })}
+          </span>
+        </div>
+      ) : null}
       {(hasReply || hasThinking) && (
         <div
           style={{
@@ -3102,6 +3128,7 @@ function RowCardImpl({
   row,
   sessionId,
   isLatestAssistant,
+  preparingTool,
   onRespondClarify,
   onCancelClarification,
   loadSubAgentSteps,
@@ -3250,6 +3277,7 @@ function RowCardImpl({
             row={row}
             sessionId={sessionId}
             isLatest={isLatestAssistant}
+            preparingTool={isLatestAssistant ? preparingTool : null}
           />
         );
       case 'tool':
@@ -3358,6 +3386,7 @@ function RowCardImpl({
 const RowCard = memo(RowCardImpl, (prev: any, next: any) => {
   if (prev.row !== next.row) return false;
   if (prev.isLatestAssistant !== next.isLatestAssistant) return false;
+  if (prev.preparingTool !== next.preparingTool) return false;
   if (prev.sessionId !== next.sessionId) return false;
   if (prev.onRespondClarify !== next.onRespondClarify) return false;
   if (prev.onCancelClarification !== next.onCancelClarification) return false;
@@ -3488,6 +3517,11 @@ export default function TimelineList({
             isLatestAssistant={
               it.row.kind === 'assistant' && it.row.seq === latestAssistantSeq
             }
+            preparingTool={
+              it.row.kind === 'assistant' && it.row.seq === latestAssistantSeq
+                ? preparingTool
+                : null
+            }
             onRespondClarify={onRespondClarify}
             onCancelClarification={onCancelClarification}
             loadSubAgentSteps={loadSubAgentSteps}
@@ -3505,7 +3539,7 @@ export default function TimelineList({
           />
         ),
       )}
-      {preparingTool ? (
+      {preparingTool && latestAssistantSeq == null ? (
         <div
           style={{
             display: 'flex',

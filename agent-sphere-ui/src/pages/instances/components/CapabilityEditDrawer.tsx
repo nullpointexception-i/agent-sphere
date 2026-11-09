@@ -12,6 +12,17 @@ interface Props {
   onSaved: () => void;
 }
 
+const ROUTER_ONLY_BUILTIN_IDS = new Set([17, 18, 19, 20, 21, 22]);
+const ROUTER_ALLOWED_BUILTIN_IDS = new Set([
+  17, 18, 19, 20, 21, 22, 12, 7, 13, 14, 6, 9,
+]);
+
+/** Keep in sync with ContextPreparer's ROUTER_ALLOWED_IDS / ROUTER_TOOL_IDS. */
+function builtinAllowedForRole(toolId: number, role?: string) {
+  if (role === 'ROUTER') return ROUTER_ALLOWED_BUILTIN_IDS.has(toolId);
+  return !ROUTER_ONLY_BUILTIN_IDS.has(toolId);
+}
+
 export default function CapabilityEditDrawer({
   record,
   open,
@@ -409,7 +420,11 @@ export default function CapabilityEditDrawer({
             >
               <Table
                 rowKey="id"
-                dataSource={allBuiltin.filter((b) => b.needConfig !== false)}
+                dataSource={allBuiltin
+                  .filter((b) => b.needConfig !== false)
+                  .filter((b) =>
+                    builtinAllowedForRole(b.id, record?.instanceRole),
+                  )}
                 size="small"
                 pagination={false}
                 locale={{

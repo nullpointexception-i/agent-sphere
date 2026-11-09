@@ -3,8 +3,13 @@ import { createStyles } from 'antd-style';
 export const useStyles = createStyles(({ css }) => ({
   overlay: css`
     position: fixed;
-    inset: 0;
+    inset: 24px;
+    width: min(1440px, calc(100vw - 48px));
+    height: min(900px, calc(100vh - 48px));
+    margin: auto;
     z-index: 100;
+    border-radius: 16px;
+    box-shadow: 0 24px 80px rgba(24, 16, 64, 0.18);
     background: #f5f6f9;
     display: flex;
     flex-direction: column;
