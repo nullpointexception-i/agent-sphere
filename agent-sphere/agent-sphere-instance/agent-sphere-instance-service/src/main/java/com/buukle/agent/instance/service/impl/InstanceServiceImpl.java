@@ -209,17 +209,35 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
                 ? (systemScope ? "ALL" : InstanceRole.CHAT.value()) : instanceRole.trim().toUpperCase();
         boolean allRoles = "ALL".equals(requestedRole);
         String role = allRoles ? null : InstanceRole.normalize(requestedRole);
-        Page<AgentInstance> p = lambdaQuery()
-                .eq(!allRoles, AgentInstance::getInstanceRole, role)
-                .eq(systemScope, AgentInstance::getSystemManaged, true)
-                .and(!systemScope, w -> w.isNull(AgentInstance::getSystemManaged)
-                        .or().eq(AgentInstance::getSystemManaged, false))
-                .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
-                .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
-                .le(endTime != null, AgentInstance::getCreatedAt, endTime)
-                .orderByDesc(AgentInstance::getCreatedAt)
-                .page(new Page<>(page, size));
-        return p.convert(instanceConverter::toVO);
+        TenantScope currentScope = TenantScopeHolder.currentOrFallback();
+        TenantScope previousScope = TenantScopeHolder.get();
+        try {
+            // System resources belong to the tenant, not to one creator: the audit view
+            // must not be narrowed by the self-only created_by filter.
+            if (systemScope && currentScope != null && currentScope.selfOnly()) {
+                TenantScopeHolder.start(new TenantScope(
+                        currentScope.userId(), currentScope.username(), currentScope.currentTenantId(),
+                        currentScope.visibleTenantIds(), false,
+                        currentScope.manageableTenantIds(), currentScope.subtreeVisible()));
+            }
+            Page<AgentInstance> p = lambdaQuery()
+                    .eq(!allRoles, AgentInstance::getInstanceRole, role)
+                    .eq(systemScope, AgentInstance::getSystemManaged, true)
+                    .and(!systemScope, w -> w.isNull(AgentInstance::getSystemManaged)
+                            .or().eq(AgentInstance::getSystemManaged, false))
+                    .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
+                    .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
+                    .le(endTime != null, AgentInstance::getCreatedAt, endTime)
+                    .orderByDesc(AgentInstance::getCreatedAt)
+                    .page(new Page<>(page, size));
+            return p.convert(instanceConverter::toVO);
+        } finally {
+            if (previousScope == null) {
+                TenantScopeHolder.clear();
+            } else {
+                TenantScopeHolder.start(previousScope);
+            }
+        }
     }
 
     @Override
