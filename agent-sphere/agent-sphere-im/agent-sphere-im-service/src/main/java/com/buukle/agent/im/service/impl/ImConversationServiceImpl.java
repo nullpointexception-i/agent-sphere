@@ -277,15 +277,9 @@ public class ImConversationServiceImpl implements ImConversationService {
                         cursor -> cursor.getLastReadSeq() == null ? 0L : cursor.getLastReadSeq(),
                         (left, right) -> left));
 
-        List<Long> otherUserIds = participants.stream()
-                .filter(member -> ImParticipantType.USER.equals(member.getParticipantType()))
-                .map(ImParticipant::getParticipantId)
-                .filter(Objects::nonNull)
-                .filter(id -> !id.equals(userId))
-                .distinct()
-                .toList();
-        Map<Long, UserIdentityVO> identities = otherUserIds.isEmpty()
-                ? Map.of() : userSpi.identityMap(otherUserIds);
+        // Reuse the same identity resolution as conversation detail: it attaches the SSO
+        // provider@username label, so list rows and the header match the message sender.
+        Map<Long, UserIdentityVO> identities = identitiesOf(participants);
 
         Map<Long, ConversationSummaryVO> result = new java.util.HashMap<>();
         for (ImConversation conversation : conversations) {
