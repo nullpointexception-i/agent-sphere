@@ -579,7 +579,7 @@ export default function AdminTenants() {
         onCancel={() => setRouteOpen(false)}
         onOk={saveGroupRouterRoute}
         confirmLoading={routeSaving}
-        destroyOnClose
+        destroyOnHidden
       >
         <div style={{ marginBottom: 8, color: '#8b8b93', fontSize: 12 }}>
           {routeTenant
