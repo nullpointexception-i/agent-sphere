@@ -37,9 +37,9 @@ AgentSphere 不是单个 Agent，而是 **Agent 托管平台**。实例是配置
 
 ### Agent 配置与对话
 
-| 实例 | 对话 |
-|---|---|
-| ![Agent 实例](agent-sphere-readme/02-instances-zh.png) | ![对话](agent-sphere-readme/05-chat-zh.png) |
+| 实例 | 对话 | 会话观测 |
+|---|---|---|
+| ![Agent 实例](agent-sphere-readme/02-instances-zh.png) | ![对话](agent-sphere-readme/05-chat-zh.png) | ![会话观测](agent-sphere-readme/08-observing-session-zh.png) |
 
 ### 数字员工与 IM
 

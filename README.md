@@ -37,9 +37,9 @@ Live screenshots from the deployed product. The Chinese versions of the same scr
 
 ### Agent configuration and conversation
 
-| Instances | Chat |
-|---|---|
-| ![Agent instances](agent-sphere-readme/02-instances-en.png) | ![Chat](agent-sphere-readme/05-chat-en.png) |
+| Instances | Chat | Session observability |
+|---|---|---|
+| ![Agent instances](agent-sphere-readme/02-instances-en.png) | ![Chat](agent-sphere-readme/05-chat-en.png) | ![Session observability](agent-sphere-readme/08-observing-session-en.png) |
 
 ### Digital employees and IM
 
