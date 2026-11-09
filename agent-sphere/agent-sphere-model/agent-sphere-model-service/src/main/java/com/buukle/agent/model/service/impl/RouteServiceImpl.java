@@ -205,16 +205,34 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
 
     @Override
     public List<ModelRouteVO> listSystemRoutes() {
-        List<AgentModelRoute> routes = lambdaQuery()
-                .eq(AgentModelRoute::getSystemManaged, true)
-                .orderByAsc(AgentModelRoute::getTenantId)
-                .orderByAsc(AgentModelRoute::getId)
-                .list();
-        List<ModelRouteVO> vos = routes.stream().map(routeConverter::toVO).toList();
-        enrichFallbackNames(vos);
-        enrichApiKeyConfigured(vos);
-        enrichProviderName(vos);
-        return vos;
+        // Audit view: system routes belong to the tenant, so the owner-created_by
+        // restriction (self-only scale) must not hide routes created by another user.
+        TenantScope scope = TenantScopeHolder.currentOrFallback();
+        TenantScope previous = TenantScopeHolder.get();
+        try {
+            if (scope != null && scope.selfOnly()) {
+                TenantScopeHolder.start(new TenantScope(
+                        scope.userId(), scope.username(), scope.currentTenantId(),
+                        scope.visibleTenantIds(), false,
+                        scope.manageableTenantIds(), scope.subtreeVisible()));
+            }
+            List<AgentModelRoute> routes = lambdaQuery()
+                    .eq(AgentModelRoute::getSystemManaged, true)
+                    .orderByAsc(AgentModelRoute::getTenantId)
+                    .orderByAsc(AgentModelRoute::getId)
+                    .list();
+            List<ModelRouteVO> vos = routes.stream().map(routeConverter::toVO).toList();
+            enrichFallbackNames(vos);
+            enrichApiKeyConfigured(vos);
+            enrichProviderName(vos);
+            return vos;
+        } finally {
+            if (previous == null) {
+                TenantScopeHolder.clear();
+            } else {
+                TenantScopeHolder.start(previous);
+            }
+        }
     }
 
     private static String currentOwner() {

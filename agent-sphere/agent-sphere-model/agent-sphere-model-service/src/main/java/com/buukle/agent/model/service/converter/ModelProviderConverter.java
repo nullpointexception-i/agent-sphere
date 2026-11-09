@@ -25,6 +25,7 @@ public class ModelProviderConverter {
         vo.setApiKeyId(provider.getApiKeyId());
         vo.setConfig(provider.getConfig());
         vo.setStatus(provider.getStatus());
+        vo.setTenantId(provider.getTenantId());
         vo.setCreatedAt(provider.getCreatedAt() != null ? provider.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(provider.getCreatedBy());
         vo.setUpdatedBy(provider.getUpdatedBy());
