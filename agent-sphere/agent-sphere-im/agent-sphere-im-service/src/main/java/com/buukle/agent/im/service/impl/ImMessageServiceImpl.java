@@ -35,6 +35,8 @@ import com.buukle.agent.im.repository.ImParticipantMapper;
 import com.buukle.agent.im.repository.ImReadCursorMapper;
 import com.buukle.agent.im.service.ImMessageService;
 import com.buukle.agent.im.service.ImStreamService;
+import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
+import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
 import com.buukle.agent.superagent.spi.SessionInputSpi;
@@ -54,8 +56,11 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -78,6 +83,7 @@ public class ImMessageServiceImpl implements ImMessageService {
     private final ObjectProvider<EventIngestPort> ingestPortProvider;
     private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
     private final ObjectProvider<SessionInputSpi> sessionInputPortProvider;
+    private final ObjectProvider<UserSpi> userSpiProvider;
     private final AgentMetrics metrics;
 
     @org.springframework.beans.factory.annotation.Value("${buukle.agent.im.max-message-chars:8000}")
@@ -322,7 +328,9 @@ public class ImMessageServiceImpl implements ImMessageService {
             messages = messages.reversed();
         }
         ImMessagePageVO page = new ImMessagePageVO();
-        page.setRows(messages.stream().map(this::toVO).toList());
+        List<MessageVO> rows = messages.stream().map(this::toVO).toList();
+        fillAgentSenders(rows);
+        page.setRows(rows);
         page.setHasMore(hasMore);
         if (!messages.isEmpty()) {
             if (ascending) {
@@ -352,7 +360,9 @@ public class ImMessageServiceImpl implements ImMessageService {
         }
         messages = messages.reversed();
         ImMessagePageVO page = new ImMessagePageVO();
-        page.setRows(messages.stream().map(this::toVO).toList());
+        List<MessageVO> rows = messages.stream().map(this::toVO).toList();
+        fillAgentSenders(rows);
+        page.setRows(rows);
         page.setHasMore(hasMore);
         if (!messages.isEmpty()) {
             page.setNextBeforeSeq(messages.get(0).getSeq());
@@ -471,26 +481,6 @@ public class ImMessageServiceImpl implements ImMessageService {
         return "";
     }
 
-    private String conversationTitle(Long conversationId) {
-        ImConversation conversation = systemRead(() -> conversationMapper.selectById(conversationId));
-        return conversation == null ? "" : conversation.getTitle();
-    }
-
-    private String conversationPurpose(Long conversationId) {
-        ImConversation conversation = systemRead(() -> conversationMapper.selectById(conversationId));
-        return conversation == null ? "" : conversation.getPurpose();
-    }
-
-    private String conversationGateConfig(Long conversationId) {
-        ImConversation conversation = systemRead(() -> conversationMapper.selectById(conversationId));
-        return conversation == null ? "" : conversation.getGateConfig();
-    }
-
-    private String conversationType(Long conversationId) {
-        ImConversation conversation = systemRead(() -> conversationMapper.selectById(conversationId));
-        return conversation == null ? null : conversation.getType();
-    }
-
     /** Paused avatars cannot receive new messages in their direct chats. */
     private void assertAgentChattable(ImConversation conversation, Long userId) {
         if (!"DM".equalsIgnoreCase(conversation.getType())) {
@@ -540,7 +530,8 @@ public class ImMessageServiceImpl implements ImMessageService {
                         && ImParticipantType.AGENT.equalsIgnoreCase(mention.getType()));
     }
 
-    private void ingest(Long conversationId, ImMessage message, SendMessageDTO dto) {        EventIngestPort port = ingestPortProvider.getIfAvailable();
+    private void ingest(Long conversationId, ImMessage message, SendMessageDTO dto) {
+        EventIngestPort port = ingestPortProvider.getIfAvailable();
         if (port == null) {
             return;
         }
@@ -548,10 +539,19 @@ public class ImMessageServiceImpl implements ImMessageService {
             return;
         }
         try {
-            List<Long> agentIds = participantMapper.selectList(Wrappers.<ImParticipant>lambdaQuery()
-                            .eq(ImParticipant::getConversationId, conversationId)
-                            .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT))
-                    .stream().map(ImParticipant::getParticipantId).filter(java.util.Objects::nonNull).toList();
+            List<Long> memberIds = systemRead(() -> participantMapper.selectList(
+                            Wrappers.<ImParticipant>lambdaQuery()
+                                    .eq(ImParticipant::getConversationId, conversationId)
+                                    .eq(ImParticipant::getParticipantType, ImParticipantType.USER)))
+                    .stream()
+                    .map(ImParticipant::getParticipantId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            ImConversation conversation = systemRead(
+                    () -> conversationMapper.selectById(conversationId));
+            List<Long> agentIds = agentIdsFor(conversationId,
+                    conversation == null ? null : conversation.getType(), memberIds);
             var result = port.ingest(new NormalizedEvent(
                     CHANNEL_IM,
                     String.valueOf(conversationId),
@@ -561,7 +561,7 @@ public class ImMessageServiceImpl implements ImMessageService {
                     false,
                     extractText(dto.getContent()),
                     List.of(),
-                    JsonUtils.toJson(eventMeta(message, dto, agentIds, conversationId)),
+                    JsonUtils.toJson(eventMeta(message, dto, agentIds, conversation, memberIds)),
                     null
             ));
             if (result != null && result.threadId() != null) {
@@ -574,17 +574,55 @@ public class ImMessageServiceImpl implements ImMessageService {
         }
     }
 
+    /**
+     * Avatars are not participants: a group exposes every public avatar of its
+     * members, while a DM keeps the single agent participant it was opened with.
+     */
+    private List<Long> agentIdsFor(Long conversationId, String conversationType,
+                                   List<Long> memberIds) {
+        if (!ImConversationType.GROUP.equalsIgnoreCase(conversationType)) {
+            return systemRead(() -> participantMapper.selectList(Wrappers.<ImParticipant>lambdaQuery()
+                            .eq(ImParticipant::getConversationId, conversationId)
+                            .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)))
+                    .stream().map(ImParticipant::getParticipantId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+        }
+        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+        if (directory == null || memberIds.isEmpty()) {
+            return List.of();
+        }
+        return directory.listPublicByOwners(memberIds).stream()
+                .map(ChatAgentIdentity::agentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
     private ImEventMetaVO eventMeta(ImMessage message, SendMessageDTO dto,
-                                    List<Long> agentIds, Long conversationId) {
+                                    List<Long> agentIds, ImConversation conversation,
+                                    List<Long> memberIds) {
         ImEventMetaVO meta = new ImEventMetaVO();
         meta.setType(message.getType());
         meta.setMentions(dto.getMentions() == null ? List.of() : dto.getMentions());
         meta.setAgentIds(agentIds);
-        meta.setConversationType(conversationType(conversationId));
-        meta.setConversationTitle(conversationTitle(conversationId));
-        meta.setPurpose(conversationPurpose(conversationId));
-        meta.setGateConfig(conversationGateConfig(conversationId));
+        meta.setConversationType(conversation == null ? null : conversation.getType());
+        meta.setConversationTitle(conversation == null ? "" : conversation.getTitle());
+        meta.setPurpose(conversation == null ? "" : conversation.getPurpose());
+        meta.setGateConfig(conversation == null ? "" : conversation.getGateConfig());
+        meta.setMemberUserIds(memberIds);
+        meta.setSpeakerId(message.getSenderId());
+        meta.setSpeakerName(currentSpeakerName());
         return meta;
+    }
+
+    private static String currentSpeakerName() {
+        String displayName = AuthContext.getDisplayName();
+        if (displayName != null && !displayName.isBlank()) {
+            return displayName;
+        }
+        return AuthContext.getUsername();
     }
 
     private static String extractText(Object content) {
@@ -657,6 +695,70 @@ public class ImMessageServiceImpl implements ImMessageService {
                 TenantUtil.start(tenant);
             }
         }
+    }
+
+    /** Adds the avatar name and its owner so the wall can label agent messages. */
+    private void fillAgentSenders(List<MessageVO> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        Set<Long> agentIds = new HashSet<>();
+        for (MessageVO row : rows) {
+            if (ImParticipantType.AGENT.equalsIgnoreCase(row.getSenderType())
+                    && row.getSenderId() != null) {
+                agentIds.add(row.getSenderId());
+            }
+        }
+        if (agentIds.isEmpty()) {
+            return;
+        }
+        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+        if (directory == null) {
+            return;
+        }
+        Map<Long, ChatAgentIdentity> agents = directory.findByIds(agentIds);
+        if (agents.isEmpty()) {
+            return;
+        }
+        Set<Long> ownerIds = new HashSet<>();
+        for (ChatAgentIdentity identity : agents.values()) {
+            if (identity.ownerUserId() != null) {
+                ownerIds.add(identity.ownerUserId());
+            }
+        }
+        Map<Long, UserIdentityVO> owners = Map.of();
+        if (!ownerIds.isEmpty()) {
+            UserSpi userSpi = userSpiProvider.getIfAvailable();
+            if (userSpi != null) {
+                owners = userSpi.identityMap(ownerIds);
+            }
+        }
+        for (MessageVO row : rows) {
+            ChatAgentIdentity identity = row.getSenderId() == null
+                    ? null : agents.get(row.getSenderId());
+            if (identity == null) {
+                continue;
+            }
+            row.setSenderName(identity.name());
+            row.setSenderOwnerName(userLabel(owners.get(identity.ownerUserId())));
+        }
+    }
+
+    /** Mirrors the console label rule: provider@subject for SSO users. */
+    private static String userLabel(UserIdentityVO identity) {
+        if (identity == null) {
+            return null;
+        }
+        if (identity.getSsoProviderCode() != null && identity.getSsoSubject() != null) {
+            return identity.getSsoProviderCode() + "@" + identity.getSsoSubject();
+        }
+        if (identity.getDisplayName() != null && !identity.getDisplayName().isBlank()) {
+            return identity.getDisplayName();
+        }
+        if (identity.getEnglishName() != null && !identity.getEnglishName().isBlank()) {
+            return identity.getEnglishName();
+        }
+        return identity.getUsername();
     }
 
     private MessageVO toVO(ImMessage message) {

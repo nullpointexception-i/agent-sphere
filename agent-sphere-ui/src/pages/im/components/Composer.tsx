@@ -1,6 +1,10 @@
 import { SendOutlined, UploadOutlined } from '@ant-design/icons';
-import { Button, Input, Select, Tag, Upload } from 'antd';
-import { userDisplayLabel } from '@/utils/userLabel';
+import { Button, Tag, Upload } from 'antd';
+import { useMemo, useRef } from 'react';
+import { MentionSuggest } from '@/components/mention/MentionSuggest';
+import { buildMentionCandidates } from '@/components/mention/mentionModel';
+import { useMentionSuggest } from '@/components/mention/useMentionSuggest';
+import type { ConversationAgent } from '@/services/agentSphere/im';
 
 interface Props {
   text: string;
@@ -8,33 +12,68 @@ interface Props {
   onSend: () => void;
   sending: boolean;
   participants: any[];
-  mentions: number[];
-  onMentionsChange: (value: number[]) => void;
+  /** Live avatar view of the conversation; groups do not store avatars as members. */
+  agents?: ConversationAgent[];
+  /** Excludes the current user from the @ candidate list. */
+  selfUserId?: number | null;
   replyToId?: number;
   onClearReply: () => void;
   onUpload: (file: File) => void;
   labels: {
     placeholder: string;
-    mention: string;
     send: string;
     replying: string;
     attachment: string;
+    candidateAgent: string;
+    candidateUser: string;
+    candidateSelf: string;
   };
 }
 
+/**
+ * IM composer with an `@` suggestion list.
+ *
+ * Mentions are no longer picked from a separate multi-select: the message body
+ * carries `@name` and the page rebuilds the payload from it before sending.
+ */
 export function Composer({
   text,
   onTextChange,
   onSend,
   sending,
   participants,
-  mentions,
-  onMentionsChange,
+  agents,
+  selfUserId,
   replyToId,
   onClearReply,
   onUpload,
   labels,
 }: Props) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const candidates = useMemo(() => {
+    const avatarRows = (agents || []).map((agent) => ({
+      participantType: 'AGENT',
+      participantId: agent.participantId,
+      displayName: agent.displayName,
+      ownerUserId: agent.ownerUserId,
+    }));
+    return buildMentionCandidates([...participants, ...avatarRows], selfUserId);
+  }, [participants, agents, selfUserId]);
+  const mention = useMentionSuggest({
+    textareaRef,
+    value: text,
+    candidates,
+    onChange: (nextText, caret) => {
+      onTextChange(nextText);
+      requestAnimationFrame(() => {
+        const element = textareaRef.current;
+        if (!element) return;
+        element.focus();
+        element.setSelectionRange(caret, caret);
+      });
+    },
+  });
+
   return (
     <div
       style={{
@@ -51,34 +90,60 @@ export function Composer({
           </Tag>
         </div>
       ) : null}
-      <Select
-        mode="multiple"
-        allowClear
-        value={mentions}
-        onChange={onMentionsChange}
-        placeholder={labels.mention}
-        style={{ width: '100%', marginBottom: 6 }}
-        options={participants
-          .filter((participant) => participant.participantType === 'AGENT')
-          .map((participant) => ({
-            value: participant.participantId,
-            label: userDisplayLabel(
-              participant,
-              participant.participantType === 'AGENT' ? '数字员工' : '用户',
-            ),
-          }))}
-      />
-      <Input.TextArea
+      <textarea
+        ref={textareaRef}
         value={text}
-        onChange={(event) => onTextChange(event.target.value)}
         placeholder={labels.placeholder}
-        autoSize={{ minRows: 2, maxRows: 5 }}
-        onPressEnter={(event) => {
-          if (!event.shiftKey) {
+        rows={2}
+        style={{
+          width: '100%',
+          minHeight: 54,
+          maxHeight: 120,
+          resize: 'vertical',
+          padding: '5px 11px',
+          border: '1px solid #d9d9d9',
+          borderRadius: 6,
+          fontSize: 14,
+          lineHeight: 1.5715,
+          outline: 'none',
+          boxSizing: 'border-box',
+        }}
+        onChange={(event) => {
+          const next = event.target.value;
+          onTextChange(next);
+          mention.refresh(next, event.target.selectionStart);
+          const element = event.target;
+          element.style.height = 'auto';
+          element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
+        }}
+        onKeyDown={(event) => {
+          if (mention.handleKeyDown(event)) {
+            return;
+          }
+          if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             onSend();
           }
         }}
+        onSelect={(event) =>
+          mention.refresh(
+            event.currentTarget.value,
+            event.currentTarget.selectionStart,
+          )
+        }
+      />
+      <MentionSuggest
+        open={mention.open}
+        items={mention.items}
+        activeIndex={mention.activeIndex}
+        position={mention.position}
+        labels={{
+          agent: labels.candidateAgent,
+          user: labels.candidateUser,
+          self: labels.candidateSelf,
+        }}
+        onHover={mention.setActiveIndex}
+        onSelect={mention.applyCandidate}
       />
       <div style={{ textAlign: 'right', marginTop: 8 }}>
         <Upload

@@ -23,6 +23,8 @@ export interface AgentInputCardView {
   multiple?: boolean;
   options?: string;
   toolCallsJson?: string;
+  /** Resolved cards: submitted decisions (approval) or answer (clarification). */
+  decisionsJson?: string;
 }
 
 export const ROUTER_CLARIFICATION = 'ROUTER_CLARIFICATION';
@@ -77,6 +79,28 @@ function toolCallArgsLabel(call: AgentInputToolCall) {
   return text.length > 200 ? `${text.slice(0, 200)}…` : text;
 }
 
+/** Resolved approval cards: callId → submitted decision. */
+function parseDecisions(json?: string): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const row of parseList<{ callId?: string; decision?: string }>(json)) {
+    if (row?.callId && row?.decision) {
+      map[row.callId] = row.decision;
+    }
+  }
+  return map;
+}
+
+/** Resolved clarification cards: the free-text answer that was sent. */
+function parseAnswer(json?: string): string | null {
+  if (!json) return null;
+  try {
+    const value = JSON.parse(json) as { answer?: unknown };
+    return typeof value?.answer === 'string' ? value.answer : null;
+  } catch {
+    return null;
+  }
+}
+
 const DECISIONS = ['DENY', 'ALLOW_ONCE', 'ALLOW_RUN', 'ALLOW_SESSION'] as const;
 
 function decisionLabel(decision: string) {
@@ -125,6 +149,11 @@ export function AgentInputCard({
   const [busy, setBusy] = useState(false);
 
   if (!pending || !conversationId) {
+    const resolvedCalls = parseList<AgentInputToolCall>(
+      card.toolCallsJson,
+    ).slice(0, 20);
+    const resolvedDecisions = parseDecisions(card.decisionsJson);
+    const resolvedAnswer = parseAnswer(card.decisionsJson);
     return (
       <div className={styles.taskCard}>
         <div className={styles.taskCardTop}>
@@ -144,6 +173,40 @@ export function AgentInputCard({
         </div>
         {card.description ? (
           <div className={styles.taskCardSummary}>{card.description}</div>
+        ) : null}
+        {approval && resolvedCalls.length > 0
+          ? resolvedCalls.map((call) => {
+              const decision = resolvedDecisions[call.callId];
+              return (
+                <div key={call.callId} className={styles.agentInputToolCall}>
+                  <div className={styles.agentInputToolName}>
+                    {toolCallName(call)}
+                    {call.action ? ` · ${call.action}` : ''}
+                  </div>
+                  {toolCallArgsLabel(call) ? (
+                    <div className={styles.agentInputToolArgs}>
+                      {toolCallArgsLabel(call)}
+                    </div>
+                  ) : null}
+                  {decision ? (
+                    <div
+                      style={{ marginTop: 4, fontSize: 12, color: '#3f8cff' }}
+                    >
+                      {tw('chat.inputDecisionTaken', 'Chosen: {decision}', {
+                        decision: decisionLabel(decision),
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          : null}
+        {clarification && resolvedAnswer ? (
+          <div style={{ marginTop: 6, fontSize: 12, color: '#3f8cff' }}>
+            {tw('chat.inputAnswerTaken', 'Answer: {answer}', {
+              answer: resolvedAnswer,
+            })}
+          </div>
         ) : null}
       </div>
     );

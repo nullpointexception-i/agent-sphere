@@ -196,14 +196,21 @@ public class OutboundDispatchScheduler {
     }
 
     private void applySendIdentity(AgentOutboundMessage row) {
+        // Never inherit a caller's tenant: look the agent up without scope, then
+        // pin the delivery to the row's tenant (falling back to the agent's).
+        TenantContext.clear();
+        TenantScopeHolder.clear();
         AgentSuperAgent agent = null;
         try {
             agent = superAgentMapper.selectById(row.getSuperAgentId());
         } catch (Exception e) {
             log.debug("Outbound agent lookup failed: id={}", row.getSuperAgentId());
         }
-        Long tenantId = row.getTenantId() != null ? row.getTenantId()
-                : (agent == null ? null : agent.getTenantId());
+        Long tenantId = row.getTenantId();
+        if (tenantId == null || tenantId <= 0) {
+            // Rows written without a tenant used to fail with "conversation not found".
+            tenantId = agent == null ? null : agent.getTenantId();
+        }
         TenantContext.set(tenantId);
         if (agent != null && agent.getOwnerUserId() != null) {
             try {

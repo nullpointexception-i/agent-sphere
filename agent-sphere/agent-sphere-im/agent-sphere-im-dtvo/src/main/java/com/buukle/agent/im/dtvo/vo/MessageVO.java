@@ -18,4 +18,8 @@ public class MessageVO implements Serializable {
     private Object mentions;
     private String status;
     private String createdAt;
+    /** Resolved sender display name (agent name or member label). */
+    private String senderName;
+    /** For AGENT senders: the member this avatar belongs to. */
+    private String senderOwnerName;
 }

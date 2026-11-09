@@ -5,6 +5,7 @@ import com.buukle.agent.im.dtvo.dto.CreateConversationDTO;
 import com.buukle.agent.im.dtvo.dto.ImGateConfig;
 import com.buukle.agent.im.dtvo.dto.MarkReadDTO;
 import com.buukle.agent.im.dtvo.dto.UpdateConversationSettingDTO;
+import com.buukle.agent.im.dtvo.vo.ConversationAgentVO;
 import com.buukle.agent.im.dtvo.vo.ConversationPageVO;
 import com.buukle.agent.im.dtvo.vo.ConversationSettingVO;
 import com.buukle.agent.im.dtvo.vo.ConversationVO;
@@ -28,6 +29,14 @@ public interface ImConversationService {
     ConversationVO updateMeta(Long conversationId, String title, String purpose);
 
     List<ParticipantVO> participants(Long conversationId);
+
+    /**
+     * Digital avatars available in this conversation.
+     *
+     * <p>Group: every public avatar of the members, resolved live (they are not
+     * participants). DM: the single agent the conversation was opened with.
+     */
+    List<ConversationAgentVO> agents(Long conversationId);
 
     ParticipantVO addParticipant(Long conversationId, AddParticipantDTO dto);
 

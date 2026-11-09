@@ -2,6 +2,7 @@ package com.buukle.agent.superagent.service;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -89,6 +90,7 @@ class SessionInputServiceImplTest {
     @AfterEach
     void tearDown() {
         AuthContext.clear();
+        TenantContext.clear();
     }
 
     @Test
@@ -131,13 +133,14 @@ class SessionInputServiceImplTest {
         // keep the double resolve active only when it has not happened.
         when(inputMapper.selectById(pending.getId())).thenReturn(pending);
 
-        boolean consumed = service.answerRouterClarification(THREAD_ID, "差旅");
+        boolean consumed = service.answerRouterClarification(THREAD_ID, "Travel");
 
         assertTrue(consumed);
-        verify(resumePort).answerClarification(SESSION_ID, RUN_ID, "c1abc123", "差旅");
+        verify(resumePort).answerClarification(SESSION_ID, RUN_ID, "c1abc123", "Travel");
         ArgumentCaptor<AgentSessionInput> patch = ArgumentCaptor.forClass(AgentSessionInput.class);
         verify(inputMapper, atLeastOnce()).updateById(patch.capture());
-        assertEquals(SessionInputStatus.ANSWERED, patch.getAllValues().get(0).getStatus());
+        assertTrue(patch.getAllValues().stream()
+                .anyMatch(row -> SessionInputStatus.ANSWERED.equals(row.getStatus())));
     }
 
     @Test
@@ -152,11 +155,14 @@ class SessionInputServiceImplTest {
         resolved.setStatus(SessionInputStatus.ANSWERED);
         when(inputMapper.selectById(pending.getId())).thenReturn(resolved);
 
-        boolean consumed = service.answerRouterClarification(THREAD_ID, "差旅");
+        boolean consumed = service.answerRouterClarification(THREAD_ID, "Travel");
 
         assertTrue(consumed);
-        verify(resumePort).answerClarification(SESSION_ID, RUN_ID, "c1abc123", "差旅");
-        verify(inputMapper, never()).updateById(any(AgentSessionInput.class));
+        verify(resumePort).answerClarification(SESSION_ID, RUN_ID, "c1abc123", "Travel");
+        // The answer itself is persisted before resuming; only the status patch is skipped.
+        ArgumentCaptor<AgentSessionInput> patches = ArgumentCaptor.forClass(AgentSessionInput.class);
+        verify(inputMapper, atLeastOnce()).updateById(patches.capture());
+        assertTrue(patches.getAllValues().stream().noneMatch(row -> row.getStatus() != null));
         verify(outboundMapper, never()).insert(any(AgentOutboundMessage.class));
     }
 
@@ -164,7 +170,7 @@ class SessionInputServiceImplTest {
     void answerRouterClarificationWithoutPendingReturnsFalse() {
         when(inputMapper.selectOne(any(Wrapper.class))).thenReturn(null);
 
-        assertFalse(service.answerRouterClarification(THREAD_ID, "差旅"));
+        assertFalse(service.answerRouterClarification(THREAD_ID, "Travel"));
 
         verify(resumePort, never()).answerClarification(any(), any(), any(), any());
     }
@@ -174,13 +180,16 @@ class SessionInputServiceImplTest {
         AgentSessionInput pending = pendingInput(SessionInputType.APPROVAL, "ap1abc456");
         when(inputMapper.selectOne(any(Wrapper.class))).thenReturn(pending);
         when(inputMapper.selectById(pending.getId())).thenReturn(pending);
+        String decisions = "[{\"callId\":\"call_1\",\"decision\":\"ALLOW_ONCE\"}]";
 
-        service.resolveRouterApproval(THREAD_ID, "ap1abc456",
-                "[{\"callId\":\"call_1\",\"decision\":\"ALLOW_ONCE\"}]");
+        service.resolveRouterApproval(THREAD_ID, "ap1abc456", decisions);
 
         verify(resumePort).resolveApproval(SESSION_ID, RUN_ID, "ap1abc456",
-                "[{\"callId\":\"call_1\",\"decision\":\"ALLOW_ONCE\"}]", "owner");
-        verify(inputMapper, atLeastOnce()).updateById(any(AgentSessionInput.class));
+                decisions, "owner");
+        ArgumentCaptor<AgentSessionInput> patches = ArgumentCaptor.forClass(AgentSessionInput.class);
+        verify(inputMapper, atLeastOnce()).updateById(patches.capture());
+        assertTrue(patches.getAllValues().stream()
+                .anyMatch(row -> decisions.equals(row.getDecisionsJson())));
     }
 
     @Test
@@ -194,7 +203,10 @@ class SessionInputServiceImplTest {
         service.resolveRouterApproval(THREAD_ID, "ap1abc456",
                 "[{\"callId\":\"call_1\",\"decision\":\"ALLOW_ONCE\"}]");
 
-        verify(inputMapper, never()).updateById(any(AgentSessionInput.class));
+        // Decisions are persisted before resuming; only the status patch + card update are skipped.
+        ArgumentCaptor<AgentSessionInput> patches = ArgumentCaptor.forClass(AgentSessionInput.class);
+        verify(inputMapper, atLeastOnce()).updateById(patches.capture());
+        assertTrue(patches.getAllValues().stream().noneMatch(row -> row.getStatus() != null));
         verify(outboundMapper, never()).insert(any(AgentOutboundMessage.class));
     }
 
@@ -222,6 +234,35 @@ class SessionInputServiceImplTest {
     }
 
     @Test
+    void projectResolvedPinsCardUpdateToInputTenant() {
+        // Regression: the ANSWERED/CANCELLED card outbound used to be stamped with
+        // SYSTEM tenant 0, so delivery failed with "conversation not found" and the
+        // card stayed pending forever.
+        AgentSessionInput pending = pendingInput(SessionInputType.APPROVAL, "ap1abc456");
+        pending.setTenantId(7L);
+        pending.setCardOutboundId(500L);
+        when(inputMapper.selectOne(any(Wrapper.class))).thenReturn(pending);
+        when(inputMapper.selectById(pending.getId())).thenReturn(pending);
+        AgentOutboundMessage cardOutbound = new AgentOutboundMessage();
+        cardOutbound.setExternalMessageId("9001");
+        when(outboundMapper.selectById(500L)).thenReturn(cardOutbound);
+        stubInsertIds();
+        final Long[] tenantAtInsert = new Long[1];
+        when(outboundMapper.insert(any(AgentOutboundMessage.class))).thenAnswer(inv -> {
+            tenantAtInsert[0] = TenantContext.get();
+            AgentOutboundMessage row = inv.getArgument(0);
+            row.setId(500L);
+            return 1;
+        });
+
+        service.projectResolved(new SessionInputResolveCommand(
+                SessionInputType.APPROVAL, "ap1abc456", SessionInputStatus.ANSWERED));
+
+        assertEquals(7L, tenantAtInsert[0]);
+        verify(outboundMapper).insert(any(AgentOutboundMessage.class));
+    }
+
+    @Test
     void projectRunTerminalCancelsAllPendingInputs() {
         AgentSessionInput pendingA = pendingInput(SessionInputType.CLARIFICATION, "c1abc123");
         AgentSessionInput pendingB = pendingInput(SessionInputType.APPROVAL, "ap1abc456");
@@ -238,7 +279,7 @@ class SessionInputServiceImplTest {
     private SessionInputCommand clarificationCommand(String clarificationId) {
         return new SessionInputCommand(AGENT_ID, THREAD_ID, SESSION_ID, RUN_ID,
                 SessionInputType.CLARIFICATION, clarificationId,
-                "缺少报销类型", "请补充", "[\"差旅\",\"办公\"]", false, null);
+                "Missing expense type", "Please add", "[\"Travel\",\"Office\"]", false, null);
     }
 
     private AgentSessionInput pendingInput(String inputType, String inputId) {
@@ -250,7 +291,7 @@ class SessionInputServiceImplTest {
         input.setRunId(RUN_ID);
         input.setInputType(inputType);
         input.setInputId(inputId);
-        input.setTitle("缺少报销类型");
+        input.setTitle("Missing expense type");
         input.setStatus(SessionInputStatus.PENDING);
         return input;
     }

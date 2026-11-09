@@ -36,6 +36,8 @@ public class AgentSessionInput {
     private String options;
     private Boolean multiple;
     private String toolCallsJson;
+    /** Approval decisions / clarification answer captured when the input was resolved. */
+    private String decisionsJson;
     /** PENDING / ANSWERED / CANCELLED */
     private String status;
     private Long cardOutboundId;

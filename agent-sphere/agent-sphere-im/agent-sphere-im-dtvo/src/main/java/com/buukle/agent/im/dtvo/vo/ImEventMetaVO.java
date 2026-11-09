@@ -16,4 +16,9 @@ public class ImEventMetaVO implements Serializable {
     private String conversationTitle;
     private String purpose;
     private String gateConfig;
+    /** Human members of the conversation; avatars are not members. */
+    private List<Long> memberUserIds;
+    /** Author of this message, so an avatar knows who is talking to it. */
+    private Long speakerId;
+    private String speakerName;
 }

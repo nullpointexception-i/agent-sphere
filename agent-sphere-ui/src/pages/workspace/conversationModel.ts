@@ -200,6 +200,8 @@ export type TaskCardView = {
   multiple?: boolean;
   options?: string;
   toolCallsJson?: string;
+  /** Resolved cards: submitted decisions (approval) or answer (clarification). */
+  decisionsJson?: string;
 };
 
 export function taskCardOf(message: ImMessage): TaskCardView | null {

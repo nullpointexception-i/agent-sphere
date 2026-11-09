@@ -1,4 +1,7 @@
 export default {
+  'workspace.language.zh': '简体中文',
+  'workspace.language.zhShort': '中文',
+  'workspace.language.en': 'English',
   'workspace.nav.home': '首页',
   'workspace.nav.avatars': '数字分身',
   'workspace.nav.chat': '聊天',
@@ -127,8 +130,14 @@ export default {
   'workspace.chat.allowMemberInviteHint': '开启后普通成员可以邀请用户。',
   'workspace.chat.inviteMember': '邀请成员',
   'workspace.chat.selectMember': '选择成员',
-  'workspace.chat.mentionAvatar': '提及该分身',
-  'workspace.chat.autoPublicAvatar': '自动带入的公开分身',
+  'workspace.chat.mentionCandidateAgent': '数字分身',
+  'workspace.chat.mentionCandidateUser': '成员',
+  'workspace.chat.mentionCandidateSelf': '我',
+  'workspace.chat.ownerSuffix': '（{owner}）',
+  'workspace.chat.expand': '展开',
+  'workspace.chat.collapse': '收起',
+  'workspace.chat.inputDecisionTaken': '选择：{decision}',
+  'workspace.chat.inputAnswerTaken': '回答：{answer}',
   'workspace.common.confirm': '确认',
   'workspace.chat.agent': '数字分身',
   'workspace.chat.agentTag': '数字分身',
@@ -295,6 +304,4 @@ export default {
   'workspace.avatars.publicTag': '公开',
   'workspace.avatars.publicOn': '该分身已在群聊创建中可见',
   'workspace.avatars.publicOff': '该分身已设为私有',
-
-  'workspace.chat.myPublicAvatars': '我的公开分身',
 };

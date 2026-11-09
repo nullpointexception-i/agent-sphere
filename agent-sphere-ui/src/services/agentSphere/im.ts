@@ -77,6 +77,18 @@ export interface ImMessage {
   replyToId?: number;
   status?: string;
   createdAt?: string;
+  /** Server-resolved sender label (agent name or member label). */
+  senderName?: string;
+  /** AGENT senders only: the member who owns the avatar. */
+  senderOwnerName?: string;
+}
+
+/** A digital avatar available in a conversation; groups resolve these live. */
+export interface ConversationAgent {
+  participantId: number;
+  displayName?: string;
+  ownerUserId?: number | null;
+  status?: string;
 }
 
 export interface ImAttachment {
@@ -99,7 +111,6 @@ export interface CreateConversationInput {
   title?: string;
   purpose?: string;
   participantUserIds?: number[];
-  agentIds?: number[];
   gateConfig?: string;
 }
 
@@ -123,6 +134,8 @@ export const imApi = {
     }),
   participants: (id: number) =>
     request<any[]>(`${BASE}/im/conversations/${id}/participants`),
+  agents: (id: number) =>
+    request<ConversationAgent[]>(`${BASE}/im/conversations/${id}/agents`),
   addParticipant: (
     id: number,
     data: { participantType: string; participantId: number; role?: string; displayName?: string },

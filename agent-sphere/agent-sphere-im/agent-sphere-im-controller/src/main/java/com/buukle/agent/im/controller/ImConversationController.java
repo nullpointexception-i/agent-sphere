@@ -84,6 +84,12 @@ public class ImConversationController extends BaseController {
         return ok(conversationService.participants(id));
     }
 
+    @RequirePermission(PermissionCodes.IM_CONVERSATION_READ)
+    @GetMapping("/{id}/agents")
+    public ResponseEntity<?> agents(@PathVariable Long id) {
+        return ok(conversationService.agents(id));
+    }
+
     @AuditLog(action = "ADD_PARTICIPANT", resourceType = "ImConversation", resourceId = "#id")
     @RequirePermission(PermissionCodes.IM_MEMBER_MANAGE)
     @PostMapping("/{id}/participants")

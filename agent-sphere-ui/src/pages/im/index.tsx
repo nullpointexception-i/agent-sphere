@@ -18,11 +18,16 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  buildMentionCandidates,
+  mentionsFromText,
+} from '@/components/mention/mentionModel';
 import { API_PATHS } from '@/constants/endpoints';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 import { useReconnectingSse } from '@/hooks/useReconnectingSse';
 import { agentApi } from '@/services/agentSphere/api';
 import {
+  type ConversationAgent,
   type ImAttachment,
   type ImConversation,
   type ImMessage,
@@ -30,6 +35,7 @@ import {
   imApi,
 } from '@/services/agentSphere/im';
 import { superAgentApi } from '@/services/agentSphere/superAgent';
+import { getStoredUser } from '@/utils/auth';
 import { userDisplayLabel } from '@/utils/userLabel';
 import { Composer } from './components/Composer';
 import { ConversationList } from './components/ConversationList';
@@ -76,6 +82,7 @@ export default function ImPage() {
   const intl = useIntl();
   const t = (id: string, defaultMessage: string) =>
     intl.formatMessage({ id, defaultMessage });
+  const selfUserId = getStoredUser()?.id;
 
   const [loading, setLoading] = useState(false);
   const [conversations, setConversations] = useState<ImConversation[]>([]);
@@ -98,7 +105,7 @@ export default function ImPage() {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [participants, setParticipants] = useState<any[]>([]);
-  const [mentions, setMentions] = useState<number[]>([]);
+  const [agents, setAgents] = useState<ConversationAgent[]>([]);
   const [replyToId, setReplyToId] = useState<number | undefined>(undefined);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -117,7 +124,6 @@ export default function ImPage() {
   const [gateSaving, setGateSaving] = useState(false);
   const [createForm] = Form.useForm();
   const [contactOptions, setContactOptions] = useState<any[]>([]);
-  const [agentOptions, setAgentOptions] = useState<any[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<number | undefined>(undefined);
   activeIdRef.current = activeId;
@@ -336,10 +342,13 @@ export default function ImPage() {
         type !== 'message_pinned' &&
         type !== 'message_unpinned'
       ) {
-        imApi
-          .participants(id)
-          .then(setParticipants)
-          .catch(() => {});
+        Promise.all([
+          imApi.participants(id).catch(() => []),
+          imApi.agents(id).catch(() => []),
+        ]).then(([members, agentRows]) => {
+          setParticipants(members || []);
+          setAgents(agentRows || []);
+        });
       }
     }
   };
@@ -399,10 +408,6 @@ export default function ImPage() {
       .users({ page: 1, size: 200 })
       .then((page: any) => setContactOptions(page.records || page || []))
       .catch(() => setContactOptions([]));
-    superAgentApi
-      .list()
-      .then((list) => setAgentOptions(list || []))
-      .catch(() => setAgentOptions([]));
   }, [createOpen]);
 
   // IM user-level SSE: incremental updates by event type instead of a full refresh on each event.
@@ -415,15 +420,19 @@ export default function ImPage() {
       setMessages([]);
       setHasMore(false);
       setNextBeforeSeq(undefined);
+      setAgents([]);
       return;
     }
     setSearchInput('');
     setSearchKeyword('');
     loadLatest(activeId, false, true);
-    imApi
-      .participants(activeId)
-      .then(setParticipants)
-      .catch(() => setParticipants([]));
+    Promise.all([
+      imApi.participants(activeId).catch(() => []),
+      imApi.agents(activeId).catch(() => []),
+    ]).then(([members, agentRows]) => {
+      setParticipants(members || []);
+      setAgents(agentRows || []);
+    });
     // 45s HTTP compensation only; dense updates arrive through SSE.
     const compensate = () => {
       if (document.visibilityState !== 'visible') return;
@@ -449,13 +458,17 @@ export default function ImPage() {
     if (!activeId || !text.trim()) return;
     setSending(true);
     try {
-      const mentionPayload = participants
-        .filter((participant) => mentions.includes(participant.participantId))
-        .map((participant) => ({
-          type: participant.participantType,
-          id: participant.participantId,
-          name: participant.displayName,
-        }));
+      // Rebuild mentions from the body so deleting an @name unsets the routing.
+      const avatarRows = agents.map((agent) => ({
+        participantType: 'AGENT',
+        participantId: agent.participantId,
+        displayName: agent.displayName,
+        ownerUserId: agent.ownerUserId,
+      }));
+      const mentionPayload = mentionsFromText(
+        text.trim(),
+        buildMentionCandidates([...participants, ...avatarRows], selfUserId),
+      );
       await imApi.send(
         activeId,
         text.trim(),
@@ -464,7 +477,6 @@ export default function ImPage() {
         replyToId,
       );
       setText('');
-      setMentions([]);
       setReplyToId(undefined);
       await loadMessages(activeId, true);
       loadConversations();
@@ -629,9 +641,6 @@ export default function ImPage() {
       participantUserIds: (values.participantUserIds ?? [])
         .map((value: string | number) => Number(value))
         .filter((value: number) => Number.isFinite(value)),
-      agentIds: (values.agentIds ?? [])
-        .map((value: string | number) => Number(value))
-        .filter((value: number) => Number.isFinite(value)),
     });
     toast.success(t('pages.im.created', 'Conversation created'));
     setCreateOpen(false);
@@ -645,8 +654,8 @@ export default function ImPage() {
       ? active.remark ||
         active.displayName ||
         active.title ||
-        t('pages.im.group', '群聊')
-      : active.displayName || active.title || t('pages.im.dm', '单聊')
+        t('pages.im.group', 'Group')
+      : active.displayName || active.title || t('pages.im.dm', 'DM')
     : '';
 
   return (
@@ -705,10 +714,10 @@ export default function ImPage() {
                   </Typography.Title>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     {active.type === 'GROUP'
-                      ? t('pages.im.group', '群聊')
-                      : t('pages.im.dm', '单聊')}
+                      ? t('pages.im.group', 'Group')
+                      : t('pages.im.dm', 'DM')}
                     {participants.length
-                      ? ` · ${participants.length} ${t('pages.im.members', '位成员')}`
+                      ? ` · ${participants.length} ${t('pages.im.members', 'members')}`
                       : ''}
                   </Typography.Text>
                 </div>
@@ -781,8 +790,8 @@ export default function ImPage() {
                   onSend={send}
                   sending={sending}
                   participants={participants}
-                  mentions={mentions}
-                  onMentionsChange={setMentions}
+                  agents={agents}
+                  selfUserId={selfUserId}
                   replyToId={replyToId}
                   onClearReply={() => setReplyToId(undefined)}
                   onUpload={uploadAttachment}
@@ -791,10 +800,15 @@ export default function ImPage() {
                       'pages.im.placeholder',
                       'Type a message. Enter to send, Shift+Enter for a new line',
                     ),
-                    mention: t('pages.im.mention', '@Agent'),
                     send: t('pages.im.send', 'Send'),
                     replying: t('pages.im.replying', 'Reply'),
                     attachment: t('pages.im.attachment', 'Attachment'),
+                    candidateAgent: t(
+                      'pages.im.mentionCandidateAgent',
+                      'Avatar',
+                    ),
+                    candidateUser: t('pages.im.mentionCandidateUser', 'Member'),
+                    candidateSelf: t('pages.im.mentionCandidateSelf', 'Me'),
                   }}
                 />
               </div>
@@ -831,11 +845,11 @@ export default function ImPage() {
               options={[
                 {
                   value: 'GROUP',
-                  label: t('pages.im.group', '群聊'),
+                  label: t('pages.im.group', 'Group'),
                 },
                 {
                   value: 'DM',
-                  label: t('pages.im.dm', '单聊'),
+                  label: t('pages.im.dm', 'DM'),
                 },
               ]}
             />
@@ -858,26 +872,7 @@ export default function ImPage() {
               optionFilterProp="label"
               options={contactOptions.map((user) => ({
                 value: user.id,
-                label: userDisplayLabel(user, '用户'),
-              }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="agentIds"
-            label={t('pages.im.agentIds', '数字员工')}
-            tooltip={t(
-              'pages.im.agentIdsHint',
-              'Add groups already bound to these digital employees',
-            )}
-          >
-            <Select
-              mode="multiple"
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={agentOptions.map((agent) => ({
-                value: agent.id,
-                label: agent.name || '数字员工',
+                label: userDisplayLabel(user, 'User'),
               }))}
             />
           </Form.Item>
@@ -953,7 +948,7 @@ export default function ImPage() {
                     borderBottom: '1px solid #f0f0f0',
                   }}
                 >
-                  <span>{userDisplayLabel(participant, '数字员工')}</span>
+                  <span>{userDisplayLabel(participant, 'Agent')}</span>
                   <Switch
                     checked={Boolean(participant.muted)}
                     onChange={(checked) =>

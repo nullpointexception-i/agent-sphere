@@ -23,6 +23,7 @@ import com.buukle.agent.im.dtvo.enums.ImStreamEventType;
 import com.buukle.agent.im.dtvo.enums.ImMessageStatus;
 import com.buukle.agent.im.dtvo.enums.ImParticipantRole;
 import com.buukle.agent.im.dtvo.enums.ImParticipantType;
+import com.buukle.agent.im.dtvo.vo.ConversationAgentVO;
 import com.buukle.agent.im.dtvo.vo.ConversationPageVO;
 import com.buukle.agent.im.dtvo.vo.ConversationSettingVO;
 import com.buukle.agent.im.dtvo.vo.ConversationSummaryVO;
@@ -96,8 +97,6 @@ public class ImConversationServiceImpl implements ImConversationService {
         if (!ImConversationType.DM.equals(type) && !ImConversationType.GROUP.equals(type)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "type must be DM or GROUP");
         }
-        List<ChatAgentIdentity> groupAgents = ImConversationType.GROUP.equals(type)
-                ? resolveGroupAgents(dto.getAgentIds(), userId) : List.of();
         if (ImConversationType.DM.equals(type)) {
             Long otherUserId = firstOtherUser(dto.getParticipantUserIds(), userId);
             ImConversation existing = findExistingDm(userId, otherUserId, null);
@@ -117,34 +116,17 @@ public class ImConversationServiceImpl implements ImConversationService {
 
         addParticipantInternal(conversation.getId(), userId, ImParticipantType.USER,
                 ImParticipantRole.OWNER, displayName());
-        Set<Long> memberIds = new LinkedHashSet<>();
-        memberIds.add(userId);
         if (dto.getParticipantUserIds() != null) {
             for (Long participantUserId : new LinkedHashSet<>(dto.getParticipantUserIds())) {
                 if (participantUserId == null || participantUserId.equals(userId)) {
                     continue;
                 }
-                memberIds.add(participantUserId);
                 addParticipantInternal(conversation.getId(), participantUserId,
                         ImParticipantType.USER, ImParticipantRole.MEMBER, null);
             }
         }
-        Set<Long> addedAgentIds = new LinkedHashSet<>();
-        for (ChatAgentIdentity agent : groupAgents) {
-            addedAgentIds.add(agent.agentId());
-            addParticipantInternal(conversation.getId(), agent.agentId(),
-                    ImParticipantType.AGENT, ImParticipantRole.BOT, agent.name());
-        }
-        if (ImConversationType.GROUP.equals(type)) {
-            // Every public avatar of the initial members joins automatically.
-            SuperAgentDirectorySpi directory = requireDirectory();
-            for (ChatAgentIdentity agent : directory.listPublicByOwners(memberIds)) {
-                if (addedAgentIds.add(agent.agentId())) {
-                    addParticipantInternal(conversation.getId(), agent.agentId(),
-                            ImParticipantType.AGENT, ImParticipantRole.BOT, agent.name(), true);
-                }
-            }
-        }
+        // Group avatars are not participants: they are resolved dynamically from
+        // the members' public avatar catalogue on every read and dispatch.
         bootstrapConversation(conversation, userId, type);
         publishToMembersAfterCommit(conversation.getId(), ImStreamEvent.builder()
                 .type(ImStreamEventType.CONVERSATION_CREATED)
@@ -484,9 +466,52 @@ public class ImConversationServiceImpl implements ImConversationService {
                         .eq(ImParticipant::getConversationId, conversationId)
                         .orderByAsc(ImParticipant::getId)));
         Map<Long, UserIdentityVO> identities = identitiesOf(participants);
+        Map<Long, Long> agentOwners = agentOwnersOf(participants);
         return participants.stream()
-                .map(participant -> toParticipantVO(participant, identities))
+                .map(participant -> toParticipantVO(participant, identities, agentOwners))
                 .toList();
+    }
+
+    @Override
+    public List<ConversationAgentVO> agents(Long conversationId) {
+        assertMember(conversationId, currentUserId());
+        ImConversation conversation = requireConversation(conversationId);
+        if (ImConversationType.GROUP.equals(conversation.getType())) {
+            List<Long> memberIds = systemRead(() -> participantMapper.selectList(
+                            Wrappers.<ImParticipant>lambdaQuery()
+                                    .eq(ImParticipant::getConversationId, conversationId)
+                                    .eq(ImParticipant::getParticipantType, ImParticipantType.USER)))
+                    .stream()
+                    .map(ImParticipant::getParticipantId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            if (memberIds.isEmpty()) {
+                return List.of();
+            }
+            return requireDirectory().listPublicByOwners(memberIds).stream()
+                    .map(identity -> {
+                        ConversationAgentVO vo = new ConversationAgentVO();
+                        vo.setParticipantId(identity.agentId());
+                        vo.setDisplayName(identity.name());
+                        vo.setOwnerUserId(identity.ownerUserId());
+                        vo.setStatus(identity.status());
+                        return vo;
+                    })
+                    .toList();
+        }
+        List<ImParticipant> agentRows = systemRead(() -> participantMapper.selectList(
+                Wrappers.<ImParticipant>lambdaQuery()
+                        .eq(ImParticipant::getConversationId, conversationId)
+                        .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)));
+        Map<Long, Long> owners = agentOwnersOf(agentRows);
+        return agentRows.stream().map(row -> {
+            ConversationAgentVO vo = new ConversationAgentVO();
+            vo.setParticipantId(row.getParticipantId());
+            vo.setDisplayName(row.getDisplayName());
+            vo.setOwnerUserId(owners.get(row.getParticipantId()));
+            return vo;
+        }).toList();
     }
 
     @Override
@@ -497,6 +522,11 @@ public class ImConversationServiceImpl implements ImConversationService {
         String type = dto.getParticipantType().toUpperCase();
         if (!ImParticipantType.USER.equals(type) && !ImParticipantType.AGENT.equals(type)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "participantType must be USER or AGENT");
+        }
+        if (ImParticipantType.AGENT.equals(type)
+                && ImConversationType.GROUP.equals(conversation.getType())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "group avatars are resolved from members' public avatars; they are not members");
         }
         assertCanAddParticipant(conversation, userId, type);
         String displayName = dto.getDisplayName();
@@ -511,20 +541,13 @@ public class ImConversationServiceImpl implements ImConversationService {
         String role = dto.getRole() == null ? ImParticipantRole.MEMBER : dto.getRole().toUpperCase();
         ImParticipant participant = addParticipantInternal(conversationId, dto.getParticipantId(),
                 type, role, displayName);
-        if (ImParticipantType.USER.equals(type)) {
-            // A new member brings their public avatar catalogue with them.
-            for (ChatAgentIdentity identity : requireDirectory()
-                    .listPublicByOwners(List.of(dto.getParticipantId()))) {
-                addParticipantInternal(conversationId, identity.agentId(),
-                        ImParticipantType.AGENT, ImParticipantRole.BOT, identity.name(), true);
-            }
-        }
         publishToMembersAfterCommit(conversationId, ImStreamEvent.builder()
                 .type(ImStreamEventType.PARTICIPANT_CHANGED)
                 .conversationId(conversationId)
                 .timestamp(System.currentTimeMillis())
                 .build());
-        return toParticipantVO(participant, identitiesOf(List.of(participant)));
+        List<ImParticipant> added = List.of(participant);
+        return toParticipantVO(participant, identitiesOf(added), agentOwnersOf(added));
     }
 
     @Override
@@ -546,24 +569,6 @@ public class ImConversationServiceImpl implements ImConversationService {
         if (ImParticipantRole.ADMIN.equals(participant.getRole())) {
             // Admins may promote/demote each other, but only the owner may remove an admin.
             assertOwner(conversationId, callerId);
-        }
-        if (ImParticipantType.USER.equals(participant.getParticipantType())) {
-            // Auto-added public avatars follow the member out of the group.
-            List<ChatAgentIdentity> publicAvatars = requireDirectory()
-                    .listPublicByOwners(List.of(participantId));
-            List<Long> avatarIds = publicAvatars.stream()
-                    .map(ChatAgentIdentity::agentId).filter(Objects::nonNull).toList();
-            if (!avatarIds.isEmpty()) {
-                List<ImParticipant> autoAvatars = systemRead(() -> participantMapper.selectList(
-                        Wrappers.<ImParticipant>lambdaQuery()
-                                .eq(ImParticipant::getConversationId, conversationId)
-                                .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)
-                                .eq(ImParticipant::getAutoAdded, true)
-                                .in(ImParticipant::getParticipantId, avatarIds)));
-                for (ImParticipant avatar : autoAvatars) {
-                    participantMapper.deleteById(avatar.getId());
-                }
-            }
         }
         participantMapper.deleteById(participant.getId());
         publishToMembersAfterCommit(conversationId, ImStreamEvent.builder()
@@ -600,7 +605,8 @@ public class ImConversationServiceImpl implements ImConversationService {
                 .conversationId(conversationId)
                 .timestamp(System.currentTimeMillis())
                 .build());
-        return toParticipantVO(participant, identitiesOf(List.of(participant)));
+        List<ImParticipant> updated = List.of(participant);
+        return toParticipantVO(participant, identitiesOf(updated), agentOwnersOf(updated));
     }
 
     @Override
@@ -871,24 +877,6 @@ public class ImConversationServiceImpl implements ImConversationService {
         return null;
     }
 
-    /**
-     * Validate every initial agent before the conversation row is inserted so a
-     * forbidden/private avatar cannot leave a half-created group behind.
-     */
-    private List<ChatAgentIdentity> resolveGroupAgents(List<Long> agentIds, Long userId) {
-        if (agentIds == null || agentIds.isEmpty()) {
-            return List.of();
-        }
-        SuperAgentDirectorySpi directory = requireDirectory();
-        List<ChatAgentIdentity> result = new ArrayList<>();
-        for (Long agentId : new LinkedHashSet<>(agentIds)) {
-            if (agentId != null) {
-                result.add(directory.resolveForGroupChat(agentId, userId));
-            }
-        }
-        return result;
-    }
-
     private SuperAgentDirectorySpi requireDirectory() {
         SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
         if (directory == null) {
@@ -916,12 +904,6 @@ public class ImConversationServiceImpl implements ImConversationService {
 
     private ImParticipant addParticipantInternal(Long conversationId, Long participantId,
                                                  String participantType, String role, String displayName) {
-        return addParticipantInternal(conversationId, participantId, participantType, role, displayName, false);
-    }
-
-    private ImParticipant addParticipantInternal(Long conversationId, Long participantId,
-                                                 String participantType, String role, String displayName,
-                                                 boolean autoAdded) {
         ImParticipant existing = systemRead(() -> participantMapper.selectOne(Wrappers.<ImParticipant>lambdaQuery()
                 .eq(ImParticipant::getConversationId, conversationId)
                 .eq(ImParticipant::getParticipantType, participantType)
@@ -937,7 +919,7 @@ public class ImConversationServiceImpl implements ImConversationService {
         participant.setRole(role);
         participant.setDisplayName(displayName);
         participant.setMuted(false);
-        participant.setAutoAdded(autoAdded);
+        participant.setAutoAdded(false);
         participant.setJoinedAt(LocalDateTime.now());
         try {
             participantMapper.insert(participant);
@@ -991,8 +973,9 @@ public class ImConversationServiceImpl implements ImConversationService {
                         .eq(ImParticipant::getConversationId, conversation.getId())
                         .orderByAsc(ImParticipant::getId)));
         Map<Long, UserIdentityVO> identities = identitiesOf(participants);
+        Map<Long, Long> agentOwners = agentOwnersOf(participants);
         vo.setParticipants(participants.stream()
-                .map(participant -> toParticipantVO(participant, identities))
+                .map(participant -> toParticipantVO(participant, identities, agentOwners))
                 .toList());
         vo.setMyRole(roleOf(participants, userId));
         vo.setAllowMemberInvite(allowMemberInvite(conversation));
@@ -1110,6 +1093,26 @@ public class ImConversationServiceImpl implements ImConversationService {
         }
     }
 
+    /** Owner user id per AGENT participant; empty when the directory is unavailable. */
+    private Map<Long, Long> agentOwnersOf(List<ImParticipant> participants) {
+        List<Long> agentIds = participants.stream()
+                .filter(participant -> ImParticipantType.AGENT.equals(participant.getParticipantType()))
+                .map(ImParticipant::getParticipantId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (agentIds.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+            return directory == null ? Map.of() : directory.ownerUserIds(agentIds);
+        } catch (Exception e) {
+            log.warn("Failed to load avatar owners", e);
+            return Map.of();
+        }
+    }
+
     /** Workspace/console share one human label: provider@external-username for SSO users. */
     private void attachSsoLabels(Map<Long, UserIdentityVO> identities, List<Long> userIds) {
         if (identities == null || identities.isEmpty()) {
@@ -1158,7 +1161,8 @@ public class ImConversationServiceImpl implements ImConversationService {
         return vo;
     }
 
-    private ParticipantVO toParticipantVO(ImParticipant participant, Map<Long, UserIdentityVO> identities) {
+    private ParticipantVO toParticipantVO(ImParticipant participant, Map<Long, UserIdentityVO> identities,
+                                          Map<Long, Long> agentOwners) {
         ParticipantVO vo = new ParticipantVO();
         vo.setId(participant.getId());
         vo.setConversationId(participant.getConversationId());
@@ -1179,6 +1183,10 @@ public class ImConversationServiceImpl implements ImConversationService {
         }
         vo.setMuted(participant.getMuted());
         vo.setAutoAdded(Boolean.TRUE.equals(participant.getAutoAdded()));
+        if (ImParticipantType.AGENT.equals(participant.getParticipantType())
+                && participant.getParticipantId() != null) {
+            vo.setOwnerUserId(agentOwners.get(participant.getParticipantId()));
+        }
         vo.setJoinedAt(participant.getJoinedAt() == null ? null
                 : participant.getJoinedAt().format(DTF));
         return vo;

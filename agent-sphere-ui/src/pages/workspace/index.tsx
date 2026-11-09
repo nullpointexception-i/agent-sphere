@@ -49,7 +49,13 @@ import {
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { MentionSuggest } from '@/components/mention/MentionSuggest';
+import {
+  buildMentionCandidates,
+  mentionsFromText,
+} from '@/components/mention/mentionModel';
+import { useMentionSuggest } from '@/components/mention/useMentionSuggest';
 import { API_PATHS } from '@/constants/endpoints';
 import { STATUS, SUPER_AGENT_STATUS_CODE } from '@/constants/status';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
@@ -57,6 +63,7 @@ import { useReconnectingSse } from '@/hooks/useReconnectingSse';
 import { agentApi } from '@/services/agentSphere/api';
 import { dictApi, type SystemDicEntry } from '@/services/agentSphere/dict';
 import {
+  type ConversationAgent,
   type ImConversation,
   type ImConversationSetting,
   type ImMessage,
@@ -64,7 +71,6 @@ import {
   type SessionInputDecision,
 } from '@/services/agentSphere/im';
 import {
-  type PublicSuperAgent,
   type SuperAgent,
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
@@ -87,6 +93,7 @@ import {
 } from './agentStreamStore';
 import { ApprovalInboxDrawer } from './approval/ApprovalInboxDrawer';
 import { usePendingApprovals } from './approval/usePendingApprovals';
+import { CollapsibleMarkdown } from './CollapsibleMarkdown';
 import {
   conversationAvatar,
   conversationDisplayName,
@@ -220,15 +227,20 @@ function TopBar({ me }: { me: any }) {
           menu={{
             selectedKeys: [locale],
             items: [
-              { key: 'zh-CN', label: '简体中文' },
-              { key: 'en-US', label: 'English' },
+              {
+                key: 'zh-CN',
+                label: tw('language.zh', 'Simplified Chinese'),
+              },
+              { key: 'en-US', label: tw('language.en', 'English') },
             ],
             onClick: ({ key }) => setLocale(key, false),
           }}
         >
           <button type="button" className={styles.langButton}>
             <GlobalOutlined />
-            {locale === 'en-US' ? 'English' : '中文'}
+            {locale === 'en-US'
+              ? tw('language.en', 'English')
+              : tw('language.zhShort', 'Chinese')}
           </button>
         </Dropdown>
         <span className={styles.online}>
@@ -1355,9 +1367,6 @@ function ChatTab({
   const [groupOpen, setGroupOpen] = useState(false);
   const [groupKeyword, setGroupKeyword] = useState('');
   const [groupMembers, setGroupMembers] = useState<number[]>([]);
-  const [groupAgents, setGroupAgents] = useState<number[]>([]);
-  const [publicAvatars, setPublicAvatars] = useState<PublicSuperAgent[]>([]);
-  const [publicAvatarsLoading, setPublicAvatarsLoading] = useState(false);
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [creatingGroup, setCreatingGroup] = useState(false);
@@ -1580,8 +1589,6 @@ function ChatTab({
     setGroupOpen(true);
     setGroupKeyword('');
     setGroupMembers([]);
-    setGroupAgents([]);
-    setPublicAvatars([]);
     if (contacts.length > 0) return;
     setContactsLoading(true);
     agentApi.workspaceContacts
@@ -1589,79 +1596,6 @@ function ChatTab({
       .then((page: any) => setContacts(page.records || page || []))
       .catch(() => setContacts([]))
       .finally(() => setContactsLoading(false));
-  };
-
-  useEffect(() => {
-    if (!groupOpen) return;
-    const owners = [...groupMembers, me?.id].filter((value): value is number =>
-      Number.isFinite(Number(value)),
-    );
-    setPublicAvatarsLoading(true);
-    superAgentApi
-      .publicAvatars(owners)
-      .then((rows) => {
-        const list = Array.isArray(rows) ? rows : [];
-        setPublicAvatars(list);
-        // All public avatars are auto-included; the create request sends them too.
-        setGroupAgents(list.map((agent) => agent.id));
-      })
-      .catch(() => setPublicAvatars([]))
-      .finally(() => setPublicAvatarsLoading(false));
-  }, [groupOpen, groupMembers, me?.id]);
-
-  const publicAvatarsByOwner = publicAvatars.reduce<
-    Record<number, PublicSuperAgent[]>
-  >((groups, agent) => {
-    if (!groups[agent.ownerUserId]) groups[agent.ownerUserId] = [];
-    groups[agent.ownerUserId].push(agent);
-    return groups;
-  }, {});
-
-  const toggleAgent = (id: number) => {
-    setGroupAgents((previous) =>
-      previous.includes(id)
-        ? previous.filter((value) => value !== id)
-        : [...previous, id],
-    );
-  };
-
-  const renderAgentChips = (ownerId?: number) => {
-    const list = ownerId == null ? [] : (publicAvatarsByOwner[ownerId] ?? []);
-    if (list.length === 0) return null;
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 6,
-          margin: '4px 0 10px 44px',
-        }}
-      >
-        {list.map((agent) => {
-          return (
-            <button
-              key={agent.id}
-              type="button"
-              style={{
-                border: '1px solid #7c6cff',
-                background: '#f1efff',
-                color: '#5b4bdb',
-                borderRadius: 999,
-                padding: '3px 10px',
-                fontSize: 12,
-                cursor: 'default',
-              }}
-              title={tw(
-                'chat.autoPublicAvatar',
-                'Automatically included public avatar',
-              )}
-            >
-              {agent.name}
-            </button>
-          );
-        })}
-      </div>
-    );
   };
 
   const createGroup = async () => {
@@ -1681,23 +1615,13 @@ function ChatTab({
         .slice(0, 64) || tw('chat.groupDefaultName', 'Group');
     setCreatingGroup(true);
     try {
-      const allowedOwners = new Set<number>([
-        ...groupMembers.map(Number),
-        ...(me?.id ? [Number(me.id)] : []),
-      ]);
-      const agentIds = groupAgents.filter((id) => {
-        const agent = publicAvatars.find((item) => item.id === id);
-        return Boolean(agent && allowedOwners.has(agent.ownerUserId));
-      });
       const conversation = await imApi.createConversation({
         type: 'GROUP',
         title,
         participantUserIds: groupMembers.map(Number),
-        agentIds,
       });
       setGroupOpen(false);
       setGroupMembers([]);
-      setGroupAgents([]);
       setConversations((previous) => mergeConversation(previous, conversation));
       openConversation(conversation.id, conversation.lastSeq);
       reloadList();
@@ -1735,19 +1659,10 @@ function ChatTab({
     return left.localeCompare(right);
   });
   const toggleMember = (id: number) => {
-    const nextMembers = groupMembers.includes(id)
-      ? groupMembers.filter((item) => item !== id)
-      : [...groupMembers, id];
-    setGroupMembers(nextMembers);
-    const allowedOwners = new Set<number>([
-      ...nextMembers.map(Number),
-      ...(me?.id ? [Number(me.id)] : []),
-    ]);
-    setGroupAgents((previous) =>
-      previous.filter((agentId) => {
-        const agent = publicAvatars.find((item) => item.id === agentId);
-        return Boolean(agent && allowedOwners.has(agent.ownerUserId));
-      }),
+    setGroupMembers((previous) =>
+      previous.includes(id)
+        ? previous.filter((item) => item !== id)
+        : [...previous, id],
     );
   };
 
@@ -2103,28 +2018,9 @@ function ChatTab({
                         <CloseOutlined />
                       </button>
                     </div>
-                    {renderAgentChips(Number(user.id))}
                   </div>
                 ))
               )}
-              {me?.id ? (
-                <div style={{ marginTop: 8 }}>
-                  <div className={styles.groupSelectedRow}>
-                    <Avatar
-                      size={34}
-                      src={me.avatar}
-                      style={avatarStyle(displayName(me))}
-                    >
-                      {initials(displayName(me))}
-                    </Avatar>
-                    <span className={styles.groupSelectedName}>
-                      {tw('chat.myPublicAvatars', 'My public avatars')}
-                    </span>
-                    {publicAvatarsLoading ? <Spin size="small" /> : null}
-                  </div>
-                  {renderAgentChips(Number(me.id))}
-                </div>
-              ) : null}
             </div>
             <div className={styles.groupFooter}>
               <Button
@@ -2165,12 +2061,10 @@ function ChatDetail({
   const me = getStoredUser();
   const [conversation, setConversation] = useState<ImConversation | null>(null);
   const [participants, setParticipants] = useState<any[]>([]);
+  const [agents, setAgents] = useState<ConversationAgent[]>([]);
   const [messages, setMessages] = useState<ImMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
-  const [mentions, setMentions] = useState<
-    { type: string; id: number; name?: string }[]
-  >([]);
   const [sending, setSending] = useState(false);
   const [agentPaused, setAgentPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2192,6 +2086,38 @@ function ChatDetail({
   messagesRef.current = messages;
   const agentStream = useAgentStream(conversationId);
 
+  const avatarCandidates = useMemo(
+    () =>
+      agents.map((agent) => ({
+        participantType: 'AGENT',
+        participantId: agent.participantId,
+        displayName: agent.displayName,
+        ownerUserId: agent.ownerUserId,
+      })),
+    [agents],
+  );
+  const mentionCandidates = useMemo(
+    () =>
+      buildMentionCandidates([...participants, ...avatarCandidates], me?.id),
+    [participants, avatarCandidates, me?.id],
+  );
+  const mention = useMentionSuggest({
+    textareaRef: composerRef,
+    value: text,
+    candidates: mentionCandidates,
+    onChange: (nextText, caret) => {
+      setText(nextText);
+      requestAnimationFrame(() => {
+        const element = composerRef.current;
+        if (!element) return;
+        element.focus();
+        element.setSelectionRange(caret, caret);
+        element.style.height = 'auto';
+        element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
+      });
+    },
+  });
+
   const load = (silent = false) => {
     if (!silent) {
       setLoading(true);
@@ -2202,11 +2128,14 @@ function ChatDetail({
     Promise.all([
       imApi.conversation(conversationId),
       imApi.participants(conversationId),
+      // Older backends have no /agents endpoint; avatars then still come from participants.
+      imApi.agents(conversationId).catch(() => []),
       imApi.messagePage(conversationId, undefined, undefined, 50),
     ])
-      .then(([current, members, page]) => {
+      .then(([current, members, agentRows, page]) => {
         setConversation(current || null);
         setParticipants(members || []);
+        setAgents(agentRows || []);
         setMessages((page?.rows || []).slice().sort((a, b) => a.seq - b.seq));
         setHasOlder(Boolean(page?.hasMore));
         setOlderCursor(page?.nextBeforeSeq);
@@ -2284,8 +2213,8 @@ function ChatDetail({
     if (first) {
       setMessages([]);
       setParticipants([]);
+      setAgents([]);
       setConversation(null);
-      setMentions([]);
       // A freshly opened conversation starts pinned to the bottom.
       stickToBottomRef.current = true;
     }
@@ -2461,38 +2390,14 @@ function ChatDetail({
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
-    await sendText(value, `workspace-${Date.now()}`, mentions);
+    await sendText(value, `workspace-${Date.now()}`);
     setText('');
-    setMentions([]);
+    mention.close();
     if (composerRef.current) composerRef.current.style.height = 'auto';
   };
 
-  const addMention = (agent: any) => {
-    const name = displayName(agent);
-    setText((previous) => {
-      const separator = previous && !previous.endsWith(' ') ? ' ' : '';
-      return `${previous}${separator}@${name} `;
-    });
-    setMentions((previous) =>
-      previous.some((item) => item.id === agent.participantId)
-        ? previous
-        : [
-            ...previous,
-            {
-              type: 'AGENT',
-              id: agent.participantId,
-              name,
-            },
-          ],
-    );
-  };
-
   /** Sends an arbitrary DM text; clarification option buttons reuse this path. */
-  const sendText = async (
-    value: string,
-    clientMsgId?: string,
-    mentionList: { type: string; id: number; name?: string }[] = [],
-  ) => {
+  const sendText = async (value: string, clientMsgId?: string) => {
     if (!value || sending) return;
     if (agentPaused) {
       message.warning(
@@ -2514,6 +2419,8 @@ function ChatDetail({
       beginAgentStream(conversationId);
     }
     try {
+      // The body is the source of truth: deleting an @name also drops its routing.
+      const mentionList = mentionsFromText(value, mentionCandidates);
       await imApi.send(
         conversationId,
         value,
@@ -2590,9 +2497,13 @@ function ChatDetail({
   };
 
   const refreshConversation = async () => {
-    const updated = await imApi.conversation(conversationId);
+    const [updated, agentRows] = await Promise.all([
+      imApi.conversation(conversationId),
+      imApi.agents(conversationId).catch(() => []),
+    ]);
     setConversation(updated);
     setParticipants(updated?.participants || []);
+    setAgents(agentRows || []);
     onChanged();
   };
 
@@ -2907,19 +2818,34 @@ function ChatDetail({
                 (sender
                   ? isSameUser(sender, me)
                   : Number(item.senderId) === Number(me?.id));
-              const senderName = sender
-                ? userDisplayLabel(
-                    sender,
-                    item.senderType === 'AGENT'
-                      ? tw('chat.agent', 'Digital avatar')
-                      : tw('chat.unknownUser', 'Unknown user'),
-                  )
-                : item.senderType === 'AGENT'
-                  ? tw('chat.agent', 'Digital avatar')
-                  : item.senderType === 'SYSTEM'
-                    ? tw('chat.system', 'System')
-                    : tw('chat.unknownUser', 'Unknown user');
-              const avatarName = self ? displayName(me) : senderName;
+              // Avatar messages carry a server-resolved name + owner: the wall
+              // reads "Agent (owner)" even though avatars are no longer participants.
+              const serverLabel = item.senderName
+                ? `${item.senderName}${
+                    item.senderOwnerName
+                      ? tw('chat.ownerSuffix', ' ({owner})', {
+                          owner: item.senderOwnerName,
+                        })
+                      : ''
+                  }`
+                : null;
+              const senderName =
+                serverLabel ||
+                (sender
+                  ? userDisplayLabel(
+                      sender,
+                      item.senderType === 'AGENT'
+                        ? tw('chat.agent', 'Digital avatar')
+                        : tw('chat.unknownUser', 'Unknown user'),
+                    )
+                  : item.senderType === 'AGENT'
+                    ? tw('chat.agent', 'Digital avatar')
+                    : item.senderType === 'SYSTEM'
+                      ? tw('chat.system', 'System')
+                      : tw('chat.unknownUser', 'Unknown user'));
+              const avatarName = self
+                ? displayName(me)
+                : item.senderName || senderName;
               const card = taskCardOf(item);
               const pinned = conversation?.pinnedMessage?.id === item.id;
               const menuItems: any[] = [
@@ -3000,7 +2926,7 @@ function ChatDetail({
                             </div>
                             {card.summary ? (
                               <div className={styles.taskCardSummary}>
-                                {card.summary}
+                                <CollapsibleMarkdown text={card.summary} />
                               </div>
                             ) : (
                               <div className={styles.taskCardSummary}>
@@ -3057,38 +2983,6 @@ function ChatDetail({
         </div>
       ) : null}
 
-      {isGroup && participants.some((p) => p.participantType === 'AGENT') ? (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-            padding: '0 4px 8px',
-          }}
-        >
-          {participants
-            .filter((p) => p.participantType === 'AGENT')
-            .map((p) => (
-              <button
-                key={p.participantId}
-                type="button"
-                onClick={() => addMention(p)}
-                style={{
-                  border: '1px solid #e4e4e7',
-                  background: '#fff',
-                  borderRadius: 999,
-                  padding: '2px 8px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-                title={tw('chat.mentionAvatar', 'Mention this avatar')}
-              >
-                @{displayName(p)}
-              </button>
-            ))}
-        </div>
-      ) : null}
-
       <div className={styles.composer}>
         <textarea
           ref={composerRef}
@@ -3098,17 +2992,41 @@ function ChatDetail({
           disabled={agentPaused}
           placeholder={tw('chat.inputPlaceholder', 'Type a message...')}
           onChange={(event) => {
-            setText(event.target.value);
+            const next = event.target.value;
+            setText(next);
+            mention.refresh(next, event.target.selectionStart);
             const element = event.target;
             element.style.height = 'auto';
             element.style.height = `${Math.min(element.scrollHeight, 120)}px`;
           }}
           onKeyDown={(event) => {
+            if (mention.handleKeyDown(event)) {
+              return;
+            }
             if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault();
               send();
             }
           }}
+          onSelect={(event) =>
+            mention.refresh(
+              event.currentTarget.value,
+              event.currentTarget.selectionStart,
+            )
+          }
+        />
+        <MentionSuggest
+          open={mention.open}
+          items={mention.items}
+          activeIndex={mention.activeIndex}
+          position={mention.position}
+          labels={{
+            agent: tw('chat.mentionCandidateAgent', 'Avatar'),
+            user: tw('chat.mentionCandidateUser', 'Member'),
+            self: tw('chat.mentionCandidateSelf', 'Me'),
+          }}
+          onHover={mention.setActiveIndex}
+          onSelect={mention.applyCandidate}
         />
         <button
           type="button"

@@ -1,4 +1,7 @@
 export default {
+  'workspace.language.zh': 'Simplified Chinese',
+  'workspace.language.zhShort': 'Chinese',
+  'workspace.language.en': 'English',
   'workspace.nav.home': 'Home',
   'workspace.nav.avatars': 'Avatars',
   'workspace.nav.chat': 'Chats',
@@ -136,8 +139,14 @@ export default {
     'When on, ordinary members can invite users.',
   'workspace.chat.inviteMember': 'Invite member',
   'workspace.chat.selectMember': 'Select a member',
-  'workspace.chat.mentionAvatar': 'Mention this avatar',
-  'workspace.chat.autoPublicAvatar': 'Automatically included public avatar',
+  'workspace.chat.mentionCandidateAgent': 'Avatar',
+  'workspace.chat.mentionCandidateUser': 'Member',
+  'workspace.chat.mentionCandidateSelf': 'Me',
+  'workspace.chat.ownerSuffix': ' ({owner})',
+  'workspace.chat.expand': 'Expand',
+  'workspace.chat.collapse': 'Collapse',
+  'workspace.chat.inputDecisionTaken': 'Chosen: {decision}',
+  'workspace.chat.inputAnswerTaken': 'Answer: {answer}',
   'workspace.common.confirm': 'Confirm',
   'workspace.chat.agent': 'Digital avatar',
   'workspace.chat.agentTag': 'Digital avatar',
@@ -317,6 +326,4 @@ export default {
   'workspace.avatars.publicTag': 'Public',
   'workspace.avatars.publicOn': 'This avatar is now visible in group creation',
   'workspace.avatars.publicOff': 'This avatar is now private',
-
-  'workspace.chat.myPublicAvatars': 'My public avatars',
 };

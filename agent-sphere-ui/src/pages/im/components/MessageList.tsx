@@ -216,7 +216,7 @@ export function MessageList({
       `${participant.participantType}:${participant.participantId}`,
       userDisplayLabel(
         participant,
-        participant.participantType === 'AGENT' ? '数字员工' : '用户',
+        participant.participantType === 'AGENT' ? 'Agent' : 'User',
       ),
     ]),
   );
@@ -260,8 +260,11 @@ export function MessageList({
                     <Tag
                       color={item.senderType === 'AGENT' ? 'blue' : 'default'}
                     >
-                      {nameByKey.get(`${item.senderType}:${item.senderId}`) ||
-                        (item.senderType === 'AGENT' ? '数字员工' : '用户')}
+                      {item.senderName
+                        ? `${item.senderName}${item.senderOwnerName ? ` (${item.senderOwnerName})` : ''}`
+                        : nameByKey.get(
+                            `${item.senderType}:${item.senderId}`,
+                          ) || (item.senderType === 'AGENT' ? 'Agent' : 'User')}
                     </Tag>
                     <Typography.Text type="secondary">
                       {item.createdAt

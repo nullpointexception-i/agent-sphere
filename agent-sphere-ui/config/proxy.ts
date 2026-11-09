@@ -1,7 +1,9 @@
 export default {
   dev: {
     '/api/': {
-      target: 'http://localhost:8080',
+      // Env override lets the UI run against a remote backend without editing
+      // this file; the default stays the local Spring Boot port.
+      target: process.env.API_PROXY_TARGET || 'http://localhost:8080',
       changeOrigin: true,
       onProxyReq: (proxyReq: any, req: any) => {
         if (req.url?.includes('/stream')) {

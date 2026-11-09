@@ -192,6 +192,9 @@ export default {
   'pages.im.placeholder':
     'Type a message. Enter to send, Shift+Enter for a new line',
   'pages.im.mention': '@Agent',
+  'pages.im.mentionCandidateAgent': 'Avatar',
+  'pages.im.mentionCandidateUser': 'Member',
+  'pages.im.mentionCandidateSelf': 'Me',
   'pages.im.send': 'Send',
   'pages.im.selectConversation': 'Select a conversation',
   'pages.im.groupSettings': 'Group Settings',
@@ -200,9 +203,6 @@ export default {
   'pages.im.type': 'Type',
   'pages.im.userIds': 'Members',
   'pages.im.userIdsHint': 'Select members from the current tenant',
-  'pages.im.agentIds': 'Digital employees',
-  'pages.im.agentIdsHint':
-    'Add groups already bound to these digital employees',
   'pages.im.created': 'Conversation created',
   'pages.im.gateSaved': 'Group trigger rule saved',
   'pages.im.loadMore': 'Load more',

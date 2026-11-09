@@ -15,7 +15,9 @@ import java.util.Objects;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -88,5 +90,45 @@ public class SuperAgentDirectoryServiceImpl implements SuperAgentDirectorySpi {
                     agent.getOwnerUserId(), agent.getStatus()));
         }
         return result;
+    }
+
+    @Override
+    public Map<Long, Long> ownerUserIds(Collection<Long> agentIds) {
+        if (agentIds == null || agentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = agentIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<AgentSuperAgent> agents = superAgentMapper.selectList(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<AgentSuperAgent>lambdaQuery()
+                        .select(AgentSuperAgent::getId, AgentSuperAgent::getOwnerUserId)
+                        .in(AgentSuperAgent::getId, ids));
+        Map<Long, Long> owners = new HashMap<>(agents.size());
+        for (AgentSuperAgent agent : agents) {
+            if (agent.getOwnerUserId() != null) {
+                owners.put(agent.getId(), agent.getOwnerUserId());
+            }
+        }
+        return owners;
+    }
+
+    @Override
+    public Map<Long, ChatAgentIdentity> findByIds(Collection<Long> agentIds) {
+        if (agentIds == null || agentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = agentIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<AgentSuperAgent> agents = superAgentMapper.selectBatchIds(ids);
+        Map<Long, ChatAgentIdentity> identities = new HashMap<>(agents.size());
+        for (AgentSuperAgent agent : agents) {
+            identities.put(agent.getId(), new ChatAgentIdentity(agent.getId(), agent.getName(),
+                    agent.getOwnerUserId(), agent.getStatus()));
+        }
+        return identities;
     }
 }

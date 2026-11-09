@@ -6,6 +6,7 @@ import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.im.domain.ImConversation;
 import com.buukle.agent.im.domain.ImMessage;
 import com.buukle.agent.im.domain.ImParticipant;
+import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.im.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.im.dtvo.enums.ImMessageStatus;
 import com.buukle.agent.im.dtvo.enums.ImMessageType;
@@ -70,6 +71,8 @@ class ImMessageServiceImplTest {
     @Mock
     ObjectProvider<SessionInputSpi> sessionInputPortProvider;
     @Mock
+    ObjectProvider<UserSpi> userSpiProvider;
+    @Mock
     SessionInputSpi sessionInputSpi;
     @Mock
     AgentMetrics metrics;
@@ -80,7 +83,7 @@ class ImMessageServiceImplTest {
     void setUp() {
         service = new ImMessageServiceImpl(messageMapper, conversationMapper, settingMapper,
                 participantMapper, readCursorMapper, streamService, ingestPortProvider,
-                directoryPortProvider, sessionInputPortProvider, metrics);
+                directoryPortProvider, sessionInputPortProvider, userSpiProvider, metrics);
         AuthContext.setUserId(1L);
         AuthContext.setUsername("alice");
         AuthContext.setDisplayName("Alice");
@@ -269,13 +272,13 @@ class ImMessageServiceImplTest {
             return 1;
         });
         when(participantMapper.selectList(any())).thenReturn(List.of());
-        when(sessionInputSpi.answerRouterClarification(77L, "选项A")).thenReturn(true);
+        when(sessionInputSpi.answerRouterClarification(77L, "Option A")).thenReturn(true);
 
         SendMessageDTO dto = new SendMessageDTO();
-        dto.setContent(Map.of("text", "选项A"));
+        dto.setContent(Map.of("text", "Option A"));
         service.send(10L, dto);
 
-        verify(sessionInputSpi).answerRouterClarification(77L, "选项A");
+        verify(sessionInputSpi).answerRouterClarification(77L, "Option A");
         // Interception succeeded: ingest is skipped (the event never reaches Router scheduling)
         verify(ingestPortProvider, never()).getIfAvailable();
     }
@@ -294,13 +297,13 @@ class ImMessageServiceImplTest {
             return 1;
         });
         when(participantMapper.selectList(any())).thenReturn(List.of());
-        when(sessionInputSpi.answerRouterClarification(77L, "普通聊天")).thenReturn(false);
+        when(sessionInputSpi.answerRouterClarification(77L, "Regular chat")).thenReturn(false);
 
         SendMessageDTO dto = new SendMessageDTO();
-        dto.setContent(Map.of("text", "普通聊天"));
+        dto.setContent(Map.of("text", "Regular chat"));
         service.send(10L, dto);
 
-        assertFalse(sessionInputSpi.answerRouterClarification(77L, "普通聊天"));
+        assertFalse(sessionInputSpi.answerRouterClarification(77L, "Regular chat"));
         verify(ingestPortProvider).getIfAvailable();
     }
 
@@ -317,7 +320,7 @@ class ImMessageServiceImplTest {
         when(participantMapper.selectList(any())).thenReturn(List.of());
 
         SendMessageDTO dto = new SendMessageDTO();
-        dto.setContent(Map.of("text", "选项A"));
+        dto.setContent(Map.of("text", "Option A"));
         service.send(10L, dto);
 
         verify(sessionInputSpi, never()).answerRouterClarification(any(), any());

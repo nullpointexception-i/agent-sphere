@@ -39,6 +39,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * Projects Router parked inputs (clarification / L2 tool approval) into the IM DM.
@@ -124,6 +125,11 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             if (input == null) {
                 return;
             }
+            // The card-update outbound row must carry the input's tenant; otherwise the
+            // audit handler stamps SYSTEM (0) and delivery cannot resolve the conversation.
+            if (input.getTenantId() != null) {
+                TenantContext.set(input.getTenantId());
+            }
             markResolved(input, command.status());
             updateCard(input, ownerUsername(resolveOwner(input)));
         } catch (Exception e) {
@@ -145,6 +151,9 @@ public class SessionInputServiceImpl implements SessionInputSpi {
                     .eq(AgentSessionInput::getRunId, runId)
                     .eq(AgentSessionInput::getStatus, SessionInputStatus.PENDING));
             for (AgentSessionInput input : pending) {
+                if (input.getTenantId() != null) {
+                    TenantContext.set(input.getTenantId());
+                }
                 markResolved(input, SessionInputStatus.CANCELLED);
                 updateCard(input, ownerUsername(resolveOwner(input)));
                 metrics.increment(AgentMetrics.ROUTER_INPUT_CANCELLED, "inputType", input.getInputType());
@@ -198,6 +207,14 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             if (port == null) {
                 return false;
             }
+            // Persist the answer before resuming: the synchronous RESPONDED event
+            // re-projects the card and must already see it.
+            String answerJson = JsonUtils.toJson(Map.of("answer", response));
+            AgentSessionInput answerPatch = new AgentSessionInput();
+            answerPatch.setId(input.getId());
+            answerPatch.setDecisionsJson(answerJson);
+            sessionInputMapper.updateById(answerPatch);
+            input.setDecisionsJson(answerJson);
             port.answerClarification(input.getSessionId(), input.getRunId(), input.getInputId(), response);
             // The resume path publishes the RESPONDED event synchronously, and the
             // bridge's projectResolved already marked the row + updated the card.
@@ -256,6 +273,13 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             if (port == null) {
                 throw new BizException(CommonErrorCode.PARAM_INVALID, "Approval resume is unavailable");
             }
+            // Persist the decisions before resuming: the synchronous RESPONDED event
+            // re-projects the card and must already see which option was chosen.
+            AgentSessionInput decisionPatch = new AgentSessionInput();
+            decisionPatch.setId(input.getId());
+            decisionPatch.setDecisionsJson(decisionsJson);
+            sessionInputMapper.updateById(decisionPatch);
+            input.setDecisionsJson(decisionsJson);
             port.resolveApproval(input.getSessionId(), input.getRunId(), inputId,
                     decisionsJson, AuthContext.getUsername());
             // Mirror answerRouterClarification: the resume path already resolved the
@@ -347,6 +371,9 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             if (current == null) {
                 return;
             }
+            if (current.getTenantId() != null) {
+                TenantContext.set(current.getTenantId());
+            }
             Long threadId = current.getThreadId();
             AgentSuperAgent agent = superAgentMapper.selectById(current.getSuperAgentId());
             if (agent == null) {
@@ -416,6 +443,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         card.setMultiple(input.getMultiple());
         card.setOptions(isClarification(input) ? input.getOptions() : null);
         card.setToolCallsJson(isApproval(input) ? input.getToolCallsJson() : null);
+        card.setDecisionsJson(input.getDecisionsJson());
         return card;
     }
 

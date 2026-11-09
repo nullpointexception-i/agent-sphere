@@ -11,7 +11,9 @@ import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
+import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.domain.AgentEvent;
 import com.buukle.agent.superagent.domain.AgentEventDelivery;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
@@ -43,8 +45,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -75,6 +79,7 @@ public class AgentRouterScheduler {
     private final AgentThreadMapper threadMapper;
     private final SessionSpi sessionSpi;
     private final ObjectProvider<AgentRouterRunPort> agentRouterRunPortProvider;
+    private final ObjectProvider<UserSpi> userSpiProvider;
     private final AgentMetrics metrics;
     private final RedissonClient redissonClient;
 
@@ -203,7 +208,8 @@ public class AgentRouterScheduler {
                     }
                     continue;
                 }
-                StringBuilder input = new StringBuilder("[DELIVERIES]\n");
+                StringBuilder input = new StringBuilder(identityBlock(first.agent, first.event));
+                input.append("[DELIVERIES]\n");
                 for (DeliveryContext context : claimed) {
                     input.append("deliveryId=").append(context.delivery.getId())
                             .append(", eventId=").append(context.event.getId())
@@ -329,6 +335,107 @@ public class AgentRouterScheduler {
                 ? "Conversation" : thread.getTitle();
         String title = (agent.getName() == null ? "" : agent.getName()) + " · " + suffix;
         return title.length() <= MAX_TITLE ? title : title.substring(0, MAX_TITLE);
+    }
+
+    /**
+     * Tells an avatar who it belongs to and who is speaking, so a mention of
+     * someone else's avatar is not answered as if the owner had spoken.
+     */
+    private String identityBlock(AgentSuperAgent agent, AgentEvent event) {
+        JsonNode meta = rawMeta(event);
+        Long ownerId = agent.getOwnerUserId();
+        List<Long> memberIds = numberList(meta, "memberUserIds");
+        Long speakerId = meta != null && meta.hasNonNull("speakerId")
+                ? meta.get("speakerId").asLong() : event.getActorId();
+        String speakerName = meta != null && meta.hasNonNull("speakerName")
+                ? meta.get("speakerName").asText() : null;
+        boolean group = meta != null && meta.hasNonNull("conversationType")
+                && "GROUP".equalsIgnoreCase(meta.get("conversationType").asText());
+        Set<Long> userIds = new LinkedHashSet<>();
+        if (ownerId != null) {
+            userIds.add(ownerId);
+        }
+        userIds.addAll(memberIds);
+        if (speakerId != null) {
+            userIds.add(speakerId);
+        }
+        UserSpi userSpi = userSpiProvider.getIfAvailable();
+        Map<Long, UserIdentityVO> identities = userSpi == null || userIds.isEmpty()
+                ? Map.of() : userSpi.identityMap(userIds);
+        String ownerName = userLabel(ownerId == null ? null : identities.get(ownerId));
+        if (speakerName == null || speakerName.isBlank()) {
+            speakerName = userLabel(speakerId == null ? null : identities.get(speakerId));
+        }
+        String agentName = agent.getName() == null ? "" : agent.getName();
+        StringBuilder block = new StringBuilder("[IDENTITY]\nYou are \"").append(agentName).append("\"");
+        if (ownerName != null) {
+            block.append(", the digital avatar of ").append(ownerName)
+                    .append(". You are not an independent account");
+        }
+        block.append(".\n");
+        List<String> memberNames = new ArrayList<>();
+        for (Long memberId : memberIds) {
+            String name = userLabel(identities.get(memberId));
+            if (name != null) {
+                memberNames.add(name);
+            }
+        }
+        if (!memberNames.isEmpty()) {
+            block.append(group ? "Group members: " : "Conversation members: ")
+                    .append(String.join(", ", memberNames)).append(".\n");
+        }
+        if (speakerName != null) {
+            boolean ownerSpeaking = ownerId != null && ownerId.equals(speakerId);
+            block.append("This message is from ").append(speakerName);
+            if (!ownerSpeaking && ownerName != null) {
+                block.append(", not your owner ").append(ownerName);
+            }
+            block.append(".\n");
+        }
+        return block.toString();
+    }
+
+    private static List<Long> numberList(JsonNode meta, String field) {
+        JsonNode node = meta == null ? null : meta.get(field);
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<Long> ids = new ArrayList<>(node.size());
+        for (JsonNode value : node) {
+            if (value.isNumber()) {
+                ids.add(value.asLong());
+            }
+        }
+        return ids;
+    }
+
+    /** Mirrors the console label rule: provider@subject for SSO users. */
+    private static String userLabel(UserIdentityVO identity) {
+        if (identity == null) {
+            return null;
+        }
+        if (identity.getSsoProviderCode() != null && identity.getSsoSubject() != null) {
+            return identity.getSsoProviderCode() + "@" + identity.getSsoSubject();
+        }
+        if (identity.getDisplayName() != null && !identity.getDisplayName().isBlank()) {
+            return identity.getDisplayName();
+        }
+        if (identity.getEnglishName() != null && !identity.getEnglishName().isBlank()) {
+            return identity.getEnglishName();
+        }
+        return identity.getUsername();
+    }
+
+    private static JsonNode rawMeta(AgentEvent event) {
+        try {
+            JsonNode root = JsonUtils.getMapper().readTree(event.getPayload());
+            if (root == null || !root.has("rawMeta") || !root.get("rawMeta").isTextual()) {
+                return null;
+            }
+            return JsonUtils.getMapper().readTree(root.get("rawMeta").asText());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String eventText(AgentEvent event) {

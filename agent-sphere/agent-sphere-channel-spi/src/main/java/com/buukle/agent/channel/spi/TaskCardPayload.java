@@ -27,4 +27,6 @@ public class TaskCardPayload implements Serializable {
     private String options;
     /** Approval: pending tool calls JSON passthrough. */
     private String toolCallsJson;
+    /** Resolved cards: the decisions (approval) or answer (clarification) that were submitted. */
+    private String decisionsJson;
 }

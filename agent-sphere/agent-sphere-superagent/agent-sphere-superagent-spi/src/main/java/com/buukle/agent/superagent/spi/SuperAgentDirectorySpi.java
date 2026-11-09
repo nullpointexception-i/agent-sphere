@@ -2,6 +2,7 @@ package com.buukle.agent.superagent.spi;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /** Resolves Super-Agents that the current user is allowed to chat with. */
 public interface SuperAgentDirectorySpi {
@@ -27,4 +28,13 @@ public interface SuperAgentDirectorySpi {
      * group chats with members' public avatars.
      */
     List<ChatAgentIdentity> listPublicByOwners(Collection<Long> ownerUserIds);
+
+    /**
+     * Owner user id of each agent, keyed by agent id. Used by the IM UI to nest
+     * avatars under the member who owns them.
+     */
+    Map<Long, Long> ownerUserIds(Collection<Long> agentIds);
+
+    /** Batch identity lookup by agent id, used to label agent messages. */
+    Map<Long, ChatAgentIdentity> findByIds(Collection<Long> agentIds);
 }
