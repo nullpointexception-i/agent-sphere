@@ -130,6 +130,11 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
+        // Commit the response headers immediately. Spring only flushes the SSE response on the
+        // first send(); without this, the client's fetch/onOpen waits up to one heartbeat interval
+        // (15s by default) just to establish the connection.
+        flushHeaders(emitter);
+
         // Cross-replica reconnect: replay this session's recent events from the Redis cache (async, does not block connection setup)
         asyncFlush(() -> sseEventCache.flushSessionEvents(sessionId, emitter));
         return emitter;
@@ -201,9 +206,20 @@ public class SseManager {
         emitter.onTimeout(cleanup);
         emitter.onError(e -> cleanup.run());
 
+        flushHeaders(emitter);
+
         // User-level cache replay (async, does not block connection setup)
         asyncFlush(() -> sseEventCache.flushUserEvents(username, emitter));
         return emitter;
+    }
+
+    /** Commit SSE response headers with a comment line; clients ignore comment-only events. */
+    private void flushHeaders(SseEmitter emitter) {
+        try {
+            emitter.send(SseEmitter.event().comment("connected"));
+        } catch (Exception e) {
+            log.debug("SSE initial comment failed: {}", e.getMessage());
+        }
     }
 
     /**

@@ -145,6 +145,8 @@ export function SessionChat(props: SessionChatProps = {}) {
   const abortRef = useRef<AbortController | null>(null);
   const currentSessionIdRef = useRef<number | null>(null);
   const reconnectCountRef = useRef(0);
+  const sseStoppedRef = useRef(false);
+  const reconnectTimerRef = useRef<number | null>(null);
   const runUserMessageRef = useRef<Map<number, string>>(new Map());
   const currentRunIdRef = useRef<number | null>(null);
   const stopFallbackRef = useRef<number | null>(null);
@@ -1106,6 +1108,11 @@ export function SessionChat(props: SessionChatProps = {}) {
   ]);
 
   const connectSSE = useCallback((sid: number) => {
+    if (sseStoppedRef.current) return;
+    if (reconnectTimerRef.current != null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (abortRef.current) abortRef.current.abort();
     // Clear locally answered markers when switching sessions (memory only, so a different session does not wrongly suppress refreshes)
     if (currentSessionIdRef.current !== sid) {
@@ -1121,8 +1128,11 @@ export function SessionChat(props: SessionChatProps = {}) {
     const token = getToken();
     if (!token) {
       // Do not silently give up when the token is briefly empty: retry after 1s so SSE does not stay disconnected forever
-      setTimeout(() => {
-        if (currentSessionIdRef.current === sid) connectSSE(sid);
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        if (!sseStoppedRef.current && currentSessionIdRef.current === sid) {
+          connectSSE(sid);
+        }
       }, 1000);
       return;
     }
@@ -1132,6 +1142,7 @@ export function SessionChat(props: SessionChatProps = {}) {
       token,
       {
         onOpen: () => {
+          if (sseStoppedRef.current) return;
           const wasReconnect = reconnectCountRef.current > 0;
           setSseConnected(true);
           props.onSseStatusChange?.(true);
@@ -1150,6 +1161,7 @@ export function SessionChat(props: SessionChatProps = {}) {
           refreshStateCoalesced(sid);
         },
         onMessage: (payload) => {
+          if (sseStoppedRef.current) return;
           try {
             const parsed = JSON.parse(payload);
             const evtType = parsed.eventType || parsed.type || '';
@@ -1682,6 +1694,7 @@ export function SessionChat(props: SessionChatProps = {}) {
           } catch {}
         },
         onError: (err: unknown) => {
+          if (sseStoppedRef.current) return;
           setSseConnected(false);
           props.onSseStatusChange?.(false);
           // Diagnostics: print the disconnect reason (stream ended / connect timeout / HTTP status / underlying read error)
@@ -1698,8 +1711,14 @@ export function SessionChat(props: SessionChatProps = {}) {
               sid,
               `attempt ${reconnectCountRef.current} in ${delay}ms`,
             );
-            setTimeout(() => {
-              if (currentSessionIdRef.current === sid) connectSSE(sid);
+            reconnectTimerRef.current = window.setTimeout(() => {
+              reconnectTimerRef.current = null;
+              if (
+                !sseStoppedRef.current &&
+                currentSessionIdRef.current === sid
+              ) {
+                connectSSE(sid);
+              }
             }, delay);
           }
         },
@@ -1711,6 +1730,10 @@ export function SessionChat(props: SessionChatProps = {}) {
   useEffect(() => {
     if (sessionId) {
       const sid = Number(sessionId);
+      // Open the live stream before the history/todo requests so a busy browser
+      // connection pool cannot delay the SSE handshake.
+      sseStoppedRef.current = false;
+      connectSSE(sid);
       const pendingMsg = sessionStorage.getItem('landingPendingMsg');
       const modelRoute = sessionStorage.getItem('landingModelRouteId');
 
@@ -1837,10 +1860,14 @@ export function SessionChat(props: SessionChatProps = {}) {
           })
           .catch(() => {});
         loadHistory(sid, 1);
-        connectSSE(sid);
       }
     }
     return () => {
+      sseStoppedRef.current = true;
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (abortRef.current) {
         abortRef.current.abort();
         abortRef.current = null;
