@@ -24,4 +24,8 @@ public class UserVO implements Serializable {
     private List<String> roles;
     private List<UserRoleVO> roleDetails;
     private List<String> permissions;
+    /** External IdP provider code (for example bole); null for local users. */
+    private String ssoProviderCode;
+    /** External IdP display username, shown as provider@subject. */
+    private String ssoSubject;
 }

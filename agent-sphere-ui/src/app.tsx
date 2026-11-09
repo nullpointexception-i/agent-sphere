@@ -116,14 +116,16 @@ export async function getInitialState(): Promise<{
         clearStoredUser();
         return undefined;
       }
-      // SSO users: query the third-party identity (provider_code@subject) during
-      // initialization, used for the top-right display
-      const ssoIdentity = await umiRequest(API_PATHS.SSO_ME, {
-        skipErrorHandler: true,
-      }).catch(() => null);
-      if (ssoIdentity?.providerCode && ssoIdentity?.subject) {
-        user.ssoProviderCode = ssoIdentity.providerCode;
-        user.ssoSubject = ssoIdentity.subject;
+      // SSO users: /auth/me already carries provider_code@subject after the SSO label enrichment.
+      // Keep the legacy /sso/me fallback for older backends.
+      if (!user.ssoProviderCode || !user.ssoSubject) {
+        const ssoIdentity = await umiRequest(API_PATHS.SSO_ME, {
+          skipErrorHandler: true,
+        }).catch(() => null);
+        if (ssoIdentity?.providerCode && ssoIdentity?.subject) {
+          user.ssoProviderCode = ssoIdentity.providerCode;
+          user.ssoSubject = ssoIdentity.subject;
+        }
       }
       // Write fresh /auth/me data (including permissions/roles) back to local storage
       // so permission changes take effect on the next startup without re-login.

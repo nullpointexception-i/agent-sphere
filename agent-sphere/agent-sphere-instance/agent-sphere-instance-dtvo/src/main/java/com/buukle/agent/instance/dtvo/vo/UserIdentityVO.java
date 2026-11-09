@@ -12,4 +12,8 @@ public class UserIdentityVO implements Serializable {
     private String displayName;
     private String englishName;
     private String avatar;
+    /** External IdP provider code (for example bole); null for local users. */
+    private String ssoProviderCode;
+    /** External IdP display username, shown as provider@subject. */
+    private String ssoSubject;
 }

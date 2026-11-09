@@ -69,6 +69,7 @@ import {
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
+import { userDisplayLabel } from '@/utils/userLabel';
 import { messageText } from '../im/components/messageUtils';
 import {
   AgentInputCard,
@@ -551,7 +552,9 @@ function AvatarsTab({
   const editName = Form.useWatch('name', editForm);
   const [agentInstances, setAgentInstances] = useState<any>(null);
   const [agentRoutes, setAgentRoutes] = useState<any[]>([]);
-  const [agentModelRouteId, setAgentModelRouteId] = useState<number | undefined>();
+  const [agentModelRouteId, setAgentModelRouteId] = useState<
+    number | undefined
+  >();
   const [agentModelMixed, setAgentModelMixed] = useState(false);
   const [agentModelLoading, setAgentModelLoading] = useState(false);
   const [agentModelSaving, setAgentModelSaving] = useState(false);
@@ -1096,8 +1099,8 @@ function AvatarsTab({
                       : tw('avatars.modelPlaceholder', 'Select a model route')
                   }
                   disabled={
-                    editingAgent?.status ===
-                      SUPER_AGENT_STATUS_CODE.ARCHIVED || agentModelSaving
+                    editingAgent?.status === SUPER_AGENT_STATUS_CODE.ARCHIVED ||
+                    agentModelSaving
                   }
                   onChange={(value) => void changeAgentModelRoute(value)}
                   options={agentRoutes.map((route) => ({
@@ -2629,7 +2632,7 @@ function ChatDetail({
 
   const memberRows = participants.filter((member) => {
     if (!memberKeyword.trim()) return true;
-    const text = `${member.displayName || ''} ${member.username || ''}`;
+    const text = `${userDisplayLabel(member, '')} ${member.username || ''}`;
     return text.toLowerCase().includes(memberKeyword.trim().toLowerCase());
   });
 
@@ -2774,13 +2777,18 @@ function ChatDetail({
                 (sender
                   ? isSameUser(sender, me)
                   : Number(item.senderId) === Number(me?.id));
-              const senderName =
-                sender?.displayName ||
-                (item.senderType === 'AGENT'
+              const senderName = sender
+                ? userDisplayLabel(
+                    sender,
+                    item.senderType === 'AGENT'
+                      ? tw('chat.agent', 'Digital avatar')
+                      : tw('chat.unknownUser', 'Unknown user'),
+                  )
+                : item.senderType === 'AGENT'
                   ? tw('chat.agent', 'Digital avatar')
                   : item.senderType === 'SYSTEM'
                     ? tw('chat.system', 'System')
-                    : tw('chat.unknownUser', 'Unknown user'));
+                    : tw('chat.unknownUser', 'Unknown user');
               const avatarName = self ? displayName(me) : senderName;
               const card = taskCardOf(item);
               const pinned = conversation?.pinnedMessage?.id === item.id;
@@ -3038,10 +3046,10 @@ function ChatDetail({
                     </div>
                   ) : (
                     memberRows.map((member) => {
-                      const name =
-                        member.displayName ||
-                        member.username ||
-                        tw('common.unnamedMember', 'Unnamed member');
+                      const name = userDisplayLabel(
+                        member,
+                        tw('common.unnamedMember', 'Unnamed member'),
+                      );
                       return (
                         <div
                           key={`${member.participantType}-${member.participantId}`}

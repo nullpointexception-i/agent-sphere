@@ -1,5 +1,6 @@
 import { SendOutlined, UploadOutlined } from '@ant-design/icons';
 import { Button, Input, Select, Tag, Upload } from 'antd';
+import { userDisplayLabel } from '@/utils/userLabel';
 
 interface Props {
   text: string;
@@ -61,10 +62,10 @@ export function Composer({
           .filter((participant) => participant.participantType === 'AGENT')
           .map((participant) => ({
             value: participant.participantId,
-            label:
-              participant.displayName ||
-              participant.username ||
-              (participant.participantType === 'AGENT' ? '数字员工' : '用户'),
+            label: userDisplayLabel(
+              participant,
+              participant.participantType === 'AGENT' ? '数字员工' : '用户',
+            ),
           }))}
       />
       <Input.TextArea

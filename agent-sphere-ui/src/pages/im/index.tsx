@@ -30,6 +30,7 @@ import {
   imApi,
 } from '@/services/agentSphere/im';
 import { superAgentApi } from '@/services/agentSphere/superAgent';
+import { userDisplayLabel } from '@/utils/userLabel';
 import { Composer } from './components/Composer';
 import { ConversationList } from './components/ConversationList';
 import { MessageList } from './components/MessageList';
@@ -857,7 +858,7 @@ export default function ImPage() {
               optionFilterProp="label"
               options={contactOptions.map((user) => ({
                 value: user.id,
-                label: user.displayName || user.username || '用户',
+                label: userDisplayLabel(user, '用户'),
               }))}
             />
           </Form.Item>
@@ -952,11 +953,7 @@ export default function ImPage() {
                     borderBottom: '1px solid #f0f0f0',
                   }}
                 >
-                  <span>
-                    {participant.displayName ||
-                      participant.username ||
-                      '数字员工'}
-                  </span>
+                  <span>{userDisplayLabel(participant, '数字员工')}</span>
                   <Switch
                     checked={Boolean(participant.muted)}
                     onChange={(checked) =>

@@ -37,6 +37,22 @@ class ConversationDisplayTest {
     }
 
     @Test
+    void dmUsesSsoLabelWhenIdentityHasProvider() {
+        ImConversation conversation = conversation(ImConversationType.DM, "Bob");
+        List<ImParticipant> members = List.of(
+                user(SELF_ID, "Alice"), user(OTHER_ID, null));
+        UserIdentityVO other = identity(OTHER_ID, "bole_2", "Bob", "avatar-b");
+        other.setSsoProviderCode("bole");
+        other.setSsoSubject("elvin");
+
+        ImConversationServiceImpl.ConversationDisplay display =
+                ImConversationServiceImpl.resolveDisplay(conversation, SELF_ID, members,
+                        Map.of(OTHER_ID, other), "Alice", "alice");
+
+        assertEquals("bole@elvin", display.displayName());
+    }
+
+    @Test
     void dmWithOnlySelfIsSelfConversation() {
         ImConversation conversation = conversation(ImConversationType.DM, "Myself");
 

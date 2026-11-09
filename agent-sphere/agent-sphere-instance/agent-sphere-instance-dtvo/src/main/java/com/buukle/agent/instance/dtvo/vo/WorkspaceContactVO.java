@@ -17,4 +17,8 @@ public class WorkspaceContactVO implements Serializable {
     private String status;
     private List<String> roles;
     private LocalDateTime lastLoginAt;
+    /** External IdP provider code (for example bole); null for local users. */
+    private String ssoProviderCode;
+    /** External IdP display username, shown as provider@subject. */
+    private String ssoSubject;
 }

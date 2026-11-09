@@ -22,6 +22,7 @@ import com.buukle.agent.sso.repository.IdentityProviderMapper;
 import com.buukle.agent.sso.repository.SsoIdentityMapper;
 import com.buukle.agent.sso.spi.ResolvedIdentityVO;
 import com.buukle.agent.sso.spi.SsoIdentitySpi;
+import com.buukle.agent.sso.spi.SsoUserLabelVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBucket;
@@ -36,7 +37,10 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.buukle.agent.sso.service.SsoConstants.CALLBACK_PATH;
 import static com.buukle.agent.sso.service.SsoConstants.CODE_CHALLENGE_METHOD_S256;
@@ -121,6 +125,36 @@ public class SsoServiceImpl implements SsoService, SsoIdentitySpi {
         vo.setSubject(identity.getDisplaySubject() != null && !identity.getDisplaySubject().isBlank()
                 ? identity.getDisplaySubject() : identity.getSubject());
         return vo;
+    }
+
+    @Override
+    public Map<Long, SsoUserLabelVO> labelsByUserIds(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = userIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        List<SsoIdentity> identities = ssoIdentityMapper.selectList(
+                new LambdaQueryWrapper<SsoIdentity>()
+                        .in(SsoIdentity::getAgentUserId, ids)
+                        .orderByDesc(SsoIdentity::getId));
+        Map<Long, SsoUserLabelVO> labels = new HashMap<>();
+        for (SsoIdentity identity : identities) {
+            if (identity.getAgentUserId() == null || labels.containsKey(identity.getAgentUserId())) {
+                continue;
+            }
+            String subject = identity.getDisplaySubject() != null && !identity.getDisplaySubject().isBlank()
+                    ? identity.getDisplaySubject() : identity.getSubject();
+            if (identity.getProviderCode() == null || identity.getProviderCode().isBlank()
+                    || subject == null || subject.isBlank()) {
+                continue;
+            }
+            labels.put(identity.getAgentUserId(),
+                    new SsoUserLabelVO(identity.getAgentUserId(), identity.getProviderCode(), subject));
+        }
+        return labels;
     }
 
     @Override

@@ -24,6 +24,7 @@ import {
   type ImParticipant,
   imApi,
 } from '@/services/agentSphere/im';
+import { userDisplayLabel } from '@/utils/userLabel';
 import { messageText, parsedContent } from './messageUtils';
 
 const TASK_STATUS = IM_TASK_STATUS;
@@ -213,9 +214,10 @@ export function MessageList({
   const nameByKey = new Map(
     participants.map((participant) => [
       `${participant.participantType}:${participant.participantId}`,
-      participant.displayName ||
-        participant.username ||
-        (participant.participantType === 'AGENT' ? '数字员工' : '用户'),
+      userDisplayLabel(
+        participant,
+        participant.participantType === 'AGENT' ? '数字员工' : '用户',
+      ),
     ]),
   );
   return (

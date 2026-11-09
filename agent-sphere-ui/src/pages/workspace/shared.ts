@@ -1,3 +1,4 @@
+import { userDisplayLabel } from '@/utils/userLabel';
 import { tw } from './i18n';
 
 const AVATAR_PALETTE = [
@@ -15,13 +16,7 @@ export function initials(name?: string) {
 }
 
 export function displayName(user: any) {
-  return (
-    user?.displayName ||
-    user?.englishName ||
-    user?.username ||
-    user?.name ||
-    tw('common.unnamed', 'Unnamed')
-  );
+  return userDisplayLabel(user, tw('common.unnamed', 'Unnamed'));
 }
 
 export function avatarStyle(name?: string) {

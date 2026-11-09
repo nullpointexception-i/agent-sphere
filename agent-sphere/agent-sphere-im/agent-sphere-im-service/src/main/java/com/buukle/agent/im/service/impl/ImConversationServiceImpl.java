@@ -39,6 +39,8 @@ import com.buukle.agent.im.service.ImConversationService;
 import com.buukle.agent.im.service.ImStreamService;
 import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
 import com.buukle.agent.instance.spi.UserSpi;
+import com.buukle.agent.sso.spi.SsoIdentitySpi;
+import com.buukle.agent.sso.spi.SsoUserLabelVO;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
@@ -80,6 +82,7 @@ public class ImConversationServiceImpl implements ImConversationService {
     private final ImReadCursorMapper readCursorMapper;
     private final ImConversationSettingMapper settingMapper;
     private final UserSpi userSpi;
+    private final SsoIdentitySpi ssoIdentitySpi;
     private final ImStreamService streamService;
     private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
 
@@ -926,11 +929,35 @@ public class ImConversationServiceImpl implements ImConversationService {
             // Resolve identities outside the caller's self-only scope: a DM/group counterpart may
             // belong to another tenant branch, and a missing identity makes the UI fall back to the
             // stored title (which can be the current user's own name).
-            return systemRead(() -> userSpi.identityMap(userIds));
+            return systemRead(() -> {
+                Map<Long, UserIdentityVO> identities = userSpi.identityMap(userIds);
+                attachSsoLabels(identities, userIds);
+                return identities;
+            });
         } catch (Exception e) {
             log.warn("Failed to load participant identities", e);
             return Map.of();
         }
+    }
+
+    /** Workspace/console share one human label: provider@external-username for SSO users. */
+    private void attachSsoLabels(Map<Long, UserIdentityVO> identities, List<Long> userIds) {
+        if (identities == null || identities.isEmpty()) {
+            return;
+        }
+        Map<Long, SsoUserLabelVO> labels = ssoIdentitySpi.labelsByUserIds(userIds);
+        if (labels == null || labels.isEmpty()) {
+            return;
+        }
+        identities.forEach((userId, identity) -> {
+            SsoUserLabelVO label = labels.get(userId);
+            if (label == null) {
+                return;
+            }
+            identity.setSsoProviderCode(label.getProviderCode());
+            identity.setSsoSubject(label.getSubject());
+            identity.setDisplayName(label.getProviderCode() + "@" + label.getSubject());
+        });
     }
 
     private long unread(ImConversation conversation, Long userId) {
@@ -976,6 +1003,8 @@ public class ImConversationServiceImpl implements ImConversationService {
                 vo.setUsername(identity.getUsername());
                 vo.setAvatar(identity.getAvatar());
                 vo.setDisplayName(currentDisplayName(identity, participant.getDisplayName()));
+                vo.setSsoProviderCode(identity.getSsoProviderCode());
+                vo.setSsoSubject(identity.getSsoSubject());
             }
         }
         vo.setMuted(participant.getMuted());
@@ -1055,6 +1084,10 @@ public class ImConversationServiceImpl implements ImConversationService {
     private static String currentDisplayName(UserIdentityVO identity, String fallback) {
         if (identity == null) {
             return fallback;
+        }
+        if (identity.getSsoProviderCode() != null && !identity.getSsoProviderCode().isBlank()
+                && identity.getSsoSubject() != null && !identity.getSsoSubject().isBlank()) {
+            return identity.getSsoProviderCode() + "@" + identity.getSsoSubject();
         }
         if (identity.getDisplayName() != null && !identity.getDisplayName().isBlank()) {
             return identity.getDisplayName();

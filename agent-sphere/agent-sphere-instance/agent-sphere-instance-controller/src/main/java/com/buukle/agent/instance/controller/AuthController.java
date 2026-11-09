@@ -21,17 +21,23 @@ import com.buukle.agent.instance.dtvo.dto.UpdatePasswordDTO;
 import com.buukle.agent.instance.dtvo.dto.UpdateProfileDTO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.service.UserService;
+import com.buukle.agent.sso.spi.SsoIdentitySpi;
+import com.buukle.agent.sso.spi.SsoUserLabelVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Map;
+
 @RestController
 @RequestMapping(ApiPrefix.V1 + "/auth")
 @RequiredArgsConstructor
 public class AuthController extends BaseController {
     private final UserService userService;
+    private final SsoIdentitySpi ssoIdentitySpi;
 
     private Long getCurrentUserId() {
         UserVO user = userService.getCurrentUser();
@@ -87,8 +93,21 @@ public class AuthController extends BaseController {
             // The token is no longer stored on agent_user; return the token used by the current
             // request so the frontend still works after a refresh
             user.setToken(AuthContext.getToken());
+            attachSsoLabel(user);
         }
         return ok(user);
+    }
+
+    private void attachSsoLabel(UserVO user) {
+        if (user.getId() == null) {
+            return;
+        }
+        Map<Long, SsoUserLabelVO> labels = ssoIdentitySpi.labelsByUserIds(List.of(user.getId()));
+        SsoUserLabelVO label = labels.get(user.getId());
+        if (label != null) {
+            user.setSsoProviderCode(label.getProviderCode());
+            user.setSsoSubject(label.getSubject());
+        }
     }
 
     @AuditLog(action = "LOGOUT", resourceType = "User")
