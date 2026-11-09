@@ -474,3 +474,6 @@ See [LICENSE](LICENSE).
 <img src="agent-sphere-readme/contact-wechat.jpg" alt="WeChat QR code" width="240" />
 
 Scan the QR code to add me on WeChat. 微信扫码添加好友。
+
+- Email: [18001268330@163.com](mailto:18001268330@163.com)
+- Email: [zhangleielvin@gmail.com](mailto:zhangleielvin@gmail.com)

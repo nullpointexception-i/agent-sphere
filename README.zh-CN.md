@@ -474,3 +474,6 @@ examples/                      集成示例
 <img src="agent-sphere-readme/contact-wechat.jpg" alt="微信二维码" width="240" />
 
 微信扫码添加好友。
+
+- 邮箱：[18001268330@163.com](mailto:18001268330@163.com)
+- 邮箱：[zhangleielvin@gmail.com](mailto:zhangleielvin@gmail.com)
