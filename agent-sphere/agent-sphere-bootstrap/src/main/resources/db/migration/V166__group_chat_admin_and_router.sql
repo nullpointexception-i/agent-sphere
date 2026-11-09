@@ -22,7 +22,7 @@ SET group_router_model_route_id = (
     WHERE i.instance_role = 'GROUP_ROUTER'
       AND i.system_managed = TRUE
       AND i.model_route_id IS NOT NULL
-      AND i.delete_flag = FALSE
+      AND i.delete_flag = 0
     ORDER BY i.id
     LIMIT 1
 )
@@ -35,7 +35,7 @@ SET group_router_model_route_id = (
     SELECT r.id
     FROM agent_model_route r
     WHERE r.tenant_id = t.id
-      AND r.delete_flag = FALSE
+      AND r.delete_flag = 0
     ORDER BY r.id
     LIMIT 1
 )
