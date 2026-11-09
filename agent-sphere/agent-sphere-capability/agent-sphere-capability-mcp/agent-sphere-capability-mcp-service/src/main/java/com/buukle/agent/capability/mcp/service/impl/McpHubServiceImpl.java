@@ -100,6 +100,7 @@ public class McpHubServiceImpl implements McpHubService, McpHubSpi {
         hub.setSecurityLevel(mcp.getSecurityLevel());
         hub.setApprovalScope(mcp.getApprovalScope());
         hub.setUpdatedBy(operator);
+        hub.setUpdatedAt(LocalDateTime.now());
         if (created) {
             hubMapper.insert(hub);
         } else {
