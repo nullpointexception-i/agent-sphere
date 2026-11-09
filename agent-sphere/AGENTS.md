@@ -108,6 +108,7 @@ Mandatory guards:
 ### MyBatis-Plus
 
 - Logic delete `delete_flag` (1=deleted, 0=active); never hard-delete. The only sanctioned exception is session cleanup.
+- **`delete_flag` storage type is not uniform.** Legacy tables such as `agent_instance`, `agent_model_route`, `agent_model_provider`, and `sys_tenant` use `smallint` (`0`/`1`); newer tables such as `im_participant` use `boolean`. Raw SQL must match the actual column type (`delete_flag = 0` vs `delete_flag = false`). Do not assume boolean; verify with `information_schema.columns` before writing migrations or backfills.
 - `map-underscore-to-camel-case` enabled.
 - Type handlers: `com.buukle.agent.infrastructure.handler` (includes PostgreSQL `jsonb`).
 - Audit fields auto-filled by `AuditMetaObjectHandler`.
@@ -119,6 +120,7 @@ Mandatory guards:
 - Current highest: **V149**. Check the directory before adding one.
 - `baseline-on-migrate: true`, baseline 0.
 - Never edit an applied migration. New migrations use English comments.
+- Backfills must use the real column types. In particular, check `delete_flag` (see above) and boolean vs smallint comparisons before deploying; a mismatch aborts application startup and leaves the previous pods serving.
 
 ### Annotation SQL
 
