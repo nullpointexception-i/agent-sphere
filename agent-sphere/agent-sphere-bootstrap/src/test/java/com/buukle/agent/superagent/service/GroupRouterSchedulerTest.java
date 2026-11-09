@@ -52,8 +52,6 @@ class GroupRouterSchedulerTest {
     @Mock
     UserSpi userSpi;
     @Mock
-    com.buukle.agent.admin.spi.TenantScopeSpi tenantScopeSpi;
-    @Mock
     GroupRouterPort groupRouterPort;
     @Mock
     RedissonClient redissonClient;
@@ -61,9 +59,14 @@ class GroupRouterSchedulerTest {
     AgentMetrics metrics;
 
     @org.junit.jupiter.api.BeforeEach
-    void stubTenantRoute() {
-        org.mockito.Mockito.lenient().when(tenantScopeSpi.groupRouterModelRouteId(
-                org.mockito.ArgumentMatchers.any())).thenReturn(99L);
+    void stubSystemRouter() {
+        com.buukle.agent.instance.dtvo.vo.InstanceVO system =
+                new com.buukle.agent.instance.dtvo.vo.InstanceVO();
+        system.setId(7L);
+        system.setModelRouteId(99L);
+        org.mockito.Mockito.lenient().when(instanceSpi.findSystemByTenant(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(system);
     }
 
     @Test
@@ -153,7 +156,7 @@ class GroupRouterSchedulerTest {
         when(groupRouterPort.classify(any())).thenReturn(
                 "{\"deliver\":[],\"ignore\":[{\"agentId\":3,\"reason\":\"unrelated\"}],\"summary\":\"ok\"}");
 
-        ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L, 7L);
+        ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L);
 
         var captor = org.mockito.ArgumentCaptor.forClass(AgentEventDelivery.class);
         verify(deliveryMapper).insert(captor.capture());
@@ -179,7 +182,7 @@ class GroupRouterSchedulerTest {
         when(superAgentMapper.selectBatchIds(any())).thenReturn(List.of(agent));
         when(groupRouterPort.classify(any())).thenThrow(new IllegalStateException("llm down"));
 
-        ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L, 7L);
+        ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L);
 
         assertEquals(1, event.getAttempts());
         assertNotNull(event.getNextRetryAt());
@@ -189,7 +192,7 @@ class GroupRouterSchedulerTest {
 
     private GroupRouterScheduler scheduler() {
         return new GroupRouterScheduler(eventMapper, threadMapper, deliveryMapper, superAgentMapper,
-                sessionSpi, instanceSpi, userSpi, tenantScopeSpi, groupRouterPort, redissonClient, metrics);
+                sessionSpi, instanceSpi, userSpi, groupRouterPort, redissonClient, metrics);
     }
 
     private static AgentThread thread() {

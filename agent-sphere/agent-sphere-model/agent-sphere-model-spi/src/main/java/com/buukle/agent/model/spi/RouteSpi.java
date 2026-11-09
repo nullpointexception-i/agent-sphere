@@ -20,4 +20,13 @@ public interface RouteSpi {
     void deleteRoute(Long id);
 
     List<ModelRouteVO> listAllRoutes(String keyword);
+
+    /** The tenant's system route (the one auto-created with the tenant), or null. */
+    ModelRouteVO findSystemRoute(Long tenantId);
+
+    /** Marks a route as its tenant's system route (group router target). */
+    void markSystemRoute(Long id);
+
+    /** System routes visible to the caller; a platform admin sees every tenant. */
+    List<ModelRouteVO> listSystemRoutes();
 }

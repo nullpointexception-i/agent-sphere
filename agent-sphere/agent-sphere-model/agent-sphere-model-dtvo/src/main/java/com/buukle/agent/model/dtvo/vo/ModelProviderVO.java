@@ -12,6 +12,7 @@ public class ModelProviderVO implements Serializable {
     private Long apiKeyId;
     private String config;
     private String status;
+    private Long tenantId;
     private String createdAt;
     private String createdBy;
     private String updatedBy;

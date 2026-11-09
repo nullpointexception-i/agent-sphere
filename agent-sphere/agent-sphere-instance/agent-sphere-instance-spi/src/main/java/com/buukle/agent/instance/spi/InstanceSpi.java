@@ -35,6 +35,16 @@ public interface InstanceSpi {
     IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
                                     LocalDateTime endTime, String instanceRole);
 
+    /**
+     * @param scope BUSINESS (default, excludes system resources) or SYSTEM
+     *              (only system-managed instances; role defaults to ALL).
+     */
+    IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
+                                    LocalDateTime endTime, String instanceRole, String scope);
+
+    /** The tenant's system instance for the given role, or null. */
+    InstanceVO findSystemByTenant(Long tenantId, String instanceRole);
+
     List<InstanceVO> listLatestNInstances(int n);
 
     InstanceVO setModelRoute(Long id, Long modelRouteId);

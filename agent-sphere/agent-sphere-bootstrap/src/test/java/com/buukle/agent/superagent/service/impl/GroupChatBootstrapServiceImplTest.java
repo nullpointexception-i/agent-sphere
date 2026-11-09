@@ -1,6 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
-import com.buukle.agent.admin.spi.TenantScopeSpi;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
+import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.common.context.SessionSurface;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.exception.BizException;
@@ -39,7 +40,7 @@ class GroupChatBootstrapServiceImplTest {
     @Mock
     SessionSpi sessionSpi;
     @Mock
-    TenantScopeSpi tenantScopeSpi;
+    RouteSpi routeSpi;
 
     @AfterEach
     void tearDown() {
@@ -47,7 +48,7 @@ class GroupChatBootstrapServiceImplTest {
     }
 
     private GroupChatBootstrapServiceImpl service() {
-        return new GroupChatBootstrapServiceImpl(threadMapper, instanceSpi, sessionSpi, tenantScopeSpi);
+        return new GroupChatBootstrapServiceImpl(threadMapper, instanceSpi, sessionSpi, routeSpi);
     }
 
     private GroupChatBootstrapCommand command(String type) {
@@ -78,10 +79,12 @@ class GroupChatBootstrapServiceImplTest {
             thread.setId(101L);
             return 1;
         });
-        given(tenantScopeSpi.groupRouterModelRouteId(3L)).willReturn(77L);
+        ModelRouteVO systemRoute = new ModelRouteVO();
+        systemRoute.setId(77L);
+        given(routeSpi.findSystemRoute(3L)).willReturn(systemRoute);
         InstanceVO router = new InstanceVO();
         router.setId(9L);
-        given(instanceSpi.findByRole("GROUP_ROUTER")).willReturn(router);
+        given(instanceSpi.findSystemByTenant(3L, "GROUP_ROUTER")).willReturn(router);
         given(sessionSpi.createSession(any())).willAnswer(inv -> {
             SessionVO session = new SessionVO();
             session.setId(201L);
@@ -106,7 +109,7 @@ class GroupChatBootstrapServiceImplTest {
             thread.setId(101L);
             return 1;
         });
-        given(tenantScopeSpi.groupRouterModelRouteId(3L)).willReturn(null);
+        given(routeSpi.findSystemRoute(3L)).willReturn(null);
 
         assertThrows(BizException.class, () -> service().bootstrap(command("GROUP")));
         verify(sessionSpi, never()).createSession(any());

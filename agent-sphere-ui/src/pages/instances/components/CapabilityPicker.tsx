@@ -3,7 +3,7 @@ import { useIntl } from '@umijs/max';
 import { Button, DatePicker, Input, Table } from 'antd';
 import type dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
-import { formatParamDate, formatTime, nowUTC8 } from '@/utils/format';
+import { formatParamDate, formatTime } from '@/utils/format';
 
 interface Props {
   fetchFn: (params: any) => Promise<any>;
@@ -26,18 +26,17 @@ export default function CapabilityPicker({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [keyword, setKeyword] = useState('');
-  const defaultValue: [dayjs.Dayjs, dayjs.Dayjs] = [
-    nowUTC8().subtract(3, 'month').startOf('day'),
-    nowUTC8().endOf('day'),
-  ];
-  const [timeRange, setTimeRange] =
-    useState<[dayjs.Dayjs | null, dayjs.Dayjs | null]>(defaultValue);
+  const [timeRange, setTimeRange] = useState<
+    [dayjs.Dayjs | null, dayjs.Dayjs | null]
+  >([null, null]);
 
   const load = (p: number, ps: number, kw: string) => {
     fetchFn({
       keyword: kw || undefined,
-      startTime: formatParamDate(timeRange[0] || defaultValue[0]),
-      endTime: formatParamDate(timeRange[1]?.endOf('day') || defaultValue[1]),
+      startTime: timeRange[0] ? formatParamDate(timeRange[0]) : undefined,
+      endTime: timeRange[1]
+        ? formatParamDate(timeRange[1].endOf('day'))
+        : undefined,
       page: p,
       size: ps,
     })
@@ -85,16 +84,29 @@ export default function CapabilityPicker({
           value={
             timeRange[0] && timeRange[1]
               ? (timeRange as [dayjs.Dayjs, dayjs.Dayjs])
-              : defaultValue
+              : undefined
           }
           onChange={(dates) => {
-            if (dates && dates[0] && dates[1]) {
-              const diff = dates[1].diff(dates[0], 'day');
-              if (diff > 90) {
-                return;
-              }
-            }
-            setTimeRange(dates || [null, null]);
+            const next = (dates || [null, null]) as [
+              dayjs.Dayjs | null,
+              dayjs.Dayjs | null,
+            ];
+            setTimeRange(next);
+            setPage(1);
+            fetchFn({
+              keyword: keyword || undefined,
+              startTime: next[0] ? formatParamDate(next[0]) : undefined,
+              endTime: next[1]
+                ? formatParamDate(next[1].endOf('day'))
+                : undefined,
+              page: 1,
+              size: pageSize,
+            })
+              .then((r: any) => {
+                setData(r.records || r);
+                setTotal(r.total ?? 0);
+              })
+              .catch(() => setData([]));
           }}
         />
         <Button

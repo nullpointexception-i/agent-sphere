@@ -8,7 +8,18 @@ import {
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl, useLocation } from '@umijs/max';
-import { App, Button, Card, Form, Input, Modal, Tag } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Pagination,
+  Select,
+  Table,
+  Tag,
+} from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { Can } from '@/components/Can';
 import { PERM } from '@/constants/permissions';
@@ -24,6 +35,16 @@ export default function ModelProviders() {
   const intl = useIntl();
   const { styles } = useStyles();
   const [providers, setProviders] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+  const [total, setTotal] = useState(0);
+  const [systemOpen, setSystemOpen] = useState(false);
+  const [systemLoading, setSystemLoading] = useState(false);
+  const [systemRoutes, setSystemRoutes] = useState<any[]>([]);
+  const [systemEdit, setSystemEdit] = useState<any>(null);
+  const [systemDraft, setSystemDraft] = useState<any>({});
+  const [systemSaving, setSystemSaving] = useState(false);
+  const [providerPool, setProviderPool] = useState<any[]>([]);
 
   const [providerModal, setProviderModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<any>(null);
@@ -39,17 +60,20 @@ export default function ModelProviders() {
   const canEditProvider = useCan('model:provider:update');
   const canDeleteProvider = useCan('model:provider:delete');
 
-  const loadProviders = () =>
+  const loadProviders = (nextPage = page, nextSize = pageSize) =>
     agentApi.modelProviders
-      .list()
-      .then(setProviders)
+      .page({ page: nextPage, size: nextSize })
+      .then((result: any) => {
+        setProviders(result?.records || []);
+        setTotal(Number(result?.total || 0));
+      })
       .catch(() => {});
 
   const location = useLocation();
 
   useEffect(() => {
-    loadProviders();
-  }, []);
+    loadProviders(page, pageSize);
+  }, [page, pageSize]);
 
   useEffect(() => {
     if (autoOpenedRef.current || providers.length === 0) return;
@@ -67,6 +91,65 @@ export default function ModelProviders() {
       }
     }
   }, [location.search, providers]);
+
+  const openSystemRoutes = async () => {
+    setSystemOpen(true);
+    setSystemLoading(true);
+    try {
+      const [routes, providers] = await Promise.all([
+        agentApi.routes.listSystem(),
+        agentApi.modelProviders.list(),
+      ]);
+      setSystemRoutes(Array.isArray(routes) ? routes : []);
+      setProviderPool(Array.isArray(providers) ? providers : []);
+    } catch {
+      setSystemRoutes([]);
+    } finally {
+      setSystemLoading(false);
+    }
+  };
+
+  const beginEditSystemRoute = (route: any) => {
+    setSystemEdit(route);
+    setSystemDraft({
+      providerId: route.providerId,
+      modelName: route.modelName,
+    });
+  };
+
+  const saveSystemRoute = async () => {
+    if (!systemEdit) return;
+    setSystemSaving(true);
+    try {
+      await agentApi.routes.update(systemEdit.id, {
+        providerId: systemDraft.providerId,
+        modelName: systemDraft.modelName,
+        maxInputTokens: systemEdit.maxInputTokens,
+        maxOutputTokens: systemEdit.maxOutputTokens,
+        company: systemEdit.company,
+        completionProtocol: systemEdit.completionProtocol,
+        weight: systemEdit.weight,
+      });
+      message.success(
+        intl.formatMessage({
+          id: 'pages.save.success',
+          defaultMessage: 'Saved',
+        }),
+      );
+      setSystemEdit(null);
+      await openSystemRoutes();
+    } catch (error: any) {
+      message.error(
+        error?.message ||
+          intl.formatMessage({
+            id: 'pages.save.failed',
+            defaultMessage: 'Save failed',
+          }),
+      );
+    } finally {
+      setSystemSaving(false);
+    }
+  };
 
   const submitProvider = async () => {
     setSubmitting(true);
@@ -92,22 +175,27 @@ export default function ModelProviders() {
     <PageContainer
       title={false}
       extra={
-        <Can code={PERM.modelProviderCreate}>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingProvider(null);
-              providerForm.resetFields();
-              setProviderModal(true);
-            }}
-          >
-            {intl.formatMessage({
-              id: 'pages.modal.newProvider',
-              defaultMessage: 'New Provider',
-            })}
+        <>
+          <Button onClick={openSystemRoutes} style={{ marginRight: 8 }}>
+            System routes
           </Button>
-        </Can>
+          <Can code={PERM.modelProviderCreate}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setEditingProvider(null);
+                providerForm.resetFields();
+                setProviderModal(true);
+              }}
+            >
+              {intl.formatMessage({
+                id: 'pages.modal.newProvider',
+                defaultMessage: 'New Provider',
+              })}
+            </Button>
+          </Can>
+        </>
       }
     >
       <div className={styles.cardGrid}>
@@ -255,6 +343,21 @@ export default function ModelProviders() {
             />
           </Card>
         ))}
+      </div>
+      <div
+        style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}
+      >
+        <Pagination
+          current={page}
+          pageSize={pageSize}
+          total={total}
+          showSizeChanger
+          pageSizeOptions={[12, 24, 48]}
+          onChange={(nextPage, nextSize) => {
+            setPage(nextPage);
+            setPageSize(nextSize);
+          }}
+        />
       </div>
 
       <Modal
@@ -415,6 +518,88 @@ export default function ModelProviders() {
         providerId={drawerProvider?.id ?? null}
         onClose={() => setRouteDrawerOpen(false)}
       />
+
+      <Modal
+        open={systemOpen}
+        title="System model routes"
+        width={880}
+        footer={null}
+        onCancel={() => {
+          setSystemOpen(false);
+          setSystemEdit(null);
+        }}
+        destroyOnHidden
+      >
+        <Table
+          rowKey="id"
+          size="small"
+          loading={systemLoading}
+          dataSource={systemRoutes}
+          pagination={false}
+          columns={[
+            { title: 'Tenant', dataIndex: 'tenantId', width: 80 },
+            { title: 'Model', dataIndex: 'modelName' },
+            { title: 'Provider', dataIndex: 'providerName', width: 180 },
+            {
+              title: 'Key',
+              dataIndex: 'apiKeyConfigured',
+              width: 70,
+              render: (value: any) => (value ? 'OK' : '-'),
+            },
+            { title: 'Updated', dataIndex: 'updatedAt', width: 170 },
+            {
+              title: '',
+              width: 70,
+              render: (_: any, row: any) => (
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => beginEditSystemRoute(row)}
+                >
+                  Edit
+                </Button>
+              ),
+            },
+          ]}
+        />
+      </Modal>
+
+      <Modal
+        open={Boolean(systemEdit)}
+        title="Edit system route"
+        onCancel={() => setSystemEdit(null)}
+        onOk={saveSystemRoute}
+        confirmLoading={systemSaving}
+        destroyOnHidden
+      >
+        <div style={{ marginBottom: 8, color: '#8b8b93', fontSize: 12 }}>
+          Tenant #{systemEdit?.tenantId}
+        </div>
+        <Input
+          value={systemDraft.modelName}
+          placeholder="Model name"
+          style={{ marginBottom: 8 }}
+          onChange={(event) =>
+            setSystemDraft({ ...systemDraft, modelName: event.target.value })
+          }
+        />
+        <Select
+          style={{ width: '100%' }}
+          value={systemDraft.providerId}
+          onChange={(value) =>
+            setSystemDraft({ ...systemDraft, providerId: value })
+          }
+          options={providerPool
+            .filter(
+              (provider) =>
+                Number(provider.tenantId) === Number(systemEdit?.tenantId),
+            )
+            .map((provider) => ({
+              value: provider.id,
+              label: `${provider.name} (#${provider.id})`,
+            }))}
+        />
+      </Modal>
     </PageContainer>
   );
 }

@@ -31,9 +31,6 @@ public class SysTenant {
 
     private String remark;
 
-    /** Tenant-scoped model route used by the group chat router. */
-    private Long groupRouterModelRouteId;
-
     @TableLogic
     private Integer deleteFlag;
 

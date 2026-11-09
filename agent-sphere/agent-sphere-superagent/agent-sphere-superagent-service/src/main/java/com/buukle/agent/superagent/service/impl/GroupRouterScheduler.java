@@ -1,7 +1,6 @@
 package com.buukle.agent.superagent.service.impl;
 
 import com.buukle.agent.common.context.TenantScopeHolder;
-import com.buukle.agent.admin.spi.TenantScopeSpi;
 
 
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -77,7 +76,6 @@ public class GroupRouterScheduler {
     private final SessionSpi sessionSpi;
     private final InstanceSpi instanceSpi;
     private final UserSpi userSpi;
-    private final TenantScopeSpi tenantScopeSpi;
     private final GroupRouterPort groupRouterPort;
     private final RedissonClient redissonClient;
     private final AgentMetrics metrics;
@@ -86,8 +84,6 @@ public class GroupRouterScheduler {
     private boolean superAgentEnabled;
     @Value("${buukle.agent.super-agent.group-router.enabled:false}")
     private boolean enabled;
-    @Value("${buukle.agent.super-agent.group-router.instance-id:0}")
-    private Long groupRouterInstanceId;
     @Value("${buukle.agent.super-agent.group-router.batch.max-events:20}")
     private int maxEvents;
     @Value("${buukle.agent.super-agent.group-router.batch.max-chars:12000}")
@@ -108,10 +104,6 @@ public class GroupRouterScheduler {
         if (!superAgentEnabled || !enabled) {
             return;
         }
-        Long routerInstanceId = resolveInstanceId();
-        if (routerInstanceId == null) {
-            return;
-        }
         TenantUtil.stop();
         TenantScopeHolder.clear();
         AuthContext.clear();
@@ -128,7 +120,7 @@ public class GroupRouterScheduler {
                 if (!batchReady(threadId)) {
                     continue;
                 }
-                processThread(threadId, routerInstanceId);
+                processThread(threadId);
             } catch (Exception e) {
                 log.warn("Group router failed for thread {}: {}", threadId, e.getMessage());
             } finally {
@@ -154,16 +146,7 @@ public class GroupRouterScheduler {
         return java.time.Duration.between(oldest, java.time.LocalDateTime.now()).toMillis() >= maxWaitMs;
     }
 
-    /** Explicit configuration wins; otherwise fall back to the shared GROUP_ROUTER instance created at startup. */
-    private Long resolveInstanceId() {
-        if (groupRouterInstanceId != null && groupRouterInstanceId > 0) {
-            return groupRouterInstanceId;
-        }
-        InstanceVO instance = instanceSpi.findByRole(ROLE_GROUP_ROUTER);
-        return instance == null ? null : instance.getId();
-    }
-
-    private void processThread(Long threadId, Long routerInstanceId) {
+    private void processThread(Long threadId) {
         AgentThread thread = threadMapper.selectById(threadId);
         if (thread == null) {
             return;
@@ -184,12 +167,16 @@ public class GroupRouterScheduler {
             markEvents(events, GroupRouterDecisionType.OBSERVE, "group router session missing", null);
             return;
         }
-        Long modelRouteId = tenantScopeSpi.groupRouterModelRouteId(thread.getTenantId());
-        if (modelRouteId == null) {
-            log.warn("Tenant group-router route is missing for tenant {}", thread.getTenantId());
-            markEvents(events, GroupRouterDecisionType.OBSERVE, "tenant group-router route missing", null);
+        InstanceVO instance = instanceSpi.findSystemByTenant(
+                thread.getTenantId(), ROLE_GROUP_ROUTER);
+        Long modelRouteId = instance == null ? null : instance.getModelRouteId();
+        if (instance == null || modelRouteId == null) {
+            log.warn("Tenant group router instance/route is missing for tenant {}", thread.getTenantId());
+            markEvents(events, GroupRouterDecisionType.OBSERVE,
+                    "tenant group router instance or system route missing", null);
             return;
         }
+        Long routerInstanceId = instance.getId();
 
         Set<Long> agentIds = extractAgentIds(events);
         if (agentIds.isEmpty()) {

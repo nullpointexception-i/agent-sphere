@@ -105,6 +105,17 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     }
 
     @Override
+    public com.baomidou.mybatisplus.core.metadata.IPage<ModelProviderVO> pageProviders(
+            int page, int size, String keyword) {
+        return lambdaQuery()
+                .like(keyword != null && !keyword.isBlank(), AgentModelProvider::getName, keyword)
+                .orderByDesc(AgentModelProvider::getCreatedAt)
+                .page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
+                        Math.max(1, page), Math.max(1, size)))
+                .convert(modelProviderConverter::toVO);
+    }
+
+    @Override
     public long countProviders() {
         return count();
     }

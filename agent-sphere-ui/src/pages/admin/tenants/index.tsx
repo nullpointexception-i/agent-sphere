@@ -30,7 +30,6 @@ interface TenantItem {
   status: string;
   remark?: string;
   manageable?: boolean;
-  groupRouterModelRouteId?: number | null;
 }
 
 interface TenantTreeNode {
@@ -97,12 +96,6 @@ export default function AdminTenants() {
   const [editing, setEditing] = useState<TenantItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [routeOpen, setRouteOpen] = useState(false);
-  const [routeTenant, setRouteTenant] = useState<TenantItem | null>(null);
-  const [routeOptions, setRouteOptions] = useState<any[]>([]);
-  const [routeValue, setRouteValue] = useState<number | undefined>();
-  const [routeLoading, setRouteLoading] = useState(false);
-  const [routeSaving, setRouteSaving] = useState(false);
   const [currentVisibility, setCurrentVisibility] = useState<
     'SELF_ONLY' | 'TENANT' | 'TENANT_SUBTREE' | null
   >(null);
@@ -180,40 +173,6 @@ export default function AdminTenants() {
     setEditing(tenant);
     form.setFieldsValue(tenant);
     setOpen(true);
-  };
-
-  const openGroupRouterRoute = async (tenant: TenantItem) => {
-    setRouteTenant(tenant);
-    setRouteValue(tenant.groupRouterModelRouteId ?? undefined);
-    setRouteOptions([]);
-    setRouteOpen(true);
-    setRouteLoading(true);
-    try {
-      const rows = await agentApi.admin.tenants.modelRoutes(tenant.id);
-      setRouteOptions(Array.isArray(rows) ? rows : []);
-    } catch {
-      setRouteOptions([]);
-    } finally {
-      setRouteLoading(false);
-    }
-  };
-
-  const saveGroupRouterRoute = async () => {
-    if (!routeTenant) return;
-    setRouteSaving(true);
-    try {
-      await agentApi.admin.tenants.updateGroupRouterRoute(
-        routeTenant.id,
-        routeValue ?? null,
-      );
-      message.success(loc('pages.save.success', 'Saved'));
-      setRouteOpen(false);
-      load();
-    } catch (error: any) {
-      message.error(error?.message || loc('pages.save.failed', 'Save failed'));
-    } finally {
-      setRouteSaving(false);
-    }
   };
 
   const save = async () => {
@@ -343,24 +302,8 @@ export default function AdminTenants() {
       title: loc('pages.table.actions', 'Actions'),
       key: 'actions',
       render: (_: any, tenant: TenantItem) => {
-        const groupRouterButton = (
-          <Can code={PERM.adminTenantUpdate}>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => openGroupRouterRoute(tenant)}
-            >
-              {loc('pages.admin.tenants.groupRouterShort', 'Group Router')}
-            </Button>
-          </Can>
-        );
         if (isReservedTenant(tenant.id)) {
-          return (
-            <Space>
-              <Tag>{loc('pages.admin.tenants.readOnly', 'Read-only')}</Tag>
-              {groupRouterButton}
-            </Space>
-          );
+          return <Tag>{loc('pages.admin.tenants.readOnly', 'Read-only')}</Tag>;
         }
         return (
           <Space>
@@ -369,7 +312,6 @@ export default function AdminTenants() {
                 {loc('pages.table.edit', 'Edit')}
               </Button>
             </Can>
-            {groupRouterButton}
             <Can code={PERM.adminTenantUpdate}>
               <Button
                 type="link"
@@ -568,43 +510,6 @@ export default function AdminTenants() {
             </>
           )}
         </Form>
-      </Modal>
-
-      <Modal
-        open={routeOpen}
-        title={loc(
-          'pages.admin.tenants.groupRouterRoute',
-          'Group Router model route',
-        )}
-        onCancel={() => setRouteOpen(false)}
-        onOk={saveGroupRouterRoute}
-        confirmLoading={routeSaving}
-        destroyOnHidden
-      >
-        <div style={{ marginBottom: 8, color: '#8b8b93', fontSize: 12 }}>
-          {routeTenant
-            ? `${routeTenant.name || routeTenant.code} (#${routeTenant.id})`
-            : ''}
-        </div>
-        <Select
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          loading={routeLoading}
-          style={{ width: '100%' }}
-          value={routeValue}
-          onChange={(value) => setRouteValue(value as number | undefined)}
-          placeholder={loc(
-            'pages.admin.tenants.groupRouterRoutePlaceholder',
-            'Select a route owned by this tenant',
-          )}
-          options={routeOptions.map((route) => ({
-            value: route.id,
-            label: `${route.modelName || route.modelName}${
-              route.company ? ` · ${route.company}` : ''
-            } (#${route.id})`,
-          }))}
-        />
       </Modal>
     </>
   );

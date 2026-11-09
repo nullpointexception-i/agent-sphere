@@ -49,6 +49,14 @@ public class ModelProviderController extends BaseController {
         return ok(modelProviderService.listProviders(keyword));
     }
 
+    @GetMapping("/page")
+    public ResponseEntity<?> page(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword) {
+        return ok(modelProviderService.pageProviders(page, size, keyword));
+    }
+
     @GetMapping("/companies")
     public ResponseEntity<?> companies() {
         return ok(List.of(ModelProviderCompany.values()));

@@ -109,6 +109,7 @@ export const agentApi = {
       startTime?: string;
       endTime?: string;
       instanceRole?: string;
+      scope?: string;
       page?: number;
       size?: number;
     }) =>
@@ -354,6 +355,10 @@ export const agentApi = {
       request<any[]>(`${BASE}/model/providers`, {
         params: { keyword },
       }),
+    page: (params: { page?: number; size?: number; keyword?: string }) =>
+      request<any>(`${BASE}/model/providers/page`, {
+        params,
+      }),
     get: (id: number) => request<any>(`${BASE}/model/providers/${id}`),
     create: (data: any) =>
       request<any>(`${BASE}/model/providers`, { method: 'POST', data }),
@@ -390,6 +395,7 @@ export const agentApi = {
       request<any[]>(`${BASE}/model/routes`, {
         params: { keyword },
       }),
+    listSystem: () => request<any[]>(`${BASE}/model/routes/system`),
     get: (id: number) => request<any>(`${BASE}/model/routes/${id}`),
     getDefault: () => request<any>(`${BASE}/model/routes/default`),
     create: (data: any) =>
@@ -570,13 +576,6 @@ export const agentApi = {
         }),
       update: (id: number, data: any) =>
         request<any>(`${BASE}/admin/tenants/${id}`, { method: 'PUT', data }),
-      modelRoutes: (id: number) =>
-        request<any[]>(`${BASE}/admin/tenants/${id}/model-routes`),
-      updateGroupRouterRoute: (id: number, modelRouteId: number | null) =>
-        request<any>(`${BASE}/admin/tenants/${id}/group-router-route`, {
-          method: 'PUT',
-          data: { modelRouteId },
-        }),
       updateStatus: (id: number, status: string) =>
         request<void>(`${BASE}/admin/tenants/${id}/status`, {
           method: 'PUT',

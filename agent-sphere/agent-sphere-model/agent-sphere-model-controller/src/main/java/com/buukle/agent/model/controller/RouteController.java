@@ -34,6 +34,12 @@ public class RouteController extends BaseController {
         return ok(routeService.getDefaultRoute());
     }
 
+    /** System routes (one per tenant) for the audit view. */
+    @GetMapping("/system")
+    public ResponseEntity<?> listSystem() {
+        return ok(routeService.listSystemRoutes());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
         return ok(routeService.getRoute(id));

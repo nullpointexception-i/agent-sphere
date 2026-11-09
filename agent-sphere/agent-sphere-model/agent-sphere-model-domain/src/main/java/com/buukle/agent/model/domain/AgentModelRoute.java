@@ -23,6 +23,8 @@ public class AgentModelRoute {
     private String completionProtocol;
     /** Whether this route is the owner's default route. */
     private Boolean isDefault;
+    /** System route auto-created with a tenant; the group router resolves it by type. */
+    private Boolean systemManaged;
     /** Reasoning strength: NULL = inherit from provider; true/false = override. */
     private Boolean reasoningSupported;
     /** Reasoning strength mode: levels. */

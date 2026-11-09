@@ -1,7 +1,6 @@
 package com.buukle.agent.superagent.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.buukle.agent.admin.spi.TenantScopeSpi;
 import com.buukle.agent.common.constant.ActorType;
 import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.context.SessionSurface;
@@ -16,6 +15,8 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
+import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.superagent.domain.AgentThread;
 import com.buukle.agent.superagent.dtvo.enums.AgentThreadState;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
@@ -37,7 +38,7 @@ public class GroupChatBootstrapServiceImpl implements GroupChatBootstrapSpi {
     private final AgentThreadMapper threadMapper;
     private final InstanceSpi instanceSpi;
     private final SessionSpi sessionSpi;
-    private final TenantScopeSpi tenantScopeSpi;
+    private final RouteSpi routeSpi;
 
     @Override
     @Transactional
@@ -83,16 +84,18 @@ public class GroupChatBootstrapServiceImpl implements GroupChatBootstrapSpi {
     }
 
     private Long createGroupRouterSession(AgentThread thread, GroupChatBootstrapCommand command) {
-        Long modelRouteId = tenantScopeSpi.groupRouterModelRouteId(command.tenantId());
-        if (modelRouteId == null) {
+        ModelRouteVO systemRoute = routeSpi.findSystemRoute(command.tenantId());
+        if (systemRoute == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "tenant group-router model route is not configured");
+                    "tenant system model route is not configured");
         }
-        InstanceVO router = instanceSpi.findByRole(InstanceRole.GROUP_ROUTER.value());
+        Long modelRouteId = systemRoute.getId();
+        InstanceVO router = instanceSpi.findSystemByTenant(
+                command.tenantId(), InstanceRole.GROUP_ROUTER.value());
         if (router == null) {
             CreateInstanceDTO dto = new CreateInstanceDTO();
             dto.setName("Group Router");
-            dto.setDescription("Shared group-level dispatcher for Super-Agent");
+            dto.setDescription("Tenant group-level dispatcher for Super-Agent");
             dto.setModelRouteId(modelRouteId);
             dto.setInstanceRole(InstanceRole.GROUP_ROUTER.value());
             dto.setSystemManaged(true);

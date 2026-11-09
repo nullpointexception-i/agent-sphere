@@ -71,6 +71,7 @@ export default function InstanceList() {
   const [submitting, setSubmitting] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [instanceRole, setInstanceRole] = useState('ALL');
+  const [scope, setScope] = useState<'BUSINESS' | 'SYSTEM'>('BUSINESS');
   const [timeRange, setTimeRange] = useState<
     [dayjs.Dayjs | null, dayjs.Dayjs | null]
   >([null, null]);
@@ -97,6 +98,7 @@ export default function InstanceList() {
       const res = await agentApi.instances.list({
         keyword: keyword || undefined,
         instanceRole,
+        scope: scope === 'SYSTEM' ? 'SYSTEM' : undefined,
         startTime: formatParamDate(timeRange[0]),
         endTime: formatParamDate(timeRange[1]?.endOf('day')),
         page: p,
@@ -107,7 +109,7 @@ export default function InstanceList() {
       setPage(p);
       return res;
     },
-    [keyword, timeRange, instanceRole],
+    [keyword, timeRange, instanceRole, scope],
   );
 
   useEffect(() => {
@@ -219,7 +221,7 @@ export default function InstanceList() {
               setDetailOpen(true);
             }}
           />
-          {!record.systemManaged && (
+          {(scope === 'SYSTEM' || !record.systemManaged) && (
             <>
               <Can code={PERM.instanceUpdate}>
                 <Button
@@ -502,12 +504,27 @@ export default function InstanceList() {
                 },
               ]}
             />
+            <Select
+              value={scope}
+              style={{ width: 160 }}
+              onChange={(value) => {
+                setScope(value);
+                setInstanceRole('ALL');
+                setSelectMode(false);
+                setSelectedIds(new Set());
+              }}
+              options={[
+                { value: 'BUSINESS', label: 'Business instances' },
+                { value: 'SYSTEM', label: 'System instances' },
+              ]}
+            />
             <Button
               icon={<ClearOutlined />}
               onClick={() => {
                 setKeyword('');
                 setTimeRange([null, null]);
                 setInstanceRole('ALL');
+                setScope('BUSINESS');
                 setTimeout(() => setRefreshKey((k) => k + 1), 0);
               }}
             />
@@ -619,7 +636,7 @@ export default function InstanceList() {
                         })}
                       </span>
                     </div>,
-                    ...(!item.systemManaged && canEdit
+                    ...((scope === 'SYSTEM' || !item.systemManaged) && canEdit
                       ? [
                           <div
                             key="edit"

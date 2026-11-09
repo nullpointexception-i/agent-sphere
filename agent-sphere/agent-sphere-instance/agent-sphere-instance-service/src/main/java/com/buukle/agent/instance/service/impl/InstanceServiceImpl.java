@@ -5,6 +5,9 @@ import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.myb
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.event.InstanceDeletedEvent;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.AvatarGenerator;
@@ -57,8 +60,9 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
             throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
         }
         if (Boolean.TRUE.equals(existing.getSystemManaged())) {
-            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.FORBIDDEN,
-                    "System-managed instances cannot be edited");
+            // System instances are editable for their route/prompt; role, ownership and
+            // lifecycle are still forced from the stored row below.
+            log.info("Updating system-managed instance: id={}", id);
         }
         if (dto.getImage() != null && !dto.getImage().isBlank()) {
             byte[] decoded = java.util.Base64.getDecoder().decode(dto.getImage().contains(",") ? dto.getImage().split(",")[1] : dto.getImage());
@@ -194,13 +198,21 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     @Override
     public IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
                                            LocalDateTime endTime, String instanceRole) {
+        return pageInstances(page, size, keyword, startTime, endTime, instanceRole, null);
+    }
+
+    @Override
+    public IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
+                                           LocalDateTime endTime, String instanceRole, String scope) {
+        boolean systemScope = "SYSTEM".equalsIgnoreCase(scope);
         String requestedRole = instanceRole == null || instanceRole.isBlank()
-                ? InstanceRole.CHAT.value() : instanceRole.trim().toUpperCase();
+                ? (systemScope ? "ALL" : InstanceRole.CHAT.value()) : instanceRole.trim().toUpperCase();
         boolean allRoles = "ALL".equals(requestedRole);
         String role = allRoles ? null : InstanceRole.normalize(requestedRole);
         Page<AgentInstance> p = lambdaQuery()
                 .eq(!allRoles, AgentInstance::getInstanceRole, role)
-                .and(w -> w.isNull(AgentInstance::getSystemManaged)
+                .eq(systemScope, AgentInstance::getSystemManaged, true)
+                .and(!systemScope, w -> w.isNull(AgentInstance::getSystemManaged)
                         .or().eq(AgentInstance::getSystemManaged, false))
                 .like(keyword != null && !keyword.isBlank(), AgentInstance::getName, keyword)
                 .ge(startTime != null, AgentInstance::getCreatedAt, startTime)
@@ -208,6 +220,36 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
                 .orderByDesc(AgentInstance::getCreatedAt)
                 .page(new Page<>(page, size));
         return p.convert(instanceConverter::toVO);
+    }
+
+    @Override
+    public InstanceVO findSystemByTenant(Long tenantId, String instanceRole) {
+        if (tenantId == null || instanceRole == null || instanceRole.isBlank()) {
+            return null;
+        }
+        Long previousTenant = TenantContext.get();
+        TenantScope previousScope = TenantScopeHolder.get();
+        try {
+            TenantContext.set(tenantId);
+            TenantScopeHolder.start(TenantScope.tenantOnly(tenantId, "system"));
+            AgentInstance instance = lambdaQuery()
+                    .eq(AgentInstance::getTenantId, tenantId)
+                    .eq(AgentInstance::getInstanceRole, instanceRole.toUpperCase())
+                    .eq(AgentInstance::getSystemManaged, true)
+                    .orderByAsc(AgentInstance::getId)
+                    .last("LIMIT 1")
+                    .one();
+            return instance == null ? null : instanceConverter.toVO(instance);
+        } finally {
+            TenantScopeHolder.clear();
+            TenantContext.clear();
+            if (previousScope != null) {
+                TenantScopeHolder.start(previousScope);
+            }
+            if (previousTenant != null) {
+                TenantContext.set(previousTenant);
+            }
+        }
     }
 
     @Override

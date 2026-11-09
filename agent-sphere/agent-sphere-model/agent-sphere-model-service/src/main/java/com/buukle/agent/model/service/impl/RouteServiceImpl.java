@@ -2,6 +2,9 @@ package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.model.domain.AgentApiKey;
@@ -154,6 +157,60 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
                 .filter(route -> selectableProviders.contains(route.getProviderId()))
                 .map(routeConverter::toVO)
                 .toList();
+        enrichFallbackNames(vos);
+        enrichApiKeyConfigured(vos);
+        enrichProviderName(vos);
+        return vos;
+    }
+
+    @Override
+    public ModelRouteVO findSystemRoute(Long tenantId) {
+        if (tenantId == null) {
+            return null;
+        }
+        Long previousTenant = TenantContext.get();
+        TenantScope previousScope = TenantScopeHolder.get();
+        try {
+            TenantContext.set(tenantId);
+            TenantScopeHolder.start(TenantScope.tenantOnly(tenantId, "system"));
+            AgentModelRoute route = lambdaQuery()
+                    .eq(AgentModelRoute::getSystemManaged, true)
+                    .orderByAsc(AgentModelRoute::getId)
+                    .last("LIMIT 1")
+                    .one();
+            return route == null ? null : routeConverter.toVO(route);
+        } finally {
+            TenantScopeHolder.clear();
+            TenantContext.clear();
+            if (previousScope != null) {
+                TenantScopeHolder.start(previousScope);
+            }
+            if (previousTenant != null) {
+                TenantContext.set(previousTenant);
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void markSystemRoute(Long id) {
+        if (id == null) {
+            return;
+        }
+        lambdaUpdate()
+                .eq(AgentModelRoute::getId, id)
+                .set(AgentModelRoute::getSystemManaged, true)
+                .update();
+    }
+
+    @Override
+    public List<ModelRouteVO> listSystemRoutes() {
+        List<AgentModelRoute> routes = lambdaQuery()
+                .eq(AgentModelRoute::getSystemManaged, true)
+                .orderByAsc(AgentModelRoute::getTenantId)
+                .orderByAsc(AgentModelRoute::getId)
+                .list();
+        List<ModelRouteVO> vos = routes.stream().map(routeConverter::toVO).toList();
         enrichFallbackNames(vos);
         enrichApiKeyConfigured(vos);
         enrichProviderName(vos);

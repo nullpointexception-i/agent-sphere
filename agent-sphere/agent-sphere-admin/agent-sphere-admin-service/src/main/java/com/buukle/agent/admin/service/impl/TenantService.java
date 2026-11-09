@@ -52,7 +52,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -343,75 +342,9 @@ public class TenantService implements TenantProvisioningSpi {
         return existing;
     }
 
-    /**
-     * Routes owned by the target tenant, used by the group-router picker.
-     * Queried inside that tenant's scope so a platform administrator never sees
-     * (or picks) another tenant's routes.
-     */
-    public List<ModelRouteVO> listModelRoutes(Long tenantId) {
-        assertCanManage(tenantId);
-        return withTenantScope(tenantId, () -> routeSpi.listAllRoutes(null));
-    }
-
-    /**
-     * Sets or clears the group-router model route of any tenant, including the
-     * reserved platform/default tenants whose other fields remain read-only.
-     *
-     * <p>The route must belong to the tenant: the group router resolves it under
-     * the group's tenant context, so a foreign route would fail at runtime.
-     */
     @Transactional
-    public SysTenant updateGroupRouterRoute(Long tenantId, Long modelRouteId) {
-        assertCanManage(tenantId);
-        SysTenant tenant = tenantMapper.selectById(tenantId);
-        if (tenant == null) {
-            throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND, "Tenant not found");
-        }
-        if (modelRouteId != null) {
-            requireTenantRoute(tenantId, modelRouteId);
-        }
-        tenant.setGroupRouterModelRouteId(modelRouteId);
-        tenant.setUpdatedAt(LocalDateTime.now());
-        tenantMapper.updateById(tenant);
-        return tenant;
-    }
-
-    private void requireTenantRoute(Long tenantId, Long modelRouteId) {
-        ModelRouteVO route;
-        try {
-            route = withTenantScope(tenantId, () -> routeSpi.getRoute(modelRouteId));
-        } catch (BizException e) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "Group router route does not belong to this tenant");
-        }
-        if (route == null) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "Group router route does not belong to this tenant");
-        }
-    }
-
-    /** Runs an action under a single-tenant scope and always restores the caller's. */
-    private <T> T withTenantScope(Long tenantId, Supplier<T> action) {
-        Long previousTenant = TenantContext.get();
-        TenantScope previousScope = TenantScopeHolder.get();
-        try {
-            TenantContext.set(tenantId);
-            TenantScopeHolder.start(TenantScope.tenantOnly(tenantId, operatorName()));
-            return action.get();
-        } finally {
-            TenantScopeHolder.clear();
-            TenantContext.clear();
-            if (previousScope != null) {
-                TenantScopeHolder.start(previousScope);
-            }
-            if (previousTenant != null) {
-                TenantContext.set(previousTenant);
-            }
-        }
-    }
-
-    @Transactional
-    public void changeStatus(Long id, String status) {        assertCanManage(id);
+    public void changeStatus(Long id, String status) {
+        assertCanManage(id);
         if (id.equals(TenantConstants.PLATFORM_TENANT_ID)
                 || id.equals(TenantConstants.DEFAULT_TENANT_ID)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID,
@@ -755,9 +688,9 @@ public class TenantService implements TenantProvisioningSpi {
             routeDTO.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
             routeDTO.setIsDefault(true);
             ModelRouteVO route = routeSpi.createRoute(routeDTO);
-
-            tenant.setGroupRouterModelRouteId(route.getId());
-            tenantMapper.updateById(tenant);
+            // The route created with a tenant is that tenant's system route; the
+            // group router resolves it by type instead of a tenant pointer.
+            routeSpi.markSystemRoute(route.getId());
         } finally {
             TenantScopeHolder.clear();
             TenantContext.clear();
@@ -800,7 +733,6 @@ public class TenantService implements TenantProvisioningSpi {
         vo.setSortOrder(tenant.getSortOrder());
         vo.setStatus(tenant.getStatus());
         vo.setRemark(tenant.getRemark());
-        vo.setGroupRouterModelRouteId(tenant.getGroupRouterModelRouteId());
         vo.setCreatedAt(tenant.getCreatedAt());
         return vo;
     }
