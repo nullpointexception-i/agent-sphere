@@ -33,6 +33,12 @@ public interface ImConversationService {
 
     void removeParticipant(Long conversationId, Long participantId);
 
+    ParticipantVO updateParticipantRole(Long conversationId, Long participantId, String role);
+
+    ConversationVO transferOwner(Long conversationId, Long newOwnerUserId);
+
+    ImGateConfig updateInvitePolicy(Long conversationId, boolean allowMemberInvite);
+
     void updateParticipantMute(Long conversationId, Long participantId, boolean muted);
 
     void markRead(Long conversationId, MarkReadDTO dto);

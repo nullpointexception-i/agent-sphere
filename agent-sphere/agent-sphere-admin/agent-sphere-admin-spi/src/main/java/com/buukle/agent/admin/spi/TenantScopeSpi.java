@@ -42,4 +42,7 @@ public interface TenantScopeSpi {
 
     /** User ids assigned to any of the supplied tenants. Used for user/contact lists. */
     List<Long> listUserIdsInTenants(Set<Long> tenantIds);
+
+    /** Tenant-scoped model route used by the group chat router, or null when not configured. */
+    Long groupRouterModelRouteId(Long tenantId);
 }

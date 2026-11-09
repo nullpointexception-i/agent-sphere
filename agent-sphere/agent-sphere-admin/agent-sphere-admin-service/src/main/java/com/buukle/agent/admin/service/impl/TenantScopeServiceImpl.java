@@ -268,6 +268,15 @@ public class TenantScopeServiceImpl implements TenantScopeSpi {
         return collected;
     }
 
+    @Override
+    public Long groupRouterModelRouteId(Long tenantId) {
+        if (tenantId == null) {
+            return null;
+        }
+        SysTenant tenant = tenantMapper.selectById(tenantId);
+        return tenant == null ? null : tenant.getGroupRouterModelRouteId();
+    }
+
     private static String normalizeVisibility(String raw) {
         if (TenantConstants.VISIBILITY_SELF_ONLY.equalsIgnoreCase(raw)) {
             return TenantConstants.VISIBILITY_SELF_ONLY;

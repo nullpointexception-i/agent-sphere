@@ -52,11 +52,19 @@ class GroupRouterSchedulerTest {
     @Mock
     UserSpi userSpi;
     @Mock
+    com.buukle.agent.admin.spi.TenantScopeSpi tenantScopeSpi;
+    @Mock
     GroupRouterPort groupRouterPort;
     @Mock
     RedissonClient redissonClient;
     @Mock
     AgentMetrics metrics;
+
+    @org.junit.jupiter.api.BeforeEach
+    void stubTenantRoute() {
+        org.mockito.Mockito.lenient().when(tenantScopeSpi.groupRouterModelRouteId(
+                org.mockito.ArgumentMatchers.any())).thenReturn(99L);
+    }
 
     @Test
     void parseDecision_readsDeliverIgnoreAndSummary() {
@@ -181,7 +189,7 @@ class GroupRouterSchedulerTest {
 
     private GroupRouterScheduler scheduler() {
         return new GroupRouterScheduler(eventMapper, threadMapper, deliveryMapper, superAgentMapper,
-                sessionSpi, instanceSpi, userSpi, groupRouterPort, redissonClient, metrics);
+                sessionSpi, instanceSpi, userSpi, tenantScopeSpi, groupRouterPort, redissonClient, metrics);
     }
 
     private static AgentThread thread() {

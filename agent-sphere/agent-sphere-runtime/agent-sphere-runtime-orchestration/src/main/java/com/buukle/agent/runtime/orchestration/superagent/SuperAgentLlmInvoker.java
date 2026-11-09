@@ -38,14 +38,28 @@ public class SuperAgentLlmInvoker {
     public String invoke(Long instanceId, String systemPrompt, String userPrompt, Integer maxTokens,
                          Long sessionId, String sessionType, Long superAgentId, Long threadId,
                          LlmInteractionType interactionType) {
+        return invoke(instanceId, null, systemPrompt, userPrompt, maxTokens, sessionId,
+                sessionType, superAgentId, threadId, interactionType);
+    }
+
+    /**
+     * @param overrideModelRouteId tenant/group route override; null falls back to the instance route.
+     */
+    public String invoke(Long instanceId, Long overrideModelRouteId, String systemPrompt, String userPrompt,
+                         Integer maxTokens, Long sessionId, String sessionType, Long superAgentId,
+                         Long threadId, LlmInteractionType interactionType) {
         if (instanceId == null) {
             throw new IllegalArgumentException("router instanceId is required");
         }
         InstanceVO instance = instanceSpi.getInstance(instanceId);
-        if (instance == null || instance.getModelRouteId() == null) {
+        if (instance == null) {
+            throw new IllegalStateException("router instance not found");
+        }
+        Long routeId = overrideModelRouteId != null ? overrideModelRouteId : instance.getModelRouteId();
+        if (routeId == null) {
             throw new IllegalStateException("router instance has no model route");
         }
-        ModelRouteVO route = routeSpi.getRoute(instance.getModelRouteId());
+        ModelRouteVO route = routeSpi.getRoute(routeId);
         if (route == null) {
             throw new IllegalStateException("router model route not found");
         }

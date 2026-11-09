@@ -13,6 +13,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.Objects;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class SuperAgentDirectoryServiceImpl implements SuperAgentDirectorySpi {
@@ -61,5 +65,28 @@ public class SuperAgentDirectoryServiceImpl implements SuperAgentDirectorySpi {
         }
         return new ChatAgentIdentity(agent.getId(), agent.getName(),
                 agent.getOwnerUserId(), agent.getStatus());
+    }
+
+    @Override
+    public List<ChatAgentIdentity> listPublicByOwners(Collection<Long> ownerUserIds) {
+        if (ownerUserIds == null || ownerUserIds.isEmpty()) {
+            return List.of();
+        }
+        List<Long> owners = ownerUserIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (owners.isEmpty()) {
+            return List.of();
+        }
+        List<AgentSuperAgent> agents = superAgentMapper.selectList(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<AgentSuperAgent>lambdaQuery()
+                        .in(AgentSuperAgent::getOwnerUserId, owners)
+                        .eq(AgentSuperAgent::getPublicVisible, true)
+                        .eq(AgentSuperAgent::getStatus, SuperAgentStatus.ACTIVE)
+                        .orderByAsc(AgentSuperAgent::getId));
+        List<ChatAgentIdentity> result = new ArrayList<>(agents.size());
+        for (AgentSuperAgent agent : agents) {
+            result.add(new ChatAgentIdentity(agent.getId(), agent.getName(),
+                    agent.getOwnerUserId(), agent.getStatus()));
+        }
+        return result;
     }
 }

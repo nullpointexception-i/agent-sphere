@@ -13,7 +13,10 @@ import com.buukle.agent.im.dtvo.dto.CreateAgentDmDTO;
 import com.buukle.agent.im.dtvo.dto.CreateConversationDTO;
 import com.buukle.agent.im.dtvo.dto.ImGateConfig;
 import com.buukle.agent.im.dtvo.dto.MarkReadDTO;
+import com.buukle.agent.im.dtvo.dto.TransferOwnerDTO;
 import com.buukle.agent.im.dtvo.dto.UpdateConversationSettingDTO;
+import com.buukle.agent.im.dtvo.dto.UpdateInvitePolicyDTO;
+import com.buukle.agent.im.dtvo.dto.UpdateParticipantRoleDTO;
 import com.buukle.agent.im.service.ImConversationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -95,6 +99,31 @@ public class ImConversationController extends BaseController {
                                                @PathVariable Long participantId) {
         conversationService.removeParticipant(id, participantId);
         return deleted();
+    }
+
+    @AuditLog(action = "UPDATE_PARTICIPANT_ROLE", resourceType = "ImConversation", resourceId = "#id")
+    @RequirePermission(PermissionCodes.IM_MEMBER_MANAGE)
+    @PutMapping("/{id}/participants/{participantId}/role")
+    public ResponseEntity<?> updateParticipantRole(@PathVariable Long id,
+                                                   @PathVariable Long participantId,
+                                                   @Valid @RequestBody UpdateParticipantRoleDTO dto) {
+        return ok(conversationService.updateParticipantRole(id, participantId, dto.getRole()));
+    }
+
+    @AuditLog(action = "TRANSFER_OWNER", resourceType = "ImConversation", resourceId = "#id")
+    @RequirePermission(PermissionCodes.IM_MEMBER_MANAGE)
+    @PutMapping("/{id}/owner")
+    public ResponseEntity<?> transferOwner(@PathVariable Long id,
+                                           @Valid @RequestBody TransferOwnerDTO dto) {
+        return ok(conversationService.transferOwner(id, dto.getUserId()));
+    }
+
+    @AuditLog(action = "UPDATE_INVITE_POLICY", resourceType = "ImConversation", resourceId = "#id")
+    @RequirePermission(PermissionCodes.IM_MEMBER_MANAGE)
+    @PatchMapping("/{id}/invite-policy")
+    public ResponseEntity<?> updateInvitePolicy(@PathVariable Long id,
+                                                @Valid @RequestBody UpdateInvitePolicyDTO dto) {
+        return ok(conversationService.updateInvitePolicy(id, dto.getAllowMemberInvite()));
     }
 
     @RequirePermission(PermissionCodes.IM_CONVERSATION_READ)

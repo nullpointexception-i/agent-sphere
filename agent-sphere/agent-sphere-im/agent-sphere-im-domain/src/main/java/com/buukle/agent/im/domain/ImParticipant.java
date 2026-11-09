@@ -27,6 +27,8 @@ public class ImParticipant {
     private String role;
     private String displayName;
     private Boolean muted;
+    /** True when this participant was auto-added from a member's public avatar catalogue. */
+    private Boolean autoAdded;
     private LocalDateTime joinedAt;
     private String remark;
     @TableLogic(value = "false", delval = "true")

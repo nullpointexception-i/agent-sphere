@@ -58,6 +58,8 @@ class ConversationSummaryDisplayTest {
     ImStreamService streamService;
     @Mock
     ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
+    @Mock
+    ObjectProvider<com.buukle.agent.superagent.spi.GroupChatBootstrapSpi> groupChatBootstrapProvider;
 
     ImConversationServiceImpl service;
 
@@ -65,7 +67,7 @@ class ConversationSummaryDisplayTest {
     void setUp() {
         service = new ImConversationServiceImpl(conversationMapper, participantMapper,
                 messageMapper, readCursorMapper, settingMapper, userSpi, ssoIdentitySpi,
-                streamService, directoryPortProvider);
+                streamService, directoryPortProvider, groupChatBootstrapProvider);
         AuthContext.setUserId(SELF_ID);
         AuthContext.setUsername("bole_7");
         AuthContext.setDisplayName("elvin");

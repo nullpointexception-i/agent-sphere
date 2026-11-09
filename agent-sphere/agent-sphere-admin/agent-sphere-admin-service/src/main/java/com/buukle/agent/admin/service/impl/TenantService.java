@@ -8,8 +8,20 @@ import com.buukle.agent.admin.domain.SysRolePermission;
 import com.buukle.agent.admin.domain.SysTenant;
 import com.buukle.agent.admin.domain.SysUserRole;
 import com.buukle.agent.admin.domain.SysUserTenant;
+import com.buukle.agent.admin.dtvo.dto.TenantDefaultModelDTO;
 import com.buukle.agent.admin.dtvo.dto.TenantSaveReq;
 import com.buukle.agent.admin.dtvo.dto.UserTenantAssignReq;
+import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.model.dtvo.dto.CreateApiKeyDTO;
+import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
+import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
+import com.buukle.agent.model.dtvo.vo.ApiKeyVO;
+import com.buukle.agent.model.dtvo.vo.ModelProviderVO;
+import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
+import com.buukle.agent.model.spi.ApiKeySpi;
+import com.buukle.agent.model.spi.ModelProviderSpi;
+import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.admin.dtvo.vo.TenantSwitchVO;
 import com.buukle.agent.admin.dtvo.vo.TenantVO;
 import com.buukle.agent.admin.dtvo.vo.UserTenantVO;
@@ -74,6 +86,9 @@ public class TenantService implements TenantProvisioningSpi {
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysPermissionMapper permissionMapper;
     private final TenantScopeServiceImpl tenantScopeService;
+    private final ModelProviderSpi modelProviderSpi;
+    private final ApiKeySpi apiKeySpi;
+    private final RouteSpi routeSpi;
 
     // ==================== queries ====================
 
@@ -172,6 +187,10 @@ public class TenantService implements TenantProvisioningSpi {
     @Transactional
     public SysTenant create(TenantSaveReq req) {
         assertCanCreateChildTenant();
+        if (req.getDefaultModel() == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "Default model configuration is required for a new tenant");
+        }
         String code = req.getCode() == null ? "" : req.getCode().trim();
         if (code.isEmpty()) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Tenant code is required");
@@ -203,6 +222,7 @@ public class TenantService implements TenantProvisioningSpi {
 
         createTenantAdminRole(tenant);
         createTenantUserRole(tenant);
+        provisionDefaultModel(tenant, req.getDefaultModel(), operatorName());
         return tenant;
     }
 
@@ -317,6 +337,14 @@ public class TenantService implements TenantProvisioningSpi {
             existing.setStatus(nextStatus);
         }
         existing.setRemark(req.getRemark());
+        if (req.getGroupRouterModelRouteId() != null) {
+            ModelRouteVO route = routeSpi.getRoute(req.getGroupRouterModelRouteId());
+            if (route == null) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "Group router model route not found");
+            }
+            existing.setGroupRouterModelRouteId(req.getGroupRouterModelRouteId());
+        }
         existing.setUpdatedAt(LocalDateTime.now());
         tenantMapper.updateById(existing);
         return existing;
@@ -633,6 +661,73 @@ public class TenantService implements TenantProvisioningSpi {
         }
     }
 
+    private void provisionDefaultModel(SysTenant tenant, TenantDefaultModelDTO model, String operator) {
+        if (model == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "Default model configuration is required for a new tenant");
+        }
+        Long previousTenant = TenantContext.get();
+        TenantScope previousScope = TenantScopeHolder.get();
+        try {
+            TenantContext.set(tenant.getId());
+            TenantScopeHolder.start(TenantScope.tenantOnly(tenant.getId(), operator));
+            CreateModelProviderDTO providerDTO = new CreateModelProviderDTO();
+            providerDTO.setName(providerName(tenant, model));
+            providerDTO.setBaseUrl(model.getBaseUrl());
+            providerDTO.setConfig(model.getProviderConfig());
+            ModelProviderVO provider = modelProviderSpi.createProvider(providerDTO);
+
+            CreateApiKeyDTO keyDTO = new CreateApiKeyDTO();
+            keyDTO.setProviderId(provider.getId());
+            keyDTO.setAlias(model.getApiKeyName());
+            keyDTO.setKeyValue(model.getApiKeyValue());
+            ApiKeyVO key = apiKeySpi.createApiKey(keyDTO);
+            modelProviderSpi.setActiveKey(provider.getId(), key.getId());
+
+            CreateRouteDTO routeDTO = new CreateRouteDTO();
+            routeDTO.setProviderId(provider.getId());
+            routeDTO.setModelName(model.getModelName());
+            routeDTO.setCompany(model.getProviderCompany());
+            routeDTO.setMaxInputTokens(model.getMaxInputTokens() == null
+                    ? 128000L : model.getMaxInputTokens());
+            routeDTO.setMaxOutputTokens(model.getMaxOutputTokens() == null
+                    ? 4096L : model.getMaxOutputTokens());
+            routeDTO.setSupportsAttachment(Boolean.TRUE.equals(model.getSupportsAttachment()));
+            routeDTO.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
+            routeDTO.setIsDefault(true);
+            ModelRouteVO route = routeSpi.createRoute(routeDTO);
+
+            tenant.setGroupRouterModelRouteId(route.getId());
+            tenantMapper.updateById(tenant);
+        } finally {
+            TenantScopeHolder.clear();
+            TenantContext.clear();
+            if (previousScope != null) {
+                TenantScopeHolder.start(previousScope);
+            }
+            if (previousTenant != null) {
+                TenantContext.set(previousTenant);
+            }
+        }
+    }
+
+    private static String providerName(SysTenant tenant, TenantDefaultModelDTO model) {
+        String name = model.getProviderName();
+        if (name == null || name.isBlank()) {
+            name = tenant.getName() + " Default Provider";
+        }
+        return name.length() > 64 ? name.substring(0, 64) : name;
+    }
+
+    private static String operatorName() {
+        String username = AuthContext.getUsername();
+        if (username != null && !username.isBlank()) {
+            return username;
+        }
+        String scoped = TenantScopeHolder.currentUsername();
+        return scoped == null || scoped.isBlank() ? "system" : scoped;
+    }
+
     private TenantVO toVO(SysTenant tenant) {
         TenantVO vo = new TenantVO();
         vo.setId(tenant.getId());
@@ -646,6 +741,7 @@ public class TenantService implements TenantProvisioningSpi {
         vo.setSortOrder(tenant.getSortOrder());
         vo.setStatus(tenant.getStatus());
         vo.setRemark(tenant.getRemark());
+        vo.setGroupRouterModelRouteId(tenant.getGroupRouterModelRouteId());
         vo.setCreatedAt(tenant.getCreatedAt());
         return vo;
     }

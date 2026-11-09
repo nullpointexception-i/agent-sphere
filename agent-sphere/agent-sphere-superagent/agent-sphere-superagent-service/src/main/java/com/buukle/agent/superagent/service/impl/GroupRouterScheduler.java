@@ -1,6 +1,7 @@
 package com.buukle.agent.superagent.service.impl;
 
 import com.buukle.agent.common.context.TenantScopeHolder;
+import com.buukle.agent.admin.spi.TenantScopeSpi;
 
 
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -76,6 +77,7 @@ public class GroupRouterScheduler {
     private final SessionSpi sessionSpi;
     private final InstanceSpi instanceSpi;
     private final UserSpi userSpi;
+    private final TenantScopeSpi tenantScopeSpi;
     private final GroupRouterPort groupRouterPort;
     private final RedissonClient redissonClient;
     private final AgentMetrics metrics;
@@ -176,8 +178,16 @@ public class GroupRouterScheduler {
         if (events.isEmpty()) {
             return;
         }
-        Long sessionId = ensureGroupSession(thread, routerInstanceId);
+        Long sessionId = thread.getGroupRouterSessionId();
         if (sessionId == null) {
+            log.warn("Group router session is missing for thread {}", threadId);
+            markEvents(events, GroupRouterDecisionType.OBSERVE, "group router session missing", null);
+            return;
+        }
+        Long modelRouteId = tenantScopeSpi.groupRouterModelRouteId(thread.getTenantId());
+        if (modelRouteId == null) {
+            log.warn("Tenant group-router route is missing for tenant {}", thread.getTenantId());
+            markEvents(events, GroupRouterDecisionType.OBSERVE, "tenant group-router route missing", null);
             return;
         }
 
@@ -199,7 +209,7 @@ public class GroupRouterScheduler {
         String raw;
         try {
             raw = groupRouterPort.classify(new GroupRouterRequest(
-                    routerInstanceId, sessionId, threadId, systemPrompt, userPrompt, maxTokens));
+                    routerInstanceId, modelRouteId, sessionId, threadId, systemPrompt, userPrompt, maxTokens));
         } catch (Exception e) {
             log.warn("Group router LLM failed for thread {}: {}", threadId, e.getMessage());
             scheduleRetry(events);
@@ -252,22 +262,6 @@ public class GroupRouterScheduler {
                     ? summary : summary.substring(0, Math.max(1, summaryMaxChars)));
             threadMapper.updateById(thread);
         }
-    }
-
-    private Long ensureGroupSession(AgentThread thread, Long routerInstanceId) {
-        if (thread.getGroupRouterSessionId() != null) {
-            return thread.getGroupRouterSessionId();
-        }
-        CreateSessionDTO dto = new CreateSessionDTO();
-        dto.setAgentInstanceId(routerInstanceId);
-        dto.setTitle("Group Router " + thread.getExternalThreadId());
-        dto.setSessionType(SessionType.GROUP_ROUTER);
-        dto.setThreadId(thread.getId());
-        dto.setCreatedBy(thread.getCreatedBy());
-        SessionVO session = sessionSpi.createSession(dto);
-        thread.setGroupRouterSessionId(session.getId());
-        threadMapper.updateById(thread);
-        return session.getId();
     }
 
     private String resolveSystemPrompt(Long routerInstanceId) {

@@ -1599,7 +1599,12 @@ function ChatTab({
     setPublicAvatarsLoading(true);
     superAgentApi
       .publicAvatars(owners)
-      .then((rows) => setPublicAvatars(Array.isArray(rows) ? rows : []))
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : [];
+        setPublicAvatars(list);
+        // All public avatars are auto-included; the create request sends them too.
+        setGroupAgents(list.map((agent) => agent.id));
+      })
       .catch(() => setPublicAvatars([]))
       .finally(() => setPublicAvatarsLoading(false));
   }, [groupOpen, groupMembers, me?.id]);
@@ -1633,22 +1638,23 @@ function ChatTab({
         }}
       >
         {list.map((agent) => {
-          const active = groupAgents.includes(agent.id);
           return (
             <button
               key={agent.id}
               type="button"
-              onClick={() => toggleAgent(agent.id)}
               style={{
-                border: active ? '1px solid #7c6cff' : '1px solid #e4e4e7',
-                background: active ? '#f1efff' : '#fff',
-                color: active ? '#5b4bdb' : '#52525b',
+                border: '1px solid #7c6cff',
+                background: '#f1efff',
+                color: '#5b4bdb',
                 borderRadius: 999,
                 padding: '3px 10px',
                 fontSize: 12,
-                cursor: 'pointer',
+                cursor: 'default',
               }}
-              title={agent.description || agent.name}
+              title={tw(
+                'chat.autoPublicAvatar',
+                'Automatically included public avatar',
+              )}
             >
               {agent.name}
             </button>
@@ -2162,11 +2168,18 @@ function ChatDetail({
   const [messages, setMessages] = useState<ImMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
+  const [mentions, setMentions] = useState<
+    { type: string; id: number; name?: string }[]
+  >([]);
   const [sending, setSending] = useState(false);
   const [agentPaused, setAgentPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [setting, setSetting] = useState<ImConversationSetting | null>(null);
   const [memberKeyword, setMemberKeyword] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteOptions, setInviteOptions] = useState<any[]>([]);
+  const [inviteUserId, setInviteUserId] = useState<number | undefined>();
+  const [inviting, setInviting] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const [remarkValue, setRemarkValue] = useState('');
@@ -2272,6 +2285,7 @@ function ChatDetail({
       setMessages([]);
       setParticipants([]);
       setConversation(null);
+      setMentions([]);
       // A freshly opened conversation starts pinned to the bottom.
       stickToBottomRef.current = true;
     }
@@ -2447,13 +2461,38 @@ function ChatDetail({
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
-    await sendText(value, `workspace-${Date.now()}`);
+    await sendText(value, `workspace-${Date.now()}`, mentions);
     setText('');
+    setMentions([]);
     if (composerRef.current) composerRef.current.style.height = 'auto';
   };
 
+  const addMention = (agent: any) => {
+    const name = displayName(agent);
+    setText((previous) => {
+      const separator = previous && !previous.endsWith(' ') ? ' ' : '';
+      return `${previous}${separator}@${name} `;
+    });
+    setMentions((previous) =>
+      previous.some((item) => item.id === agent.participantId)
+        ? previous
+        : [
+            ...previous,
+            {
+              type: 'AGENT',
+              id: agent.participantId,
+              name,
+            },
+          ],
+    );
+  };
+
   /** Sends an arbitrary DM text; clarification option buttons reuse this path. */
-  const sendText = async (value: string, clientMsgId?: string) => {
+  const sendText = async (
+    value: string,
+    clientMsgId?: string,
+    mentionList: { type: string; id: number; name?: string }[] = [],
+  ) => {
     if (!value || sending) return;
     if (agentPaused) {
       message.warning(
@@ -2479,6 +2518,7 @@ function ChatDetail({
         conversationId,
         value,
         clientMsgId || `option-${Date.now()}`,
+        mentionList,
       );
       load(true);
     } catch {
@@ -2546,6 +2586,93 @@ function ChatDetail({
       message.error(tw('common.saveFailed', 'Save failed'));
     } finally {
       setSavingMeta(false);
+    }
+  };
+
+  const refreshConversation = async () => {
+    const updated = await imApi.conversation(conversationId);
+    setConversation(updated);
+    setParticipants(updated?.participants || []);
+    onChanged();
+  };
+
+  const changeMemberRole = async (member: any, role: string) => {
+    try {
+      await imApi.updateParticipantRole(
+        conversationId,
+        member.participantId,
+        role,
+      );
+      await refreshConversation();
+      message.success(tw('common.saved', 'Saved'));
+    } catch {
+      message.error(tw('common.saveFailed', 'Save failed'));
+    }
+  };
+
+  const transferGroupOwner = (member: any) => {
+    modal.confirm({
+      title: tw('chat.transferOwnerConfirm', 'Transfer group ownership?'),
+      content: tw(
+        'chat.transferOwnerHint',
+        'The selected member becomes owner; you become an administrator.',
+      ),
+      okText: tw('common.confirm', 'Confirm'),
+      onOk: async () => {
+        await imApi.transferOwner(conversationId, member.participantId);
+        await refreshConversation();
+      },
+    });
+  };
+
+  const toggleMemberInvite = async (checked: boolean) => {
+    try {
+      await imApi.updateInvitePolicy(conversationId, checked);
+      setConversation((previous) =>
+        previous ? { ...previous, allowMemberInvite: checked } : previous,
+      );
+      message.success(tw('common.saved', 'Saved'));
+    } catch {
+      message.error(tw('common.saveFailed', 'Save failed'));
+    }
+  };
+
+  const openInvite = () => {
+    setInviteOpen(true);
+    setInviteUserId(undefined);
+    agentApi.workspaceContacts
+      .users({ page: 1, size: 200 })
+      .then((page: any) =>
+        setInviteOptions(
+          (page?.records || []).filter(
+            (user: any) =>
+              !participants.some(
+                (member: any) =>
+                  member.participantType === 'USER' &&
+                  member.participantId === user.id,
+              ),
+          ),
+        ),
+      )
+      .catch(() => setInviteOptions([]));
+  };
+
+  const inviteMember = async () => {
+    if (!inviteUserId) return;
+    setInviting(true);
+    try {
+      await imApi.addParticipant(conversationId, {
+        participantType: 'USER',
+        participantId: inviteUserId,
+        role: 'MEMBER',
+      });
+      setInviteOpen(false);
+      await refreshConversation();
+      message.success(tw('common.saved', 'Saved'));
+    } catch {
+      message.error(tw('common.saveFailed', 'Save failed'));
+    } finally {
+      setInviting(false);
     }
   };
 
@@ -2638,6 +2765,9 @@ function ChatDetail({
 
   const memberCount = participants.length;
   const isGroup = conversation?.type === 'GROUP';
+  const isOwner = conversation?.myRole === 'OWNER';
+  const isAdmin = isOwner || conversation?.myRole === 'ADMIN';
+  const allowMemberInvite = conversation?.allowMemberInvite !== false;
   const selfConversation = !isGroup && isSelfParticipants(participants, me);
   const otherParticipant = participants.find(
     (member) => member.participantType === 'USER' && !isSameUser(member, me),
@@ -2927,6 +3057,38 @@ function ChatDetail({
         </div>
       ) : null}
 
+      {isGroup && participants.some((p) => p.participantType === 'AGENT') ? (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+            padding: '0 4px 8px',
+          }}
+        >
+          {participants
+            .filter((p) => p.participantType === 'AGENT')
+            .map((p) => (
+              <button
+                key={p.participantId}
+                type="button"
+                onClick={() => addMention(p)}
+                style={{
+                  border: '1px solid #e4e4e7',
+                  background: '#fff',
+                  borderRadius: 999,
+                  padding: '2px 8px',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+                title={tw('chat.mentionAvatar', 'Mention this avatar')}
+              >
+                @{displayName(p)}
+              </button>
+            ))}
+        </div>
+      ) : null}
+
       <div className={styles.composer}>
         <textarea
           ref={composerRef}
@@ -3028,10 +3190,27 @@ function ChatDetail({
               </div>
 
               <div className={styles.settingSection}>
-                <div className={styles.settingLabel}>
-                  {tw('chat.membersLabel', 'Members · {count}', {
-                    count: memberCount,
-                  })}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                  }}
+                >
+                  <div className={styles.settingLabel}>
+                    {tw('chat.membersLabel', 'Members · {count}', {
+                      count: memberCount,
+                    })}
+                  </div>
+                  {isAdmin ||
+                  (isGroup &&
+                    conversation?.myRole === 'MEMBER' &&
+                    allowMemberInvite) ? (
+                    <Button type="link" size="small" onClick={openInvite}>
+                      {tw('chat.inviteMember', 'Invite')}
+                    </Button>
+                  ) : null}
                 </div>
                 <Input.Search
                   allowClear
@@ -3067,11 +3246,55 @@ function ChatDetail({
                             <div className={styles.memberRole}>
                               {member.role === 'OWNER'
                                 ? tw('chat.owner', 'Owner')
-                                : member.participantType === 'AGENT'
-                                  ? tw('chat.agent', 'Digital avatar')
-                                  : tw('chat.member', 'Member')}
+                                : member.role === 'ADMIN'
+                                  ? tw('chat.admin', 'Admin')
+                                  : member.participantType === 'AGENT'
+                                    ? tw('chat.agent', 'Digital avatar')
+                                    : tw('chat.member', 'Member')}
                             </div>
                           </div>
+                          {isAdmin &&
+                          member.participantType === 'USER' &&
+                          member.role !== 'OWNER' ? (
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'flex-end',
+                                gap: 2,
+                              }}
+                            >
+                              <Button
+                                type="link"
+                                size="small"
+                                onClick={() =>
+                                  changeMemberRole(
+                                    member,
+                                    member.role === 'ADMIN'
+                                      ? 'MEMBER'
+                                      : 'ADMIN',
+                                  )
+                                }
+                              >
+                                {member.role === 'ADMIN'
+                                  ? tw('chat.removeAdmin', 'Remove admin')
+                                  : tw('chat.makeAdmin', 'Make admin')}
+                              </Button>
+                              {isOwner ? (
+                                <Button
+                                  type="link"
+                                  size="small"
+                                  danger
+                                  onClick={() => transferGroupOwner(member)}
+                                >
+                                  {tw(
+                                    'chat.transferOwner',
+                                    'Transfer ownership',
+                                  )}
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })
@@ -3079,10 +3302,35 @@ function ChatDetail({
                 </div>
               </div>
 
+              {isGroup && isAdmin ? (
+                <div className={styles.settingSection}>
+                  <div className={styles.settingSwitchRow}>
+                    <div>
+                      <div className={styles.settingLabel}>
+                        {tw(
+                          'chat.allowMemberInvite',
+                          'Allow members to invite',
+                        )}
+                      </div>
+                      <div className={styles.settingHint}>
+                        {tw(
+                          'chat.allowMemberInviteHint',
+                          'When on, ordinary members can invite users.',
+                        )}
+                      </div>
+                    </div>
+                    <Switch
+                      checked={allowMemberInvite}
+                      onChange={toggleMemberInvite}
+                    />
+                  </div>
+                </div>
+              ) : null}
+
               <div className={styles.settingSection}>
                 <div className={styles.settingLabel}>
                   {tw('chat.remark', 'Group alias')}
-                </div>
+                </div>{' '}
                 <div className={styles.inlineField}>
                   <Input
                     value={remarkValue}
@@ -3144,6 +3392,28 @@ function ChatDetail({
           </div>
         </>
       ) : null}
+
+      <Modal
+        title={tw('chat.inviteMember', 'Invite member')}
+        open={inviteOpen}
+        onCancel={() => setInviteOpen(false)}
+        onOk={inviteMember}
+        confirmLoading={inviting}
+        okButtonProps={{ disabled: !inviteUserId }}
+      >
+        <Select
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          value={inviteUserId}
+          onChange={setInviteUserId}
+          placeholder={tw('chat.selectMember', 'Select a member')}
+          options={inviteOptions.map((user) => ({
+            value: user.id,
+            label: userDisplayLabel(user),
+          }))}
+        />
+      </Modal>
     </div>
   );
 }

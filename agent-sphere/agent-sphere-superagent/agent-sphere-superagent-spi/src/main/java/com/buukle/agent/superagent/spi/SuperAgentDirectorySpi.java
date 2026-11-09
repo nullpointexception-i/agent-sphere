@@ -1,5 +1,8 @@
 package com.buukle.agent.superagent.spi;
 
+import java.util.Collection;
+import java.util.List;
+
 /** Resolves Super-Agents that the current user is allowed to chat with. */
 public interface SuperAgentDirectorySpi {
 
@@ -18,4 +21,10 @@ public interface SuperAgentDirectorySpi {
      * ACTIVE and explicitly public. Paused/archived agents are never joinable.
      */
     ChatAgentIdentity resolveForGroupChat(Long agentId, Long userId);
+
+    /**
+     * All ACTIVE, public avatars owned by the given users. Used to auto-populate
+     * group chats with members' public avatars.
+     */
+    List<ChatAgentIdentity> listPublicByOwners(Collection<Long> ownerUserIds);
 }

@@ -40,10 +40,6 @@ public class GroupRouterInitializer implements ApplicationRunner {
     private boolean autoCreate;
     @Value("${buukle.agent.super-agent.group-router.instance-id:0}")
     private Long configuredInstanceId;
-    @Value("${buukle.agent.super-agent.group-router.model-route-id:0}")
-    private Long groupRouterModelRouteId;
-    @Value("${buukle.agent.super-agent.router.default-model-route-id:0}")
-    private Long defaultModelRouteId;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -59,17 +55,9 @@ public class GroupRouterInitializer implements ApplicationRunner {
                     existing.getId(), configuredInstanceId);
             return;
         }
-        Long modelRouteId = positive(groupRouterModelRouteId) != null
-                ? groupRouterModelRouteId : positive(defaultModelRouteId);
-        if (modelRouteId == null) {
-            log.warn("Group router instance not found and no model route configured; "
-                    + "set super-agent.group-router.model-route-id or router.default-model-route-id");
-            return;
-        }
         CreateInstanceDTO dto = new CreateInstanceDTO();
         dto.setName("Group Router");
         dto.setDescription("Shared group-level dispatcher for Super-Agent");
-        dto.setModelRouteId(modelRouteId);
         dto.setInstanceRole(ROLE_GROUP_ROUTER);
         dto.setSystemManaged(true);
         dto.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
@@ -80,9 +68,5 @@ public class GroupRouterInitializer implements ApplicationRunner {
         log.info("Group router instance created: id={}; configure "
                 + "super-agent.group-router.instance-id={} if you prefer an explicit id",
                 created.getId(), created.getId());
-    }
-
-    private static Long positive(Long value) {
-        return value != null && value > 0 ? value : null;
     }
 }

@@ -43,6 +43,7 @@ import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.sso.spi.SsoUserLabelVO;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.GroupChatBootstrapSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
@@ -85,6 +86,7 @@ public class ImConversationServiceImpl implements ImConversationService {
     private final SsoIdentitySpi ssoIdentitySpi;
     private final ImStreamService streamService;
     private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
+    private final ObjectProvider<GroupChatBootstrapSpi> groupChatBootstrapProvider;
 
     @Override
     @Transactional
@@ -115,19 +117,35 @@ public class ImConversationServiceImpl implements ImConversationService {
 
         addParticipantInternal(conversation.getId(), userId, ImParticipantType.USER,
                 ImParticipantRole.OWNER, displayName());
+        Set<Long> memberIds = new LinkedHashSet<>();
+        memberIds.add(userId);
         if (dto.getParticipantUserIds() != null) {
             for (Long participantUserId : new LinkedHashSet<>(dto.getParticipantUserIds())) {
                 if (participantUserId == null || participantUserId.equals(userId)) {
                     continue;
                 }
+                memberIds.add(participantUserId);
                 addParticipantInternal(conversation.getId(), participantUserId,
                         ImParticipantType.USER, ImParticipantRole.MEMBER, null);
             }
         }
+        Set<Long> addedAgentIds = new LinkedHashSet<>();
         for (ChatAgentIdentity agent : groupAgents) {
+            addedAgentIds.add(agent.agentId());
             addParticipantInternal(conversation.getId(), agent.agentId(),
                     ImParticipantType.AGENT, ImParticipantRole.BOT, agent.name());
         }
+        if (ImConversationType.GROUP.equals(type)) {
+            // Every public avatar of the initial members joins automatically.
+            SuperAgentDirectorySpi directory = requireDirectory();
+            for (ChatAgentIdentity agent : directory.listPublicByOwners(memberIds)) {
+                if (addedAgentIds.add(agent.agentId())) {
+                    addParticipantInternal(conversation.getId(), agent.agentId(),
+                            ImParticipantType.AGENT, ImParticipantRole.BOT, agent.name(), true);
+                }
+            }
+        }
+        bootstrapConversation(conversation, userId, type);
         publishToMembersAfterCommit(conversation.getId(), ImStreamEvent.builder()
                 .type(ImStreamEventType.CONVERSATION_CREATED)
                 .conversationId(conversation.getId())
@@ -308,6 +326,8 @@ public class ImConversationServiceImpl implements ImConversationService {
 
             List<ImParticipant> members = membersByConversation.getOrDefault(conversation.getId(), List.of());
             summary.setParticipantCount(members.size());
+            summary.setMyRole(roleOf(members, userId));
+            summary.setAllowMemberInvite(allowMemberInvite(conversation));
             ConversationDisplay display = resolveDisplay(conversation, userId, members, identities);
             summary.setDisplayName(display.displayName());
             summary.setAvatar(display.avatar());
@@ -473,12 +493,12 @@ public class ImConversationServiceImpl implements ImConversationService {
     @Transactional
     public ParticipantVO addParticipant(Long conversationId, AddParticipantDTO dto) {
         Long userId = currentUserId();
-        requireConversation(conversationId);
-        assertAdmin(conversationId, userId);
+        ImConversation conversation = requireConversation(conversationId);
         String type = dto.getParticipantType().toUpperCase();
         if (!ImParticipantType.USER.equals(type) && !ImParticipantType.AGENT.equals(type)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "participantType must be USER or AGENT");
         }
+        assertCanAddParticipant(conversation, userId, type);
         String displayName = dto.getDisplayName();
         if (ImParticipantType.AGENT.equals(type)) {
             SuperAgentDirectorySpi directory = requireDirectory();
@@ -491,6 +511,14 @@ public class ImConversationServiceImpl implements ImConversationService {
         String role = dto.getRole() == null ? ImParticipantRole.MEMBER : dto.getRole().toUpperCase();
         ImParticipant participant = addParticipantInternal(conversationId, dto.getParticipantId(),
                 type, role, displayName);
+        if (ImParticipantType.USER.equals(type)) {
+            // A new member brings their public avatar catalogue with them.
+            for (ChatAgentIdentity identity : requireDirectory()
+                    .listPublicByOwners(List.of(dto.getParticipantId()))) {
+                addParticipantInternal(conversationId, identity.agentId(),
+                        ImParticipantType.AGENT, ImParticipantRole.BOT, identity.name(), true);
+            }
+        }
         publishToMembersAfterCommit(conversationId, ImStreamEvent.builder()
                 .type(ImStreamEventType.PARTICIPANT_CHANGED)
                 .conversationId(conversationId)
@@ -503,7 +531,8 @@ public class ImConversationServiceImpl implements ImConversationService {
     @Transactional
     public void removeParticipant(Long conversationId, Long participantId) {
         requireConversation(conversationId);
-        assertAdmin(conversationId, currentUserId());
+        Long callerId = currentUserId();
+        assertAdmin(conversationId, callerId);
         ImParticipant participant = systemRead(() -> participantMapper.selectOne(Wrappers.<ImParticipant>lambdaQuery()
                 .eq(ImParticipant::getConversationId, conversationId)
                 .eq(ImParticipant::getParticipantId, participantId)
@@ -514,12 +543,104 @@ public class ImConversationServiceImpl implements ImConversationService {
         if (ImParticipantRole.OWNER.equals(participant.getRole())) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "owner cannot be removed");
         }
+        if (ImParticipantRole.ADMIN.equals(participant.getRole())) {
+            // Admins may promote/demote each other, but only the owner may remove an admin.
+            assertOwner(conversationId, callerId);
+        }
+        if (ImParticipantType.USER.equals(participant.getParticipantType())) {
+            // Auto-added public avatars follow the member out of the group.
+            List<ChatAgentIdentity> publicAvatars = requireDirectory()
+                    .listPublicByOwners(List.of(participantId));
+            List<Long> avatarIds = publicAvatars.stream()
+                    .map(ChatAgentIdentity::agentId).filter(Objects::nonNull).toList();
+            if (!avatarIds.isEmpty()) {
+                List<ImParticipant> autoAvatars = systemRead(() -> participantMapper.selectList(
+                        Wrappers.<ImParticipant>lambdaQuery()
+                                .eq(ImParticipant::getConversationId, conversationId)
+                                .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)
+                                .eq(ImParticipant::getAutoAdded, true)
+                                .in(ImParticipant::getParticipantId, avatarIds)));
+                for (ImParticipant avatar : autoAvatars) {
+                    participantMapper.deleteById(avatar.getId());
+                }
+            }
+        }
         participantMapper.deleteById(participant.getId());
         publishToMembersAfterCommit(conversationId, ImStreamEvent.builder()
                 .type(ImStreamEventType.PARTICIPANT_CHANGED)
                 .conversationId(conversationId)
                 .timestamp(System.currentTimeMillis())
                 .build());
+    }
+
+    @Override
+    @Transactional
+    public ParticipantVO updateParticipantRole(Long conversationId, Long participantId, String role) {
+        requireConversation(conversationId);
+        assertAdmin(conversationId, currentUserId());
+        String nextRole = role == null ? "" : role.toUpperCase();
+        if (!ImParticipantRole.ADMIN.equals(nextRole) && !ImParticipantRole.MEMBER.equals(nextRole)) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "role must be ADMIN or MEMBER");
+        }
+        ImParticipant participant = systemRead(() -> participantMapper.selectOne(Wrappers.<ImParticipant>lambdaQuery()
+                .eq(ImParticipant::getConversationId, conversationId)
+                .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
+                .eq(ImParticipant::getParticipantId, participantId)
+                .last("LIMIT 1")));
+        if (participant == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "participant not found");
+        }
+        if (ImParticipantRole.OWNER.equals(participant.getRole())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "owner role cannot be changed; transfer ownership instead");
+        }
+        participant.setRole(nextRole);
+        participantMapper.updateById(participant);
+        publishToMembersAfterCommit(conversationId, ImStreamEvent.builder()
+                .type(ImStreamEventType.PARTICIPANT_CHANGED)
+                .conversationId(conversationId)
+                .timestamp(System.currentTimeMillis())
+                .build());
+        return toParticipantVO(participant, identitiesOf(List.of(participant)));
+    }
+
+    @Override
+    @Transactional
+    public ConversationVO transferOwner(Long conversationId, Long newOwnerUserId) {
+        ImConversation conversation = requireConversation(conversationId);
+        Long callerId = currentUserId();
+        assertOwner(conversationId, callerId);
+        if (newOwnerUserId == null || newOwnerUserId.equals(callerId)) {
+            return toVO(conversation, callerId);
+        }
+        ImParticipant target = systemRead(() -> participantMapper.selectOne(
+                Wrappers.<ImParticipant>lambdaQuery()
+                        .eq(ImParticipant::getConversationId, conversationId)
+                        .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
+                        .eq(ImParticipant::getParticipantId, newOwnerUserId)
+                        .last("LIMIT 1")));
+        if (target == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "target user is not a group member");
+        }
+        ImParticipant oldOwner = systemRead(() -> participantMapper.selectOne(
+                Wrappers.<ImParticipant>lambdaQuery()
+                        .eq(ImParticipant::getConversationId, conversationId)
+                        .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
+                        .eq(ImParticipant::getParticipantId, callerId)
+                        .last("LIMIT 1")));
+        if (oldOwner != null) {
+            oldOwner.setRole(ImParticipantRole.ADMIN);
+            participantMapper.updateById(oldOwner);
+        }
+        target.setRole(ImParticipantRole.OWNER);
+        participantMapper.updateById(target);
+        conversation.setOwnerUserId(newOwnerUserId);
+        conversationMapper.updateById(conversation);
+        publishToMembersAfterCommit(conversationId, ImStreamEvent.builder()
+                .type(ImStreamEventType.PARTICIPANT_CHANGED)
+                .conversationId(conversationId)
+                .timestamp(System.currentTimeMillis())
+                .build());
+        return toVO(conversation, callerId);
     }
 
     @Override
@@ -579,13 +700,25 @@ public class ImConversationServiceImpl implements ImConversationService {
         if (conversation.getGateConfig() == null || conversation.getGateConfig().isBlank()) {
             ImGateConfig config = new ImGateConfig();
             config.setTrigger(ImGateConfig.TRIGGER_MENTION);
+            config.setAllowMemberInvite(true);
             return config;
         }
         try {
-            return JsonUtils.parse(conversation.getGateConfig(), ImGateConfig.class);
+            ImGateConfig config = JsonUtils.parse(conversation.getGateConfig(), ImGateConfig.class);
+            if (config == null) {
+                config = new ImGateConfig();
+            }
+            if (config.getTrigger() == null) {
+                config.setTrigger(ImGateConfig.TRIGGER_MENTION);
+            }
+            if (config.getAllowMemberInvite() == null) {
+                config.setAllowMemberInvite(true);
+            }
+            return config;
         } catch (Exception e) {
             ImGateConfig config = new ImGateConfig();
             config.setTrigger(ImGateConfig.TRIGGER_MENTION);
+            config.setAllowMemberInvite(true);
             return config;
         }
     }
@@ -601,12 +734,29 @@ public class ImConversationServiceImpl implements ImConversationService {
                 && !ImGateConfig.TRIGGER_ALL.equals(trigger)) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "invalid trigger");
         }
-        ImGateConfig normalized = new ImGateConfig();
+        ImGateConfig normalized = getGateConfig(conversationId);
         normalized.setTrigger(trigger);
+        if (config != null && config.getAllowMemberInvite() != null) {
+            normalized.setAllowMemberInvite(config.getAllowMemberInvite());
+        } else if (normalized.getAllowMemberInvite() == null) {
+            normalized.setAllowMemberInvite(true);
+        }
         ImConversation conversation = requireConversation(conversationId);
         conversation.setGateConfig(JsonUtils.toJson(normalized));
         conversationMapper.updateById(conversation);
         return normalized;
+    }
+
+    @Override
+    public ImGateConfig updateInvitePolicy(Long conversationId, boolean allowMemberInvite) {
+        requireConversation(conversationId);
+        assertAdmin(conversationId, currentUserId());
+        ImGateConfig config = getGateConfig(conversationId);
+        config.setAllowMemberInvite(allowMemberInvite);
+        ImConversation conversation = requireConversation(conversationId);
+        conversation.setGateConfig(JsonUtils.toJson(config));
+        conversationMapper.updateById(conversation);
+        return config;
     }
 
     @Override
@@ -660,6 +810,7 @@ public class ImConversationServiceImpl implements ImConversationService {
         addParticipantInternal(conversation.getId(), agent.agentId(), ImParticipantType.AGENT,
                 ImParticipantRole.BOT, agent.name());
 
+        bootstrapConversation(conversation, userId, ImConversationType.DM);
         publishToMembersAfterCommit(conversation.getId(), ImStreamEvent.builder()
                 .type(ImStreamEventType.CONVERSATION_CREATED)
                 .conversationId(conversation.getId())
@@ -747,8 +898,30 @@ public class ImConversationServiceImpl implements ImConversationService {
         return directory;
     }
 
+    /** Creates the thread (and group-router session for GROUP) at conversation creation time. */
+    private void bootstrapConversation(ImConversation conversation, Long creatorUserId, String type) {
+        GroupChatBootstrapSpi bootstrap = groupChatBootstrapProvider.getIfAvailable();
+        if (bootstrap == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "group chat bootstrap is unavailable");
+        }
+        String username = AuthContext.getUsername();
+        GroupChatBootstrapSpi.GroupChatBootstrapResult result = bootstrap.bootstrap(
+                new GroupChatBootstrapSpi.GroupChatBootstrapCommand(
+                        conversation.getId(), type, conversation.getTitle(), conversation.getPurpose(),
+                        creatorUserId, username, TenantScopeHolder.currentTenantId()));
+        conversation.setThreadId(result.threadId());
+        conversationMapper.updateById(conversation);
+    }
+
     private ImParticipant addParticipantInternal(Long conversationId, Long participantId,
                                                  String participantType, String role, String displayName) {
+        return addParticipantInternal(conversationId, participantId, participantType, role, displayName, false);
+    }
+
+    private ImParticipant addParticipantInternal(Long conversationId, Long participantId,
+                                                 String participantType, String role, String displayName,
+                                                 boolean autoAdded) {
         ImParticipant existing = systemRead(() -> participantMapper.selectOne(Wrappers.<ImParticipant>lambdaQuery()
                 .eq(ImParticipant::getConversationId, conversationId)
                 .eq(ImParticipant::getParticipantType, participantType)
@@ -764,6 +937,7 @@ public class ImConversationServiceImpl implements ImConversationService {
         participant.setRole(role);
         participant.setDisplayName(displayName);
         participant.setMuted(false);
+        participant.setAutoAdded(autoAdded);
         participant.setJoinedAt(LocalDateTime.now());
         try {
             participantMapper.insert(participant);
@@ -820,6 +994,8 @@ public class ImConversationServiceImpl implements ImConversationService {
         vo.setParticipants(participants.stream()
                 .map(participant -> toParticipantVO(participant, identities))
                 .toList());
+        vo.setMyRole(roleOf(participants, userId));
+        vo.setAllowMemberInvite(allowMemberInvite(conversation));
         ConversationDisplay display = resolveDisplay(conversation, userId, participants, identities);
         vo.setDisplayName(display.displayName());
         vo.setAvatar(display.avatar());
@@ -1002,6 +1178,7 @@ public class ImConversationServiceImpl implements ImConversationService {
             }
         }
         vo.setMuted(participant.getMuted());
+        vo.setAutoAdded(Boolean.TRUE.equals(participant.getAutoAdded()));
         vo.setJoinedAt(participant.getJoinedAt() == null ? null
                 : participant.getJoinedAt().format(DTF));
         return vo;
@@ -1154,6 +1331,72 @@ public class ImConversationServiceImpl implements ImConversationService {
                 || (!ImParticipantRole.OWNER.equals(participant.getRole())
                 && !ImParticipantRole.ADMIN.equals(participant.getRole()))) {
             throw new BizException(CommonErrorCode.FORBIDDEN);
+        }
+    }
+
+    private void assertOwner(Long conversationId, Long userId) {
+        if (AuthContext.isSuperAdmin()) {
+            return;
+        }
+        ImParticipant participant = systemRead(() -> participantMapper.selectOne(Wrappers.<ImParticipant>lambdaQuery()
+                .eq(ImParticipant::getConversationId, conversationId)
+                .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
+                .eq(ImParticipant::getParticipantId, userId)
+                .last("LIMIT 1")));
+        if (participant == null || !ImParticipantRole.OWNER.equals(participant.getRole())) {
+            throw new BizException(CommonErrorCode.FORBIDDEN);
+        }
+    }
+
+    /** Admins may add users and avatars; members may add users only when the invite switch is on. */
+    private void assertCanAddParticipant(ImConversation conversation, Long userId, String type) {
+        if (AuthContext.isSuperAdmin()) {
+            return;
+        }
+        ImParticipant participant = systemRead(() -> participantMapper.selectOne(Wrappers.<ImParticipant>lambdaQuery()
+                .eq(ImParticipant::getConversationId, conversation.getId())
+                .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
+                .eq(ImParticipant::getParticipantId, userId)
+                .last("LIMIT 1")));
+        if (participant == null) {
+            throw new BizException(CommonErrorCode.FORBIDDEN);
+        }
+        if (ImParticipantRole.OWNER.equals(participant.getRole())
+                || ImParticipantRole.ADMIN.equals(participant.getRole())) {
+            return;
+        }
+        if (ImParticipantRole.MEMBER.equals(participant.getRole())
+                && ImParticipantType.USER.equals(type)
+                && allowMemberInvite(conversation)) {
+            return;
+        }
+        throw new BizException(CommonErrorCode.FORBIDDEN);
+    }
+
+    private static String roleOf(List<ImParticipant> participants, Long userId) {
+        if (participants == null || userId == null) {
+            return null;
+        }
+        for (ImParticipant participant : participants) {
+            if (ImParticipantType.USER.equals(participant.getParticipantType())
+                    && userId.equals(participant.getParticipantId())) {
+                return participant.getRole();
+            }
+        }
+        return null;
+    }
+
+    /** Missing legacy field means the switch is on. */
+    private static boolean allowMemberInvite(ImConversation conversation) {        if (conversation == null || conversation.getGateConfig() == null
+                || conversation.getGateConfig().isBlank()) {
+            return true;
+        }
+        try {
+            ImGateConfig config = JsonUtils.parse(conversation.getGateConfig(), ImGateConfig.class);
+            return config == null || config.getAllowMemberInvite() == null
+                    || config.getAllowMemberInvite();
+        } catch (Exception e) {
+            return true;
         }
     }
 

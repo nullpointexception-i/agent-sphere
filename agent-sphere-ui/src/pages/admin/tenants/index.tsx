@@ -7,6 +7,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Select,
   Space,
   Table,
   Tag,
@@ -29,6 +30,7 @@ interface TenantItem {
   status: string;
   remark?: string;
   manageable?: boolean;
+  groupRouterModelRouteId?: number | null;
 }
 
 interface TenantTreeNode {
@@ -94,6 +96,8 @@ export default function AdminTenants() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TenantItem | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [routes, setRoutes] = useState<any[]>([]);
   const [currentVisibility, setCurrentVisibility] = useState<
     'SELF_ONLY' | 'TENANT' | 'TENANT_SUBTREE' | null
   >(null);
@@ -154,13 +158,26 @@ export default function AdminTenants() {
     // Do not hard-code the platform tenant id: a tenant administrator only has
     // their own subtree in the list, so the platform tenant option may not exist.
     const defaultParent = tenants.find((tenant) => tenant.status === 'ACTIVE');
-    form.setFieldsValue({ pid: defaultParent?.id, sortOrder: 0 });
+    form.setFieldsValue({
+      pid: defaultParent?.id,
+      sortOrder: 0,
+      defaultModel: {
+        providerCompany: 'openai',
+        maxInputTokens: 128000,
+        maxOutputTokens: 4096,
+        supportsAttachment: false,
+      },
+    });
     setOpen(true);
   };
 
   const openEdit = (tenant: TenantItem) => {
     setEditing(tenant);
     form.setFieldsValue(tenant);
+    agentApi.routes
+      .listAll()
+      .then((rows: any[]) => setRoutes(Array.isArray(rows) ? rows : []))
+      .catch(() => setRoutes([]));
     setOpen(true);
   };
 
@@ -186,6 +203,53 @@ export default function AdminTenants() {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const testModel = async () => {
+    const model = form.getFieldValue('defaultModel') || {};
+    if (
+      !model.providerCompany ||
+      !model.baseUrl ||
+      !model.apiKeyValue ||
+      !model.modelName
+    ) {
+      message.warning(
+        loc(
+          'pages.admin.tenants.modelIncomplete',
+          'Provider, base URL, API key and model name are required',
+        ),
+      );
+      return;
+    }
+    setTesting(true);
+    try {
+      const res = await agentApi.admin.tenants.testModel({
+        company: model.providerCompany,
+        baseUrl: model.baseUrl,
+        apiKey: model.apiKeyValue,
+        modelName: model.modelName,
+      });
+      if (res?.ok) {
+        message.success(
+          loc('pages.admin.tenants.modelTestOk', 'Connection succeeded') +
+            (res.latencyMs ? ` · ${res.latencyMs}ms` : ''),
+        );
+      } else {
+        message.error(
+          res?.message ||
+            loc('pages.admin.tenants.modelTestFailed', 'Connection failed'),
+        );
+      }
+    } catch (error: any) {
+      if (!error?.errorFields) {
+        message.error(
+          error?.message ||
+            loc('pages.admin.tenants.modelTestFailed', 'Connection failed'),
+        );
+      }
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -365,6 +429,110 @@ export default function AdminTenants() {
           >
             <Input.TextArea maxLength={500} />
           </Form.Item>
+          {editing ? (
+            <Form.Item
+              name="groupRouterModelRouteId"
+              label={loc(
+                'pages.admin.tenants.groupRouterRoute',
+                'Group Router model route',
+              )}
+            >
+              <Select
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                options={routes.map((route) => ({
+                  value: route.id,
+                  label: `${route.modelName || route.modelName} (#${route.id})`,
+                }))}
+              />
+            </Form.Item>
+          ) : (
+            <>
+              <div
+                style={{
+                  margin: '8px 0 12px',
+                  fontWeight: 600,
+                  color: '#1677ff',
+                }}
+              >
+                {loc('pages.admin.tenants.defaultModel', 'Default model')}
+              </div>
+              <Form.Item
+                name={['defaultModel', 'providerName']}
+                label={loc('pages.admin.tenants.providerName', 'Provider name')}
+              >
+                <Input maxLength={64} />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'providerCompany']}
+                label={loc(
+                  'pages.admin.tenants.providerCompany',
+                  'Provider company',
+                )}
+                rules={[{ required: true }]}
+              >
+                <Input maxLength={64} placeholder="openai / qwen / deepseek" />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'baseUrl']}
+                label={loc('pages.admin.tenants.baseUrl', 'Base URL')}
+                rules={[{ required: true }]}
+              >
+                <Input maxLength={500} />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'providerConfig']}
+                label={loc(
+                  'pages.admin.tenants.providerConfig',
+                  'Provider config (JSON)',
+                )}
+              >
+                <Input.TextArea rows={2} maxLength={5000} />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'apiKeyName']}
+                label={loc('pages.admin.tenants.apiKeyName', 'API key name')}
+              >
+                <Input maxLength={255} />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'apiKeyValue']}
+                label={loc('pages.admin.tenants.apiKeyValue', 'API key')}
+                rules={[{ required: true }]}
+              >
+                <Input.Password maxLength={2000} autoComplete="new-password" />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'modelName']}
+                label={loc('pages.admin.tenants.modelName', 'Model name')}
+                rules={[{ required: true }]}
+              >
+                <Input maxLength={64} />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'maxInputTokens']}
+                label={loc(
+                  'pages.admin.tenants.maxInputTokens',
+                  'Max input tokens',
+                )}
+              >
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item
+                name={['defaultModel', 'maxOutputTokens']}
+                label={loc(
+                  'pages.admin.tenants.maxOutputTokens',
+                  'Max output tokens',
+                )}
+              >
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+              <Button onClick={testModel} loading={testing}>
+                {loc('pages.admin.tenants.testModel', 'Test connection')}
+              </Button>
+            </>
+          )}
         </Form>
       </Modal>
     </>

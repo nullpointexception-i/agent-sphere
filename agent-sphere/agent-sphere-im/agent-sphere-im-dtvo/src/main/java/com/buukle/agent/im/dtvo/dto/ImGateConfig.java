@@ -14,4 +14,7 @@ public class ImGateConfig implements Serializable {
 
     /** MENTION / RELEVANCE / ALL */
     private String trigger;
+
+    /** Whether ordinary members may invite users. Missing means true for backward compatibility. */
+    private Boolean allowMemberInvite;
 }

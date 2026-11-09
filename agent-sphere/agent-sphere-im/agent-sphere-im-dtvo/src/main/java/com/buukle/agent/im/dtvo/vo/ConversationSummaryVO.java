@@ -23,5 +23,9 @@ public class ConversationSummaryVO implements Serializable {
     private String displayName;
     private String avatar;
     private Boolean selfConversation;
+    /** Viewer's role in this conversation (OWNER / ADMIN / MEMBER / BOT). */
+    private String myRole;
+    /** Whether ordinary members may invite users. */
+    private Boolean allowMemberInvite;
     private MessageVO lastMessage;
 }

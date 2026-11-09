@@ -23,7 +23,7 @@ public class GroupRouterInvoker implements GroupRouterPort {
         if (request == null) {
             throw new IllegalArgumentException("group router request is required");
         }
-        return invoker.invoke(request.instanceId(), request.systemPrompt(),
+        return invoker.invoke(request.instanceId(), request.modelRouteId(), request.systemPrompt(),
                 request.userPrompt(), request.maxTokens(),
                 request.sessionId(), SessionType.GROUP_ROUTER, null, request.threadId(),
                 com.buukle.agent.runtime.kernel.model.invoke.LlmInteractionType.INTENT_CLASSIFICATION);

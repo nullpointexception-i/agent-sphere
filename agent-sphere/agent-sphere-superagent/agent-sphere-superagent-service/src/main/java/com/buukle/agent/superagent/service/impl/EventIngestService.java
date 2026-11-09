@@ -56,7 +56,12 @@ public class EventIngestService implements EventIngestPort {
         if (event == null || event.externalThreadId() == null || event.externalThreadId().isBlank()) {
             return IngestResult.rejected();
         }
-        AgentThread thread = findOrCreateThread(event);
+        AgentThread thread = findThread(event);
+        if (thread == null) {
+            log.warn("IM/channel event has no pre-created thread: channel={}, externalThreadId={}",
+                    event.channelType(), event.externalThreadId());
+            return IngestResult.rejected();
+        }
         Long seq = threadMapper.nextEventSeq(thread.getId());
         if (seq == null) {
             return IngestResult.rejected();
@@ -251,34 +256,12 @@ public class EventIngestService implements EventIngestPort {
         }
     }
 
-    private AgentThread findOrCreateThread(NormalizedEvent event) {
-        AgentThread thread = threadMapper.selectOne(Wrappers.<AgentThread>lambdaQuery()
+    private AgentThread findThread(NormalizedEvent event) {
+        return threadMapper.selectOne(Wrappers.<AgentThread>lambdaQuery()
                 .eq(AgentThread::getExternalThreadId, event.externalThreadId())
                 .eq(event.channelBindingId() != null, AgentThread::getChannelBindingId, event.channelBindingId())
                 .isNull(event.channelBindingId() == null, AgentThread::getChannelBindingId)
                 .last("LIMIT 1"));
-        if (thread != null) {
-            if (thread.getTitle() == null) {
-                String title = rawField(event.rawMeta(), "conversationTitle");
-                if (title != null) {
-                    thread.setTitle(title);
-                    threadMapper.updateById(thread);
-                }
-            }
-            return thread;
-        }
-        thread = new AgentThread();
-        thread.setExternalThreadId(event.externalThreadId());
-        thread.setChannelBindingId(event.channelBindingId());
-        thread.setKind(event.channelType());
-        thread.setTitle(rawField(event.rawMeta(), "conversationTitle"));
-        thread.setMeta(event.rawMeta());
-        thread.setEventSeq(0L);
-        thread.setState(AgentThreadState.OPEN);
-        thread.setActorType(ActorType.USER);
-        thread.setActorId(parseActorId(event.author()));
-        threadMapper.insert(thread);
-        return thread;
     }
 
     private static Long parseActorId(String value) {

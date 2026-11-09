@@ -5,6 +5,7 @@ import java.io.Serializable;
 /** Group message dispatch request. */
 public record GroupRouterRequest(
         Long instanceId,
+        Long modelRouteId,
         Long sessionId,
         Long threadId,
         String systemPrompt,

@@ -563,6 +563,11 @@ export const agentApi = {
         request<any[]>(`${BASE}/admin/tenants/user/${userId}`),
       create: (data: any) =>
         request<any>(`${BASE}/admin/tenants`, { method: 'POST', data }),
+      testModel: (data: any) =>
+        request<any>(`${BASE}/admin/tenants/test-model`, {
+          method: 'POST',
+          data,
+        }),
       update: (id: number, data: any) =>
         request<any>(`${BASE}/admin/tenants/${id}`, { method: 'PUT', data }),
       updateStatus: (id: number, status: string) =>

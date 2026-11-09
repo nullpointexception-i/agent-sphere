@@ -14,6 +14,7 @@ export interface ImParticipant {
   username?: string;
   avatar?: string;
   muted?: boolean;
+  autoAdded?: boolean;
   joinedAt?: string;
 }
 
@@ -34,6 +35,8 @@ export interface ImConversation {
   displayName?: string;
   avatar?: string;
   selfConversation?: boolean;
+  myRole?: string;
+  allowMemberInvite?: boolean;
   participantCount?: number;
   lastMessage?: ImMessage;
   pinnedMessage?: ImMessage;
@@ -127,6 +130,25 @@ export const imApi = {
     request<any>(`${BASE}/im/conversations/${id}/participants`, {
       method: 'POST',
       data,
+    }),
+  updateParticipantRole: (
+    id: number,
+    participantId: number,
+    role: string,
+  ) =>
+    request<any>(
+      `${BASE}/im/conversations/${id}/participants/${participantId}/role`,
+      { method: 'PUT', data: { role } },
+    ),
+  transferOwner: (id: number, userId: number) =>
+    request<any>(`${BASE}/im/conversations/${id}/owner`, {
+      method: 'PUT',
+      data: { userId },
+    }),
+  updateInvitePolicy: (id: number, allowMemberInvite: boolean) =>
+    request<any>(`${BASE}/im/conversations/${id}/invite-policy`, {
+      method: 'PATCH',
+      data: { allowMemberInvite },
     }),
   muteParticipant: (id: number, participantId: number, muted: boolean) =>
     request<void>(

@@ -15,6 +15,7 @@ public class ParticipantVO implements Serializable {
     private String username;
     private String avatar;
     private Boolean muted;
+    private Boolean autoAdded;
     private String joinedAt;
     /** External IdP provider code (for example bole); null for local users. */
     private String ssoProviderCode;
