@@ -153,7 +153,11 @@ public class SkillHubServiceImpl implements SkillHubService, SkillHubSpi {
     @Override
     public HubSkillVO getHub(Long hubId) {
         CapabilitySkillHub hub = requireVisibleHub(hubId);
-        return enrich(List.of(hub)).get(0);
+        HubSkillVO vo = enrich(List.of(hub)).get(0);
+        // The list deliberately omits the (potentially large) definition; the detail view needs it
+        // to render promptTemplate/parameters.
+        vo.setDefinition(hub.getDefinition());
+        return vo;
     }
 
     @Override

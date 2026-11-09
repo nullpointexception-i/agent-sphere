@@ -187,6 +187,19 @@ class SkillHubV2ServiceTest {
     }
 
     @Test
+    void getHub_returnsDefinitionForDetail() {
+        CapabilitySkillHub hub = hub(5L, 1, 1);
+        hub.setDefinition("{\"promptTemplate\":\"do it\"}");
+        given(hubMapper.selectById(5L)).willReturn(hub);
+        givenEmptyEnrichment();
+
+        HubSkillVO vo = service.getHub(5L);
+
+        assertEquals("{\"promptTemplate\":\"do it\"}", vo.getDefinition());
+        assertEquals("shared", vo.getName());
+    }
+
+    @Test
     void install_publisher_forbidden() {
         CapabilitySkillHub publisherHub = hub(5L, 4, 4);
         publisherHub.setPublisherUserId(7L);
