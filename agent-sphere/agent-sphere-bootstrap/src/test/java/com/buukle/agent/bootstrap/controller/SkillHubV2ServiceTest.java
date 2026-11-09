@@ -9,6 +9,7 @@ import com.buukle.agent.capability.skill.domain.CapabilitySkillFollow;
 import com.buukle.agent.capability.skill.domain.CapabilitySkillHub;
 import com.buukle.agent.capability.skill.dtvo.vo.HubSkillVO;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
+import com.buukle.agent.capability.skill.exception.CapabilitySkillErrorCode;
 import com.buukle.agent.capability.skill.repository.SkillFollowMapper;
 import com.buukle.agent.capability.skill.repository.SkillHubMapper;
 import com.buukle.agent.capability.skill.service.CapabilitySkillService;
@@ -16,6 +17,7 @@ import com.buukle.agent.capability.skill.service.converter.CapabilitySkillConver
 import com.buukle.agent.capability.skill.service.impl.SkillHubServiceImpl;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.exception.BizException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +30,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -105,6 +108,7 @@ class SkillHubV2ServiceTest {
         h.setInstallCount(0);
         h.setFollowCount(0);
         h.setCreatedBy("alice");
+        h.setPublisherUserId(99L);
         return h;
     }
 
@@ -180,6 +184,20 @@ class SkillHubV2ServiceTest {
         assertEquals("shared", vo.getName());
         // hub install counter
         verify(hubMapper).update(org.mockito.ArgumentMatchers.<CapabilitySkillHub>isNull(), any(Wrapper.class));
+    }
+
+    @Test
+    void install_publisher_forbidden() {
+        CapabilitySkillHub publisherHub = hub(5L, 4, 4);
+        publisherHub.setPublisherUserId(7L);
+        given(hubMapper.selectById(5L)).willReturn(publisherHub);
+
+        BizException error = assertThrows(BizException.class,
+                () -> service.install(5L, false));
+
+        assertEquals(CapabilitySkillErrorCode.SKILL_FORBIDDEN.getCode(),
+                error.getErrorCode());
+        verify(skillService, never()).save(any());
     }
 
     @Test

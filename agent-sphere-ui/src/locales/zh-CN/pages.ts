@@ -314,9 +314,9 @@ export default {
   'pages.capabilities.skill.visibility': '可见性',
   'pages.capabilities.skill.visibilityPublic': '公开',
   'pages.capabilities.skill.visibilityPrivate': '私有',
-  'pages.capabilities.skill.publish': '公开',
+  'pages.capabilities.skill.publish': '发布到 Hub',
   'pages.capabilities.skill.unpublish': '取消公开',
-  'pages.capabilities.skill.publishConfirm': '公开「{name}」到技能 Hub？',
+  'pages.capabilities.skill.publishConfirm': '发布「{name}」到技能 Hub？',
   'pages.capabilities.skill.unpublishConfirm':
     '取消公开「{name}」？已安装的副本不受影响。',
   'pages.capabilities.skill.install': '安装',

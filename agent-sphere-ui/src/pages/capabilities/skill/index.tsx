@@ -721,56 +721,58 @@ export default function SkillList() {
           />
           <Can code={PERM.capabilitySkillInstall}>
             {!record.mine && (
-              <Button
-                type="link"
-                size="small"
-                onClick={() => handleFollow(record)}
-              >
-                {record.followed
-                  ? intl.formatMessage({
-                      id: 'pages.capabilities.skill.unfollow',
-                      defaultMessage: 'Unfollow',
-                    })
-                  : intl.formatMessage({
-                      id: 'pages.capabilities.skill.follow',
-                      defaultMessage: 'Follow',
-                    })}
-              </Button>
+              <>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => handleFollow(record)}
+                >
+                  {record.followed
+                    ? intl.formatMessage({
+                        id: 'pages.capabilities.skill.unfollow',
+                        defaultMessage: 'Unfollow',
+                      })
+                    : intl.formatMessage({
+                        id: 'pages.capabilities.skill.follow',
+                        defaultMessage: 'Follow',
+                      })}
+                </Button>
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'install',
+                        label: intl.formatMessage({
+                          id: 'pages.capabilities.skill.install',
+                          defaultMessage: 'Install',
+                        }),
+                        onClick: () => handleInstallHub(record, false),
+                      },
+                      {
+                        key: 'install-auto',
+                        label: intl.formatMessage({
+                          id: 'pages.capabilities.skill.installAutoUpdate',
+                          defaultMessage: 'Install + auto-update',
+                        }),
+                        onClick: () => handleInstallHub(record, true),
+                      },
+                    ],
+                  }}
+                >
+                  <Button type="link" size="small">
+                    {record.installedSkillId
+                      ? intl.formatMessage({
+                          id: 'pages.capabilities.skill.reinstall',
+                          defaultMessage: 'Install again',
+                        })
+                      : intl.formatMessage({
+                          id: 'pages.capabilities.skill.install',
+                          defaultMessage: 'Install',
+                        })}
+                  </Button>
+                </Dropdown>
+              </>
             )}
-            <Dropdown
-              menu={{
-                items: [
-                  {
-                    key: 'install',
-                    label: intl.formatMessage({
-                      id: 'pages.capabilities.skill.install',
-                      defaultMessage: 'Install',
-                    }),
-                    onClick: () => handleInstallHub(record, false),
-                  },
-                  {
-                    key: 'install-auto',
-                    label: intl.formatMessage({
-                      id: 'pages.capabilities.skill.installAutoUpdate',
-                      defaultMessage: 'Install + auto-update',
-                    }),
-                    onClick: () => handleInstallHub(record, true),
-                  },
-                ],
-              }}
-            >
-              <Button type="link" size="small">
-                {record.installedSkillId
-                  ? intl.formatMessage({
-                      id: 'pages.capabilities.skill.reinstall',
-                      defaultMessage: 'Install again',
-                    })
-                  : intl.formatMessage({
-                      id: 'pages.capabilities.skill.install',
-                      defaultMessage: 'Install',
-                    })}
-              </Button>
-            </Dropdown>
           </Can>
         </>
       ),

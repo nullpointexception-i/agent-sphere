@@ -326,7 +326,7 @@ export default {
   'pages.capabilities.skill.visibility': 'Visibility',
   'pages.capabilities.skill.visibilityPublic': 'Public',
   'pages.capabilities.skill.visibilityPrivate': 'Private',
-  'pages.capabilities.skill.publish': 'Publish',
+  'pages.capabilities.skill.publish': 'Publish to Hub',
   'pages.capabilities.skill.unpublish': 'Unpublish',
   'pages.capabilities.skill.publishConfirm':
     'Publish "{name}" to the Skill Hub?',

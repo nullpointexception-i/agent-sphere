@@ -226,6 +226,10 @@ public class SkillHubServiceImpl implements SkillHubService, SkillHubSpi {
     @Transactional
     public SkillVO install(Long hubId, Boolean autoUpdate) {
         CapabilitySkillHub hub = requireVisibleHub(hubId);
+        if (isPublisher(hub)) {
+            throw new BizException(CapabilitySkillErrorCode.SKILL_FORBIDDEN,
+                    "Publisher cannot install their own hub skill");
+        }
         String operator = AuthContext.getUsername();
         String name = SkillCopyName.resolve(hub.getName(),
                 candidate -> countByName(candidate) > 0);
@@ -324,6 +328,20 @@ public class SkillHubServiceImpl implements SkillHubService, SkillHubSpi {
         return scope == null ? null : scope.currentTenantId();
     }
 
+    /** The publisher of a hub entry may not install a private copy of their own skill. */
+    private boolean isPublisher(CapabilitySkillHub hub) {
+        Long userId = AuthContext.getUserId();
+        if (hub.getPublisherUserId() != null && userId != null) {
+            return Objects.equals(userId, hub.getPublisherUserId());
+        }
+        String username = AuthContext.getUsername();
+        CapabilitySkill source = hub.getSourceSkillId() == null
+                ? null : skillService.getById(hub.getSourceSkillId());
+        return source != null
+                ? Objects.equals(username, source.getCreatedBy())
+                : Objects.equals(username, hub.getCreatedBy());
+    }
+
     private CapabilitySkillHub requireVisibleHub(Long hubId) {
         if (hubId == null) {
             throw new BizException(CapabilitySkillErrorCode.SKILL_NOT_FOUND);
@@ -403,9 +421,11 @@ public class SkillHubServiceImpl implements SkillHubService, SkillHubSpi {
             CapabilitySkill source = hub.getSourceSkillId() == null ? null
                     : sources.get(hub.getSourceSkillId());
             CapabilitySkill copy = installed.get(hub.getId());
-            boolean mine = source != null
-                    ? Objects.equals(username, source.getCreatedBy())
-                    : Objects.equals(username, hub.getCreatedBy());
+            boolean mine = (hub.getPublisherUserId() != null
+                    && Objects.equals(userId, hub.getPublisherUserId()))
+                    || (source != null
+                        ? Objects.equals(username, source.getCreatedBy())
+                        : Objects.equals(username, hub.getCreatedBy()));
             vo.setMine(mine);
             vo.setFollowed(followed.contains(hub.getId()));
             vo.setInstalledSkillId(copy == null ? null : copy.getId());
