@@ -41,21 +41,22 @@ export default function CapabilityEditDrawer({
   const [addingType, setAddingType] = useState<string | null>(null);
   const [allBuiltin, setAllBuiltin] = useState<any[]>([]);
   const [toRemoveIds, setToRemoveIds] = useState<Set<number>>(new Set());
+  const recordId = record?.id;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !recordId) return;
     setAddCaps([]);
     setToRemoveIds(new Set());
     setAddingType(null);
     agentApi.instanceCapabilities
-      .listFull(record.id)
+      .listFull(recordId)
       .then(setBoundCaps)
       .catch(() => setBoundCaps([]));
     agentApi.builtin
       .list()
       .then(setAllBuiltin)
       .catch(() => setAllBuiltin([]));
-  }, [open, record]);
+  }, [open, recordId]);
 
   const save = async () => {
     for (const id of toRemoveIds) {

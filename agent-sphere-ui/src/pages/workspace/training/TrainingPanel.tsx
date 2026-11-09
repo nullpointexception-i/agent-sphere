@@ -48,6 +48,17 @@ export function TrainingPanel({ agent, onExit }: Props) {
 
   const workerInstanceId =
     instances?.workerInstance?.id ?? session?.workerInstanceId;
+  const workerRecord = useMemo(
+    () =>
+      workerInstanceId
+        ? {
+            id: workerInstanceId,
+            name: `${agent.name} Worker`,
+            instanceRole: 'WORKER',
+          }
+        : null,
+    [workerInstanceId, agent.name],
+  );
 
   const load = async () => {
     setLoading(true);
@@ -253,13 +264,9 @@ export function TrainingPanel({ agent, onExit }: Props) {
         </div>
       )}
 
-      {workerInstanceId ? (
+      {workerRecord ? (
         <CapabilityEditDrawer
-          record={{
-            id: workerInstanceId,
-            name: `${agent.name} Worker`,
-            instanceRole: 'WORKER',
-          }}
+          record={workerRecord}
           open={capOpen}
           onClose={() => setCapOpen(false)}
           onSaved={() => void loadCapabilities(workerInstanceId)}
