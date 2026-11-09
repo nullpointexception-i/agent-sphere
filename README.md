@@ -2,6 +2,22 @@
 
 **English** | [Chinese](README.zh-CN.md)
 
+<p>
+  <img alt="Java 21" src="agent-sphere-readme/icons/java.svg" height="24" />
+  <img alt="Spring Boot 3.4" src="agent-sphere-readme/icons/spring-boot.svg" height="24" />
+  <img alt="PostgreSQL 16" src="agent-sphere-readme/icons/postgresql.svg" height="24" />
+  <img alt="Redis 7" src="agent-sphere-readme/icons/redis.svg" height="24" />
+</p>
+
+<p>
+  <img alt="React 19" src="agent-sphere-readme/icons/react.svg" height="24" />
+  <img alt="TypeScript" src="agent-sphere-readme/icons/typescript.svg" height="24" />
+  <img alt="Ant Design 6" src="agent-sphere-readme/icons/ant-design.svg" height="24" />
+  <img alt="Vite 6" src="agent-sphere-readme/icons/vite.svg" height="24" />
+  <img alt="Kubernetes k3s" src="agent-sphere-readme/icons/kubernetes.svg" height="24" />
+  <img alt="Chrome MV3" src="agent-sphere-readme/icons/chrome.svg" height="24" />
+</p>
+
 > 4A = **Business Architecture / Application Architecture / Technology Architecture / Data Architecture**
 
 ## Contents
@@ -450,3 +466,11 @@ magic values, enums, method size, layering, tests and runtime invariants.
 ## License
 
 See [LICENSE](LICENSE).
+
+---
+
+## Contact
+
+<img src="agent-sphere-readme/contact-wechat.jpg" alt="WeChat QR code" width="240" />
+
+Scan the QR code to add me on WeChat. 微信扫码添加好友。
