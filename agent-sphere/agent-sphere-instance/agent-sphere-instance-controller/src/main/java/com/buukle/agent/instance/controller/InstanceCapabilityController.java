@@ -10,6 +10,7 @@ import com.buukle.agent.capability.cli.dtvo.vo.CliVO;
 import com.buukle.agent.capability.cli.spi.CapabilityCliSpi;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
+import com.buukle.agent.capability.mcp.spi.McpHubSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
 import com.buukle.agent.capability.skill.spi.SkillHubSpi;
@@ -39,6 +40,7 @@ import java.util.stream.Collectors;
 public class InstanceCapabilityController extends BaseController {
     private final InstanceCapabilityService instanceCapabilityService;
     private final CapabilityMcpSpi capabilityMcpSpi;
+    private final McpHubSpi mcpHubSpi;
     private final CapabilitySkillSpi capabilitySkillSpi;
     private final SkillHubSpi skillHubSpi;
     private final CapabilityCliSpi capabilityCliSpi;
@@ -72,12 +74,14 @@ public class InstanceCapabilityController extends BaseController {
     public ResponseEntity<?> listFull(@RequestParam Long instanceId) {
         List<CapabilityVO> caps = instanceCapabilityService.getCapabilitiesByInstance(instanceId);
         List<Long> mcpIds = new ArrayList<>();
+        List<Long> mcpHubIds = new ArrayList<>();
         List<Long> skillIds = new ArrayList<>();
         List<Long> hubIds = new ArrayList<>();
         List<Long> cliIds = new ArrayList<>();
         for (CapabilityVO c : caps) {
             switch (c.getCapabilityType()) {
                 case "mcp" -> mcpIds.add(c.getCapabilityId());
+                case "mcp_hub" -> mcpHubIds.add(c.getCapabilityId());
                 case "skill" -> skillIds.add(c.getCapabilityId());
                 case "skill_hub" -> hubIds.add(c.getCapabilityId());
                 case "cli" -> cliIds.add(c.getCapabilityId());
@@ -86,6 +90,10 @@ public class InstanceCapabilityController extends BaseController {
         Map<Long, McpVO> mcpById = capabilityMcpSpi.listMcpsByIds(mcpIds).stream()
                 .collect(Collectors.toMap(McpVO::getId, Function.identity()));
         Map<Long, String> mcpNames = mcpById.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getName()));
+        Map<Long, McpVO> mcpHubById = mcpHubSpi.listHubMcpsByIds(mcpHubIds).stream()
+                .collect(Collectors.toMap(McpVO::getId, Function.identity()));
+        Map<Long, String> mcpHubNames = mcpHubById.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getName()));
         Map<Long, SkillVO> skillById = capabilitySkillSpi.listSkillsByIds(skillIds).stream()
                 .collect(Collectors.toMap(SkillVO::getId, Function.identity()));
@@ -109,6 +117,7 @@ public class InstanceCapabilityController extends BaseController {
             vo.setStatus(c.getStatus());
             String name = switch (c.getCapabilityType()) {
                 case "mcp" -> mcpNames.get(c.getCapabilityId());
+                case "mcp_hub" -> mcpHubNames.get(c.getCapabilityId());
                 case "skill" -> skillNames.get(c.getCapabilityId());
                 case "skill_hub" -> hubNames.get(c.getCapabilityId());
                 case "cli" -> cliNames.get(c.getCapabilityId());
@@ -131,6 +140,17 @@ public class InstanceCapabilityController extends BaseController {
                         vo.setAccessMode(m.getAccessMode());
                         vo.setSecurityLevel(m.getSecurityLevel());
                         vo.setApprovalScope(m.getApprovalScope());
+                    }
+                }
+                case "mcp_hub" -> {
+                    McpVO m = mcpHubById.get(c.getCapabilityId());
+                    if (m != null) {
+                        vo.setCompressEnabled(m.getCompressEnabled());
+                        vo.setAccessMode(m.getAccessMode());
+                        vo.setSecurityLevel(m.getSecurityLevel());
+                        vo.setApprovalScope(m.getApprovalScope());
+                        vo.setDescription(m.getDescription());
+                        vo.setStatus(m.getStatus());
                     }
                 }
                 case "cli" -> {

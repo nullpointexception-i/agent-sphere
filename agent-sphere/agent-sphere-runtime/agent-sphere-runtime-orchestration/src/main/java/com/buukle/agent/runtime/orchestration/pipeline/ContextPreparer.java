@@ -13,6 +13,7 @@ import com.buukle.agent.capability.cli.spi.CapabilityCliSpi;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpToolInfoVO;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.spi.CapabilityMcpSpi;
+import com.buukle.agent.capability.mcp.spi.McpHubSpi;
 import com.buukle.agent.capability.skill.dtvo.vo.SkillVO;
 import com.buukle.agent.capability.skill.spi.CapabilitySkillSpi;
 import com.buukle.agent.capability.skill.spi.SkillHubSpi;
@@ -50,6 +51,11 @@ import static com.buukle.agent.instance.dtvo.enums.InstanceCapabilityEnum.*;
 public class ContextPreparer {
 
     private static final String DEFAULT_EMPTY_SCHEMA = "{\"type\":\"object\",\"properties\":{}}";
+    /**
+     * Hub MCP ids share a sequence with local MCP ids in a tenant, so the LLM-facing tool name
+     * offsets hub ids to avoid collisions. Runtime capabilityType stays "mcp" for ToolExecutor.
+     */
+    private static final long MCP_HUB_ID_BASE = 1_000_000_000L;
     private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (clear, friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"confirm=yes/no; choice=provide 2-5 concise distinct options; input=free-form answer\"},\"multiple\":{\"type\":\"boolean\",\"description\":\"For type=choice: true when the user may select more than one option.\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Short display text shown to the user (max ~20 chars, a concise option phrase, NOT a full sentence, NOT placeholder like 'http://')\"},\"value\":{\"type\":\"string\",\"description\":\"Machine value sent back to the agent when the user picks this option\"},\"description\":{\"type\":\"string\",\"description\":\"Optional short explanation for the option\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"description\":\"2-5 concise, distinct choices (required when type=choice). No duplicates, no placeholder URLs, no full sentences.\"},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"}},\"required\":[\"title\",\"type\"]}";
 
     private static final String WAIT_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"ms\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":600000,\"description\":\"Milliseconds to wait (100-600000). The run suspends immediately and resumes automatically afterwards. Use it to give dynamic content time to appear or settle.\"}},\"required\":[\"ms\"],\"additionalProperties\":false}";
@@ -86,6 +92,7 @@ public class ContextPreparer {
             (long) BuiltinToolEnum.SKILL_MANAGE.getId());
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
+    private final McpHubSpi mcpHubSpi;
     private final CapabilitySkillSpi skillSpi;
     private final SkillHubSpi skillHubSpi;
     private final CapabilityCliSpi cliSpi;
@@ -154,6 +161,12 @@ public class ContextPreparer {
                 switch (cap.getCapabilityType()) {
                     case CAPABILITY_TYPE_MCP -> {
                         McpVO mcp = mcpSpi.getMcp(cap.getCapabilityId());
+                        if (mcp != null) result.add(buildFull(cap, mcp.getName(), mcp.getDescription(),
+                                mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig(), mcp.getToolDefinitions()));
+                    }
+                    case CAPABILITY_TYPE_MCP_HUB -> {
+                        // Followed hub MCP: read-only, always resolved from the current hub snapshot.
+                        McpVO mcp = mcpHubSpi.getHubMcp(cap.getCapabilityId());
                         if (mcp != null) result.add(buildFull(cap, mcp.getName(), mcp.getDescription(),
                                 mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig(), mcp.getToolDefinitions()));
                     }
@@ -261,6 +274,10 @@ public class ContextPreparer {
                     case CAPABILITY_TYPE_MCP -> {
                         McpVO mcp = mcpSpi.getMcp(cap.getCapabilityId());
                         if (mcp != null) resolveMcpTools(mcp, cap, result);
+                    }
+                    case CAPABILITY_TYPE_MCP_HUB -> {
+                        McpVO mcp = mcpHubSpi.getHubMcp(cap.getCapabilityId());
+                        if (mcp != null) resolveMcpHubTools(mcp, cap, result);
                     }
                     case CAPABILITY_TYPE_CLI -> {
                         CliVO cli = cliSpi.getCli(cap.getCapabilityId());
@@ -473,10 +490,23 @@ public class ContextPreparer {
     }
 
     void resolveMcpTools(McpVO mcp, CapabilityVO cap, List<RuntimeTool> result) {
-        String llmNamePrefix = LLM_PREFIX_MCP + mcp.getId() + "_";
+        resolveMcpTools(mcp, cap, result, mcp.getId(), cap.getCapabilityId(), false);
+    }
+
+    /** Hub MCPs use an offset id for the LLM tool name so they never collide with local MCP ids. */
+    private void resolveMcpHubTools(McpVO mcp, CapabilityVO cap, List<RuntimeTool> result) {
+        Long hubId = cap.getCapabilityId() != null ? cap.getCapabilityId() : mcp.getId();
+        resolveMcpTools(mcp, cap, result, MCP_HUB_ID_BASE + hubId, cap.getCapabilityId(), true);
+    }
+
+    private void resolveMcpTools(McpVO mcp, CapabilityVO cap, List<RuntimeTool> result,
+                                 Long llmId, Long capabilityId, boolean fromHub) {
+        String llmNamePrefix = LLM_PREFIX_MCP + llmId + "_";
 
         try {
-            List<McpToolInfoVO> tools = mcpSpi.listMcpTools(mcp.getId());
+            List<McpToolInfoVO> tools = fromHub
+                    ? mcpHubSpi.listHubTools(mcp.getId())
+                    : mcpSpi.listMcpTools(mcp.getId());
             if (tools != null && !tools.isEmpty()) {
                 for (int i = 0; i < tools.size(); i++) {
                     McpToolInfoVO tool = tools.get(i);
@@ -488,9 +518,9 @@ public class ContextPreparer {
                     binding.put(ExecBindingKeys.MCP_NATIVE_TOOL_NAME, tool.getName());
                     result.add(RuntimeTool.builder()
                             .capabilityType(CAPABILITY_TYPE_MCP)
-                            .capabilityId(cap.getCapabilityId())
+                            .capabilityId(capabilityId)
                             .llmToolName(llmName)
-                            .toolRef(ToolRefs.mcp(cap.getCapabilityId(), tool.getName()))
+                            .toolRef(ToolRefs.mcp(capabilityId, tool.getName()))
                             .displayName(tool.getName())
                             .description(tool.getDescription() != null ? tool.getDescription() : "")
                             .parametersSchemaJson(tool.getInputSchema())
@@ -515,9 +545,9 @@ public class ContextPreparer {
         binding.put(ExecBindingKeys.MCP_NATIVE_TOOL_NAME, mcp.getName());
         result.add(RuntimeTool.builder()
                 .capabilityType(CAPABILITY_TYPE_MCP)
-                .capabilityId(cap.getCapabilityId())
+                .capabilityId(capabilityId)
                 .llmToolName(llmName)
-                .toolRef(ToolRefs.mcp(cap.getCapabilityId(), mcp.getName()))
+                .toolRef(ToolRefs.mcp(capabilityId, mcp.getName()))
                 .displayName(mcp.getName())
                 .description(mcp.getDescription() != null ? mcp.getDescription() : "")
                 .parametersSchemaJson(DEFAULT_EMPTY_SCHEMA)

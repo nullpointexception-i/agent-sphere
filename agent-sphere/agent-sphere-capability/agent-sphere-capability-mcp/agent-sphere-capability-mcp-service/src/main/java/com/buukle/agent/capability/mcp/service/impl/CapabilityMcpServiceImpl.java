@@ -1,14 +1,17 @@
 package com.buukle.agent.capability.mcp.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.capability.mcp.domain.CapabilityMcp;
+import com.buukle.agent.capability.mcp.domain.CapabilityMcpHub;
 import com.buukle.agent.capability.mcp.dtvo.dto.CreateMcpDTO;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpTestResultVO;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpToolInfoVO;
 import com.buukle.agent.capability.mcp.dtvo.vo.McpVO;
 import com.buukle.agent.capability.mcp.exception.CapabilityMcpErrorCode;
+import com.buukle.agent.capability.mcp.repository.McpHubMapper;
 import com.buukle.agent.capability.mcp.repository.McpMapper;
 import com.buukle.agent.capability.mcp.service.CapabilityMcpService;
 import com.buukle.agent.capability.mcp.service.converter.CapabilityMcpConverter;
@@ -16,6 +19,7 @@ import com.buukle.agent.capability.mcp.service.mcp.McpCallContext;
 import com.buukle.agent.capability.mcp.service.mcp.McpProtocolConstants;
 import com.buukle.agent.capability.mcp.service.mcp.McpTransportClient;
 import com.buukle.agent.capability.mcp.service.mcp.McpTransportFactory;
+import com.buukle.agent.capability.mcp.spi.McpHubSpi;
 import com.buukle.agent.common.constant.HttpHeaders;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.common.exception.BizException;
@@ -25,7 +29,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -40,14 +46,20 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
 
     private final CapabilityMcpConverter capabilityMcpConverter;
     private final McpTransportFactory mcpTransportFactory;
+    private final McpHubMapper mcpHubMapper;
+    private final McpHubSpi mcpHubSpi;
     private final Duration directReadTimeout;
     private final Duration directConnectTimeout;
 
     public CapabilityMcpServiceImpl(CapabilityMcpConverter capabilityMcpConverter,
                                     McpTransportFactory mcpTransportFactory,
+                                    McpHubMapper mcpHubMapper,
+                                    McpHubSpi mcpHubSpi,
                                     AgentRuntimeProperties properties) {
         this.capabilityMcpConverter = capabilityMcpConverter;
         this.mcpTransportFactory = mcpTransportFactory;
+        this.mcpHubMapper = mcpHubMapper;
+        this.mcpHubSpi = mcpHubSpi;
         this.directReadTimeout = properties.getMcp().getDirectReadTimeout();
         this.directConnectTimeout = properties.getMcp().getDirectConnectTimeout();
     }
@@ -77,7 +89,9 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                 .orderByDesc(CapabilityMcp::getCreatedAt)
                 .list();
         log.warn("listMcps result: {} rows", list.size());
-        return list.stream().map(capabilityMcpConverter::toVO).toList();
+        List<McpVO> vos = list.stream().map(capabilityMcpConverter::toVO).toList();
+        attachHubState(list, vos);
+        return vos;
     }
 
     @Override
@@ -88,7 +102,41 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                 .le(endTime != null, CapabilityMcp::getCreatedAt, endTime)
                 .orderByDesc(CapabilityMcp::getCreatedAt)
                 .page(new Page<>(page, size));
-        return p.convert(capabilityMcpConverter::toVO);
+        List<McpVO> vos = p.getRecords().stream().map(capabilityMcpConverter::toVO).toList();
+        attachHubState(p.getRecords(), vos);
+        Page<McpVO> result = new Page<>(p.getCurrent(), p.getSize(), p.getTotal());
+        result.setRecords(vos);
+        return result;
+    }
+
+    /** One extra query for the page: publish state shown by the "my MCP" badges. */
+    private void attachHubState(List<CapabilityMcp> mcps, List<McpVO> vos) {
+        if (mcps == null || mcps.isEmpty() || vos == null || vos.isEmpty()) {
+            return;
+        }
+        List<Long> ids = mcps.stream().map(CapabilityMcp::getId).toList();
+        Map<Long, CapabilityMcpHub> hubs = new HashMap<>();
+        if (mcpHubMapper != null) {
+            mcpHubMapper.selectList(Wrappers.<CapabilityMcpHub>lambdaQuery()
+                            .in(CapabilityMcpHub::getSourceMcpId, ids))
+                    .forEach(h -> hubs.putIfAbsent(h.getSourceMcpId(), h));
+        }
+        for (int i = 0; i < mcps.size(); i++) {
+            McpVO vo = vos.get(i);
+            CapabilityMcpHub hub = hubs.get(mcps.get(i).getId());
+            if (hub == null) {
+                vo.setHasUnpublished(false);
+                continue;
+            }
+            vo.setHubMcpId(hub.getId());
+            vo.setHubVersion(hub.getVersion());
+            vo.setHasUnpublished(hasUnpublished(mcps.get(i), hub));
+        }
+    }
+
+    private static boolean hasUnpublished(CapabilityMcp mcp, CapabilityMcpHub hub) {
+        return mcp.getUpdatedAt() != null && hub.getUpdatedAt() != null
+                && mcp.getUpdatedAt().isAfter(hub.getUpdatedAt());
     }
 
     @Override
@@ -193,6 +241,10 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
         McpCallContext callContext = McpCallContext.ofTaskCredential(taskMcpCredential);
 
         if (mcp == null) {
+            McpVO hub = mcpHubSpi == null ? null : mcpHubSpi.findHubByServerUrl(serverUrl);
+            if (hub != null) {
+                return executeHubTool(hub, toolName, argumentsJson, callContext);
+            }
             log.warn(DIRECT_HTTP_HINT, serverUrl);
             return executeDirectHttp(serverUrl, toolName, argumentsJson, callContext);
         }
@@ -213,6 +265,28 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
         } catch (Exception e) {
             log.error("MCP tool call failed via client, falling back to direct HTTP: {}", e.getMessage());
             return executeDirectHttp(serverUrl, toolName, argumentsJson, callContext);
+        }
+    }
+
+    /**
+     * Executes a followed hub MCP with the hub's shared auth config. The negative cache key keeps
+     * hub transports separate from local MCP transports.
+     */
+    private String executeHubTool(McpVO hub, String toolName, String argumentsJson,
+                                  McpCallContext callContext) {
+        try {
+            McpTransportClient client = mcpTransportFactory.getOrCreateClient(
+                    -hub.getId(), hub.getServerUrl(), hub.getServerType(), hub.getAuthConfig());
+            return client.callTool(toolName, argumentsJson, callContext);
+        } catch (BizException e) {
+            if (CapabilityMcpErrorCode.MCP_AUTH_CONFIG_INVALID.getCode().equals(e.getErrorCode())) {
+                throw e;
+            }
+            log.error("MCP hub tool call failed via client, falling back to direct HTTP: {}", e.getMessage());
+            return executeDirectHttp(hub.getServerUrl(), toolName, argumentsJson, callContext);
+        } catch (Exception e) {
+            log.error("MCP hub tool call failed via client, falling back to direct HTTP: {}", e.getMessage());
+            return executeDirectHttp(hub.getServerUrl(), toolName, argumentsJson, callContext);
         }
     }
 

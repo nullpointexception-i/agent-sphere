@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -127,7 +128,10 @@ class ParallelSearchExampleTest {
         // Only persistence is replaced. All DTO conversion, selection, HTTP and results are real.
         ConcurrentHashMap<Long, CapabilityMcp> saved = new ConcurrentHashMap<>();
         CapabilityMcpServiceImpl service = spy(new CapabilityMcpServiceImpl(
-                new CapabilityMcpConverter(), factory, new AgentRuntimeProperties()));
+                new CapabilityMcpConverter(), factory,
+                mock(com.buukle.agent.capability.mcp.repository.McpHubMapper.class),
+                mock(com.buukle.agent.capability.mcp.spi.McpHubSpi.class),
+                new AgentRuntimeProperties()));
         doAnswer(call -> {
             CapabilityMcp capability = call.getArgument(0);
             capability.setId(MCP_ID);
@@ -135,7 +139,8 @@ class ParallelSearchExampleTest {
             return true;
         }).when(service).save(any(CapabilityMcp.class));
         doAnswer(call -> saved.get(call.getArgument(0))).when(service).getById(MCP_ID);
-        MockMvc api = MockMvcBuilders.standaloneSetup(new CapabilityMcpController(service)).build();
+        MockMvc api = MockMvcBuilders.standaloneSetup(new CapabilityMcpController(service,
+                mock(com.buukle.agent.capability.mcp.service.McpHubService.class))).build();
         ObjectNode config = (ObjectNode) JSON.readTree(Files.readString(EXAMPLE));
         config.put("serverUrl", endpoint);
         api.perform(post(API).contentType(MediaType.APPLICATION_JSON).content(config.toString()))

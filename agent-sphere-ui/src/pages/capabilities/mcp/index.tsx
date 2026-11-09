@@ -23,7 +23,9 @@ import {
   Select,
   Space,
   Switch,
+  Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type dayjs from 'dayjs';
@@ -72,6 +74,12 @@ export default function McpList() {
     result?: string;
     error?: string;
   }>({ mcpId: 0, toolName: '', args: '{}', open: false, loading: false });
+  const [activeTab, setActiveTab] = useState<'mine' | 'hub' | 'followed'>(
+    'mine',
+  );
+  const [hubKeyword, setHubKeyword] = useState('');
+  const hubActionRef = useRef<any>(null);
+  const followedActionRef = useRef<any>(null);
 
   useEffect(() => {
     const calc = () => setTableScrollY(window.innerHeight - 280);
@@ -209,6 +217,63 @@ export default function McpList() {
       ),
     },
     {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.mcp.hubStatus',
+        defaultMessage: 'MCP Hub',
+      }),
+      key: 'hubState',
+      width: 190,
+      render: (_: any, record: any) => {
+        if (record.originVersion != null && record.hubMcpId) {
+          return (
+            <Tag color="blue">
+              {intl.formatMessage(
+                {
+                  id: 'pages.capabilities.mcp.installedFromHub',
+                  defaultMessage: 'Installed · hub v{version}',
+                },
+                { version: record.originVersion ?? 1 },
+              )}
+            </Tag>
+          );
+        }
+        if (record.hasUnpublished) {
+          return (
+            <Tag color="orange">
+              {intl.formatMessage(
+                {
+                  id: 'pages.capabilities.mcp.hubOutdated',
+                  defaultMessage: 'Hub v{version} · local updates pending',
+                },
+                { version: record.hubVersion ?? 1 },
+              )}
+            </Tag>
+          );
+        }
+        if (record.hubMcpId) {
+          return (
+            <Tag color="green">
+              {intl.formatMessage(
+                {
+                  id: 'pages.capabilities.mcp.hubPublished',
+                  defaultMessage: 'Hub v{version}',
+                },
+                { version: record.hubVersion ?? 1 },
+              )}
+            </Tag>
+          );
+        }
+        return (
+          <Tag>
+            {intl.formatMessage({
+              id: 'pages.capabilities.mcp.hubNotPublished',
+              defaultMessage: 'Not published',
+            })}
+          </Tag>
+        );
+      },
+    },
+    {
       title: intl.formatMessage({ id: 'pages.table.created' }),
       dataIndex: 'createdAt',
       key: 'createdAt',
@@ -239,6 +304,23 @@ export default function McpList() {
                 setModalOpen(true);
               }}
             />
+          </Can>
+          <Can code={PERM.capabilityMcpCreate}>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handlePublishToHub(record)}
+            >
+              {record.hubMcpId
+                ? intl.formatMessage({
+                    id: 'pages.capabilities.mcp.updateHub',
+                    defaultMessage: 'Update Hub',
+                  })
+                : intl.formatMessage({
+                    id: 'pages.capabilities.mcp.publishToHub',
+                    defaultMessage: '发布到 Hub',
+                  })}
+            </Button>
           </Can>
           <Can code={PERM.capabilityMcpDelete}>
             <Button
@@ -303,6 +385,271 @@ export default function McpList() {
     },
   ];
 
+  const handlePublishToHub = (record: any) => {
+    const published = Boolean(record.hubMcpId);
+    modal.confirm({
+      title: intl.formatMessage(
+        {
+          id: published
+            ? 'pages.capabilities.mcp.updateHubConfirm'
+            : 'pages.capabilities.mcp.publishConfirm',
+          defaultMessage: published
+            ? 'Update "{name}" in the tenant MCP Hub?'
+            : 'Publish "{name}" to the tenant MCP Hub?',
+        },
+        { name: record.name },
+      ),
+      content: intl.formatMessage({
+        id: 'pages.capabilities.mcp.publishHint',
+        defaultMessage:
+          'Every publish increments the hub version. The MCP credentials (authConfig) are shared: users of this tenant and its child tenants can use them to call the server. Make sure no non-shareable secret is included.',
+      }),
+      okText: intl.formatMessage({
+        id: 'pages.modal.ok',
+        defaultMessage: 'Confirm',
+      }),
+      onOk: async () => {
+        const res = await agentApi.mcp.publishToHub(record.id);
+        message.success(
+          intl.formatMessage(
+            {
+              id: 'pages.capabilities.mcp.publishSuccess',
+              defaultMessage: 'Published as hub v{version}',
+            },
+            { version: res?.version ?? 1 },
+          ),
+        );
+        actionRef.current?.reload();
+      },
+    });
+  };
+
+  const handleFollow = async (record: any) => {
+    try {
+      if (record.followed) {
+        await agentApi.mcp.unfollow(record.id);
+        message.success(
+          intl.formatMessage({
+            id: 'pages.capabilities.mcp.unfollowSuccess',
+            defaultMessage: 'Unfollowed',
+          }),
+        );
+      } else {
+        await agentApi.mcp.follow(record.id);
+        message.success(
+          intl.formatMessage({
+            id: 'pages.capabilities.mcp.followSuccess',
+            defaultMessage: 'Following the latest hub version',
+          }),
+        );
+      }
+      hubActionRef.current?.reload();
+      followedActionRef.current?.reload();
+    } catch {
+      message.error(intl.formatMessage({ id: 'pages.chat.saveFailed' }));
+    }
+  };
+
+  const handleInstallHub = (record: any, autoUpdate: boolean) => {
+    modal.confirm({
+      title: intl.formatMessage(
+        {
+          id: 'pages.capabilities.mcp.installConfirm',
+          defaultMessage: 'Install "{name}" to my MCPs?',
+        },
+        { name: record.name },
+      ),
+      content: intl.formatMessage({
+        id: autoUpdate
+          ? 'pages.capabilities.mcp.installAutoUpdateContent'
+          : 'pages.capabilities.mcp.installConfirmContent',
+        defaultMessage: autoUpdate
+          ? 'A private copy is created and kept in sync with the hub automatically.'
+          : 'A private copy is created at the current hub version and can be edited independently.',
+      }),
+      okText: intl.formatMessage({
+        id: 'pages.modal.ok',
+        defaultMessage: 'Confirm',
+      }),
+      onOk: async () => {
+        await agentApi.mcp.installHub(record.id, autoUpdate);
+        message.success(
+          intl.formatMessage({
+            id: 'pages.capabilities.mcp.installSuccess',
+            defaultMessage: 'Installed to my MCPs',
+          }),
+        );
+        hubActionRef.current?.reload();
+        actionRef.current?.reload();
+      },
+    });
+  };
+
+  const hubColumns = [
+    {
+      title: intl.formatMessage({ id: 'pages.table.id' }),
+      dataIndex: 'id',
+      key: 'id',
+      width: 60,
+    },
+    {
+      title: intl.formatMessage({ id: 'pages.table.name' }),
+      dataIndex: 'name',
+      key: 'name',
+      width: 200,
+      ellipsis: true,
+    },
+    {
+      title: intl.formatMessage({ id: 'pages.table.description' }),
+      dataIndex: 'description',
+      key: 'description',
+      width: 300,
+      ellipsis: { showTitle: false },
+      render: (_: any, record: any) => (
+        <Tooltip placement="topLeft" title={record.description || ''}>
+          <span>{record.description || '-'}</span>
+        </Tooltip>
+      ),
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.mcp.publisher',
+        defaultMessage: 'Publisher',
+      }),
+      dataIndex: 'publisherName',
+      key: 'publisherName',
+      width: 120,
+      ellipsis: true,
+      render: (v: any) => v || '-',
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.accessMode',
+        defaultMessage: 'Policy',
+      }),
+      key: 'policy',
+      width: 220,
+      render: (_: any, r: any) => (
+        <Space size={4} wrap>
+          {r.compressEnabled ? <Tag color="blue">compress</Tag> : null}
+          <Tag>{r.accessMode || 'READ_WRITE'}</Tag>
+          <Tag color={r.securityLevel === 'L2' ? 'orange' : 'default'}>
+            {r.securityLevel || 'L1'}
+            {r.securityLevel === 'L2' ? ` / ${r.approvalScope || 'ONCE'}` : ''}
+          </Tag>
+        </Space>
+      ),
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.mcp.hubVersion',
+        defaultMessage: 'Hub version',
+      }),
+      dataIndex: 'version',
+      key: 'version',
+      width: 100,
+      render: (v: any) => `v${v ?? 1}`,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.mcp.installCount',
+        defaultMessage: 'Installs',
+      }),
+      dataIndex: 'installCount',
+      key: 'installCount',
+      width: 90,
+      render: (v: any) => v ?? 0,
+    },
+    {
+      title: intl.formatMessage({
+        id: 'pages.capabilities.mcp.followCount',
+        defaultMessage: 'Followers',
+      }),
+      dataIndex: 'followCount',
+      key: 'followCount',
+      width: 90,
+      render: (v: any) => v ?? 0,
+    },
+    {
+      title: intl.formatMessage({ id: 'pages.table.actions' }),
+      key: 'actions',
+      width: 260,
+      fixed: 'right' as const,
+      render: (_: any, record: any) => (
+        <>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => {
+              agentApi.mcp
+                .hubDetail(record.id)
+                .then((detail: any) => setViewRecord({ ...record, ...detail }))
+                .catch(() => setViewRecord(record));
+            }}
+          />
+          {!record.mine && (
+            <>
+              <Can code={PERM.capabilityMcpTest}>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => handleFollow(record)}
+                >
+                  {record.followed
+                    ? intl.formatMessage({
+                        id: 'pages.capabilities.mcp.unfollow',
+                        defaultMessage: 'Unfollow',
+                      })
+                    : intl.formatMessage({
+                        id: 'pages.capabilities.mcp.follow',
+                        defaultMessage: 'Follow',
+                      })}
+                </Button>
+              </Can>
+              <Can code={PERM.capabilityMcpCreate}>
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'install',
+                        label: intl.formatMessage({
+                          id: 'pages.capabilities.mcp.install',
+                          defaultMessage: 'Install',
+                        }),
+                        onClick: () => handleInstallHub(record, false),
+                      },
+                      {
+                        key: 'install-auto',
+                        label: intl.formatMessage({
+                          id: 'pages.capabilities.mcp.installAutoUpdate',
+                          defaultMessage: 'Install + auto-update',
+                        }),
+                        onClick: () => handleInstallHub(record, true),
+                      },
+                    ],
+                  }}
+                >
+                  <Button type="link" size="small">
+                    {record.installedMcpId
+                      ? intl.formatMessage({
+                          id: 'pages.capabilities.mcp.reinstall',
+                          defaultMessage: 'Install again',
+                        })
+                      : intl.formatMessage({
+                          id: 'pages.capabilities.mcp.install',
+                          defaultMessage: 'Install',
+                        })}
+                  </Button>
+                </Dropdown>
+              </Can>
+            </>
+          )}
+        </>
+      ),
+    },
+  ];
+
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
@@ -357,111 +704,227 @@ export default function McpList() {
 
   return (
     <PageContainer title={false} breadcrumbRender={false}>
-      <ProTable
-        actionRef={actionRef}
-        rowKey="id"
-        search={false}
-        options={false}
-        scroll={{ y: tableScrollY }}
-        pagination={{
-          defaultPageSize: DEFAULT_PAGE_SIZE,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          pageSizeOptions: [5, 10, 20, 50],
-          style: { justifyContent: 'flex-start' },
-        }}
-        params={{
-          keyword: keyword || undefined,
-          startTime: formatParamDate(timeRange[0]),
-          endTime: formatParamDate(timeRange[1]?.endOf('day')),
-        }}
-        request={async (p) => {
-          const res = await agentApi.mcp.list({
-            keyword: p.keyword,
-            startTime: p.startTime,
-            endTime: p.endTime,
-            page: p.current,
-            size: p.pageSize,
-          });
-          return {
-            data: res.records || res,
-            total: res.total ?? 0,
-            success: true,
-          };
-        }}
-        columns={columns}
-        rowSelection={{
-          selectedRowKeys,
-          onChange: (keys: any) => setSelectedRowKeys(keys),
-        }}
-        toolBarRender={() => [
-          selectedRowKeys.length > 0 && (
-            <Button
-              key="batchDelete"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={handleBatchDelete}
-            >
-              {intl.formatMessage(
-                { id: 'pages.batchDelete', defaultMessage: 'Delete ({count})' },
-                { count: selectedRowKeys.length },
-              )}
-            </Button>
-          ),
-          <Input.Search
-            key="search"
-            placeholder={intl.formatMessage({ id: 'pages.search.placeholder' })}
-            style={{ width: 200 }}
-            onSearch={(value) => {
-              setKeyword(value);
-            }}
-            allowClear
-            onClear={() => setKeyword('')}
-            maxLength={255}
-          />,
-          <DatePicker.RangePicker
-            key="date"
-            value={
-              timeRange[0] && timeRange[1]
-                ? (timeRange as [dayjs.Dayjs, dayjs.Dayjs])
-                : undefined
-            }
-            onChange={(dates) => {
-              if (dates?.[0] && dates[1]) {
-                const diff = dates[1].diff(dates[0], 'day');
-                if (diff > 90) {
-                  setTimeRange([dates[0], dates[0].add(90, 'day')]);
-                  message.warning(
-                    intl.formatMessage({ id: 'pages.dateRange.warning' }),
-                  );
-                  return;
-                }
-              }
-              setTimeRange(dates || [null, null]);
-            }}
-          />,
-          <Button
-            key="clear"
-            icon={<ClearOutlined />}
-            onClick={() => {
-              setKeyword('');
-              setTimeRange([null, null]);
-              actionRef.current?.reload();
-            }}
-          />,
-          <Can key="new" code={PERM.capabilityMcpCreate}>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditing(null);
-                form.resetFields();
-                setModalOpen(true);
-              }}
-            />
-          </Can>,
+      <Tabs
+        activeKey={activeTab}
+        onChange={(k) => setActiveTab(k as 'mine' | 'hub' | 'followed')}
+        items={[
+          {
+            key: 'mine',
+            label: intl.formatMessage({
+              id: 'pages.capabilities.mcp.tabs.mine',
+              defaultMessage: 'My MCPs',
+            }),
+          },
+          {
+            key: 'hub',
+            label: intl.formatMessage({
+              id: 'pages.capabilities.mcp.tabs.hub',
+              defaultMessage: 'MCP Hub',
+            }),
+          },
+          {
+            key: 'followed',
+            label: intl.formatMessage({
+              id: 'pages.capabilities.mcp.tabs.followed',
+              defaultMessage: 'Followed',
+            }),
+          },
         ]}
       />
+      {activeTab === 'hub' ? (
+        <>
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={intl.formatMessage({
+              id: 'pages.capabilities.mcp.sharedCredentialWarning',
+              defaultMessage:
+                'Credentials are shared with this tenant and its child tenants',
+            })}
+            description={intl.formatMessage({
+              id: 'pages.capabilities.mcp.sharedCredentialWarningDesc',
+              defaultMessage:
+                'Hub MCPs use the publisher authConfig. Do not publish a server whose credential should remain private.',
+            })}
+          />
+          <ProTable
+            key="hub"
+            actionRef={hubActionRef}
+            rowKey="id"
+            search={false}
+            options={false}
+            scroll={{ x: 1300, y: tableScrollY }}
+            pagination={{
+              defaultPageSize: DEFAULT_PAGE_SIZE,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              pageSizeOptions: [5, 10, 20, 50],
+              style: { justifyContent: 'flex-start' },
+            }}
+            params={{ keyword: hubKeyword || undefined }}
+            request={async (p) => {
+              const res = await agentApi.mcp.hub({
+                keyword: p.keyword,
+                page: p.current,
+                size: p.pageSize,
+              });
+              return {
+                data: res.records || res,
+                total: res.total ?? 0,
+                success: true,
+              };
+            }}
+            columns={hubColumns}
+            toolBarRender={() => [
+              <Input.Search
+                key="search"
+                placeholder={intl.formatMessage({
+                  id: 'pages.search.placeholder',
+                })}
+                style={{ width: 200 }}
+                onSearch={(value) => setHubKeyword(value)}
+                allowClear
+                onClear={() => setHubKeyword('')}
+                maxLength={255}
+              />,
+            ]}
+          />
+        </>
+      ) : activeTab === 'followed' ? (
+        <ProTable
+          key="followed"
+          actionRef={followedActionRef}
+          rowKey="id"
+          search={false}
+          options={false}
+          scroll={{ x: 1300, y: tableScrollY }}
+          pagination={{
+            defaultPageSize: DEFAULT_PAGE_SIZE,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: [5, 10, 20, 50],
+            style: { justifyContent: 'flex-start' },
+          }}
+          request={async () => {
+            const rows = await agentApi.mcp.followed();
+            const list = Array.isArray(rows) ? rows : [];
+            return { data: list, total: list.length, success: true };
+          }}
+          columns={hubColumns}
+        />
+      ) : (
+        <ProTable
+          actionRef={actionRef}
+          rowKey="id"
+          search={false}
+          options={false}
+          scroll={{ y: tableScrollY }}
+          pagination={{
+            defaultPageSize: DEFAULT_PAGE_SIZE,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            pageSizeOptions: [5, 10, 20, 50],
+            style: { justifyContent: 'flex-start' },
+          }}
+          params={{
+            keyword: keyword || undefined,
+            startTime: formatParamDate(timeRange[0]),
+            endTime: formatParamDate(timeRange[1]?.endOf('day')),
+          }}
+          request={async (p) => {
+            const res = await agentApi.mcp.list({
+              keyword: p.keyword,
+              startTime: p.startTime,
+              endTime: p.endTime,
+              page: p.current,
+              size: p.pageSize,
+            });
+            return {
+              data: res.records || res,
+              total: res.total ?? 0,
+              success: true,
+            };
+          }}
+          columns={columns}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (keys: any) => setSelectedRowKeys(keys),
+          }}
+          toolBarRender={() => [
+            selectedRowKeys.length > 0 && (
+              <Button
+                key="batchDelete"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={handleBatchDelete}
+              >
+                {intl.formatMessage(
+                  {
+                    id: 'pages.batchDelete',
+                    defaultMessage: 'Delete ({count})',
+                  },
+                  { count: selectedRowKeys.length },
+                )}
+              </Button>
+            ),
+            <Input.Search
+              key="search"
+              placeholder={intl.formatMessage({
+                id: 'pages.search.placeholder',
+              })}
+              style={{ width: 200 }}
+              onSearch={(value) => {
+                setKeyword(value);
+              }}
+              allowClear
+              onClear={() => setKeyword('')}
+              maxLength={255}
+            />,
+            <DatePicker.RangePicker
+              key="date"
+              value={
+                timeRange[0] && timeRange[1]
+                  ? (timeRange as [dayjs.Dayjs, dayjs.Dayjs])
+                  : undefined
+              }
+              onChange={(dates) => {
+                if (dates?.[0] && dates[1]) {
+                  const diff = dates[1].diff(dates[0], 'day');
+                  if (diff > 90) {
+                    setTimeRange([dates[0], dates[0].add(90, 'day')]);
+                    message.warning(
+                      intl.formatMessage({ id: 'pages.dateRange.warning' }),
+                    );
+                    return;
+                  }
+                }
+                setTimeRange(dates || [null, null]);
+              }}
+            />,
+            <Button
+              key="clear"
+              icon={<ClearOutlined />}
+              onClick={() => {
+                setKeyword('');
+                setTimeRange([null, null]);
+                actionRef.current?.reload();
+              }}
+            />,
+            <Can key="new" code={PERM.capabilityMcpCreate}>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setEditing(null);
+                  form.resetFields();
+                  setModalOpen(true);
+                }}
+              />
+            </Can>,
+          ]}
+        />
+      )}
       <Modal
         title={
           editing

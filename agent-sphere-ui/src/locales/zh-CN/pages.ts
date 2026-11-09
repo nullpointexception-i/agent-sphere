@@ -371,6 +371,43 @@ export default {
   'pages.capabilities.mcp.authConfig': '认证 Header (JSON)',
   'pages.capabilities.mcp.authConfigPlaceholder':
     '{{"Authorization":"Bearer <token>"}}',
+  'pages.capabilities.mcp.tabs.mine': '我的 MCP',
+  'pages.capabilities.mcp.tabs.hub': 'MCP Hub',
+  'pages.capabilities.mcp.tabs.followed': '我关注的',
+  'pages.capabilities.mcp.hubStatus': 'MCP Hub',
+  'pages.capabilities.mcp.installedFromHub': '已安装 · Hub v{version}',
+  'pages.capabilities.mcp.hubOutdated': 'Hub v{version} · 本地有未发布更新',
+  'pages.capabilities.mcp.hubPublished': 'Hub v{version}',
+  'pages.capabilities.mcp.hubNotPublished': '未发布',
+  'pages.capabilities.mcp.publisher': '发布者',
+  'pages.capabilities.mcp.hubVersion': 'Hub 版本',
+  'pages.capabilities.mcp.installCount': '安装数',
+  'pages.capabilities.mcp.followCount': '关注数',
+  'pages.capabilities.mcp.follow': '关注',
+  'pages.capabilities.mcp.unfollow': '取消关注',
+  'pages.capabilities.mcp.followSuccess': '已关注最新 Hub 版本',
+  'pages.capabilities.mcp.unfollowSuccess': '已取消关注',
+  'pages.capabilities.mcp.install': '安装',
+  'pages.capabilities.mcp.installAutoUpdate': '安装并自动更新',
+  'pages.capabilities.mcp.reinstall': '重新安装',
+  'pages.capabilities.mcp.installConfirm': '安装「{name}」到我的 MCP？',
+  'pages.capabilities.mcp.installConfirmContent':
+    '将按当前 Hub 版本创建私有副本，可独立编辑。',
+  'pages.capabilities.mcp.installAutoUpdateContent':
+    '将创建私有副本，并随 Hub 自动同步到最新版本。',
+  'pages.capabilities.mcp.installSuccess': '已安装到我的 MCP',
+  'pages.capabilities.mcp.publishToHub': '发布到 Hub',
+  'pages.capabilities.mcp.updateHub': '更新 Hub',
+  'pages.capabilities.mcp.publishConfirm': '发布「{name}」到 MCP Hub？',
+  'pages.capabilities.mcp.updateHubConfirm':
+    '更新「{name}」在 MCP Hub 中的内容？',
+  'pages.capabilities.mcp.publishHint':
+    '每次发布都会递增 Hub 版本。MCP 认证配置（authConfig）为共享凭据：本租户及其子租户的用户都可以使用它调用该服务。请确认其中不包含不可共享的密钥。',
+  'pages.capabilities.mcp.publishSuccess': '已发布为 Hub v{version}',
+  'pages.capabilities.mcp.sharedCredentialWarning':
+    '凭据会共享给本租户及子租户',
+  'pages.capabilities.mcp.sharedCredentialWarningDesc':
+    'Hub MCP 使用发布者的 authConfig。请勿发布凭据需要保密的 MCP 服务。',
   'pages.capabilities.compressEnabled': '压缩工具结果',
   'pages.capabilities.accessMode': '读写属性',
   'pages.capabilities.accessMode.read': '读',
@@ -799,6 +836,7 @@ export default {
   'pages.instances.currentCapabilities': '当前已绑定',
   'pages.instances.autoInclude': '内置',
   'pages.instances.followedHubSkills': '关注的 Hub 技能',
+  'pages.instances.followedHubMcps': '关注的 Hub MCP',
   'pages.instances.followedHubHint':
     '只读引用：运行时始终使用租户 Hub 的最新版本，不会复制到你的技能列表。',
   'pages.instances.selected': '已选',

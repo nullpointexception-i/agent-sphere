@@ -53,6 +53,8 @@ class AgentConversationWorkflowTest {
     @Mock
     CapabilityMcpService capabilityMcpService;
     @Mock
+    com.buukle.agent.capability.mcp.service.McpHubService mcpHubService;
+    @Mock
     InstanceService instanceService;
     @Mock
     SessionService sessionService;
@@ -65,7 +67,7 @@ class AgentConversationWorkflowTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
                 new RouteController(routeService),
-                new CapabilityMcpController(capabilityMcpService),
+                new CapabilityMcpController(capabilityMcpService, mcpHubService),
                 new InstanceController(instanceService),
                 new SessionController(sessionService, runSpi),
                 new ChatRuntimeController(chatRuntimeService)

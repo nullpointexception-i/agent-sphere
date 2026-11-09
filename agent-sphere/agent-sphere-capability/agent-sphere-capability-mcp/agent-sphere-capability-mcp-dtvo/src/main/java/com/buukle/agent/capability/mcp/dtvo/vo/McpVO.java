@@ -18,6 +18,12 @@ public class McpVO implements Serializable {
     private String accessMode;
     private String securityLevel;
     private String approvalScope;
+    private Long hubMcpId;
+    private Integer hubVersion;
+    private Boolean hasUnpublished;
+    private Boolean autoUpdate;
+    private Integer originVersion;
+    private String syncedAt;
     private String createdAt;
     private String createdBy;
     private String updatedBy;

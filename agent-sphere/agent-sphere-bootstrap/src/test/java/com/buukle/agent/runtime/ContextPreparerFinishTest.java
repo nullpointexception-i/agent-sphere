@@ -59,7 +59,9 @@ class ContextPreparerFinishTest {
         when(builtin.listBuiltinTools()).thenReturn(List.of());
 
         ContextPreparer preparer = new ContextPreparer(capabilitySpi,
-                mock(CapabilityMcpSpi.class), mock(CapabilitySkillSpi.class),
+                mock(CapabilityMcpSpi.class),
+                mock(com.buukle.agent.capability.mcp.spi.McpHubSpi.class),
+                mock(CapabilitySkillSpi.class),
                 mock(com.buukle.agent.capability.skill.spi.SkillHubSpi.class),
                 mock(CapabilityCliSpi.class), builtin, properties);
 

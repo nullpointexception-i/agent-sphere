@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -32,12 +33,16 @@ class CapabilityMcpServerUrlTest {
     @Mock
     McpTransportFactory mcpTransportFactory;
 
+    @Mock
+    com.buukle.agent.capability.mcp.repository.McpHubMapper mcpHubMapper;
+
     CapabilityMcpServiceImpl service;
 
     @BeforeEach
     void setUp() throws Exception {
         service = new CapabilityMcpServiceImpl(
-                new CapabilityMcpConverter(), mcpTransportFactory,
+                new CapabilityMcpConverter(), mcpTransportFactory, mcpHubMapper,
+                mock(com.buukle.agent.capability.mcp.spi.McpHubSpi.class),
                 new com.buukle.agent.common.config.AgentRuntimeProperties());
         java.lang.reflect.Field f =
                 com.baomidou.mybatisplus.extension.repository.CrudRepository.class.getDeclaredField("baseMapper");

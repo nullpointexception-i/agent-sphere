@@ -24,11 +24,12 @@ interface Props {
   onExit: () => void;
 }
 
-const CAP_TYPES = ['skill', 'mcp', 'cli', 'builtin'] as const;
+const CAP_TYPES = ['skill', 'mcp', 'mcp_hub', 'cli', 'builtin'] as const;
 
 const CAP_LABELS: Record<string, string> = {
   skill: 'Skills',
   mcp: 'MCP',
+  mcp_hub: 'MCP Hub',
   cli: 'CLI',
   builtin: 'Builtin',
 };

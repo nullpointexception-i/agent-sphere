@@ -172,7 +172,9 @@ class ParallelSearchAgentLoopTest {
                 assertTrue(((AbstractWrapper<?, ?, ?>) query).getParamNameValuePairs().containsValue(endpoint));
                 return List.of(saved.get());
             });
-            CapabilityMcpServiceImpl mcp = new CapabilityMcpServiceImpl(new CapabilityMcpConverter(), factory, properties);
+            CapabilityMcpServiceImpl mcp = new CapabilityMcpServiceImpl(new CapabilityMcpConverter(), factory,
+                    mock(com.buukle.agent.capability.mcp.repository.McpHubMapper.class),
+                    mock(com.buukle.agent.capability.mcp.spi.McpHubSpi.class), properties);
             ReflectionTestUtils.setField(mcp, "baseMapper", mcpMapper);
             ReflectionTestUtils.setField(mcp, "entityClass", CapabilityMcp.class);
             ReflectionTestUtils.setField(mcp, "mapperClass", McpMapper.class);
@@ -218,7 +220,9 @@ class ParallelSearchAgentLoopTest {
             RunVO run = new RunVO();
             run.setId(RUN_ID);
             run.setSessionId(SESSION_ID);
-            ContextPreparer preparer = new ContextPreparer(bindings, mcp, mock(CapabilitySkillSpi.class),
+            ContextPreparer preparer = new ContextPreparer(bindings, mcp,
+                    mock(com.buukle.agent.capability.mcp.spi.McpHubSpi.class),
+                    mock(CapabilitySkillSpi.class),
                     mock(com.buukle.agent.capability.skill.spi.SkillHubSpi.class),
                     mock(CapabilityCliSpi.class), builtin, properties);
             KernelContext ctx = preparer.prepare(run, ValidationResult.builder()

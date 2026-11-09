@@ -30,6 +30,10 @@ public class CapabilityMcpConverter {
         vo.setAccessMode(mcp.getAccessMode());
         vo.setSecurityLevel(mcp.getSecurityLevel());
         vo.setApprovalScope(mcp.getApprovalScope());
+        vo.setHubMcpId(mcp.getHubMcpId());
+        vo.setAutoUpdate(Boolean.TRUE.equals(mcp.getAutoUpdate()));
+        vo.setOriginVersion(mcp.getOriginVersion());
+        vo.setSyncedAt(mcp.getSyncedAt() != null ? mcp.getSyncedAt().format(DTF) : null);
         vo.setCreatedAt(mcp.getCreatedAt() != null ? mcp.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(mcp.getCreatedBy());
         vo.setUpdatedBy(mcp.getUpdatedBy());

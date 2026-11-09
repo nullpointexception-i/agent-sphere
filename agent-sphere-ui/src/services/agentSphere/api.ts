@@ -430,6 +430,27 @@ export const agentApi = {
         method: 'POST',
         data: args || {},
       }),
+    /** Publish (or re-publish) a local MCP into its tenant hub; version always increments. */
+    publishToHub: (id: number) =>
+      request<any>(`${BASE}/capability/mcp/${id}/publish`, { method: 'POST' }),
+    hub: (params: { keyword?: string; page?: number; size?: number }) =>
+      request<any>(`${BASE}/capability/mcp/hub`, { params }),
+    hubDetail: (hubId: number) =>
+      request<any>(`${BASE}/capability/mcp/hub/${hubId}`),
+    followed: () => request<any[]>(`${BASE}/capability/mcp/hub/followed`),
+    follow: (hubId: number) =>
+      request<any>(`${BASE}/capability/mcp/hub/${hubId}/follow`, {
+        method: 'POST',
+      }),
+    unfollow: (hubId: number) =>
+      request<any>(`${BASE}/capability/mcp/hub/${hubId}/follow`, {
+        method: 'DELETE',
+      }),
+    installHub: (hubId: number, autoUpdate: boolean) =>
+      request<any>(`${BASE}/capability/mcp/hub/${hubId}/install`, {
+        method: 'POST',
+        data: { autoUpdate },
+      }),
   },
 
   skill: {

@@ -21,6 +21,10 @@ public class CapabilityMcp {
     private String accessMode;
     private String securityLevel;
     private String approvalScope;
+    private Long hubMcpId;
+    private Boolean autoUpdate;
+    private Integer originVersion;
+    private LocalDateTime syncedAt;
     @TableLogic
     private Boolean deleteFlag;
     @TableField(fill = FieldFill.INSERT)

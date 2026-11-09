@@ -33,6 +33,11 @@
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-common</artifactId>
         </dependency>
+        <!-- Ancestor tenant chain for the tenant-scoped MCP Hub (SPI only, no admin implementation). -->
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-admin-spi</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-util</artifactId>

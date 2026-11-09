@@ -7,6 +7,8 @@ public final class InstanceCapabilityEnum {
     public static final String CAPABILITY_TYPE_SKILL = "skill";
     /** A followed tenant-hub skill bound to an instance: read-only, always the latest hub version. */
     public static final String CAPABILITY_TYPE_SKILL_HUB = "skill_hub";
+    /** A followed tenant-hub MCP bound to an instance: read-only, always the latest hub version. */
+    public static final String CAPABILITY_TYPE_MCP_HUB = "mcp_hub";
     public static final String CAPABILITY_TYPE_CLI = "cli";
     public static final String CAPABILITY_TYPE_BUILTIN = "builtin";
     public static final String STATUS_ENABLED = "ENABLED";

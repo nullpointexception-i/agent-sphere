@@ -76,6 +76,10 @@ export default function CapabilityEditDrawer({
 
   const capTypeLabel: Record<string, string> = {
     mcp: 'MCP',
+    mcp_hub: intl.formatMessage({
+      id: 'pages.instances.followedHubMcps',
+      defaultMessage: 'Followed hub MCPs',
+    }),
     skill: intl.formatMessage({ id: 'menu.capabilities.skill' }),
     skill_hub: intl.formatMessage({
       id: 'pages.instances.followedHubSkills',
@@ -85,10 +89,23 @@ export default function CapabilityEditDrawer({
     builtin: intl.formatMessage({ id: 'menu.capabilities.builtin' }),
   };
 
-  const capTypes = ['mcp', 'skill', 'skill_hub', 'cli', 'builtin'];
+  const capTypes = ['mcp', 'mcp_hub', 'skill', 'skill_hub', 'cli', 'builtin'];
 
   const fetchMap: Record<string, (params: any) => Promise<any>> = {
     mcp: (p) => agentApi.mcp.list(p),
+    // Followed hub MCPs are read-only bindings: the run always reads the latest hub version.
+    mcp_hub: async (p) => {
+      const rows = await agentApi.mcp.followed();
+      const keyword = String(p?.keyword || '').toLowerCase();
+      const list = (Array.isArray(rows) ? rows : []).filter(
+        (r: any) =>
+          !keyword ||
+          String(r.name || '')
+            .toLowerCase()
+            .includes(keyword),
+      );
+      return { records: list, total: list.length };
+    },
     skill: (p) => agentApi.skill.list(p),
     // Followed hub skills are read-only bindings: the run always reads the latest hub version.
     skill_hub: async (p) => {

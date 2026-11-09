@@ -387,6 +387,43 @@ export default {
   'pages.capabilities.mcp.authConfig': 'Auth Headers (JSON)',
   'pages.capabilities.mcp.authConfigPlaceholder':
     '{{"Authorization":"Bearer <token>"}}',
+  'pages.capabilities.mcp.tabs.mine': 'My MCPs',
+  'pages.capabilities.mcp.tabs.hub': 'MCP Hub',
+  'pages.capabilities.mcp.tabs.followed': 'Followed',
+  'pages.capabilities.mcp.hubStatus': 'MCP Hub',
+  'pages.capabilities.mcp.installedFromHub': 'Installed · hub v{version}',
+  'pages.capabilities.mcp.hubOutdated':
+    'Hub v{version} · local updates pending',
+  'pages.capabilities.mcp.hubPublished': 'Hub v{version}',
+  'pages.capabilities.mcp.hubNotPublished': 'Not published',
+  'pages.capabilities.mcp.publisher': 'Publisher',
+  'pages.capabilities.mcp.hubVersion': 'Hub version',
+  'pages.capabilities.mcp.installCount': 'Installs',
+  'pages.capabilities.mcp.followCount': 'Followers',
+  'pages.capabilities.mcp.follow': 'Follow',
+  'pages.capabilities.mcp.unfollow': 'Unfollow',
+  'pages.capabilities.mcp.followSuccess': 'Following the latest hub version',
+  'pages.capabilities.mcp.unfollowSuccess': 'Unfollowed',
+  'pages.capabilities.mcp.install': 'Install',
+  'pages.capabilities.mcp.installAutoUpdate': 'Install + auto-update',
+  'pages.capabilities.mcp.reinstall': 'Install again',
+  'pages.capabilities.mcp.installConfirm': 'Install "{name}" to my MCPs?',
+  'pages.capabilities.mcp.installConfirmContent':
+    'A private copy is created at the current hub version and can be edited independently.',
+  'pages.capabilities.mcp.installAutoUpdateContent':
+    'A private copy is created and kept in sync with the hub automatically.',
+  'pages.capabilities.mcp.installSuccess': 'Installed to my MCPs',
+  'pages.capabilities.mcp.publishToHub': '发布到 Hub',
+  'pages.capabilities.mcp.updateHub': 'Update Hub',
+  'pages.capabilities.mcp.publishConfirm': 'Publish "{name}" to the MCP Hub?',
+  'pages.capabilities.mcp.updateHubConfirm': 'Update "{name}" in the MCP Hub?',
+  'pages.capabilities.mcp.publishHint':
+    'Every publish increments the hub version. The MCP credentials (authConfig) are shared: users of this tenant and its child tenants can use them to call the server. Make sure no non-shareable secret is included.',
+  'pages.capabilities.mcp.publishSuccess': 'Published as hub v{version}',
+  'pages.capabilities.mcp.sharedCredentialWarning':
+    'Credentials are shared with this tenant and its child tenants',
+  'pages.capabilities.mcp.sharedCredentialWarningDesc':
+    'Hub MCPs use the publisher authConfig. Do not publish a server whose credential should remain private.',
   'pages.capabilities.compressEnabled': 'Compress tool results',
   'pages.capabilities.accessMode': 'Access mode',
   'pages.capabilities.accessMode.read': 'Read',
@@ -833,6 +870,7 @@ export default {
   'pages.instances.currentCapabilities': 'Current',
   'pages.instances.autoInclude': 'Built-in',
   'pages.instances.followedHubSkills': 'Followed hub skills',
+  'pages.instances.followedHubMcps': 'Followed hub MCPs',
   'pages.instances.followedHubHint':
     'Read-only reference: runs always use the latest tenant hub version; nothing is copied to your skills.',
   'pages.instances.selected': 'Selected',
