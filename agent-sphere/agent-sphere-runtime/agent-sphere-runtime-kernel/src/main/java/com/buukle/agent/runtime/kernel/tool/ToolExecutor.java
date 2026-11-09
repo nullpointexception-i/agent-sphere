@@ -102,10 +102,30 @@ public class ToolExecutor {
             }
 
             if (CAPABILITY_TYPE_MCP.equals(type) && !mcpSpis.isEmpty()) {
-                return mcpSpis.get(0).executeTool(
-                        (String) binding.get(ExecBindingKeys.MCP_SERVER_URL),
-                        (String) binding.get(ExecBindingKeys.MCP_NATIVE_TOOL_NAME), args,
-                        resolveTaskMcpCredential(sessionId));
+                Map<String, Object> mcpBinding = tool.getExecBinding();
+                String serverUrl = mcpBinding == null ? null
+                        : (String) mcpBinding.get(ExecBindingKeys.MCP_SERVER_URL);
+                String nativeToolName = mcpBinding == null ? null
+                        : (String) mcpBinding.get(ExecBindingKeys.MCP_NATIVE_TOOL_NAME);
+                String taskMcpCredential = resolveTaskMcpCredential(sessionId);
+                Long mcpId = tool.getCapabilityId();
+                if (mcpId != null) {
+                    return mcpSpis.get(0).executeToolById(mcpId, nativeToolName, args, taskMcpCredential);
+                }
+                return mcpSpis.get(0).executeTool(serverUrl, nativeToolName, args, taskMcpCredential);
+            }
+            if (CAPABILITY_TYPE_MCP_HUB.equals(type) && !mcpSpis.isEmpty()) {
+                Map<String, Object> mcpBinding = tool.getExecBinding();
+                String serverUrl = mcpBinding == null ? null
+                        : (String) mcpBinding.get(ExecBindingKeys.MCP_SERVER_URL);
+                String nativeToolName = mcpBinding == null ? null
+                        : (String) mcpBinding.get(ExecBindingKeys.MCP_NATIVE_TOOL_NAME);
+                String taskMcpCredential = resolveTaskMcpCredential(sessionId);
+                Long hubId = tool.getCapabilityId();
+                if (hubId != null) {
+                    return mcpSpis.get(0).executeHubTool(hubId, nativeToolName, args, taskMcpCredential);
+                }
+                return mcpSpis.get(0).executeTool(serverUrl, nativeToolName, args, taskMcpCredential);
             }
             if (CAPABILITY_TYPE_BUILTIN.equals(type) && ChatClarification.CLARIFICATION_TOOL_NAME.equals(tc.name())) {
                 try {

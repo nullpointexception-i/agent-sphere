@@ -341,7 +341,7 @@ class ParallelSearchAgentLoopTest {
             assertEquals(3, turns.get());
             assertNotNull(finalAnswer.get());
             assertEquals(finalAnswer.get(), run.getAssistantReply());
-            verify(mcpMapper, times(2)).selectList(any(Wrapper.class));
+            verify(mcpMapper, org.mockito.Mockito.atLeast(2)).selectById(MCP_ID);
             verify(credential, times(2)).get();
             verify(input).clear(SESSION_ID);
             verify(cache).remove(SESSION_ID);

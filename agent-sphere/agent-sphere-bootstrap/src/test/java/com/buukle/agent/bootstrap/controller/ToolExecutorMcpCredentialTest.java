@@ -31,8 +31,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -83,6 +85,7 @@ class ToolExecutorMcpCredentialTest {
         return List.of(RuntimeTool.builder()
                 .llmToolName("check_candidate_history")
                 .capabilityType("mcp")
+                .capabilityId(101L)
                 .execBinding(Map.of(
                         ExecBindingKeys.MCP_SERVER_URL, "http://bole/api/v1/mcp/sourcing",
                         ExecBindingKeys.MCP_NATIVE_TOOL_NAME, "check_candidate_history"))
@@ -92,20 +95,43 @@ class ToolExecutorMcpCredentialTest {
     @Test
     void credentialFromSessionStoreIsForwardedToMcpSpi() {
         org.mockito.Mockito.when(credentialStore.get(SESSION_ID)).thenReturn(CREDENTIAL);
-        org.mockito.Mockito.when(mcpSpi.executeTool(anyString(), anyString(), anyString(), anyString()))
+        org.mockito.Mockito.when(mcpSpi.executeToolById(anyLong(), anyString(), anyString(), anyString()))
                 .thenReturn("{\"suggestion\":\"PROCEED\"}");
 
         toolExecutor.execute(new TurnToolCall("t1", "check_candidate_history", "{}"),
                 SESSION_ID, 1L, mcpTool());
 
-        verify(mcpSpi).executeTool(eq("http://bole/api/v1/mcp/sourcing"),
+        verify(mcpSpi).executeToolById(eq(101L),
                 eq("check_candidate_history"), eq("{}"), eq(CREDENTIAL));
+        verify(mcpSpi, never()).executeTool(anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void hubToolExecutesByHubId() {
+        org.mockito.Mockito.when(credentialStore.get(SESSION_ID)).thenReturn(CREDENTIAL);
+        org.mockito.Mockito.when(mcpSpi.executeHubTool(anyLong(), anyString(), anyString(), anyString()))
+                .thenReturn("{}");
+        List<RuntimeTool> tools = List.of(RuntimeTool.builder()
+                .llmToolName("check_candidate_history")
+                .capabilityType("mcp_hub")
+                .capabilityId(9001L)
+                .execBinding(Map.of(
+                        ExecBindingKeys.MCP_SERVER_URL, "http://bole/api/v1/mcp/sourcing",
+                        ExecBindingKeys.MCP_NATIVE_TOOL_NAME, "check_candidate_history"))
+                .build());
+
+        toolExecutor.execute(new TurnToolCall("t1", "check_candidate_history", "{}"),
+                SESSION_ID, 1L, tools);
+
+        verify(mcpSpi).executeHubTool(eq(9001L),
+                eq("check_candidate_history"), eq("{}"), eq(CREDENTIAL));
+        verify(mcpSpi, never()).executeTool(anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
     void callReasonIsStrippedBeforeMcpForwarding() {
         org.mockito.Mockito.when(credentialStore.get(SESSION_ID)).thenReturn(null);
-        org.mockito.Mockito.when(mcpSpi.executeTool(anyString(), anyString(), anyString(), any()))
+        org.mockito.Mockito.when(mcpSpi.executeToolById(anyLong(), anyString(), anyString(), any()))
                 .thenReturn("{}");
 
         toolExecutor.execute(new TurnToolCall("t1", "check_candidate_history",
@@ -113,7 +139,7 @@ class ToolExecutorMcpCredentialTest {
                 SESSION_ID, 1L, mcpTool());
 
         ArgumentCaptor<String> args = ArgumentCaptor.forClass(String.class);
-        verify(mcpSpi).executeTool(anyString(), anyString(), args.capture(), any());
+        verify(mcpSpi).executeToolById(anyLong(), anyString(), args.capture(), any());
         assertFalse(args.getValue().contains("_reason"),
                 "保留参数不能发给 MCP server");
         assertTrue(args.getValue().contains("candidateId"));
@@ -124,14 +150,14 @@ class ToolExecutorMcpCredentialTest {
         // With no credential in Redis, null must be passed: an empty string makes the server receive a present-but-invalid credential header,
         // masking the fact that "the credential chain is broken".
         org.mockito.Mockito.when(credentialStore.get(SESSION_ID)).thenReturn(null);
-        org.mockito.Mockito.when(mcpSpi.executeTool(anyString(), anyString(), anyString(), any()))
+        org.mockito.Mockito.when(mcpSpi.executeToolById(anyLong(), anyString(), anyString(), any()))
                 .thenReturn("{}");
 
         toolExecutor.execute(new TurnToolCall("t1", "check_candidate_history", "{}"),
                 SESSION_ID, 1L, mcpTool());
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(mcpSpi).executeTool(anyString(), anyString(), anyString(), captor.capture());
+        verify(mcpSpi).executeToolById(anyLong(), anyString(), anyString(), captor.capture());
         assertNull(captor.getValue());
     }
 

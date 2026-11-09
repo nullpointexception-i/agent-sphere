@@ -243,12 +243,38 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
         if (mcp == null) {
             McpVO hub = mcpHubSpi == null ? null : mcpHubSpi.findHubByServerUrl(serverUrl);
             if (hub != null) {
-                return executeHubTool(hub, toolName, argumentsJson, callContext);
+                return executeHubMcp(hub, toolName, argumentsJson, callContext);
             }
             log.warn(DIRECT_HTTP_HINT, serverUrl);
             return executeDirectHttp(serverUrl, toolName, argumentsJson, callContext);
         }
 
+        return executeLocalMcp(mcp, toolName, argumentsJson, callContext);
+    }
+
+    @Override
+    public String executeToolById(Long mcpId, String toolName, String argumentsJson, String taskMcpCredential) {
+        CapabilityMcp mcp = mcpId == null ? null : getById(mcpId);
+        if (mcp == null) {
+            throw new BizException(CapabilityMcpErrorCode.MCP_NOT_FOUND);
+        }
+        return executeLocalMcp(mcp, toolName, argumentsJson,
+                McpCallContext.ofTaskCredential(taskMcpCredential));
+    }
+
+    @Override
+    public String executeHubTool(Long hubId, String toolName, String argumentsJson, String taskMcpCredential) {
+        McpVO hub = mcpHubSpi == null ? null : mcpHubSpi.getHubMcp(hubId);
+        if (hub == null) {
+            throw new BizException(CapabilityMcpErrorCode.MCP_NOT_FOUND);
+        }
+        return executeHubMcp(hub, toolName, argumentsJson,
+                McpCallContext.ofTaskCredential(taskMcpCredential));
+    }
+
+    /** Executes one tool of an already-resolved local MCP definition. */
+    private String executeLocalMcp(CapabilityMcp mcp, String toolName, String argumentsJson,
+                                   McpCallContext callContext) {
         try {
             McpTransportClient client = mcpTransportFactory.getOrCreateClient(
                     mcp.getId(), mcp.getServerUrl(), mcp.getServerType(), mcp.getAuthConfig());
@@ -261,10 +287,10 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
                 throw e;
             }
             log.error("MCP tool call failed via client, falling back to direct HTTP: {}", e.getMessage());
-            return executeDirectHttp(serverUrl, toolName, argumentsJson, callContext);
+            return executeDirectHttp(mcp.getServerUrl(), toolName, argumentsJson, callContext);
         } catch (Exception e) {
             log.error("MCP tool call failed via client, falling back to direct HTTP: {}", e.getMessage());
-            return executeDirectHttp(serverUrl, toolName, argumentsJson, callContext);
+            return executeDirectHttp(mcp.getServerUrl(), toolName, argumentsJson, callContext);
         }
     }
 
@@ -272,8 +298,8 @@ public class CapabilityMcpServiceImpl extends ServiceImpl<McpMapper, CapabilityM
      * Executes a followed hub MCP with the hub's shared auth config. The negative cache key keeps
      * hub transports separate from local MCP transports.
      */
-    private String executeHubTool(McpVO hub, String toolName, String argumentsJson,
-                                  McpCallContext callContext) {
+    private String executeHubMcp(McpVO hub, String toolName, String argumentsJson,
+                                 McpCallContext callContext) {
         try {
             McpTransportClient client = mcpTransportFactory.getOrCreateClient(
                     -hub.getId(), hub.getServerUrl(), hub.getServerType(), hub.getAuthConfig());

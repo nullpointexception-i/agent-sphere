@@ -43,6 +43,17 @@ public interface CapabilityMcpSpi {
     }
 
     /**
+     * Executes a local MCP by primary key. The id is authoritative: no serverUrl lookup is performed,
+     * so a followed hub MCP with the same URL can never shadow the local definition.
+     */
+    String executeToolById(Long mcpId, String toolName, String argumentsJson, String taskMcpCredential);
+
+    /**
+     * Executes a followed hub MCP by hub id using the hub's current shared auth config.
+     */
+    String executeHubTool(Long hubId, String toolName, String argumentsJson, String taskMcpCredential);
+
+    /**
      * Discover tools from an MCP server at runtime.
      * Implemented in Phase 5 with full MCP protocol client.
      * Returns empty list if not yet implemented or if discovery fails.

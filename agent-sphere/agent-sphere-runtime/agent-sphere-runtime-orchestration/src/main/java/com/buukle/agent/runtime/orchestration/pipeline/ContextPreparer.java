@@ -209,7 +209,9 @@ public class ContextPreparer {
             List<RuntimeTool> filtered = new ArrayList<>();
             Set<Long> present = new HashSet<>();
             for (RuntimeTool tool : tools) {
-                if (tool.getCapabilityId() != null && ROUTER_ALLOWED_IDS.contains(tool.getCapabilityId())) {
+                if (CAPABILITY_TYPE_BUILTIN.equals(tool.getCapabilityType())
+                        && tool.getCapabilityId() != null
+                        && ROUTER_ALLOWED_IDS.contains(tool.getCapabilityId())) {
                     filtered.add(tool);
                     present.add(tool.getCapabilityId());
                 }
@@ -222,7 +224,8 @@ public class ContextPreparer {
             }
             return filtered;
         }
-        tools.removeIf(tool -> tool.getCapabilityId() != null
+        tools.removeIf(tool -> CAPABILITY_TYPE_BUILTIN.equals(tool.getCapabilityType())
+                && tool.getCapabilityId() != null
                 && ROUTER_TOOL_IDS.contains(tool.getCapabilityId()));
         return tools;
     }
@@ -502,6 +505,7 @@ public class ContextPreparer {
     private void resolveMcpTools(McpVO mcp, CapabilityVO cap, List<RuntimeTool> result,
                                  Long llmId, Long capabilityId, boolean fromHub) {
         String llmNamePrefix = LLM_PREFIX_MCP + llmId + "_";
+        String capabilityType = fromHub ? CAPABILITY_TYPE_MCP_HUB : CAPABILITY_TYPE_MCP;
 
         try {
             List<McpToolInfoVO> tools = fromHub
@@ -517,7 +521,7 @@ public class ContextPreparer {
                     binding.put(ExecBindingKeys.MCP_AUTH_CONFIG, mcp.getAuthConfig());
                     binding.put(ExecBindingKeys.MCP_NATIVE_TOOL_NAME, tool.getName());
                     result.add(RuntimeTool.builder()
-                            .capabilityType(CAPABILITY_TYPE_MCP)
+                            .capabilityType(capabilityType)
                             .capabilityId(capabilityId)
                             .llmToolName(llmName)
                             .toolRef(ToolRefs.mcp(capabilityId, tool.getName()))
@@ -544,7 +548,7 @@ public class ContextPreparer {
         binding.put(ExecBindingKeys.MCP_AUTH_CONFIG, mcp.getAuthConfig());
         binding.put(ExecBindingKeys.MCP_NATIVE_TOOL_NAME, mcp.getName());
         result.add(RuntimeTool.builder()
-                .capabilityType(CAPABILITY_TYPE_MCP)
+                .capabilityType(capabilityType)
                 .capabilityId(capabilityId)
                 .llmToolName(llmName)
                 .toolRef(ToolRefs.mcp(capabilityId, mcp.getName()))
