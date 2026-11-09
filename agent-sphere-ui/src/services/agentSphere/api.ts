@@ -570,6 +570,13 @@ export const agentApi = {
         }),
       update: (id: number, data: any) =>
         request<any>(`${BASE}/admin/tenants/${id}`, { method: 'PUT', data }),
+      modelRoutes: (id: number) =>
+        request<any[]>(`${BASE}/admin/tenants/${id}/model-routes`),
+      updateGroupRouterRoute: (id: number, modelRouteId: number | null) =>
+        request<any>(`${BASE}/admin/tenants/${id}/group-router-route`, {
+          method: 'PUT',
+          data: { modelRouteId },
+        }),
       updateStatus: (id: number, status: string) =>
         request<void>(`${BASE}/admin/tenants/${id}/status`, {
           method: 'PUT',

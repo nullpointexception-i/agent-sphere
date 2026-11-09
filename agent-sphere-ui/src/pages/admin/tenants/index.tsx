@@ -97,7 +97,12 @@ export default function AdminTenants() {
   const [editing, setEditing] = useState<TenantItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [routes, setRoutes] = useState<any[]>([]);
+  const [routeOpen, setRouteOpen] = useState(false);
+  const [routeTenant, setRouteTenant] = useState<TenantItem | null>(null);
+  const [routeOptions, setRouteOptions] = useState<any[]>([]);
+  const [routeValue, setRouteValue] = useState<number | undefined>();
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeSaving, setRouteSaving] = useState(false);
   const [currentVisibility, setCurrentVisibility] = useState<
     'SELF_ONLY' | 'TENANT' | 'TENANT_SUBTREE' | null
   >(null);
@@ -113,7 +118,7 @@ export default function AdminTenants() {
     currentVisibility === 'TENANT_SUBTREE';
   const subtreeHint = loc(
     'pages.admin.tenants.subtreeRequired',
-    '当前可见级别不包含下辖租户，无法创建下级租户。请先在“设置租户与角色”中把可见级别改为“可见当前及下辖”。',
+    'The current visibility does not include descendants. Set the visibility to "Current tenant and descendants" in Tenants and roles before creating a child tenant.',
   );
 
   const load = async () => {
@@ -174,11 +179,41 @@ export default function AdminTenants() {
   const openEdit = (tenant: TenantItem) => {
     setEditing(tenant);
     form.setFieldsValue(tenant);
-    agentApi.routes
-      .listAll()
-      .then((rows: any[]) => setRoutes(Array.isArray(rows) ? rows : []))
-      .catch(() => setRoutes([]));
     setOpen(true);
+  };
+
+  const openGroupRouterRoute = async (tenant: TenantItem) => {
+    setRouteTenant(tenant);
+    setRouteValue(tenant.groupRouterModelRouteId ?? undefined);
+    setRouteOptions([]);
+    setRouteOpen(true);
+    setRouteLoading(true);
+    try {
+      const rows = await agentApi.admin.tenants.modelRoutes(tenant.id);
+      setRouteOptions(Array.isArray(rows) ? rows : []);
+    } catch {
+      setRouteOptions([]);
+    } finally {
+      setRouteLoading(false);
+    }
+  };
+
+  const saveGroupRouterRoute = async () => {
+    if (!routeTenant) return;
+    setRouteSaving(true);
+    try {
+      await agentApi.admin.tenants.updateGroupRouterRoute(
+        routeTenant.id,
+        routeValue ?? null,
+      );
+      message.success(loc('pages.save.success', 'Saved'));
+      setRouteOpen(false);
+      load();
+    } catch (error: any) {
+      message.error(error?.message || loc('pages.save.failed', 'Save failed'));
+    } finally {
+      setRouteSaving(false);
+    }
   };
 
   const save = async () => {
@@ -308,8 +343,24 @@ export default function AdminTenants() {
       title: loc('pages.table.actions', 'Actions'),
       key: 'actions',
       render: (_: any, tenant: TenantItem) => {
+        const groupRouterButton = (
+          <Can code={PERM.adminTenantUpdate}>
+            <Button
+              type="link"
+              size="small"
+              onClick={() => openGroupRouterRoute(tenant)}
+            >
+              {loc('pages.admin.tenants.groupRouterShort', 'Group Router')}
+            </Button>
+          </Can>
+        );
         if (isReservedTenant(tenant.id)) {
-          return <Tag>{loc('pages.admin.tenants.readOnly', 'Read-only')}</Tag>;
+          return (
+            <Space>
+              <Tag>{loc('pages.admin.tenants.readOnly', 'Read-only')}</Tag>
+              {groupRouterButton}
+            </Space>
+          );
         }
         return (
           <Space>
@@ -318,6 +369,7 @@ export default function AdminTenants() {
                 {loc('pages.table.edit', 'Edit')}
               </Button>
             </Can>
+            {groupRouterButton}
             <Can code={PERM.adminTenantUpdate}>
               <Button
                 type="link"
@@ -413,7 +465,7 @@ export default function AdminTenants() {
               treeNodeFilterProp="title"
               placeholder={loc(
                 'pages.admin.tenants.parentPlaceholder',
-                '请选择上级租户',
+                'Select a parent tenant',
               )}
             />
           </Form.Item>
@@ -429,25 +481,7 @@ export default function AdminTenants() {
           >
             <Input.TextArea maxLength={500} />
           </Form.Item>
-          {editing ? (
-            <Form.Item
-              name="groupRouterModelRouteId"
-              label={loc(
-                'pages.admin.tenants.groupRouterRoute',
-                'Group Router model route',
-              )}
-            >
-              <Select
-                allowClear
-                showSearch
-                optionFilterProp="label"
-                options={routes.map((route) => ({
-                  value: route.id,
-                  label: `${route.modelName || route.modelName} (#${route.id})`,
-                }))}
-              />
-            </Form.Item>
-          ) : (
+          {!editing && (
             <>
               <div
                 style={{
@@ -534,6 +568,43 @@ export default function AdminTenants() {
             </>
           )}
         </Form>
+      </Modal>
+
+      <Modal
+        open={routeOpen}
+        title={loc(
+          'pages.admin.tenants.groupRouterRoute',
+          'Group Router model route',
+        )}
+        onCancel={() => setRouteOpen(false)}
+        onOk={saveGroupRouterRoute}
+        confirmLoading={routeSaving}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 8, color: '#8b8b93', fontSize: 12 }}>
+          {routeTenant
+            ? `${routeTenant.name || routeTenant.code} (#${routeTenant.id})`
+            : ''}
+        </div>
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          loading={routeLoading}
+          style={{ width: '100%' }}
+          value={routeValue}
+          onChange={(value) => setRouteValue(value as number | undefined)}
+          placeholder={loc(
+            'pages.admin.tenants.groupRouterRoutePlaceholder',
+            'Select a route owned by this tenant',
+          )}
+          options={routeOptions.map((route) => ({
+            value: route.id,
+            label: `${route.modelName || route.modelName}${
+              route.company ? ` · ${route.company}` : ''
+            } (#${route.id})`,
+          }))}
+        />
       </Modal>
     </>
   );

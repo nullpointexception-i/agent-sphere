@@ -1,5 +1,6 @@
 package com.buukle.agent.admin.controller;
 
+import com.buukle.agent.admin.dtvo.dto.TenantGroupRouterRouteReq;
 import com.buukle.agent.admin.dtvo.dto.TenantSaveReq;
 import com.buukle.agent.admin.dtvo.dto.UserTenantAssignReq;
 import com.buukle.agent.admin.dtvo.vo.TenantSwitchVO;
@@ -77,8 +78,23 @@ public class TenantController extends BaseController {
         return ok(tenantService.update(id, req));
     }
 
-    @AuditLog(action = "STATUS", resourceType = "Tenant", resourceId = "#id")
+    /** Routes owned by this tenant, for the group-router picker. */
+    @RequirePermission(PermissionCodes.ADMIN_TENANT_READ)
+    @GetMapping("/{id}/model-routes")
+    public ResponseEntity<?> listModelRoutes(@PathVariable Long id) {
+        return ok(tenantService.listModelRoutes(id));
+    }
+
+    /** Sets or clears the group-router route; works for the reserved tenants too. */
+    @AuditLog(action = "GROUP_ROUTER_ROUTE", resourceType = "Tenant", resourceId = "#id")
     @RequirePermission(PermissionCodes.ADMIN_TENANT_UPDATE)
+    @PutMapping("/{id}/group-router-route")
+    public ResponseEntity<?> updateGroupRouterRoute(@PathVariable Long id,
+                                                    @RequestBody TenantGroupRouterRouteReq req) {
+        return ok(tenantService.updateGroupRouterRoute(id, req.getModelRouteId()));
+    }
+
+    @AuditLog(action = "STATUS", resourceType = "Tenant", resourceId = "#id")    @RequirePermission(PermissionCodes.ADMIN_TENANT_UPDATE)
     @PutMapping("/{id}/status")
     public ResponseEntity<?> changeStatus(@PathVariable Long id, @RequestParam String status) {
         tenantService.changeStatus(id, status);

@@ -17,6 +17,4 @@ public class TenantSaveReq {
     /** Manually entered model configuration used when creating a tenant. */
     @Valid
     private TenantDefaultModelDTO defaultModel;
-    /** Existing route selected when editing a tenant. */
-    private Long groupRouterModelRouteId;
 }

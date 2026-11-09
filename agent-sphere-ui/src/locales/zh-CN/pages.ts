@@ -32,6 +32,9 @@ export default {
   'pages.admin.tenants.modelIncomplete':
     '请填写 Provider、Base URL、API Key 和模型名称',
   'pages.admin.tenants.groupRouterRoute': '群聊 Router 模型路由',
+  'pages.admin.tenants.groupRouterShort': '群聊 Router',
+  'pages.admin.tenants.groupRouterRoutePlaceholder':
+    '请选择该租户自己的模型路由',
   'pages.admin.tenants.subtreeRequired':
     '当前可见级别不包含下辖租户，无法创建下级租户。请先在“设置租户与角色”中把可见级别改为“可见当前及下辖”。',
   'pages.admin.users.assignTenant': '租户分配',

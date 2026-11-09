@@ -32,6 +32,9 @@ export default {
   'pages.admin.tenants.modelIncomplete':
     'Provider, base URL, API key and model name are required',
   'pages.admin.tenants.groupRouterRoute': 'Group Router model route',
+  'pages.admin.tenants.groupRouterShort': 'Group Router',
+  'pages.admin.tenants.groupRouterRoutePlaceholder':
+    'Select a route owned by this tenant',
   'pages.admin.tenants.subtreeRequired':
     'The current visibility does not include descendants. Set the visibility to “Current tenant and descendants” in Tenants and roles before creating a child tenant.',
   'pages.admin.users.assignTenant': 'Assign Tenants',
