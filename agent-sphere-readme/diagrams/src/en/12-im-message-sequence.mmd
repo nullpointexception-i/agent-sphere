@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant U as IM user
+    participant C as ImConversationController
+    participant M as ImMessageController
+    participant S as ImMessageService
+    participant Q as ImStreamController
+    participant A as Agent runtime
+    U->>C: create / open conversation
+    C-->>U: conversation + participants
+    U->>M: POST message
+    M->>S: persist message
+    S-->>Q: publish message event
+    Q-->>U: SSE message
+    S->>A: optional Agent run
+    A-->>S: reply
+    S-->>U: reply message

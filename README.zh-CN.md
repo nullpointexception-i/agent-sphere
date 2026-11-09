@@ -88,160 +88,31 @@ AgentSphere 不是单个 Agent，而是 **Agent 托管平台**。实例是配置
 
 ### 1.3 业务能力地图
 
-```mermaid
-flowchart LR
-    root(["AgentSphere 业务能力"])
-    root --> A["A Agent 运营"]
-    root --> B["B 对话"]
-    root --> C["C 任务交付"]
-    root --> D["D 能力供给"]
-    root --> E["E 模型运营"]
-    root --> F["F 平台治理"]
-    root --> G["G 数字员工 / Super Agent"]
-    root --> H["H IM 协作"]
-
-    A --> A1["实例增删改查"]
-    A --> A2["提示词 / 开场白"]
-    A --> A3["能力绑定"]
-    A --> A4["记忆 / 轮次上限"]
-    A --> A5["按入口的会话开关"]
-
-    B --> B1["创建会话 / 发消息"]
-    B --> B2["澄清"]
-    B --> B3["wait"]
-    B --> B4["停止 / 取消"]
-    B --> B5["时间线 / 待办"]
-    B --> B6["分享链接"]
-
-    C --> C1["单次补全"]
-    C --> C2["三阶段任务"]
-    C --> C3["产物"]
-    C --> C4["回调"]
-
-    D --> D1["MCP Server"]
-    D --> D2["技能库"]
-    D --> D3["CLI 命令"]
-    D --> D4["内置工具"]
-    D --> D5["浏览器控制"]
-
-    E --> E1["供应商 / API Key"]
-    E --> E2["模型路由"]
-    E --> E3["故障切换"]
-
-    F --> F1["用户 / 角色 / 权限"]
-    F --> F2["OIDC SSO"]
-    F --> F3["审计日志"]
-    F --> F4["系统配置"]
-    F --> F5["会话清理"]
-    F --> F6["运行时可观测"]
-
-    G --> G1["渠道绑定"]
-    G --> G2["线程 / 事件接入"]
-    G --> G3["Group Router"]
-    G --> G4["Agent Router / 工作项"]
-    G --> G5["Worker 调度"]
-    G --> G6["外发回复"]
-
-    H --> H1["会话 / 参与者"]
-    H --> H2["消息 / 附件"]
-    H --> H3["读游标"]
-    H --> H4["会话输入"]
-    H --> H5["SSE 流"]
-```
+![业务能力地图](agent-sphere-readme/diagrams/zh/01-business-capability-map.png)
 
 ### 1.4 核心业务流程
 
 #### 对话式路径（人在环路中）
 
-```mermaid
-flowchart LR
-    s1["创建实例<br/>模型路由 + 能力"] --> s2["打开会话"]
-    s2 --> s3["发送消息"]
-    s3 --> s4["ReAct 循环<br/>推理 / 调工具 / 观察"]
-    s4 --> s5{"需要人？<br/>需要时间？"}
-    s5 -->|"澄清"| s6["挂起<br/>不占线程"]
-    s5 -->|"wait"| s6
-    s6 --> s7["人回答 / 定时器触发"]
-    s7 --> s4
-    s5 -->|"否"| s8["finish 结束 run"]
-    s8 --> s9["时间线落库并渲染"]
-```
+![对话式路径](agent-sphere-readme/diagrams/zh/02-conversational-path.png)
 
 #### 任务式路径（系统到系统，三阶段）
 
-```mermaid
-sequenceDiagram
-    participant BIZ as 业务系统
-    participant T as TaskService
-    participant R as SessionRunner
-    participant X as ArtifactService
-    participant CB as callbackUrl
-    BIZ->>T: POST /api/v1/api/tasks
-    T->>T: 校验凭证、匹配实例、创建会话
-    T-->>BIZ: 202 TaskVO{id, status=QUEUED}
-    T->>R: 阶段 1 execute
-    R-->>T: run 输出
-    T->>R: 阶段 2 extract 到 JSON Schema
-    R-->>T: 结构化 JSON
-    alt 校验失败
-        T->>R: 阶段 3 refine（带校验错误）
-        R-->>T: 修正后的 JSON
-    end
-    T->>X: 每个阶段写 agent_task_artifact
-    T->>CB: POST 结果（remark 带 run 摘要）
-    BIZ->>T: 或轮询 GET /api/v1/api/tasks/{id}
-```
+![任务式路径时序](agent-sphere-readme/diagrams/zh/03-task-path-sequence.png)
 
 #### 能力式路径（供给 → 消费）
 
-```mermaid
-flowchart LR
-    p1["注册 MCP"] --> bind["绑定到实例"]
-    p2["创建 / 安装技能"] --> bind
-    p3["注册 CLI"] --> bind
-    p4["内置工具（SPI）"] --> bind
-    bind --> prep["ContextPreparer<br/>聚合 JSON Schema"]
-    prep --> model["模型可见的工具列表"]
-    model --> exec["ToolExecutor 分发"]
-```
+![能力式路径](agent-sphere-readme/diagrams/zh/04-capability-path.png)
 
 #### Super Agent 路径（数字员工）
 
-```mermaid
-sequenceDiagram
-    participant CH as IM / webhook 渠道
-    participant E as EventIngestService
-    participant G as GroupRouterScheduler
-    participant A as AgentRouterScheduler
-    participant W as WorkerScheduler
-    participant R as SessionRunner
-    participant O as OutboundDispatchScheduler
-    CH->>E: 入站事件
-    E->>E: 落库 thread + event + delivery（幂等）
-    G->>G: 相关性 / 分组决策
-    A->>A: 每线程 Router，创建工作项
-    W->>W: CAS 领取 QUEUED 工作项
-    W->>R: 派发 Worker run
-    R-->>W: run 终态结果
-    W->>A: Worker 报告
-    A->>O: 写入外发消息
-    O-->>CH: 投递回复（重试 / 幂等键）
-```
+![Super Agent 路径时序](agent-sphere-readme/diagrams/zh/05-super-agent-path.png)
 
 Super Agent 是由 **Router 实例 + Worker 实例 + 渠道绑定** 组成的数字员工。入站事件形成线程与工作项，Worker run 产出报告，外发消息最终回到来源渠道。
 
 #### IM 协作路径
 
-```mermaid
-flowchart LR
-    u["IM 用户"] --> c["创建 / 打开会话"]
-    c --> p["参与者"]
-    p --> m["发送消息"]
-    m --> s["IM SSE 流"]
-    s --> a["Agent run（可选）"]
-    a --> r["回复消息"]
-    r --> rc["更新读游标"]
-```
+![IM 协作路径](agent-sphere-readme/diagrams/zh/06-im-collaboration-path.png)
 
 IM 同时支持人与人、人与 Agent 协作。会话、参与者、消息、附件、读游标独立于 Agent 时间线；一条消息可以触发 Agent run，回复再写回 IM 消息。
 
@@ -274,36 +145,7 @@ IM 同时支持人与人、人与 Agent 协作。会话、参与者、消息、�
 
 ### 2.1 应用全景
 
-```mermaid
-flowchart TB
-    subgraph clients["客户端 / 入口"]
-        UI["Web 控制台<br/>Umi Max + React 19"]
-        WS["Workspace<br/>Super Agent 产品"]
-        WG["嵌入 widget<br/>IIFE + Shadow DOM"]
-        EXT["Chrome 扩展<br/>MV3，无服务端"]
-        BIZ["外部业务系统"]
-        CH["IM / webhook 渠道"]
-    end
-
-    subgraph k3s["k3s 命名空间 agent-sphere"]
-        FE["frontend :80 x1"]
-        BE["backend :8080 x2"]
-        WGS["widget :80 x1"]
-        PG[("PostgreSQL 16<br/>StatefulSet 20Gi")]
-        RD[("Redis 7<br/>Deployment x1")]
-    end
-
-    UI -->|"/api/v1 + SSE"| FE
-    WS -->|"/api/v1 + SSE"| FE
-    FE -->|"反向代理"| BE
-    BIZ -->|"code + subject"| BE
-    CH -->|"webhook / IM 事件"| BE
-    WGS --> WG
-    WG -->|"/api/v1 + SSE"| BE
-    EXT -->|"Bearer + SSE"| BE
-    BE --> PG
-    BE --> RD
-```
+![应用全景](agent-sphere-readme/diagrams/zh/07-application-landscape.png)
 
 ### 2.2 后端模块与依赖
 
@@ -313,64 +155,7 @@ flowchart TB
 -domain → -exception → -dtvo → -spi → -repository → -service → -controller
 ```
 
-```mermaid
-flowchart TD
-    BOOT["agent-sphere-bootstrap<br/>唯一可运行模块 / Flyway / yml"]
-
-    subgraph biz["业务域"]
-        INST["instance"]
-        MODEL["model"]
-        CAP["capability"]
-        ADMIN["admin"]
-        SSO["sso"]
-        TASKS["tasks"]
-        COMP["completions"]
-        TPL["resource-template"]
-        SUP["superagent"]
-        IM["im"]
-        CHSPI["channel-spi"]
-    end
-
-    subgraph rt["runtime"]
-        ORCH["runtime-orchestration"]
-        KERN["runtime-kernel"]
-    end
-
-    INFRA["infrastructure"]
-    COMMON["common"]
-    UTIL["util"]
-
-    BOOT --> INFRA
-    BOOT --> ADMIN
-    BOOT --> SSO
-    BOOT --> INST
-    BOOT --> MODEL
-    BOOT --> CAP
-    BOOT --> ORCH
-    BOOT --> TASKS
-    BOOT --> COMP
-    BOOT --> TPL
-    BOOT --> SUP
-    BOOT --> IM
-    SUP --> CHSPI
-    IM --> CHSPI
-    ORCH --> KERN
-    ORCH --> INST
-    ORCH --> CAP
-    ORCH --> MODEL
-    KERN --> INST
-    KERN --> MODEL
-    KERN --> CAP
-    INFRA --> INST
-    ADMIN --> COMMON
-    SSO --> COMMON
-    INST --> COMMON
-    MODEL --> COMMON
-    CAP --> COMMON
-    KERN --> COMMON
-    ORCH --> COMMON
-    COMMON --> UTIL
-```
+![后端模块依赖](agent-sphere-readme/diagrams/zh/08-backend-modules.png)
 
 依赖纪律：
 
@@ -382,117 +167,19 @@ flowchart TD
 
 #### 静态组件关系
 
-`mermaid
-graph LR
-    UI["Web / Widget / Workspace"] --> API["Controller"]
-    API --> SVC["应用服务"]
-    SVC --> ORCH["运行时编排"]
-    ORCH --> KERNEL["SessionRunner"]
-    KERNEL --> LLM["KernelLlmService"]
-    KERNEL --> TOOLS["ToolExecutor"]
-    TOOLS --> CAPS["MCP / Skill / CLI / Builtin"]
-    LLM --> PROVIDERS["LLM 供应商"]
-    ORCH --> SSE["SseManager"]
-    SSE --> UI
-    SVC --> DB[("PostgreSQL")]
-    KERNEL --> REDIS[("Redis")]
-`
+![静态组件关系](agent-sphere-readme/diagrams/zh/09-static-component-relationships.png)
+
 #### 一次 `chat` 调用时序
 
-```mermaid
-sequenceDiagram
-    participant U as Web UI / Widget
-    participant A as AuthInterceptor
-    participant C as ChatRuntimeController
-    participant S as ChatRuntimeService
-    participant O as RuntimeOrchestrator
-    participant P as ContextPreparer
-    participant R as SessionRunner
-    participant L as KernelLlmService
-    participant T as ToolExecutor
-    participant Q as SseManager
-    participant DB as PostgreSQL
-
-    U->>A: POST /api/v1/runtime/{sid}/chat
-    A->>A: 认证 / 租户 / 来源 / 权限
-    A->>C: 放行
-    C->>S: createRun(message)
-    S->>DB: INSERT agent_run(status=RUNNING)
-    S->>Q: publish run_start
-    Q-->>U: SSE run_start
-    S-->>C: {runId, status}
-    C-->>U: 202 {runId}
-
-    S->>O: 提交（虚拟线程）
-    O->>P: prepare()
-    P->>DB: 历史 / 记忆 / 能力绑定
-    P-->>O: KernelContext（含工具 Schema）
-
-    O->>R: run(context)
-    loop ReAct 循环，受 loop_limit 约束
-        R->>L: 流式请求
-        L-->>R: 正文 / 推理 / tool_calls
-        R->>Q: 事件增量
-        Q-->>U: SSE token
-        alt 有工具调用
-            R->>T: execute(toolCalls)
-            T->>T: FiberSet 并发 + 超时
-            T-->>R: 压缩后的结果
-        else 命中 finish
-            R->>R: 用 summary 收口
-        else 无工具调用
-            R->>R: 追问，超限后 FAILED
-        end
-    end
-
-    R->>DB: 终态 + 时间线 + 工具记录
-    R->>Q: run_completed
-    Q-->>U: SSE run_completed
-```
+![chat 调用时序](agent-sphere-readme/diagrams/zh/10-chat-call-sequence.png)
 
 #### Super Agent 数字员工时序
 
-```mermaid
-sequenceDiagram
-    participant CH as IM / webhook
-    participant E as EventIngestService
-    participant G as GroupRouterScheduler
-    participant A as AgentRouterScheduler
-    participant W as WorkerScheduler
-    participant R as SessionRunner
-    participant O as OutboundDispatchScheduler
-    CH->>E: 入站事件
-    E->>E: thread + event + delivery
-    G->>G: 分组 / 相关性决策
-    A->>A: 为线程创建工作项
-    W->>W: CAS 领取 QUEUED 工作项
-    W->>R: 派发 Worker run
-    R-->>W: 终态结果
-    W->>A: Worker 报告
-    A->>O: 写入外发消息
-    O-->>CH: 投递回复
-```
+![Super Agent 数字员工时序](agent-sphere-readme/diagrams/zh/11-super-agent-sequence.png)
 
 #### IM 消息时序
 
-```mermaid
-sequenceDiagram
-    participant U as IM 用户
-    participant C as ImConversationController
-    participant M as ImMessageController
-    participant S as ImMessageService
-    participant Q as ImStreamController
-    participant A as Agent runtime
-    U->>C: 创建 / 打开会话
-    C-->>U: 会话 + 参与者
-    U->>M: POST 消息
-    M->>S: 落库消息
-    S-->>Q: 发布消息事件
-    Q-->>U: SSE 消息
-    S->>A: 可选触发 Agent run
-    A-->>S: 回复
-    S-->>U: 回复消息
-```
+![IM 消息时序](agent-sphere-readme/diagrams/zh/12-im-message-sequence.png)
 
 ### 2.4 集成矩阵
 
@@ -530,20 +217,7 @@ sequenceDiagram
 
 ### 3.2 部署拓扑
 
-```mermaid
-flowchart TB
-    IN["Ingress<br/>控制台 / widget 域名"]
-    IN --> FE["frontend Deployment x1 :80"]
-    IN --> BE["backend Deployment x2 :8080"]
-    IN --> WGS["widget Deployment x1 :80"]
-
-    BE --> PG[("PostgreSQL StatefulSet x1<br/>PVC 20Gi")]
-    BE --> RD[("Redis Deployment x1")]
-    BE -.->|"镜像"| ACR["阿里云 ACR"]
-
-    FE -.->|"COMMIT_HASH"| VER["版本展示"]
-    EXT["Chrome 扩展"] -->|"HTTPS + Bearer"| IN
-```
+![部署拓扑](agent-sphere-readme/diagrams/zh/13-deployment-topology.png)
 
 关键点：
 
@@ -599,20 +273,7 @@ flowchart TB
 
 ### 3.6 交付流水线
 
-```mermaid
-flowchart LR
-    T["git tag v*"] --> GHA["GitHub Actions deploy.yml"]
-    GHA --> B1["构建 backend"]
-    GHA --> B2["构建 frontend<br/>COMMIT_HASH"]
-    GHA --> B3["构建 widget"]
-    B1 --> PUSH["推送 ACR"]
-    B2 --> PUSH
-    B3 --> PUSH
-    PUSH --> RW["改写 k8s 镜像 tag"]
-    RW --> CM["提交 main"]
-    CM --> FLEET["Fleet 同步 k3s"]
-    GHA --> REL["扩展 zip + Release"]
-```
+![交付流水线](agent-sphere-readme/diagrams/zh/14-delivery-pipeline.png)
 
 本地等价：`.local-workflow/deploy.sh`（`--dry-run` / `--skip-existing` / `--only`）。
 
@@ -661,69 +322,13 @@ flowchart LR
 
 > Schema 只有 **两个物理外键**：`agent_run.session_id → agent_session`、`agent_task_artifact.task_id → agent_task`。其他关系都是应用层维护的逻辑 `*_id` 关联。
 
-```mermaid
-erDiagram
-    agent_instance ||--o{ agent_session : owns
-    agent_session ||--o{ agent_run : contains
-    agent_run ||--o{ agent_timeline : renders
-    agent_run ||--o{ agent_tool_call_record : calls
-    agent_run ||--o{ agent_llm_interaction_record : invokes
-    agent_run ||--o{ agent_pending_wait : suspends
-    agent_run ||--o{ agent_pending_clarification : asks
-    agent_run ||--o{ agent_compact_record : compacts
-    agent_run ||--o{ agent_sub_agent_run : delegates
-    agent_task ||--o{ agent_task_artifact : produces
-    agent_instance ||--o{ agent_instance_capability : binds
-    agent_super_agent ||--o{ agent_channel_binding : binds
-    agent_super_agent ||--o{ agent_thread : owns
-    agent_thread ||--o{ agent_event : ingests
-    agent_event ||--o{ agent_event_delivery : fans_out
-    agent_thread ||--o{ agent_work_item : produces
-    agent_work_item ||--o{ agent_outbound_message : replies
-    im_conversation ||--o{ im_participant : has
-    im_conversation ||--o{ im_message : contains
-    im_conversation ||--o{ im_read_cursor : tracks
-```
+![ER 模型](agent-sphere-readme/diagrams/zh/15-er-model.png)
 
 `capability_mcp` / `capability_cli` 通过 `agent_instance_capability(capability_type, capability_id)` 多态绑定，没有外键。
 
 ### 4.4 数据流
 
-```mermaid
-flowchart LR
-    R["agent_run<br/>状态 / 轮次 / 错误"]
-    TL["agent_timeline<br/>展示流"]
-    TC["agent_tool_call_record<br/>工具详情"]
-    LLM["agent_llm_interaction_record<br/>原始请求与响应"]
-    SUB["agent_sub_agent_run<br/>子 Agent"]
-
-    U["用户消息"] --> R
-    R --> TL
-    R --> TC
-    R --> LLM
-    R --> SUB
-    TC --> TL
-    SUB --> TL
-
-    TL -->|"afterSeq 分页"| FE["前端时间线"]
-    LLM -->|"超阈值"| CP["压缩 → 摘要"]
-    CP --> SES["agent_session.summary"]
-
-    CL["SessionCleanupTask"] -->|"按 FK 顺序硬删除"| R
-    CL --> TL
-    CL --> LLM
-    CL --> RUNS["agent_session_cleanup_run"]
-
-    EV["agent_event"] --> DEL["agent_event_delivery"]
-    DEL --> WI["agent_work_item"]
-    WI --> R
-    WI --> OUT["agent_outbound_message"]
-    OUT --> CH["渠道适配器"]
-
-    IMC["im_conversation"] --> IMM["im_message"]
-    IMM --> IMR["im_read_cursor"]
-    IMM --> R
-```
+![数据流](agent-sphere-readme/diagrams/zh/16-data-flow.png)
 
 关键特征：
 

@@ -88,160 +88,31 @@ Screenshots from the Super Agent product at `/workspace`.
 
 ### 1.3 Business Capability Map
 
-```mermaid
-flowchart LR
-    root(["AgentSphere Business Capabilities"])
-    root --> A["A Agent Operations"]
-    root --> B["B Conversational"]
-    root --> C["C Task Delivery"]
-    root --> D["D Capability Supply"]
-    root --> E["E Model Operations"]
-    root --> F["F Platform Governance"]
-    root --> G["G Digital Employee / Super Agent"]
-    root --> H["H IM Collaboration"]
-
-    A --> A1["Instance CRUD"]
-    A --> A2["Prompt / opening"]
-    A --> A3["Capability binding"]
-    A --> A4["Memory / loop cap"]
-    A --> A5["Per-surface session switches"]
-
-    B --> B1["Create session / send"]
-    B --> B2["Clarification"]
-    B --> B3["Wait"]
-    B --> B4["Stop / cancel"]
-    B --> B5["Timeline / todos"]
-    B --> B6["Share link"]
-
-    C --> C1["One-shot completion"]
-    C --> C2["Three-phase task"]
-    C --> C3["Artifact"]
-    C --> C4["Callback"]
-
-    D --> D1["MCP server"]
-    D --> D2["Skill library"]
-    D --> D3["CLI command"]
-    D --> D4["Builtin tools"]
-    D --> D5["Browser control"]
-
-    E --> E1["Providers / API keys"]
-    E --> E2["Model routing"]
-    E --> E3["Fallback failover"]
-
-    F --> F1["Users / roles / permissions"]
-    F --> F2["OIDC SSO"]
-    F --> F3["Audit log"]
-    F --> F4["System config"]
-    F --> F5["Session cleanup"]
-    F --> F6["Runtime observability"]
-
-    G --> G1["Channel binding"]
-    G --> G2["Thread / event ingestion"]
-    G --> G3["Group router"]
-    G --> G4["Agent router / work items"]
-    G --> G5["Worker dispatch"]
-    G --> G6["Outbound reply"]
-
-    H --> H1["Conversation / participant"]
-    H --> H2["Message / attachment"]
-    H --> H3["Read cursor"]
-    H --> H4["Session input"]
-    H --> H5["SSE stream"]
-```
+![Business capability map](agent-sphere-readme/diagrams/en/01-business-capability-map.png)
 
 ### 1.4 Core Business Flows
 
 #### Conversational path (human in the loop)
 
-```mermaid
-flowchart LR
-    s1["Create instance<br/>model route + capabilities"] --> s2["Open a session"]
-    s2 --> s3["Send message"]
-    s3 --> s4["ReAct loop<br/>reason / call tools / observe"]
-    s4 --> s5{"Needs a human?<br/>Needs time?"}
-    s5 -->|"clarification"| s6["Suspend<br/>no thread held"]
-    s5 -->|"wait"| s6
-    s6 --> s7["Human answers / timer fires"]
-    s7 --> s4
-    s5 -->|"no"| s8["finish closes the run"]
-    s8 --> s9["Timeline persisted + rendered"]
-```
+![Conversational path](agent-sphere-readme/diagrams/en/02-conversational-path.png)
 
 #### Task path (system to system, three phases)
 
-```mermaid
-sequenceDiagram
-    participant BIZ as Business system
-    participant T as TaskService
-    participant R as SessionRunner
-    participant X as ArtifactService
-    participant CB as callbackUrl
-    BIZ->>T: POST /api/v1/api/tasks
-    T->>T: verify credentials, match instance, create session
-    T-->>BIZ: 202 TaskVO{id, status=QUEUED}
-    T->>R: phase 1 execute
-    R-->>T: run output
-    T->>R: phase 2 extract into JSON Schema
-    R-->>T: structured JSON
-    alt validation fails
-        T->>R: phase 3 refine with validation errors
-        R-->>T: corrected JSON
-    end
-    T->>X: persist agent_task_artifact per phase
-    T->>CB: POST result (remark carries run summary)
-    BIZ->>T: or poll GET /api/v1/api/tasks/{id}
-```
+![Task path sequence](agent-sphere-readme/diagrams/en/03-task-path-sequence.png)
 
 #### Capability path (supply → consumption)
 
-```mermaid
-flowchart LR
-    p1["Register MCP"] --> bind["Bind to instance"]
-    p2["Create / install skill"] --> bind
-    p3["Register CLI"] --> bind
-    p4["Builtin tools (SPI)"] --> bind
-    bind --> prep["ContextPreparer<br/>aggregate JSON Schema"]
-    prep --> model["Tool list visible to model"]
-    model --> exec["ToolExecutor dispatch"]
-```
+![Capability path](agent-sphere-readme/diagrams/en/04-capability-path.png)
 
 #### Super Agent path (digital employee)
 
-```mermaid
-sequenceDiagram
-    participant CH as IM / webhook channel
-    participant E as EventIngestService
-    participant G as GroupRouterScheduler
-    participant A as AgentRouterScheduler
-    participant W as WorkerScheduler
-    participant R as SessionRunner
-    participant O as OutboundDispatchScheduler
-    CH->>E: inbound event
-    E->>E: persist thread + event + delivery (idempotent)
-    G->>G: relevance / group decision
-    A->>A: per-thread router, create work item
-    W->>W: CAS-claim QUEUED work item
-    W->>R: dispatch worker agent run
-    R-->>W: terminal run result
-    W->>A: worker report
-    A->>O: enqueue outbound message
-    O-->>CH: deliver reply (retry / idempotency key)
-```
+![Super Agent path sequence](agent-sphere-readme/diagrams/en/05-super-agent-path.png)
 
 A Super Agent is a digital employee composed of a **Router instance + Worker instance + channel bindings**. Inbound events become threads/work items; worker runs produce reports; outbound messages are delivered back to the originating channel.
 
 #### IM collaboration path
 
-```mermaid
-flowchart LR
-    u["IM user"] --> c["Create / open conversation"]
-    c --> p["Participants"]
-    p --> m["Send message"]
-    m --> s["IM SSE stream"]
-    s --> a["Agent run (optional)"]
-    a --> r["Reply message"]
-    r --> rc["Read cursor updated"]
-```
+![IM collaboration path](agent-sphere-readme/diagrams/en/06-im-collaboration-path.png)
 
 IM is a channel for both human-to-human and human-to-agent collaboration. Conversations, participants, messages, attachments and read cursors are independent from Agent timelines; a message can trigger an Agent run and the reply is written back as an IM message.
 
@@ -274,36 +145,7 @@ IM is a channel for both human-to-human and human-to-agent collaboration. Conver
 
 ### 2.1 Application Landscape
 
-```mermaid
-flowchart TB
-    subgraph clients["Clients / entry points"]
-        UI["Web console<br/>Umi Max + React 19"]
-        WS["Workspace<br/>Super Agent product"]
-        WG["Embedded widget<br/>IIFE + shadow DOM"]
-        EXT["Chrome extension<br/>MV3, no server"]
-        BIZ["External business systems"]
-        CH["IM / webhook channels"]
-    end
-
-    subgraph k3s["k3s namespace agent-sphere"]
-        FE["frontend :80 x1"]
-        BE["backend :8080 x2"]
-        WGS["widget :80 x1"]
-        PG[("PostgreSQL 16<br/>StatefulSet 20Gi")]
-        RD[("Redis 7<br/>Deployment x1")]
-    end
-
-    UI -->|"/api/v1 + SSE"| FE
-    WS -->|"/api/v1 + SSE"| FE
-    FE -->|"reverse proxy"| BE
-    BIZ -->|"code + subject"| BE
-    CH -->|"webhook / IM events"| BE
-    WGS --> WG
-    WG -->|"/api/v1 + SSE"| BE
-    EXT -->|"Bearer + SSE"| BE
-    BE --> PG
-    BE --> RD
-```
+![Application landscape](agent-sphere-readme/diagrams/en/07-application-landscape.png)
 
 ### 2.2 Backend Modules and Dependencies
 
@@ -313,64 +155,7 @@ Business domains use the same layered split:
 -domain → -exception → -dtvo → -spi → -repository → -service → -controller
 ```
 
-```mermaid
-flowchart TD
-    BOOT["agent-sphere-bootstrap<br/>runnable / Flyway / yml"]
-
-    subgraph biz["business domains"]
-        INST["instance"]
-        MODEL["model"]
-        CAP["capability"]
-        ADMIN["admin"]
-        SSO["sso"]
-        TASKS["tasks"]
-        COMP["completions"]
-        TPL["resource-template"]
-        SUP["superagent"]
-        IM["im"]
-        CHSPI["channel-spi"]
-    end
-
-    subgraph rt["runtime"]
-        ORCH["runtime-orchestration"]
-        KERN["runtime-kernel"]
-    end
-
-    INFRA["infrastructure"]
-    COMMON["common"]
-    UTIL["util"]
-
-    BOOT --> INFRA
-    BOOT --> ADMIN
-    BOOT --> SSO
-    BOOT --> INST
-    BOOT --> MODEL
-    BOOT --> CAP
-    BOOT --> ORCH
-    BOOT --> TASKS
-    BOOT --> COMP
-    BOOT --> TPL
-    BOOT --> SUP
-    BOOT --> IM
-    SUP --> CHSPI
-    IM --> CHSPI
-    ORCH --> KERN
-    ORCH --> INST
-    ORCH --> CAP
-    ORCH --> MODEL
-    KERN --> INST
-    KERN --> MODEL
-    KERN --> CAP
-    INFRA --> INST
-    ADMIN --> COMMON
-    SSO --> COMMON
-    INST --> COMMON
-    MODEL --> COMMON
-    CAP --> COMMON
-    KERN --> COMMON
-    ORCH --> COMMON
-    COMMON --> UTIL
-```
+![Backend module dependencies](agent-sphere-readme/diagrams/en/08-backend-modules.png)
 
 Dependency discipline:
 
@@ -382,117 +167,19 @@ Dependency discipline:
 
 #### Static component relationships
 
-`mermaid
-graph LR
-    UI["Web / Widget / Workspace"] --> API["Controllers"]
-    API --> SVC["Application services"]
-    SVC --> ORCH["Runtime orchestrator"]
-    ORCH --> KERNEL["SessionRunner"]
-    KERNEL --> LLM["KernelLlmService"]
-    KERNEL --> TOOLS["ToolExecutor"]
-    TOOLS --> CAPS["MCP / Skill / CLI / Builtin"]
-    LLM --> PROVIDERS["LLM providers"]
-    ORCH --> SSE["SseManager"]
-    SSE --> UI
-    SVC --> DB[("PostgreSQL")]
-    KERNEL --> REDIS[("Redis")]
-`
+![Static component relationships](agent-sphere-readme/diagrams/en/09-static-component-relationships.png)
+
 #### One `chat` call sequence
 
-```mermaid
-sequenceDiagram
-    participant U as Web UI / Widget
-    participant A as AuthInterceptor
-    participant C as ChatRuntimeController
-    participant S as ChatRuntimeService
-    participant O as RuntimeOrchestrator
-    participant P as ContextPreparer
-    participant R as SessionRunner
-    participant L as KernelLlmService
-    participant T as ToolExecutor
-    participant Q as SseManager
-    participant DB as PostgreSQL
-
-    U->>A: POST /api/v1/runtime/{sid}/chat
-    A->>A: authn / tenant / surface / permission
-    A->>C: pass through
-    C->>S: createRun(message)
-    S->>DB: INSERT agent_run(status=RUNNING)
-    S->>Q: publish run_start
-    Q-->>U: SSE run_start
-    S-->>C: {runId, status}
-    C-->>U: 202 {runId}
-
-    S->>O: submit (virtual thread)
-    O->>P: prepare()
-    P->>DB: history / memory / capabilities
-    P-->>O: KernelContext with tool schemas
-
-    O->>R: run(context)
-    loop ReAct loop bounded by loop_limit
-        R->>L: streaming request
-        L-->>R: text / reasoning / tool_calls
-        R->>Q: event deltas
-        Q-->>U: SSE token
-        alt tool calls
-            R->>T: execute(toolCalls)
-            T->>T: FiberSet concurrency + timeout
-            T-->>R: compressed results
-        else finish
-            R->>R: close out with summary
-        else silence
-            R->>R: nudge, FAILED after limit
-        end
-    end
-
-    R->>DB: terminal state + timeline + tool records
-    R->>Q: run_completed
-    Q-->>U: SSE run_completed
-```
+![chat call sequence](agent-sphere-readme/diagrams/en/10-chat-call-sequence.png)
 
 #### Super Agent digital-employee sequence
 
-```mermaid
-sequenceDiagram
-    participant CH as IM / webhook
-    participant E as EventIngestService
-    participant G as GroupRouterScheduler
-    participant A as AgentRouterScheduler
-    participant W as WorkerScheduler
-    participant R as SessionRunner
-    participant O as OutboundDispatchScheduler
-    CH->>E: inbound event
-    E->>E: thread + event + delivery
-    G->>G: group / relevance decision
-    A->>A: create work item for thread
-    W->>W: claim QUEUED item (CAS)
-    W->>R: dispatch worker agent run
-    R-->>W: terminal result
-    W->>A: worker report
-    A->>O: enqueue outbound message
-    O-->>CH: deliver reply
-```
+![Super Agent digital-employee sequence](agent-sphere-readme/diagrams/en/11-super-agent-sequence.png)
 
 #### IM message sequence
 
-```mermaid
-sequenceDiagram
-    participant U as IM user
-    participant C as ImConversationController
-    participant M as ImMessageController
-    participant S as ImMessageService
-    participant Q as ImStreamController
-    participant A as Agent runtime
-    U->>C: create / open conversation
-    C-->>U: conversation + participants
-    U->>M: POST message
-    M->>S: persist message
-    S-->>Q: publish message event
-    Q-->>U: SSE message
-    S->>A: optional Agent run
-    A-->>S: reply
-    S-->>U: reply message
-```
+![IM message sequence](agent-sphere-readme/diagrams/en/12-im-message-sequence.png)
 
 ### 2.4 Integration Matrix
 
@@ -530,20 +217,7 @@ sequenceDiagram
 
 ### 3.2 Deployment Topology
 
-```mermaid
-flowchart TB
-    IN["Ingress<br/>console / widget hosts"]
-    IN --> FE["frontend Deployment x1 :80"]
-    IN --> BE["backend Deployment x2 :8080"]
-    IN --> WGS["widget Deployment x1 :80"]
-
-    BE --> PG[("PostgreSQL StatefulSet x1<br/>PVC 20Gi")]
-    BE --> RD[("Redis Deployment x1")]
-    BE -.->|"images"| ACR["Aliyun ACR"]
-
-    FE -.->|"COMMIT_HASH"| VER["version display"]
-    EXT["Chrome extension"] -->|"HTTPS + Bearer"| IN
-```
+![Deployment topology](agent-sphere-readme/diagrams/en/13-deployment-topology.png)
 
 Key points:
 
@@ -599,20 +273,7 @@ Log levels: `com.buukle` DEBUG; `*.repository` and `com.buukle.agent.capability`
 
 ### 3.6 Delivery Pipeline
 
-```mermaid
-flowchart LR
-    T["git tag v*"] --> GHA["GitHub Actions deploy.yml"]
-    GHA --> B1["build backend"]
-    GHA --> B2["build frontend<br/>COMMIT_HASH"]
-    GHA --> B3["build widget"]
-    B1 --> PUSH["push to ACR"]
-    B2 --> PUSH
-    B3 --> PUSH
-    PUSH --> RW["rewrite k8s image tags"]
-    RW --> CM["commit to main"]
-    CM --> FLEET["Fleet syncs k3s"]
-    GHA --> REL["extension zip + Release"]
-```
+![Delivery pipeline](agent-sphere-readme/diagrams/en/14-delivery-pipeline.png)
 
 Local equivalent: `.local-workflow/deploy.sh` (`--dry-run` / `--skip-existing` / `--only`).
 
@@ -660,69 +321,13 @@ Local equivalent: `.local-workflow/deploy.sh` (`--dry-run` / `--skip-existing` /
 
 > The schema has only **two physical foreign keys**: `agent_run.session_id → agent_session` and `agent_task_artifact.task_id → agent_task`. Other relations are logical `*_id` associations enforced by application code.
 
-```mermaid
-erDiagram
-    agent_instance ||--o{ agent_session : owns
-    agent_session ||--o{ agent_run : contains
-    agent_run ||--o{ agent_timeline : renders
-    agent_run ||--o{ agent_tool_call_record : calls
-    agent_run ||--o{ agent_llm_interaction_record : invokes
-    agent_run ||--o{ agent_pending_wait : suspends
-    agent_run ||--o{ agent_pending_clarification : asks
-    agent_run ||--o{ agent_compact_record : compacts
-    agent_run ||--o{ agent_sub_agent_run : delegates
-    agent_task ||--o{ agent_task_artifact : produces
-    agent_instance ||--o{ agent_instance_capability : binds
-    agent_super_agent ||--o{ agent_channel_binding : binds
-    agent_super_agent ||--o{ agent_thread : owns
-    agent_thread ||--o{ agent_event : ingests
-    agent_event ||--o{ agent_event_delivery : fans_out
-    agent_thread ||--o{ agent_work_item : produces
-    agent_work_item ||--o{ agent_outbound_message : replies
-    im_conversation ||--o{ im_participant : has
-    im_conversation ||--o{ im_message : contains
-    im_conversation ||--o{ im_read_cursor : tracks
-```
+![ER model](agent-sphere-readme/diagrams/en/15-er-model.png)
 
 `capability_mcp` / `capability_cli` are polymorphically bound through `agent_instance_capability(capability_type, capability_id)` and have no foreign key.
 
 ### 4.4 Data Flow
 
-```mermaid
-flowchart LR
-    R["agent_run<br/>state / turns / errors"]
-    TL["agent_timeline<br/>display stream"]
-    TC["agent_tool_call_record<br/>tool details"]
-    LLM["agent_llm_interaction_record<br/>raw request & response"]
-    SUB["agent_sub_agent_run<br/>sub agents"]
-
-    U["User message"] --> R
-    R --> TL
-    R --> TC
-    R --> LLM
-    R --> SUB
-    TC --> TL
-    SUB --> TL
-
-    TL -->|"afterSeq paging"| FE["Frontend timeline"]
-    LLM -->|"over threshold"| CP["Compaction → summary"]
-    CP --> SES["agent_session.summary"]
-
-    CL["SessionCleanupTask"] -->|"hard delete in FK order"| R
-    CL --> TL
-    CL --> LLM
-    CL --> RUNS["agent_session_cleanup_run"]
-
-    EV["agent_event"] --> DEL["agent_event_delivery"]
-    DEL --> WI["agent_work_item"]
-    WI --> R
-    WI --> OUT["agent_outbound_message"]
-    OUT --> CH["channel adapter"]
-
-    IMC["im_conversation"] --> IMM["im_message"]
-    IMM --> IMR["im_read_cursor"]
-    IMM --> R
-```
+![Data flow](agent-sphere-readme/diagrams/en/16-data-flow.png)
 
 Key characteristics:
 

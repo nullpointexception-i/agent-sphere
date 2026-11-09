@@ -1,0 +1,11 @@
+flowchart LR
+    s1["Create instance<br/>model route + capabilities"] --> s2["Open a session"]
+    s2 --> s3["Send message"]
+    s3 --> s4["ReAct loop<br/>reason / call tools / observe"]
+    s4 --> s5{"Needs a human?<br/>Needs time?"}
+    s5 -->|"clarification"| s6["Suspend<br/>no thread held"]
+    s5 -->|"wait"| s6
+    s6 --> s7["Human answers / timer fires"]
+    s7 --> s4
+    s5 -->|"no"| s8["finish closes the run"]
+    s8 --> s9["Timeline persisted + rendered"]

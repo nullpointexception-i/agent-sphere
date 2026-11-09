@@ -1,0 +1,56 @@
+flowchart TD
+    BOOT["agent-sphere-bootstrap<br/>runnable / Flyway / yml"]
+
+    subgraph biz["business domains"]
+        INST["instance"]
+        MODEL["model"]
+        CAP["capability"]
+        ADMIN["admin"]
+        SSO["sso"]
+        TASKS["tasks"]
+        COMP["completions"]
+        TPL["resource-template"]
+        SUP["superagent"]
+        IM["im"]
+        CHSPI["channel-spi"]
+    end
+
+    subgraph rt["runtime"]
+        ORCH["runtime-orchestration"]
+        KERN["runtime-kernel"]
+    end
+
+    INFRA["infrastructure"]
+    COMMON["common"]
+    UTIL["util"]
+
+    BOOT --> INFRA
+    BOOT --> ADMIN
+    BOOT --> SSO
+    BOOT --> INST
+    BOOT --> MODEL
+    BOOT --> CAP
+    BOOT --> ORCH
+    BOOT --> TASKS
+    BOOT --> COMP
+    BOOT --> TPL
+    BOOT --> SUP
+    BOOT --> IM
+    SUP --> CHSPI
+    IM --> CHSPI
+    ORCH --> KERN
+    ORCH --> INST
+    ORCH --> CAP
+    ORCH --> MODEL
+    KERN --> INST
+    KERN --> MODEL
+    KERN --> CAP
+    INFRA --> INST
+    ADMIN --> COMMON
+    SSO --> COMMON
+    INST --> COMMON
+    MODEL --> COMMON
+    CAP --> COMMON
+    KERN --> COMMON
+    ORCH --> COMMON
+    COMMON --> UTIL

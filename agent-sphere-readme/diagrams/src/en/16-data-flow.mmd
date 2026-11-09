@@ -1,0 +1,33 @@
+flowchart LR
+    R["agent_run<br/>state / turns / errors"]
+    TL["agent_timeline<br/>display stream"]
+    TC["agent_tool_call_record<br/>tool details"]
+    LLM["agent_llm_interaction_record<br/>raw request & response"]
+    SUB["agent_sub_agent_run<br/>sub agents"]
+
+    U["User message"] --> R
+    R --> TL
+    R --> TC
+    R --> LLM
+    R --> SUB
+    TC --> TL
+    SUB --> TL
+
+    TL -->|"afterSeq paging"| FE["Frontend timeline"]
+    LLM -->|"over threshold"| CP["Compaction → summary"]
+    CP --> SES["agent_session.summary"]
+
+    CL["SessionCleanupTask"] -->|"hard delete in FK order"| R
+    CL --> TL
+    CL --> LLM
+    CL --> RUNS["agent_session_cleanup_run"]
+
+    EV["agent_event"] --> DEL["agent_event_delivery"]
+    DEL --> WI["agent_work_item"]
+    WI --> R
+    WI --> OUT["agent_outbound_message"]
+    OUT --> CH["channel adapter"]
+
+    IMC["im_conversation"] --> IMM["im_message"]
+    IMM --> IMR["im_read_cursor"]
+    IMM --> R

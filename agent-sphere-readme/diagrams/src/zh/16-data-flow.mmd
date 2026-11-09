@@ -1,0 +1,33 @@
+flowchart LR
+    R["agent_run<br/>状态 / 轮次 / 错误"]
+    TL["agent_timeline<br/>展示流"]
+    TC["agent_tool_call_record<br/>工具详情"]
+    LLM["agent_llm_interaction_record<br/>原始请求与响应"]
+    SUB["agent_sub_agent_run<br/>子 Agent"]
+
+    U["用户消息"] --> R
+    R --> TL
+    R --> TC
+    R --> LLM
+    R --> SUB
+    TC --> TL
+    SUB --> TL
+
+    TL -->|"afterSeq 分页"| FE["前端时间线"]
+    LLM -->|"超阈值"| CP["压缩 → 摘要"]
+    CP --> SES["agent_session.summary"]
+
+    CL["SessionCleanupTask"] -->|"按 FK 顺序硬删除"| R
+    CL --> TL
+    CL --> LLM
+    CL --> RUNS["agent_session_cleanup_run"]
+
+    EV["agent_event"] --> DEL["agent_event_delivery"]
+    DEL --> WI["agent_work_item"]
+    WI --> R
+    WI --> OUT["agent_outbound_message"]
+    OUT --> CH["渠道适配器"]
+
+    IMC["im_conversation"] --> IMM["im_message"]
+    IMM --> IMR["im_read_cursor"]
+    IMM --> R

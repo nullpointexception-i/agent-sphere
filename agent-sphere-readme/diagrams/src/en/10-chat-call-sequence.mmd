@@ -1,0 +1,48 @@
+sequenceDiagram
+    participant U as Web UI / Widget
+    participant A as AuthInterceptor
+    participant C as ChatRuntimeController
+    participant S as ChatRuntimeService
+    participant O as RuntimeOrchestrator
+    participant P as ContextPreparer
+    participant R as SessionRunner
+    participant L as KernelLlmService
+    participant T as ToolExecutor
+    participant Q as SseManager
+    participant DB as PostgreSQL
+
+    U->>A: POST /api/v1/runtime/{sid}/chat
+    A->>A: authn / tenant / surface / permission
+    A->>C: pass through
+    C->>S: createRun(message)
+    S->>DB: INSERT agent_run(status=RUNNING)
+    S->>Q: publish run_start
+    Q-->>U: SSE run_start
+    S-->>C: {runId, status}
+    C-->>U: 202 {runId}
+
+    S->>O: submit (virtual thread)
+    O->>P: prepare()
+    P->>DB: history / memory / capabilities
+    P-->>O: KernelContext with tool schemas
+
+    O->>R: run(context)
+    loop ReAct loop bounded by loop_limit
+        R->>L: streaming request
+        L-->>R: text / reasoning / tool_calls
+        R->>Q: event deltas
+        Q-->>U: SSE token
+        alt tool calls
+            R->>T: execute(toolCalls)
+            T->>T: FiberSet concurrency + timeout
+            T-->>R: compressed results
+        else finish
+            R->>R: close out with summary
+        else silence
+            R->>R: nudge, FAILED after limit
+        end
+    end
+
+    R->>DB: terminal state + timeline + tool records
+    R->>Q: run_completed
+    Q-->>U: SSE run_completed

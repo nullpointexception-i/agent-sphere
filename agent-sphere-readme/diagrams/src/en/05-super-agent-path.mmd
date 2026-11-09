@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant CH as IM / webhook channel
+    participant E as EventIngestService
+    participant G as GroupRouterScheduler
+    participant A as AgentRouterScheduler
+    participant W as WorkerScheduler
+    participant R as SessionRunner
+    participant O as OutboundDispatchScheduler
+    CH->>E: inbound event
+    E->>E: persist thread + event + delivery (idempotent)
+    G->>G: relevance / group decision
+    A->>A: per-thread router, create work item
+    W->>W: CAS-claim QUEUED work item
+    W->>R: dispatch worker agent run
+    R-->>W: terminal run result
+    W->>A: worker report
+    A->>O: enqueue outbound message
+    O-->>CH: deliver reply (retry / idempotency key)

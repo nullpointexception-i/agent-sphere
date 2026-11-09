@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant CH as IM / webhook 渠道
+    participant E as EventIngestService
+    participant G as GroupRouterScheduler
+    participant A as AgentRouterScheduler
+    participant W as WorkerScheduler
+    participant R as SessionRunner
+    participant O as OutboundDispatchScheduler
+    CH->>E: 入站事件
+    E->>E: 落库 thread + event + delivery（幂等）
+    G->>G: 相关性 / 分组决策
+    A->>A: 每线程 Router，创建工作项
+    W->>W: CAS 领取 QUEUED 工作项
+    W->>R: 派发 Worker run
+    R-->>W: run 终态结果
+    W->>A: Worker 报告
+    A->>O: 写入外发消息
+    O-->>CH: 投递回复（重试 / 幂等键）

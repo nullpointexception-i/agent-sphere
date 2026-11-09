@@ -1,0 +1,13 @@
+graph LR
+    UI["Web / Widget / Workspace"] --> API["Controllers"]
+    API --> SVC["Application services"]
+    SVC --> ORCH["Runtime orchestrator"]
+    ORCH --> KERNEL["SessionRunner"]
+    KERNEL --> LLM["KernelLlmService"]
+    KERNEL --> TOOLS["ToolExecutor"]
+    TOOLS --> CAPS["MCP / Skill / CLI / Builtin"]
+    LLM --> PROVIDERS["LLM providers"]
+    ORCH --> SSE["SseManager"]
+    SSE --> UI
+    SVC --> DB[("PostgreSQL")]
+    KERNEL --> REDIS[("Redis")]

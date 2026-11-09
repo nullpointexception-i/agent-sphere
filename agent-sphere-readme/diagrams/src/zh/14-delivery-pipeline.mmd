@@ -1,0 +1,12 @@
+flowchart LR
+    T["git tag v*"] --> GHA["GitHub Actions deploy.yml"]
+    GHA --> B1["构建 backend"]
+    GHA --> B2["构建 frontend<br/>COMMIT_HASH"]
+    GHA --> B3["构建 widget"]
+    B1 --> PUSH["推送 ACR"]
+    B2 --> PUSH
+    B3 --> PUSH
+    PUSH --> RW["改写 k8s 镜像 tag"]
+    RW --> CM["提交 main"]
+    CM --> FLEET["Fleet 同步 k3s"]
+    GHA --> REL["扩展 zip + Release"]

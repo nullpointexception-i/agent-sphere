@@ -1,0 +1,48 @@
+sequenceDiagram
+    participant U as Web UI / Widget
+    participant A as AuthInterceptor
+    participant C as ChatRuntimeController
+    participant S as ChatRuntimeService
+    participant O as RuntimeOrchestrator
+    participant P as ContextPreparer
+    participant R as SessionRunner
+    participant L as KernelLlmService
+    participant T as ToolExecutor
+    participant Q as SseManager
+    participant DB as PostgreSQL
+
+    U->>A: POST /api/v1/runtime/{sid}/chat
+    A->>A: 认证 / 租户 / 来源 / 权限
+    A->>C: 放行
+    C->>S: createRun(message)
+    S->>DB: INSERT agent_run(status=RUNNING)
+    S->>Q: publish run_start
+    Q-->>U: SSE run_start
+    S-->>C: {runId, status}
+    C-->>U: 202 {runId}
+
+    S->>O: 提交（虚拟线程）
+    O->>P: prepare()
+    P->>DB: 历史 / 记忆 / 能力绑定
+    P-->>O: KernelContext（含工具 Schema）
+
+    O->>R: run(context)
+    loop ReAct 循环，受 loop_limit 约束
+        R->>L: 流式请求
+        L-->>R: 正文 / 推理 / tool_calls
+        R->>Q: 事件增量
+        Q-->>U: SSE token
+        alt 有工具调用
+            R->>T: execute(toolCalls)
+            T->>T: FiberSet 并发 + 超时
+            T-->>R: 压缩后的结果
+        else 命中 finish
+            R->>R: 用 summary 收口
+        else 无工具调用
+            R->>R: 追问，超限后 FAILED
+        end
+    end
+
+    R->>DB: 终态 + 时间线 + 工具记录
+    R->>Q: run_completed
+    Q-->>U: SSE run_completed

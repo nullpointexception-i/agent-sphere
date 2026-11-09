@@ -1,0 +1,28 @@
+flowchart TB
+    subgraph clients["Clients / entry points"]
+        UI["Web console<br/>Umi Max + React 19"]
+        WS["Workspace<br/>Super Agent product"]
+        WG["Embedded widget<br/>IIFE + shadow DOM"]
+        EXT["Chrome extension<br/>MV3, no server"]
+        BIZ["External business systems"]
+        CH["IM / webhook channels"]
+    end
+
+    subgraph k3s["k3s namespace agent-sphere"]
+        FE["frontend :80 x1"]
+        BE["backend :8080 x2"]
+        WGS["widget :80 x1"]
+        PG[("PostgreSQL 16<br/>StatefulSet 20Gi")]
+        RD[("Redis 7<br/>Deployment x1")]
+    end
+
+    UI -->|"/api/v1 + SSE"| FE
+    WS -->|"/api/v1 + SSE"| FE
+    FE -->|"reverse proxy"| BE
+    BIZ -->|"code + subject"| BE
+    CH -->|"webhook / IM events"| BE
+    WGS --> WG
+    WG -->|"/api/v1 + SSE"| BE
+    EXT -->|"Bearer + SSE"| BE
+    BE --> PG
+    BE --> RD

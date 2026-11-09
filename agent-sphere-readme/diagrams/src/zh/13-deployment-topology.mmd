@@ -1,0 +1,12 @@
+flowchart TB
+    IN["Ingress<br/>控制台 / widget 域名"]
+    IN --> FE["frontend Deployment x1 :80"]
+    IN --> BE["backend Deployment x2 :8080"]
+    IN --> WGS["widget Deployment x1 :80"]
+
+    BE --> PG[("PostgreSQL StatefulSet x1<br/>PVC 20Gi")]
+    BE --> RD[("Redis Deployment x1")]
+    BE -.->|"镜像"| ACR["阿里云 ACR"]
+
+    FE -.->|"COMMIT_HASH"| VER["版本展示"]
+    EXT["Chrome 扩展"] -->|"HTTPS + Bearer"| IN

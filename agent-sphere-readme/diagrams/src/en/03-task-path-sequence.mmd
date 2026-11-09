@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant BIZ as Business system
+    participant T as TaskService
+    participant R as SessionRunner
+    participant X as ArtifactService
+    participant CB as callbackUrl
+    BIZ->>T: POST /api/v1/api/tasks
+    T->>T: verify credentials, match instance, create session
+    T-->>BIZ: 202 TaskVO{id, status=QUEUED}
+    T->>R: phase 1 execute
+    R-->>T: run output
+    T->>R: phase 2 extract into JSON Schema
+    R-->>T: structured JSON
+    alt validation fails
+        T->>R: phase 3 refine with validation errors
+        R-->>T: corrected JSON
+    end
+    T->>X: persist agent_task_artifact per phase
+    T->>CB: POST result (remark carries run summary)
+    BIZ->>T: or poll GET /api/v1/api/tasks/{id}

@@ -1,0 +1,28 @@
+flowchart TB
+    subgraph clients["客户端 / 入口"]
+        UI["Web 控制台<br/>Umi Max + React 19"]
+        WS["Workspace<br/>Super Agent 产品"]
+        WG["嵌入 widget<br/>IIFE + Shadow DOM"]
+        EXT["Chrome 扩展<br/>MV3，无服务端"]
+        BIZ["外部业务系统"]
+        CH["IM / webhook 渠道"]
+    end
+
+    subgraph k3s["k3s 命名空间 agent-sphere"]
+        FE["frontend :80 x1"]
+        BE["backend :8080 x2"]
+        WGS["widget :80 x1"]
+        PG[("PostgreSQL 16<br/>StatefulSet 20Gi")]
+        RD[("Redis 7<br/>Deployment x1")]
+    end
+
+    UI -->|"/api/v1 + SSE"| FE
+    WS -->|"/api/v1 + SSE"| FE
+    FE -->|"反向代理"| BE
+    BIZ -->|"code + subject"| BE
+    CH -->|"webhook / IM 事件"| BE
+    WGS --> WG
+    WG -->|"/api/v1 + SSE"| BE
+    EXT -->|"Bearer + SSE"| BE
+    BE --> PG
+    BE --> RD

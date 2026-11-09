@@ -1,0 +1,12 @@
+flowchart LR
+    T["git tag v*"] --> GHA["GitHub Actions deploy.yml"]
+    GHA --> B1["build backend"]
+    GHA --> B2["build frontend<br/>COMMIT_HASH"]
+    GHA --> B3["build widget"]
+    B1 --> PUSH["push to ACR"]
+    B2 --> PUSH
+    B3 --> PUSH
+    PUSH --> RW["rewrite k8s image tags"]
+    RW --> CM["commit to main"]
+    CM --> FLEET["Fleet syncs k3s"]
+    GHA --> REL["extension zip + Release"]

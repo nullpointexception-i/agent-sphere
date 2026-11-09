@@ -1,0 +1,8 @@
+flowchart LR
+    p1["Register MCP"] --> bind["Bind to instance"]
+    p2["Create / install skill"] --> bind
+    p3["Register CLI"] --> bind
+    p4["Builtin tools (SPI)"] --> bind
+    bind --> prep["ContextPreparer<br/>aggregate JSON Schema"]
+    prep --> model["Tool list visible to model"]
+    model --> exec["ToolExecutor dispatch"]

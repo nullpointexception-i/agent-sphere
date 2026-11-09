@@ -1,0 +1,8 @@
+flowchart LR
+    p1["注册 MCP"] --> bind["绑定到实例"]
+    p2["创建 / 安装技能"] --> bind
+    p3["注册 CLI"] --> bind
+    p4["内置工具（SPI）"] --> bind
+    bind --> prep["ContextPreparer<br/>聚合 JSON Schema"]
+    prep --> model["模型可见的工具列表"]
+    model --> exec["ToolExecutor 分发"]

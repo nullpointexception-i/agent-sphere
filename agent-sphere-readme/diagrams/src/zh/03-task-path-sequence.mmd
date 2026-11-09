@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant BIZ as 业务系统
+    participant T as TaskService
+    participant R as SessionRunner
+    participant X as ArtifactService
+    participant CB as callbackUrl
+    BIZ->>T: POST /api/v1/api/tasks
+    T->>T: 校验凭证、匹配实例、创建会话
+    T-->>BIZ: 202 TaskVO{id, status=QUEUED}
+    T->>R: 阶段 1 execute
+    R-->>T: run 输出
+    T->>R: 阶段 2 extract 到 JSON Schema
+    R-->>T: 结构化 JSON
+    alt 校验失败
+        T->>R: 阶段 3 refine（带校验错误）
+        R-->>T: 修正后的 JSON
+    end
+    T->>X: 每个阶段写 agent_task_artifact
+    T->>CB: POST 结果（remark 带 run 摘要）
+    BIZ->>T: 或轮询 GET /api/v1/api/tasks/{id}

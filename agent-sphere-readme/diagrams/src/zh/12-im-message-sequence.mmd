@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant U as IM 用户
+    participant C as ImConversationController
+    participant M as ImMessageController
+    participant S as ImMessageService
+    participant Q as ImStreamController
+    participant A as Agent runtime
+    U->>C: 创建 / 打开会话
+    C-->>U: 会话 + 参与者
+    U->>M: POST 消息
+    M->>S: 落库消息
+    S-->>Q: 发布消息事件
+    Q-->>U: SSE 消息
+    S->>A: 可选触发 Agent run
+    A-->>S: 回复
+    S-->>U: 回复消息

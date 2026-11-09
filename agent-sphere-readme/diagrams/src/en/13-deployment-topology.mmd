@@ -1,0 +1,12 @@
+flowchart TB
+    IN["Ingress<br/>console / widget hosts"]
+    IN --> FE["frontend Deployment x1 :80"]
+    IN --> BE["backend Deployment x2 :8080"]
+    IN --> WGS["widget Deployment x1 :80"]
+
+    BE --> PG[("PostgreSQL StatefulSet x1<br/>PVC 20Gi")]
+    BE --> RD[("Redis Deployment x1")]
+    BE -.->|"images"| ACR["Aliyun ACR"]
+
+    FE -.->|"COMMIT_HASH"| VER["version display"]
+    EXT["Chrome extension"] -->|"HTTPS + Bearer"| IN

@@ -1,0 +1,21 @@
+erDiagram
+    agent_instance ||--o{ agent_session : owns
+    agent_session ||--o{ agent_run : contains
+    agent_run ||--o{ agent_timeline : renders
+    agent_run ||--o{ agent_tool_call_record : calls
+    agent_run ||--o{ agent_llm_interaction_record : invokes
+    agent_run ||--o{ agent_pending_wait : suspends
+    agent_run ||--o{ agent_pending_clarification : asks
+    agent_run ||--o{ agent_compact_record : compacts
+    agent_run ||--o{ agent_sub_agent_run : delegates
+    agent_task ||--o{ agent_task_artifact : produces
+    agent_instance ||--o{ agent_instance_capability : binds
+    agent_super_agent ||--o{ agent_channel_binding : binds
+    agent_super_agent ||--o{ agent_thread : owns
+    agent_thread ||--o{ agent_event : ingests
+    agent_event ||--o{ agent_event_delivery : fans_out
+    agent_thread ||--o{ agent_work_item : produces
+    agent_work_item ||--o{ agent_outbound_message : replies
+    im_conversation ||--o{ im_participant : has
+    im_conversation ||--o{ im_message : contains
+    im_conversation ||--o{ im_read_cursor : tracks

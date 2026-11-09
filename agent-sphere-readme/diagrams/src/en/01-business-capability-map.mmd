@@ -1,0 +1,58 @@
+flowchart LR
+    root(["AgentSphere Business Capabilities"])
+    root --> A["A Agent Operations"]
+    root --> B["B Conversational"]
+    root --> C["C Task Delivery"]
+    root --> D["D Capability Supply"]
+    root --> E["E Model Operations"]
+    root --> F["F Platform Governance"]
+    root --> G["G Digital Employee / Super Agent"]
+    root --> H["H IM Collaboration"]
+
+    A --> A1["Instance CRUD"]
+    A --> A2["Prompt / opening"]
+    A --> A3["Capability binding"]
+    A --> A4["Memory / loop cap"]
+    A --> A5["Per-surface session switches"]
+
+    B --> B1["Create session / send"]
+    B --> B2["Clarification"]
+    B --> B3["Wait"]
+    B --> B4["Stop / cancel"]
+    B --> B5["Timeline / todos"]
+    B --> B6["Share link"]
+
+    C --> C1["One-shot completion"]
+    C --> C2["Three-phase task"]
+    C --> C3["Artifact"]
+    C --> C4["Callback"]
+
+    D --> D1["MCP server"]
+    D --> D2["Skill library"]
+    D --> D3["CLI command"]
+    D --> D4["Builtin tools"]
+    D --> D5["Browser control"]
+
+    E --> E1["Providers / API keys"]
+    E --> E2["Model routing"]
+    E --> E3["Fallback failover"]
+
+    F --> F1["Users / roles / permissions"]
+    F --> F2["OIDC SSO"]
+    F --> F3["Audit log"]
+    F --> F4["System config"]
+    F --> F5["Session cleanup"]
+    F --> F6["Runtime observability"]
+
+    G --> G1["Channel binding"]
+    G --> G2["Thread / event ingestion"]
+    G --> G3["Group router"]
+    G --> G4["Agent router / work items"]
+    G --> G5["Worker dispatch"]
+    G --> G6["Outbound reply"]
+
+    H --> H1["Conversation / participant"]
+    H --> H2["Message / attachment"]
+    H --> H3["Read cursor"]
+    H --> H4["Session input"]
+    H --> H5["SSE stream"]

@@ -1,0 +1,8 @@
+flowchart LR
+    u["IM user"] --> c["Create / open conversation"]
+    c --> p["Participants"]
+    p --> m["Send message"]
+    m --> s["IM SSE stream"]
+    s --> a["Agent run (optional)"]
+    a --> r["Reply message"]
+    r --> rc["Read cursor updated"]
