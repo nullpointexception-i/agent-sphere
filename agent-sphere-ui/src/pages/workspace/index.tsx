@@ -2079,6 +2079,8 @@ function ChatDetail({
   const [remarkValue, setRemarkValue] = useState('');
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingSetting, setSavingSetting] = useState(false);
+  const [gateTrigger, setGateTrigger] = useState('MENTION');
+  const [savingGate, setSavingGate] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const loadedIdRef = useRef<number | null>(null);
@@ -2478,6 +2480,14 @@ function ChatDetail({
         setRemarkValue(data.remark || '');
       })
       .catch(() => setSetting(null));
+    if (conversation?.type === 'GROUP') {
+      imApi
+        .gateConfig(conversationId)
+        .then((config) => setGateTrigger(config?.trigger || 'MENTION'))
+        .catch(() => setGateTrigger('MENTION'));
+    } else {
+      setGateTrigger('MENTION');
+    }
   };
 
   const saveMeta = async (patch: { title?: string; purpose?: string }) => {
@@ -2545,6 +2555,21 @@ function ChatDetail({
       message.success(tw('common.saved', 'Saved'));
     } catch {
       message.error(tw('common.saveFailed', 'Save failed'));
+    }
+  };
+
+  const changeGateTrigger = async (trigger: string) => {
+    const previous = gateTrigger;
+    setGateTrigger(trigger);
+    setSavingGate(true);
+    try {
+      await imApi.updateGateConfig(conversationId, trigger);
+      message.success(tw('common.saved', 'Saved'));
+    } catch {
+      setGateTrigger(previous);
+      message.error(tw('common.saveFailed', 'Save failed'));
+    } finally {
+      setSavingGate(false);
     }
   };
 
@@ -3241,6 +3266,50 @@ function ChatDetail({
                       checked={allowMemberInvite}
                       onChange={toggleMemberInvite}
                     />
+                  </div>
+                </div>
+              ) : null}
+
+              {isGroup && isAdmin ? (
+                <div className={styles.settingSection}>
+                  <div className={styles.settingLabel}>
+                    {tw('chat.trigger', 'Trigger rule')}
+                  </div>
+                  <Select
+                    value={gateTrigger}
+                    loading={savingGate}
+                    disabled={savingGate}
+                    onChange={changeGateTrigger}
+                    style={{ width: '100%' }}
+                    options={[
+                      {
+                        value: 'MENTION',
+                        label: tw(
+                          'chat.triggerMention',
+                          'MENTION - only when a digital avatar is @mentioned',
+                        ),
+                      },
+                      {
+                        value: 'RELEVANCE',
+                        label: tw(
+                          'chat.triggerRelevance',
+                          'RELEVANCE - Group Router judges every message',
+                        ),
+                      },
+                      {
+                        value: 'ALL',
+                        label: tw(
+                          'chat.triggerAll',
+                          'ALL - triggered by every message',
+                        ),
+                      },
+                    ]}
+                  />
+                  <div className={styles.settingHint}>
+                    {tw(
+                      'chat.triggerHint',
+                      'Group Router handles new messages under RELEVANCE or ALL; @mentions always reply directly.',
+                    )}
                   </div>
                 </div>
               ) : null}

@@ -137,6 +137,13 @@ export default {
   'workspace.chat.allowMemberInvite': 'Allow members to invite',
   'workspace.chat.allowMemberInviteHint':
     'When on, ordinary members can invite users.',
+  'workspace.chat.trigger': 'Trigger rule',
+  'workspace.chat.triggerHint':
+    'Under RELEVANCE or ALL, new messages go to the Group Router; @mentions always reply directly.',
+  'workspace.chat.triggerMention': 'MENTION - only when @Digital avatar',
+  'workspace.chat.triggerRelevance':
+    'RELEVANCE - Group Router judges every message',
+  'workspace.chat.triggerAll': 'ALL - triggered by every message',
   'workspace.chat.inviteMember': 'Invite member',
   'workspace.chat.selectMember': 'Select a member',
   'workspace.chat.mentionCandidateAgent': 'Avatar',
