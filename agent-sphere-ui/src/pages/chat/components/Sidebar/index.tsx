@@ -10,7 +10,7 @@ import {
 import { Conversations } from '@ant-design/x';
 import { useIntl } from '@umijs/max';
 import { App, Button, Input, Modal, Segmented, Tabs, Tag } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import { useStyles } from '../../style';
@@ -73,6 +73,12 @@ export default function Sidebar({
   const [summaryEditValue, setSummaryEditValue] = useState('');
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summarySaving, setSummarySaving] = useState(false);
+
+  // Leaving the user-conversation filter must not leave an invisible batch mode active.
+  useEffect(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, [conversationScope, userRole]);
 
   const handleShowSummary = async (sessionId: number) => {
     setSummaryLoading(true);
@@ -406,7 +412,7 @@ export default function Sidebar({
               })}
             </div>
           )}
-          {conversationScope === 'USER' && (
+          {conversationScope === 'USER' && userRole === 'USER' && (
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <span
                 className={styles.sidebarNewChatItem}
