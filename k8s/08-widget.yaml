@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: widget
-        image: crpi-2jeh8zb0taelsoax.cn-wulanchabu.personal.cr.aliyuncs.com/nullpointexception/agent-sphere-widget:sha-f6a1d92
+        image: crpi-2jeh8zb0taelsoax.cn-wulanchabu.personal.cr.aliyuncs.com/nullpointexception/agent-sphere-widget:sha-1e555a6
         ports:
         - containerPort: 80
         readinessProbe:
