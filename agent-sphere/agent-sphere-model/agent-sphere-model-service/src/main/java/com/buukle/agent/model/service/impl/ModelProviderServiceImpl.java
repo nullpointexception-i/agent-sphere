@@ -306,12 +306,12 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
                 boolean handshake = isHandshakeFailure(e);
                 if (handshake) {
                     handshakeFailed = true;
-                    metrics.increment(AgentMetrics.LLM_STREAM_HANDSHAKE_FAILED, "model", modelName);
+                    metrics.increment(AgentMetrics.LLM_STREAM_HANDSHAKE_FAILED, AgentMetrics.TAG_MODEL, modelName);
                 }
                 // Transient transport failure (EOF/disconnect, no chunk received) -> retry; timeout/cancel -> no retry.
                 if (attempt < streamMaxRetries && acc.chunkCount == 0 && !userTimedOut) {
                     retryCount++;
-                    metrics.increment(AgentMetrics.LLM_STREAM_RETRY, "model", modelName);
+                    metrics.increment(AgentMetrics.LLM_STREAM_RETRY, AgentMetrics.TAG_MODEL, modelName);
                     log.warn("LLM stream failed, will retry: model={}, attempt={}/{}, timedOut={}, chunks={}, errorType={}, handshake={}, err={}",
                             modelName, attempt + 1, streamMaxRetries + 1, userTimedOut, acc.chunkCount,
                             lastErrorType, handshake, e.toString());

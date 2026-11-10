@@ -24,4 +24,7 @@ public class SessionInputVO implements Serializable {
     private String status;
     /** User id that triggered the parked run; present only for inputs created after V173. */
     private Long requestedBy;
+    private String decisionsJson;
+    private String respondedBy;
+    private String respondedAt;
 }

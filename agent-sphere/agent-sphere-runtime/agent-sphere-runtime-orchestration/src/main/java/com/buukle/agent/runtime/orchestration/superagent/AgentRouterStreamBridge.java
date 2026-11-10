@@ -492,7 +492,7 @@ public class AgentRouterStreamBridge {
             if (AgentStreamStatus.COMPLETED.equals(signal.streamStatus())) {
                 deliverFinalReply(signal);
             }
-            metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "streamStatus",
+            metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, AgentMetrics.TAG_STREAM_STATUS,
                     AgentStreamStatus.COMPLETED.equals(signal.streamStatus())
                             ? "completed" : "lifecycle");
             synchronized (thinking) {

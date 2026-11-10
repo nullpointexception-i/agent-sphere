@@ -144,12 +144,16 @@ export default {
   'workspace.chat.triggerRelevance':
     'RELEVANCE - Group Router judges every message',
   'workspace.chat.triggerAll': 'ALL - triggered by every message',
-  'workspace.chat.clarifyTarget': 'Reply to',
-  'workspace.chat.clarifyTargetNone': 'Normal message',
-  'workspace.chat.clarifyTargetHint': 'Choose the clarification to answer',
-  'workspace.chat.clarifyStrict': 'Restrict clarification answers',
+  'workspace.chat.clarifyStrict': 'Clarification visibility',
   'workspace.chat.clarifyStrictHint':
-    'When on, only the asker, the avatar owner and group admins can answer a clarification.',
+    'Off: every member can see and answer. On: only the asker, the avatar owner and group admins.',
+  'workspace.chat.clarificationHidden':
+    'A clarification visible to its responders only',
+  'workspace.chat.clarificationHiddenHint':
+    'Only the asker, the avatar owner and group admins can see and answer it.',
+  'workspace.chat.clarificationInput': 'Type your answer…',
+  'workspace.chat.clarificationNoPermission':
+    'Only the asker, the avatar owner and group admins can answer.',
   'workspace.chat.inviteMember': 'Invite member',
   'workspace.chat.selectMember': 'Select a member',
   'workspace.chat.addMember': 'Add',

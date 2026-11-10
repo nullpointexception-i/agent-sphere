@@ -83,6 +83,12 @@ export interface ImMessage {
   senderOwnerName?: string;
   /** AGENT senders only: the avatar belongs to the current viewer. */
   ownAgent?: boolean;
+  /** Router clarification cards: viewer may see the card body. */
+  canView?: boolean;
+  /** Router clarification cards: viewer may answer. */
+  canAnswer?: boolean;
+  /** Router clarification cards: reason when answering is denied. */
+  deniedReason?: string;
 }
 
 /** A digital avatar available in a conversation; groups resolve these live. */
@@ -192,7 +198,6 @@ export const imApi = {
     clientMsgId?: string,
     mentions?: { type: string; id: number; name?: string }[],
     replyToId?: number,
-    clarificationInputId?: string,
   ) =>
     request<ImMessage>(`${BASE}/im/conversations/${id}/messages`, {
       method: 'POST',
@@ -202,9 +207,27 @@ export const imApi = {
         clientMsgId,
         mentions,
         replyToId,
-        clarificationInputId,
       },
     }),
+  answerClarification: (
+    id: number,
+    inputId: string,
+    payload: {
+      mode: 'SINGLE_OPTION' | 'MULTI_OPTION' | 'FREE_TEXT';
+      selectedOptions?: string[];
+      text?: string;
+    },
+  ) =>
+    request<{
+      inputId: string;
+      status: string;
+      answer: string;
+      respondedBy: string;
+      respondedAt: string;
+    }>(
+      `${BASE}/im/conversations/${id}/clarifications/${encodeURIComponent(inputId)}/answer`,
+      { method: 'POST', data: payload },
+    ),
   uploadAttachment: (id: number, file: File) => {
     const form = new FormData();
     form.append('file', file);

@@ -47,6 +47,17 @@ public class AgentMetrics {
     public static final String ROUTER_INPUT_CANCELLED = "superagent.router_input.cancelled";
     public static final String ROUTER_INPUT_CARD_FAILED = "superagent.router_input.card_failed";
 
+    /** Fixed low-cardinality metric tag keys. */
+    public static final String TAG_SENDER = "sender";
+    public static final String TAG_STATUS = "status";
+    public static final String TAG_INPUT_TYPE = "inputType";
+    public static final String TAG_DECISION = "decision";
+    public static final String TAG_DEFERRED = "deferred";
+    public static final String TAG_STREAM_STATUS = "streamStatus";
+    public static final String TAG_MODEL = "model";
+    public static final String TAG_KIND = "kind";
+    public static final String TAG_TABLE = "table";
+
     private final ObjectProvider<MeterRegistry> registryProvider;
 
     public void increment(String name) {

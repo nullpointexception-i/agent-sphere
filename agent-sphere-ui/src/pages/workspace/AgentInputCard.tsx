@@ -1,3 +1,4 @@
+import { Input } from 'antd';
 import { useState } from 'react';
 import { TIMELINE_STATE } from '@/constants/timeline';
 import type { SessionInputDecision } from '@/services/agentSphere/im';
@@ -27,6 +28,14 @@ export interface AgentInputCardView {
   decisionsJson?: string;
   /** Resolved cards: username that answered/approved. */
   respondedBy?: string;
+  /** Resolved cards: answer/approval time. */
+  respondedAt?: string;
+}
+
+export interface AgentClarificationAnswer {
+  mode: 'SINGLE_OPTION' | 'MULTI_OPTION' | 'FREE_TEXT';
+  selectedOptions?: string[];
+  text?: string;
 }
 
 export const ROUTER_CLARIFICATION = 'ROUTER_CLARIFICATION';
@@ -92,7 +101,7 @@ function parseDecisions(json?: string): Record<string, string> {
   return map;
 }
 
-/** Resolved clarification cards: the free-text answer that was sent. */
+/** Resolved clarification cards: the answer captured on the card. */
 function parseAnswer(json?: string): string | null {
   if (!json) return null;
   try {
@@ -121,21 +130,27 @@ function decisionLabel(decision: string) {
 }
 
 /**
- * Router parked-input card: clarification options are answered as plain chat
- * text (the backend consumes it and resumes the parked run); approval calls are
- * decided per call and submitted through the approval endpoint.
+ * Router parked-input card. Clarifications are answered only inside the card: options select,
+ * free text is typed here, and an explicit confirm submits. Approvals keep their per-call flow.
  */
 export function AgentInputCard({
   card,
   conversationId,
-  onReplyText,
-  submitting,
+  onAnswer,
+  canView = true,
+  canAnswer = true,
+  deniedReason,
   onApprove,
 }: {
   card: AgentInputCardView;
   conversationId: number;
-  onReplyText?: (text: string, inputId?: string) => void;
-  submitting?: boolean;
+  onAnswer?: (
+    inputId: string,
+    payload: AgentClarificationAnswer,
+  ) => Promise<boolean>;
+  canView?: boolean;
+  canAnswer?: boolean;
+  deniedReason?: string;
   onApprove?: (
     conversationId: number,
     inputId: string,
@@ -147,8 +162,34 @@ export function AgentInputCard({
   const clarification = card.cardType === ROUTER_CLARIFICATION;
   const approval = card.cardType === ROUTER_APPROVAL;
   const [picked, setPicked] = useState<number[]>([]);
+  const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [freeText, setFreeText] = useState('');
   const [decisions, setDecisions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+
+  if (clarification && !canView) {
+    return (
+      <div className={styles.taskCard}>
+        <div className={styles.taskCardTop}>
+          <span className={styles.taskCardTitle}>
+            {tw(
+              'chat.clarificationHidden',
+              'A clarification is visible to its responders only',
+            )}
+          </span>
+          <span className={styles.taskCardStatus}>
+            {tw('chat.taskStatus.pending', 'Awaiting reply')}
+          </span>
+        </div>
+        <div className={styles.agentInputDoneHint}>
+          {tw(
+            'chat.clarificationHiddenHint',
+            'Only the asker, the avatar owner and group admins can see and answer it.',
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (!pending || !conversationId) {
     const resolvedCalls = parseList<AgentInputToolCall>(
@@ -210,6 +251,7 @@ export function AgentInputCard({
                 ? `${resolvedAnswer} · ${card.respondedBy}`
                 : resolvedAnswer,
             })}
+            {card.respondedAt ? ` · ${card.respondedAt}` : ''}
           </div>
         ) : null}
       </div>
@@ -227,21 +269,43 @@ export function AgentInputCard({
     0,
     20,
   );
-
-  const repliesDisabled = submitting || busy || !onReplyText;
-
-  const submitOption = (text: string) => {
-    if (repliesDisabled) return;
-    onReplyText?.(text, card.inputId);
-  };
+  const disabled = busy || !canAnswer;
+  const freeTextMode = options.length === 0;
+  const multiple = Boolean(card.multiple);
+  const valid = freeTextMode
+    ? freeText.trim().length > 0
+    : multiple
+      ? picked.length > 0
+      : selectedOption !== null;
 
   const toggleMultipleOption = (index: number) => {
-    if (repliesDisabled) return;
+    if (disabled) return;
     setPicked((previous) =>
       previous.includes(index)
         ? previous.filter((value) => value !== index)
         : [...previous, index],
     );
+  };
+
+  const submitClarification = async () => {
+    if (!valid || disabled || !card.inputId || !onAnswer) return;
+    setBusy(true);
+    try {
+      const payload: AgentClarificationAnswer = freeTextMode
+        ? { mode: 'FREE_TEXT', text: freeText.trim() }
+        : multiple
+          ? {
+              mode: 'MULTI_OPTION',
+              selectedOptions: picked.map((index) => options[index]),
+            }
+          : {
+              mode: 'SINGLE_OPTION',
+              selectedOptions: [options[selectedOption as number]],
+            };
+      await onAnswer(card.inputId, payload);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submitApproval = async () => {
@@ -255,8 +319,6 @@ export function AgentInputCard({
     if (list.length !== toolCalls.length) return;
     setBusy(true);
     try {
-      // On success the button collapses via the authoritative PENDING→non-PENDING update; this only
-      // guards against duplicate requests while in flight.
       await onApprove(conversationId, card.inputId, list);
     } finally {
       setBusy(false);
@@ -281,42 +343,66 @@ export function AgentInputCard({
       ) : null}
       {clarification ? (
         <>
-          <div className={styles.agentInputOptions}>
-            {options.map((option, index) => {
-              const active = card.multiple && picked.includes(index);
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  className={`${styles.agentInputOption} ${
-                    active ? styles.agentInputOptionActive : ''
-                  } ${repliesDisabled ? styles.agentInputOptionDisabled : ''}`}
-                  onClick={() => {
-                    if (card.multiple) {
-                      toggleMultipleOption(index);
-                    } else {
-                      submitOption(option);
-                    }
-                  }}
-                >
-                  {option}
-                </button>
-              );
-            })}
-          </div>
-          {card.multiple && picked.length > 0 ? (
+          {freeTextMode ? (
+            <Input.TextArea
+              value={freeText}
+              rows={2}
+              maxLength={8000}
+              disabled={disabled}
+              placeholder={tw('chat.clarificationInput', 'Type your answer…')}
+              onChange={(event) => setFreeText(event.target.value)}
+              style={{ marginTop: 8 }}
+            />
+          ) : (
+            <div className={styles.agentInputOptions}>
+              {options.map((option, index) => {
+                const active = multiple
+                  ? picked.includes(index)
+                  : selectedOption === index;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    className={`${styles.agentInputOption} ${
+                      active ? styles.agentInputOptionActive : ''
+                    } ${disabled ? styles.agentInputOptionDisabled : ''}`}
+                    onClick={() => {
+                      if (disabled) return;
+                      if (multiple) {
+                        toggleMultipleOption(index);
+                      } else {
+                        setSelectedOption(index);
+                      }
+                    }}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {!canAnswer ? (
+            <div className={styles.agentInputDoneHint}>
+              {deniedReason ||
+                tw(
+                  'chat.clarificationNoPermission',
+                  'Only the asker, the avatar owner and group admins can answer.',
+                )}
+            </div>
+          ) : (
             <button
               type="button"
+              disabled={!valid || disabled}
               className={`${styles.agentInputSubmit} ${
-                repliesDisabled ? styles.agentInputSubmitDisabled : ''
+                !valid || disabled ? styles.agentInputSubmitDisabled : ''
               }`}
-              onClick={() =>
-                submitOption(picked.map((index) => options[index]).join(', '))
-              }
+              onClick={submitClarification}
             >
-              {tw('chat.inputSubmitAnswer', 'Submit answer')}
+              {busy
+                ? tw('chat.inputSubmitting', 'Submitting…')
+                : tw('chat.inputSubmitAnswer', 'Submit answer')}
             </button>
-          ) : null}
+          )}
         </>
       ) : null}
       {approval ? (

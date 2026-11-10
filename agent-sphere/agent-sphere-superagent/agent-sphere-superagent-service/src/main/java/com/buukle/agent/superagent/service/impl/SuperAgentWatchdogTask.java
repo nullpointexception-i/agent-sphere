@@ -88,13 +88,13 @@ public class SuperAgentWatchdogTask {
                 run.setDeliveryStuck(deliveries);
                 run.setOutboundStuck(outbound);
                 if (dispatched > 0) {
-                    metrics.increment(AgentMetrics.WATCHDOG_RECOVERED, "kind", "DISPATCH");
+                    metrics.increment(AgentMetrics.WATCHDOG_RECOVERED, AgentMetrics.TAG_KIND, "DISPATCH");
                 }
                 if (deliveries > 0) {
-                    metrics.increment(AgentMetrics.WATCHDOG_RECOVERED, "kind", "DELIVERY");
+                    metrics.increment(AgentMetrics.WATCHDOG_RECOVERED, AgentMetrics.TAG_KIND, "DELIVERY");
                 }
                 if (outbound > 0) {
-                    metrics.increment(AgentMetrics.WATCHDOG_RECOVERED, "kind", "OUTBOUND");
+                    metrics.increment(AgentMetrics.WATCHDOG_RECOVERED, AgentMetrics.TAG_KIND, "OUTBOUND");
                 }
                 run.setStatus(AgentWatchdogRunStatus.SUCCESS);
                 run.setFinishedAt(LocalDateTime.now());

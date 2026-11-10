@@ -24,4 +24,10 @@ public class MessageVO implements Serializable {
     private String senderOwnerName;
     /** For AGENT senders: true when the avatar belongs to the current viewer. */
     private Boolean ownAgent;
+    /** Router clarification cards: whether the current viewer may see the card body. */
+    private Boolean canView;
+    /** Router clarification cards: whether the current viewer may answer. */
+    private Boolean canAnswer;
+    /** Router clarification cards: why answering is denied. */
+    private String deniedReason;
 }

@@ -104,7 +104,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             input.setCreatedBy(owner);
             try {
                 sessionInputMapper.insert(input);
-                metrics.increment(AgentMetrics.ROUTER_INPUT_PROJECTED, "inputType", command.inputType());
+                metrics.increment(AgentMetrics.ROUTER_INPUT_PROJECTED, AgentMetrics.TAG_INPUT_TYPE, command.inputType());
             } catch (DuplicateKeyException ignored) {
                 // Error-type/input-type already projected: keep the first row.
                 return;
@@ -164,7 +164,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
                 }
                 markResolved(input, SessionInputStatus.CANCELLED);
                 updateCard(input, ownerUsername(resolveOwner(input)));
-                metrics.increment(AgentMetrics.ROUTER_INPUT_CANCELLED, "inputType", input.getInputType());
+                metrics.increment(AgentMetrics.ROUTER_INPUT_CANCELLED, AgentMetrics.TAG_INPUT_TYPE, input.getInputType());
             }
         } catch (Exception e) {
             log.warn("Router input run-terminal cleanup failed: runId={}, error={}", runId, e.getMessage());
@@ -301,7 +301,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             }
             markResolved(input, SessionInputStatus.ANSWERED, responder);
             updateCard(input, null);
-            metrics.increment(AgentMetrics.ROUTER_INPUT_ANSWERED, "inputType", SessionInputType.CLARIFICATION);
+            metrics.increment(AgentMetrics.ROUTER_INPUT_ANSWERED, AgentMetrics.TAG_INPUT_TYPE, SessionInputType.CLARIFICATION);
             publishDeliveryReady(input, threadId);
             return true;
         } catch (Exception e) {
@@ -397,7 +397,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             }
             markResolved(input, SessionInputStatus.ANSWERED, null);
             updateCard(input, null);
-            metrics.increment(AgentMetrics.ROUTER_INPUT_ANSWERED, "inputType", SessionInputType.APPROVAL);
+            metrics.increment(AgentMetrics.ROUTER_INPUT_ANSWERED, AgentMetrics.TAG_INPUT_TYPE, SessionInputType.APPROVAL);
         } finally {
             TenantContext.clear();
         }
@@ -440,7 +440,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         } catch (DuplicateKeyException ignored) {
             // Card already queued.
         } catch (Exception e) {
-            metrics.increment(AgentMetrics.ROUTER_INPUT_CARD_FAILED, "inputType", input.getInputType());
+            metrics.increment(AgentMetrics.ROUTER_INPUT_CARD_FAILED, AgentMetrics.TAG_INPUT_TYPE, input.getInputType());
             log.warn("Router input card enqueue failed: inputId={}, error={}", input.getInputId(), e.getMessage());
         } finally {
             if (outboundId != null) {
@@ -511,7 +511,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         } catch (DuplicateKeyException ignored) {
             // Status update already projected.
         } catch (Exception e) {
-            metrics.increment(AgentMetrics.ROUTER_INPUT_CARD_FAILED, "inputType", input.getInputType());
+            metrics.increment(AgentMetrics.ROUTER_INPUT_CARD_FAILED, AgentMetrics.TAG_INPUT_TYPE, input.getInputType());
             log.warn("Router input card update failed: inputId={}, error={}", input.getInputId(), e.getMessage());
         }
     }
@@ -548,6 +548,8 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         card.setToolCallsJson(isApproval(input) ? input.getToolCallsJson() : null);
         card.setDecisionsJson(input.getDecisionsJson());
         card.setRespondedBy(input.getRespondedBy());
+        card.setRespondedAt(input.getRespondedAt() == null
+                ? null : input.getRespondedAt().toString());
         return card;
     }
 
@@ -602,6 +604,10 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         vo.setToolCallsJson(input.getToolCallsJson());
         vo.setStatus(input.getStatus());
         vo.setRequestedBy(input.getRequestedBy());
+        vo.setDecisionsJson(input.getDecisionsJson());
+        vo.setRespondedBy(input.getRespondedBy());
+        vo.setRespondedAt(input.getRespondedAt() == null
+                ? null : input.getRespondedAt().toString());
         return vo;
     }
 

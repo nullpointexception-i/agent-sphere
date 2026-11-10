@@ -301,11 +301,11 @@ public class AgentRouterScheduler {
                     context.delivery().setDeliveredAt(LocalDateTime.now());
                     deliveryMapper.updateById(context.delivery());
                 }
-                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status",
+                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, AgentMetrics.TAG_STATUS,
                         AgentRouterRunStatus.ACCEPTED);
             } else {
                 releaseAll(claimed);
-                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status",
+                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, AgentMetrics.TAG_STATUS,
                         AgentRouterRunStatus.REJECTED);
             }
         } catch (InterruptedException e) {
@@ -387,7 +387,7 @@ public class AgentRouterScheduler {
             context.delivery().setDeliveredAt(LocalDateTime.now());
             deliveryMapper.updateById(context.delivery());
         }
-        metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status", FORKED_STATUS_TAG);
+        metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, AgentMetrics.TAG_STATUS, FORKED_STATUS_TAG);
     }
 
     private SessionVO createForkSession(AgentSuperAgent agent, Long threadId, Long parentSessionId,

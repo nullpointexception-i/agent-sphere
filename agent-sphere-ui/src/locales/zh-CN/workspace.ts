@@ -135,12 +135,15 @@ export default {
   'workspace.chat.triggerRelevance':
     'RELEVANCE - 每条消息都交给 Group Router 判断',
   'workspace.chat.triggerAll': 'ALL - 每条消息都触发',
-  'workspace.chat.clarifyTarget': '回复',
-  'workspace.chat.clarifyTargetNone': '普通消息',
-  'workspace.chat.clarifyTargetHint': '请选择要回答的澄清',
-  'workspace.chat.clarifyStrict': '限制澄清回复人',
+  'workspace.chat.clarifyStrict': '澄清可见范围',
   'workspace.chat.clarifyStrictHint':
-    '开启后只有提问者、分身所有者和群管理员可以回答澄清。',
+    '关闭时所有成员可见并可回答；开启后仅提问者、分身所有者和群管理员可见并可回答。',
+  'workspace.chat.clarificationHidden': '有一条仅相关人员可见的澄清',
+  'workspace.chat.clarificationHiddenHint':
+    '仅提问者、分身所有者和群管理员可以查看并回答。',
+  'workspace.chat.clarificationInput': '输入你的回答…',
+  'workspace.chat.clarificationNoPermission':
+    '仅提问者、分身所有者和群管理员可以回答。',
   'workspace.chat.inviteMember': '邀请成员',
   'workspace.chat.selectMember': '选择成员',
   'workspace.chat.addMember': '添加',

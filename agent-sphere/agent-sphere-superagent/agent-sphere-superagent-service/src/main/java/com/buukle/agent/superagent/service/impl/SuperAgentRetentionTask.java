@@ -114,7 +114,7 @@ public class SuperAgentRetentionTask {
             }
             budget.remaining--;
             int deleted = delete.apply(ids);
-            metrics.add(AgentMetrics.RETENTION_ROWS, "table", table, deleted);
+            metrics.add(AgentMetrics.RETENTION_ROWS, AgentMetrics.TAG_TABLE, table, deleted);
             if (ids.size() >= size) {
                 sleepBetweenBatches();
             }

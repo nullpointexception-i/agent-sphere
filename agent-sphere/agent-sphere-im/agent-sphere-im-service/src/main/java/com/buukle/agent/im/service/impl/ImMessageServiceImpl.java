@@ -1,11 +1,14 @@
 package com.buukle.agent.im.service.impl;
 
 import com.buukle.agent.common.context.TenantScopeHolder;
+import com.buukle.agent.common.context.TenantScope;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.channel.spi.EventIngestPort;
 import com.buukle.agent.channel.spi.NormalizedEvent;
+import com.buukle.agent.channel.spi.TaskCardPayload;
 import com.buukle.agent.common.constant.ActorType;
+import com.buukle.agent.common.context.AgentContextSnapshot;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.error.CommonErrorCode;
@@ -59,6 +62,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +80,9 @@ public class ImMessageServiceImpl implements ImMessageService {
     private static final int MAX_SEARCH_KEYWORD_CHARS = 100;
     private static final String DEFAULT_DEVICE = "default";
     private static final String CHANNEL_IM = "IM_BUILTIN";
+    private static final String ROUTER_CLARIFICATION_CARD = "ROUTER_CLARIFICATION";
+    private static final String CLARIFICATION_DENIED_REASON =
+            "Only the asker, the avatar owner or a group admin can answer this clarification";
 
     private final ImMessageMapper messageMapper;
     private final ImConversationMapper conversationMapper;
@@ -162,151 +169,9 @@ public class ImMessageServiceImpl implements ImMessageService {
         touchReadCursor(conversationId, userId, seq);
 
         publishToMembers(conversationId, message, userId);
-        metrics.increment(AgentMetrics.IM_MESSAGE_SENT, "sender", "USER");
-        if (answerPendingClarification(conversation, message, dto)) {
-            // The text resumed the parked Router run; keep it out of a fresh Router delivery.
-            return toVO(message);
-        }
+        metrics.increment(AgentMetrics.IM_MESSAGE_SENT, AgentMetrics.TAG_SENDER, ActorType.USER);
         ingest(conversationId, message, dto);
         return toVO(message);
-    }
-
-    /**
-     * Consumes a text reply as the answer to a pending Router clarification and resumes the
-     * parked run. Works for DMs and groups; a group may hold several pending cards, so the
-     * target is resolved from the clicked card / quoted card / @mention first and only falls
-     * back to "the single pending clarification" when that is unambiguous.
-     */
-    private boolean answerPendingClarification(ImConversation conversation, ImMessage message,
-                                               SendMessageDTO dto) {
-        if (conversation.getThreadId() == null
-                || !ImMessageType.TEXT.equals(message.getType())) {
-            return false;
-        }
-        SessionInputSpi sessionInputSpi = sessionInputPortProvider.getIfAvailable();
-        if (sessionInputSpi == null) {
-            return false;
-        }
-        Object content = parseJson(message.getContent());
-        String text = content instanceof ImTextContentVO textContent ? textContent.getText()
-                : extractText(content);
-        if (text == null || text.isBlank()) {
-            return false;
-        }
-        Long threadId = conversation.getThreadId();
-        SessionInputVO target = null;
-        if (dto.getClarificationInputId() != null && !dto.getClarificationInputId().isBlank()) {
-            target = sessionInputSpi.findPendingByInput(threadId, dto.getClarificationInputId());
-        }
-        if (target == null && message.getReplyToId() != null) {
-            String inputId = cardInputId(message.getReplyToId());
-            if (inputId != null) {
-                target = sessionInputSpi.findPendingByInput(threadId, inputId);
-            }
-        }
-        if (target == null) {
-            target = mentionedPending(sessionInputSpi, threadId, dto);
-        }
-        if (target == null) {
-            List<SessionInputVO> pending = sessionInputSpi.findPendingClarifications(threadId);
-            if (pending.size() == 1) {
-                target = pending.get(0);
-            }
-        }
-        if (target == null) {
-            return false;
-        }
-        if (isStrictClarification(conversation) && !canAnswerStrict(conversation, target)) {
-            throw new BizException(CommonErrorCode.FORBIDDEN,
-                    "Only the asker, the avatar owner or a group admin can answer this clarification");
-        }
-        try {
-            return sessionInputSpi.answerRouterClarification(
-                    threadId, target.getInputId(), text, AuthContext.getUsername());
-        } catch (Exception e) {
-            log.warn("Router clarification intercept failed: conversation={}, input={}, error={}",
-                    conversation.getId(), target.getInputId(), e.getMessage());
-            return false;
-        }
-    }
-
-    /** Reads the card input id from a quoted clarification message. */
-    private String cardInputId(Long messageId) {
-        if (messageId == null) {
-            return null;
-        }
-        ImMessage replied = systemRead(() -> messageMapper.selectById(messageId));
-        if (replied == null) {
-            return null;
-        }
-        Object content = parseJson(replied.getContent());
-        if (content instanceof java.util.Map<?, ?> map && map.get("inputId") instanceof String inputId) {
-            return inputId.isBlank() ? null : inputId;
-        }
-        return null;
-    }
-
-    /** The pending clarification of the single mentioned avatar, or null when ambiguous/none. */
-    private SessionInputVO mentionedPending(SessionInputSpi spi, Long threadId, SendMessageDTO dto) {
-        if (dto.getMentions() == null || dto.getMentions().isEmpty()) {
-            return null;
-        }
-        SessionInputVO found = null;
-        for (MentionDTO mention : dto.getMentions()) {
-            if (mention == null || mention.getId() == null
-                    || !ImParticipantType.AGENT.equalsIgnoreCase(mention.getType())) {
-                continue;
-            }
-            SessionInputVO pending = spi.findPendingByThreadAndAgent(threadId, mention.getId());
-            if (pending == null) {
-                continue;
-            }
-            if (found != null && !found.getInputId().equals(pending.getInputId())) {
-                return null;
-            }
-            found = pending;
-        }
-        return found;
-    }
-
-    private boolean isStrictClarification(ImConversation conversation) {
-        if (conversation.getGateConfig() == null || conversation.getGateConfig().isBlank()) {
-            return false;
-        }
-        try {
-            ImGateConfig config = JsonUtils.parse(conversation.getGateConfig(), ImGateConfig.class);
-            return config != null && Boolean.TRUE.equals(config.getClarificationStrict());
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /** Strict mode: the asker, the avatar owner or a group owner/admin may answer. */
-    private boolean canAnswerStrict(ImConversation conversation, SessionInputVO input) {
-        Long userId = AuthContext.getUserId();
-        if (userId == null || input == null) {
-            return true;
-        }
-        if (input.getRequestedBy() != null && input.getRequestedBy().equals(userId)) {
-            return true;
-        }
-        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
-        if (directory != null && input.getSuperAgentId() != null) {
-            ChatAgentIdentity identity = directory.findByIds(
-                            java.util.Set.of(input.getSuperAgentId()))
-                    .get(input.getSuperAgentId());
-            if (identity != null && userId.equals(identity.ownerUserId())) {
-                return true;
-            }
-        }
-        ImParticipant member = systemRead(() -> participantMapper.selectOne(
-                Wrappers.<ImParticipant>lambdaQuery()
-                        .eq(ImParticipant::getConversationId, conversation.getId())
-                        .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
-                        .eq(ImParticipant::getParticipantId, userId)
-                        .last("LIMIT 1")));
-        return member != null && (ImParticipantRole.OWNER.equals(member.getRole())
-                || ImParticipantRole.ADMIN.equals(member.getRole()));
     }
 
     @Override
@@ -363,7 +228,7 @@ public class ImMessageServiceImpl implements ImMessageService {
         }
         conversationMapper.updateLastMessage(conversationId, message.getId(), LocalDateTime.now());
         publishToMembers(conversationId, message, superAgentId);
-        metrics.increment(AgentMetrics.IM_MESSAGE_SENT, "sender", "AGENT");
+        metrics.increment(AgentMetrics.IM_MESSAGE_SENT, AgentMetrics.TAG_SENDER, ActorType.AGENT);
         return toVO(message);
     }
 
@@ -440,6 +305,7 @@ public class ImMessageServiceImpl implements ImMessageService {
         ImMessagePageVO page = new ImMessagePageVO();
         List<MessageVO> rows = messages.stream().map(this::toVO).toList();
         fillAgentSenders(rows);
+        fillClarificationAccess(rows);
         page.setRows(rows);
         page.setHasMore(hasMore);
         if (!messages.isEmpty()) {
@@ -472,6 +338,7 @@ public class ImMessageServiceImpl implements ImMessageService {
         ImMessagePageVO page = new ImMessagePageVO();
         List<MessageVO> rows = messages.stream().map(this::toVO).toList();
         fillAgentSenders(rows);
+        fillClarificationAccess(rows);
         page.setRows(rows);
         page.setHasMore(hasMore);
         if (!messages.isEmpty()) {
@@ -793,6 +660,7 @@ public class ImMessageServiceImpl implements ImMessageService {
 
     private <T> T systemRead(java.util.function.Supplier<T> supplier) {
         String tenant = TenantUtil.get();
+        TenantScope scope = TenantScopeHolder.get();
         boolean admin = AuthContext.isSuperAdmin();
         TenantUtil.stop();
         TenantScopeHolder.clear();
@@ -803,6 +671,11 @@ public class ImMessageServiceImpl implements ImMessageService {
             AuthContext.setSuperAdmin(admin);
             if (tenant != null) {
                 TenantUtil.start(tenant);
+            }
+            if (scope == null) {
+                TenantScopeHolder.clear();
+            } else {
+                TenantScopeHolder.start(scope);
             }
         }
     }
@@ -855,6 +728,131 @@ public class ImMessageServiceImpl implements ImMessageService {
             row.setOwnAgent(viewerId != null && identity.ownerUserId() != null
                     && viewerId.equals(identity.ownerUserId()));
         }
+    }
+
+    /**
+     * Clarification cards follow the group visibility setting. Strict groups expose the card only
+     * to the asker, the avatar owner and group administrators; everyone else gets a redacted card
+     * so the conversation keeps its shape without leaking the question.
+     */
+    private void fillClarificationAccess(List<MessageVO> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        SessionInputSpi spi = sessionInputPortProvider.getIfAvailable();
+        if (spi == null) {
+            return;
+        }
+        Long viewerId = AuthContext.getUserId();
+        Map<Long, ClarificationContext> conversations = new HashMap<>();
+        AgentContextSnapshot caller = AgentContextSnapshot.capture();
+        try {
+            for (MessageVO row : rows) {
+                if (!ImMessageType.CARD.equalsIgnoreCase(row.getType())) {
+                    continue;
+                }
+                TaskCardPayload card = parseCard(row.getContent());
+                if (card == null || card.getInputId() == null
+                        || !ROUTER_CLARIFICATION_CARD.equalsIgnoreCase(card.getCardType())) {
+                    continue;
+                }
+                ClarificationContext context = conversations.computeIfAbsent(
+                        row.getConversationId(), id -> clarificationContext(id, viewerId));
+                if (context == null) {
+                    continue;
+                }
+                if (viewerId == null || !context.strict()) {
+                    // Open groups (the default) need no extra lookup: every member can answer.
+                    row.setCanView(true);
+                    row.setCanAnswer(true);
+                    continue;
+                }
+                SessionInputVO input = spi.findPendingByInput(context.threadId(), card.getInputId());
+                caller.restore();
+                if (input == null) {
+                    // Already answered/cancelled: the resolved card is visible to the room.
+                    row.setCanView(true);
+                    row.setCanAnswer(false);
+                    continue;
+                }
+                boolean allowed = canAnswerClarification(context, input, viewerId);
+                row.setCanView(allowed);
+                row.setCanAnswer(allowed);
+                if (!allowed) {
+                    row.setDeniedReason(CLARIFICATION_DENIED_REASON);
+                    row.setContent(hiddenCard(card));
+                }
+            }
+        } finally {
+            caller.restore();
+        }
+    }
+
+    private ClarificationContext clarificationContext(Long conversationId, Long viewerId) {
+        ImConversation conversation = systemRead(() -> conversationMapper.selectById(conversationId));
+        if (conversation == null || conversation.getThreadId() == null) {
+            return null;
+        }
+        boolean strict = false;
+        if (conversation.getGateConfig() != null && !conversation.getGateConfig().isBlank()) {
+            try {
+                ImGateConfig config = JsonUtils.parse(conversation.getGateConfig(), ImGateConfig.class);
+                strict = config != null && Boolean.TRUE.equals(config.getClarificationStrict());
+            } catch (Exception ignored) {
+                strict = false;
+            }
+        }
+        String role = null;
+        if (viewerId != null) {
+            ImParticipant member = systemRead(() -> participantMapper.selectOne(
+                    Wrappers.<ImParticipant>lambdaQuery()
+                            .eq(ImParticipant::getConversationId, conversationId)
+                            .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
+                            .eq(ImParticipant::getParticipantId, viewerId)
+                            .last("LIMIT 1")));
+            role = member == null ? null : member.getRole();
+        }
+        return new ClarificationContext(conversation.getThreadId(), strict, role);
+    }
+
+    private boolean canAnswerClarification(ClarificationContext context, SessionInputVO input,
+                                           Long viewerId) {
+        if (input.getRequestedBy() != null && input.getRequestedBy().equals(viewerId)) {
+            return true;
+        }
+        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+        if (directory != null && input.getSuperAgentId() != null) {
+            ChatAgentIdentity identity = directory.findByIds(List.of(input.getSuperAgentId()))
+                    .get(input.getSuperAgentId());
+            if (identity != null && viewerId.equals(identity.ownerUserId())) {
+                return true;
+            }
+        }
+        return ImParticipantRole.OWNER.equals(context.role())
+                || ImParticipantRole.ADMIN.equals(context.role());
+    }
+
+    private TaskCardPayload parseCard(Object content) {
+        if (content == null) {
+            return null;
+        }
+        try {
+            return content instanceof TaskCardPayload card
+                    ? card : JsonUtils.parse(JsonUtils.toJson(content), TaskCardPayload.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String hiddenCard(TaskCardPayload original) {
+        TaskCardPayload hidden = new TaskCardPayload();
+        hidden.setCardType(original.getCardType());
+        hidden.setStatus(original.getStatus());
+        hidden.setHidden(true);
+        return JsonUtils.toJson(hidden);
+    }
+
+    private record ClarificationContext(Long threadId, boolean strict, String role) {
     }
 
     /** Mirrors the console label rule: provider@subject for SSO users. */

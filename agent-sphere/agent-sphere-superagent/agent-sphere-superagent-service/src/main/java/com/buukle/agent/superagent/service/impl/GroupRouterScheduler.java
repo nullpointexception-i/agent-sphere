@@ -230,7 +230,7 @@ public class GroupRouterScheduler {
             log.info("Group router deferred {} events for thread {} due to char budget",
                     candidateEvents - events.size(), threadId);
             metrics.increment(AgentMetrics.GROUP_ROUTER_DEFERRED_EVENTS,
-                    "deferred", String.valueOf(candidateEvents - events.size()));
+                    AgentMetrics.TAG_DEFERRED, String.valueOf(candidateEvents - events.size()));
         }
 
         String userPrompt = buildPrompt(thread, events, agents);
@@ -293,7 +293,7 @@ public class GroupRouterScheduler {
                     : "delivered to " + deliverReasons.keySet();
             markEvent(event, decisionCode, reason);
         }
-        metrics.increment(AgentMetrics.GROUP_ROUTER_BATCH, "decision",
+        metrics.increment(AgentMetrics.GROUP_ROUTER_BATCH, AgentMetrics.TAG_DECISION,
                 deliverReasons.isEmpty()
                         ? GroupRouterDecisionType.OBSERVE : GroupRouterDecisionType.RELEVANT);
         if (decision.getSummary() != null && !decision.getSummary().isBlank()) {

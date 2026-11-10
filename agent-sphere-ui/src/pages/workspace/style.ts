@@ -1300,21 +1300,6 @@ export const useStyles = createStyles(({ css }) => ({
     font-size: 12px;
     line-height: 1.5;
   `,
-  clarifyTargetBar: css`
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 18px 0;
-    flex-wrap: wrap;
-  `,
-  clarifyTargetLabel: css`
-    color: #6f6a85;
-    font-size: 11px;
-  `,
-  clarifyTargetHint: css`
-    color: #a7a2b8;
-    font-size: 11px;
-  `,
   composer: css`
     display: flex;
     align-items: flex-end;

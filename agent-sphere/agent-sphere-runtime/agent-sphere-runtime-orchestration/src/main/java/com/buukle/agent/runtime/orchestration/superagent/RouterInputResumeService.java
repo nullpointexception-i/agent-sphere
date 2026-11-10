@@ -2,7 +2,10 @@ package com.buukle.agent.runtime.orchestration.superagent;
 
 import com.buukle.agent.common.context.TenantScopeHolder;
 
+import com.buukle.agent.common.context.AgentContextSnapshot;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.SessionSurface;
+import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
@@ -47,6 +50,7 @@ public class RouterInputResumeService implements RouterInputResumePort {
     }
 
     private void withOwnerContext(Long sessionId, Runnable action) {
+        AgentContextSnapshot caller = AgentContextSnapshot.capture();
         TenantUtil.stop();
         TenantScopeHolder.clear();
         TenantContext.clear();
@@ -56,16 +60,16 @@ public class RouterInputResumeService implements RouterInputResumePort {
             if (session == null) {
                 return;
             }
+            // ROUTER sessions are internal: the resume must look like a runtime call, not a
+            // console request, otherwise SessionAccessPolicy rejects it as read-only.
+            SessionSurfaceHolder.set(SessionSurface.INTERNAL);
             AuthContext.setSuperAdmin(true);
             if (session.getCreatedBy() != null) {
                 AuthContext.setUsername(session.getCreatedBy());
             }
             action.run();
         } finally {
-            TenantUtil.stop();
-            TenantScopeHolder.clear();
-            TenantContext.clear();
-            AuthContext.clear();
+            caller.restore();
         }
     }
 }

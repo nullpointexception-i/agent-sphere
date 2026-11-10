@@ -81,6 +81,7 @@ import { clearStoredUser, getStoredUser } from '@/utils/auth';
 import { userDisplayLabel } from '@/utils/userLabel';
 import { messageText } from '../im/components/messageUtils';
 import {
+  type AgentClarificationAnswer,
   AgentInputCard,
   ROUTER_APPROVAL,
   ROUTER_CLARIFICATION,
@@ -2068,7 +2069,6 @@ function ChatDetail({
   const [messages, setMessages] = useState<ImMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
-  const [replyTarget, setReplyTarget] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [agentPaused, setAgentPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2400,18 +2400,14 @@ function ChatDetail({
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
-    await sendText(value, `workspace-${Date.now()}`, replyTarget || undefined);
+    await sendText(value, `workspace-${Date.now()}`);
     setText('');
     mention.close();
     if (composerRef.current) composerRef.current.style.height = 'auto';
   };
 
   /** Sends an arbitrary DM text; clarification option buttons reuse this path. */
-  const sendText = async (
-    value: string,
-    clientMsgId?: string,
-    clarificationInputId?: string,
-  ) => {
+  const sendText = async (value: string, clientMsgId?: string) => {
     if (!value || sending) return;
     if (agentPaused) {
       message.warning(
@@ -2440,8 +2436,6 @@ function ChatDetail({
         value,
         clientMsgId || `option-${Date.now()}`,
         mentionList,
-        undefined,
-        clarificationInputId,
       );
       load(true);
     } catch (error: any) {
@@ -2456,6 +2450,27 @@ function ChatDetail({
       );
     } finally {
       setSending(false);
+    }
+  };
+
+  /** Card-only clarification answer; ordinary composer text never reaches this path. */
+  const answerClarification = async (
+    inputId: string,
+    payload: AgentClarificationAnswer,
+  ) => {
+    try {
+      await imApi.answerClarification(conversationId, inputId, payload);
+      await load(true);
+      message.success(tw('common.saved', 'Saved'));
+      return true;
+    } catch (error: any) {
+      message.error(
+        error?.response?.data?.message ||
+          error?.data?.message ||
+          error?.message ||
+          tw('chat.sendFailed', 'Failed to send'),
+      );
+      return false;
     }
   };
 
@@ -2782,40 +2797,6 @@ function ChatDetail({
       !isSameUser(member, me) &&
       (isOwner || member.role !== 'ADMIN'),
   );
-  const pendingMap = new Map<string, string>();
-  messages.forEach((item) => {
-    const card = taskCardOf(item);
-    if (
-      card?.cardType === ROUTER_CLARIFICATION &&
-      card.status === 'PENDING' &&
-      card.inputId &&
-      !pendingMap.has(card.inputId)
-    ) {
-      pendingMap.set(
-        card.inputId,
-        item.senderName || tw('chat.agent', 'Digital avatar'),
-      );
-    }
-  });
-  const pendingClarifications = Array.from(pendingMap, ([inputId, label]) => ({
-    inputId,
-    label,
-  }));
-  const pendingKey = pendingClarifications
-    .map((item) => item.inputId)
-    .join('|');
-  useEffect(() => {
-    setReplyTarget((current) => {
-      if (pendingClarifications.length === 0) return null;
-      if (pendingClarifications.length === 1) {
-        return pendingClarifications[0].inputId;
-      }
-      return pendingClarifications.some((item) => item.inputId === current)
-        ? current
-        : null;
-    });
-  }, [pendingKey]);
-
   const selfConversation = !isGroup && isSelfParticipants(participants, me);
   const otherParticipant = participants.find(
     (member) => member.participantType === 'USER' && !isSameUser(member, me),
@@ -2955,10 +2936,13 @@ function ChatDetail({
                 (sender
                   ? isSameUser(sender, me)
                   : Number(item.senderId) === Number(me?.id));
-              // Backend marks agent messages whose avatar belongs to the viewer; keep them on
-              // the user's side of the wall while retaining the agent name + owner label.
+              // Backend marks agent messages whose avatar belongs to the viewer. In a group the
+              // own avatar answers on the user's side; in a DM it is the counterpart, so it stays
+              // on the left while keeping the agent name + owner label.
               const ownAgent =
-                item.senderType === 'AGENT' && item.ownAgent === true;
+                item.senderType === 'AGENT' &&
+                item.ownAgent === true &&
+                conversation?.type === 'GROUP';
               const alignRight = self || ownAgent;
               // Avatar messages carry a server-resolved name + owner: the wall
               // reads "Agent (owner)" even though avatars are no longer participants.
@@ -3041,10 +3025,10 @@ function ChatDetail({
                           <AgentInputCard
                             card={card}
                             conversationId={conversationId}
-                            onReplyText={(value, inputId) =>
-                              sendText(value, undefined, inputId)
-                            }
-                            submitting={sending}
+                            canView={item.canView !== false}
+                            canAnswer={item.canAnswer !== false}
+                            deniedReason={item.deniedReason}
+                            onAnswer={answerClarification}
                             onApprove={approveSessionInput}
                           />
                         ) : (
@@ -3124,34 +3108,6 @@ function ChatDetail({
             'avatars.chatPaused',
             'This avatar is paused. Resume it before chatting.',
           )}
-        </div>
-      ) : null}
-
-      {pendingClarifications.length > 0 ? (
-        <div className={styles.clarifyTargetBar}>
-          <span className={styles.clarifyTargetLabel}>
-            {tw('chat.clarifyTarget', 'Reply to')}
-          </span>
-          <Select
-            size="small"
-            allowClear={pendingClarifications.length > 1}
-            value={replyTarget ?? undefined}
-            placeholder={tw('chat.clarifyTargetNone', 'Normal message')}
-            style={{ minWidth: 200, maxWidth: 320 }}
-            onChange={(value: string | null) => setReplyTarget(value ?? null)}
-            options={pendingClarifications.map((item) => ({
-              value: item.inputId,
-              label: item.label,
-            }))}
-          />
-          {pendingClarifications.length > 1 ? (
-            <span className={styles.clarifyTargetHint}>
-              {tw(
-                'chat.clarifyTargetHint',
-                'Choose the clarification to answer',
-              )}
-            </span>
-          ) : null}
         </div>
       ) : null}
 

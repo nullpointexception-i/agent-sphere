@@ -31,4 +31,8 @@ public class TaskCardPayload implements Serializable {
     private String decisionsJson;
     /** Resolved cards: username that answered/approved the input. */
     private String respondedBy;
+    /** Resolved cards: answer/approval time. */
+    private String respondedAt;
+    /** True when the card body is hidden from the current viewer (strict clarification visibility). */
+    private Boolean hidden;
 }

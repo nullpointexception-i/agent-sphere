@@ -19,6 +19,4 @@ public class SendMessageDTO implements Serializable {
     private Object content;
     private Long replyToId;
     private List<MentionDTO> mentions;
-    /** Target clarification card when this text answers a parked Router clarification. */
-    private String clarificationInputId;
 }
