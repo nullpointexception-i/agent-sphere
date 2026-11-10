@@ -12,6 +12,7 @@ import { PERM } from '@/constants/permissions';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { Can } from '@/components/Can';
 import { agentApi } from '@/services/agentSphere/api';
+import { getWebOrigin } from '@/utils/runtimeEnv';
 import { useStyles } from './style';
 import { type TocItemBase, TocPanel } from './TocPanel';
 
@@ -301,7 +302,7 @@ export default function DocumentDetail() {
                   }}
                 >
                   <QRCodeSVG
-                    value={`${window.location.origin}/s/${shareToken}`}
+                    value={`${getWebOrigin()}/s/${shareToken}`}
                     size={180}
                   />
                 </div>
@@ -310,7 +311,7 @@ export default function DocumentDetail() {
                   ellipsis
                   style={{ maxWidth: 280, fontSize: 13 }}
                 >
-                  {window.location.origin}/s/{shareToken}
+                  {getWebOrigin()}/s/{shareToken}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {intl.formatMessage({

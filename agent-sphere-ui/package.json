@@ -7,6 +7,7 @@
   "scripts": {
     "analyze": "cross-env ANALYZE=1 max build",
     "build": "max build",
+    "build:desktop": "cross-env UMI_ENV=desktop max build",
     "deploy": "cross-env CI=true max build && gh-pages -d dist",
     "dev": "cross-env NODE_NO_WARNINGS=1 UMI_ENV=dev MOCK=none max dev",
     "i18n-remove": "node scripts/i18n-remove.js",

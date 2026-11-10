@@ -69,6 +69,7 @@ import {
 } from 'antd';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
+import { getWebOrigin } from '@/utils/runtimeEnv';
 import { useStyles } from '../../style';
 import UsageChip, { formatTokens } from '../Usage';
 import { stripSubAgentMarkerPrefix } from './subAgentMarker';
@@ -334,7 +335,7 @@ function AssistantCard({ row, sessionId, isLatest, preparingTool }: any) {
       if (res?.shareToken) {
         setShareOpen(false);
         window.open(
-          `${window.location.origin}/share/${res.shareToken}`,
+          `${getWebOrigin()}/share/${res.shareToken}`,
           '_blank',
           'noopener,noreferrer',
         );

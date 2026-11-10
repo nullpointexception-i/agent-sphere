@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+protocol/codex-*/
+package-lock.json
+*.log
+.env
+.env.*

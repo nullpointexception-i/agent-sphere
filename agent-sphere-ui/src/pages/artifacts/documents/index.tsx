@@ -16,6 +16,7 @@ import { DEFAULT_PAGE_SIZE } from '@/constants/pagination';
 import { PERM } from '@/constants/permissions';
 import { agentApi } from '@/services/agentSphere/api';
 import { exportDocxToFile } from '@/utils/exportWord';
+import { getWebOrigin } from '@/utils/runtimeEnv';
 
 export default function DocumentList() {
   const intl = useIntl();
@@ -428,7 +429,7 @@ export default function DocumentList() {
               }}
             >
               <QRCodeSVG
-                value={`${window.location.origin}/s/${shareModal.shareToken}`}
+                value={`${getWebOrigin()}/s/${shareModal.shareToken}`}
                 size={180}
               />
             </div>
@@ -437,7 +438,7 @@ export default function DocumentList() {
               ellipsis
               style={{ maxWidth: 280, fontSize: 13 }}
             >
-              {window.location.origin}/s/{shareModal.shareToken}
+              {getWebOrigin()}/s/{shareModal.shareToken}
             </Typography.Text>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {intl.formatMessage({

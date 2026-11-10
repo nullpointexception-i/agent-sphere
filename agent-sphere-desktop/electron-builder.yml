@@ -1,0 +1,34 @@
+appId: top.buukle.agentsphere
+productName: AgentSphere
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: ../agent-sphere-ui/dist-desktop
+    to: renderer
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+mac:
+  target: [dmg, zip]
+  category: public.app-category.productivity
+  hardenedRuntime: true
+linux:
+  target: [AppImage, deb]
+  category: Development
+publish:
+  provider: github
+  owner: nullpointexception-i
+  repo: agent-sphere

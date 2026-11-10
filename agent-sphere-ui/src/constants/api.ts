@@ -1,7 +1,11 @@
+import { getApiOrigin } from '@/utils/runtimeEnv';
+
 /**
  * Shared API base for every hand-written service client.
  *
- * <p>Keep this value in sync with the backend {@code ApiPrefix.V1} constant. The front-end
- * cannot import Java constants, so this is the single client-side source of truth.
+ * Web builds use a relative `/api/v1`; the desktop build injects an absolute
+ * server origin through `window.__AS_RUNTIME__`.
  */
-export const API_BASE = '/api/v1';
+const ORIGIN = typeof window === 'undefined' ? '' : getApiOrigin();
+
+export const API_BASE = `${ORIGIN}/api/v1`;

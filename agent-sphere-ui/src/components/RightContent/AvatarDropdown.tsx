@@ -1,4 +1,5 @@
 import {
+  DesktopOutlined,
   DisconnectOutlined,
   KeyOutlined,
   LogoutOutlined,
@@ -11,6 +12,7 @@ import { Spin } from 'antd';
 import React, { startTransition } from 'react';
 import { API_PATHS } from '@/constants/endpoints';
 import { clearStoredUser } from '@/utils/auth';
+import { isDesktop } from '@/utils/runtimeEnv';
 import HeaderDropdown from '../HeaderDropdown';
 
 type GlobalHeaderRightProps = {
@@ -62,6 +64,10 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       history.push('/admin/users');
       return;
     }
+    if (key === 'desktop-status') {
+      history.push('/desktop/status');
+      return;
+    }
     history.push(`/account/${key}`);
   };
 
@@ -106,6 +112,21 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
             label: intl.formatMessage({
               id: 'menu.admin',
               defaultMessage: 'System Admin',
+            }),
+          },
+        ]
+      : []),
+    ...(isDesktop()
+      ? [
+          {
+            type: 'divider' as const,
+          },
+          {
+            key: 'desktop-status',
+            icon: <DesktopOutlined />,
+            label: intl.formatMessage({
+              id: 'desktop.status.title',
+              defaultMessage: 'Local runtime',
             }),
           },
         ]

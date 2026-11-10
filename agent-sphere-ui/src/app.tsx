@@ -39,6 +39,8 @@ const isDev = process.env.NODE_ENV === 'development';
 const loginPath = '/user/login';
 const isPublicPath = (pathname: string) =>
   pathname === loginPath ||
+  pathname === '/desktop' ||
+  pathname.startsWith('/desktop/') ||
   pathname.startsWith('/share/') ||
   pathname.startsWith('/s/');
 

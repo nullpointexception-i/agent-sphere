@@ -53,3 +53,6 @@ docs/superpowers
 .wrangler
 requestRecord.mock.js
 package-lock.json
+
+# electron desktop build output
+/dist-desktop

@@ -32,6 +32,7 @@ const commitHash =
  * @doc https://umijs.org/docs/api/config#publicpath
  */
 const PUBLIC_PATH: string = '/';
+const OUTPUT_PATH = UMI_ENV === 'desktop' ? 'dist-desktop' : 'dist';
 
 export default defineConfig({
   alias: {
@@ -45,6 +46,8 @@ export default defineConfig({
   hash: true,
 
   publicPath: PUBLIC_PATH,
+
+  outputPath: OUTPUT_PATH,
 
   /**
    * @name compatibility settings
@@ -80,7 +83,8 @@ export default defineConfig({
    * @doc proxy guide https://umijs.org/docs/guides/proxy
    * @doc proxy configuration https://umijs.org/docs/api/config#proxy
    */
-  proxy: proxy[UMI_ENV as keyof typeof proxy],
+  proxy:
+    UMI_ENV === 'desktop' ? undefined : proxy[UMI_ENV as keyof typeof proxy],
   /**
    * @name fast refresh
    * @description A solid hot-reload integration that preserves state across updates.
@@ -171,9 +175,12 @@ export default defineConfig({
    * @description Site analytics via GA4 (gtag.js).
    * @doc https://umijs.org/docs/max/analytics
    */
-  analytics: {
-    ga_v2: 'G-59NF1VHHPF',
-  },
+  analytics:
+    UMI_ENV === 'desktop'
+      ? undefined
+      : {
+          ga_v2: 'G-59NF1VHHPF',
+        },
   /**
    * @name extra script in <head>
    * @description Configure extra scripts injected into <head>.

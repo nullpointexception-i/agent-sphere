@@ -1,4 +1,5 @@
 import component from './en-US/component';
+import desktop from './en-US/desktop';
 import globalHeader from './en-US/globalHeader';
 import menu from './en-US/menu';
 import network from './en-US/network';
@@ -21,4 +22,5 @@ export default {
   ...component,
   ...pages,
   ...workspace,
+  ...desktop,
 };

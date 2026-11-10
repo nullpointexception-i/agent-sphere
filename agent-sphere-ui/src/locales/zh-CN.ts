@@ -1,4 +1,5 @@
 import component from './zh-CN/component';
+import desktop from './zh-CN/desktop';
 import globalHeader from './zh-CN/globalHeader';
 import menu from './zh-CN/menu';
 import network from './zh-CN/network';
@@ -15,6 +16,7 @@ export default {
   'app.preview.down.block': '下载此页面到本地项目',
   ...pages,
   ...workspace,
+  ...desktop,
   ...globalHeader,
   ...menu,
   ...settingDrawer,

@@ -26,6 +26,7 @@ import { agentApi } from '@/services/agentSphere/api';
 import { setStoredUser, type UserVO } from '@/utils/auth';
 import { localizeApiError } from '@/utils/errorMessage';
 import { labelWithRule } from '@/utils/labelWithRule';
+import { isDesktop } from '@/utils/runtimeEnv';
 import Settings from '../../../../config/defaultSettings';
 import { useStyles } from './style';
 
@@ -161,12 +162,14 @@ const Login: React.FC = () => {
 
   useEffect(() => {
     void handleSsoCallback();
-    agentApi.sso
-      .providers()
-      .then((list: { code: string; name: string }[]) =>
-        setSsoProviders(list || []),
-      )
-      .catch(() => setSsoProviders([]));
+    if (!isDesktop()) {
+      agentApi.sso
+        .providers()
+        .then((list: { code: string; name: string }[]) =>
+          setSsoProviders(list || []),
+        )
+        .catch(() => setSsoProviders([]));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -432,7 +435,7 @@ const Login: React.FC = () => {
               )}
             </LoginForm>
           </Col>
-          {ssoProviders.length > 0 && (
+          {!isDesktop() && ssoProviders.length > 0 && (
             <Col xs={24} md={12}>
               <Card
                 style={{
