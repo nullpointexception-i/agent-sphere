@@ -11,7 +11,7 @@ import {
   Switch,
   Upload,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { labelWithRule } from '@/utils/labelWithRule';
 
@@ -32,10 +32,16 @@ export default function InfoEditDrawer({
   const intl = useIntl();
   const [imagePreview, setImagePreview] = useState('');
   const [form] = Form.useForm();
+  const initialPromptRef = useRef('');
+  const promptDefaultedRef = useRef(false);
+  const restoreDefaultRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setImagePreview(record.image || '');
+    initialPromptRef.current = record.systemPrompt || '';
+    promptDefaultedRef.current = Boolean(record.systemPromptDefaulted);
+    restoreDefaultRef.current = false;
     form.setFieldsValue({
       ...record,
       maxLoopCount: record.maxLoopCount ?? 0,
@@ -45,7 +51,32 @@ export default function InfoEditDrawer({
 
   const submit = async () => {
     const values = await form.validateFields();
-    const payload = { ...values, image: imagePreview || undefined };
+    const payload: any = { ...values, image: imagePreview || undefined };
+    if (record?.instanceRole === 'GROUP_ROUTER') {
+      const prompt = values.systemPrompt || '';
+      const restoringDefault =
+        restoreDefaultRef.current &&
+        prompt === (record.defaultSystemPrompt || '');
+      if (restoringDefault) {
+        if (record.systemPromptDefaulted) {
+          // Already using the built-in default; keep the column empty.
+          delete payload.systemPrompt;
+        } else {
+          // Custom prompt -> clear it so the runtime falls back to the default.
+          payload.clearSystemPrompt = true;
+          delete payload.systemPrompt;
+        }
+      } else if (
+        promptDefaultedRef.current &&
+        prompt === initialPromptRef.current
+      ) {
+        // Unchanged default: keep the column empty instead of persisting the built-in text.
+        delete payload.systemPrompt;
+      } else if (!prompt.trim()) {
+        payload.clearSystemPrompt = true;
+        delete payload.systemPrompt;
+      }
+    }
     await agentApi.instances.update(record.id, payload);
     message.success('Saved');
     onClose();
@@ -134,6 +165,46 @@ export default function InfoEditDrawer({
         >
           <Input.TextArea rows={4} maxLength={5000} />
         </Form.Item>
+        {record?.instanceRole === 'GROUP_ROUTER' && (
+          <div
+            style={{
+              marginTop: -6,
+              marginBottom: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12,
+              color: '#8c8c8c',
+            }}
+          >
+            <span>
+              {record.systemPromptDefaulted
+                ? intl.formatMessage({
+                    id: 'pages.instances.systemPromptDefaultHint',
+                    defaultMessage: 'Currently using the system default prompt',
+                  })
+                : intl.formatMessage({
+                    id: 'pages.instances.systemPromptCustomHint',
+                    defaultMessage: 'A custom prompt is in use',
+                  })}
+            </span>
+            <Button
+              size="small"
+              onClick={() => {
+                restoreDefaultRef.current = true;
+                form.setFieldValue(
+                  'systemPrompt',
+                  record.defaultSystemPrompt || '',
+                );
+              }}
+            >
+              {intl.formatMessage({
+                id: 'pages.instances.systemPromptRestoreDefault',
+                defaultMessage: 'Restore default',
+              })}
+            </Button>
+          </div>
+        )}
         {record?.instanceRole === 'ROUTER' ||
         record?.instanceRole === 'WORKER' ? (
           <div

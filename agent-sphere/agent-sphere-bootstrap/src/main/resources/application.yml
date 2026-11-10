@@ -64,21 +64,18 @@ buukle:
   agent:
     # ============================================================
     # Super-Agent / group-level dispatch
-    # Disabled by default; agent_event is only consumed after group-router.instance-id is configured.
+    # The Group Router runs through the normal runtime on the tenant's current instance.
     # ============================================================
     super-agent:
       enabled: true
       group-router:
         enabled: true
-        auto-create: true                          # Automatically create the shared GROUP_ROUTER instance on startup
-        instance-id: 0                             # Shared GROUP_ROUTER instance id; 0 = look up by role
-        model-route-id: 0                          # Model route used when auto-creating; 0 = fall back to the router default
+        run-timeout-ms: 60000                      # Max wait for one router run before retrying the batch
         batch:
           interval-ms: 3000                        # Scheduling interval
           max-events: 20                           # Max events per batch
           max-wait-ms: 3000                        # Batch accumulation wait window
           max-chars: 12000                         # Max characters per batch
-          max-tokens: 2000                         # Group Router output cap
         retry:
           max-attempts: 5
           base-backoff-ms: 3000

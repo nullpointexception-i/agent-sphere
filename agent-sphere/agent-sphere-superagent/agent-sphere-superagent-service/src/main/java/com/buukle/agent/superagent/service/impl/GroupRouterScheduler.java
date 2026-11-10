@@ -31,9 +31,9 @@ import com.buukle.agent.superagent.repository.AgentEventDeliveryMapper;
 import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
-import com.buukle.agent.superagent.spi.GroupRouterPort;
-import com.buukle.agent.superagent.spi.GroupRouterRequest;
-import com.buukle.agent.superagent.service.support.GroupRouterTemplate;
+import com.buukle.agent.superagent.spi.GroupRouterRunCommand;
+import com.buukle.agent.superagent.spi.GroupRouterRunPort;
+import com.buukle.agent.superagent.spi.GroupRouterRunResult;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +67,8 @@ import java.util.concurrent.TimeUnit;
 public class GroupRouterScheduler {
 
     private static final String LOCK_PREFIX = "superagent:group-router:";
+    /** Covers the synchronous run wait (default 60s) plus processing; prevents lock expiry mid-batch. */
+    private static final long LOCK_LEASE_SECONDS = 120L;
 
     private final AgentEventMapper eventMapper;
     private final AgentThreadMapper threadMapper;
@@ -75,7 +77,7 @@ public class GroupRouterScheduler {
     private final SessionSpi sessionSpi;
     private final InstanceSpi instanceSpi;
     private final UserSpi userSpi;
-    private final GroupRouterPort groupRouterPort;
+    private final GroupRouterRunPort groupRouterRunPort;
     private final RedissonClient redissonClient;
     private final AgentMetrics metrics;
 
@@ -87,8 +89,6 @@ public class GroupRouterScheduler {
     private int maxEvents;
     @Value("${buukle.agent.super-agent.group-router.batch.max-chars:12000}")
     private int maxChars;
-    @Value("${buukle.agent.super-agent.group-router.batch.max-tokens:2000}")
-    private int maxTokens;
     @Value("${buukle.agent.super-agent.group-router.batch.max-wait-ms:3000}")
     private long maxWaitMs;
     @Value("${buukle.agent.super-agent.group-router.summary.max-chars:2000}")
@@ -112,7 +112,7 @@ public class GroupRouterScheduler {
             RLock lock = redissonClient.getLock(LOCK_PREFIX + threadId);
             boolean locked = false;
             try {
-                locked = lock.tryLock(0, 30, TimeUnit.SECONDS);
+                locked = lock.tryLock(0, LOCK_LEASE_SECONDS, TimeUnit.SECONDS);
                 if (!locked) {
                     continue;
                 }
@@ -166,16 +166,27 @@ public class GroupRouterScheduler {
             markEvents(events, GroupRouterDecisionType.OBSERVE, "group router session missing", null);
             return;
         }
+        SessionVO session = sessionSpi.getSession(sessionId);
+        if (session == null || !SessionType.GROUP_ROUTER.equals(session.getSessionType())) {
+            log.warn("Group router session row not found for thread {}", threadId);
+            markEvents(events, GroupRouterDecisionType.OBSERVE,
+                    "group router session not found", null);
+            return;
+        }
         InstanceVO instance = instanceSpi.findCurrentGroupRouter(thread.getTenantId());
-        Long modelRouteId = instance == null ? null : instance.getModelRouteId();
-        if (instance == null || modelRouteId == null) {
+        if (instance == null || instance.getModelRouteId() == null) {
             log.warn("Tenant current group router instance/route is missing for tenant {}",
                     thread.getTenantId());
             markEvents(events, GroupRouterDecisionType.OBSERVE,
                     "tenant current group router instance or route missing", null);
             return;
         }
-        Long routerInstanceId = instance.getId();
+        // Follow the tenant's current instance per delivery; no bulk rebinding of old sessions.
+        if (!java.util.Objects.equals(session.getAgentInstanceId(), instance.getId())) {
+            sessionSpi.updateAgentInstance(sessionId, instance.getId());
+            log.info("Group router session {} follows current instance: {} -> {}",
+                    sessionId, session.getAgentInstanceId(), instance.getId());
+        }
 
         Set<Long> agentIds = extractAgentIds(events);
         if (agentIds.isEmpty()) {
@@ -190,17 +201,23 @@ public class GroupRouterScheduler {
             return;
         }
 
-        String systemPrompt = resolveSystemPrompt(routerInstanceId);
         String userPrompt = buildPrompt(thread, events, agents);
-        String raw;
+        GroupRouterRunResult run;
         try {
-            raw = groupRouterPort.classify(new GroupRouterRequest(
-                    routerInstanceId, modelRouteId, sessionId, threadId, systemPrompt, userPrompt, maxTokens));
+            run = groupRouterRunPort.route(new GroupRouterRunCommand(
+                    sessionId, threadId, thread.getTenantId(), userPrompt));
         } catch (Exception e) {
-            log.warn("Group router LLM failed for thread {}: {}", threadId, e.getMessage());
+            log.warn("Group router run failed for thread {}: {}", threadId, e.getMessage());
             scheduleRetry(events);
             return;
         }
+        if (run == null || !run.accepted()) {
+            log.warn("Group router run rejected for thread {}: {}",
+                    threadId, run == null ? "no result" : run.message());
+            scheduleRetry(events);
+            return;
+        }
+        String raw = run.reply();
 
         GroupRouterDecision decision = parseDecision(raw);
         if (decision == null) {
@@ -248,15 +265,6 @@ public class GroupRouterScheduler {
                     ? summary : summary.substring(0, Math.max(1, summaryMaxChars)));
             threadMapper.updateById(thread);
         }
-    }
-
-    private String resolveSystemPrompt(Long routerInstanceId) {
-        InstanceVO instance = instanceSpi.getInstance(routerInstanceId);
-        if (instance == null || instance.getSystemPrompt() == null
-                || instance.getSystemPrompt().isBlank()) {
-            return GroupRouterTemplate.DEFAULT;
-        }
-        return instance.getSystemPrompt();
     }
 
     private String buildPrompt(AgentThread thread, List<AgentEvent> events,

@@ -9,12 +9,15 @@ import {
 } from '@ant-design/icons';
 import { Conversations } from '@ant-design/x';
 import { useIntl } from '@umijs/max';
-import { App, Button, Input, Modal } from 'antd';
+import { App, Button, Input, Modal, Segmented, Tabs } from 'antd';
 import { useMemo, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import { useStyles } from '../../style';
 import RunDrawer from '../RunDrawer';
+
+/** Internal sessions are view-only: no rename/summary/delete from the chat list. */
+const READ_ONLY_SESSION_TYPES = new Set(['ROUTER', 'WORKER', 'GROUP_ROUTER']);
 
 interface SidebarProps {
   sessions: any[];
@@ -26,6 +29,12 @@ interface SidebarProps {
   onRename: (id: number, title: string) => void;
   onBatchDelete: (ids: number[]) => void;
   onNewChat: () => void;
+  conversationScope: 'USER' | 'TENANT';
+  onConversationScopeChange: (scope: 'USER' | 'TENANT') => void;
+  userRole: 'USER' | 'ROUTER' | 'WORKER';
+  onUserRoleChange: (role: 'USER' | 'ROUTER' | 'WORKER') => void;
+  canViewTenant: boolean;
+  readOnly: boolean;
 }
 
 export default function Sidebar({
@@ -38,6 +47,12 @@ export default function Sidebar({
   onRename,
   onBatchDelete,
   onNewChat,
+  conversationScope,
+  onConversationScopeChange,
+  userRole,
+  onUserRoleChange,
+  canViewTenant,
+  readOnly,
 }: SidebarProps) {
   const intl = useIntl();
   const { message, modal } = App.useApp();
@@ -179,14 +194,16 @@ export default function Sidebar({
                     setViewSession(s);
                   }}
                 />
-                <EditOutlined
-                  style={{ fontSize: 13, cursor: 'pointer' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingValue(s.title);
-                    setEditingKey(String(s.id));
-                  }}
-                />
+                {!READ_ONLY_SESSION_TYPES.has(s.sessionType) && (
+                  <EditOutlined
+                    style={{ fontSize: 13, cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingValue(s.title);
+                      setEditingKey(String(s.id));
+                    }}
+                  />
+                )}
                 <UnorderedListOutlined
                   style={{ fontSize: 13, cursor: 'pointer' }}
                   onClick={(e) => {
@@ -194,45 +211,49 @@ export default function Sidebar({
                     setRunDrawerSessionId(s.id);
                   }}
                 />
-                <span
-                  style={{
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleShowSummary(s.id);
-                  }}
-                >
-                  🧠
-                </span>
-                <DeleteOutlined
-                  style={{ fontSize: 13, cursor: 'pointer' }}
-                  className="delete-icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    modal.confirm({
-                      title: intl.formatMessage(
-                        {
-                          id: 'pages.deleteConfirm.title',
-                          defaultMessage: 'Delete {name}',
-                        },
-                        { name: 'session' },
-                      ),
-                      content: intl.formatMessage(
-                        {
-                          id: 'pages.deleteConfirm.content',
-                          defaultMessage:
-                            'Are you sure you want to delete this {name}?',
-                        },
-                        { name: 'session' },
-                      ),
-                      okType: 'danger',
-                      onOk: () => onDelete(s.id),
-                    });
-                  }}
-                />
+                {!READ_ONLY_SESSION_TYPES.has(s.sessionType) && (
+                  <span
+                    style={{
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleShowSummary(s.id);
+                    }}
+                  >
+                    🧠
+                  </span>
+                )}
+                {!READ_ONLY_SESSION_TYPES.has(s.sessionType) && (
+                  <DeleteOutlined
+                    style={{ fontSize: 13, cursor: 'pointer' }}
+                    className="delete-icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      modal.confirm({
+                        title: intl.formatMessage(
+                          {
+                            id: 'pages.deleteConfirm.title',
+                            defaultMessage: 'Delete {name}',
+                          },
+                          { name: 'session' },
+                        ),
+                        content: intl.formatMessage(
+                          {
+                            id: 'pages.deleteConfirm.content',
+                            defaultMessage:
+                              'Are you sure you want to delete this {name}?',
+                          },
+                          { name: 'session' },
+                        ),
+                        okType: 'danger',
+                        onOk: () => onDelete(s.id),
+                      });
+                    }}
+                  />
+                )}
               </span>
             </span>
           ),
@@ -262,85 +283,148 @@ export default function Sidebar({
             gap: 8,
           }}
         >
-          <div
-            className={styles.sidebarNewChatItem}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-            onClick={onNewChat}
-          >
-            <PlusOutlined />
-            {intl.formatMessage({
-              id: 'pages.chat.newChat',
-              defaultMessage: 'New Chat',
-            })}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <span
-              className={styles.sidebarNewChatItem}
-              style={{ color: selectMode ? '#1677ff' : undefined }}
-              onClick={() => !selectMode && setSelectMode(true)}
-            >
-              <CheckSquareOutlined style={{ marginRight: 4 }} />
-              {intl.formatMessage({
-                id: 'pages.chat.batchOperation',
-                defaultMessage: 'Batch operation',
-              })}
-            </span>
-            {selectMode && (
-              <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
+          {canViewTenant && (
+            <Tabs
+              size="small"
+              activeKey={conversationScope}
+              onChange={(key) =>
+                onConversationScopeChange(key as 'USER' | 'TENANT')
+              }
+              items={[
+                {
+                  key: 'USER',
+                  label: intl.formatMessage({
+                    id: 'pages.chat.userConversations',
+                    defaultMessage: 'User chats',
+                  }),
+                },
+                {
+                  key: 'TENANT',
+                  label: intl.formatMessage({
+                    id: 'pages.chat.tenantConversations',
+                    defaultMessage: 'Tenant chats',
+                  }),
+                },
+              ]}
+            />
+          )}
+          {conversationScope === 'USER' && (
+            <Segmented
+              size="small"
+              block
+              value={userRole}
+              onChange={(value) =>
+                onUserRoleChange(value as 'USER' | 'ROUTER' | 'WORKER')
+              }
+              options={[
+                {
+                  value: 'USER',
+                  label: intl.formatMessage({
+                    id: 'pages.chat.roleUser',
+                    defaultMessage: 'User',
+                  }),
+                },
+                {
+                  value: 'ROUTER',
+                  label: intl.formatMessage({
+                    id: 'pages.chat.roleRouter',
+                    defaultMessage: 'Router',
+                  }),
+                },
+                {
+                  value: 'WORKER',
+                  label: intl.formatMessage({
+                    id: 'pages.chat.roleWorker',
+                    defaultMessage: 'Worker',
+                  }),
+                },
+              ]}
+            />
+          )}
+          {!readOnly && conversationScope === 'USER' && (
+            <>
+              <div
+                className={styles.sidebarNewChatItem}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                onClick={onNewChat}
+              >
+                <PlusOutlined />
+                {intl.formatMessage({
+                  id: 'pages.chat.newChat',
+                  defaultMessage: 'New Chat',
+                })}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
                 <span
                   className={styles.sidebarNewChatItem}
-                  style={{
-                    color: selectedIds.size === 0 ? undefined : '#ff4d4f',
-                    cursor: selectedIds.size === 0 ? 'not-allowed' : 'pointer',
-                  }}
-                  onClick={() => {
-                    if (selectedIds.size === 0) return;
-                    modal.confirm({
-                      title: intl.formatMessage(
-                        {
-                          id: 'pages.deleteConfirm.title',
-                          defaultMessage: 'Delete {name}',
-                        },
-                        { name: `${selectedIds.size} sessions` },
-                      ),
-                      content: intl.formatMessage(
-                        {
-                          id: 'pages.deleteConfirm.content',
-                          defaultMessage:
-                            'Are you sure you want to delete this {name}?',
-                        },
-                        { name: 'session' },
-                      ),
-                      okType: 'danger',
-                      onOk: async () => {
-                        await onBatchDelete(Array.from(selectedIds));
-                        setSelectMode(false);
-                        setSelectedIds(new Set());
-                      },
-                    });
-                  }}
+                  style={{ color: selectMode ? '#1677ff' : undefined }}
+                  onClick={() => !selectMode && setSelectMode(true)}
                 >
+                  <CheckSquareOutlined style={{ marginRight: 4 }} />
                   {intl.formatMessage({
-                    id: 'pages.chat.deleteSelected',
-                    defaultMessage: 'Delete',
-                  })}{' '}
-                  ({selectedIds.size})
-                </span>
-                <span
-                  className={styles.sidebarNewChatItem}
-                  onClick={() => {
-                    setSelectMode(false);
-                    setSelectedIds(new Set());
-                  }}
-                >
-                  {intl.formatMessage({
-                    id: 'pages.chat.cancel',
-                    defaultMessage: 'Cancel',
+                    id: 'pages.chat.batchOperation',
+                    defaultMessage: 'Batch operation',
                   })}
                 </span>
+                {selectMode && (
+                  <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
+                    <span
+                      className={styles.sidebarNewChatItem}
+                      style={{
+                        color: selectedIds.size === 0 ? undefined : '#ff4d4f',
+                        cursor:
+                          selectedIds.size === 0 ? 'not-allowed' : 'pointer',
+                      }}
+                      onClick={() => {
+                        if (selectedIds.size === 0) return;
+                        modal.confirm({
+                          title: intl.formatMessage(
+                            {
+                              id: 'pages.deleteConfirm.title',
+                              defaultMessage: 'Delete {name}',
+                            },
+                            { name: `${selectedIds.size} sessions` },
+                          ),
+                          content: intl.formatMessage(
+                            {
+                              id: 'pages.deleteConfirm.content',
+                              defaultMessage:
+                                'Are you sure you want to delete this {name}?',
+                            },
+                            { name: 'session' },
+                          ),
+                          okType: 'danger',
+                          onOk: async () => {
+                            await onBatchDelete(Array.from(selectedIds));
+                            setSelectMode(false);
+                            setSelectedIds(new Set());
+                          },
+                        });
+                      }}
+                    >
+                      {intl.formatMessage({
+                        id: 'pages.chat.deleteSelected',
+                        defaultMessage: 'Delete',
+                      })}{' '}
+                      ({selectedIds.size})
+                    </span>
+                    <span
+                      className={styles.sidebarNewChatItem}
+                      onClick={() => {
+                        setSelectMode(false);
+                        setSelectedIds(new Set());
+                      }}
+                    >
+                      {intl.formatMessage({
+                        id: 'pages.chat.cancel',
+                        defaultMessage: 'Cancel',
+                      })}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
       <div className={styles.sidebarScroll}>

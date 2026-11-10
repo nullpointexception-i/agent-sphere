@@ -14,7 +14,8 @@ import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.service.impl.GroupRouterScheduler;
-import com.buukle.agent.superagent.spi.GroupRouterPort;
+import com.buukle.agent.superagent.spi.GroupRouterRunPort;
+import com.buukle.agent.superagent.spi.GroupRouterRunResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -52,7 +53,7 @@ class GroupRouterSchedulerTest {
     @Mock
     UserSpi userSpi;
     @Mock
-    GroupRouterPort groupRouterPort;
+    GroupRouterRunPort groupRouterRunPort;
     @Mock
     RedissonClient redissonClient;
     @Mock
@@ -66,6 +67,17 @@ class GroupRouterSchedulerTest {
         system.setModelRouteId(99L);
         org.mockito.Mockito.lenient().when(instanceSpi.findCurrentGroupRouter(
                 org.mockito.ArgumentMatchers.any())).thenReturn(system);
+        org.mockito.Mockito.lenient().when(sessionSpi.getSession(20L))
+                .thenReturn(session(20L, 7L));
+    }
+
+    private static com.buukle.agent.instance.dtvo.vo.SessionVO session(Long id, Long instanceId) {
+        com.buukle.agent.instance.dtvo.vo.SessionVO session =
+                new com.buukle.agent.instance.dtvo.vo.SessionVO();
+        session.setId(id);
+        session.setAgentInstanceId(instanceId);
+        session.setSessionType(com.buukle.agent.instance.dtvo.enums.SessionType.GROUP_ROUTER);
+        return session;
     }
 
     @Test
@@ -141,7 +153,6 @@ class GroupRouterSchedulerTest {
         GroupRouterScheduler scheduler = scheduler();
         ReflectionTestUtils.setField(scheduler, "maxEvents", 20);
         ReflectionTestUtils.setField(scheduler, "maxChars", 12000);
-        ReflectionTestUtils.setField(scheduler, "maxTokens", 2000);
         ReflectionTestUtils.setField(scheduler, "summaryMaxChars", 2000);
 
         AgentThread thread = thread();
@@ -152,8 +163,8 @@ class GroupRouterSchedulerTest {
         agent.setId(3L);
         agent.setStatus("ACTIVE");
         when(superAgentMapper.selectBatchIds(any())).thenReturn(List.of(agent));
-        when(groupRouterPort.classify(any())).thenReturn(
-                "{\"deliver\":[],\"ignore\":[{\"agentId\":3,\"reason\":\"unrelated\"}],\"summary\":\"ok\"}");
+        when(groupRouterRunPort.route(any())).thenReturn(GroupRouterRunResult.accepted(500L,
+                "{\"deliver\":[],\"ignore\":[{\"agentId\":3,\"reason\":\"unrelated\"}],\"summary\":\"ok\"}"));
 
         ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L);
 
@@ -179,7 +190,8 @@ class GroupRouterSchedulerTest {
         agent.setId(3L);
         agent.setStatus("ACTIVE");
         when(superAgentMapper.selectBatchIds(any())).thenReturn(List.of(agent));
-        when(groupRouterPort.classify(any())).thenThrow(new IllegalStateException("llm down"));
+        when(groupRouterRunPort.route(any()))
+                .thenReturn(GroupRouterRunResult.rejected("llm down"));
 
         ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L);
 
@@ -189,9 +201,30 @@ class GroupRouterSchedulerTest {
         verify(eventMapper).updateById(event);
     }
 
+    @Test
+    void processThread_rebindsSessionToCurrentInstance() {
+        GroupRouterScheduler scheduler = scheduler();
+        ReflectionTestUtils.setField(scheduler, "maxEvents", 20);
+        ReflectionTestUtils.setField(scheduler, "maxChars", 12000);
+
+        when(threadMapper.selectById(10L)).thenReturn(thread());
+        when(sessionSpi.getSession(20L)).thenReturn(session(20L, 5L));
+        when(eventMapper.selectList(any())).thenReturn(List.of(event()));
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(3L);
+        agent.setStatus("ACTIVE");
+        when(superAgentMapper.selectBatchIds(any())).thenReturn(List.of(agent));
+        when(groupRouterRunPort.route(any()))
+                .thenReturn(GroupRouterRunResult.accepted(500L, "{\"deliver\":[],\"ignore\":[]}"));
+
+        ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L);
+
+        verify(sessionSpi).updateAgentInstance(20L, 7L);
+    }
+
     private GroupRouterScheduler scheduler() {
         return new GroupRouterScheduler(eventMapper, threadMapper, deliveryMapper, superAgentMapper,
-                sessionSpi, instanceSpi, userSpi, groupRouterPort, redissonClient, metrics);
+                sessionSpi, instanceSpi, userSpi, groupRouterRunPort, redissonClient, metrics);
     }
 
     private static AgentThread thread() {

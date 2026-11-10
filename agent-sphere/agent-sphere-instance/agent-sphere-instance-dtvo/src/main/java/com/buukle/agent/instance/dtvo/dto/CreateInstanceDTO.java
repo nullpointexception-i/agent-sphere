@@ -16,6 +16,8 @@ public class CreateInstanceDTO implements Serializable {
     private String description;
     @Size(max = 5000)
     private String systemPrompt;
+    /** Update-only: explicitly clear the stored prompt so the Group Router falls back to the default. */
+    private Boolean clearSystemPrompt;
     private Long modelRouteId;
     @Size(max = 5000)
     private String customInstructions;

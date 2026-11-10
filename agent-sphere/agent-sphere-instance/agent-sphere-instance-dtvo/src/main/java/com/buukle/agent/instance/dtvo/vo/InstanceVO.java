@@ -10,6 +10,10 @@ public class InstanceVO implements Serializable {
     private String name;
     private String description;
     private String systemPrompt;
+    /** True when systemPrompt is the built-in Group Router default echoed for display/editing. */
+    private Boolean systemPromptDefaulted;
+    /** Built-in Group Router default prompt (GROUP_ROUTER only); used by the "restore default" action. */
+    private String defaultSystemPrompt;
     private Long modelRouteId;
     private String customInstructions;
     private String image;

@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.common.event.SessionCreatedEvent;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurface;
@@ -27,6 +28,12 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession> implements SessionService {
+    private static final List<String> USER_SESSION_TYPES = List.of(
+            SessionType.CONSOLE, SessionType.WIDGET, SessionType.TASK, SessionType.TRAINING);
+    private static final String ROLE_USER = "USER";
+    private static final String ROLE_ROUTER = "ROUTER";
+    private static final String ROLE_WORKER = "WORKER";
+
     private final SessionConverter sessionConverter;
     private final ApplicationEventPublisher eventPublisher;
     private final InstanceMapper instanceMapper;
@@ -98,13 +105,47 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
 
     @Override
     public List<SessionVO> listSessions(int offset, int limit, String keyword) {
-        List<AgentSession> sessions = lambdaQuery()
+        return listSessions(offset, limit, keyword, OwnerScope.USER, ROLE_USER);
+    }
+
+    @Override
+    public List<SessionVO> listSessions(int offset, int limit, String keyword, String scope, String role) {
+        boolean tenantScope = OwnerScope.isTenant(scope);
+        String requestedRole = role == null || role.isBlank()
+                ? ROLE_USER : role.trim().toUpperCase();
+        List<String> sessionTypes = switch (requestedRole) {
+            case ROLE_ROUTER -> List.of(SessionType.ROUTER);
+            case ROLE_WORKER -> List.of(SessionType.WORKER);
+            default -> USER_SESSION_TYPES;
+        };
+        var query = lambdaQuery()
                 .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
-                .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword)
+                .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword);
+        if (tenantScope) {
+            query.eq(AgentSession::getSessionType, SessionType.GROUP_ROUTER);
+        } else {
+            // Legacy rows may have a null session_type; they are console conversations.
+            query.and(w -> w.in(AgentSession::getSessionType, sessionTypes)
+                    .or().isNull(AgentSession::getSessionType));
+        }
+        List<AgentSession> sessions = query
                 .orderByDesc(AgentSession::getUpdatedAt)
                 .last("OFFSET " + offset + " LIMIT " + limit)
                 .list();
         return sessions.stream().map(sessionConverter::toVO).toList();
+    }
+
+    @Override
+    public void updateAgentInstance(Long sessionId, Long instanceId) {
+        if (sessionId == null || instanceId == null) {
+            return;
+        }
+        AgentSession session = getById(sessionId);
+        if (session == null) {
+            return;
+        }
+        session.setAgentInstanceId(instanceId);
+        updateById(session);
     }
 
     @Override

@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.constant.GroupRouterPrompt;
 import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantScope;
@@ -68,6 +69,13 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
             }
         }
         boolean clearLoop = dto.getMaxLoopCount() != null && dto.getMaxLoopCount() == 0;
+        boolean clearSystemPrompt = Boolean.TRUE.equals(dto.getClearSystemPrompt());
+        // A Group Router prompt equal to the built-in default is not persisted unless it changed:
+        // leaving the column empty keeps the "system default" state.
+        if (!clearSystemPrompt && (existing.getSystemPrompt() == null || existing.getSystemPrompt().isBlank())
+                && GroupRouterPrompt.isDefault(dto.getSystemPrompt())) {
+            dto.setSystemPrompt(null);
+        }
         // MODEL_DEFAULT / blank = clear the instance override and follow the model route again.
         boolean clearCompletionProtocol = dto.getCompletionProtocol() != null
                 && CompletionProtocol.isInherit(dto.getCompletionProtocol());
@@ -84,6 +92,12 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
             lambdaUpdate()
                     .eq(AgentInstance::getId, id)
                     .set(AgentInstance::getMaxLoopCount, null)
+                    .update();
+        }
+        if (clearSystemPrompt) {
+            lambdaUpdate()
+                    .eq(AgentInstance::getId, id)
+                    .set(AgentInstance::getSystemPrompt, null)
                     .update();
         }
         if (clearCompletionProtocol) {

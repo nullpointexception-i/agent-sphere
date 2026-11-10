@@ -151,9 +151,9 @@ export const agentApi = {
         data,
       }),
     get: (id: number) => request<any>(`${BASE}/instance/sessions/${id}`),
-    list: (offset = 0, limit = 20, keyword?: string) =>
+    list: (offset = 0, limit = 20, keyword?: string, scope?: string, role?: string) =>
       request<any[]>(`${BASE}/instance/sessions`, {
-        params: { offset, limit, keyword },
+        params: { offset, limit, keyword, scope, role },
       }),
     update: (id: number, title: string) =>
       request<any>(`${BASE}/instance/sessions/${id}`, {

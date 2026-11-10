@@ -35,8 +35,10 @@ public class SessionController extends BaseController {
     @GetMapping
     public ResponseEntity<?> list(@RequestParam(defaultValue = "0") int offset,
                                   @RequestParam(defaultValue = "20") int limit,
-                                  @RequestParam(required = false) String keyword) {
-        return ok(sessionService.listSessions(offset, limit, keyword));
+                                  @RequestParam(required = false) String keyword,
+                                  @RequestParam(required = false) String scope,
+                                  @RequestParam(required = false) String role) {
+        return ok(sessionService.listSessions(offset, limit, keyword, scope, role));
     }
 
     @GetMapping("/{id}")

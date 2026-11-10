@@ -11,6 +11,7 @@ import { App } from 'antd';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SetModelRouteModal from '@/components/SetModelRouteModal';
 import { API_PATHS } from '@/constants/endpoints';
+import { PERM } from '@/constants/permissions';
 import { STATUS } from '@/constants/status';
 import { TIMELINE_STATE } from '@/constants/timeline';
 import { TIMING } from '@/constants/timing';
@@ -19,6 +20,7 @@ import {
   TODOWRITE_TOOL_NAME,
   TOOL_CALL_RECORD_STATUS,
 } from '@/constants/toolCall';
+import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
 import { getToken } from '@/utils/auth';
 import { localizeApiError } from '@/utils/errorMessage';
@@ -38,6 +40,9 @@ import { useStyles } from './style';
 import { createCoalescedTask } from './utils/coalesce';
 
 const SESSION_PAGE_SIZE = 10;
+
+/** Internal sessions (router / worker / group router) are view-only. */
+const READ_ONLY_SESSION_TYPES = new Set(['ROUTER', 'WORKER', 'GROUP_ROUTER']);
 
 /**
  * Local guard key for the optimistic clarification state. It must include clarificationId: when
@@ -92,6 +97,13 @@ export function SessionChat(props: SessionChatProps = {}) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionOffset, setSessionOffset] = useState(0);
   const [hasMoreSessions, setHasMoreSessions] = useState(true);
+  const [conversationScope, setConversationScope] = useState<'USER' | 'TENANT'>(
+    'USER',
+  );
+  const [userRole, setUserRole] = useState<'USER' | 'ROUTER' | 'WORKER'>(
+    'USER',
+  );
+  const canViewTenant = useCan(PERM.instanceTenant);
   const [currentSession, setCurrentSession] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -168,18 +180,27 @@ export function SessionChat(props: SessionChatProps = {}) {
   );
   const deltaRafRef = useRef<number | null>(null);
 
-  const loadSessions = useCallback(async (offset: number) => {
-    try {
-      const list = await agentApi.sessions.list(offset, SESSION_PAGE_SIZE);
-      if (offset === 0) {
-        setSessions(list);
-      } else {
-        setSessions((prev) => [...prev, ...list]);
-      }
-      setSessionOffset(offset + list.length);
-      if (list.length < SESSION_PAGE_SIZE) setHasMoreSessions(false);
-    } catch {}
-  }, []);
+  const loadSessions = useCallback(
+    async (offset: number) => {
+      try {
+        const list = await agentApi.sessions.list(
+          offset,
+          SESSION_PAGE_SIZE,
+          undefined,
+          conversationScope,
+          conversationScope === 'USER' ? userRole : undefined,
+        );
+        if (offset === 0) {
+          setSessions(list);
+        } else {
+          setSessions((prev) => [...prev, ...list]);
+        }
+        setSessionOffset(offset + list.length);
+        if (list.length < SESSION_PAGE_SIZE) setHasMoreSessions(false);
+      } catch {}
+    },
+    [conversationScope, userRole],
+  );
 
   useEffect(() => {
     agentApi.instances
@@ -200,7 +221,11 @@ export function SessionChat(props: SessionChatProps = {}) {
       .listAll()
       .then(setModelRoutes)
       .catch(() => {});
-    if (!trainingMode) loadSessions(0);
+    if (!trainingMode) {
+      setSessionOffset(0);
+      setHasMoreSessions(true);
+      loadSessions(0);
+    }
   }, [loadSessions, trainingMode]);
 
   useEffect(() => {
@@ -2116,6 +2141,17 @@ export function SessionChat(props: SessionChatProps = {}) {
                 onRename={handleSessionRename}
                 onBatchDelete={handleBatchDelete}
                 onNewChat={() => navigate('/chat')}
+                conversationScope={conversationScope}
+                onConversationScopeChange={(next) => {
+                  setConversationScope(next);
+                }}
+                userRole={userRole}
+                onUserRoleChange={setUserRole}
+                canViewTenant={canViewTenant}
+                readOnly={
+                  !!currentSession &&
+                  READ_ONLY_SESSION_TYPES.has(currentSession.sessionType)
+                }
               />
             </div>
             <div
@@ -2133,6 +2169,7 @@ export function SessionChat(props: SessionChatProps = {}) {
               instances={instances}
               trainingMode={trainingMode}
               hideSessionPanel={trainingMode}
+              readOnly={READ_ONLY_SESSION_TYPES.has(currentSession.sessionType)}
               selectedModelRouteId={selectedModelRouteId}
               onModelRouteChange={(id) => {
                 setSelectedModelRouteId(id);

@@ -1,12 +1,15 @@
 package com.buukle.agent.bootstrap.controller;
 
+import com.buukle.agent.common.constant.GroupRouterPrompt;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.service.converter.InstanceConverter;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -65,6 +68,42 @@ class InstanceConverterTest {
         AgentInstance existing = new AgentInstance();
         existing.setCompletionProtocol("IMPLICIT_TEXT");
         assertEquals("IMPLICIT_TEXT", converter.toVO(existing).getCompletionProtocol());
+    }
+
+    @Test
+    void groupRouterWithoutPrompt_echoesSystemDefault() {
+        AgentInstance instance = new AgentInstance();
+        instance.setInstanceRole(InstanceRole.GROUP_ROUTER.value());
+
+        InstanceVO vo = converter.toVO(instance);
+
+        assertEquals(GroupRouterPrompt.DEFAULT, vo.getSystemPrompt());
+        assertEquals(true, vo.getSystemPromptDefaulted());
+        assertEquals(GroupRouterPrompt.DEFAULT, vo.getDefaultSystemPrompt());
+    }
+
+    @Test
+    void groupRouterWithCustomPrompt_keepsIt() {
+        AgentInstance instance = new AgentInstance();
+        instance.setInstanceRole(InstanceRole.GROUP_ROUTER.value());
+        instance.setSystemPrompt("custom routing rules");
+
+        InstanceVO vo = converter.toVO(instance);
+
+        assertEquals("custom routing rules", vo.getSystemPrompt());
+        assertFalse(vo.getSystemPromptDefaulted());
+    }
+
+    @Test
+    void chatInstanceWithoutPrompt_isNotDefaulted() {
+        AgentInstance instance = new AgentInstance();
+        instance.setInstanceRole(InstanceRole.CHAT.value());
+
+        InstanceVO vo = converter.toVO(instance);
+
+        assertNull(vo.getSystemPrompt());
+        assertFalse(vo.getSystemPromptDefaulted());
+        assertNull(vo.getDefaultSystemPrompt());
     }
 
     private static CreateInstanceDTO toCreateDto(Boolean console, Boolean widget) {

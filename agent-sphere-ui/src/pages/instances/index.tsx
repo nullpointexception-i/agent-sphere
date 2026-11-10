@@ -1380,6 +1380,14 @@ export default function InstanceList() {
                         id: 'pages.instances.detailSystemPrompt',
                       })}
                     </strong>
+                    {viewing?.systemPromptDefaulted && (
+                      <Tag color="default" style={{ marginLeft: 8 }}>
+                        {intl.formatMessage({
+                          id: 'pages.instances.systemPromptDefaultedTag',
+                          defaultMessage: 'System default',
+                        })}
+                      </Tag>
+                    )}
                     <div className={styles.jsonBlock}>
                       {viewing?.systemPrompt || '-'}
                     </div>

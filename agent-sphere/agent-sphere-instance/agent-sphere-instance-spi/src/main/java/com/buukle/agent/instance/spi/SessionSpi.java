@@ -12,6 +12,15 @@ public interface SessionSpi {
 
     List<SessionVO> listSessions(int offset, int limit, String keyword);
 
+    /**
+     * @param scope USER (default) or TENANT (tenant-level GROUP_ROUTER conversations)
+     * @param role  USER / ROUTER / WORKER when scope is USER; ignored for TENANT
+     */
+    List<SessionVO> listSessions(int offset, int limit, String keyword, String scope, String role);
+
+    /** Rebinds one session to another agent instance (group router follows the tenant's current instance). */
+    void updateAgentInstance(Long sessionId, Long instanceId);
+
     void closeSession(Long id);
 
     void batchCloseSessions(List<Long> ids);

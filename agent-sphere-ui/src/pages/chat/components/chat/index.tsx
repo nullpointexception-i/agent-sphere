@@ -74,6 +74,8 @@ interface ChatMainProps {
   trainingMode?: boolean;
   /** Training hides the console session panel (its Worker rail already shows the live state). */
   hideSessionPanel?: boolean;
+  /** Internal sessions (router/worker/group router) are view-only. */
+  readOnly?: boolean;
 }
 
 export default function ChatMain({
@@ -117,6 +119,7 @@ export default function ChatMain({
   onWithdrawQueued,
   trainingMode = false,
   hideSessionPanel = false,
+  readOnly = false,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
   const intl = useIntl();
@@ -305,7 +308,7 @@ export default function ChatMain({
           </div>
         ) : (
           <div className={styles.footerCenter}>
-            <Footer {...footerProps} />
+            {!readOnly && <Footer {...footerProps} />}
           </div>
         )}
         {queuedMessages.length > 0 && (
@@ -367,7 +370,7 @@ export default function ChatMain({
             ))}
           </div>
         )}
-        {hasMessages && (
+        {hasMessages && !readOnly && (
           <div ref={footerRef} className={styles.footer}>
             <Footer {...footerProps} />
           </div>

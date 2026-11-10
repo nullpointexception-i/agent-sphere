@@ -162,6 +162,7 @@ public class TenantResourceProvisioner {
         dto.setBusinessType(item.path("businessType").asText(null));
         dto.setInstanceRole(item.path("instanceRole").asText(InstanceRole.GROUP_ROUTER.value()));
         dto.setOwnerScope(OwnerScope.TENANT);
+        dto.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
         dto.setAllowConsoleSession(false);
         dto.setAllowWidgetSession(false);
         Long routeId = routes.get(item.path("route").asText(""));

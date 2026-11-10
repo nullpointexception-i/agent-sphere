@@ -2,6 +2,7 @@ package com.buukle.agent.instance.service.converter;
 
 
 import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.constant.GroupRouterPrompt;
 import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;
 import com.buukle.agent.instance.domain.AgentInstance;
@@ -23,6 +24,17 @@ public class InstanceConverter {
         vo.setName(instance.getName());
         vo.setDescription(instance.getDescription());
         vo.setSystemPrompt(instance.getSystemPrompt());
+        if (InstanceRole.GROUP_ROUTER.value().equals(instance.getInstanceRole())
+                && (instance.getSystemPrompt() == null || instance.getSystemPrompt().isBlank())) {
+            // Echo the effective prompt so the editor/detail page and the runtime share one value.
+            vo.setSystemPrompt(GroupRouterPrompt.DEFAULT);
+            vo.setSystemPromptDefaulted(true);
+        } else {
+            vo.setSystemPromptDefaulted(false);
+        }
+        if (InstanceRole.GROUP_ROUTER.value().equals(instance.getInstanceRole())) {
+            vo.setDefaultSystemPrompt(GroupRouterPrompt.DEFAULT);
+        }
         vo.setModelRouteId(instance.getModelRouteId());
         vo.setCustomInstructions(instance.getCustomInstructions());
         vo.setImage(instance.getImage());
