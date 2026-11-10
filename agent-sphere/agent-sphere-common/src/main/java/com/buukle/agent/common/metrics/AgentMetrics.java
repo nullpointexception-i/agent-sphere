@@ -26,6 +26,10 @@ public class AgentMetrics {
     public static final String AGENT_ROUTER_STREAM_PUBLISH_FAILED =
             "superagent.agent_router.stream_publish_failed";
     public static final String AGENT_ROUTER_FINAL_REPLY = "superagent.agent_router.final_reply";
+    public static final String AGENT_ROUTER_FORK_CREATED = "superagent.agent_router.fork_created";
+    public static final String AGENT_ROUTER_FORK_MERGED = "superagent.agent_router.fork_merged";
+    public static final String AGENT_ROUTER_FORK_FAILED = "superagent.agent_router.fork_failed";
+    public static final String AGENT_ROUTER_FORK_TIMEOUT = "superagent.agent_router.fork_timeout";
     public static final String WORKER_REPORT = "superagent.worker.report";
     public static final String WORKER_DISPATCH_LOCK_SKIPPED = "superagent.worker.dispatch_lock_skipped";
     public static final String RETENTION_ROWS = "superagent.retention.rows";

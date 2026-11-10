@@ -2,6 +2,8 @@ package com.buukle.agent.superagent.service.impl;
 
 import com.buukle.agent.common.context.TenantScopeHolder;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurface;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
@@ -14,9 +16,11 @@ import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.SessionSpi;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.domain.AgentEvent;
 import com.buukle.agent.superagent.domain.AgentEventDelivery;
+import com.buukle.agent.superagent.domain.AgentRouterFork;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.domain.AgentThread;
 import com.buukle.agent.superagent.dtvo.enums.AgentEventDeliveryStatus;
@@ -24,6 +28,7 @@ import com.buukle.agent.superagent.dtvo.enums.AgentRouterRunStatus;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.repository.AgentEventDeliveryMapper;
 import com.buukle.agent.superagent.repository.AgentEventMapper;
+import com.buukle.agent.superagent.repository.AgentRouterForkMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.repository.PendingDeliveryGroup;
@@ -74,6 +79,8 @@ public class AgentRouterScheduler {
 
     private static final int MAX_EVENT_SUMMARY = 200;
     private static final int MAX_TITLE = 200;
+    private static final int MAX_FORK_SUMMARY = 4000;
+    private static final String FORKED_STATUS_TAG = "FORKED";
     private static final int RETRY_DELAY_SECONDS = 30;
     private static final long GROUP_LOCK_LEASE_SECONDS = 60;
     private static final String GROUP_LOCK_PREFIX = "superagent:agent-router:";
@@ -86,6 +93,8 @@ public class AgentRouterScheduler {
     private final AgentSuperAgentMapper superAgentMapper;
     private final AgentThreadMapper threadMapper;
     private final SessionSpi sessionSpi;
+    private final RunSpi runSpi;
+    private final AgentRouterForkMapper forkMapper;
     private final ObjectProvider<AgentRouterRunPort> agentRouterRunPortProvider;
     private final ObjectProvider<UserSpi> userSpiProvider;
     private final AgentMetrics metrics;
@@ -115,6 +124,10 @@ public class AgentRouterScheduler {
     private long kickDebounceMs;
     @Value("${buukle.agent.super-agent.agent-router.claim-timeout-seconds:120}")
     private long claimTimeoutSeconds;
+    @Value("${buukle.agent.super-agent.agent-router.fork.enabled:false}")
+    private boolean forkEnabled;
+    @Value("${buukle.agent.super-agent.agent-router.fork.max-per-agent:2}")
+    private int forkMaxPerAgent;
 
     /**
      * Hot path: a producer (mention ingest / group router) just committed deliveries for one
@@ -263,6 +276,11 @@ public class AgentRouterScheduler {
             }
             input.append("[INSTRUCTION] Use recall_event for full text when needed. ")
                     .append("Reply once or dispatch one worker for the whole batch.");
+            if (forkEnabled && runSpi.findActiveRun(routerSessionId) != null
+                    && activeForkCount(routerSessionId) < Math.max(1, forkMaxPerAgent)) {
+                startFork(routerSessionId, first, threadId, input.toString(), claimed, port);
+                return;
+            }
             AgentRouterRunResult result;
             try {
                 result = port.start(new AgentRouterRunCommand(
@@ -298,6 +316,131 @@ public class AgentRouterScheduler {
             }
             TenantContext.clear();
         }
+    }
+
+    private long activeForkCount(Long parentSessionId) {
+        return forkMapper.selectCount(Wrappers.<AgentRouterFork>lambdaQuery()
+                .eq(AgentRouterFork::getParentSessionId, parentSessionId)
+                .in(AgentRouterFork::getState, AgentRouterFork.STATE_RUNNING,
+                        AgentRouterFork.STATE_COMPLETED, AgentRouterFork.STATE_WAITING_SEQ,
+                        AgentRouterFork.STATE_MERGING));
+    }
+
+    /**
+     * Runs the batch in a soft-forked session while the parent is busy. The reply is captured and
+     * merged later in event-sequence order; it never posts to the group directly.
+     */
+    private void startFork(Long parentSessionId, DeliveryContext first, Long threadId,
+                           String input, List<DeliveryContext> claimed,
+                           AgentRouterRunPort port) {
+        long seqFrom = claimed.stream()
+                .mapToLong(context -> context.event().getSeq() == null ? 0L : context.event().getSeq())
+                .min().orElse(0L);
+        long seqTo = claimed.stream()
+                .mapToLong(context -> context.event().getSeq() == null ? 0L : context.event().getSeq())
+                .max().orElse(seqFrom);
+        SessionVO parent = sessionSpi.getSession(parentSessionId);
+        SessionVO child = createForkSession(first.agent(), threadId, parentSessionId, parent,
+                seqFrom, seqTo);
+        if (child == null || child.getId() == null) {
+            releaseAll(claimed);
+            return;
+        }
+        AgentRouterFork fork = new AgentRouterFork();
+        fork.setParentSessionId(parentSessionId);
+        fork.setChildSessionId(child.getId());
+        fork.setThreadId(threadId);
+        fork.setSuperAgentId(first.agent().getId());
+        fork.setSeqFrom(seqFrom);
+        fork.setSeqTo(seqTo);
+        fork.setState(AgentRouterFork.STATE_RUNNING);
+        fork.setStatus(AgentRouterFork.STATUS_ACTIVE);
+        fork.setCreatedBy(parent == null ? null : parent.getCreatedBy());
+        fork.setTenantId(first.agent().getTenantId());
+        forkMapper.insert(fork);
+        metrics.increment(AgentMetrics.AGENT_ROUTER_FORK_CREATED);
+
+        String forkInput = "[FORK] parentSession=" + parentSessionId
+                + ", seq=" + seqFrom + "-" + seqTo
+                + "\n[PARENT_SUMMARY] " + forkSummary(parent)
+                + "\n" + input;
+        AgentRouterRunResult result;
+        try {
+            result = port.start(new AgentRouterRunCommand(
+                    child.getId(), first.agent().getId(), threadId, forkInput, "WRITE"));
+        } catch (Exception e) {
+            failFork(fork, child.getId(), claimed, e.getMessage());
+            return;
+        }
+        if (result == null || !result.accepted()) {
+            failFork(fork, child.getId(), claimed,
+                    result == null ? "fork start returned null" : result.message());
+            return;
+        }
+        fork.setChildRunId(result.runId());
+        forkMapper.updateById(fork);
+        for (DeliveryContext context : claimed) {
+            context.delivery().setStatus(result.runId() == null
+                    ? AgentEventDeliveryStatus.PROCESSED
+                    : AgentEventDeliveryStatus.RUNNING);
+            context.delivery().setRouterRunId(result.runId());
+            context.delivery().setDeliveredAt(LocalDateTime.now());
+            deliveryMapper.updateById(context.delivery());
+        }
+        metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status", FORKED_STATUS_TAG);
+    }
+
+    private SessionVO createForkSession(AgentSuperAgent agent, Long threadId, Long parentSessionId,
+                                        SessionVO parent, long seqFrom, long seqTo) {
+        if (agent.getRouterInstanceId() == null) {
+            return null;
+        }
+        SessionSurface previous = SessionSurfaceHolder.get();
+        SessionSurfaceHolder.set(SessionSurface.INTERNAL);
+        try {
+            CreateSessionDTO dto = new CreateSessionDTO();
+            dto.setAgentInstanceId(agent.getRouterInstanceId());
+            dto.setTitle("Router fork " + seqFrom + "-" + seqTo);
+            dto.setSessionType(SessionType.ROUTER);
+            dto.setSuperAgentId(agent.getId());
+            dto.setThreadId(threadId);
+            dto.setCreatedBy(parent == null ? null : parent.getCreatedBy());
+            dto.setParentSessionId(parentSessionId);
+            dto.setForkKind(AgentRouterFork.KIND_ROUTER);
+            dto.setForkState(AgentRouterFork.STATE_RUNNING);
+            return sessionSpi.createSession(dto);
+        } catch (Exception e) {
+            log.warn("Router fork session creation failed: parent={}, error={}",
+                    parentSessionId, e.getMessage());
+            return null;
+        } finally {
+            if (previous == null) {
+                SessionSurfaceHolder.clear();
+            } else {
+                SessionSurfaceHolder.set(previous);
+            }
+        }
+    }
+
+    private void failFork(AgentRouterFork fork, Long childSessionId,
+                          List<DeliveryContext> claimed, String error) {
+        fork.setState(AgentRouterFork.STATE_FAILED);
+        fork.setMergeError(error == null ? null : error.substring(0, Math.min(500, error.length())));
+        forkMapper.updateById(fork);
+        sessionSpi.closeSession(childSessionId);
+        releaseAll(claimed);
+        metrics.increment(AgentMetrics.AGENT_ROUTER_START_FAILED);
+        log.warn("Router fork start failed: parent={}, child={}, error={}",
+                fork.getParentSessionId(), childSessionId, error);
+    }
+
+    private static String forkSummary(SessionVO parent) {
+        if (parent == null || parent.getSummary() == null) {
+            return "";
+        }
+        String summary = parent.getSummary();
+        return summary.length() <= MAX_FORK_SUMMARY
+                ? summary : summary.substring(0, MAX_FORK_SUMMARY);
     }
 
     private void releaseAll(List<DeliveryContext> claimed) {

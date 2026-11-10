@@ -24,6 +24,11 @@ public class AgentSession {
     private Long superAgentId;
     /** Session-level agent_thread. */
     private Long threadId;
+    /** Parent Router session for a soft-forked Router run; null for canonical sessions. */
+    private Long parentSessionId;
+    private String forkKind;
+    private String forkState;
+    private Long nextMergeSeq;
     private Long workItemId;
     private String summary;
     private LocalDateTime summaryUpdatedAt;

@@ -144,6 +144,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
             }
             var query = lambdaQuery()
                     .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
+                    .isNull(AgentSession::getParentSessionId)
                     .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword);
             if (tenantScope || groupScope) {
                 query.eq(AgentSession::getSessionType, SessionType.GROUP_ROUTER);
@@ -259,6 +260,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
                 .eq(AgentSession::getThreadId, threadId)
                 .eq(AgentSession::getSuperAgentId, superAgentId)
                 .eq(AgentSession::getSessionType, SessionType.ROUTER)
+                .isNull(AgentSession::getParentSessionId)
                 .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
                 .orderByDesc(AgentSession::getId)
                 .last("LIMIT 1")

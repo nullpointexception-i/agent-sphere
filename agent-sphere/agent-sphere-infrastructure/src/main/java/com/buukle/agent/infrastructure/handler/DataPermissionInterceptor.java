@@ -110,6 +110,7 @@ public class DataPermissionInterceptor implements InnerInterceptor {
             "agent_thread_subscription",
             "agent_work_item",
             "agent_outbound_message",
+            "agent_router_fork",
             "im_conversation",
             "im_participant",
             "im_message",

@@ -103,6 +103,12 @@ public class AgentRouterToolService {
         if (ctx == null) {
             return AgentRouterToolResult.failed("router session not found");
         }
+        // Fork sessions must not post intermediate messages out of order; the final merged reply
+        // carries the user-visible result.
+        if (ctx.session.getParentSessionId() != null) {
+            TenantContext.clear();
+            return AgentRouterToolResult.ok("queued for fork merge", null);
+        }
         if (text == null || text.isBlank()) {
             TenantContext.clear();
             return AgentRouterToolResult.failed("text is required");

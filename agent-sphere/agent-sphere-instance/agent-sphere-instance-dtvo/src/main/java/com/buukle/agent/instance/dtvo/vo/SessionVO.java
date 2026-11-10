@@ -18,6 +18,10 @@ public class SessionVO implements Serializable {
     private String sessionType;
     private Long superAgentId;
     private Long threadId;
+    /** Non-null when this session is a soft fork of another Router session. */
+    private Long parentSessionId;
+    private String forkKind;
+    private String forkState;
     private String summary;
     private String summaryUpdatedAt;
     private Long summaryModelRouteId;

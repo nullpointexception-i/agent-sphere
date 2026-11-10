@@ -96,6 +96,8 @@ class AgentRouterSessionTest {
                 mock(AgentSuperAgentMapper.class),
                 threadMapper,
                 sessionSpi,
+                mock(com.buukle.agent.instance.spi.RunSpi.class),
+                mock(com.buukle.agent.superagent.repository.AgentRouterForkMapper.class),
                 provider,
                 provider,
                 mock(AgentMetrics.class),

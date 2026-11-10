@@ -20,4 +20,8 @@ public class CreateSessionDTO implements Serializable {
     private Long superAgentId;
     private Long threadId;
     private String createdBy;
+    /** Parent Router session when this is a soft fork. */
+    private Long parentSessionId;
+    private String forkKind;
+    private String forkState;
 }
