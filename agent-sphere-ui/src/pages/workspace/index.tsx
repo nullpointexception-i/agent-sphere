@@ -12,6 +12,7 @@ import {
   HomeOutlined,
   LogoutOutlined,
   MessageOutlined,
+  MinusOutlined,
   MoreOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
@@ -115,6 +116,7 @@ import {
   taskStatusLabel,
 } from './conversationModel';
 import { tw } from './i18n';
+import MemberPickerModal from './MemberPickerModal';
 import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
@@ -2073,8 +2075,11 @@ function ChatDetail({
   const [memberKeyword, setMemberKeyword] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteOptions, setInviteOptions] = useState<any[]>([]);
-  const [inviteUserId, setInviteUserId] = useState<number | undefined>();
+  const [inviteSelected, setInviteSelected] = useState<number[]>([]);
   const [inviting, setInviting] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removeSelected, setRemoveSelected] = useState<number[]>([]);
+  const [removing, setRemoving] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const [remarkValue, setRemarkValue] = useState('');
@@ -2576,7 +2581,7 @@ function ChatDetail({
 
   const openInvite = () => {
     setInviteOpen(true);
-    setInviteUserId(undefined);
+    setInviteSelected([]);
     agentApi.workspaceContacts
       .users({ page: 1, size: 200 })
       .then((page: any) =>
@@ -2594,22 +2599,50 @@ function ChatDetail({
       .catch(() => setInviteOptions([]));
   };
 
-  const inviteMember = async () => {
-    if (!inviteUserId) return;
+  const inviteMembers = async () => {
+    if (inviteSelected.length === 0) return;
     setInviting(true);
     try {
-      await imApi.addParticipant(conversationId, {
-        participantType: 'USER',
-        participantId: inviteUserId,
-        role: 'MEMBER',
-      });
+      for (const userId of inviteSelected) {
+        await imApi.addParticipant(conversationId, {
+          participantType: 'USER',
+          participantId: userId,
+          role: 'MEMBER',
+        });
+      }
       setInviteOpen(false);
+      setInviteSelected([]);
       await refreshConversation();
       message.success(tw('common.saved', 'Saved'));
     } catch {
+      await refreshConversation().catch(() => {});
       message.error(tw('common.saveFailed', 'Save failed'));
     } finally {
       setInviting(false);
+    }
+  };
+
+  const openRemove = () => {
+    setRemoveOpen(true);
+    setRemoveSelected([]);
+  };
+
+  const removeMembers = async () => {
+    if (removeSelected.length === 0) return;
+    setRemoving(true);
+    try {
+      for (const participantId of removeSelected) {
+        await imApi.removeParticipant(conversationId, participantId);
+      }
+      setRemoveOpen(false);
+      setRemoveSelected([]);
+      await refreshConversation();
+      message.success(tw('common.saved', 'Saved'));
+    } catch {
+      await refreshConversation().catch(() => {});
+      message.error(tw('common.saveFailed', 'Save failed'));
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -2705,6 +2738,16 @@ function ChatDetail({
   const isOwner = conversation?.myRole === 'OWNER';
   const isAdmin = isOwner || conversation?.myRole === 'ADMIN';
   const allowMemberInvite = conversation?.allowMemberInvite !== false;
+  const canInvite =
+    isAdmin ||
+    (isGroup && conversation?.myRole === 'MEMBER' && allowMemberInvite);
+  const removableMembers = participants.filter(
+    (member) =>
+      member.participantType === 'USER' &&
+      member.role !== 'OWNER' &&
+      !isSameUser(member, me) &&
+      (isOwner || member.role !== 'ADMIN'),
+  );
   const selfConversation = !isGroup && isSelfParticipants(participants, me);
   const otherParticipant = participants.find(
     (member) => member.participantType === 'USER' && !isSameUser(member, me),
@@ -3134,27 +3177,10 @@ function ChatDetail({
               </div>
 
               <div className={styles.settingSection}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 8,
-                  }}
-                >
-                  <div className={styles.settingLabel}>
-                    {tw('chat.membersLabel', 'Members · {count}', {
-                      count: memberCount,
-                    })}
-                  </div>
-                  {isAdmin ||
-                  (isGroup &&
-                    conversation?.myRole === 'MEMBER' &&
-                    allowMemberInvite) ? (
-                    <Button type="link" size="small" onClick={openInvite}>
-                      {tw('chat.inviteMember', 'Invite')}
-                    </Button>
-                  ) : null}
+                <div className={styles.settingLabel}>
+                  {tw('chat.membersLabel', 'Members · {count}', {
+                    count: memberCount,
+                  })}
                 </div>
                 <Input.Search
                   allowClear
@@ -3163,107 +3189,134 @@ function ChatDetail({
                   onChange={(event) => setMemberKeyword(event.target.value)}
                 />
                 <div className={styles.memberList}>
+                  <div className={styles.memberGrid}>
+                    {memberRows.map((member) => {
+                      const name = userDisplayLabel(
+                        member,
+                        tw('common.unnamedMember', 'Unnamed member'),
+                      );
+                      const manageable =
+                        isAdmin &&
+                        member.participantType === 'USER' &&
+                        member.role !== 'OWNER';
+                      return (
+                        <Dropdown
+                          key={`${member.participantType}-${member.participantId}`}
+                          trigger={['click']}
+                          disabled={!manageable}
+                          menu={{
+                            items: [
+                              {
+                                key: 'role',
+                                label:
+                                  member.role === 'ADMIN'
+                                    ? tw('chat.removeAdmin', 'Remove admin')
+                                    : tw('chat.makeAdmin', 'Make admin'),
+                              },
+                              ...(isOwner
+                                ? [
+                                    {
+                                      key: 'owner',
+                                      label: tw(
+                                        'chat.transferOwner',
+                                        'Transfer ownership',
+                                      ),
+                                      danger: true,
+                                    },
+                                  ]
+                                : []),
+                            ],
+                            onClick: ({ key, domEvent }) => {
+                              domEvent.stopPropagation();
+                              if (key === 'role') {
+                                changeMemberRole(
+                                  member,
+                                  member.role === 'ADMIN' ? 'MEMBER' : 'ADMIN',
+                                );
+                              }
+                              if (key === 'owner') {
+                                transferGroupOwner(member);
+                              }
+                            },
+                          }}
+                        >
+                          <div
+                            className={styles.memberCard}
+                            title={name}
+                            style={{
+                              cursor: manageable ? 'pointer' : 'default',
+                            }}
+                          >
+                            <Avatar
+                              shape="square"
+                              size={56}
+                              src={member.avatar}
+                              style={{
+                                ...avatarStyle(name),
+                                borderRadius: 14,
+                              }}
+                            >
+                              {initials(name)}
+                            </Avatar>
+                            {manageable ? (
+                              <span
+                                className={`member-card-more ${styles.memberCardMore}`}
+                              >
+                                <MoreOutlined />
+                              </span>
+                            ) : null}
+                            <div className={styles.memberCardName}>{name}</div>
+                            <div className={styles.memberCardRole}>
+                              {member.role === 'OWNER'
+                                ? tw('chat.owner', 'Owner')
+                                : member.role === 'ADMIN'
+                                  ? tw('chat.admin', 'Admin')
+                                  : member.participantType === 'AGENT'
+                                    ? tw('chat.agent', 'Digital avatar')
+                                    : tw('chat.member', 'Member')}
+                            </div>
+                          </div>
+                        </Dropdown>
+                      );
+                    })}
+                    {canInvite ? (
+                      <button
+                        type="button"
+                        className={styles.memberActionCard}
+                        onClick={openInvite}
+                      >
+                        <span
+                          className={`member-action-box ${styles.memberActionBox}`}
+                        >
+                          <PlusOutlined />
+                        </span>
+                        <span className={styles.memberCardName}>
+                          {tw('chat.addMember', 'Add')}
+                        </span>
+                      </button>
+                    ) : null}
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        className={styles.memberActionCard}
+                        onClick={openRemove}
+                      >
+                        <span
+                          className={`member-action-box ${styles.memberActionBox}`}
+                        >
+                          <MinusOutlined />
+                        </span>
+                        <span className={styles.memberCardName}>
+                          {tw('chat.removeMemberAction', 'Remove')}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
                   {memberRows.length === 0 ? (
                     <div className={styles.settingHint}>
                       {tw('chat.noMatchedMembers', 'No matching members')}
                     </div>
-                  ) : (
-                    <div className={styles.memberGrid}>
-                      {memberRows.map((member) => {
-                        const name = userDisplayLabel(
-                          member,
-                          tw('common.unnamedMember', 'Unnamed member'),
-                        );
-                        const manageable =
-                          isAdmin &&
-                          member.participantType === 'USER' &&
-                          member.role !== 'OWNER';
-                        return (
-                          <Dropdown
-                            key={`${member.participantType}-${member.participantId}`}
-                            trigger={['click']}
-                            disabled={!manageable}
-                            menu={{
-                              items: [
-                                {
-                                  key: 'role',
-                                  label:
-                                    member.role === 'ADMIN'
-                                      ? tw('chat.removeAdmin', 'Remove admin')
-                                      : tw('chat.makeAdmin', 'Make admin'),
-                                },
-                                ...(isOwner
-                                  ? [
-                                      {
-                                        key: 'owner',
-                                        label: tw(
-                                          'chat.transferOwner',
-                                          'Transfer ownership',
-                                        ),
-                                        danger: true,
-                                      },
-                                    ]
-                                  : []),
-                              ],
-                              onClick: ({ key, domEvent }) => {
-                                domEvent.stopPropagation();
-                                if (key === 'role') {
-                                  changeMemberRole(
-                                    member,
-                                    member.role === 'ADMIN'
-                                      ? 'MEMBER'
-                                      : 'ADMIN',
-                                  );
-                                }
-                                if (key === 'owner') {
-                                  transferGroupOwner(member);
-                                }
-                              },
-                            }}
-                          >
-                            <div
-                              className={styles.memberCard}
-                              title={name}
-                              style={{
-                                cursor: manageable ? 'pointer' : 'default',
-                              }}
-                            >
-                              <Avatar
-                                shape="square"
-                                size={56}
-                                src={member.avatar}
-                                style={{
-                                  ...avatarStyle(name),
-                                  borderRadius: 14,
-                                }}
-                              >
-                                {initials(name)}
-                              </Avatar>
-                              {manageable ? (
-                                <span
-                                  className={`member-card-more ${styles.memberCardMore}`}
-                                >
-                                  <MoreOutlined />
-                                </span>
-                              ) : null}
-                              <div className={styles.memberCardName}>
-                                {name}
-                              </div>
-                              <div className={styles.memberCardRole}>
-                                {member.role === 'OWNER'
-                                  ? tw('chat.owner', 'Owner')
-                                  : member.role === 'ADMIN'
-                                    ? tw('chat.admin', 'Admin')
-                                    : member.participantType === 'AGENT'
-                                      ? tw('chat.agent', 'Digital avatar')
-                                      : tw('chat.member', 'Member')}
-                              </div>
-                            </div>
-                          </Dropdown>
-                        );
-                      })}
-                    </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -3402,27 +3455,59 @@ function ChatDetail({
         </>
       ) : null}
 
-      <Modal
-        title={tw('chat.inviteMember', 'Invite member')}
+      <MemberPickerModal
         open={inviteOpen}
+        title={tw('chat.addMemberTitle', 'Add members')}
+        selectedTitle={tw('chat.memberPickerSelected', 'Selected members')}
+        confirmText={tw('chat.addMember', 'Add')}
+        cancelText={tw('common.cancel', 'Cancel')}
+        searchPlaceholder={tw('chat.searchContacts', 'Search contacts')}
+        emptyText={tw('chat.noMatchedContacts', 'No matching contacts')}
+        noSelectedText={tw('chat.noMemberSelected', 'No member selected')}
+        items={inviteOptions.map((user) => ({
+          id: user.id,
+          name: userDisplayLabel(user),
+          avatar: user.avatar,
+        }))}
+        selected={inviteSelected}
+        confirming={inviting}
+        onToggle={(id) =>
+          setInviteSelected((previous) =>
+            previous.includes(id)
+              ? previous.filter((value) => value !== id)
+              : [...previous, id],
+          )
+        }
         onCancel={() => setInviteOpen(false)}
-        onOk={inviteMember}
-        confirmLoading={inviting}
-        okButtonProps={{ disabled: !inviteUserId }}
-      >
-        <Select
-          showSearch
-          optionFilterProp="label"
-          style={{ width: '100%' }}
-          value={inviteUserId}
-          onChange={setInviteUserId}
-          placeholder={tw('chat.selectMember', 'Select a member')}
-          options={inviteOptions.map((user) => ({
-            value: user.id,
-            label: userDisplayLabel(user),
-          }))}
-        />
-      </Modal>
+        onConfirm={inviteMembers}
+      />
+
+      <MemberPickerModal
+        open={removeOpen}
+        title={tw('chat.removeMemberTitle', 'Remove members')}
+        selectedTitle={tw('chat.memberPickerSelected', 'Selected members')}
+        confirmText={tw('chat.removeMemberAction', 'Remove')}
+        cancelText={tw('common.cancel', 'Cancel')}
+        searchPlaceholder={tw('chat.searchMembers', 'Search members')}
+        emptyText={tw('chat.noMatchedMembers', 'No matching members')}
+        noSelectedText={tw('chat.noMemberSelected', 'No member selected')}
+        items={removableMembers.map((member) => ({
+          id: member.participantId,
+          name: userDisplayLabel(member),
+          avatar: member.avatar,
+        }))}
+        selected={removeSelected}
+        confirming={removing}
+        onToggle={(id) =>
+          setRemoveSelected((previous) =>
+            previous.includes(id)
+              ? previous.filter((value) => value !== id)
+              : [...previous, id],
+          )
+        }
+        onCancel={() => setRemoveOpen(false)}
+        onConfirm={removeMembers}
+      />
     </div>
   );
 }

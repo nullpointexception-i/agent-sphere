@@ -1665,6 +1665,108 @@ export const useStyles = createStyles(({ css }) => ({
     font-size: 10px;
     line-height: 14px;
   `,
+  memberActionCard: css`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 2px 6px;
+    border: none;
+    background: none;
+    border-radius: 12px;
+    cursor: pointer;
+    &:hover .member-action-box {
+      border-color: #b9b3d6;
+      color: #8d87a8;
+    }
+  `,
+  memberActionBox: css`
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    border: 1.5px dashed #d9d5ea;
+    color: #b9b3d6;
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    transition: all 0.15s ease;
+  `,
+  pickerBody: css`
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 16px;
+    height: 440px;
+    margin-top: 8px;
+  `,
+  pickerPane: css`
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 10px;
+  `,
+  pickerSelectedPane: css`
+    border-left: 1px solid #f4f2fb;
+    padding-left: 16px;
+  `,
+  pickerList: css`
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2px;
+  `,
+  pickerRow: css`
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 6px;
+    border: none;
+    background: none;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+    &:hover {
+      background: #faf9ff;
+    }
+  `,
+  pickerCheck: css`
+    width: 18px;
+    height: 18px;
+    flex: none;
+    border-radius: 50%;
+    border: 1.5px solid #ddd8ee;
+    color: #fff;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `,
+  pickerCheckActive: css`
+    border-color: #6c5ce7;
+    background: #6c5ce7;
+  `,
+  pickerName: css`
+    flex: 1;
+    min-width: 0;
+    color: #3a3358;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
+  pickerSelectedTitle: css`
+    color: #3a3358;
+    font-size: 12px;
+    font-weight: 400;
+  `,
+  pickerFooter: css`
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 16px;
+  `,
   settingSwitchRow: css`
     display: flex;
     align-items: center;

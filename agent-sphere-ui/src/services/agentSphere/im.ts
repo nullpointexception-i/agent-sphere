@@ -144,6 +144,10 @@ export const imApi = {
       method: 'POST',
       data,
     }),
+  removeParticipant: (id: number, participantId: number) =>
+    request<void>(`${BASE}/im/conversations/${id}/participants/${participantId}`, {
+      method: 'DELETE',
+    }),
   updateParticipantRole: (
     id: number,
     participantId: number,
