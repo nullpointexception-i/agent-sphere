@@ -1618,35 +1618,52 @@ export const useStyles = createStyles(({ css }) => ({
   `,
   memberList: css`
     margin-top: 10px;
-    max-height: 260px;
+    max-height: 300px;
     overflow-y: auto;
   `,
-  memberRow: css`
+  memberGrid: css`
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 4px;
+    padding: 2px;
+  `,
+  memberCard: css`
+    position: relative;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 10px;
-    padding: 7px 2px;
-    border-radius: 8px;
+    gap: 6px;
+    padding: 8px 2px 6px;
+    border-radius: 12px;
     &:hover {
       background: #faf9ff;
     }
+    &:hover .member-card-more {
+      opacity: 1;
+    }
   `,
-  memberBody: css`
-    flex: 1;
-    min-width: 0;
+  memberCardMore: css`
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    color: #a7a2b8;
+    font-size: 12px;
+    opacity: 0.45;
+    transition: opacity 0.15s ease;
   `,
-  memberName: css`
+  memberCardName: css`
+    width: 100%;
     color: #3a3358;
     font-size: 12px;
-    font-weight: 400;
+    text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   `,
-  memberRole: css`
-    margin-top: 2px;
+  memberCardRole: css`
     color: #a7a2b8;
-    font-size: 11px;
+    font-size: 10px;
+    line-height: 14px;
   `,
   settingSwitchRow: css`
     display: flex;

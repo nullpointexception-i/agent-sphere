@@ -128,7 +128,7 @@ export default {
   'workspace.chat.transferOwnerHint': '对方将成为群主，你将成为管理员。',
   'workspace.chat.allowMemberInvite': '允许成员拉人',
   'workspace.chat.allowMemberInviteHint': '开启后普通成员可以邀请用户。',
-  'workspace.chat.trigger': '触发规则',
+  'workspace.chat.trigger': 'AI 辅助等级',
   'workspace.chat.triggerHint':
     'RELEVANCE / ALL 下新消息会交给 Group Router 判断；@数字员工 始终直接回复。',
   'workspace.chat.triggerMention': 'MENTION - 仅 @数字员工 时触发',

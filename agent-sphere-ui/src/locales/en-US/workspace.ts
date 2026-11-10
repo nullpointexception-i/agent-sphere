@@ -137,7 +137,7 @@ export default {
   'workspace.chat.allowMemberInvite': 'Allow members to invite',
   'workspace.chat.allowMemberInviteHint':
     'When on, ordinary members can invite users.',
-  'workspace.chat.trigger': 'Trigger rule',
+  'workspace.chat.trigger': 'AI assistance level',
   'workspace.chat.triggerHint':
     'Under RELEVANCE or ALL, new messages go to the Group Router; @mentions always reply directly.',
   'workspace.chat.triggerMention': 'MENTION - only when @Digital avatar',

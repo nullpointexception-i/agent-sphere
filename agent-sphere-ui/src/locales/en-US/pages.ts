@@ -179,7 +179,7 @@ export default {
   'pages.im.send': 'Send',
   'pages.im.selectConversation': 'Select a conversation',
   'pages.im.groupSettings': 'Group Settings',
-  'pages.im.trigger': 'Trigger Rule',
+  'pages.im.trigger': 'AI assistance level',
   'pages.im.title': 'Title',
   'pages.im.type': 'Type',
   'pages.im.userIds': 'Members',

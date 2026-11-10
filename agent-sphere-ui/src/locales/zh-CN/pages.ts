@@ -174,7 +174,7 @@ export default {
   'pages.im.send': '发送',
   'pages.im.selectConversation': '请选择会话',
   'pages.im.groupSettings': '群设置',
-  'pages.im.trigger': '触发规则',
+  'pages.im.trigger': 'AI 辅助等级',
   'pages.im.title': '标题',
   'pages.im.type': '类型',
   'pages.im.userIds': '成员',

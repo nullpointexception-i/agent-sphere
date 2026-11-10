@@ -12,6 +12,7 @@ import {
   HomeOutlined,
   LogoutOutlined,
   MessageOutlined,
+  MoreOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
@@ -3167,80 +3168,101 @@ function ChatDetail({
                       {tw('chat.noMatchedMembers', 'No matching members')}
                     </div>
                   ) : (
-                    memberRows.map((member) => {
-                      const name = userDisplayLabel(
-                        member,
-                        tw('common.unnamedMember', 'Unnamed member'),
-                      );
-                      return (
-                        <div
-                          key={`${member.participantType}-${member.participantId}`}
-                          className={styles.memberRow}
-                        >
-                          <Avatar
-                            size={34}
-                            src={member.avatar}
-                            style={avatarStyle(name)}
-                          >
-                            {initials(name)}
-                          </Avatar>
-                          <div className={styles.memberBody}>
-                            <div className={styles.memberName}>{name}</div>
-                            <div className={styles.memberRole}>
-                              {member.role === 'OWNER'
-                                ? tw('chat.owner', 'Owner')
-                                : member.role === 'ADMIN'
-                                  ? tw('chat.admin', 'Admin')
-                                  : member.participantType === 'AGENT'
-                                    ? tw('chat.agent', 'Digital avatar')
-                                    : tw('chat.member', 'Member')}
-                            </div>
-                          </div>
-                          {isAdmin &&
+                    <div className={styles.memberGrid}>
+                      {memberRows.map((member) => {
+                        const name = userDisplayLabel(
+                          member,
+                          tw('common.unnamedMember', 'Unnamed member'),
+                        );
+                        const manageable =
+                          isAdmin &&
                           member.participantType === 'USER' &&
-                          member.role !== 'OWNER' ? (
-                            <div
-                              style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'flex-end',
-                                gap: 2,
-                              }}
-                            >
-                              <Button
-                                type="link"
-                                size="small"
-                                onClick={() =>
+                          member.role !== 'OWNER';
+                        return (
+                          <Dropdown
+                            key={`${member.participantType}-${member.participantId}`}
+                            trigger={['click']}
+                            disabled={!manageable}
+                            menu={{
+                              items: [
+                                {
+                                  key: 'role',
+                                  label:
+                                    member.role === 'ADMIN'
+                                      ? tw('chat.removeAdmin', 'Remove admin')
+                                      : tw('chat.makeAdmin', 'Make admin'),
+                                },
+                                ...(isOwner
+                                  ? [
+                                      {
+                                        key: 'owner',
+                                        label: tw(
+                                          'chat.transferOwner',
+                                          'Transfer ownership',
+                                        ),
+                                        danger: true,
+                                      },
+                                    ]
+                                  : []),
+                              ],
+                              onClick: ({ key, domEvent }) => {
+                                domEvent.stopPropagation();
+                                if (key === 'role') {
                                   changeMemberRole(
                                     member,
                                     member.role === 'ADMIN'
                                       ? 'MEMBER'
                                       : 'ADMIN',
-                                  )
+                                  );
                                 }
+                                if (key === 'owner') {
+                                  transferGroupOwner(member);
+                                }
+                              },
+                            }}
+                          >
+                            <div
+                              className={styles.memberCard}
+                              title={name}
+                              style={{
+                                cursor: manageable ? 'pointer' : 'default',
+                              }}
+                            >
+                              <Avatar
+                                shape="square"
+                                size={56}
+                                src={member.avatar}
+                                style={{
+                                  ...avatarStyle(name),
+                                  borderRadius: 14,
+                                }}
                               >
-                                {member.role === 'ADMIN'
-                                  ? tw('chat.removeAdmin', 'Remove admin')
-                                  : tw('chat.makeAdmin', 'Make admin')}
-                              </Button>
-                              {isOwner ? (
-                                <Button
-                                  type="link"
-                                  size="small"
-                                  danger
-                                  onClick={() => transferGroupOwner(member)}
+                                {initials(name)}
+                              </Avatar>
+                              {manageable ? (
+                                <span
+                                  className={`member-card-more ${styles.memberCardMore}`}
                                 >
-                                  {tw(
-                                    'chat.transferOwner',
-                                    'Transfer ownership',
-                                  )}
-                                </Button>
+                                  <MoreOutlined />
+                                </span>
                               ) : null}
+                              <div className={styles.memberCardName}>
+                                {name}
+                              </div>
+                              <div className={styles.memberCardRole}>
+                                {member.role === 'OWNER'
+                                  ? tw('chat.owner', 'Owner')
+                                  : member.role === 'ADMIN'
+                                    ? tw('chat.admin', 'Admin')
+                                    : member.participantType === 'AGENT'
+                                      ? tw('chat.agent', 'Digital avatar')
+                                      : tw('chat.member', 'Member')}
+                              </div>
                             </div>
-                          ) : null}
-                        </div>
-                      );
-                    })
+                          </Dropdown>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </div>
