@@ -167,7 +167,8 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
                     .map(this::toAccessVO)
                     .toList();
             fillInstanceNames(result);
-            return result;        } finally {
+            return result;
+        } finally {
             if (previousScope == null) {
                 TenantScopeHolder.clear();
             } else {
@@ -198,12 +199,40 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         if (ids.isEmpty()) {
             return;
         }
-        Map<Long, String> names = instanceMapper.selectBatchIds(ids).stream()
-                .collect(Collectors.toMap(AgentInstance::getId, AgentInstance::getName,
-                        (left, right) -> left));
+        Map<Long, String> names = lookupInstanceNames(ids);
         for (SessionVO session : sessions) {
             if (session.getAgentInstanceId() != null) {
                 session.setAgentInstanceName(names.get(session.getAgentInstanceId()));
+            }
+        }
+    }
+
+    /**
+     * Instance names are display-only. A visible session may reference a tenant-owned instance the
+     * caller cannot open (for example the tenant Group Router), so the self-only filter is lifted
+     * for this id-to-name lookup while the tenant boundary itself stays enforced.
+     */
+    private Map<Long, String> lookupInstanceNames(List<Long> ids) {
+        TenantScope previous = TenantScopeHolder.get();
+        TenantScope current = TenantScopeHolder.currentOrFallback();
+        boolean widen = current != null && current.selfOnly();
+        try {
+            if (widen) {
+                TenantScopeHolder.start(new TenantScope(
+                        current.userId(), current.username(), current.currentTenantId(),
+                        current.visibleTenantIds(), false,
+                        current.manageableTenantIds(), current.subtreeVisible()));
+            }
+            return instanceMapper.selectBatchIds(ids).stream()
+                    .collect(Collectors.toMap(AgentInstance::getId, AgentInstance::getName,
+                            (left, right) -> left));
+        } finally {
+            if (widen) {
+                if (previous == null) {
+                    TenantScopeHolder.clear();
+                } else {
+                    TenantScopeHolder.start(previous);
+                }
             }
         }
     }
