@@ -29,4 +29,6 @@ public class TaskCardPayload implements Serializable {
     private String toolCallsJson;
     /** Resolved cards: the decisions (approval) or answer (clarification) that were submitted. */
     private String decisionsJson;
+    /** Resolved cards: username that answered/approved the input. */
+    private String respondedBy;
 }

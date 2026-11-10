@@ -135,6 +135,12 @@ export default {
   'workspace.chat.triggerRelevance':
     'RELEVANCE - 每条消息都交给 Group Router 判断',
   'workspace.chat.triggerAll': 'ALL - 每条消息都触发',
+  'workspace.chat.clarifyTarget': '回复',
+  'workspace.chat.clarifyTargetNone': '普通消息',
+  'workspace.chat.clarifyTargetHint': '请选择要回答的澄清',
+  'workspace.chat.clarifyStrict': '限制澄清回复人',
+  'workspace.chat.clarifyStrictHint':
+    '开启后只有提问者、分身所有者和群管理员可以回答澄清。',
   'workspace.chat.inviteMember': '邀请成员',
   'workspace.chat.selectMember': '选择成员',
   'workspace.chat.addMember': '添加',

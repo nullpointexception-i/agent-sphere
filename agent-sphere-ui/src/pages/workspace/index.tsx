@@ -2068,6 +2068,7 @@ function ChatDetail({
   const [messages, setMessages] = useState<ImMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
+  const [replyTarget, setReplyTarget] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [agentPaused, setAgentPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2086,6 +2087,7 @@ function ChatDetail({
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingSetting, setSavingSetting] = useState(false);
   const [gateTrigger, setGateTrigger] = useState('MENTION');
+  const [gateStrict, setGateStrict] = useState(false);
   const [savingGate, setSavingGate] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -2398,14 +2400,18 @@ function ChatDetail({
   const send = async () => {
     const value = text.trim();
     if (!value || sending) return;
-    await sendText(value, `workspace-${Date.now()}`);
+    await sendText(value, `workspace-${Date.now()}`, replyTarget || undefined);
     setText('');
     mention.close();
     if (composerRef.current) composerRef.current.style.height = 'auto';
   };
 
   /** Sends an arbitrary DM text; clarification option buttons reuse this path. */
-  const sendText = async (value: string, clientMsgId?: string) => {
+  const sendText = async (
+    value: string,
+    clientMsgId?: string,
+    clarificationInputId?: string,
+  ) => {
     if (!value || sending) return;
     if (agentPaused) {
       message.warning(
@@ -2434,13 +2440,20 @@ function ChatDetail({
         value,
         clientMsgId || `option-${Date.now()}`,
         mentionList,
+        undefined,
+        clarificationInputId,
       );
       load(true);
-    } catch {
+    } catch (error: any) {
       if (shouldStream) {
         resetAgentStream(conversationId);
       }
-      message.error(tw('chat.sendFailed', 'Failed to send'));
+      message.error(
+        error?.response?.data?.message ||
+          error?.data?.message ||
+          error?.message ||
+          tw('chat.sendFailed', 'Failed to send'),
+      );
     } finally {
       setSending(false);
     }
@@ -2489,10 +2502,17 @@ function ChatDetail({
     if (conversation?.type === 'GROUP') {
       imApi
         .gateConfig(conversationId)
-        .then((config) => setGateTrigger(config?.trigger || 'MENTION'))
-        .catch(() => setGateTrigger('MENTION'));
+        .then((config) => {
+          setGateTrigger(config?.trigger || 'MENTION');
+          setGateStrict(Boolean(config?.clarificationStrict));
+        })
+        .catch(() => {
+          setGateTrigger('MENTION');
+          setGateStrict(false);
+        });
     } else {
       setGateTrigger('MENTION');
+      setGateStrict(false);
     }
   };
 
@@ -2569,13 +2589,27 @@ function ChatDetail({
     setGateTrigger(trigger);
     setSavingGate(true);
     try {
-      await imApi.updateGateConfig(conversationId, trigger);
+      await imApi.updateGateConfig(conversationId, { trigger });
       message.success(tw('common.saved', 'Saved'));
     } catch {
       setGateTrigger(previous);
       message.error(tw('common.saveFailed', 'Save failed'));
     } finally {
       setSavingGate(false);
+    }
+  };
+
+  const changeGateStrict = async (checked: boolean) => {
+    const previous = gateStrict;
+    setGateStrict(checked);
+    try {
+      await imApi.updateGateConfig(conversationId, {
+        clarificationStrict: checked,
+      });
+      message.success(tw('common.saved', 'Saved'));
+    } catch {
+      setGateStrict(previous);
+      message.error(tw('common.saveFailed', 'Save failed'));
     }
   };
 
@@ -2748,6 +2782,40 @@ function ChatDetail({
       !isSameUser(member, me) &&
       (isOwner || member.role !== 'ADMIN'),
   );
+  const pendingMap = new Map<string, string>();
+  messages.forEach((item) => {
+    const card = taskCardOf(item);
+    if (
+      card?.cardType === ROUTER_CLARIFICATION &&
+      card.status === 'PENDING' &&
+      card.inputId &&
+      !pendingMap.has(card.inputId)
+    ) {
+      pendingMap.set(
+        card.inputId,
+        item.senderName || tw('chat.agent', 'Digital avatar'),
+      );
+    }
+  });
+  const pendingClarifications = Array.from(pendingMap, ([inputId, label]) => ({
+    inputId,
+    label,
+  }));
+  const pendingKey = pendingClarifications
+    .map((item) => item.inputId)
+    .join('|');
+  useEffect(() => {
+    setReplyTarget((current) => {
+      if (pendingClarifications.length === 0) return null;
+      if (pendingClarifications.length === 1) {
+        return pendingClarifications[0].inputId;
+      }
+      return pendingClarifications.some((item) => item.inputId === current)
+        ? current
+        : null;
+    });
+  }, [pendingKey]);
+
   const selfConversation = !isGroup && isSelfParticipants(participants, me);
   const otherParticipant = participants.find(
     (member) => member.participantType === 'USER' && !isSameUser(member, me),
@@ -2973,7 +3041,9 @@ function ChatDetail({
                           <AgentInputCard
                             card={card}
                             conversationId={conversationId}
-                            onReplyText={sendText}
+                            onReplyText={(value, inputId) =>
+                              sendText(value, undefined, inputId)
+                            }
                             submitting={sending}
                             onApprove={approveSessionInput}
                           />
@@ -3054,6 +3124,34 @@ function ChatDetail({
             'avatars.chatPaused',
             'This avatar is paused. Resume it before chatting.',
           )}
+        </div>
+      ) : null}
+
+      {pendingClarifications.length > 0 ? (
+        <div className={styles.clarifyTargetBar}>
+          <span className={styles.clarifyTargetLabel}>
+            {tw('chat.clarifyTarget', 'Reply to')}
+          </span>
+          <Select
+            size="small"
+            allowClear={pendingClarifications.length > 1}
+            value={replyTarget ?? undefined}
+            placeholder={tw('chat.clarifyTargetNone', 'Normal message')}
+            style={{ minWidth: 200, maxWidth: 320 }}
+            onChange={(value: string | null) => setReplyTarget(value ?? null)}
+            options={pendingClarifications.map((item) => ({
+              value: item.inputId,
+              label: item.label,
+            }))}
+          />
+          {pendingClarifications.length > 1 ? (
+            <span className={styles.clarifyTargetHint}>
+              {tw(
+                'chat.clarifyTargetHint',
+                'Choose the clarification to answer',
+              )}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -3390,6 +3488,26 @@ function ChatDetail({
                       'chat.triggerHint',
                       'Group Router handles new messages under RELEVANCE or ALL; @mentions always reply directly.',
                     )}
+                  </div>
+                  <div
+                    className={styles.settingSwitchRow}
+                    style={{ marginTop: 8 }}
+                  >
+                    <div>
+                      <div className={styles.settingLabel}>
+                        {tw(
+                          'chat.clarifyStrict',
+                          'Restrict clarification answers',
+                        )}
+                      </div>
+                      <div className={styles.settingHint}>
+                        {tw(
+                          'chat.clarifyStrictHint',
+                          'When on, only the asker, the avatar owner and group admins can answer a clarification.',
+                        )}
+                      </div>
+                    </div>
+                    <Switch checked={gateStrict} onChange={changeGateStrict} />
                   </div>
                 </div>
               ) : null}

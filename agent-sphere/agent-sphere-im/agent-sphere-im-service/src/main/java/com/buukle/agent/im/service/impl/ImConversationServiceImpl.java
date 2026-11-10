@@ -707,6 +707,7 @@ public class ImConversationServiceImpl implements ImConversationService {
             ImGateConfig config = new ImGateConfig();
             config.setTrigger(ImGateConfig.TRIGGER_MENTION);
             config.setAllowMemberInvite(true);
+            config.setClarificationStrict(false);
             return config;
         }
         try {
@@ -720,11 +721,15 @@ public class ImConversationServiceImpl implements ImConversationService {
             if (config.getAllowMemberInvite() == null) {
                 config.setAllowMemberInvite(true);
             }
+            if (config.getClarificationStrict() == null) {
+                config.setClarificationStrict(false);
+            }
             return config;
         } catch (Exception e) {
             ImGateConfig config = new ImGateConfig();
             config.setTrigger(ImGateConfig.TRIGGER_MENTION);
             config.setAllowMemberInvite(true);
+            config.setClarificationStrict(false);
             return config;
         }
     }
@@ -746,6 +751,11 @@ public class ImConversationServiceImpl implements ImConversationService {
             normalized.setAllowMemberInvite(config.getAllowMemberInvite());
         } else if (normalized.getAllowMemberInvite() == null) {
             normalized.setAllowMemberInvite(true);
+        }
+        if (config != null && config.getClarificationStrict() != null) {
+            normalized.setClarificationStrict(config.getClarificationStrict());
+        } else if (normalized.getClarificationStrict() == null) {
+            normalized.setClarificationStrict(false);
         }
         ImConversation conversation = requireConversation(conversationId);
         conversation.setGateConfig(JsonUtils.toJson(normalized));

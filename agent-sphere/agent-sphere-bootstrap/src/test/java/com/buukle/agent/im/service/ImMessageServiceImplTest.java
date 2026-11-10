@@ -13,6 +13,7 @@ import com.buukle.agent.im.dtvo.enums.ImMessageType;
 import com.buukle.agent.im.dtvo.enums.ImParticipantType;
 import com.buukle.agent.im.dtvo.vo.ImStreamEvent;
 import com.buukle.agent.im.dtvo.vo.ImMessagePageVO;
+import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.im.dtvo.vo.MessageVO;
 import com.buukle.agent.im.repository.ImConversationMapper;
 import com.buukle.agent.im.repository.ImConversationSettingMapper;
@@ -20,6 +21,7 @@ import com.buukle.agent.im.repository.ImMessageMapper;
 import com.buukle.agent.im.repository.ImParticipantMapper;
 import com.buukle.agent.im.repository.ImReadCursorMapper;
 import com.buukle.agent.im.service.impl.ImMessageServiceImpl;
+import com.buukle.agent.superagent.spi.ChatAgentIdentity;
 import com.buukle.agent.superagent.spi.SessionInputSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import org.junit.jupiter.api.AfterEach;
@@ -74,6 +76,8 @@ class ImMessageServiceImplTest {
     ObjectProvider<UserSpi> userSpiProvider;
     @Mock
     SessionInputSpi sessionInputSpi;
+    @Mock
+    SuperAgentDirectorySpi directorySpi;
     @Mock
     AgentMetrics metrics;
 
@@ -272,13 +276,18 @@ class ImMessageServiceImplTest {
             return 1;
         });
         when(participantMapper.selectList(any())).thenReturn(List.of());
-        when(sessionInputSpi.answerRouterClarification(77L, "Option A")).thenReturn(true);
+        com.buukle.agent.superagent.dtvo.vo.SessionInputVO pending =
+                new com.buukle.agent.superagent.dtvo.vo.SessionInputVO();
+        pending.setInputId("c-1");
+        when(sessionInputSpi.findPendingClarifications(77L)).thenReturn(List.of(pending));
+        when(sessionInputSpi.answerRouterClarification(77L, "c-1", "Option A", "alice"))
+                .thenReturn(true);
 
         SendMessageDTO dto = new SendMessageDTO();
         dto.setContent(Map.of("text", "Option A"));
         service.send(10L, dto);
 
-        verify(sessionInputSpi).answerRouterClarification(77L, "Option A");
+        verify(sessionInputSpi).answerRouterClarification(77L, "c-1", "Option A", "alice");
         // Interception succeeded: ingest is skipped (the event never reaches Router scheduling)
         verify(ingestPortProvider, never()).getIfAvailable();
     }
@@ -297,19 +306,22 @@ class ImMessageServiceImplTest {
             return 1;
         });
         when(participantMapper.selectList(any())).thenReturn(List.of());
-        when(sessionInputSpi.answerRouterClarification(77L, "Regular chat")).thenReturn(false);
+        when(sessionInputSpi.findPendingClarifications(77L)).thenReturn(List.of());
 
         SendMessageDTO dto = new SendMessageDTO();
         dto.setContent(Map.of("text", "Regular chat"));
         service.send(10L, dto);
 
-        assertFalse(sessionInputSpi.answerRouterClarification(77L, "Regular chat"));
+        verify(sessionInputSpi, never())
+                .answerRouterClarification(any(), any(), any(), any());
         verify(ingestPortProvider).getIfAvailable();
     }
 
     @Test
-    void send_groupConversation_neverInterceptsClarification() {
-        when(conversationMapper.selectById(10L)).thenReturn(conversation(10L, 4L));
+    void send_groupConversation_withoutPendingClarification_fallsBackToIngest() {
+        ImConversation group = conversation(10L, 4L);
+        group.setThreadId(77L);
+        when(conversationMapper.selectById(10L)).thenReturn(group);
         when(conversationMapper.nextSeq(10L)).thenReturn(5L);
         when(messageMapper.insert(any(ImMessage.class))).thenAnswer(inv -> {
             ImMessage message = inv.getArgument(0);
@@ -318,12 +330,80 @@ class ImMessageServiceImplTest {
             return 1;
         });
         when(participantMapper.selectList(any())).thenReturn(List.of());
+        when(sessionInputSpi.findPendingClarifications(77L)).thenReturn(List.of());
 
         SendMessageDTO dto = new SendMessageDTO();
         dto.setContent(Map.of("text", "Option A"));
         service.send(10L, dto);
 
-        verify(sessionInputSpi, never()).answerRouterClarification(any(), any());
+        verify(sessionInputSpi, never())
+                .answerRouterClarification(any(), any(), any(), any());
+        verify(ingestPortProvider).getIfAvailable();
+    }
+
+    @Test
+    void send_groupConversation_answersTargetClarificationByCardInput() {
+        ImConversation group = conversation(10L, 4L);
+        group.setThreadId(77L);
+        when(conversationMapper.selectById(10L)).thenReturn(group);
+        when(conversationMapper.nextSeq(10L)).thenReturn(5L);
+        when(messageMapper.insert(any(ImMessage.class))).thenAnswer(inv -> {
+            ImMessage message = inv.getArgument(0);
+            message.setId(106L);
+            message.setCreatedAt(LocalDateTime.now());
+            return 1;
+        });
+        when(participantMapper.selectList(any())).thenReturn(List.of());
+        com.buukle.agent.superagent.dtvo.vo.SessionInputVO pending =
+                new com.buukle.agent.superagent.dtvo.vo.SessionInputVO();
+        pending.setInputId("c-9");
+        when(sessionInputSpi.findPendingByInput(77L, "c-9")).thenReturn(pending);
+        when(sessionInputSpi.answerRouterClarification(77L, "c-9", "报销", "alice"))
+                .thenReturn(true);
+
+        SendMessageDTO dto = new SendMessageDTO();
+        dto.setContent(Map.of("text", "报销"));
+        dto.setClarificationInputId("c-9");
+        service.send(10L, dto);
+
+        verify(sessionInputSpi).answerRouterClarification(77L, "c-9", "报销", "alice");
+        verify(ingestPortProvider, never()).getIfAvailable();
+    }
+
+    @Test
+    void send_groupConversation_strictClarificationRejectsNonAsker() {
+        ImConversation group = conversation(10L, 4L);
+        group.setThreadId(77L);
+        group.setGateConfig("{\"trigger\":\"MENTION\",\"clarificationStrict\":true}");
+        when(conversationMapper.selectById(10L)).thenReturn(group);
+        when(conversationMapper.nextSeq(10L)).thenReturn(5L);
+        when(messageMapper.insert(any(ImMessage.class))).thenAnswer(inv -> {
+            ImMessage message = inv.getArgument(0);
+            message.setId(107L);
+            message.setCreatedAt(LocalDateTime.now());
+            return 1;
+        });
+        when(participantMapper.selectList(any())).thenReturn(List.of());
+        com.buukle.agent.superagent.dtvo.vo.SessionInputVO pending =
+                new com.buukle.agent.superagent.dtvo.vo.SessionInputVO();
+        pending.setInputId("c-10");
+        pending.setSuperAgentId(9L);
+        pending.setRequestedBy(2L);
+        when(sessionInputSpi.findPendingByInput(77L, "c-10")).thenReturn(pending);
+        when(directoryPortProvider.getIfAvailable()).thenReturn(directorySpi);
+        when(directorySpi.findByIds(any())).thenReturn(Map.of(
+                9L, new ChatAgentIdentity(9L, "Finance", 2L, "ACTIVE")));
+        ImParticipant member = new ImParticipant();
+        member.setRole("MEMBER");
+        when(participantMapper.selectOne(any())).thenReturn(member);
+
+        SendMessageDTO dto = new SendMessageDTO();
+        dto.setContent(Map.of("text", "报销"));
+        dto.setClarificationInputId("c-10");
+
+        assertThrows(BizException.class, () -> service.send(10L, dto));
+        verify(sessionInputSpi, never())
+                .answerRouterClarification(any(), any(), any(), any());
     }
 
     private static ImMessage message(Long id, Long seq, String text) {

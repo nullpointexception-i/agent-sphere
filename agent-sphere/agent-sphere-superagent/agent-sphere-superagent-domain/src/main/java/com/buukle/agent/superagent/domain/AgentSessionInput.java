@@ -41,6 +41,8 @@ public class AgentSessionInput {
     /** PENDING / ANSWERED / CANCELLED */
     private String status;
     private Long cardOutboundId;
+    /** User id that triggered the parked run (the asker); used by strict clarification mode. */
+    private Long requestedBy;
     private String respondedBy;
     private LocalDateTime respondedAt;
     private String remark;

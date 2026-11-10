@@ -25,6 +25,8 @@ export interface AgentInputCardView {
   toolCallsJson?: string;
   /** Resolved cards: submitted decisions (approval) or answer (clarification). */
   decisionsJson?: string;
+  /** Resolved cards: username that answered/approved. */
+  respondedBy?: string;
 }
 
 export const ROUTER_CLARIFICATION = 'ROUTER_CLARIFICATION';
@@ -132,7 +134,7 @@ export function AgentInputCard({
 }: {
   card: AgentInputCardView;
   conversationId: number;
-  onReplyText?: (text: string) => void;
+  onReplyText?: (text: string, inputId?: string) => void;
   submitting?: boolean;
   onApprove?: (
     conversationId: number,
@@ -204,7 +206,9 @@ export function AgentInputCard({
         {clarification && resolvedAnswer ? (
           <div style={{ marginTop: 6, fontSize: 12, color: '#3f8cff' }}>
             {tw('chat.inputAnswerTaken', 'Answer: {answer}', {
-              answer: resolvedAnswer,
+              answer: card.respondedBy
+                ? `${resolvedAnswer} · ${card.respondedBy}`
+                : resolvedAnswer,
             })}
           </div>
         ) : null}
@@ -228,7 +232,7 @@ export function AgentInputCard({
 
   const submitOption = (text: string) => {
     if (repliesDisabled) return;
-    onReplyText?.(text);
+    onReplyText?.(text, card.inputId);
   };
 
   const toggleMultipleOption = (index: number) => {

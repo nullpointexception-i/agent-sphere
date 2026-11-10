@@ -11,6 +11,7 @@ import com.buukle.agent.superagent.domain.AgentSessionInput;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.repository.AgentOutboundMessageMapper;
 import com.buukle.agent.superagent.repository.AgentSessionInputMapper;
+import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.event.AgentOutboundWakePublisher;
 import com.buukle.agent.superagent.service.impl.SessionInputServiceImpl;
@@ -54,6 +55,8 @@ class SessionInputServiceImplTest {
     @Mock
     AgentSessionInputMapper inputMapper;
     @Mock
+    AgentEventMapper eventMapper;
+    @Mock
     AgentOutboundMessageMapper outboundMapper;
     @Mock
     AgentOutboundWakePublisher wakePublisher;
@@ -75,8 +78,9 @@ class SessionInputServiceImplTest {
         AuthContext.setUserId(9L);
         AuthContext.setUsername("owner");
         when(resumePortProvider.getIfAvailable()).thenReturn(resumePort);
-        service = new SessionInputServiceImpl(inputMapper, outboundMapper, wakePublisher,
-                superAgentMapper, userSpi, new AgentMetrics(registryProvider), resumePortProvider);
+        service = new SessionInputServiceImpl(inputMapper, eventMapper, outboundMapper,
+                wakePublisher, superAgentMapper, userSpi, new AgentMetrics(registryProvider),
+                resumePortProvider);
         AgentSuperAgent agent = new AgentSuperAgent();
         agent.setId(AGENT_ID);
         agent.setTenantId(1L);

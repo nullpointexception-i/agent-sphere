@@ -17,4 +17,10 @@ public class ImGateConfig implements Serializable {
 
     /** Whether ordinary members may invite users. Missing means true for backward compatibility. */
     private Boolean allowMemberInvite;
+
+    /**
+     * Strict clarification answers: only the asker, the avatar owner and group admins.
+     * Missing means false (any member may answer).
+     */
+    private Boolean clarificationStrict;
 }

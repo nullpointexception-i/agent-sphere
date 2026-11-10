@@ -15,12 +15,14 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
+import com.buukle.agent.superagent.domain.AgentEvent;
 import com.buukle.agent.superagent.domain.AgentOutboundMessage;
 import com.buukle.agent.superagent.domain.AgentSessionInput;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.dtvo.enums.AgentOutboundMessageStatus;
 import com.buukle.agent.superagent.dtvo.vo.AgentOutboundPayloadVO;
 import com.buukle.agent.superagent.dtvo.vo.SessionInputVO;
+import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentOutboundMessageMapper;
 import com.buukle.agent.superagent.repository.AgentSessionInputMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
@@ -39,6 +41,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -57,6 +60,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
     private static final int MAX_TITLE = 500;
 
     private final AgentSessionInputMapper sessionInputMapper;
+    private final AgentEventMapper eventMapper;
     private final AgentOutboundMessageMapper outboundMapper;
     private final AgentOutboundWakePublisher outboundWakePublisher;
     private final AgentSuperAgentMapper superAgentMapper;
@@ -93,6 +97,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             input.setMultiple(command.multiple() != null && command.multiple());
             input.setToolCallsJson(command.toolCallsJson());
             input.setStatus(SessionInputStatus.PENDING);
+            input.setRequestedBy(latestActorId(command.threadId()));
             input.setCreatedBy(owner);
             try {
                 sessionInputMapper.insert(input);
@@ -186,7 +191,67 @@ public class SessionInputServiceImpl implements SessionInputSpi {
     }
 
     @Override
+    public SessionInputVO findPendingByInput(Long threadId, String inputId) {
+        if (threadId == null || inputId == null || inputId.isBlank()) {
+            return null;
+        }
+        TenantUtil.stop();
+        TenantScopeHolder.clear();
+        TenantContext.clear();
+        try {
+            AgentSessionInput input = selectPending(threadId, inputId, null);
+            return input == null ? null : toVO(input);
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    @Override
+    public SessionInputVO findPendingByThreadAndAgent(Long threadId, Long superAgentId) {
+        if (threadId == null || superAgentId == null) {
+            return null;
+        }
+        TenantUtil.stop();
+        TenantScopeHolder.clear();
+        TenantContext.clear();
+        try {
+            AgentSessionInput input = selectPending(threadId, null, superAgentId);
+            return input == null ? null : toVO(input);
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    @Override
+    public List<SessionInputVO> findPendingClarifications(Long threadId) {
+        if (threadId == null) {
+            return List.of();
+        }
+        TenantUtil.stop();
+        TenantScopeHolder.clear();
+        TenantContext.clear();
+        try {
+            return sessionInputMapper.selectList(Wrappers.<AgentSessionInput>lambdaQuery()
+                            .eq(AgentSessionInput::getThreadId, threadId)
+                            .eq(AgentSessionInput::getInputType, SessionInputType.CLARIFICATION)
+                            .eq(AgentSessionInput::getStatus, SessionInputStatus.PENDING)
+                            .orderByAsc(AgentSessionInput::getId))
+                    .stream()
+                    .map(SessionInputServiceImpl::toVO)
+                    .toList();
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    @Override
     public boolean answerRouterClarification(Long threadId, String response) {
+        return answerRouterClarification(threadId, null, response, AuthContext.getUsername());
+    }
+
+    @Override
+    public boolean answerRouterClarification(
+            Long threadId, String inputId, String response, String responder) {
         if (threadId == null || response == null || response.isBlank()) {
             return false;
         }
@@ -194,12 +259,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         TenantScopeHolder.clear();
         TenantContext.clear();
         try {
-            AgentSessionInput input = sessionInputMapper.selectOne(Wrappers.<AgentSessionInput>lambdaQuery()
-                    .eq(AgentSessionInput::getThreadId, threadId)
-                    .eq(AgentSessionInput::getInputType, SessionInputType.CLARIFICATION)
-                    .eq(AgentSessionInput::getStatus, SessionInputStatus.PENDING)
-                    .orderByDesc(AgentSessionInput::getId)
-                    .last(LIMIT_ONE));
+            AgentSessionInput input = selectPending(threadId, inputId, null);
             if (input == null) {
                 return false;
             }
@@ -213,8 +273,14 @@ public class SessionInputServiceImpl implements SessionInputSpi {
             AgentSessionInput answerPatch = new AgentSessionInput();
             answerPatch.setId(input.getId());
             answerPatch.setDecisionsJson(answerJson);
+            if (responder != null && !responder.isBlank()) {
+                answerPatch.setRespondedBy(responder);
+            }
             sessionInputMapper.updateById(answerPatch);
             input.setDecisionsJson(answerJson);
+            if (responder != null && !responder.isBlank()) {
+                input.setRespondedBy(responder);
+            }
             port.answerClarification(input.getSessionId(), input.getRunId(), input.getInputId(), response);
             // The resume path publishes the RESPONDED event synchronously, and the
             // bridge's projectResolved already marked the row + updated the card.
@@ -229,14 +295,37 @@ public class SessionInputServiceImpl implements SessionInputSpi {
                         "inputType", SessionInputType.CLARIFICATION);
                 return true;
             }
-            markResolved(input, SessionInputStatus.ANSWERED, null);
+            markResolved(input, SessionInputStatus.ANSWERED, responder);
             updateCard(input, null);
             metrics.increment(AgentMetrics.ROUTER_INPUT_ANSWERED, "inputType", SessionInputType.CLARIFICATION);
             return true;
         } catch (Exception e) {
-            log.warn("Router clarification answer failed: threadId={}, error={}", threadId, e.getMessage());
+            log.warn("Router clarification answer failed: threadId={}, inputId={}, error={}",
+                    threadId, inputId, e.getMessage());
             return false;
         }
+    }
+
+    private AgentSessionInput selectPending(Long threadId, String inputId, Long superAgentId) {
+        return sessionInputMapper.selectOne(Wrappers.<AgentSessionInput>lambdaQuery()
+                .eq(AgentSessionInput::getThreadId, threadId)
+                .eq(AgentSessionInput::getInputType, SessionInputType.CLARIFICATION)
+                .eq(AgentSessionInput::getStatus, SessionInputStatus.PENDING)
+                .eq(inputId != null && !inputId.isBlank(), AgentSessionInput::getInputId, inputId)
+                .eq(superAgentId != null, AgentSessionInput::getSuperAgentId, superAgentId)
+                .orderByDesc(AgentSessionInput::getId)
+                .last(LIMIT_ONE));
+    }
+
+    private Long latestActorId(Long threadId) {
+        if (threadId == null) {
+            return null;
+        }
+        AgentEvent event = eventMapper.selectOne(Wrappers.<AgentEvent>lambdaQuery()
+                .eq(AgentEvent::getThreadId, threadId)
+                .orderByDesc(AgentEvent::getSeq)
+                .last(LIMIT_ONE));
+        return event == null ? null : event.getActorId();
     }
 
     @Override
@@ -444,6 +533,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         card.setOptions(isClarification(input) ? input.getOptions() : null);
         card.setToolCallsJson(isApproval(input) ? input.getToolCallsJson() : null);
         card.setDecisionsJson(input.getDecisionsJson());
+        card.setRespondedBy(input.getRespondedBy());
         return card;
     }
 
@@ -497,6 +587,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
         vo.setMultiple(input.getMultiple());
         vo.setToolCallsJson(input.getToolCallsJson());
         vo.setStatus(input.getStatus());
+        vo.setRequestedBy(input.getRequestedBy());
         return vo;
     }
 

@@ -192,10 +192,18 @@ export const imApi = {
     clientMsgId?: string,
     mentions?: { type: string; id: number; name?: string }[],
     replyToId?: number,
+    clarificationInputId?: string,
   ) =>
     request<ImMessage>(`${BASE}/im/conversations/${id}/messages`, {
       method: 'POST',
-      data: { type: 'TEXT', content: { text }, clientMsgId, mentions, replyToId },
+      data: {
+        type: 'TEXT',
+        content: { text },
+        clientMsgId,
+        mentions,
+        replyToId,
+        clarificationInputId,
+      },
     }),
   uploadAttachment: (id: number, file: File) => {
     const form = new FormData();
@@ -248,12 +256,20 @@ export const imApi = {
       data: { text: content.text ?? '' },
     }),
   gateConfig: (id: number) =>
-    request<{ trigger?: string }>(`${BASE}/im/conversations/${id}/gate-config`),
-  updateGateConfig: (id: number, trigger: string) =>
-    request<{ trigger?: string }>(`${BASE}/im/conversations/${id}/gate-config`, {
-      method: 'PATCH',
-      data: { trigger },
-    }),
+    request<{ trigger?: string; clarificationStrict?: boolean }>(
+      `${BASE}/im/conversations/${id}/gate-config`,
+    ),
+  updateGateConfig: (
+    id: number,
+    config: { trigger?: string; clarificationStrict?: boolean },
+  ) =>
+    request<{ trigger?: string; clarificationStrict?: boolean }>(
+      `${BASE}/im/conversations/${id}/gate-config`,
+      {
+        method: 'PATCH',
+        data: config,
+      },
+    ),
   updateConversation: (id: number, data: { title?: string; purpose?: string }) =>
     request<ImConversation>(`${BASE}/im/conversations/${id}`, {
       method: 'PATCH',

@@ -635,7 +635,7 @@ export default function ImPage() {
     setGateSaving(true);
     try {
       await Promise.all([
-        imApi.updateGateConfig(activeId, gateTrigger),
+        imApi.updateGateConfig(activeId, { trigger: gateTrigger }),
         imApi.updateConversation(activeId, {
           title: groupTitle,
           purpose: groupPurpose,
