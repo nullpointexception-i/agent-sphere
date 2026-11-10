@@ -346,15 +346,15 @@ export default function Sidebar({
                   defaultMessage: 'User chats',
                 }),
               },
-              {
-                key: 'GROUP',
-                label: intl.formatMessage({
-                  id: 'pages.chat.groupConversations',
-                  defaultMessage: 'Group chats',
-                }),
-              },
               ...(canViewTenant
                 ? [
+                    {
+                      key: 'GROUP',
+                      label: intl.formatMessage({
+                        id: 'pages.chat.groupConversations',
+                        defaultMessage: 'Group chats',
+                      }),
+                    },
                     {
                       key: 'TENANT',
                       label: intl.formatMessage({

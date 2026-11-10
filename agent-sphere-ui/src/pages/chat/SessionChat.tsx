@@ -134,12 +134,12 @@ export function SessionChat(props: SessionChatProps = {}) {
   const [conversationScope, setConversationScope] = useState<ConversationScope>(
     () => {
       const stored = readStoredScope();
-      return stored === 'TENANT' && !canViewTenant ? 'USER' : stored;
+      return stored !== 'USER' && !canViewTenant ? 'USER' : stored;
     },
   );
   const [userRole, setUserRole] = useState<UserSessionRole>(readStoredRole);
   useEffect(() => {
-    if (conversationScope === 'TENANT' && !canViewTenant) {
+    if (conversationScope !== 'USER' && !canViewTenant) {
       persistChatPreference(CHAT_SCOPE_STORAGE_KEY, 'USER');
       setConversationScope('USER');
     }
