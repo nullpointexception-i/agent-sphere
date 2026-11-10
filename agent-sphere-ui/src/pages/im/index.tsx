@@ -1,9 +1,16 @@
-import { SettingOutlined } from '@ant-design/icons';
+import {
+  MinusOutlined,
+  MoreOutlined,
+  PlusOutlined,
+  SettingOutlined,
+} from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import {
   App,
+  Avatar,
   Button,
+  Dropdown,
   Empty,
   Form,
   Input,
@@ -18,6 +25,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import MemberPickerModal from '@/components/MemberPickerModal';
 import {
   buildMentionCandidates,
   mentionsFromText,
@@ -122,6 +130,14 @@ export default function ImPage() {
   const [groupTitle, setGroupTitle] = useState('');
   const [groupPurpose, setGroupPurpose] = useState('');
   const [gateSaving, setGateSaving] = useState(false);
+  const [memberKeyword, setMemberKeyword] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteOptions, setInviteOptions] = useState<any[]>([]);
+  const [inviteSelected, setInviteSelected] = useState<number[]>([]);
+  const [inviting, setInviting] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removeSelected, setRemoveSelected] = useState<number[]>([]);
+  const [removing, setRemoving] = useState(false);
   const [createForm] = Form.useForm();
   const [contactOptions, setContactOptions] = useState<any[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -633,6 +649,138 @@ export default function ImPage() {
     }
   };
 
+  const refreshMembers = async (conversationId: number) => {
+    const [members, conversation] = await Promise.all([
+      imApi.participants(conversationId).catch(() => []),
+      imApi.conversation(conversationId).catch(() => null),
+    ]);
+    setParticipants(members || []);
+    if (conversation) {
+      setConversations((previous) => mergeConversation(previous, conversation));
+    }
+  };
+
+  const changeMemberRole = async (participantId: number, role: string) => {
+    if (!activeId) return;
+    try {
+      await imApi.updateParticipantRole(activeId, participantId, role);
+      await refreshMembers(activeId);
+      toast.success(t('pages.im.saved', 'Saved'));
+    } catch {
+      toast.error(t('pages.im.saveFailed', 'Save failed'));
+    }
+  };
+
+  const transferGroupOwner = (participantId: number) => {
+    if (!activeId) return;
+    modalApi.confirm({
+      title: t('pages.im.transferOwnerConfirm', 'Transfer group ownership?'),
+      content: t(
+        'pages.im.transferOwnerHint',
+        'The selected member becomes owner; you become an administrator.',
+      ),
+      okText: t('pages.im.confirm', 'Confirm'),
+      onOk: async () => {
+        await imApi.transferOwner(activeId, participantId);
+        await refreshMembers(activeId);
+      },
+    });
+  };
+
+  const toggleMemberInvite = async (checked: boolean) => {
+    if (!activeId) return;
+    const conversationId = activeId;
+    setConversations((previous) =>
+      previous.map((item) =>
+        item.id === conversationId
+          ? { ...item, allowMemberInvite: checked }
+          : item,
+      ),
+    );
+    try {
+      await imApi.updateInvitePolicy(conversationId, checked);
+    } catch {
+      setConversations((previous) =>
+        previous.map((item) =>
+          item.id === conversationId
+            ? { ...item, allowMemberInvite: !checked }
+            : item,
+        ),
+      );
+      toast.error(t('pages.im.saveFailed', 'Save failed'));
+    }
+  };
+
+  const openInvite = () => {
+    if (!activeId) return;
+    setInviteOpen(true);
+    setInviteSelected([]);
+    agentApi.workspaceContacts
+      .users({ page: 1, size: 200 })
+      .then((page: any) =>
+        setInviteOptions(
+          (page?.records || []).filter(
+            (user: any) =>
+              !participants.some(
+                (member: any) =>
+                  member.participantType === 'USER' &&
+                  member.participantId === user.id,
+              ),
+          ),
+        ),
+      )
+      .catch(() => setInviteOptions([]));
+  };
+
+  const submitInvite = async () => {
+    if (!activeId || inviteSelected.length === 0) return;
+    const conversationId = activeId;
+    setInviting(true);
+    try {
+      for (const userId of inviteSelected) {
+        await imApi.addParticipant(conversationId, {
+          participantType: 'USER',
+          participantId: userId,
+          role: 'MEMBER',
+        });
+      }
+      setInviteOpen(false);
+      setInviteSelected([]);
+      await refreshMembers(conversationId);
+      toast.success(t('pages.im.saved', 'Saved'));
+    } catch {
+      await refreshMembers(conversationId).catch(() => {});
+      toast.error(t('pages.im.saveFailed', 'Save failed'));
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const openRemove = () => {
+    setRemoveOpen(true);
+    setRemoveSelected([]);
+  };
+
+  const submitRemove = async () => {
+    if (!activeId || removeSelected.length === 0) return;
+    const conversationId = activeId;
+    setRemoving(true);
+    try {
+      for (const participantId of removeSelected) {
+        await imApi.removeParticipant(conversationId, participantId);
+      }
+      setRemoveOpen(false);
+      setRemoveSelected([]);
+      await refreshMembers(conversationId);
+      toast.success(t('pages.im.saved', 'Saved'));
+    } catch {
+      await refreshMembers(conversationId).catch(() => {});
+      toast.error(t('pages.im.saveFailed', 'Save failed'));
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   const createConversation = async () => {
     const values = await createForm.validateFields();
     const created = await imApi.createConversation({
@@ -648,6 +796,26 @@ export default function ImPage() {
     await loadConversations();
     setActiveId(created.id);
   };
+
+  const memberRows = participants.filter((member) => {
+    if (!memberKeyword.trim()) return true;
+    const text = `${userDisplayLabel(member, '')} ${member.username || ''}`;
+    return text.toLowerCase().includes(memberKeyword.trim().toLowerCase());
+  });
+  const isGroupChat = active?.type === 'GROUP';
+  const isOwner = active?.myRole === 'OWNER';
+  const isAdmin = isOwner || active?.myRole === 'ADMIN';
+  const allowMemberInvite = active?.allowMemberInvite !== false;
+  const canInvite =
+    isGroupChat &&
+    (isAdmin || (active?.myRole === 'MEMBER' && allowMemberInvite));
+  const removableMembers = participants.filter(
+    (member) =>
+      member.participantType === 'USER' &&
+      member.role !== 'OWNER' &&
+      Number(member.participantId) !== Number(selfUserId) &&
+      (isOwner || member.role !== 'ADMIN'),
+  );
 
   const activeName = active
     ? active.type === 'GROUP'
@@ -903,7 +1071,205 @@ export default function ImPage() {
               autoSize={{ minRows: 3, maxRows: 8 }}
             />
           </Form.Item>
-          <Form.Item label={t('pages.im.trigger', 'Trigger Rule')}>
+          <Form.Item label={t('pages.im.members', 'Members')}>
+            <div>
+              <Input.Search
+                allowClear
+                value={memberKeyword}
+                placeholder={t('pages.im.searchMembers', 'Search members')}
+                onChange={(event) => setMemberKeyword(event.target.value)}
+              />
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                  gap: 10,
+                  marginTop: 10,
+                  maxHeight: 240,
+                  overflowY: 'auto',
+                }}
+              >
+                {memberRows.map((member) => {
+                  const name = userDisplayLabel(
+                    member,
+                    t('pages.im.member', 'Member'),
+                  );
+                  const manageable =
+                    isAdmin &&
+                    member.participantType === 'USER' &&
+                    member.role !== 'OWNER';
+                  return (
+                    <Dropdown
+                      key={`${member.participantType}-${member.participantId}`}
+                      trigger={['click']}
+                      disabled={!manageable}
+                      menu={{
+                        items: [
+                          {
+                            key: 'role',
+                            label:
+                              member.role === 'ADMIN'
+                                ? t('pages.im.removeAdmin', 'Remove admin')
+                                : t('pages.im.makeAdmin', 'Make admin'),
+                          },
+                          ...(isOwner
+                            ? [
+                                {
+                                  key: 'owner',
+                                  label: t(
+                                    'pages.im.transferOwner',
+                                    'Transfer ownership',
+                                  ),
+                                  danger: true,
+                                },
+                              ]
+                            : []),
+                        ],
+                        onClick: ({ key, domEvent }) => {
+                          domEvent.stopPropagation();
+                          if (key === 'role') {
+                            changeMemberRole(
+                              member.participantId,
+                              member.role === 'ADMIN' ? 'MEMBER' : 'ADMIN',
+                            );
+                          }
+                          if (key === 'owner') {
+                            transferGroupOwner(member.participantId);
+                          }
+                        },
+                      }}
+                    >
+                      <div
+                        title={name}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '8px 2px 6px',
+                          borderRadius: 12,
+                          cursor: manageable ? 'pointer' : 'default',
+                        }}
+                      >
+                        <Avatar
+                          shape="square"
+                          size={56}
+                          src={member.avatar}
+                          style={{
+                            borderRadius: 14,
+                            background: '#f0eefc',
+                            color: '#6c5ce7',
+                          }}
+                        >
+                          {name.slice(0, 1)}
+                        </Avatar>
+                        <div
+                          style={{
+                            width: '100%',
+                            textAlign: 'center',
+                            fontSize: 12,
+                            color: '#3a3358',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {name}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#a7a2b8' }}>
+                          {member.role === 'OWNER'
+                            ? t('pages.im.owner', 'Owner')
+                            : member.role === 'ADMIN'
+                              ? t('pages.im.admin', 'Admin')
+                              : member.participantType === 'AGENT'
+                                ? t('pages.im.agentRole', 'Digital avatar')
+                                : t('pages.im.member', 'Member')}
+                        </div>
+                      </div>
+                    </Dropdown>
+                  );
+                })}
+                {canInvite ? (
+                  <button
+                    type="button"
+                    onClick={openInvite}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 2px 6px',
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 14,
+                        border: '1.5px dashed #d9d5ea',
+                        color: '#b9b3d6',
+                        fontSize: 22,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#fff',
+                      }}
+                    >
+                      <PlusOutlined />
+                    </span>
+                    <span style={{ fontSize: 12, color: '#3a3358' }}>
+                      {t('pages.im.addMember', 'Add')}
+                    </span>
+                  </button>
+                ) : null}
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={openRemove}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 2px 6px',
+                      border: 'none',
+                      background: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 14,
+                        border: '1.5px dashed #d9d5ea',
+                        color: '#b9b3d6',
+                        fontSize: 22,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#fff',
+                      }}
+                    >
+                      <MinusOutlined />
+                    </span>
+                    <span style={{ fontSize: 12, color: '#3a3358' }}>
+                      {t('pages.im.removeMemberAction', 'Remove')}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+              {memberRows.length === 0 ? (
+                <div style={{ marginTop: 6, color: '#a7a2b8', fontSize: 11 }}>
+                  {t('pages.im.noMatchedMembers', 'No matching members')}
+                </div>
+              ) : null}
+            </div>
+          </Form.Item>
+          <Form.Item label={t('pages.im.trigger', 'AI assistance level')}>
             <Select
               value={gateTrigger}
               onChange={setGateTrigger}
@@ -932,6 +1298,20 @@ export default function ImPage() {
               ]}
             />
           </Form.Item>
+          {isAdmin ? (
+            <Form.Item
+              label={t('pages.im.allowMemberInvite', 'Allow members to invite')}
+              extra={t(
+                'pages.im.allowMemberInviteHint',
+                'When on, ordinary members can invite users.',
+              )}
+            >
+              <Switch
+                checked={allowMemberInvite}
+                onChange={toggleMemberInvite}
+              />
+            </Form.Item>
+          ) : null}
           <Form.Item label={t('pages.im.agentMute', 'Agent mute')}>
             <Listy
               items={participants.filter(
@@ -961,6 +1341,60 @@ export default function ImPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <MemberPickerModal
+        open={inviteOpen}
+        title={t('pages.im.addMemberTitle', 'Add members')}
+        selectedTitle={t('pages.im.memberPickerSelected', 'Selected')}
+        confirmText={t('pages.im.addMember', 'Add')}
+        cancelText={t('pages.im.cancel', 'Cancel')}
+        searchPlaceholder={t('pages.im.searchContacts', 'Search contacts')}
+        emptyText={t('pages.im.noMatchedContacts', 'No matching contacts')}
+        noSelectedText={t('pages.im.noMemberSelected', 'No member selected')}
+        items={inviteOptions.map((user) => ({
+          id: user.id,
+          name: userDisplayLabel(user),
+          avatar: user.avatar,
+        }))}
+        selected={inviteSelected}
+        confirming={inviting}
+        onToggle={(id) =>
+          setInviteSelected((previous) =>
+            previous.includes(id)
+              ? previous.filter((value) => value !== id)
+              : [...previous, id],
+          )
+        }
+        onCancel={() => setInviteOpen(false)}
+        onConfirm={submitInvite}
+      />
+
+      <MemberPickerModal
+        open={removeOpen}
+        title={t('pages.im.removeMemberTitle', 'Remove members')}
+        selectedTitle={t('pages.im.memberPickerSelected', 'Selected')}
+        confirmText={t('pages.im.removeMemberAction', 'Remove')}
+        cancelText={t('pages.im.cancel', 'Cancel')}
+        searchPlaceholder={t('pages.im.searchMembers', 'Search members')}
+        emptyText={t('pages.im.noMatchedMembers', 'No matching members')}
+        noSelectedText={t('pages.im.noMemberSelected', 'No member selected')}
+        items={removableMembers.map((member) => ({
+          id: member.participantId,
+          name: userDisplayLabel(member),
+          avatar: member.avatar,
+        }))}
+        selected={removeSelected}
+        confirming={removing}
+        onToggle={(id) =>
+          setRemoveSelected((previous) =>
+            previous.includes(id)
+              ? previous.filter((value) => value !== id)
+              : [...previous, id],
+          )
+        }
+        onCancel={() => setRemoveOpen(false)}
+        onConfirm={submitRemove}
+      />
 
       <Modal
         open={editOpen}

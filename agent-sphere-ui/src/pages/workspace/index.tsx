@@ -52,6 +52,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import MemberPickerModal from '@/components/MemberPickerModal';
 import { MentionSuggest } from '@/components/mention/MentionSuggest';
 import {
   buildMentionCandidates,
@@ -116,7 +117,6 @@ import {
   taskStatusLabel,
 } from './conversationModel';
 import { tw } from './i18n';
-import MemberPickerModal from './MemberPickerModal';
 import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
