@@ -325,7 +325,25 @@ export default function ChatMain({
           </div>
         ) : (
           <div className={styles.footerCenter}>
-            {!readOnly && <Footer {...footerProps} />}
+            {readOnly ? (
+              <div
+                style={{ padding: 24, color: '#8c8c8c', textAlign: 'center' }}
+              >
+                {currentSession?.sessionType === 'GROUP_ROUTER'
+                  ? intl.formatMessage({
+                      id: 'pages.chat.groupRouterEmpty',
+                      defaultMessage:
+                        'No routing batches yet. @mentions are delivered directly and bypass the Group Router.',
+                    })
+                  : intl.formatMessage({
+                      id: 'pages.chat.readOnlyEmpty',
+                      defaultMessage:
+                        'No runs recorded for this read-only session.',
+                    })}
+              </div>
+            ) : (
+              <Footer {...footerProps} />
+            )}
           </div>
         )}
         {queuedMessages.length > 0 && (

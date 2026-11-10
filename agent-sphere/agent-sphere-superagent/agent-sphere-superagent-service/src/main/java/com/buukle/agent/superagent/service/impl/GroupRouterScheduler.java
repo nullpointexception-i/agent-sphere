@@ -16,6 +16,7 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.domain.AgentEvent;
@@ -66,9 +67,9 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class GroupRouterScheduler {
 
-    private static final String LOCK_PREFIX = "superagent:group-router:";
+    static final String LOCK_PREFIX = "superagent:group-router:";
     /** Covers the synchronous run wait (default 60s) plus processing; prevents lock expiry mid-batch. */
-    private static final long LOCK_LEASE_SECONDS = 120L;
+    static final long LOCK_LEASE_SECONDS = 120L;
 
     private final AgentEventMapper eventMapper;
     private final AgentThreadMapper threadMapper;
@@ -76,6 +77,7 @@ public class GroupRouterScheduler {
     private final AgentSuperAgentMapper superAgentMapper;
     private final SessionSpi sessionSpi;
     private final InstanceSpi instanceSpi;
+    private final RunSpi runSpi;
     private final UserSpi userSpi;
     private final GroupRouterRunPort groupRouterRunPort;
     private final RedissonClient redissonClient;
@@ -145,8 +147,12 @@ public class GroupRouterScheduler {
         return java.time.Duration.between(oldest, java.time.LocalDateTime.now()).toMillis() >= maxWaitMs;
     }
 
-    private void processThread(Long threadId) {
-        AgentThread thread = threadMapper.selectById(threadId);
+    /** Processes one batch immediately (real-time wake); the caller must hold the thread lock. */
+    void processThreadNow(Long threadId) {
+        processThread(threadId);
+    }
+
+    private void processThread(Long threadId) {        AgentThread thread = threadMapper.selectById(threadId);
         if (thread == null) {
             return;
         }
@@ -171,6 +177,11 @@ public class GroupRouterScheduler {
             log.warn("Group router session row not found for thread {}", threadId);
             markEvents(events, GroupRouterDecisionType.OBSERVE,
                     "group router session not found", null);
+            return;
+        }
+        // A router run is already in flight: leave events pending for the compensation scheduler.
+        if (runSpi.findActiveRun(sessionId) != null) {
+            log.debug("Group router is running for thread {}; leaving events for compensation", threadId);
             return;
         }
         InstanceVO instance = instanceSpi.findCurrentGroupRouter(thread.getTenantId());

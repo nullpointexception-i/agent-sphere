@@ -20,6 +20,7 @@ import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.repository.AgentThreadSubscriptionMapper;
 import com.buukle.agent.superagent.service.event.AgentDeliveryCreatedEvent;
+import com.buukle.agent.superagent.service.event.GroupRouterWakeEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -88,6 +89,10 @@ public class EventIngestService implements EventIngestPort {
                 directDeliverMentions(row, event);
             }
             eventPublisher.publishEvent(new AgentDeliveryCreatedEvent(thread.getId()));
+            if (row.getGroupProcessedAt() == null) {
+                // Realtime Group Router wake; the scheduled batch remains the compensation path.
+                eventPublisher.publishEvent(new GroupRouterWakeEvent(thread.getId()));
+            }
             return IngestResult.accepted(row.getId(), thread.getId());
         } catch (DuplicateKeyException e) {
             AgentEvent existing = eventMapper.selectOne(Wrappers.<AgentEvent>lambdaQuery()

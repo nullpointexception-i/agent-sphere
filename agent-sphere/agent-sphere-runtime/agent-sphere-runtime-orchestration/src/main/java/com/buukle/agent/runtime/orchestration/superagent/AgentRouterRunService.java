@@ -1,10 +1,10 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
-import com.buukle.agent.common.context.TenantScopeHolder;
-
 import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.instance.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
@@ -56,6 +56,11 @@ public class AgentRouterRunService implements AgentRouterRunPort {
             if (session.getCreatedBy() != null) {
                 AuthContext.setUsername(session.getCreatedBy());
             }
+            // Router runs belong to the session's tenant; without this the run/timeline rows
+            // fall back to tenant 0 and disappear from the tenant-scoped reads.
+            TenantContext.set(session.getTenantId());
+            TenantScopeHolder.start(TenantScope.tenantOnly(
+                    session.getTenantId(), session.getCreatedBy()));
             // Park guard: a pending clarification/approval card waits for the user in the
             // DM and resumes its own run. Starting another run here would fork the
             // conversation (the parked run holds the question context).

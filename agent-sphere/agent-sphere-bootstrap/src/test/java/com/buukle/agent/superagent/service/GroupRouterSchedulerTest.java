@@ -2,6 +2,7 @@ package com.buukle.agent.superagent.service;
 
 import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.instance.spi.InstanceSpi;
+import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.domain.AgentEvent;
@@ -50,6 +51,8 @@ class GroupRouterSchedulerTest {
     SessionSpi sessionSpi;
     @Mock
     InstanceSpi instanceSpi;
+    @Mock
+    RunSpi runSpi;
     @Mock
     UserSpi userSpi;
     @Mock
@@ -224,7 +227,7 @@ class GroupRouterSchedulerTest {
 
     private GroupRouterScheduler scheduler() {
         return new GroupRouterScheduler(eventMapper, threadMapper, deliveryMapper, superAgentMapper,
-                sessionSpi, instanceSpi, userSpi, groupRouterRunPort, redissonClient, metrics);
+                sessionSpi, instanceSpi, runSpi, userSpi, groupRouterRunPort, redissonClient, metrics);
     }
 
     private static AgentThread thread() {

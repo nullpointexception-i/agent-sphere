@@ -170,6 +170,27 @@ export function SessionChat(props: SessionChatProps = {}) {
   const [toolCalls, setToolCalls] = useState<any[]>([]);
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
 
+  /** Reset the right pane when the user switches conversation scope / role. */
+  const resetChatView = () => {
+    navigate('/chat');
+    setCurrentSession(null);
+    setMessages([]);
+    setTimeline([]);
+    setTimelineHasMore(false);
+    setSending(false);
+    setRuntimeState(null);
+    setToolApprovalBatch(null);
+    setClarificationBatch(null);
+    setQueuedMessages([]);
+    setReasoningCapability(null);
+    setReasoningEffort(undefined);
+    setSelectedModelRouteId(undefined);
+    setInstanceDrawerOpen(false);
+    setSessionPanelOpen(false);
+    setTodos([]);
+    setToolCalls([]);
+  };
+
   const historyPageRef = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
   const currentSessionIdRef = useRef<number | null>(null);
@@ -1907,6 +1928,8 @@ export function SessionChat(props: SessionChatProps = {}) {
           .catch(() => {});
         loadHistory(sid, 1);
       }
+    } else {
+      resetChatView();
     }
     return () => {
       sseStoppedRef.current = true;
@@ -2165,9 +2188,13 @@ export function SessionChat(props: SessionChatProps = {}) {
                 conversationScope={conversationScope}
                 onConversationScopeChange={(next) => {
                   setConversationScope(next);
+                  resetChatView();
                 }}
                 userRole={userRole}
-                onUserRoleChange={setUserRole}
+                onUserRoleChange={(next) => {
+                  setUserRole(next);
+                  resetChatView();
+                }}
                 canViewTenant={canViewTenant}
                 readOnly={
                   !!currentSession &&

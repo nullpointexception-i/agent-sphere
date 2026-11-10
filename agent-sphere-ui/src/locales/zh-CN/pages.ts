@@ -627,6 +627,9 @@ export default {
   'pages.chat.groupConversations': '群聊',
   'pages.chat.tenantConversations': '租户对话',
   'pages.chat.readOnlyHint': '只读会话：该会话属于其他用户或为内部会话',
+  'pages.chat.groupRouterEmpty':
+    '该群暂无路由批次。@成员的消息由系统直接投递，不经过 Group Router。',
+  'pages.chat.readOnlyEmpty': '该只读会话暂无运行记录。',
   'pages.chat.roleUser': '用户',
   'pages.chat.roleRouter': 'Router',
   'pages.chat.roleWorker': 'Worker',

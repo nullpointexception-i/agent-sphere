@@ -649,6 +649,9 @@ export default {
   'pages.chat.tenantConversations': 'Tenant chats',
   'pages.chat.readOnlyHint':
     'Read-only conversation: owned by another user or an internal session',
+  'pages.chat.groupRouterEmpty':
+    'No routing batches yet. @mentions are delivered directly and bypass the Group Router.',
+  'pages.chat.readOnlyEmpty': 'No runs recorded for this read-only session.',
   'pages.chat.roleUser': 'User',
   'pages.chat.roleRouter': 'Router',
   'pages.chat.roleWorker': 'Worker',

@@ -1,5 +1,7 @@
 package com.buukle.agent.runtime.orchestration.superagent;
 
+import com.buukle.agent.common.context.TenantContext;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -17,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -65,6 +68,24 @@ class AgentRouterRunServiceTest {
 
         assertEquals(true, result.accepted());
         verify(chatRuntimeService).chat(any(), any());
+    }
+
+    @Test
+    void usesSessionTenantForTheRun() {
+        SessionVO session = routerSession();
+        session.setTenantId(2L);
+        when(sessionSpi.getSession(SESSION_ID)).thenReturn(session);
+        when(runSpi.findActiveRun(SESSION_ID)).thenReturn(null);
+        when(chatRuntimeService.chat(any(), any())).thenAnswer(invocation -> {
+            assertEquals(2L, TenantContext.get());
+            assertEquals(2L, TenantScopeHolder.currentTenantId());
+            return null;
+        });
+
+        service.start(new AgentRouterRunCommand(SESSION_ID, 20L, 19L, "hello", null));
+
+        assertNull(TenantContext.get());
+        assertNull(TenantScopeHolder.get());
     }
 
     private SessionVO routerSession() {

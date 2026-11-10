@@ -356,89 +356,89 @@ export default function Sidebar({
               ]}
             />
           )}
+          {conversationScope === 'USER' && (
+            <div
+              className={styles.sidebarNewChatItem}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={onNewChat}
+            >
+              <PlusOutlined />
+              {intl.formatMessage({
+                id: 'pages.chat.newChat',
+                defaultMessage: 'New Chat',
+              })}
+            </div>
+          )}
           {!readOnly && conversationScope === 'USER' && (
-            <>
-              <div
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span
                 className={styles.sidebarNewChatItem}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                onClick={onNewChat}
+                style={{ color: selectMode ? '#1677ff' : undefined }}
+                onClick={() => !selectMode && setSelectMode(true)}
               >
-                <PlusOutlined />
+                <CheckSquareOutlined style={{ marginRight: 4 }} />
                 {intl.formatMessage({
-                  id: 'pages.chat.newChat',
-                  defaultMessage: 'New Chat',
+                  id: 'pages.chat.batchOperation',
+                  defaultMessage: 'Batch operation',
                 })}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span
-                  className={styles.sidebarNewChatItem}
-                  style={{ color: selectMode ? '#1677ff' : undefined }}
-                  onClick={() => !selectMode && setSelectMode(true)}
-                >
-                  <CheckSquareOutlined style={{ marginRight: 4 }} />
-                  {intl.formatMessage({
-                    id: 'pages.chat.batchOperation',
-                    defaultMessage: 'Batch operation',
-                  })}
-                </span>
-                {selectMode && (
-                  <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
-                    <span
-                      className={styles.sidebarNewChatItem}
-                      style={{
-                        color: selectedIds.size === 0 ? undefined : '#ff4d4f',
-                        cursor:
-                          selectedIds.size === 0 ? 'not-allowed' : 'pointer',
-                      }}
-                      onClick={() => {
-                        if (selectedIds.size === 0) return;
-                        modal.confirm({
-                          title: intl.formatMessage(
-                            {
-                              id: 'pages.deleteConfirm.title',
-                              defaultMessage: 'Delete {name}',
-                            },
-                            { name: `${selectedIds.size} sessions` },
-                          ),
-                          content: intl.formatMessage(
-                            {
-                              id: 'pages.deleteConfirm.content',
-                              defaultMessage:
-                                'Are you sure you want to delete this {name}?',
-                            },
-                            { name: 'session' },
-                          ),
-                          okType: 'danger',
-                          onOk: async () => {
-                            await onBatchDelete(Array.from(selectedIds));
-                            setSelectMode(false);
-                            setSelectedIds(new Set());
+              </span>
+              {selectMode && (
+                <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
+                  <span
+                    className={styles.sidebarNewChatItem}
+                    style={{
+                      color: selectedIds.size === 0 ? undefined : '#ff4d4f',
+                      cursor:
+                        selectedIds.size === 0 ? 'not-allowed' : 'pointer',
+                    }}
+                    onClick={() => {
+                      if (selectedIds.size === 0) return;
+                      modal.confirm({
+                        title: intl.formatMessage(
+                          {
+                            id: 'pages.deleteConfirm.title',
+                            defaultMessage: 'Delete {name}',
                           },
-                        });
-                      }}
-                    >
-                      {intl.formatMessage({
-                        id: 'pages.chat.deleteSelected',
-                        defaultMessage: 'Delete',
-                      })}{' '}
-                      ({selectedIds.size})
-                    </span>
-                    <span
-                      className={styles.sidebarNewChatItem}
-                      onClick={() => {
-                        setSelectMode(false);
-                        setSelectedIds(new Set());
-                      }}
-                    >
-                      {intl.formatMessage({
-                        id: 'pages.chat.cancel',
-                        defaultMessage: 'Cancel',
-                      })}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </>
+                          { name: `${selectedIds.size} sessions` },
+                        ),
+                        content: intl.formatMessage(
+                          {
+                            id: 'pages.deleteConfirm.content',
+                            defaultMessage:
+                              'Are you sure you want to delete this {name}?',
+                          },
+                          { name: 'session' },
+                        ),
+                        okType: 'danger',
+                        onOk: async () => {
+                          await onBatchDelete(Array.from(selectedIds));
+                          setSelectMode(false);
+                          setSelectedIds(new Set());
+                        },
+                      });
+                    }}
+                  >
+                    {intl.formatMessage({
+                      id: 'pages.chat.deleteSelected',
+                      defaultMessage: 'Delete',
+                    })}{' '}
+                    ({selectedIds.size})
+                  </span>
+                  <span
+                    className={styles.sidebarNewChatItem}
+                    onClick={() => {
+                      setSelectMode(false);
+                      setSelectedIds(new Set());
+                    }}
+                  >
+                    {intl.formatMessage({
+                      id: 'pages.chat.cancel',
+                      defaultMessage: 'Cancel',
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
