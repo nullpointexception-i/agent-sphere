@@ -645,7 +645,10 @@ export default {
   'pages.dashboard.capabilities.desc': 'MCP / Skill / CLI',
   'pages.chat.newChat': 'New Chat',
   'pages.chat.userConversations': 'User chats',
+  'pages.chat.groupConversations': 'Group chats',
   'pages.chat.tenantConversations': 'Tenant chats',
+  'pages.chat.readOnlyHint':
+    'Read-only conversation: owned by another user or an internal session',
   'pages.chat.roleUser': 'User',
   'pages.chat.roleRouter': 'Router',
   'pages.chat.roleWorker': 'Worker',

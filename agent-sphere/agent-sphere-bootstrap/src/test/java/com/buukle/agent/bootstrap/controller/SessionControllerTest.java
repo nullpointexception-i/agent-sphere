@@ -31,6 +31,9 @@ class SessionControllerTest {
     @Mock
     SessionService sessionService;
 
+    @Mock
+    com.buukle.agent.instance.service.support.SessionAccessGuard sessionAccessGuard;
+
     @InjectMocks
     SessionController sessionController;
 

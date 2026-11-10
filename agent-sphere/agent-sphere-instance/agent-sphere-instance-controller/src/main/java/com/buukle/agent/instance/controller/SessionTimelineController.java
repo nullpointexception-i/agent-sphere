@@ -6,6 +6,7 @@ import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentTimelineSpi;
+import com.buukle.agent.instance.service.support.SessionAccessGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +23,7 @@ public class SessionTimelineController extends BaseController {
 
     private final AgentTimelineSpi agentTimelineSpi;
     private final AgentLlmInteractionRecordSpi interactionRecordSpi;
+    private final SessionAccessGuard sessionAccessGuard;
 
     /** Unified flattened Timeline list: keyset pagination (beforeSeq scrolls back / afterSeq catches up after disconnects / empty = latest page). */
     @GetMapping("/{sessionId}/timeline")
@@ -30,12 +32,14 @@ public class SessionTimelineController extends BaseController {
             @RequestParam(required = false) Long beforeSeq,
             @RequestParam(required = false) Long afterSeq,
             @RequestParam(defaultValue = "5") int limit) {
+        sessionAccessGuard.requireReadable(sessionId);
         return ok(agentTimelineSpi.page(sessionId, beforeSeq, afterSeq, limit));
     }
 
     /** Session-level usage aggregation (bottom-docked display in the chat area; refreshed once a run reaches a terminal state). */
     @GetMapping("/{sessionId}/usage")
     public ResponseEntity<?> usage(@PathVariable Long sessionId) {
+        sessionAccessGuard.requireReadable(sessionId);
         return ok(interactionRecordSpi.usageSummary(sessionId));
     }
 }

@@ -1,13 +1,16 @@
 package com.buukle.agent.instance.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.buukle.agent.common.constant.OwnerScope;
+import com.buukle.agent.common.constant.SessionListScope;
 import com.buukle.agent.common.event.SessionCreatedEvent;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SessionSurface;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfacePolicy;
+import com.buukle.agent.common.context.TenantScope;
+import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.security.SessionAccessPolicy;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.domain.AgentSession;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
@@ -105,12 +108,13 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
 
     @Override
     public List<SessionVO> listSessions(int offset, int limit, String keyword) {
-        return listSessions(offset, limit, keyword, OwnerScope.USER, ROLE_USER);
+        return listSessions(offset, limit, keyword, SessionListScope.USER, ROLE_USER);
     }
 
     @Override
     public List<SessionVO> listSessions(int offset, int limit, String keyword, String scope, String role) {
-        boolean tenantScope = OwnerScope.isTenant(scope);
+        boolean tenantScope = SessionListScope.TENANT.equalsIgnoreCase(scope);
+        boolean groupScope = SessionListScope.GROUP.equalsIgnoreCase(scope);
         String requestedRole = role == null || role.isBlank()
                 ? ROLE_USER : role.trim().toUpperCase();
         List<String> sessionTypes = switch (requestedRole) {
@@ -118,21 +122,59 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
             case ROLE_WORKER -> List.of(SessionType.WORKER);
             default -> USER_SESSION_TYPES;
         };
-        var query = lambdaQuery()
-                .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
-                .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword);
-        if (tenantScope) {
-            query.eq(AgentSession::getSessionType, SessionType.GROUP_ROUTER);
-        } else {
-            // Legacy rows may have a null session_type; they are console conversations.
-            query.and(w -> w.in(AgentSession::getSessionType, sessionTypes)
-                    .or().isNull(AgentSession::getSessionType));
+        boolean tenantAdmin = SessionAccessPolicy.isTenantAdmin();
+        String username = AuthContext.getUsername();
+
+        TenantScope previousScope = TenantScopeHolder.get();
+        try {
+            TenantScope currentScope = TenantScopeHolder.currentOrFallback();
+            if (tenantAdmin && !groupScope && currentScope != null && currentScope.selfOnly()) {
+                // Tenant administrators may read tenant sessions even when their assignment is SELF_ONLY.
+                TenantScopeHolder.start(new TenantScope(
+                        currentScope.userId(), currentScope.username(), currentScope.currentTenantId(),
+                        currentScope.visibleTenantIds(), false,
+                        currentScope.manageableTenantIds(), currentScope.subtreeVisible()));
+            }
+            var query = lambdaQuery()
+                    .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
+                    .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword);
+            if (tenantScope || groupScope) {
+                query.eq(AgentSession::getSessionType, SessionType.GROUP_ROUTER);
+                if (groupScope) {
+                    query.eq(AgentSession::getCreatedBy, username);
+                }
+            } else {
+                // Legacy rows may have a null session_type; they are console conversations.
+                query.and(w -> w.in(AgentSession::getSessionType, sessionTypes)
+                        .or().isNull(AgentSession::getSessionType));
+                if (!tenantAdmin) {
+                    // Tenant visibility level must not expose other users' conversations.
+                    query.eq(AgentSession::getCreatedBy, username);
+                }
+            }
+            return query
+                    .orderByDesc(AgentSession::getUpdatedAt)
+                    .last("OFFSET " + offset + " LIMIT " + limit)
+                    .list()
+                    .stream()
+                    .map(this::toAccessVO)
+                    .toList();
+        } finally {
+            if (previousScope == null) {
+                TenantScopeHolder.clear();
+            } else {
+                TenantScopeHolder.start(previousScope);
+            }
         }
-        List<AgentSession> sessions = query
-                .orderByDesc(AgentSession::getUpdatedAt)
-                .last("OFFSET " + offset + " LIMIT " + limit)
-                .list();
-        return sessions.stream().map(sessionConverter::toVO).toList();
+    }
+
+    private SessionVO toAccessVO(AgentSession session) {
+        SessionVO vo = sessionConverter.toVO(session);
+        if (vo != null) {
+            vo.setReadOnly(!SessionAccessPolicy.canWrite(
+                    session.getTenantId(), session.getCreatedBy(), session.getSessionType()));
+        }
+        return vo;
     }
 
     @Override

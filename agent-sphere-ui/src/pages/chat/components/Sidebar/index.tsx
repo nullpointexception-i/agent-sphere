@@ -19,6 +19,10 @@ import RunDrawer from '../RunDrawer';
 /** Internal sessions are view-only: no rename/summary/delete from the chat list. */
 const READ_ONLY_SESSION_TYPES = new Set(['ROUTER', 'WORKER', 'GROUP_ROUTER']);
 
+function isReadOnlySession(session: any): boolean {
+  return session?.readOnly ?? READ_ONLY_SESSION_TYPES.has(session?.sessionType);
+}
+
 interface SidebarProps {
   sessions: any[];
   currentSession: any;
@@ -29,8 +33,8 @@ interface SidebarProps {
   onRename: (id: number, title: string) => void;
   onBatchDelete: (ids: number[]) => void;
   onNewChat: () => void;
-  conversationScope: 'USER' | 'TENANT';
-  onConversationScopeChange: (scope: 'USER' | 'TENANT') => void;
+  conversationScope: 'USER' | 'GROUP' | 'TENANT';
+  onConversationScopeChange: (scope: 'USER' | 'GROUP' | 'TENANT') => void;
   userRole: 'USER' | 'ROUTER' | 'WORKER';
   onUserRoleChange: (role: 'USER' | 'ROUTER' | 'WORKER') => void;
   canViewTenant: boolean;
@@ -194,7 +198,7 @@ export default function Sidebar({
                     setViewSession(s);
                   }}
                 />
-                {!READ_ONLY_SESSION_TYPES.has(s.sessionType) && (
+                {!isReadOnlySession(s) && (
                   <EditOutlined
                     style={{ fontSize: 13, cursor: 'pointer' }}
                     onClick={(e) => {
@@ -211,7 +215,7 @@ export default function Sidebar({
                     setRunDrawerSessionId(s.id);
                   }}
                 />
-                {!READ_ONLY_SESSION_TYPES.has(s.sessionType) && (
+                {!isReadOnlySession(s) && (
                   <span
                     style={{
                       fontSize: 13,
@@ -226,7 +230,7 @@ export default function Sidebar({
                     🧠
                   </span>
                 )}
-                {!READ_ONLY_SESSION_TYPES.has(s.sessionType) && (
+                {!isReadOnlySession(s) && (
                   <DeleteOutlined
                     style={{ fontSize: 13, cursor: 'pointer' }}
                     className="delete-icon"
@@ -299,12 +303,23 @@ export default function Sidebar({
                   }),
                 },
                 {
-                  key: 'TENANT',
+                  key: 'GROUP',
                   label: intl.formatMessage({
-                    id: 'pages.chat.tenantConversations',
-                    defaultMessage: 'Tenant chats',
+                    id: 'pages.chat.groupConversations',
+                    defaultMessage: 'Group chats',
                   }),
                 },
+                ...(canViewTenant
+                  ? [
+                      {
+                        key: 'TENANT',
+                        label: intl.formatMessage({
+                          id: 'pages.chat.tenantConversations',
+                          defaultMessage: 'Tenant chats',
+                        }),
+                      },
+                    ]
+                  : []),
               ]}
             />
           )}

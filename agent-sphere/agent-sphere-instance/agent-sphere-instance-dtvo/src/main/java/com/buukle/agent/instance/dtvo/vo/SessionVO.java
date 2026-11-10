@@ -9,6 +9,7 @@ public class SessionVO implements Serializable {
     private Long id;
     private String title;
     private Long agentInstanceId;
+    private Long tenantId;
     private String status;
     private String runMode;
     /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / ROUTER / WORKER / TRAINING / WATCHDOG。 */
@@ -23,4 +24,6 @@ public class SessionVO implements Serializable {
     private String createdBy;
     private String updatedBy;
     private String updatedAt;
+    /** True when the caller may only view this session (not send / stop / rename / delete). */
+    private Boolean readOnly;
 }

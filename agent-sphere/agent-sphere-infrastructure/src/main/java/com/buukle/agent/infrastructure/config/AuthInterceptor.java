@@ -115,6 +115,18 @@ public class AuthInterceptor implements HandlerInterceptor {
                 : permissionSpi.listCodesByUserId(user.getId(), scope.currentTenantId());
         AuthContext.setPermissions(new HashSet<>(codes == null ? java.util.List.of() : codes));
 
+        // Tenant administrators read tenant-wide data (providers, sessions, runs); SELF_ONLY only
+        // restricts ordinary users.
+        if (scope.selfOnly()
+                && (isSuperAdmin || AuthContext.hasPermission(
+                        com.buukle.agent.common.constant.PermissionCodes.INSTANCE_TENANT))) {
+            scope = new TenantScope(
+                    scope.userId(), scope.username(), scope.currentTenantId(),
+                    scope.visibleTenantIds(), false,
+                    scope.manageableTenantIds(), scope.subtreeVisible());
+            TenantScopeHolder.start(scope);
+        }
+
         if (handler instanceof HandlerMethod hm) {
             Class<?> beanType = ClassUtils.getUserClass(hm.getBeanType());
             if (beanType.isAnnotationPresent(WithTenant.class) && !isSuperAdmin) {

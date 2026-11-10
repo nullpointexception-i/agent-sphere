@@ -6,6 +6,7 @@ import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
 import com.buukle.agent.instance.service.RunService;
+import com.buukle.agent.instance.service.support.SessionAccessGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RunController extends BaseController {
     private final RunService runService;
+    private final SessionAccessGuard sessionAccessGuard;
 
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody CreateRunDTO dto) {
@@ -27,12 +29,16 @@ public class RunController extends BaseController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable Long id) {
-        return ok(runService.getRun(id));
+        var run = runService.getRun(id);
+        sessionAccessGuard.requireReadable(run.getSessionId());
+        return ok(run);
     }
 
     /** Run-level usage aggregation (InteractionModal header / RunDrawer details). */
     @GetMapping("/{id}/usage")
     public ResponseEntity<?> usage(@PathVariable Long id) {
+        var run = runService.getRun(id);
+        sessionAccessGuard.requireReadable(run.getSessionId());
         return ok(runService.usageSummary(id));
     }
 
@@ -41,6 +47,7 @@ public class RunController extends BaseController {
                                            @RequestParam(required = false) String keyword,
                                            @RequestParam(defaultValue = "1") int page,
                                            @RequestParam(defaultValue = "10") int size) {
+        sessionAccessGuard.requireReadable(sessionId);
         return ok(runService.pageRunsBySession(sessionId, keyword, page, size));
     }
 

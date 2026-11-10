@@ -62,6 +62,8 @@ class AgentConversationWorkflowTest {
     ChatRuntimeService chatRuntimeService;
     @Mock
     RunSpi runSpi;
+    @Mock
+    com.buukle.agent.instance.service.support.SessionAccessGuard sessionAccessGuard;
 
     @BeforeEach
     void setUp() {
@@ -69,7 +71,7 @@ class AgentConversationWorkflowTest {
                 new RouteController(routeService),
                 new CapabilityMcpController(capabilityMcpService, mcpHubService),
                 new InstanceController(instanceService),
-                new SessionController(sessionService, runSpi),
+                new SessionController(sessionService, runSpi, sessionAccessGuard),
                 new ChatRuntimeController(chatRuntimeService)
         ).build();
     }

@@ -5,6 +5,8 @@ import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.service.MemoryService;
+import com.buukle.agent.instance.service.support.SessionAccessGuard;
+import com.buukle.agent.instance.spi.RunSpi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,14 +20,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class MemoryController extends BaseController {
     private final MemoryService memoryService;
+    private final SessionAccessGuard sessionAccessGuard;
+    private final RunSpi runSpi;
 
     @GetMapping("/by-session/{sessionId}")
     public ResponseEntity<?> listBySession(@PathVariable Long sessionId) {
+        sessionAccessGuard.requireReadable(sessionId);
         return ok(memoryService.getMemoryBySession(sessionId));
     }
 
     @GetMapping("/by-run/{runId}")
     public ResponseEntity<?> listByRun(@PathVariable Long runId) {
+        var run = runSpi.getRun(runId);
+        if (run != null) {
+            sessionAccessGuard.requireReadable(run.getSessionId());
+        }
         return ok(memoryService.getMemoryByRun(runId));
     }
 

@@ -19,6 +19,7 @@ public class SessionConverter {
         vo.setId(session.getId());
         vo.setTitle(session.getTitle());
         vo.setAgentInstanceId(session.getAgentInstanceId());
+        vo.setTenantId(session.getTenantId());
         vo.setStatus(session.getStatus());
         vo.setRunMode(session.getRunMode());
         vo.setSessionType(session.getSessionType());
@@ -43,7 +44,8 @@ public class SessionConverter {
         session.setCachedInRedis(false);
         session.setRunMode(RunMode.WRITE.name());
         session.setSessionType(dto.getSessionType() == null || dto.getSessionType().isBlank()
-                ? "CONSOLE" : dto.getSessionType().toUpperCase());
+                ? com.buukle.agent.instance.dtvo.enums.SessionType.CONSOLE
+                : dto.getSessionType().toUpperCase());
         session.setSuperAgentId(dto.getSuperAgentId());
         session.setThreadId(dto.getThreadId());
         if (dto.getCreatedBy() != null && !dto.getCreatedBy().isBlank()) {

@@ -269,6 +269,23 @@ export default function ChatMain({
         onTogglePanel={onTogglePanel}
         hideSessionPanel={hideSessionPanel}
       />
+      {readOnly && (
+        <div
+          style={{
+            padding: '6px 16px',
+            fontSize: 12,
+            color: '#8c8c8c',
+            background: '#fafafa',
+            borderBottom: '1px solid #f0f0f0',
+          }}
+        >
+          {intl.formatMessage({
+            id: 'pages.chat.readOnlyHint',
+            defaultMessage:
+              'Read-only conversation: other users or an internal session',
+          })}
+        </div>
+      )}
       <div className={styles.chatStage}>
         {hasMessages ? (
           <div ref={messagesRef} className={styles.messages}>

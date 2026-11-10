@@ -97,14 +97,31 @@ export function SessionChat(props: SessionChatProps = {}) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionOffset, setSessionOffset] = useState(0);
   const [hasMoreSessions, setHasMoreSessions] = useState(true);
-  const [conversationScope, setConversationScope] = useState<'USER' | 'TENANT'>(
-    'USER',
-  );
+  const [conversationScope, setConversationScope] = useState<
+    'USER' | 'GROUP' | 'TENANT'
+  >('USER');
   const [userRole, setUserRole] = useState<'USER' | 'ROUTER' | 'WORKER'>(
     'USER',
   );
   const canViewTenant = useCan(PERM.instanceTenant);
   const [currentSession, setCurrentSession] = useState<any>(null);
+  const currentSessionRef = useRef<any>(null);
+  const sessionsRef = useRef<any[]>([]);
+  currentSessionRef.current = currentSession;
+  sessionsRef.current = sessions;
+
+  /** Internal/foreign sessions only load read-only data; never call owner-only runtime endpoints. */
+  const isReadOnlySessionId = useCallback((id?: number | null) => {
+    if (id == null) return false;
+    const session =
+      currentSessionRef.current?.id === id
+        ? currentSessionRef.current
+        : sessionsRef.current.find((item: any) => item.id === id);
+    return (
+      !!session &&
+      (session.readOnly ?? READ_ONLY_SESSION_TYPES.has(session.sessionType))
+    );
+  }, []);
   const [messages, setMessages] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [timelineHasMore, setTimelineHasMore] = useState(false);
@@ -537,6 +554,7 @@ export function SessionChat(props: SessionChatProps = {}) {
   // The timeline only renders and does not take part in decisions.
   const refreshRuntimeState = async (sid: number) => {
     if (typeof document !== 'undefined' && document.hidden) return;
+    if (isReadOnlySessionId(sid)) return;
     const epoch = requestEpochRef.current;
     try {
       const state = await agentApi.sessions.getRuntimeState(sid);
@@ -558,6 +576,7 @@ export function SessionChat(props: SessionChatProps = {}) {
   // Reasoning effort capability: the dynamic default is computed by the backend from the actual output
   // limit; infeasible levels are still returned, and the frontend only warns.
   const refreshReasoningCapability = async (sid: number, routeId?: number) => {
+    if (isReadOnlySessionId(sid)) return;
     const epoch = requestEpochRef.current;
     try {
       const cap = await agentApi.sessions.getReasoningCapability(sid, routeId);
@@ -661,7 +680,7 @@ export function SessionChat(props: SessionChatProps = {}) {
   };
 
   const refreshQueue = async (sid: number) => {
-    if (!sid) return;
+    if (!sid || isReadOnlySessionId(sid)) return;
     try {
       const rows = await agentApi.sessions.pendingQueue(sid);
       setQueuedMessages(Array.isArray(rows) ? rows : []);
@@ -990,6 +1009,7 @@ export function SessionChat(props: SessionChatProps = {}) {
   );
 
   const refreshPendingToolApproval = useCallback(async (sid: number) => {
+    if (isReadOnlySessionId(sid)) return;
     try {
       const vo = await agentApi.toolApprovals.pending(sid);
       if (!vo?.approvalId || !vo?.toolCallsJson) {
@@ -1043,6 +1063,7 @@ export function SessionChat(props: SessionChatProps = {}) {
   }, [currentSession?.id, refreshPendingToolApproval]);
 
   const refreshPendingClarifications = useCallback(async (sid: number) => {
+    if (isReadOnlySessionId(sid)) return;
     try {
       const rows = await agentApi.sessions.pendingClarifications(sid);
       const pending = (rows || []).filter(
@@ -2150,7 +2171,8 @@ export function SessionChat(props: SessionChatProps = {}) {
                 canViewTenant={canViewTenant}
                 readOnly={
                   !!currentSession &&
-                  READ_ONLY_SESSION_TYPES.has(currentSession.sessionType)
+                  (currentSession.readOnly ??
+                    READ_ONLY_SESSION_TYPES.has(currentSession.sessionType))
                 }
               />
             </div>
@@ -2169,7 +2191,11 @@ export function SessionChat(props: SessionChatProps = {}) {
               instances={instances}
               trainingMode={trainingMode}
               hideSessionPanel={trainingMode}
-              readOnly={READ_ONLY_SESSION_TYPES.has(currentSession.sessionType)}
+              readOnly={
+                !!currentSession &&
+                (currentSession.readOnly ??
+                  READ_ONLY_SESSION_TYPES.has(currentSession.sessionType))
+              }
               selectedModelRouteId={selectedModelRouteId}
               onModelRouteChange={(id) => {
                 setSelectedModelRouteId(id);

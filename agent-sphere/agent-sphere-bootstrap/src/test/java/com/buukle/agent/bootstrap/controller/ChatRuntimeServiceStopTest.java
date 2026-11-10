@@ -1,7 +1,9 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.repository.AgentPendingClarificationMapper;
 import com.buukle.agent.instance.spi.PendingWaitSpi;
 import com.buukle.agent.instance.spi.RunSpi;
@@ -74,6 +76,12 @@ class ChatRuntimeServiceStopTest {
                 mock(com.buukle.agent.runtime.kernel.config.LlmRequestConfigurer.class),
                 mock(com.buukle.agent.runtime.kernel.service.CompactionService.class));
         AuthContext.setSuperAdmin(true); // Skip the session ownership check (this test only cares about stop logic)
+        SessionVO session = new SessionVO();
+        session.setId(1L);
+        session.setTenantId(1L);
+        session.setCreatedBy("tester");
+        session.setSessionType(SessionType.CONSOLE);
+        lenient().when(sessionSpi.getSession(1L)).thenReturn(session);
         lenient().when(clarificationMapper.selectList(any())).thenReturn(List.of());
     }
 

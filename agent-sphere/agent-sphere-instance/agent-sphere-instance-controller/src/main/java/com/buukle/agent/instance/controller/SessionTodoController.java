@@ -10,6 +10,7 @@ import com.buukle.agent.instance.dtvo.vo.SessionToolStatsVO;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
 import com.buukle.agent.instance.spi.SessionTodoSpi;
 import com.buukle.agent.instance.spi.ToolApprovalGrantSpi;
+import com.buukle.agent.instance.service.support.SessionAccessGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,14 +30,17 @@ public class SessionTodoController extends BaseController {
     private final SessionTodoSpi sessionTodoSpi;
     private final AgentToolCallRecordSpi toolCallRecordSpi;
     private final ToolApprovalGrantSpi toolApprovalGrantSpi;
+    private final SessionAccessGuard sessionAccessGuard;
 
     @GetMapping("/{id}/todos")
     public ResponseEntity<List<SessionTodoVO>> getTodos(@PathVariable Long id) {
+        sessionAccessGuard.requireReadable(id);
         return ok(sessionTodoSpi.listBySession(id));
     }
 
     @GetMapping("/{id}/toolcalls/latest")
     public ResponseEntity<List<AgentToolCallRecordVO>> getLatestToolCalls(@PathVariable Long id) {
+        sessionAccessGuard.requireReadable(id);
         return ok(toolCallRecordSpi.listBySessionId(id, null));
     }
 
@@ -44,6 +48,7 @@ public class SessionTodoController extends BaseController {
     public ResponseEntity<SessionToolStatsVO> getToolStats(
             @PathVariable Long id,
             @RequestParam(required = false) Long runId) {
+        sessionAccessGuard.requireReadable(id);
         SessionToolStatsVO vo = new SessionToolStatsVO();
         Long latestRunId = toolCallRecordSpi.getLatestRunIdWithToolCalls(id);
         Long currentRunId = runId != null ? runId : latestRunId;

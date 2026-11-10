@@ -11,6 +11,7 @@ import com.buukle.agent.instance.dtvo.dto.UpdateDocumentDTO;
 import com.buukle.agent.instance.dtvo.vo.DocumentShareVO;
 import com.buukle.agent.instance.dtvo.vo.DocumentVO;
 import com.buukle.agent.instance.spi.DocumentSpi;
+import com.buukle.agent.instance.service.support.SessionAccessGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ import java.util.List;
 public class DocumentController extends BaseController {
 
     private final DocumentSpi documentSpi;
+    private final SessionAccessGuard sessionAccessGuard;
 
     @GetMapping
     public ResponseEntity<?> list(
@@ -32,6 +34,7 @@ public class DocumentController extends BaseController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (sessionId != null) {
+            sessionAccessGuard.requireReadable(sessionId);
             return ok(documentSpi.listBySession(sessionId, page, size));
         }
         return ok(documentSpi.listAll(page, size));
@@ -40,7 +43,11 @@ public class DocumentController extends BaseController {
     @GetMapping("/{id}")
     public ResponseEntity<DocumentVO> get(@PathVariable Long id) {
         DocumentVO vo = documentSpi.getById(id);
-        return vo != null ? ok(vo) : ResponseEntity.notFound().build();
+        if (vo == null) return ResponseEntity.notFound().build();
+        if (vo.getSessionId() != null) {
+            sessionAccessGuard.requireReadable(vo.getSessionId());
+        }
+        return ok(vo);
     }
 
     @RequirePermission(PermissionCodes.DOCUMENT_SHARE)

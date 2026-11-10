@@ -11,6 +11,7 @@ import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.common.security.SessionAccessPolicy;
 import com.buukle.agent.instance.domain.AgentPendingClarification;
 import com.buukle.agent.instance.dtvo.vo.PendingWaitVO;
 import com.buukle.agent.instance.dtvo.dto.CreateRunDTO;
@@ -89,7 +90,7 @@ public class ChatRuntimeService {
     public ChatMessageResponseVO chat(Long sessionId, SendMessageDTO dto) {
         log.info("Chat request: sessionId={}, message={}", sessionId, dto.getMessage());
         assertMessageOrAttachment(dto);
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
         sessionSpi.assertSurfaceAllowed(sessionId);
 
         RunVO active = runSpi.findActiveRun(sessionId);
@@ -127,7 +128,7 @@ public class ChatRuntimeService {
      * Create a run (including delivery mode / session ownership checks) without emitting events; the caller uses the returned runId to register the stream, then calls {@link #startRun}.
      */
     public RunVO createRun(Long sessionId, SendMessageDTO dto) {
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
         // Source surface (console / widget) switch: stop the conversation when the instance has disabled that source.
         // The task path is an internal server call without a source; SessionSurfaceHolder.current() returns INTERNAL → allowed.
         sessionSpi.assertSurfaceAllowed(sessionId);
@@ -388,7 +389,7 @@ public class ChatRuntimeService {
     }
 
     public ChatMessageResponseVO resumeFromClarification(Long sessionId, Long runId, String response, String clarificationId) {
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
 
         LambdaQueryWrapper<AgentPendingClarification> query = new LambdaQueryWrapper<AgentPendingClarification>()
                 .eq(AgentPendingClarification::getRunId, runId)
@@ -471,7 +472,7 @@ public class ChatRuntimeService {
     }
 
     public List<ClarificationVO> pendingClarifications(Long sessionId) {
-        assertSessionOwnership(sessionId);
+        assertReadable(sessionId);
         List<AgentPendingClarification> rows = clarificationMapper.selectList(
                 new LambdaQueryWrapper<AgentPendingClarification>()
                         .eq(AgentPendingClarification::getSessionId, sessionId)
@@ -503,7 +504,7 @@ public class ChatRuntimeService {
 
     public ChatMessageResponseVO resolveClarifications(Long sessionId, Long runId,
                                                        ResolveClarificationsDTO dto) {
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
         List<AgentPendingClarification> pending = clarificationMapper.selectList(
                 new LambdaQueryWrapper<AgentPendingClarification>()
                         .eq(AgentPendingClarification::getRunId, runId)
@@ -603,17 +604,17 @@ public class ChatRuntimeService {
     }
 
     public List<SessionInputManager.InputMessage> pendingQueue(Long sessionId) {
-        assertSessionOwnership(sessionId);
+        assertReadable(sessionId);
         return inputManager.listPending(sessionId);
     }
 
     public SessionInputManager.WithdrawResult withdrawQueue(Long sessionId, String queueId) {
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
         return inputManager.withdraw(sessionId, queueId);
     }
 
     public com.buukle.agent.instance.dtvo.vo.ToolApprovalVO pendingToolApproval(Long sessionId) {
-        assertSessionOwnership(sessionId);
+        assertReadable(sessionId);
         return toolApprovalService.getPending(sessionId);
     }
 
@@ -623,7 +624,7 @@ public class ChatRuntimeService {
      * <p>All fields come from source tables; {@code agent_timeline} is not read.
      */
     public SessionRuntimeStateVO getState(Long sessionId) {
-        assertSessionOwnership(sessionId);
+        assertReadable(sessionId);
         RunVO active = runSpi.findActiveRun(sessionId);
         List<ClarificationVO> clarifications = pendingClarifications(sessionId);
         ToolApprovalVO approval = pendingToolApproval(sessionId);
@@ -672,7 +673,7 @@ public class ChatRuntimeService {
      * When the route/key is not ready, do not error; return supported=false so the chat page does not fail because of a capability call.
      */
     public ReasoningCapabilityVO reasoningCapability(Long sessionId, Long modelRouteId) {
-        assertSessionOwnership(sessionId);
+        assertReadable(sessionId);
         RunVO active = runSpi.findActiveRun(sessionId);
         ReasoningCapabilityVO vo = new ReasoningCapabilityVO();
         vo.setRunning(active != null);
@@ -727,7 +728,7 @@ public class ChatRuntimeService {
 
     public void resolveToolApproval(Long sessionId, Long runId, String approvalId,
                                     String decisionsJson, String approvedBy) {
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
         ToolApprovalVO approval = toolApprovalService.getByApprovalId(approvalId);
         if (approval == null
                 || !runId.equals(approval.getRunId())
@@ -763,7 +764,7 @@ public class ChatRuntimeService {
      * the boundaries for parked states (AWAITING_USER) and for no active run are handled here.
      */
     public void stopSession(Long sessionId) {
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
         sessionRunner.cancelSession(sessionId);
         RunVO active = runSpi.findActiveRun(sessionId);
         if (active == null) {
@@ -788,7 +789,7 @@ public class ChatRuntimeService {
     }
 
     public void stopRun(Long sessionId, Long runId) {
-        assertSessionOwnership(sessionId);
+        assertWritable(sessionId);
         RunVO run = runSpi.getRun(runId);
         if (run == null) return;
 
@@ -870,10 +871,18 @@ public class ChatRuntimeService {
         }
     }
 
-    private void assertSessionOwnership(Long sessionId) {
-        if (AuthContext.isSuperAdmin()) return;
+    private void assertReadable(Long sessionId) {
         SessionVO session = sessionSpi.getSession(sessionId);
-        if (session == null || !AuthContext.getUsername().equals(session.getCreatedBy())) {
+        if (session == null || !SessionAccessPolicy.canRead(
+                session.getTenantId(), session.getCreatedBy(), session.getSessionType())) {
+            throw new BizException(CommonErrorCode.FORBIDDEN);
+        }
+    }
+
+    private void assertWritable(Long sessionId) {
+        SessionVO session = sessionSpi.getSession(sessionId);
+        if (session == null || !SessionAccessPolicy.canWrite(
+                session.getTenantId(), session.getCreatedBy(), session.getSessionType())) {
             throw new BizException(CommonErrorCode.FORBIDDEN);
         }
     }

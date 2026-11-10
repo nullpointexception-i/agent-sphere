@@ -7,6 +7,7 @@ import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.vo.AgentSubAgentRunVO;
 import com.buukle.agent.instance.dtvo.vo.SubAgentTimelineItemVO;
 import com.buukle.agent.instance.spi.AgentSubAgentRunSpi;
+import com.buukle.agent.instance.service.support.SessionAccessGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,9 +24,11 @@ import java.util.List;
 public class SubAgentRunController extends BaseController {
 
     private final AgentSubAgentRunSpi subAgentRunSpi;
+    private final SessionAccessGuard sessionAccessGuard;
 
     @GetMapping("/sessions/{sessionId}/sub-agent-runs")
     public ResponseEntity<List<AgentSubAgentRunVO>> listBySession(@PathVariable Long sessionId) {
+        sessionAccessGuard.requireReadable(sessionId);
         return ok(subAgentRunSpi.listBySession(sessionId));
     }
 
