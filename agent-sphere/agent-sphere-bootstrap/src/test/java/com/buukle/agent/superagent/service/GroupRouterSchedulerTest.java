@@ -59,14 +59,13 @@ class GroupRouterSchedulerTest {
     AgentMetrics metrics;
 
     @org.junit.jupiter.api.BeforeEach
-    void stubSystemRouter() {
+    void stubCurrentRouter() {
         com.buukle.agent.instance.dtvo.vo.InstanceVO system =
                 new com.buukle.agent.instance.dtvo.vo.InstanceVO();
         system.setId(7L);
         system.setModelRouteId(99L);
-        org.mockito.Mockito.lenient().when(instanceSpi.findSystemByTenant(
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
-                .thenReturn(system);
+        org.mockito.Mockito.lenient().when(instanceSpi.findCurrentGroupRouter(
+                org.mockito.ArgumentMatchers.any())).thenReturn(system);
     }
 
     @Test

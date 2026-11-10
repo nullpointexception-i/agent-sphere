@@ -171,15 +171,6 @@ export const superAgentApi = {
     request<void>(`${BASE}/super-agents/${agentId}/events/${eventId}/retry`, {
       method: 'POST',
     }),
-  groupRouterTemplate: () =>
-    request<{ instanceId?: number; template: string; defaultTemplate: string; custom: boolean }>(
-      `${BASE}/super-agents/group-router/template`,
-    ),
-  updateGroupRouterTemplate: (template: string) =>
-    request<any>(`${BASE}/super-agents/group-router/template`, {
-      method: 'PATCH',
-      data: { template },
-    }),
   channels: (agentId: number) =>
     request<any[]>(`${BASE}/super-agents/${agentId}/channels`),
   updateChannelStatus: (agentId: number, channelId: number, status: string) =>

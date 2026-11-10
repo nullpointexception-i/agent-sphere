@@ -16,6 +16,8 @@ public class AgentModelProvider {
     private Long apiKeyId;
     private String config;
     private String status;
+    /** USER: private to the creator; TENANT: tenant-level resource. */
+    private String ownerScope;
     @TableLogic
     private Boolean deleteFlag;
     @TableField(fill = FieldFill.INSERT)

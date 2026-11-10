@@ -102,10 +102,6 @@ export default function SuperAgentPage() {
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightRows, setInsightRows] = useState<any[]>([]);
   const [usageDays, setUsageDays] = useState(30);
-  const [templateOpen, setTemplateOpen] = useState(false);
-  const [templateText, setTemplateText] = useState('');
-  const [templateDefault, setTemplateDefault] = useState('');
-  const [templateSaving, setTemplateSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsAgent, setSettingsAgent] = useState<SuperAgent | null>(null);
@@ -270,24 +266,6 @@ export default function SuperAgentPage() {
       setInsightRows(data ?? []);
     } finally {
       setInsightLoading(false);
-    }
-  };
-
-  const openTemplate = async () => {
-    setTemplateOpen(true);
-    const data = await superAgentApi.groupRouterTemplate();
-    setTemplateText(data?.template ?? '');
-    setTemplateDefault(data?.defaultTemplate ?? '');
-  };
-
-  const saveTemplate = async () => {
-    setTemplateSaving(true);
-    try {
-      await superAgentApi.updateGroupRouterTemplate(templateText);
-      message.success(t('pages.superAgent.templateSaved', 'Template saved'));
-      setTemplateOpen(false);
-    } finally {
-      setTemplateSaving(false);
     }
   };
 
@@ -518,9 +496,6 @@ export default function SuperAgentPage() {
           {t('pages.superAgent.title', 'Super Agents')}
         </Typography.Title>
         <Space wrap>
-          <Button key="template" onClick={openTemplate}>
-            {t('pages.superAgent.groupRouterTemplate', 'Group Router Template')}
-          </Button>
           <Can key="create" code={PERM.superAgentCreate}>
             <Button
               type="primary"
@@ -949,38 +924,6 @@ export default function SuperAgentPage() {
           ) : null}
         </Spin>
       </Drawer>
-
-      <Modal
-        open={templateOpen}
-        width={760}
-        title={t(
-          'pages.superAgent.groupRouterTemplate',
-          'Group Router Template',
-        )}
-        confirmLoading={templateSaving}
-        onOk={saveTemplate}
-        onCancel={() => setTemplateOpen(false)}
-        destroyOnHidden
-      >
-        <Typography.Paragraph type="secondary">
-          {t(
-            'pages.superAgent.templateHint',
-            'Edit the system prompt of the shared Group Router instance; paste the default template below to restore it.',
-          )}
-        </Typography.Paragraph>
-        <Input.TextArea
-          value={templateText}
-          onChange={(event) => setTemplateText(event.target.value)}
-          autoSize={{ minRows: 8, maxRows: 18 }}
-        />
-        <Button
-          size="small"
-          style={{ marginTop: 8 }}
-          onClick={() => setTemplateText(templateDefault)}
-        >
-          {t('pages.superAgent.useDefaultTemplate', 'Use default template')}
-        </Button>
-      </Modal>
 
       <Modal
         open={settingsOpen}

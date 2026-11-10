@@ -1,6 +1,7 @@
 package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantScope;
@@ -42,6 +43,9 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
             baseMapper.clearDefault(currentOwner());
         }
         AgentModelRoute route = routeConverter.toDO(dto);
+        AgentModelProvider provider = modelProviderMapper.selectById(dto.getProviderId());
+        route.setOwnerScope(provider == null || provider.getOwnerScope() == null
+                ? OwnerScope.USER : OwnerScope.normalize(provider.getOwnerScope()));
         if (route.getIsDefault() == null) {
             route.setIsDefault(false);
         }
@@ -164,46 +168,6 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
     }
 
     @Override
-    public ModelRouteVO findSystemRoute(Long tenantId) {
-        if (tenantId == null) {
-            return null;
-        }
-        Long previousTenant = TenantContext.get();
-        TenantScope previousScope = TenantScopeHolder.get();
-        try {
-            TenantContext.set(tenantId);
-            TenantScopeHolder.start(TenantScope.tenantOnly(tenantId, "system"));
-            AgentModelRoute route = lambdaQuery()
-                    .eq(AgentModelRoute::getSystemManaged, true)
-                    .orderByAsc(AgentModelRoute::getId)
-                    .last("LIMIT 1")
-                    .one();
-            return route == null ? null : routeConverter.toVO(route);
-        } finally {
-            TenantScopeHolder.clear();
-            TenantContext.clear();
-            if (previousScope != null) {
-                TenantScopeHolder.start(previousScope);
-            }
-            if (previousTenant != null) {
-                TenantContext.set(previousTenant);
-            }
-        }
-    }
-
-    @Override
-    @Transactional
-    public void markSystemRoute(Long id) {
-        if (id == null) {
-            return;
-        }
-        lambdaUpdate()
-                .eq(AgentModelRoute::getId, id)
-                .set(AgentModelRoute::getSystemManaged, true)
-                .update();
-    }
-
-    @Override
     public List<ModelRouteVO> listSystemRoutes() {
         // Audit view: system routes belong to the tenant, so the owner-created_by
         // restriction (self-only scale) must not hide routes created by another user.
@@ -217,7 +181,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, AgentModelRoute> 
                         scope.manageableTenantIds(), scope.subtreeVisible()));
             }
             List<AgentModelRoute> routes = lambdaQuery()
-                    .eq(AgentModelRoute::getSystemManaged, true)
+                    .eq(AgentModelRoute::getOwnerScope, OwnerScope.TENANT)
                     .orderByAsc(AgentModelRoute::getTenantId)
                     .orderByAsc(AgentModelRoute::getId)
                     .list();

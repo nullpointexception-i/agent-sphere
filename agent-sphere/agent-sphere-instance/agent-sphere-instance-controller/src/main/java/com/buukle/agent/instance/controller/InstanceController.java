@@ -3,7 +3,9 @@ package com.buukle.agent.instance.controller;
 
 
 import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.common.constant.PermissionCodes;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -30,7 +32,17 @@ public class InstanceController extends BaseController {
     @AuditLog(action = "CREATE", resourceType = "Instance", resourceId = "#result?.body?.id")
     @RequirePermission(PermissionCodes.INSTANCE_CREATE)
     @PostMapping
-    public ResponseEntity<?> create(@Valid @RequestBody CreateInstanceDTO dto) {
+    public ResponseEntity<?> create(@Valid @RequestBody CreateInstanceDTO dto,
+                                    @RequestParam(required = false) String scope) {
+        if (OwnerScope.isTenant(scope)) {
+            if (!AuthContext.isSuperAdmin()
+                    && !AuthContext.hasPermission(PermissionCodes.INSTANCE_TENANT)) {
+                return ResponseEntity.status(403).build();
+            }
+            dto.setOwnerScope(OwnerScope.TENANT);
+        } else {
+            dto.setOwnerScope(OwnerScope.USER);
+        }
         return created(instanceService.createInstance(dto));
     }
 
@@ -53,6 +65,11 @@ public class InstanceController extends BaseController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
             @RequestParam(required = false) String instanceRole,
             @RequestParam(required = false) String scope) {
+        if (OwnerScope.isTenant(scope)
+                && !AuthContext.isSuperAdmin()
+                && !AuthContext.hasPermission(PermissionCodes.INSTANCE_TENANT)) {
+            return ResponseEntity.status(403).build();
+        }
         return ok(instanceService.pageInstances(page, size, keyword, startTime, endTime, instanceRole, scope));
     }
 

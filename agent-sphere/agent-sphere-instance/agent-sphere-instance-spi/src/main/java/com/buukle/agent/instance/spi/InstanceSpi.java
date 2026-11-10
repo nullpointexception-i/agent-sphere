@@ -12,9 +12,6 @@ public interface InstanceSpi {
 
     InstanceVO getInstance(Long id);
 
-    /** Find an enabled system instance by its role (e.g. GROUP_ROUTER). */
-    InstanceVO findByRole(String instanceRole);
-
     InstanceVO updateInstance(Long id, CreateInstanceDTO dto);
 
     /** Targeted update: refresh a managed instance's system prompt without touching other columns. */
@@ -37,13 +34,13 @@ public interface InstanceSpi {
 
     /**
      * @param scope BUSINESS (default, excludes system resources) or SYSTEM
-     *              (only system-managed instances; role defaults to ALL).
+     *              (only tenant-owned instances; role defaults to ALL).
      */
     IPage<InstanceVO> pageInstances(int page, int size, String keyword, LocalDateTime startTime,
                                     LocalDateTime endTime, String instanceRole, String scope);
 
-    /** The tenant's system instance for the given role, or null. */
-    InstanceVO findSystemByTenant(Long tenantId, String instanceRole);
+    /** The tenant's current GROUP_ROUTER instance, or null. */
+    InstanceVO findCurrentGroupRouter(Long tenantId);
 
     List<InstanceVO> listLatestNInstances(int n);
 

@@ -11,4 +11,6 @@ public class UserTenantVO {
     private String visibility;
     private Boolean isCurrent;
     private Boolean manageable;
+    /** Tenant's current GROUP_ROUTER instance (group chat routing), when set. */
+    private Long currentInstanceId;
 }

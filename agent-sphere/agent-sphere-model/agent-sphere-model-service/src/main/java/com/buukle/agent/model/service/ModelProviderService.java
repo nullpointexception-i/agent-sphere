@@ -9,4 +9,7 @@ import com.buukle.agent.model.spi.ModelProviderSpi;
 public interface ModelProviderService extends IService<AgentModelProvider>, ModelProviderSpi {
 
     IPage<ModelProviderVO> pageProviders(int page, int size, String keyword);
+
+    /** @param scope USER (creator-only) or TENANT (tenant-level resources). */
+    IPage<ModelProviderVO> pageProviders(int page, int size, String keyword, String scope);
 }

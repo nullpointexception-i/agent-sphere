@@ -21,8 +21,7 @@ public class ModelRouteVO implements Serializable {
     private String completionProtocol;
     /** Whether this route is the owner's default route. */
     private Boolean isDefault;
-    /** System route auto-created with a tenant; shown in the system route view. */
-    private Boolean systemManaged;
+    private String ownerScope;
     /** Owning tenant, for the cross-tenant system route view. */
     private Long tenantId;
     /** Reasoning strength override: NULL = inherit from provider. */

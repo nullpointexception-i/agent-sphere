@@ -41,8 +41,8 @@ public class CreateInstanceDTO implements Serializable {
     private String completionProtocol;
     /** CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG; empty defaults to CHAT. */
     private String instanceRole;
-    /** System-managed instance; empty defaults to false. */
-    private Boolean systemManaged;
+    /** USER (default) or TENANT; set by the controller/initializer, never trusted from the client. */
+    private String ownerScope;
     /** Sampling/request parameter JSON configuration (same shape as LlmSamplingConfigDTO); NULL/empty = not configured, an empty string on update = clear. */
     @Size(max = 8000, message = "config must be <= 8000 chars")
     private String config;

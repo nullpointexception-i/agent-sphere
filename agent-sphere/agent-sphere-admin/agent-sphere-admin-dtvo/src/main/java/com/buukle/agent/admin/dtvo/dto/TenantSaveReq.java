@@ -1,6 +1,5 @@
 package com.buukle.agent.admin.dtvo.dto;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
@@ -14,7 +13,4 @@ public class TenantSaveReq {
     private Integer sortOrder;
     private String status;
     private String remark;
-    /** Manually entered model configuration used when creating a tenant. */
-    @Valid
-    private TenantDefaultModelDTO defaultModel;
 }

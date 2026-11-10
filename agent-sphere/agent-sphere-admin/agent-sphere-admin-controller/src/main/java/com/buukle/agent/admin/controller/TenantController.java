@@ -1,5 +1,6 @@
 package com.buukle.agent.admin.controller;
 
+import com.buukle.agent.admin.dtvo.dto.TenantCurrentInstanceReq;
 import com.buukle.agent.admin.dtvo.dto.TenantSaveReq;
 import com.buukle.agent.admin.dtvo.dto.UserTenantAssignReq;
 import com.buukle.agent.admin.dtvo.vo.TenantSwitchVO;
@@ -75,6 +76,14 @@ public class TenantController extends BaseController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody TenantSaveReq req) {
         return ok(tenantService.update(id, req));
+    }
+
+    @AuditLog(action = "CURRENT_INSTANCE", resourceType = "Tenant", resourceId = "#id")
+    @RequirePermission(PermissionCodes.ADMIN_TENANT_UPDATE)
+    @PutMapping("/{id}/current-instance")
+    public ResponseEntity<?> setCurrentInstance(@PathVariable Long id,
+                                                @Valid @RequestBody TenantCurrentInstanceReq req) {
+        return ok(tenantService.setCurrentInstance(id, req.getInstanceId()));
     }
 
     @AuditLog(action = "STATUS", resourceType = "Tenant", resourceId = "#id")

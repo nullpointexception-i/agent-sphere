@@ -3,7 +3,9 @@ package com.buukle.agent.model.controller;
 
 
 import com.buukle.agent.common.constant.ApiPrefix;
+import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.common.constant.PermissionCodes;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.annotation.AuditLog;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.annotation.RequirePermission;
@@ -29,7 +31,17 @@ public class ModelProviderController extends BaseController {
     @AuditLog(action = "CREATE", resourceType = "ModelProvider", resourceId = "#result?.body?.id")
     @RequirePermission(PermissionCodes.MODEL_PROVIDER_CREATE)
     @PostMapping
-    public ResponseEntity<?> create(@Valid @RequestBody CreateModelProviderDTO dto) {
+    public ResponseEntity<?> create(@Valid @RequestBody CreateModelProviderDTO dto,
+                                    @RequestParam(required = false) String scope) {
+        if (OwnerScope.isTenant(scope)) {
+            if (!AuthContext.isSuperAdmin()
+                    && !AuthContext.hasPermission(PermissionCodes.MODEL_PROVIDER_TENANT)) {
+                return ResponseEntity.status(403).build();
+            }
+            dto.setOwnerScope(OwnerScope.TENANT);
+        } else {
+            dto.setOwnerScope(OwnerScope.USER);
+        }
         return created(modelProviderService.createProvider(dto));
     }
 
@@ -53,8 +65,14 @@ public class ModelProviderController extends BaseController {
     public ResponseEntity<?> page(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) String keyword) {
-        return ok(modelProviderService.pageProviders(page, size, keyword));
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String scope) {
+        if (OwnerScope.isTenant(scope)
+                && !AuthContext.isSuperAdmin()
+                && !AuthContext.hasPermission(PermissionCodes.MODEL_PROVIDER_TENANT)) {
+            return ResponseEntity.status(403).build();
+        }
+        return ok(modelProviderService.pageProviders(page, size, keyword, scope));
     }
 
     @GetMapping("/companies")

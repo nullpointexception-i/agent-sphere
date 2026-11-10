@@ -12,6 +12,7 @@ import type { TemplateItem } from './types';
 interface Props {
   open: boolean;
   initialValue: string;
+  title?: string;
   onClose: () => void;
   onSaved: (jsonText: string) => Promise<void> | void;
 }
@@ -19,6 +20,7 @@ interface Props {
 export default function ResourceTemplateEditor({
   open,
   initialValue,
+  title,
   onClose,
   onSaved,
 }: Props) {
@@ -160,10 +162,13 @@ export default function ResourceTemplateEditor({
 
   return (
     <Drawer
-      title={intl.formatMessage({
-        id: 'pages.admin.settings.template.title',
-        defaultMessage: 'Resource Template',
-      })}
+      title={
+        title ??
+        intl.formatMessage({
+          id: 'pages.admin.settings.template.title',
+          defaultMessage: 'Resource Template',
+        })
+      }
       size={900}
       open={open}
       onClose={onClose}

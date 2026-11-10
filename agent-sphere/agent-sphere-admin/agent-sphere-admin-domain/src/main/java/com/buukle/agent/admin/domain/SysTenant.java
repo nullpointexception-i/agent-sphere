@@ -31,6 +31,9 @@ public class SysTenant {
 
     private String remark;
 
+    /** Tenant's current GROUP_ROUTER instance (group chat routing). */
+    private Long currentInstanceId;
+
     @TableLogic
     private Integer deleteFlag;
 

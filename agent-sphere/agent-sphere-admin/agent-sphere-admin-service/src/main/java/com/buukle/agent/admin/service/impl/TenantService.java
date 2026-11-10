@@ -8,20 +8,8 @@ import com.buukle.agent.admin.domain.SysRolePermission;
 import com.buukle.agent.admin.domain.SysTenant;
 import com.buukle.agent.admin.domain.SysUserRole;
 import com.buukle.agent.admin.domain.SysUserTenant;
-import com.buukle.agent.admin.dtvo.dto.TenantDefaultModelDTO;
 import com.buukle.agent.admin.dtvo.dto.TenantSaveReq;
 import com.buukle.agent.admin.dtvo.dto.UserTenantAssignReq;
-import com.buukle.agent.common.constant.CompletionProtocol;
-import com.buukle.agent.common.context.TenantContext;
-import com.buukle.agent.model.dtvo.dto.CreateApiKeyDTO;
-import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
-import com.buukle.agent.model.dtvo.dto.CreateRouteDTO;
-import com.buukle.agent.model.dtvo.vo.ApiKeyVO;
-import com.buukle.agent.model.dtvo.vo.ModelProviderVO;
-import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
-import com.buukle.agent.model.spi.ApiKeySpi;
-import com.buukle.agent.model.spi.ModelProviderSpi;
-import com.buukle.agent.model.spi.RouteSpi;
 import com.buukle.agent.admin.dtvo.vo.TenantSwitchVO;
 import com.buukle.agent.admin.dtvo.vo.TenantVO;
 import com.buukle.agent.admin.dtvo.vo.UserTenantVO;
@@ -86,9 +74,7 @@ public class TenantService implements TenantProvisioningSpi {
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysPermissionMapper permissionMapper;
     private final TenantScopeServiceImpl tenantScopeService;
-    private final ModelProviderSpi modelProviderSpi;
-    private final ApiKeySpi apiKeySpi;
-    private final RouteSpi routeSpi;
+    private final TenantResourceProvisioner tenantResourceProvisioner;
 
     // ==================== queries ====================
 
@@ -177,6 +163,7 @@ public class TenantService implements TenantProvisioningSpi {
             vo.setVisibility(row.getVisibility());
             vo.setIsCurrent(row.getIsCurrent());
             vo.setManageable(manageable.contains(row.getTenantId()));
+            vo.setCurrentInstanceId(tenant == null ? null : tenant.getCurrentInstanceId());
             out.add(vo);
         }
         return out;
@@ -187,10 +174,6 @@ public class TenantService implements TenantProvisioningSpi {
     @Transactional
     public SysTenant create(TenantSaveReq req) {
         assertCanCreateChildTenant();
-        if (req.getDefaultModel() == null) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "Default model configuration is required for a new tenant");
-        }
         String code = req.getCode() == null ? "" : req.getCode().trim();
         if (code.isEmpty()) {
             throw new BizException(CommonErrorCode.PARAM_INVALID, "Tenant code is required");
@@ -222,7 +205,7 @@ public class TenantService implements TenantProvisioningSpi {
 
         createTenantAdminRole(tenant);
         createTenantUserRole(tenant);
-        provisionDefaultModel(tenant, req.getDefaultModel(), operatorName());
+        applyTenantResources(tenant);
         return tenant;
     }
 
@@ -247,6 +230,7 @@ public class TenantService implements TenantProvisioningSpi {
 
         createTenantAdminRole(tenant);
         createTenantUserRole(tenant);
+        applyTenantResources(tenant);
 
         SysRole userRole = roleMapper.selectOne(Wrappers.lambdaQuery(SysRole.class)
                 .eq(SysRole::getTenantId, tenant.getId())
@@ -340,6 +324,34 @@ public class TenantService implements TenantProvisioningSpi {
         existing.setUpdatedAt(LocalDateTime.now());
         tenantMapper.updateById(existing);
         return existing;
+    }
+
+    /** Runs the tenant resource template and stores the current GROUP_ROUTER instance. */
+    private void applyTenantResources(SysTenant tenant) {
+        Long currentInstanceId = tenantResourceProvisioner.provision(tenant, operatorName());
+        if (currentInstanceId == null) {
+            return;
+        }
+        tenant.setCurrentInstanceId(currentInstanceId);
+        tenant.setUpdatedAt(LocalDateTime.now());
+        tenantMapper.updateById(tenant);
+    }
+
+    @Transactional
+    public SysTenant setCurrentInstance(Long tenantId, Long instanceId) {
+        assertCanManage(tenantId);
+        SysTenant tenant = tenantMapper.selectById(tenantId);
+        if (tenant == null) {
+            throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND, "Tenant not found");
+        }
+        if (instanceId != null && tenantMapper.countTenantRouterInstance(tenantId, instanceId) == 0) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "The current instance must be a TENANT GROUP_ROUTER of this tenant");
+        }
+        tenant.setCurrentInstanceId(instanceId);
+        tenant.setUpdatedAt(LocalDateTime.now());
+        tenantMapper.updateById(tenant);
+        return tenant;
     }
 
     @Transactional
@@ -653,64 +665,6 @@ public class TenantService implements TenantProvisioningSpi {
         }
     }
 
-    private void provisionDefaultModel(SysTenant tenant, TenantDefaultModelDTO model, String operator) {
-        if (model == null) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "Default model configuration is required for a new tenant");
-        }
-        Long previousTenant = TenantContext.get();
-        TenantScope previousScope = TenantScopeHolder.get();
-        try {
-            TenantContext.set(tenant.getId());
-            TenantScopeHolder.start(TenantScope.tenantOnly(tenant.getId(), operator));
-            CreateModelProviderDTO providerDTO = new CreateModelProviderDTO();
-            providerDTO.setName(providerName(tenant, model));
-            providerDTO.setBaseUrl(model.getBaseUrl());
-            providerDTO.setConfig(model.getProviderConfig());
-            ModelProviderVO provider = modelProviderSpi.createProvider(providerDTO);
-
-            CreateApiKeyDTO keyDTO = new CreateApiKeyDTO();
-            keyDTO.setProviderId(provider.getId());
-            keyDTO.setAlias(model.getApiKeyName());
-            keyDTO.setKeyValue(model.getApiKeyValue());
-            ApiKeyVO key = apiKeySpi.createApiKey(keyDTO);
-            modelProviderSpi.setActiveKey(provider.getId(), key.getId());
-
-            CreateRouteDTO routeDTO = new CreateRouteDTO();
-            routeDTO.setProviderId(provider.getId());
-            routeDTO.setModelName(model.getModelName());
-            routeDTO.setCompany(model.getProviderCompany());
-            routeDTO.setMaxInputTokens(model.getMaxInputTokens() == null
-                    ? 128000L : model.getMaxInputTokens());
-            routeDTO.setMaxOutputTokens(model.getMaxOutputTokens() == null
-                    ? 4096L : model.getMaxOutputTokens());
-            routeDTO.setSupportsAttachment(Boolean.TRUE.equals(model.getSupportsAttachment()));
-            routeDTO.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
-            routeDTO.setIsDefault(true);
-            ModelRouteVO route = routeSpi.createRoute(routeDTO);
-            // The route created with a tenant is that tenant's system route; the
-            // group router resolves it by type instead of a tenant pointer.
-            routeSpi.markSystemRoute(route.getId());
-        } finally {
-            TenantScopeHolder.clear();
-            TenantContext.clear();
-            if (previousScope != null) {
-                TenantScopeHolder.start(previousScope);
-            }
-            if (previousTenant != null) {
-                TenantContext.set(previousTenant);
-            }
-        }
-    }
-
-    private static String providerName(SysTenant tenant, TenantDefaultModelDTO model) {
-        String name = model.getProviderName();
-        if (name == null || name.isBlank()) {
-            name = tenant.getName() + " Default Provider";
-        }
-        return name.length() > 64 ? name.substring(0, 64) : name;
-    }
-
     private static String operatorName() {
         String username = AuthContext.getUsername();
         if (username != null && !username.isBlank()) {
@@ -733,6 +687,7 @@ public class TenantService implements TenantProvisioningSpi {
         vo.setSortOrder(tenant.getSortOrder());
         vo.setStatus(tenant.getStatus());
         vo.setRemark(tenant.getRemark());
+        vo.setCurrentInstanceId(tenant.getCurrentInstanceId());
         vo.setCreatedAt(tenant.getCreatedAt());
         return vo;
     }

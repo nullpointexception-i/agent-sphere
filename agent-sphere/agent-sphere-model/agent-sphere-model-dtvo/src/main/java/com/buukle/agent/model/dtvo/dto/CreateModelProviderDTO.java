@@ -17,4 +17,6 @@ public class CreateModelProviderDTO implements Serializable {
     private Long apiKeyId;
     @Size(max = 5000)
     private String config;
+    /** USER (default) or TENANT; set by the controller/initializer, never trusted from the client. */
+    private String ownerScope;
 }

@@ -1,5 +1,6 @@
 package com.buukle.agent.model.service.converter;
 
+import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.model.domain.AgentModelProvider;
 import com.buukle.agent.model.dtvo.dto.CreateModelProviderDTO;
 import com.buukle.agent.model.dtvo.enums.ModelProviderEnum;
@@ -26,6 +27,7 @@ public class ModelProviderConverter {
         vo.setConfig(provider.getConfig());
         vo.setStatus(provider.getStatus());
         vo.setTenantId(provider.getTenantId());
+        vo.setOwnerScope(provider.getOwnerScope());
         vo.setCreatedAt(provider.getCreatedAt() != null ? provider.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(provider.getCreatedBy());
         vo.setUpdatedBy(provider.getUpdatedBy());
@@ -40,6 +42,9 @@ public class ModelProviderConverter {
         provider.setApiKeyId(dto.getApiKeyId());
         provider.setConfig(emptyToJson(dto.getConfig()));
         provider.setStatus(ModelProviderEnum.STATUS_ACTIVE);
+        provider.setOwnerScope(dto.getOwnerScope() == null || dto.getOwnerScope().isBlank()
+                ? OwnerScope.USER
+                : OwnerScope.normalize(dto.getOwnerScope()));
         return provider;
     }
 }

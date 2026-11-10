@@ -51,7 +51,7 @@ public class RouteConverter {
         vo.setSupportsAttachment(route.getSupportsAttachment());
         vo.setCompletionProtocol(route.getCompletionProtocol());
         vo.setIsDefault(route.getIsDefault());
-        vo.setSystemManaged(route.getSystemManaged());
+        vo.setOwnerScope(route.getOwnerScope());
         vo.setTenantId(route.getTenantId());
         vo.setReasoningSupported(route.getReasoningSupported());
         vo.setReasoningMode(route.getReasoningMode());

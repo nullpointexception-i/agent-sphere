@@ -28,8 +28,8 @@ public class InstanceVO implements Serializable {
     private String completionProtocol;
     /** CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG。 */
     private String instanceRole;
-    /** System-managed instance. */
-    private Boolean systemManaged;
+    /** USER: private to the creator; TENANT: tenant-level resource. */
+    private String ownerScope;
     /** Sampling/request parameter JSON configuration (NULL = not configured). */
     private String config;
     private String createdAt;

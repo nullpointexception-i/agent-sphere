@@ -36,7 +36,14 @@ const GROUP_LABELS: Record<string, string> = {
   llm: 'pages.admin.settings.group.llm',
   session: 'pages.admin.settings.group.session',
   skill: 'pages.admin.settings.group.skill',
+  tenant: 'pages.admin.settings.group.tenant',
 };
+
+/** Config keys edited by the visual resource template editor. */
+const TEMPLATE_CONFIG_KEYS = new Set([
+  'user.resource-template',
+  'tenant.resource-template',
+]);
 
 export default function AdminSettings() {
   const intl = useIntl();
@@ -299,7 +306,7 @@ export default function AdminSettings() {
             type="link"
             onClick={() => {
               setEditingConfig(config);
-              if (config.configKey === 'user.resource-template') {
+              if (TEMPLATE_CONFIG_KEYS.has(config.configKey)) {
                 setTemplateOpen(true);
                 return;
               }
@@ -448,9 +455,20 @@ export default function AdminSettings() {
       <ResourceTemplateEditor
         open={templateOpen}
         initialValue={editingConfig?.configValue || ''}
+        title={
+          editingConfig?.configKey === 'tenant.resource-template'
+            ? intl.formatMessage({
+                id: 'pages.admin.settings.template.tenantTitle',
+                defaultMessage: 'Tenant Resource Template',
+              })
+            : undefined
+        }
         onClose={() => setTemplateOpen(false)}
         onSaved={async (jsonText) => {
-          await agentApi.admin.updateConfig('user.resource-template', jsonText);
+          await agentApi.admin.updateConfig(
+            editingConfig?.configKey || 'user.resource-template',
+            jsonText,
+          );
           await loadConfigs();
           setTemplateOpen(false);
         }}

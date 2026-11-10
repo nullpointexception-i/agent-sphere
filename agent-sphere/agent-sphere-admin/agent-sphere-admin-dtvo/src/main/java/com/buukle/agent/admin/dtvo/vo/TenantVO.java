@@ -15,6 +15,7 @@ public class TenantVO {
     private Integer sortOrder;
     private String status;
     private String remark;
+    private Long currentInstanceId;
     private LocalDateTime createdAt;
     /** Whether the current operator can manage this tenant. */
     private Boolean manageable;

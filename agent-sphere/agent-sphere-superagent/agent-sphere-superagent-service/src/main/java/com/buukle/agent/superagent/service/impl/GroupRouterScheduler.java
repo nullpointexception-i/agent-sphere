@@ -3,7 +3,7 @@ package com.buukle.agent.superagent.service.impl;
 import com.buukle.agent.common.context.TenantScopeHolder;
 
 
-import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.ActorType;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.SuperAgentTraceContext;
@@ -67,7 +67,6 @@ import java.util.concurrent.TimeUnit;
 public class GroupRouterScheduler {
 
     private static final String LOCK_PREFIX = "superagent:group-router:";
-    private static final String ROLE_GROUP_ROUTER = InstanceRole.GROUP_ROUTER.value();
 
     private final AgentEventMapper eventMapper;
     private final AgentThreadMapper threadMapper;
@@ -167,13 +166,13 @@ public class GroupRouterScheduler {
             markEvents(events, GroupRouterDecisionType.OBSERVE, "group router session missing", null);
             return;
         }
-        InstanceVO instance = instanceSpi.findSystemByTenant(
-                thread.getTenantId(), ROLE_GROUP_ROUTER);
+        InstanceVO instance = instanceSpi.findCurrentGroupRouter(thread.getTenantId());
         Long modelRouteId = instance == null ? null : instance.getModelRouteId();
         if (instance == null || modelRouteId == null) {
-            log.warn("Tenant group router instance/route is missing for tenant {}", thread.getTenantId());
+            log.warn("Tenant current group router instance/route is missing for tenant {}",
+                    thread.getTenantId());
             markEvents(events, GroupRouterDecisionType.OBSERVE,
-                    "tenant group router instance or system route missing", null);
+                    "tenant current group router instance or route missing", null);
             return;
         }
         Long routerInstanceId = instance.getId();

@@ -35,8 +35,8 @@ public class AgentInstance {
     private String completionProtocol;
     /** Super-Agent role: CHAT / GROUP_ROUTER / ROUTER / WORKER / WATCHDOG. */
     private String instanceRole;
-    /** System-managed instance (e.g. Group Router); it should be hidden from ordinary instance lists. */
-    private Boolean systemManaged;
+    /** USER: private to the creator; TENANT: tenant-level resource (tenant administrators). */
+    private String ownerScope;
     /** Sampling/request parameter configuration (JSON, same shape as LlmSamplingConfigDTO; NULL = use the global fallback). */
     private String config;
     @TableLogic

@@ -52,11 +52,15 @@ public final class PermissionCodes {
     public static final String INSTANCE_BIND_MODEL = "instance:bind-model";
     public static final String INSTANCE_CAPABILITY_BIND = "instance:capability:bind";
     public static final String INSTANCE_CAPABILITY_UNBIND = "instance:capability:unbind";
+    /** Tenant-level instances (tenant administrators only). */
+    public static final String INSTANCE_TENANT = "instance:tenant";
 
     // ---- model ----
     public static final String MODEL_PROVIDER_CREATE = "model:provider:create";
     public static final String MODEL_PROVIDER_UPDATE = "model:provider:update";
     public static final String MODEL_PROVIDER_DELETE = "model:provider:delete";
+    /** Tenant-level model providers (tenant administrators only). */
+    public static final String MODEL_PROVIDER_TENANT = "model:provider:tenant";
     public static final String MODEL_APIKEY_CREATE = "model:apikey:create";
     public static final String MODEL_APIKEY_UPDATE = "model:apikey:update";
     public static final String MODEL_APIKEY_DELETE = "model:apikey:delete";

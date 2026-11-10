@@ -2,6 +2,8 @@ package com.buukle.agent.model.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
+import com.buukle.agent.common.constant.OwnerScope;
+import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.model.domain.AgentModelProvider;
@@ -107,12 +109,40 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
     @Override
     public com.baomidou.mybatisplus.core.metadata.IPage<ModelProviderVO> pageProviders(
             int page, int size, String keyword) {
-        return lambdaQuery()
-                .like(keyword != null && !keyword.isBlank(), AgentModelProvider::getName, keyword)
-                .orderByDesc(AgentModelProvider::getCreatedAt)
-                .page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
-                        Math.max(1, page), Math.max(1, size)))
-                .convert(modelProviderConverter::toVO);
+        return pageProviders(page, size, keyword, null);
+    }
+
+    @Override
+    public com.baomidou.mybatisplus.core.metadata.IPage<ModelProviderVO> pageProviders(
+            int page, int size, String keyword, String scope) {
+        boolean tenantScope = OwnerScope.isTenant(scope);
+        com.buukle.agent.common.context.TenantScope currentScope =
+                com.buukle.agent.common.context.TenantScopeHolder.currentOrFallback();
+        com.buukle.agent.common.context.TenantScope previousScope =
+                com.buukle.agent.common.context.TenantScopeHolder.get();
+        try {
+            if (tenantScope && currentScope != null && currentScope.selfOnly()) {
+                com.buukle.agent.common.context.TenantScopeHolder.start(
+                        new com.buukle.agent.common.context.TenantScope(
+                                currentScope.userId(), currentScope.username(),
+                                currentScope.currentTenantId(), currentScope.visibleTenantIds(),
+                                false, currentScope.manageableTenantIds(),
+                                currentScope.subtreeVisible()));
+            }
+            return lambdaQuery()
+                    .eq(AgentModelProvider::getOwnerScope, tenantScope ? OwnerScope.TENANT : OwnerScope.USER)
+                    .like(keyword != null && !keyword.isBlank(), AgentModelProvider::getName, keyword)
+                    .orderByDesc(AgentModelProvider::getCreatedAt)
+                    .page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
+                            Math.max(1, page), Math.max(1, size)))
+                    .convert(modelProviderConverter::toVO);
+        } finally {
+            if (previousScope == null) {
+                com.buukle.agent.common.context.TenantScopeHolder.clear();
+            } else {
+                com.buukle.agent.common.context.TenantScopeHolder.start(previousScope);
+            }
+        }
     }
 
     @Override
@@ -122,15 +152,46 @@ public class ModelProviderServiceImpl extends ServiceImpl<ModelProviderMapper, A
 
     @Override
     public ModelProviderVO updateProvider(Long id, CreateModelProviderDTO dto) {
+        AgentModelProvider existing = requireProvider(id);
+        requireTenantPermission(existing);
         AgentModelProvider provider = modelProviderConverter.toDO(dto);
         provider.setId(id);
+        provider.setOwnerScope(existing.getOwnerScope());
+        if (dto.getApiKeyId() == null) {
+            provider.setApiKeyId(existing.getApiKeyId());
+        }
         updateById(provider);
-        return modelProviderConverter.toVO(provider);
+        return modelProviderConverter.toVO(getById(id));
     }
 
     @Override
     public void deleteProvider(Long id) {
+        AgentModelProvider existing = requireProvider(id);
+        requireTenantPermission(existing);
+        if (baseMapper.countCurrentInstanceUsage(id) > 0) {
+            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.PARAM_INVALID,
+                    "The provider is used by the current tenant instance and cannot be deleted");
+        }
         removeById(id);
+    }
+
+    private AgentModelProvider requireProvider(Long id) {
+        AgentModelProvider provider = getById(id);
+        if (provider == null) {
+            throw new BizException(ModelErrorCode.PROVIDER_NOT_FOUND);
+        }
+        return provider;
+    }
+
+    /** Tenant-owned providers may only be maintained by tenant administrators. */
+    private void requireTenantPermission(AgentModelProvider provider) {
+        if (OwnerScope.isTenant(provider.getOwnerScope())
+                && !AuthContext.isSuperAdmin()
+                && !AuthContext.hasPermission(
+                        com.buukle.agent.common.constant.PermissionCodes.MODEL_PROVIDER_TENANT)) {
+            throw new BizException(com.buukle.agent.common.error.CommonErrorCode.FORBIDDEN,
+                    "Cannot operate on a tenant-owned provider");
+        }
     }
 
     @Override

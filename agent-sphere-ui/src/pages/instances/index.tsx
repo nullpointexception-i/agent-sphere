@@ -8,6 +8,7 @@ import {
   EditOutlined,
   EyeOutlined,
   PlusOutlined,
+  PushpinOutlined,
   UnorderedListOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
@@ -55,6 +56,8 @@ export default function InstanceList() {
   const canManageCaps = useCan('instance:capability:bind');
   const canBindModel = useCan('instance:bind-model');
   const canDelete = useCan('instance:delete');
+  const canCreateInstance = useCan(PERM.instanceCreate);
+  const canManageTenant = useCan(PERM.instanceTenant);
   const actionRef = useRef<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -71,7 +74,11 @@ export default function InstanceList() {
   const [submitting, setSubmitting] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [instanceRole, setInstanceRole] = useState('ALL');
-  const [scope, setScope] = useState<'BUSINESS' | 'SYSTEM'>('BUSINESS');
+  const [scope, setScope] = useState<'USER' | 'TENANT'>('USER');
+  const [currentTenantId, setCurrentTenantId] = useState<number | null>(null);
+  const [currentInstanceId, setCurrentInstanceId] = useState<number | null>(
+    null,
+  );
   const [timeRange, setTimeRange] = useState<
     [dayjs.Dayjs | null, dayjs.Dayjs | null]
   >([null, null]);
@@ -98,7 +105,7 @@ export default function InstanceList() {
       const res = await agentApi.instances.list({
         keyword: keyword || undefined,
         instanceRole,
-        scope: scope === 'SYSTEM' ? 'SYSTEM' : undefined,
+        scope: scope === 'TENANT' ? 'TENANT' : undefined,
         startTime: formatParamDate(timeRange[0]),
         endTime: formatParamDate(timeRange[1]?.endOf('day')),
         page: p,
@@ -122,6 +129,45 @@ export default function InstanceList() {
       .then(setProviders)
       .catch(() => {});
   }, []);
+
+  const loadCurrentTenant = () =>
+    agentApi.admin.tenants
+      .mine()
+      .then((rows: any[]) => {
+        const current = (rows || []).find((row) => row.isCurrent);
+        setCurrentTenantId(current?.tenantId ?? null);
+        setCurrentInstanceId(current?.currentInstanceId ?? null);
+      })
+      .catch(() => {});
+
+  useEffect(() => {
+    loadCurrentTenant();
+  }, []);
+
+  const setAsCurrent = async (record: any) => {
+    if (!currentTenantId) return;
+    try {
+      await agentApi.admin.tenants.setCurrentInstance(
+        currentTenantId,
+        record.id,
+      );
+      message.success(
+        intl.formatMessage({
+          id: 'pages.instances.currentUpdated',
+          defaultMessage: 'Current instance updated',
+        }),
+      );
+      await loadCurrentTenant();
+    } catch (error: any) {
+      message.error(
+        error?.message ||
+          intl.formatMessage({
+            id: 'pages.chat.saveFailed',
+            defaultMessage: 'Save failed',
+          }),
+      );
+    }
+  };
 
   const location = useLocation();
   useEffect(() => {
@@ -221,52 +267,48 @@ export default function InstanceList() {
               setDetailOpen(true);
             }}
           />
-          {(scope === 'SYSTEM' || !record.systemManaged) && (
-            <>
-              <Can code={PERM.instanceUpdate}>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => {
-                    setEditing(record);
-                    setInfoDrawerOpen(true);
-                  }}
-                />
-              </Can>
-              {canManageCaps && (
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<ApiOutlined />}
-                  onClick={() => {
-                    setEditing(record);
-                    setCapDrawerOpen(true);
-                  }}
-                />
-              )}
-              {canBindModel && (
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<CloudOutlined />}
-                  onClick={() => {
-                    setModelRouteInstance(record);
-                    setModelRouteModal(true);
-                  }}
-                />
-              )}
-              <Can code={PERM.instanceDelete}>
-                <Button
-                  type="link"
-                  danger
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  onClick={() => confirmDelete(record)}
-                />
-              </Can>
-            </>
+          <Can code={PERM.instanceUpdate}>
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditing(record);
+                setInfoDrawerOpen(true);
+              }}
+            />
+          </Can>
+          {canManageCaps && (
+            <Button
+              type="link"
+              size="small"
+              icon={<ApiOutlined />}
+              onClick={() => {
+                setEditing(record);
+                setCapDrawerOpen(true);
+              }}
+            />
           )}
+          {canBindModel && (
+            <Button
+              type="link"
+              size="small"
+              icon={<CloudOutlined />}
+              onClick={() => {
+                setModelRouteInstance(record);
+                setModelRouteModal(true);
+              }}
+            />
+          )}
+          <Can code={PERM.instanceDelete}>
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              onClick={() => confirmDelete(record)}
+            />
+          </Can>
         </>
       ),
     },
@@ -281,7 +323,7 @@ export default function InstanceList() {
         await agentApi.instances.update(editing.id, payload);
         message.success('Updated');
       } else {
-        await agentApi.instances.create(payload);
+        await agentApi.instances.create(payload, scope);
         message.success('Created');
       }
       setModalOpen(false);
@@ -364,6 +406,34 @@ export default function InstanceList() {
         padding: 0,
       }}
     >
+      {canManageTenant && (
+        <Tabs
+          activeKey={scope}
+          onChange={(key) => {
+            setScope(key as 'USER' | 'TENANT');
+            setPage(1);
+            setSelectMode(false);
+            setSelectedIds(new Set());
+          }}
+          items={[
+            {
+              key: 'USER',
+              label: intl.formatMessage({
+                id: 'pages.instances.userInstances',
+                defaultMessage: 'User Instances',
+              }),
+            },
+            {
+              key: 'TENANT',
+              label: intl.formatMessage({
+                id: 'pages.instances.tenantInstances',
+                defaultMessage: 'Tenant Instances',
+              }),
+            },
+          ]}
+          style={{ padding: '8px 24px 0', marginBottom: 0 }}
+        />
+      )}
       <div
         style={{
           display: 'flex',
@@ -504,27 +574,13 @@ export default function InstanceList() {
                 },
               ]}
             />
-            <Select
-              value={scope}
-              style={{ width: 160 }}
-              onChange={(value) => {
-                setScope(value);
-                setInstanceRole('ALL');
-                setSelectMode(false);
-                setSelectedIds(new Set());
-              }}
-              options={[
-                { value: 'BUSINESS', label: 'Business instances' },
-                { value: 'SYSTEM', label: 'System instances' },
-              ]}
-            />
             <Button
               icon={<ClearOutlined />}
               onClick={() => {
                 setKeyword('');
                 setTimeRange([null, null]);
                 setInstanceRole('ALL');
-                setScope('BUSINESS');
+                setScope('USER');
                 setTimeout(() => setRefreshKey((k) => k + 1), 0);
               }}
             />
@@ -553,8 +609,9 @@ export default function InstanceList() {
                 setViewMode(viewMode === 'card' ? 'table' : 'card')
               }
             />
-            {instanceRole !== 'ROUTER' && instanceRole !== 'WORKER' && (
-              <Can code={PERM.instanceCreate}>
+            {(scope === 'TENANT' ? canManageTenant : canCreateInstance) &&
+              instanceRole !== 'ROUTER' &&
+              instanceRole !== 'WORKER' && (
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
@@ -565,8 +622,7 @@ export default function InstanceList() {
                     setModalOpen(true);
                   }}
                 />
-              </Can>
-            )}
+              )}
           </>
         )}
       </div>
@@ -636,7 +692,7 @@ export default function InstanceList() {
                         })}
                       </span>
                     </div>,
-                    ...((scope === 'SYSTEM' || !item.systemManaged) && canEdit
+                    ...(canEdit
                       ? [
                           <div
                             key="edit"
@@ -661,7 +717,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(!item.systemManaged && canManageCaps
+                    ...(canManageCaps
                       ? [
                           <div
                             key="caps"
@@ -686,7 +742,7 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(!item.systemManaged && canBindModel
+                    ...(canBindModel
                       ? [
                           <div
                             key="model"
@@ -711,7 +767,31 @@ export default function InstanceList() {
                           </div>,
                         ]
                       : []),
-                    ...(!item.systemManaged && canDelete
+                    ...(scope === 'TENANT' &&
+                    item.instanceRole === 'GROUP_ROUTER' &&
+                    item.id !== currentInstanceId
+                      ? [
+                          <div
+                            key="current"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 2,
+                            }}
+                            onClick={() => setAsCurrent(item)}
+                          >
+                            <PushpinOutlined />
+                            <span style={{ fontSize: 11 }}>
+                              {intl.formatMessage({
+                                id: 'pages.instances.setCurrent',
+                                defaultMessage: 'Set current',
+                              })}
+                            </span>
+                          </div>,
+                        ]
+                      : []),
+                    ...(canDelete && item.id !== currentInstanceId
                       ? [
                           <div
                             key="delete"
@@ -777,12 +857,27 @@ export default function InstanceList() {
                           {item.businessType && (
                             <Tag color="blue">{item.businessType}</Tag>
                           )}
+                          {item.id === currentInstanceId && (
+                            <Tag color="gold">
+                              {intl.formatMessage({
+                                id: 'pages.instances.current',
+                                defaultMessage: 'Current',
+                              })}
+                            </Tag>
+                          )}
                         </div>
                       </div>
                     }
                     description={
                       <div className={styles.cardDesc}>
                         <div>{item.description || '-'}</div>
+                        <div style={{ color: 'rgba(0,0,0,0.45)' }}>
+                          {intl.formatMessage({
+                            id: 'pages.table.createdBy',
+                            defaultMessage: 'Created By',
+                          })}
+                          : {item.createdBy || '-'}
+                        </div>
                         <div className={styles.cardTime}>
                           {formatTime(item.createdAt)}
                         </div>
@@ -919,6 +1014,35 @@ export default function InstanceList() {
           >
             <Input maxLength={64} />
           </Form.Item>
+          {scope === 'TENANT' && !editing && (
+            <Form.Item
+              name="instanceRole"
+              label={intl.formatMessage({
+                id: 'pages.instances.role',
+                defaultMessage: 'Role',
+              })}
+              initialValue="CHAT"
+            >
+              <Select
+                options={[
+                  {
+                    value: 'CHAT',
+                    label: intl.formatMessage({
+                      id: 'pages.instances.roleChat',
+                      defaultMessage: 'Chat',
+                    }),
+                  },
+                  {
+                    value: 'GROUP_ROUTER',
+                    label: intl.formatMessage({
+                      id: 'pages.instances.roleGroupRouter',
+                      defaultMessage: 'Group Router',
+                    }),
+                  },
+                ]}
+              />
+            </Form.Item>
+          )}
           <Form.Item
             label={intl.formatMessage({
               id: 'pages.instances.image',

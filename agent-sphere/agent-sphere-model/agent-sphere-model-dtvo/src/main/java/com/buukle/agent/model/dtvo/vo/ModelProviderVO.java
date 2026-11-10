@@ -13,6 +13,8 @@ public class ModelProviderVO implements Serializable {
     private String config;
     private String status;
     private Long tenantId;
+    /** USER: private to the creator; TENANT: tenant-level resource. */
+    private String ownerScope;
     private String createdAt;
     private String createdBy;
     private String updatedBy;

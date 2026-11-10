@@ -2,14 +2,11 @@ package com.buukle.agent.superagent.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.ActorType;
-import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.context.SessionSurface;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
-import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
-import com.buukle.agent.instance.dtvo.enums.InstanceRole;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
@@ -33,7 +30,6 @@ import java.util.Objects;
 public class GroupChatBootstrapServiceImpl implements GroupChatBootstrapSpi {
 
     private static final String CHANNEL_KIND_IM = "IM";
-    private static final String BUSINESS_TYPE = "SUPER_AGENT";
 
     private final AgentThreadMapper threadMapper;
     private final InstanceSpi instanceSpi;
@@ -84,26 +80,20 @@ public class GroupChatBootstrapServiceImpl implements GroupChatBootstrapSpi {
     }
 
     private Long createGroupRouterSession(AgentThread thread, GroupChatBootstrapCommand command) {
-        ModelRouteVO systemRoute = routeSpi.findSystemRoute(command.tenantId());
-        if (systemRoute == null) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "tenant system model route is not configured");
-        }
-        Long modelRouteId = systemRoute.getId();
-        InstanceVO router = instanceSpi.findSystemByTenant(
-                command.tenantId(), InstanceRole.GROUP_ROUTER.value());
+        InstanceVO router = instanceSpi.findCurrentGroupRouter(command.tenantId());
         if (router == null) {
-            CreateInstanceDTO dto = new CreateInstanceDTO();
-            dto.setName("Group Router");
-            dto.setDescription("Tenant group-level dispatcher for Super-Agent");
-            dto.setModelRouteId(modelRouteId);
-            dto.setInstanceRole(InstanceRole.GROUP_ROUTER.value());
-            dto.setSystemManaged(true);
-            dto.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
-            dto.setBusinessType(BUSINESS_TYPE);
-            dto.setAllowConsoleSession(false);
-            dto.setAllowWidgetSession(false);
-            router = instanceSpi.createInstance(dto);
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "tenant current GROUP_ROUTER instance is not configured");
+        }
+        Long modelRouteId = router.getModelRouteId();
+        if (modelRouteId == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "tenant current instance has no model route");
+        }
+        ModelRouteVO route = routeSpi.getRoute(modelRouteId);
+        if (!Boolean.TRUE.equals(route.getApiKeyConfigured())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "tenant current provider API key is not configured");
         }
         CreateSessionDTO sessionDTO = new CreateSessionDTO();
         sessionDTO.setAgentInstanceId(router.getId());

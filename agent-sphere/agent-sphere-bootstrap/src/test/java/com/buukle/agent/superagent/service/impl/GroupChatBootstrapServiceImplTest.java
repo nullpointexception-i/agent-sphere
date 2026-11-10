@@ -79,12 +79,14 @@ class GroupChatBootstrapServiceImplTest {
             thread.setId(101L);
             return 1;
         });
-        ModelRouteVO systemRoute = new ModelRouteVO();
-        systemRoute.setId(77L);
-        given(routeSpi.findSystemRoute(3L)).willReturn(systemRoute);
+        ModelRouteVO routerRoute = new ModelRouteVO();
+        routerRoute.setId(77L);
+        routerRoute.setApiKeyConfigured(true);
         InstanceVO router = new InstanceVO();
         router.setId(9L);
-        given(instanceSpi.findSystemByTenant(3L, "GROUP_ROUTER")).willReturn(router);
+        router.setModelRouteId(77L);
+        given(instanceSpi.findCurrentGroupRouter(3L)).willReturn(router);
+        given(routeSpi.getRoute(77L)).willReturn(routerRoute);
         given(sessionSpi.createSession(any())).willAnswer(inv -> {
             SessionVO session = new SessionVO();
             session.setId(201L);
@@ -102,14 +104,35 @@ class GroupChatBootstrapServiceImplTest {
     }
 
     @Test
-    void groupWithoutTenantRouteFails() {
+    void groupWithoutCurrentInstanceFails() {
         given(threadMapper.selectOne(any())).willReturn(null);
         given(threadMapper.insert(any(AgentThread.class))).willAnswer(inv -> {
             AgentThread thread = inv.getArgument(0);
             thread.setId(101L);
             return 1;
         });
-        given(routeSpi.findSystemRoute(3L)).willReturn(null);
+        given(instanceSpi.findCurrentGroupRouter(3L)).willReturn(null);
+
+        assertThrows(BizException.class, () -> service().bootstrap(command("GROUP")));
+        verify(sessionSpi, never()).createSession(any());
+    }
+
+    @Test
+    void groupWithoutProviderApiKeyFails() {
+        given(threadMapper.selectOne(any())).willReturn(null);
+        given(threadMapper.insert(any(AgentThread.class))).willAnswer(inv -> {
+            AgentThread thread = inv.getArgument(0);
+            thread.setId(101L);
+            return 1;
+        });
+        InstanceVO router = new InstanceVO();
+        router.setId(9L);
+        router.setModelRouteId(77L);
+        given(instanceSpi.findCurrentGroupRouter(3L)).willReturn(router);
+        ModelRouteVO routerRoute = new ModelRouteVO();
+        routerRoute.setId(77L);
+        routerRoute.setApiKeyConfigured(false);
+        given(routeSpi.getRoute(77L)).willReturn(routerRoute);
 
         assertThrows(BizException.class, () -> service().bootstrap(command("GROUP")));
         verify(sessionSpi, never()).createSession(any());

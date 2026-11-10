@@ -117,9 +117,10 @@ export const agentApi = {
         params,
       }),
     get: (id: number) => request<any>(`${BASE}/instance/instances/${id}`),
-    create: (data: any) =>
+    create: (data: any, scope?: string) =>
       request<any>(`${BASE}/instance/instances`, {
         method: 'POST',
+        params: { scope },
         data,
       }),
     update: (id: number, data: any) =>
@@ -355,13 +356,22 @@ export const agentApi = {
       request<any[]>(`${BASE}/model/providers`, {
         params: { keyword },
       }),
-    page: (params: { page?: number; size?: number; keyword?: string }) =>
+    page: (params: {
+      page?: number;
+      size?: number;
+      keyword?: string;
+      scope?: string;
+    }) =>
       request<any>(`${BASE}/model/providers/page`, {
         params,
       }),
     get: (id: number) => request<any>(`${BASE}/model/providers/${id}`),
-    create: (data: any) =>
-      request<any>(`${BASE}/model/providers`, { method: 'POST', data }),
+    create: (data: any, scope?: string) =>
+      request<any>(`${BASE}/model/providers`, {
+        method: 'POST',
+        params: { scope },
+        data,
+      }),
     update: (id: number, data: any) =>
       request<any>(`${BASE}/model/providers/${id}`, { method: 'PUT', data }),
      delete: (id: number) =>
@@ -585,6 +595,11 @@ export const agentApi = {
         request<void>(`${BASE}/admin/tenants/${id}`, { method: 'DELETE' }),
       assign: (data: { userId: number; assignments: any[] }) =>
         request<any[]>(`${BASE}/admin/tenants/assign`, { method: 'POST', data }),
+      setCurrentInstance: (id: number, instanceId: number) =>
+        request<any>(`${BASE}/admin/tenants/${id}/current-instance`, {
+          method: 'PUT',
+          data: { instanceId },
+        }),
       switch: (tenantId: number) =>
         request<{ currentTenantId: number; currentTenantName?: string }>(
           `${BASE}/admin/tenants/switch`,

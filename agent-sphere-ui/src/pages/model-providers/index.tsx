@@ -8,20 +8,8 @@ import {
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useIntl, useLocation } from '@umijs/max';
-import {
-  App,
-  Button,
-  Card,
-  Form,
-  Input,
-  Modal,
-  Pagination,
-  Select,
-  Table,
-  Tag,
-} from 'antd';
+import { App, Button, Card, Form, Input, Modal, Pagination, Tag } from 'antd';
 import { useEffect, useRef, useState } from 'react';
-import { Can } from '@/components/Can';
 import { PERM } from '@/constants/permissions';
 import { useCan } from '@/hooks/usePermission';
 import { agentApi } from '@/services/agentSphere/api';
@@ -30,21 +18,17 @@ import ApiKeyDrawer from './drawers/ApiKeyDrawer';
 import ModelRouteDrawer from './drawers/ModelRouteDrawer';
 import { useStyles } from './style';
 
+type ProviderScope = 'USER' | 'TENANT';
+
 export default function ModelProviders() {
   const { message, modal } = App.useApp();
   const intl = useIntl();
   const { styles } = useStyles();
+  const [scope, setScope] = useState<ProviderScope>('USER');
   const [providers, setProviders] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [total, setTotal] = useState(0);
-  const [systemOpen, setSystemOpen] = useState(false);
-  const [systemLoading, setSystemLoading] = useState(false);
-  const [systemRoutes, setSystemRoutes] = useState<any[]>([]);
-  const [systemEdit, setSystemEdit] = useState<any>(null);
-  const [systemDraft, setSystemDraft] = useState<any>({});
-  const [systemSaving, setSystemSaving] = useState(false);
-  const [providerPool, setProviderPool] = useState<any[]>([]);
 
   const [providerModal, setProviderModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<any>(null);
@@ -57,12 +41,17 @@ export default function ModelProviders() {
   const [keyDrawerOpen, setKeyDrawerOpen] = useState(false);
   const [routeDrawerOpen, setRouteDrawerOpen] = useState(false);
 
-  const canEditProvider = useCan('model:provider:update');
-  const canDeleteProvider = useCan('model:provider:delete');
+  const canCreateProvider = useCan(PERM.modelProviderCreate);
+  const canTenantProvider = useCan(PERM.modelProviderTenant);
+  const canEditProvider = useCan(PERM.modelProviderUpdate);
+  const canDeleteProvider = useCan(PERM.modelProviderDelete);
+
+  const tenantScope = scope === 'TENANT';
+  const canCreateInScope = tenantScope ? canTenantProvider : canCreateProvider;
 
   const loadProviders = (nextPage = page, nextSize = pageSize) =>
     agentApi.modelProviders
-      .page({ page: nextPage, size: nextSize })
+      .page({ page: nextPage, size: nextSize, scope })
       .then((result: any) => {
         setProviders(result?.records || []);
         setTotal(Number(result?.total || 0));
@@ -73,7 +62,7 @@ export default function ModelProviders() {
 
   useEffect(() => {
     loadProviders(page, pageSize);
-  }, [page, pageSize]);
+  }, [page, pageSize, scope]);
 
   useEffect(() => {
     if (autoOpenedRef.current || providers.length === 0) return;
@@ -81,7 +70,7 @@ export default function ModelProviders() {
     const providerId = params.get('openApiKeys');
     if (providerId) {
       const id = Number(providerId);
-      if (!isNaN(id)) {
+      if (!Number.isNaN(id)) {
         const provider = providers.find((p: any) => p.id === id);
         if (provider) {
           setDrawerProvider(provider);
@@ -92,65 +81,6 @@ export default function ModelProviders() {
     }
   }, [location.search, providers]);
 
-  const openSystemRoutes = async () => {
-    setSystemOpen(true);
-    setSystemLoading(true);
-    try {
-      const [routes, providers] = await Promise.all([
-        agentApi.routes.listSystem(),
-        agentApi.modelProviders.list(),
-      ]);
-      setSystemRoutes(Array.isArray(routes) ? routes : []);
-      setProviderPool(Array.isArray(providers) ? providers : []);
-    } catch {
-      setSystemRoutes([]);
-    } finally {
-      setSystemLoading(false);
-    }
-  };
-
-  const beginEditSystemRoute = (route: any) => {
-    setSystemEdit(route);
-    setSystemDraft({
-      providerId: route.providerId,
-      modelName: route.modelName,
-    });
-  };
-
-  const saveSystemRoute = async () => {
-    if (!systemEdit) return;
-    setSystemSaving(true);
-    try {
-      await agentApi.routes.update(systemEdit.id, {
-        providerId: systemDraft.providerId,
-        modelName: systemDraft.modelName,
-        maxInputTokens: systemEdit.maxInputTokens,
-        maxOutputTokens: systemEdit.maxOutputTokens,
-        company: systemEdit.company,
-        completionProtocol: systemEdit.completionProtocol,
-        weight: systemEdit.weight,
-      });
-      message.success(
-        intl.formatMessage({
-          id: 'pages.save.success',
-          defaultMessage: 'Saved',
-        }),
-      );
-      setSystemEdit(null);
-      await openSystemRoutes();
-    } catch (error: any) {
-      message.error(
-        error?.message ||
-          intl.formatMessage({
-            id: 'pages.save.failed',
-            defaultMessage: 'Save failed',
-          }),
-      );
-    } finally {
-      setSystemSaving(false);
-    }
-  };
-
   const submitProvider = async () => {
     setSubmitting(true);
     try {
@@ -159,7 +89,7 @@ export default function ModelProviders() {
         await agentApi.modelProviders.update(editingProvider.id, values);
         message.success('Updated');
       } else {
-        await agentApi.modelProviders.create(values);
+        await agentApi.modelProviders.create(values, scope);
         message.success('Created');
       }
       setProviderModal(false);
@@ -171,31 +101,52 @@ export default function ModelProviders() {
     }
   };
 
+  const tabItems =
+    tenantScope || canTenantProvider
+      ? [
+          {
+            key: 'USER',
+            tab: intl.formatMessage({
+              id: 'pages.models.userProviders',
+              defaultMessage: 'User Providers',
+            }),
+          },
+          {
+            key: 'TENANT',
+            tab: intl.formatMessage({
+              id: 'pages.models.tenantProviders',
+              defaultMessage: 'Tenant Providers',
+            }),
+          },
+        ]
+      : undefined;
+
   return (
     <PageContainer
       title={false}
+      tabList={tabItems}
+      tabActiveKey={scope}
+      onTabChange={(key) => {
+        setScope(key as ProviderScope);
+        setPage(1);
+      }}
       extra={
-        <>
-          <Button onClick={openSystemRoutes} style={{ marginRight: 8 }}>
-            System routes
+        canCreateInScope ? (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingProvider(null);
+              providerForm.resetFields();
+              setProviderModal(true);
+            }}
+          >
+            {intl.formatMessage({
+              id: 'pages.modal.newProvider',
+              defaultMessage: 'New Provider',
+            })}
           </Button>
-          <Can code={PERM.modelProviderCreate}>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditingProvider(null);
-                providerForm.resetFields();
-                setProviderModal(true);
-              }}
-            >
-              {intl.formatMessage({
-                id: 'pages.modal.newProvider',
-                defaultMessage: 'New Provider',
-              })}
-            </Button>
-          </Can>
-        </>
+        ) : undefined
       }
     >
       <div className={styles.cardGrid}>
@@ -307,9 +258,19 @@ export default function ModelProviders() {
                           ),
                           okType: 'danger',
                           onOk: async () => {
-                            await agentApi.modelProviders.delete(item.id);
-                            message.success('Deleted');
-                            loadProviders();
+                            try {
+                              await agentApi.modelProviders.delete(item.id);
+                              message.success('Deleted');
+                              loadProviders();
+                            } catch (error: any) {
+                              message.error(
+                                error?.message ||
+                                  intl.formatMessage({
+                                    id: 'pages.delete.failed',
+                                    defaultMessage: 'Delete failed',
+                                  }),
+                              );
+                            }
                           },
                         });
                       }}
@@ -338,6 +299,13 @@ export default function ModelProviders() {
               description={
                 <div className={styles.cardDesc}>
                   <div>{item.baseUrl || '-'}</div>
+                  <div style={{ color: 'rgba(0,0,0,0.45)' }}>
+                    {intl.formatMessage({
+                      id: 'pages.table.createdBy',
+                      defaultMessage: 'Created By',
+                    })}
+                    : {item.createdBy || '-'}
+                  </div>
                 </div>
               }
             />
@@ -518,88 +486,6 @@ export default function ModelProviders() {
         providerId={drawerProvider?.id ?? null}
         onClose={() => setRouteDrawerOpen(false)}
       />
-
-      <Modal
-        open={systemOpen}
-        title="System model routes"
-        width={880}
-        footer={null}
-        onCancel={() => {
-          setSystemOpen(false);
-          setSystemEdit(null);
-        }}
-        destroyOnHidden
-      >
-        <Table
-          rowKey="id"
-          size="small"
-          loading={systemLoading}
-          dataSource={systemRoutes}
-          pagination={false}
-          columns={[
-            { title: 'Tenant', dataIndex: 'tenantId', width: 80 },
-            { title: 'Model', dataIndex: 'modelName' },
-            { title: 'Provider', dataIndex: 'providerName', width: 180 },
-            {
-              title: 'Key',
-              dataIndex: 'apiKeyConfigured',
-              width: 70,
-              render: (value: any) => (value ? 'OK' : '-'),
-            },
-            { title: 'Updated', dataIndex: 'updatedAt', width: 170 },
-            {
-              title: '',
-              width: 70,
-              render: (_: any, row: any) => (
-                <Button
-                  type="link"
-                  size="small"
-                  onClick={() => beginEditSystemRoute(row)}
-                >
-                  Edit
-                </Button>
-              ),
-            },
-          ]}
-        />
-      </Modal>
-
-      <Modal
-        open={Boolean(systemEdit)}
-        title="Edit system route"
-        onCancel={() => setSystemEdit(null)}
-        onOk={saveSystemRoute}
-        confirmLoading={systemSaving}
-        destroyOnHidden
-      >
-        <div style={{ marginBottom: 8, color: '#8b8b93', fontSize: 12 }}>
-          Tenant #{systemEdit?.tenantId}
-        </div>
-        <Input
-          value={systemDraft.modelName}
-          placeholder="Model name"
-          style={{ marginBottom: 8 }}
-          onChange={(event) =>
-            setSystemDraft({ ...systemDraft, modelName: event.target.value })
-          }
-        />
-        <Select
-          style={{ width: '100%' }}
-          value={systemDraft.providerId}
-          onChange={(value) =>
-            setSystemDraft({ ...systemDraft, providerId: value })
-          }
-          options={providerPool
-            .filter(
-              (provider) =>
-                Number(provider.tenantId) === Number(systemEdit?.tenantId),
-            )
-            .map((provider) => ({
-              value: provider.id,
-              label: `${provider.name} (#${provider.id})`,
-            }))}
-        />
-      </Modal>
     </PageContainer>
   );
 }

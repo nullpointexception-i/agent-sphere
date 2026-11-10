@@ -23,6 +23,8 @@ public final class SystemConfigKeys {
     public static final String PLUGIN_MIN_EXTENSION_VERSION = "plugin.min-extension-version";
     /** Default resource template (JSON array, used when initializing a new user; empty means no resources are initialized) */
     public static final String USER_RESOURCE_TEMPLATE = "user.resource-template";
+    /** Default resources created together with a tenant (JSON array, tenant-owned resources) */
+    public static final String TENANT_RESOURCE_TEMPLATE = "tenant.resource-template";
     /** Global LLM sampling defaults (JSON, same shape as instance/completions config; the global fallback for agent flows) */
     public static final String LLM_DEFAULTS_CONFIG = "llm.defaults-config";
     /** Kill switch for historical session cleanup ("true"/"false"): cleanup hard-deletes irreversibly, so turn this off first when something goes wrong — no redeploy needed */

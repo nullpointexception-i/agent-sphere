@@ -1,7 +1,9 @@
 package com.buukle.agent.instance.service.converter;
 
 
-import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.constant.OwnerScope;
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
 import com.buukle.agent.instance.dtvo.enums.InstanceEnum;
@@ -32,7 +34,7 @@ public class InstanceConverter {
         vo.setMaxLoopCount(instance.getMaxLoopCount());
         vo.setCompletionProtocol(instance.getCompletionProtocol());
         vo.setInstanceRole(instance.getInstanceRole());
-        vo.setSystemManaged(instance.getSystemManaged());
+        vo.setOwnerScope(instance.getOwnerScope());
         vo.setConfig(instance.getConfig());
         vo.setCreatedAt(instance.getCreatedAt() != null ? instance.getCreatedAt().format(DTF) : null);
         vo.setCreatedBy(instance.getCreatedBy());
@@ -64,7 +66,9 @@ public class InstanceConverter {
         instance.setConfig(normalizeConfig(dto.getConfig()));
         instance.setInstanceRole(dto.getInstanceRole() == null || dto.getInstanceRole().isBlank()
                 ? InstanceRole.CHAT.value() : InstanceRole.normalize(dto.getInstanceRole()));
-        instance.setSystemManaged(Boolean.TRUE.equals(dto.getSystemManaged()));
+        instance.setOwnerScope(dto.getOwnerScope() == null || dto.getOwnerScope().isBlank()
+                ? OwnerScope.USER
+                : OwnerScope.normalize(dto.getOwnerScope()));
         instance.setStatus(InstanceEnum.STATUS_ENABLED);
         return instance;
     }

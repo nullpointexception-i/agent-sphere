@@ -3,6 +3,7 @@ package com.buukle.agent.superagent.service.impl;
 
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.constant.CompletionProtocol;
+import com.buukle.agent.common.constant.OwnerScope;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.dict.SystemDicConstants;
 import com.buukle.agent.common.dict.SystemDicEntry;
@@ -91,7 +92,7 @@ public class SuperAgentServiceImpl implements SuperAgentService {
                 position.nameEn(), dto.getDescription(), agentRouterPromptService.resolve()));
         routerDTO.setModelRouteId(modelRouteId);
         routerDTO.setInstanceRole(ROLE_ROUTER);
-        routerDTO.setSystemManaged(false);
+        routerDTO.setOwnerScope(OwnerScope.USER);
         routerDTO.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
         routerDTO.setMaxLoopCount(routerMaxLoopCount);
         routerDTO.setBusinessType(BUSINESS_TYPE);
@@ -106,7 +107,7 @@ public class SuperAgentServiceImpl implements SuperAgentService {
                 position.nameEn(), dto.getDescription()));
         workerDTO.setModelRouteId(modelRouteId);
         workerDTO.setInstanceRole(ROLE_WORKER);
-        workerDTO.setSystemManaged(false);
+        workerDTO.setOwnerScope(OwnerScope.USER);
         workerDTO.setCompletionProtocol(CompletionProtocol.STRICT_FINISH.name());
         workerDTO.setMaxLoopCount(workerDefaultLoopLimit);
         workerDTO.setBusinessType(BUSINESS_TYPE);
