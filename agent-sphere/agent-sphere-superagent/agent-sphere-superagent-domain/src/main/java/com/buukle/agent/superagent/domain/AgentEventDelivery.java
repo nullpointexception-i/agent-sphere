@@ -22,6 +22,7 @@ public class AgentEventDelivery {
     private Long superAgentId;
     private Long targetSessionId;
     private Long routerRunId;
+    private Long targetTaskId;
     private String decision;
     private String reason;
     private String status;

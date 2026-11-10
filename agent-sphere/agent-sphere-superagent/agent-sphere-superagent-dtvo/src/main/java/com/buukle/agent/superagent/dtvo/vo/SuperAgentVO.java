@@ -9,6 +9,8 @@ public class SuperAgentVO implements Serializable {
     private Long id;
     private Long ownerUserId;
     private String agentKey;
+    private String agentType;
+    private Long localRuntimeId;
     private String name;
     private String description;
     private Boolean publicVisible;

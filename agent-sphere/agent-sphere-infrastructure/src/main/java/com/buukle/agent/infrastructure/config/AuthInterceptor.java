@@ -49,7 +49,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             ApiPaths.DOCUMENTS_SHARED,
             ApiPaths.PUBLIC_SHARES,
             ApiPaths.SYSTEM_CONFIG_PUBLIC,
-            ApiPaths.PLUGIN_DOWNLOAD);
+            ApiPaths.PLUGIN_DOWNLOAD,
+            ApiPaths.LOCAL_RUNTIME_DEVICE);
     private static final String EXTERNAL_API_PREFIX = ApiPrefix.API;
     private final UserMapper userMapper;
     private final CacheService cacheService;

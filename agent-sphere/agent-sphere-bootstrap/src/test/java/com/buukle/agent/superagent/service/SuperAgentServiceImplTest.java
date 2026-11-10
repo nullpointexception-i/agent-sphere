@@ -16,6 +16,7 @@ import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.dtvo.dto.CreateSuperAgentDTO;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentVO;
+import com.buukle.agent.superagent.repository.AgentLocalRuntimeMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.impl.SuperAgentServiceImpl;
 import org.junit.jupiter.api.AfterEach;
@@ -51,13 +52,15 @@ class SuperAgentServiceImplTest {
     RouteSpi routeSpi;
     @Mock
     SystemDicSpi systemDicSpi;
+    @Mock
+    AgentLocalRuntimeMapper localRuntimeMapper;
 
     SuperAgentServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new SuperAgentServiceImpl(superAgentMapper, instanceSpi,
-                agentRouterPromptService, routeSpi, systemDicSpi);
+                agentRouterPromptService, routeSpi, systemDicSpi, localRuntimeMapper);
         ReflectionTestUtils.setField(service, "routerMaxLoopCount", 64);
         ReflectionTestUtils.setField(service, "workerDefaultLoopLimit", 128);
         AuthContext.setUserId(1L);
@@ -118,10 +121,10 @@ class SuperAgentServiceImplTest {
         assertFalse(workerDTO.getAllowConsoleSession());
         assertFalse(workerDTO.getAllowWidgetSession());
 
-        ArgumentCaptor<AgentSuperAgent> updated = ArgumentCaptor.forClass(AgentSuperAgent.class);
-        verify(superAgentMapper).updateById(updated.capture());
-        assertEquals(11L, updated.getValue().getRouterInstanceId());
-        assertEquals(12L, updated.getValue().getWorkerInstanceId());
+        ArgumentCaptor<AgentSuperAgent> inserted = ArgumentCaptor.forClass(AgentSuperAgent.class);
+        verify(superAgentMapper).insert(inserted.capture());
+        assertEquals(11L, inserted.getValue().getRouterInstanceId());
+        assertEquals(12L, inserted.getValue().getWorkerInstanceId());
 
         assertEquals(11L, result.getRouterInstanceId());
         assertEquals(12L, result.getWorkerInstanceId());
@@ -129,9 +132,6 @@ class SuperAgentServiceImplTest {
 
     @Test
     void create_rejectsUnknownPosition() {
-        ModelRouteVO defaultRoute = new ModelRouteVO();
-        defaultRoute.setId(5L);
-        when(routeSpi.getDefaultRoute()).thenReturn(defaultRoute);
         when(systemDicSpi.findActive(SystemDicConstants.TYPE_POSITION, "NOPE")).thenReturn(null);
         CreateSuperAgentDTO dto = new CreateSuperAgentDTO();
         dto.setName("Support");

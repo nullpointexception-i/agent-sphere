@@ -9,6 +9,7 @@ import java.io.Serializable;
 public class SuperAgentPublicVO implements Serializable {
     private Long id;
     private Long ownerUserId;
+    private String agentType;
     private String name;
     private String description;
     private String positionCode;

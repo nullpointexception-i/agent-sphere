@@ -16,12 +16,16 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.spi.RouteSpi;
+import com.buukle.agent.superagent.domain.AgentLocalRuntime;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.dtvo.dto.CreateSuperAgentDTO;
+import com.buukle.agent.superagent.dtvo.enums.AgentType;
+import com.buukle.agent.superagent.dtvo.enums.LocalRuntimeStatus;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentInstancesVO;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentPublicVO;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentVO;
+import com.buukle.agent.superagent.repository.AgentLocalRuntimeMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.AgentRouterPromptService;
 import com.buukle.agent.superagent.service.SuperAgentService;
@@ -38,6 +42,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Slf4j
@@ -55,6 +60,7 @@ public class SuperAgentServiceImpl implements SuperAgentService {
     private final AgentRouterPromptService agentRouterPromptService;
     private final RouteSpi routeSpi;
     private final SystemDicSpi systemDicSpi;
+    private final AgentLocalRuntimeMapper localRuntimeMapper;
 
     @Value("${buukle.agent.super-agent.agent-router.max-loop-count:64}")
     private Integer routerMaxLoopCount;
@@ -65,17 +71,13 @@ public class SuperAgentServiceImpl implements SuperAgentService {
     @Transactional
     public SuperAgentVO create(CreateSuperAgentDTO dto) {
         Long userId = currentUserId();
-        ModelRouteVO defaultRoute = routeSpi.getDefaultRoute();
-        if (defaultRoute == null) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "default model route is not configured; complete resource initialization first");
-        }
-        Long modelRouteId = defaultRoute.getId();
         SystemDicEntry position = requirePosition(dto.getPositionCode());
+        String agentType = normalizeAgentType(dto.getAgentType());
 
         AgentSuperAgent agent = new AgentSuperAgent();
         agent.setOwnerUserId(userId);
         agent.setAgentKey("agent-" + UUID.randomUUID().toString().substring(0, 8));
+        agent.setAgentType(agentType);
         agent.setName(dto.getName());
         agent.setDescription(dto.getDescription());
         agent.setPositionCode(position.code());
@@ -83,7 +85,32 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         agent.setPositionNameEn(position.nameEn());
         agent.setConfig(dto.getConfig());
         agent.setStatus(SuperAgentStatus.ACTIVE);
-        superAgentMapper.insert(agent);
+
+        if (AgentType.LOCAL.equals(agentType)) {
+            Long runtimeId = dto.getLocalRuntimeId();
+            if (runtimeId == null) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "localRuntimeId is required for a local avatar");
+            }
+            AgentLocalRuntime runtime = localRuntimeMapper.selectById(runtimeId);
+            if (runtime == null || !LocalRuntimeStatus.ACTIVE.equals(runtime.getStatus())) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "local runtime not found or disabled");
+            }
+            if (!userId.equals(runtime.getOwnerUserId())) {
+                throw new BizException(CommonErrorCode.FORBIDDEN);
+            }
+            agent.setLocalRuntimeId(runtimeId);
+            superAgentMapper.insert(agent);
+            return toVO(agent);
+        }
+
+        ModelRouteVO defaultRoute = routeSpi.getDefaultRoute();
+        if (defaultRoute == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "default model route is not configured; complete resource initialization first");
+        }
+        Long modelRouteId = defaultRoute.getId();
 
         CreateInstanceDTO routerDTO = new CreateInstanceDTO();
         routerDTO.setName(dto.getName() + " Router");
@@ -117,7 +144,7 @@ public class SuperAgentServiceImpl implements SuperAgentService {
 
         agent.setRouterInstanceId(routerInstance.getId());
         agent.setWorkerInstanceId(workerInstance.getId());
-        superAgentMapper.updateById(agent);
+        superAgentMapper.insert(agent);
         return toVO(agent);
     }
 
@@ -301,6 +328,7 @@ public class SuperAgentServiceImpl implements SuperAgentService {
             SuperAgentPublicVO vo = new SuperAgentPublicVO();
             vo.setId(agent.getId());
             vo.setOwnerUserId(agent.getOwnerUserId());
+            vo.setAgentType(agent.getAgentType());
             vo.setName(agent.getName());
             vo.setDescription(agent.getDescription());
             vo.setPositionCode(agent.getPositionCode());
@@ -353,6 +381,9 @@ public class SuperAgentServiceImpl implements SuperAgentService {
 
     /** Role / scope / position edits must be reflected in both managed instances' prompts. */
     private void syncPrompts(AgentSuperAgent agent) {
+        if (AgentType.LOCAL.equals(agent.getAgentType())) {
+            return;
+        }
         if (agent.getPositionNameEn() == null || agent.getPositionNameEn().isBlank()) {
             return;
         }
@@ -397,6 +428,8 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         vo.setId(agent.getId());
         vo.setOwnerUserId(agent.getOwnerUserId());
         vo.setAgentKey(agent.getAgentKey());
+        vo.setAgentType(agent.getAgentType());
+        vo.setLocalRuntimeId(agent.getLocalRuntimeId());
         vo.setName(agent.getName());
         vo.setDescription(agent.getDescription());
         vo.setPublicVisible(Boolean.TRUE.equals(agent.getPublicVisible()));
@@ -409,6 +442,16 @@ public class SuperAgentServiceImpl implements SuperAgentService {
         vo.setStatus(agent.getStatus());
         vo.setCreatedAt(agent.getCreatedAt() == null ? null : agent.getCreatedAt().format(DTF));
         return vo;
+    }
+
+    private static String normalizeAgentType(String value) {
+        String type = value == null || value.isBlank()
+                ? AgentType.CLOUD : value.trim().toUpperCase(Locale.ROOT);
+        if (!AgentType.CLOUD.equals(type) && !AgentType.LOCAL.equals(type)) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "agentType must be CLOUD or LOCAL");
+        }
+        return type;
     }
 
     private static Long currentUserId() {

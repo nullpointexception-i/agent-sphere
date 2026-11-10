@@ -21,6 +21,8 @@ public final class ApiPaths {
     public static final String SYSTEM_CONFIG_PUBLIC = ApiPrefix.SYSTEM + "/config/public";
     public static final String PLUGIN_DOWNLOAD = ApiPrefix.SYSTEM + "/config/plugin/download";
     public static final String IM_CONVERSATIONS = ApiPrefix.IM + "/conversations/";
+    /** Device-token authenticated local runtime endpoints. */
+    public static final String LOCAL_RUNTIME_DEVICE = ApiPrefix.V1 + "/local-runtimes/me";
 
     private ApiPaths() {
     }

@@ -14,6 +14,11 @@ public class CreateSuperAgentDTO implements Serializable {
     private String name;
     @Size(max = 512)
     private String description;
+    /** CLOUD (default) or LOCAL. */
+    @Size(max = 16)
+    private String agentType;
+    /** Required when agentType=LOCAL. */
+    private Long localRuntimeId;
     /** Role dictionary code (system_dic.type=POSITION); required on creation. */
     @Size(max = 64)
     private String positionCode;

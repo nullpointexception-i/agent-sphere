@@ -20,6 +20,9 @@ public class AgentSuperAgent {
     private Long tenantId;
     private Long ownerUserId;
     private String agentKey;
+    /** CLOUD (server instances) or LOCAL (desktop runtime). */
+    private String agentType;
+    private Long localRuntimeId;
     private String name;
     private String description;
     /** Exposed to same-tenant members when they create a group chat. */
