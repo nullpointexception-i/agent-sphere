@@ -54,7 +54,7 @@ class AgentRouterSessionTest {
         AgentThread thread = new AgentThread();
         thread.setId(THREAD_ID);
         thread.setRouterSessionId(100L); // first avatar's legacy pointer
-        thread.setCreatedBy("owner");
+        thread.setCreatedBy("testx003");
         when(sessionSpi.findRouterSession(THREAD_ID, 9L)).thenReturn(null);
         when(threadMapper.selectById(THREAD_ID)).thenReturn(thread);
         SessionVO created = new SessionVO();
@@ -71,6 +71,8 @@ class AgentRouterSessionTest {
         verify(sessionSpi).createSession(captor.capture());
         assertEquals(9L, captor.getValue().getSuperAgentId());
         assertEquals(71L, captor.getValue().getAgentInstanceId());
+        // The router session belongs to the avatar owner, not the group message sender.
+        assertEquals("elvin", captor.getValue().getCreatedBy());
         // The legacy pointer is not overwritten by the second avatar.
         assertEquals(100L, thread.getRouterSessionId());
     }
@@ -80,6 +82,7 @@ class AgentRouterSessionTest {
         agent.setId(id);
         agent.setName("Agent " + id);
         agent.setRouterInstanceId(routerInstanceId);
+        agent.setCreatedBy("elvin");
         return agent;
     }
 

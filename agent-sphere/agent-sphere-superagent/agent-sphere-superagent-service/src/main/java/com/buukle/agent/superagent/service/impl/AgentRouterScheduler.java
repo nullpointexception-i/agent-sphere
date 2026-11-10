@@ -12,6 +12,7 @@ import com.buukle.agent.instance.dtvo.dto.CreateSessionDTO;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
+import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.domain.AgentEvent;
@@ -308,7 +309,7 @@ public class AgentRouterScheduler {
             dto.setSessionType(SessionType.ROUTER);
             dto.setSuperAgentId(agent.getId());
             dto.setThreadId(threadId);
-            dto.setCreatedBy(thread == null ? null : thread.getCreatedBy());
+            dto.setCreatedBy(agentOwnerUsername(agent, thread));
             SessionVO session = sessionSpi.createSession(dto);
             if (session == null || session.getId() == null) {
                 return null;
@@ -332,8 +333,28 @@ public class AgentRouterScheduler {
         }
     }
 
-    private static String routerSessionTitle(AgentSuperAgent agent, AgentThread thread) {
-        String suffix = thread == null || thread.getTitle() == null || thread.getTitle().isBlank()
+    /**
+     * A Router session belongs to the avatar's owner, not to the person who sent the group
+     * message, otherwise the sender's Router tab would expose someone else's avatar session.
+     */
+    private String agentOwnerUsername(AgentSuperAgent agent, AgentThread thread) {
+        if (agent.getOwnerUserId() != null) {
+            UserSpi userSpi = userSpiProvider.getIfAvailable();
+            if (userSpi != null) {
+                UserVO owner = userSpi.getByUserId(agent.getOwnerUserId());
+                if (owner != null && owner.getUsername() != null
+                        && !owner.getUsername().isBlank()) {
+                    return owner.getUsername();
+                }
+            }
+        }
+        if (agent.getCreatedBy() != null && !agent.getCreatedBy().isBlank()) {
+            return agent.getCreatedBy();
+        }
+        return thread == null ? null : thread.getCreatedBy();
+    }
+
+    private static String routerSessionTitle(AgentSuperAgent agent, AgentThread thread) {        String suffix = thread == null || thread.getTitle() == null || thread.getTitle().isBlank()
                 ? "Conversation" : thread.getTitle();
         String title = (agent.getName() == null ? "" : agent.getName()) + " · " + suffix;
         return title.length() <= MAX_TITLE ? title : title.substring(0, MAX_TITLE);
