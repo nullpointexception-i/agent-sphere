@@ -81,6 +81,8 @@ export interface ImMessage {
   senderName?: string;
   /** AGENT senders only: the member who owns the avatar. */
   senderOwnerName?: string;
+  /** AGENT senders only: the avatar belongs to the current viewer. */
+  ownAgent?: boolean;
 }
 
 /** A digital avatar available in a conversation; groups resolve these live. */

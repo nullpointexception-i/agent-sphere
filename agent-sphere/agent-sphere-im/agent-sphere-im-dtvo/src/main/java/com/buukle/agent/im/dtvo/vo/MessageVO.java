@@ -22,4 +22,6 @@ public class MessageVO implements Serializable {
     private String senderName;
     /** For AGENT senders: the member this avatar belongs to. */
     private String senderOwnerName;
+    /** For AGENT senders: true when the avatar belongs to the current viewer. */
+    private Boolean ownAgent;
 }

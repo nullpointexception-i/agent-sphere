@@ -2887,6 +2887,11 @@ function ChatDetail({
                 (sender
                   ? isSameUser(sender, me)
                   : Number(item.senderId) === Number(me?.id));
+              // Backend marks agent messages whose avatar belongs to the viewer; keep them on
+              // the user's side of the wall while retaining the agent name + owner label.
+              const ownAgent =
+                item.senderType === 'AGENT' && item.ownAgent === true;
+              const alignRight = self || ownAgent;
               // Avatar messages carry a server-resolved name + owner: the wall
               // reads "Agent (owner)" even though avatars are no longer participants.
               const serverLabel = item.senderName
@@ -2943,7 +2948,7 @@ function ChatDetail({
                   }}
                 >
                   <div
-                    className={`${styles.messageRow} ${self ? styles.messageRowSelf : ''}`}
+                    className={`${styles.messageRow} ${alignRight ? styles.messageRowSelf : ''}`}
                   >
                     <Avatar
                       size={32}
@@ -2953,10 +2958,10 @@ function ChatDetail({
                       {initials(avatarName)}
                     </Avatar>
                     <div
-                      className={`${styles.bubbleWrap} ${self ? styles.bubbleWrapSelf : ''}`}
+                      className={`${styles.bubbleWrap} ${alignRight ? styles.bubbleWrapSelf : ''}`}
                     >
                       <div
-                        className={`${styles.messageMeta} ${self ? styles.messageMetaSelf : ''}`}
+                        className={`${styles.messageMeta} ${alignRight ? styles.messageMetaSelf : ''}`}
                       >
                         {self ? tw('chat.me', 'Me') : senderName}
                         {' · '}

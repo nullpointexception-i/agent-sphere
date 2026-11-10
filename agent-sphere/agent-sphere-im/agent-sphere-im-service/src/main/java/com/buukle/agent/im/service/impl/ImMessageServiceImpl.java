@@ -733,6 +733,7 @@ public class ImMessageServiceImpl implements ImMessageService {
                 owners = userSpi.identityMap(ownerIds);
             }
         }
+        Long viewerId = AuthContext.getUserId();
         for (MessageVO row : rows) {
             ChatAgentIdentity identity = row.getSenderId() == null
                     ? null : agents.get(row.getSenderId());
@@ -741,6 +742,8 @@ public class ImMessageServiceImpl implements ImMessageService {
             }
             row.setSenderName(identity.name());
             row.setSenderOwnerName(userLabel(owners.get(identity.ownerUserId())));
+            row.setOwnAgent(viewerId != null && identity.ownerUserId() != null
+                    && viewerId.equals(identity.ownerUserId()));
         }
     }
 
