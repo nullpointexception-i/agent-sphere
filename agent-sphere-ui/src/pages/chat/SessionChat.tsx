@@ -2229,6 +2229,10 @@ export function SessionChat(props: SessionChatProps = {}) {
                 onConversationScopeChange={(next) => {
                   persistChatPreference(CHAT_SCOPE_STORAGE_KEY, next);
                   setConversationScope(next);
+                  if (next === 'USER' && conversationScope !== 'USER') {
+                    persistChatPreference(CHAT_ROLE_STORAGE_KEY, 'USER');
+                    setUserRole('USER');
+                  }
                   resetChatView();
                 }}
                 userRole={userRole}

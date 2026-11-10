@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import { Conversations } from '@ant-design/x';
 import { useIntl } from '@umijs/max';
-import { App, Button, Input, Modal, Segmented, Tabs } from 'antd';
+import { App, Button, Input, Modal, Segmented, Tabs, Tag } from 'antd';
 import { useMemo, useState } from 'react';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
@@ -187,8 +187,48 @@ export default function Sidebar({
                   {selectedIds.has(s.id) ? '✓' : '○'}
                 </span>
               )}
-              <span className="conv-label" title={s.title}>
-                {s.title}
+              <span
+                className="conv-label"
+                title={s.title}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  minWidth: 0,
+                }}
+              >
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '100%',
+                  }}
+                >
+                  {s.title}
+                </span>
+                {(s.agentInstanceName || s.agentInstanceId) && (
+                  <Tag
+                    bordered={false}
+                    style={{
+                      marginInlineEnd: 0,
+                      marginTop: 2,
+                      padding: '0 4px',
+                      fontSize: 10,
+                      lineHeight: '16px',
+                      color: '#8c8c8c',
+                      background: '#f5f5f5',
+                    }}
+                  >
+                    {s.agentInstanceId
+                      ? `#${s.agentInstanceId}${
+                          s.agentInstanceName
+                            ? `（${s.agentInstanceName}）`
+                            : ''
+                        }`
+                      : s.agentInstanceName}
+                  </Tag>
+                )}
               </span>
               <span className="conv-actions">
                 <EyeOutlined
@@ -287,42 +327,40 @@ export default function Sidebar({
             gap: 8,
           }}
         >
-          {canViewTenant && (
-            <Tabs
-              size="small"
-              activeKey={conversationScope}
-              onChange={(key) =>
-                onConversationScopeChange(key as 'USER' | 'TENANT')
-              }
-              items={[
-                {
-                  key: 'USER',
-                  label: intl.formatMessage({
-                    id: 'pages.chat.userConversations',
-                    defaultMessage: 'User chats',
-                  }),
-                },
-                {
-                  key: 'GROUP',
-                  label: intl.formatMessage({
-                    id: 'pages.chat.groupConversations',
-                    defaultMessage: 'Group chats',
-                  }),
-                },
-                ...(canViewTenant
-                  ? [
-                      {
-                        key: 'TENANT',
-                        label: intl.formatMessage({
-                          id: 'pages.chat.tenantConversations',
-                          defaultMessage: 'Tenant chats',
-                        }),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          )}
+          <Tabs
+            size="small"
+            activeKey={conversationScope}
+            onChange={(key) =>
+              onConversationScopeChange(key as 'USER' | 'GROUP' | 'TENANT')
+            }
+            items={[
+              {
+                key: 'USER',
+                label: intl.formatMessage({
+                  id: 'pages.chat.userConversations',
+                  defaultMessage: 'User chats',
+                }),
+              },
+              {
+                key: 'GROUP',
+                label: intl.formatMessage({
+                  id: 'pages.chat.groupConversations',
+                  defaultMessage: 'Group chats',
+                }),
+              },
+              ...(canViewTenant
+                ? [
+                    {
+                      key: 'TENANT',
+                      label: intl.formatMessage({
+                        id: 'pages.chat.tenantConversations',
+                        defaultMessage: 'Tenant chats',
+                      }),
+                    },
+                  ]
+                : []),
+            ]}
+          />
           {conversationScope === 'USER' && (
             <Segmented
               size="small"

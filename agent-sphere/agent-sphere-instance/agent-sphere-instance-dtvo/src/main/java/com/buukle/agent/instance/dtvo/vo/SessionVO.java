@@ -9,6 +9,8 @@ public class SessionVO implements Serializable {
     private Long id;
     private String title;
     private Long agentInstanceId;
+    /** Display name of the bound agent instance (session list tag). */
+    private String agentInstanceName;
     private Long tenantId;
     private String status;
     private String runMode;
