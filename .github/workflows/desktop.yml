@@ -1,0 +1,86 @@
+name: Build Desktop
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+            args: --win --x64
+          - os: macos-latest
+            target: mac
+            args: --mac --x64 --arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install UI dependencies
+        run: npm --prefix agent-sphere-ui install --no-audit --no-fund
+
+      - name: Install desktop dependencies
+        run: npm --prefix agent-sphere-desktop install --no-audit --no-fund
+
+      - name: Build desktop renderer
+        run: npm --prefix agent-sphere-ui run build:desktop
+
+      - name: Typecheck and bundle desktop main
+        run: |
+          npm --prefix agent-sphere-desktop run typecheck
+          npm --prefix agent-sphere-desktop run build:main
+
+      - name: Package desktop
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          cd agent-sphere-desktop
+          npx electron-builder ${{ matrix.args }} --publish never
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-sphere-desktop-${{ matrix.target }}
+          path: |
+            agent-sphere-desktop/release/*.exe
+            agent-sphere-desktop/release/*.dmg
+            agent-sphere-desktop/release/*.zip
+            agent-sphere-desktop/release/*.blockmap
+            agent-sphere-desktop/release/latest*.yml
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 10
+          done
+          files=$(find agent-sphere-desktop/release -maxdepth 1 -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' \
+               -o -name '*.blockmap' -o -name 'latest*.yml' \) -print)
+          gh release upload "${GITHUB_REF_NAME}" ${files} --clobber
