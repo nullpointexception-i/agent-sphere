@@ -38,7 +38,6 @@ interface SidebarProps {
   userRole: 'USER' | 'ROUTER' | 'WORKER';
   onUserRoleChange: (role: 'USER' | 'ROUTER' | 'WORKER') => void;
   canViewTenant: boolean;
-  readOnly: boolean;
 }
 
 export default function Sidebar({
@@ -56,7 +55,6 @@ export default function Sidebar({
   userRole,
   onUserRoleChange,
   canViewTenant,
-  readOnly,
 }: SidebarProps) {
   const intl = useIntl();
   const { message, modal } = App.useApp();
@@ -165,6 +163,7 @@ export default function Sidebar({
                 selectMode
                   ? (e) => {
                       e.stopPropagation();
+                      if (isReadOnlySession(s)) return;
                       setSelectedIds((prev) => {
                         const next = new Set(prev);
                         if (next.has(s.id)) next.delete(s.id);
@@ -407,7 +406,7 @@ export default function Sidebar({
               })}
             </div>
           )}
-          {!readOnly && conversationScope === 'USER' && (
+          {conversationScope === 'USER' && (
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <span
                 className={styles.sidebarNewChatItem}

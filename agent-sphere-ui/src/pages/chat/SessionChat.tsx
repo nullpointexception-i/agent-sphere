@@ -2242,11 +2242,6 @@ export function SessionChat(props: SessionChatProps = {}) {
                   resetChatView();
                 }}
                 canViewTenant={canViewTenant}
-                readOnly={
-                  !!currentSession &&
-                  (currentSession.readOnly ??
-                    READ_ONLY_SESSION_TYPES.has(currentSession.sessionType))
-                }
               />
             </div>
             <div
