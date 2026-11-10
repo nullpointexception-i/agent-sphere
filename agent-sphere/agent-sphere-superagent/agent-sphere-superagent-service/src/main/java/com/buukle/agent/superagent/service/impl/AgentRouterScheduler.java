@@ -26,10 +26,11 @@ import com.buukle.agent.superagent.repository.AgentEventDeliveryMapper;
 import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
+import com.buukle.agent.superagent.repository.PendingDeliveryGroup;
 import com.buukle.agent.superagent.spi.AgentRouterRunCommand;
 import com.buukle.agent.superagent.spi.AgentRouterRunPort;
 import com.buukle.agent.superagent.spi.AgentRouterRunResult;
-import com.buukle.agent.superagent.service.event.AgentDeliveryCreatedEvent;
+import com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -44,13 +45,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import jakarta.annotation.PreDestroy;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -87,20 +94,50 @@ public class AgentRouterScheduler {
     @Qualifier("runtimeAsyncExecutor")
     private final Executor wakeExecutor;
 
-    private final AtomicBoolean waking = new AtomicBoolean(false);
-    private final AtomicBoolean wakeAgain = new AtomicBoolean(false);
+    private final AtomicBoolean scanning = new AtomicBoolean(false);
+    private final ExecutorService dispatchExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private final Map<String, ScheduledFuture<?>> kickTimers = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService kickTimer = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "agent-router-kick");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @Value("${buukle.agent.super-agent.enabled:false}")
     private boolean superAgentEnabled;
     @Value("${buukle.agent.super-agent.agent-router.enabled:false}")
     private boolean enabled;
-    @Value("${buukle.agent.super-agent.agent-router.batch-size:20}")
-    private int batchSize;
+    @Value("${buukle.agent.super-agent.agent-router.batch-per-group:20}")
+    private int batchPerGroup;
+    @Value("${buukle.agent.super-agent.agent-router.groups-per-scan:50}")
+    private int groupsPerScan;
+    @Value("${buukle.agent.super-agent.agent-router.kick-debounce-ms:200}")
+    private long kickDebounceMs;
+    @Value("${buukle.agent.super-agent.agent-router.claim-timeout-seconds:120}")
+    private long claimTimeoutSeconds;
 
-    /** Event-driven wake: deliveries are consumed milliseconds after commit; polling is a fallback. */
+    /**
+     * Hot path: a producer (mention ingest / group router) just committed deliveries for one
+     * (agent, thread). Coalesce bursts briefly, then dispatch that group directly instead of
+     * scanning the whole table.
+     */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-    public void onDeliveryCreated(AgentDeliveryCreatedEvent event) {
-        wakeAsync();
+    public void onDeliveryReady(AgentDeliveryReadyEvent event) {
+        if (!superAgentEnabled || !enabled || event == null
+                || event.agentId() == null || event.threadId() == null) {
+            return;
+        }
+        String key = event.agentId() + ":" + event.threadId();
+        kickTimers.compute(key, (id, existing) -> {
+            if (existing != null && !existing.isDone()) {
+                return existing;
+            }
+            return kickTimer.schedule(() -> {
+                kickTimers.remove(id);
+                dispatchExecutor.execute(() ->
+                        dispatchGroup(event.agentId(), event.threadId(), null));
+            }, Math.max(0, kickDebounceMs), TimeUnit.MILLISECONDS);
+        });
     }
 
     @Scheduled(fixedDelayString = "${buukle.agent.super-agent.agent-router.interval-ms:3000}")
@@ -115,155 +152,158 @@ public class AgentRouterScheduler {
         processSessionBatch();
     }
 
-    private void wakeAsync() {
-        if (!superAgentEnabled || !enabled) {
-            return;
-        }
-        if (!waking.compareAndSet(false, true)) {
-            wakeAgain.set(true);
-            metrics.increment(AgentMetrics.AGENT_ROUTER_WAKE_SKIPPED);
+    private void processSessionBatch() {
+        if (!scanning.compareAndSet(false, true)) {
             return;
         }
         try {
-            wakeExecutor.execute(() -> {
-                try {
-                    do {
-                        wakeAgain.set(false);
-                        run();
-                    } while (wakeAgain.get());
-                } finally {
-                    waking.set(false);
-                    if (wakeAgain.get()) {
-                        wakeAsync();
-                    }
-                }
-            });
-        } catch (Exception e) {
-            waking.set(false);
-            log.warn("Agent router wake rejected: {}", e.getMessage());
+            deliveryMapper.reclaimStaleClaims(
+                    LocalDateTime.now().minusSeconds(claimTimeoutSeconds));
+            for (PendingDeliveryGroup group : deliveryMapper.selectPendingGroups(
+                    Math.max(1, groupsPerScan))) {
+                dispatchExecutor.execute(() ->
+                        dispatchGroup(group.getAgentId(), group.getThreadId(), null));
+            }
+        } finally {
+            scanning.set(false);
         }
     }
 
-    private void processSessionBatch() {
-        List<DeliveryContext> contexts = new ArrayList<>();
-        for (AgentEventDelivery delivery : deliveryMapper.selectPending(Math.max(1, batchSize))) {
-            AgentEvent event = delivery.getEventId() == null
-                    ? null : eventMapper.selectById(delivery.getEventId());
-            AgentSuperAgent agent = event == null
-                    ? null : superAgentMapper.selectById(delivery.getSuperAgentId());
-            if (event == null || agent == null) {
-                failUndeliverable(delivery, event == null ? "event missing" : "agent missing");
-                continue;
-            }
-            if (!SuperAgentStatus.ACTIVE.equals(agent.getStatus())) {
-                failUndeliverable(delivery, "agent " + agent.getStatus());
-                continue;
-            }
-            if (agent.getRouterInstanceId() == null) {
-                failUndeliverable(delivery, "agent has no router instance");
-                continue;
-            }
-            if (event.getThreadId() == null) {
-                failUndeliverable(delivery, "event has no thread");
-                continue;
-            }
-            contexts.add(new DeliveryContext(delivery, event, agent));
-        }
-        Map<String, List<DeliveryContext>> groups = new java.util.LinkedHashMap<>();
-        for (DeliveryContext context : contexts) {
-            String key = context.agent.getId() + ":" + context.event.getThreadId();
-            groups.computeIfAbsent(key, k -> new ArrayList<>()).add(context);
-        }
+    /**
+     * Dispatches one (agent, thread) group. The realtime kick and the compensation scan both call
+     * this method; the group lock keeps the same conversation serial without blocking other groups.
+     */
+    private void dispatchGroup(Long agentId, Long threadId, List<Long> preferredIds) {
         AgentRouterRunPort port = agentRouterRunPortProvider.getIfAvailable();
         if (port == null) {
             return;
         }
-        for (List<DeliveryContext> group : groups.values()) {
-            DeliveryContext head = group.get(0);
-            RLock lock = redissonClient.getLock(
-                    GROUP_LOCK_PREFIX + head.agent.getId() + ":" + head.event.getThreadId());
-            boolean locked = false;
-            try {
-                locked = lock.tryLock(0, GROUP_LOCK_LEASE_SECONDS, TimeUnit.SECONDS);
-                if (!locked) {
-                    metrics.increment(AgentMetrics.AGENT_ROUTER_GROUP_LOCK_SKIPPED);
-                    continue;
-                }
-                List<DeliveryContext> claimed = new ArrayList<>();
-                for (DeliveryContext context : group) {
-                    if (deliveryMapper.claim(context.delivery.getId()) > 0) {
-                        context.delivery.setStatus(AgentEventDeliveryStatus.CLAIMED);
-                        claimed.add(context);
-                    }
-                }
-                if (claimed.isEmpty()) {
-                    continue;
-                }
-                DeliveryContext first = claimed.get(0);
-                TenantContext.set(first.agent.getTenantId());
-                Long routerSessionId = ensureRouterSession(first.agent, first.event.getThreadId());
-                if (routerSessionId == null) {
-                    for (DeliveryContext context : claimed) {
-                        deliveryMapper.release(context.delivery.getId(),
-                                LocalDateTime.now().plusSeconds(RETRY_DELAY_SECONDS));
-                    }
-                    continue;
-                }
-                StringBuilder input = new StringBuilder(identityBlock(first.agent, first.event));
-                input.append("[DELIVERIES]\n");
-                for (DeliveryContext context : claimed) {
-                    input.append("deliveryId=").append(context.delivery.getId())
-                            .append(", eventId=").append(context.event.getId())
-                            .append(", decision=").append(context.delivery.getDecision())
-                            .append(", reason=").append(context.delivery.getReason())
-                            .append(", text=").append(summary(eventText(context.event)))
-                            .append('\n');
-                }
-                input.append("[INSTRUCTION] Use recall_event for full text when needed. ")
-                        .append("Reply once or dispatch one worker for the whole batch.");
-                AgentRouterRunResult result;
-                try {
-                    result = port.start(new AgentRouterRunCommand(
-                            routerSessionId, first.agent.getId(),
-                            first.event.getThreadId(), input.toString(), "WRITE"));
-                } catch (Exception e) {
-                    for (DeliveryContext context : claimed) {
-                        deliveryMapper.release(context.delivery.getId(),
-                                LocalDateTime.now().plusSeconds(RETRY_DELAY_SECONDS));
-                    }
-                    metrics.increment(AgentMetrics.AGENT_ROUTER_START_FAILED);
-                    log.warn("Agent router start failed: agent={}, thread={}, error={}",
-                            first.agent.getId(), first.event.getThreadId(), e.getMessage());
-                    continue;
-                }
-                if (result.accepted()) {
-                    for (DeliveryContext context : claimed) {
-                        context.delivery.setStatus(result.runId() == null
-                                ? AgentEventDeliveryStatus.PROCESSED
-                                : AgentEventDeliveryStatus.RUNNING);
-                        context.delivery.setRouterRunId(result.runId());
-                        context.delivery.setDeliveredAt(LocalDateTime.now());
-                        deliveryMapper.updateById(context.delivery);
-                    }
-                    metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status",
-                            AgentRouterRunStatus.ACCEPTED);
-                } else {
-                    for (DeliveryContext context : claimed) {
-                        deliveryMapper.release(context.delivery.getId(),
-                                LocalDateTime.now().plusSeconds(RETRY_DELAY_SECONDS));
-                    }
-                    metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status",
-                            AgentRouterRunStatus.REJECTED);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } finally {
-                if (locked && lock.isHeldByCurrentThread()) {
-                    lock.unlock();
-                }
-                TenantContext.clear();
+        RLock lock = redissonClient.getLock(GROUP_LOCK_PREFIX + agentId + ":" + threadId);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(0, GROUP_LOCK_LEASE_SECONDS, TimeUnit.SECONDS);
+            if (!locked) {
+                metrics.increment(AgentMetrics.AGENT_ROUTER_GROUP_LOCK_SKIPPED);
+                return;
             }
+            List<AgentEventDelivery> deliveries = preferredIds == null || preferredIds.isEmpty()
+                    ? deliveryMapper.selectPendingGroup(agentId, threadId, Math.max(1, batchPerGroup))
+                    : deliveryMapper.selectBatchIds(preferredIds).stream()
+                            .filter(row -> agentId.equals(row.getSuperAgentId()))
+                            .filter(row -> AgentEventDeliveryStatus.PENDING.equals(row.getStatus()))
+                            .toList();
+            if (deliveries.isEmpty()) {
+                return;
+            }
+            Set<Long> eventIds = deliveries.stream()
+                    .map(AgentEventDelivery::getEventId)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toSet());
+            Map<Long, AgentEvent> events = eventIds.isEmpty() ? Map.of()
+                    : eventMapper.selectBatchIds(eventIds).stream()
+                            .collect(java.util.stream.Collectors.toMap(
+                                    AgentEvent::getId, event -> event, (left, right) -> left));
+            Map<Long, AgentSuperAgent> agents = superAgentMapper.selectBatchIds(Set.of(agentId))
+                    .stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            AgentSuperAgent::getId, agent -> agent, (left, right) -> left));
+
+            List<DeliveryContext> contexts = new ArrayList<>();
+            for (AgentEventDelivery delivery : deliveries) {
+                AgentEvent event = events.get(delivery.getEventId());
+                AgentSuperAgent agent = agents.get(agentId);
+                if (event == null || agent == null) {
+                    failUndeliverable(delivery, event == null ? "event missing" : "agent missing");
+                    continue;
+                }
+                if (!threadId.equals(event.getThreadId())) {
+                    failUndeliverable(delivery, "thread mismatch");
+                    continue;
+                }
+                if (!SuperAgentStatus.ACTIVE.equals(agent.getStatus())) {
+                    failUndeliverable(delivery, "agent " + agent.getStatus());
+                    continue;
+                }
+                if (agent.getRouterInstanceId() == null) {
+                    failUndeliverable(delivery, "agent has no router instance");
+                    continue;
+                }
+                contexts.add(new DeliveryContext(delivery, event, agent));
+            }
+            if (contexts.isEmpty()) {
+                return;
+            }
+
+            List<DeliveryContext> claimed = new ArrayList<>();
+            for (DeliveryContext context : contexts) {
+                if (deliveryMapper.claim(context.delivery().getId()) > 0) {
+                    context.delivery().setStatus(AgentEventDeliveryStatus.CLAIMED);
+                    claimed.add(context);
+                }
+            }
+            if (claimed.isEmpty()) {
+                return;
+            }
+            DeliveryContext first = claimed.get(0);
+            TenantContext.set(first.agent().getTenantId());
+            Long routerSessionId = ensureRouterSession(first.agent(), threadId);
+            if (routerSessionId == null) {
+                releaseAll(claimed);
+                return;
+            }
+            StringBuilder input = new StringBuilder(identityBlock(first.agent(), first.event()));
+            input.append("[DELIVERIES]\n");
+            for (DeliveryContext context : claimed) {
+                input.append("deliveryId=").append(context.delivery().getId())
+                        .append(", eventId=").append(context.event().getId())
+                        .append(", decision=").append(context.delivery().getDecision())
+                        .append(", reason=").append(context.delivery().getReason())
+                        .append(", text=").append(summary(eventText(context.event())))
+                        .append('\n');
+            }
+            input.append("[INSTRUCTION] Use recall_event for full text when needed. ")
+                    .append("Reply once or dispatch one worker for the whole batch.");
+            AgentRouterRunResult result;
+            try {
+                result = port.start(new AgentRouterRunCommand(
+                        routerSessionId, agentId, threadId, input.toString(), "WRITE"));
+            } catch (Exception e) {
+                releaseAll(claimed);
+                metrics.increment(AgentMetrics.AGENT_ROUTER_START_FAILED);
+                log.warn("Agent router start failed: agent={}, thread={}, error={}",
+                        agentId, threadId, e.getMessage());
+                return;
+            }
+            if (result.accepted()) {
+                for (DeliveryContext context : claimed) {
+                    context.delivery().setStatus(result.runId() == null
+                            ? AgentEventDeliveryStatus.PROCESSED
+                            : AgentEventDeliveryStatus.RUNNING);
+                    context.delivery().setRouterRunId(result.runId());
+                    context.delivery().setDeliveredAt(LocalDateTime.now());
+                    deliveryMapper.updateById(context.delivery());
+                }
+                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status",
+                        AgentRouterRunStatus.ACCEPTED);
+            } else {
+                releaseAll(claimed);
+                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY, "status",
+                        AgentRouterRunStatus.REJECTED);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+            TenantContext.clear();
+        }
+    }
+
+    private void releaseAll(List<DeliveryContext> claimed) {
+        for (DeliveryContext context : claimed) {
+            deliveryMapper.release(context.delivery().getId(),
+                    LocalDateTime.now().plusSeconds(RETRY_DELAY_SECONDS));
         }
     }
 
@@ -476,5 +516,11 @@ public class AgentRouterScheduler {
             return "";
         }
         return text.length() <= MAX_EVENT_SUMMARY ? text : text.substring(0, MAX_EVENT_SUMMARY);
+    }
+
+    @PreDestroy
+    void shutdownDispatchers() {
+        kickTimer.shutdownNow();
+        dispatchExecutor.shutdownNow();
     }
 }

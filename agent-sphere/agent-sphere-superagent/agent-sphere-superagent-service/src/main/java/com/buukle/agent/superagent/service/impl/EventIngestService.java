@@ -20,6 +20,7 @@ import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.repository.AgentThreadSubscriptionMapper;
 import com.buukle.agent.superagent.service.event.AgentDeliveryCreatedEvent;
+import com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent;
 import com.buukle.agent.superagent.service.event.GroupRouterWakeEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -121,6 +122,9 @@ public class EventIngestService implements EventIngestPort {
             delivery.setActorType(ActorType.SYSTEM);
             try {
                 deliveryMapper.insert(delivery);
+                eventPublisher.publishEvent(new AgentDeliveryReadyEvent(
+                        subscription.getSuperAgentId(), row.getThreadId(),
+                        List.of(delivery.getId())));
             } catch (DuplicateKeyException ignored) {
                 // Already delivered.
             }
@@ -175,6 +179,8 @@ public class EventIngestService implements EventIngestPort {
             delivery.setActorType(ActorType.SYSTEM);
             try {
                 deliveryMapper.insert(delivery);
+                eventPublisher.publishEvent(new AgentDeliveryReadyEvent(
+                        agentId, row.getThreadId(), List.of(delivery.getId())));
             } catch (DuplicateKeyException ignored) {
                 // Already delivered.
             }
@@ -227,6 +233,8 @@ public class EventIngestService implements EventIngestPort {
             delivery.setDeliveredAt(null);
             try {
                 deliveryMapper.insert(delivery);
+                eventPublisher.publishEvent(new AgentDeliveryReadyEvent(
+                        agentId, row.getThreadId(), List.of(delivery.getId())));
             } catch (DuplicateKeyException ignored) {
                 // already delivered
             }

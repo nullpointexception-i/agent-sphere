@@ -50,4 +50,56 @@ public interface AgentEventDeliveryMapper extends BaseMapper<AgentEventDelivery>
             WHERE id = #{id} AND status = 'PENDING' AND delete_flag = FALSE
             """)
     int failPending(@Param("id") Long id, @Param("remark") String remark);
+
+    /**
+     * Fair scan: one row per (agent, thread) so a busy conversation cannot consume the whole batch.
+     */
+    @Select("""
+            SELECT d.super_agent_id AS agent_id,
+                   e.thread_id AS thread_id,
+                   COUNT(*) AS pending,
+                   MIN(d.id) AS first_id
+            FROM agent_event_delivery d
+            JOIN agent_event e ON e.id = d.event_id
+            WHERE d.status = 'PENDING'
+              AND d.decision IN ('DIRECT', 'RELEVANT', 'PASS_THROUGH')
+              AND (d.next_retry_at IS NULL OR d.next_retry_at <= now())
+              AND d.delete_flag = FALSE
+              AND e.delete_flag = FALSE
+            GROUP BY d.super_agent_id, e.thread_id
+            ORDER BY MIN(d.id)
+            LIMIT #{limit}
+            """)
+    List<PendingDeliveryGroup> selectPendingGroups(@Param("limit") int limit);
+
+    /** Pending deliveries of one group; the caller owns the (agent, thread) lock. */
+    @Select("""
+            SELECT d.* FROM agent_event_delivery d
+            JOIN agent_event e ON e.id = d.event_id
+            WHERE d.super_agent_id = #{agentId}
+              AND e.thread_id = #{threadId}
+              AND d.status = 'PENDING'
+              AND d.decision IN ('DIRECT', 'RELEVANT', 'PASS_THROUGH')
+              AND (d.next_retry_at IS NULL OR d.next_retry_at <= now())
+              AND d.delete_flag = FALSE
+              AND e.delete_flag = FALSE
+            ORDER BY d.id
+            LIMIT #{limit}
+            """)
+    List<AgentEventDelivery> selectPendingGroup(@Param("agentId") Long agentId,
+                                                @Param("threadId") Long threadId,
+                                                @Param("limit") int limit);
+
+    /** Recovers deliveries whose dispatcher died after claiming them. */
+    @Update("""
+            UPDATE agent_event_delivery
+            SET status = 'PENDING',
+                attempts = attempts + 1,
+                next_retry_at = now(),
+                updated_at = now()
+            WHERE status = 'CLAIMED'
+              AND claimed_at < #{before}
+              AND delete_flag = FALSE
+            """)
+    int reclaimStaleClaims(@Param("before") LocalDateTime before);
 }

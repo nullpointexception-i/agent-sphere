@@ -70,6 +70,8 @@ class SessionInputServiceImplTest {
     RouterInputResumePort resumePort;
     @Mock
     ObjectProvider<MeterRegistry> registryProvider;
+    @Mock
+    org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     SessionInputServiceImpl service;
 
@@ -80,7 +82,7 @@ class SessionInputServiceImplTest {
         when(resumePortProvider.getIfAvailable()).thenReturn(resumePort);
         service = new SessionInputServiceImpl(inputMapper, eventMapper, outboundMapper,
                 wakePublisher, superAgentMapper, userSpi, new AgentMetrics(registryProvider),
-                resumePortProvider);
+                resumePortProvider, eventPublisher);
         AgentSuperAgent agent = new AgentSuperAgent();
         agent.setId(AGENT_ID);
         agent.setTenantId(1L);

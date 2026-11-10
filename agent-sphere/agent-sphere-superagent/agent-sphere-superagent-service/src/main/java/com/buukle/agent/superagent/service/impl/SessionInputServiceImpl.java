@@ -27,6 +27,7 @@ import com.buukle.agent.superagent.repository.AgentOutboundMessageMapper;
 import com.buukle.agent.superagent.repository.AgentSessionInputMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.event.AgentOutboundWakePublisher;
+import com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent;
 import com.buukle.agent.superagent.spi.RouterInputResumePort;
 import com.buukle.agent.superagent.spi.SessionInputCommand;
 import com.buukle.agent.superagent.spi.SessionInputResolveCommand;
@@ -37,6 +38,7 @@ import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -67,6 +69,7 @@ public class SessionInputServiceImpl implements SessionInputSpi {
     private final UserSpi userSpi;
     private final AgentMetrics metrics;
     private final ObjectProvider<RouterInputResumePort> resumePortProvider;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public void projectPending(SessionInputCommand command) {
@@ -293,11 +296,13 @@ public class SessionInputServiceImpl implements SessionInputSpi {
                     || !SessionInputStatus.PENDING.equals(current.getStatus())) {
                 metrics.increment(AgentMetrics.ROUTER_INPUT_ANSWERED,
                         "inputType", SessionInputType.CLARIFICATION);
+                publishDeliveryReady(input, threadId);
                 return true;
             }
             markResolved(input, SessionInputStatus.ANSWERED, responder);
             updateCard(input, null);
             metrics.increment(AgentMetrics.ROUTER_INPUT_ANSWERED, "inputType", SessionInputType.CLARIFICATION);
+            publishDeliveryReady(input, threadId);
             return true;
         } catch (Exception e) {
             log.warn("Router clarification answer failed: threadId={}, inputId={}, error={}",
@@ -326,6 +331,15 @@ public class SessionInputServiceImpl implements SessionInputSpi {
                 .orderByDesc(AgentEvent::getSeq)
                 .last(LIMIT_ONE));
         return event == null ? null : event.getActorId();
+    }
+
+    private void publishDeliveryReady(AgentSessionInput input, Long threadId) {
+        if (eventPublisher == null || input == null
+                || input.getSuperAgentId() == null || threadId == null) {
+            return;
+        }
+        eventPublisher.publishEvent(new AgentDeliveryReadyEvent(
+                input.getSuperAgentId(), threadId, List.of()));
     }
 
     @Override

@@ -61,6 +61,8 @@ class GroupRouterSchedulerTest {
     RedissonClient redissonClient;
     @Mock
     AgentMetrics metrics;
+    @Mock
+    org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @org.junit.jupiter.api.BeforeEach
     void stubCurrentRouter() {
@@ -227,7 +229,31 @@ class GroupRouterSchedulerTest {
 
     private GroupRouterScheduler scheduler() {
         return new GroupRouterScheduler(eventMapper, threadMapper, deliveryMapper, superAgentMapper,
-                sessionSpi, instanceSpi, runSpi, userSpi, groupRouterRunPort, redissonClient, metrics);
+                sessionSpi, instanceSpi, runSpi, userSpi, groupRouterRunPort, redissonClient, metrics,
+                eventPublisher);
+    }
+
+    @Test
+    void selectEventsWithinBudget_defersEventsThatDoNotFit() {
+        GroupRouterScheduler scheduler = scheduler();
+        ReflectionTestUtils.setField(scheduler, "maxChars", 900);
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(3L);
+        agent.setName("A");
+        agent.setStatus("ACTIVE");
+        AgentEvent first = event();
+        first.setPayload("{\"text\":\"" + "x".repeat(600) + "\"}");
+        AgentEvent second = event();
+        second.setId(101L);
+        second.setSeq(2L);
+        second.setPayload("{\"text\":\"" + "y".repeat(600) + "\"}");
+
+        List<AgentEvent> selected = ReflectionTestUtils.invokeMethod(scheduler,
+                "selectEventsWithinBudget", thread(), List.of(first, second), List.of(agent));
+
+        assertNotNull(selected);
+        assertEquals(1, selected.size());
+        assertEquals(100L, selected.get(0).getId());
     }
 
     private static AgentThread thread() {

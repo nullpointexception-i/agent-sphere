@@ -32,6 +32,7 @@ import com.buukle.agent.superagent.repository.AgentEventDeliveryMapper;
 import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
+import com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent;
 import com.buukle.agent.superagent.spi.GroupRouterRunCommand;
 import com.buukle.agent.superagent.spi.GroupRouterRunPort;
 import com.buukle.agent.superagent.spi.GroupRouterRunResult;
@@ -42,6 +43,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -70,6 +72,10 @@ public class GroupRouterScheduler {
     static final String LOCK_PREFIX = "superagent:group-router:";
     /** Covers the synchronous run wait (default 60s) plus processing; prevents lock expiry mid-batch. */
     static final long LOCK_LEASE_SECONDS = 120L;
+    /** Rough per-event prompt overhead (id/seq/kind/separators) used by the batch budget. */
+    private static final int EVENT_LINE_OVERHEAD = 120;
+    /** Always allow at least one event, even when the fixed prompt is already large. */
+    private static final int MIN_EVENT_BUDGET = 500;
 
     private final AgentEventMapper eventMapper;
     private final AgentThreadMapper threadMapper;
@@ -82,6 +88,7 @@ public class GroupRouterScheduler {
     private final GroupRouterRunPort groupRouterRunPort;
     private final RedissonClient redissonClient;
     private final AgentMetrics metrics;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${buukle.agent.super-agent.enabled:false}")
     private boolean superAgentEnabled;
@@ -152,6 +159,11 @@ public class GroupRouterScheduler {
         processThread(threadId);
     }
 
+    /** Used by the realtime debouncer to skip a wake when another path already consumed the events. */
+    boolean hasPending(Long threadId) {
+        return eventMapper.countPending(threadId) > 0;
+    }
+
     private void processThread(Long threadId) {        AgentThread thread = threadMapper.selectById(threadId);
         if (thread == null) {
             return;
@@ -212,6 +224,15 @@ public class GroupRouterScheduler {
             return;
         }
 
+        int candidateEvents = events.size();
+        events = selectEventsWithinBudget(thread, events, agents);
+        if (events.size() < candidateEvents) {
+            log.info("Group router deferred {} events for thread {} due to char budget",
+                    candidateEvents - events.size(), threadId);
+            metrics.increment(AgentMetrics.GROUP_ROUTER_DEFERRED_EVENTS,
+                    "deferred", String.valueOf(candidateEvents - events.size()));
+        }
+
         String userPrompt = buildPrompt(thread, events, agents);
         GroupRouterRunResult run;
         try {
@@ -236,6 +257,7 @@ public class GroupRouterScheduler {
         }
         Set<Long> allowed = new HashSet<>(agentIds);
         Map<Long, String> deliverReasons = new HashMap<>();
+        Map<Long, List<Long>> readyDeliveries = new HashMap<>();
         if (decision.getDeliver() != null) {
             for (GroupRouterDecision.Deliver deliver : decision.getDeliver()) {
                 if (deliver != null && deliver.getAgentId() != null && allowed.contains(deliver.getAgentId())) {
@@ -258,8 +280,12 @@ public class GroupRouterScheduler {
 
         for (AgentEvent event : events) {
             for (Map.Entry<Long, String> entry : deliverReasons.entrySet()) {
-                insertDelivery(event, entry.getKey(),
+                Long deliveryId = insertDelivery(event, entry.getKey(),
                         GroupRouterDecisionType.RELEVANT, entry.getValue());
+                if (deliveryId != null) {
+                    readyDeliveries.computeIfAbsent(entry.getKey(), key -> new ArrayList<>())
+                            .add(deliveryId);
+                }
             }
             String decisionCode = deliverReasons.isEmpty()
                     ? GroupRouterDecisionType.OBSERVE : GroupRouterDecisionType.RELEVANT;
@@ -276,6 +302,33 @@ public class GroupRouterScheduler {
                     ? summary : summary.substring(0, Math.max(1, summaryMaxChars)));
             threadMapper.updateById(thread);
         }
+        readyDeliveries.forEach((agentId, deliveryIds) ->
+                eventPublisher.publishEvent(
+                        new AgentDeliveryReadyEvent(agentId, threadId, deliveryIds)));
+    }
+
+    /**
+     * Fits events into the prompt character budget. Events that do not fit stay unprocessed for the
+     * next batch: the router must never decide on events it did not receive.
+     */
+    private List<AgentEvent> selectEventsWithinBudget(AgentThread thread, List<AgentEvent> events,
+                                                      List<AgentSuperAgent> agents) {
+        if (events.size() <= 1) {
+            return events;
+        }
+        int overhead = buildPrompt(thread, List.of(), agents).length();
+        int budget = Math.max(MIN_EVENT_BUDGET, maxChars - overhead);
+        List<AgentEvent> selected = new ArrayList<>(events.size());
+        int used = 0;
+        for (AgentEvent event : events) {
+            int cost = extractText(event).length() + EVENT_LINE_OVERHEAD;
+            if (!selected.isEmpty() && used + cost > budget) {
+                break;
+            }
+            selected.add(event);
+            used += cost;
+        }
+        return selected.isEmpty() ? List.of(events.get(0)) : selected;
     }
 
     private String buildPrompt(AgentThread thread, List<AgentEvent> events,
@@ -298,15 +351,11 @@ public class GroupRouterScheduler {
             sb.append("E").append(event.getId()).append(" seq=").append(event.getSeq())
                     .append(" | ").append(event.getKind()).append(" | ")
                     .append(extractText(event)).append('\n');
-            if (sb.length() >= maxChars) {
-                sb.append("[truncated]\n");
-                break;
-            }
         }
         sb.append("[OUTPUT] Output JSON only: ")
                 .append("{\"deliver\":[{\"agentId\":1,\"reason\":\"...\"}],")
                 .append("\"ignore\":[],\"summary\":\"...\"}");
-        return sb.length() > maxChars ? sb.substring(0, maxChars) : sb.toString();
+        return sb.toString();
     }
 
     private Set<Long> extractAgentIds(List<AgentEvent> events) {
@@ -373,7 +422,7 @@ public class GroupRouterScheduler {
         }
     }
 
-    private void insertDelivery(AgentEvent event, Long agentId, String decision, String reason) {
+    private Long insertDelivery(AgentEvent event, Long agentId, String decision, String reason) {
         AgentEventDelivery delivery = new AgentEventDelivery();
         delivery.setEventId(event.getId());
         delivery.setSuperAgentId(agentId);
@@ -390,8 +439,10 @@ public class GroupRouterScheduler {
         // delivered_at is written by AgentRouterScheduler after the Work Item is created
         try {
             deliveryMapper.insert(delivery);
+            return delivery.getId();
         } catch (DuplicateKeyException ignored) {
             // already delivered; idempotent
+            return null;
         }
     }
 

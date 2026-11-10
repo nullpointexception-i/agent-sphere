@@ -17,6 +17,7 @@ public class AgentMetrics {
 
     public static final String EVENT_INGESTED = "superagent.event.ingested";
     public static final String GROUP_ROUTER_BATCH = "superagent.group_router.batch";
+    public static final String GROUP_ROUTER_DEFERRED_EVENTS = "superagent.group_router.deferred_events";
     public static final String AGENT_ROUTER_DECISION = "superagent.agent_router.decision";
     public static final String AGENT_ROUTER_DELIVERY = "superagent.agent_router.delivery";
     public static final String AGENT_ROUTER_GROUP_LOCK_SKIPPED = "superagent.agent_router.group_lock_skipped";
