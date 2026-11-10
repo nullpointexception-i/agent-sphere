@@ -21,6 +21,9 @@ public interface SessionSpi {
     /** Rebinds one session to another agent instance (group router follows the tenant's current instance). */
     void updateAgentInstance(Long sessionId, Long instanceId);
 
+    /** The agent's own ROUTER session for a thread, or null. */
+    SessionVO findRouterSession(Long threadId, Long superAgentId);
+
     void closeSession(Long id);
 
     void batchCloseSessions(List<Long> ids);

@@ -191,6 +191,22 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     }
 
     @Override
+    public SessionVO findRouterSession(Long threadId, Long superAgentId) {
+        if (threadId == null || superAgentId == null) {
+            return null;
+        }
+        AgentSession session = lambdaQuery()
+                .eq(AgentSession::getThreadId, threadId)
+                .eq(AgentSession::getSuperAgentId, superAgentId)
+                .eq(AgentSession::getSessionType, SessionType.ROUTER)
+                .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
+                .orderByDesc(AgentSession::getId)
+                .last("LIMIT 1")
+                .one();
+        return session == null ? null : sessionConverter.toVO(session);
+    }
+
+    @Override
     public void closeSession(Long id) {
         AgentSession session = getById(id);
         if (session == null) throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);

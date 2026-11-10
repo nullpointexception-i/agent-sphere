@@ -286,15 +286,16 @@ public class AgentRouterScheduler {
         }
     }
 
-    /** One Router session per thread; no guardian fallback. */
+    /** One Router session per (thread, agent); different avatars in one group must not share it. */
     private Long ensureRouterSession(AgentSuperAgent agent, Long threadId) {
         if (threadId == null) {
             return null;
         }
-        AgentThread thread = threadMapper.selectById(threadId);
-        if (thread != null && thread.getRouterSessionId() != null) {
-            return thread.getRouterSessionId();
+        SessionVO existing = sessionSpi.findRouterSession(threadId, agent.getId());
+        if (existing != null && existing.getId() != null) {
+            return existing.getId();
         }
+        AgentThread thread = threadMapper.selectById(threadId);
         if (agent.getRouterInstanceId() == null) {
             return null;
         }
@@ -312,7 +313,8 @@ public class AgentRouterScheduler {
             if (session == null || session.getId() == null) {
                 return null;
             }
-            if (thread != null) {
+            // Legacy single-agent pointer only; routing always resolves by (thread, agent).
+            if (thread != null && thread.getRouterSessionId() == null) {
                 thread.setRouterSessionId(session.getId());
                 threadMapper.updateById(thread);
             }
