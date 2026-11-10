@@ -41,6 +41,39 @@ import { createCoalescedTask } from './utils/coalesce';
 
 const SESSION_PAGE_SIZE = 10;
 
+type ConversationScope = 'USER' | 'GROUP' | 'TENANT';
+type UserSessionRole = 'USER' | 'ROUTER' | 'WORKER';
+
+const CHAT_SCOPE_STORAGE_KEY = 'agent-sphere.chat.scope';
+const CHAT_ROLE_STORAGE_KEY = 'agent-sphere.chat.role';
+const CONVERSATION_SCOPES: ConversationScope[] = ['USER', 'GROUP', 'TENANT'];
+const USER_SESSION_ROLES: UserSessionRole[] = ['USER', 'ROUTER', 'WORKER'];
+
+function readStoredScope(): ConversationScope {
+  if (typeof window === 'undefined') return 'USER';
+  const stored = window.sessionStorage.getItem(CHAT_SCOPE_STORAGE_KEY);
+  return CONVERSATION_SCOPES.includes(stored as ConversationScope)
+    ? (stored as ConversationScope)
+    : 'USER';
+}
+
+function readStoredRole(): UserSessionRole {
+  if (typeof window === 'undefined') return 'USER';
+  const stored = window.sessionStorage.getItem(CHAT_ROLE_STORAGE_KEY);
+  return USER_SESSION_ROLES.includes(stored as UserSessionRole)
+    ? (stored as UserSessionRole)
+    : 'USER';
+}
+
+function persistChatPreference(key: string, value: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // Storage can be unavailable (private mode); the current tab still works in memory.
+  }
+}
+
 /** Internal sessions (router / worker / group router) are view-only. */
 const READ_ONLY_SESSION_TYPES = new Set(['ROUTER', 'WORKER', 'GROUP_ROUTER']);
 
@@ -97,13 +130,20 @@ export function SessionChat(props: SessionChatProps = {}) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionOffset, setSessionOffset] = useState(0);
   const [hasMoreSessions, setHasMoreSessions] = useState(true);
-  const [conversationScope, setConversationScope] = useState<
-    'USER' | 'GROUP' | 'TENANT'
-  >('USER');
-  const [userRole, setUserRole] = useState<'USER' | 'ROUTER' | 'WORKER'>(
-    'USER',
-  );
   const canViewTenant = useCan(PERM.instanceTenant);
+  const [conversationScope, setConversationScope] = useState<ConversationScope>(
+    () => {
+      const stored = readStoredScope();
+      return stored === 'TENANT' && !canViewTenant ? 'USER' : stored;
+    },
+  );
+  const [userRole, setUserRole] = useState<UserSessionRole>(readStoredRole);
+  useEffect(() => {
+    if (conversationScope === 'TENANT' && !canViewTenant) {
+      persistChatPreference(CHAT_SCOPE_STORAGE_KEY, 'USER');
+      setConversationScope('USER');
+    }
+  }, [canViewTenant, conversationScope]);
   const [currentSession, setCurrentSession] = useState<any>(null);
   const currentSessionRef = useRef<any>(null);
   const sessionsRef = useRef<any[]>([]);
@@ -2187,11 +2227,13 @@ export function SessionChat(props: SessionChatProps = {}) {
                 onNewChat={() => navigate('/chat')}
                 conversationScope={conversationScope}
                 onConversationScopeChange={(next) => {
+                  persistChatPreference(CHAT_SCOPE_STORAGE_KEY, next);
                   setConversationScope(next);
                   resetChatView();
                 }}
                 userRole={userRole}
                 onUserRoleChange={(next) => {
+                  persistChatPreference(CHAT_ROLE_STORAGE_KEY, next);
                   setUserRole(next);
                   resetChatView();
                 }}
