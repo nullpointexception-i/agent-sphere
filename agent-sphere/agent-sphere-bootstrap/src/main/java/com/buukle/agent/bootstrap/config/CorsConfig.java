@@ -20,8 +20,10 @@ public class CorsConfig {
         config.setAllowedOriginPatterns(allOrigins);
         List<String> methods = new ArrayList<>();
         methods.add("GET");
+        methods.add("HEAD");
         methods.add("POST");
         methods.add("PUT");
+        methods.add("PATCH");
         methods.add("DELETE");
         methods.add("OPTIONS");
         config.setAllowedMethods(methods);
