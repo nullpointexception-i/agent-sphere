@@ -125,9 +125,6 @@ export default function DesktopStatusPage() {
             </Space>
           </div>
           <Space>
-            <Button onClick={() => window.location.assign('/desktop/agents')}>
-              {tw('agents.title', 'Local avatar bindings')}
-            </Button>
             <Button onClick={() => window.location.assign('/desktop/setup')}>
               {tw('settings.title', 'Desktop settings')}
             </Button>

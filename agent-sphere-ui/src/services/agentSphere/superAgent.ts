@@ -161,6 +161,11 @@ export const superAgentApi = {
       method: 'PATCH',
       data: { modelRouteId },
     }),
+  updateLocalRuntime: (id: number, localRuntimeId: number) =>
+    request<SuperAgent>(`${BASE}/super-agents/${id}/local-runtime`, {
+      method: 'PATCH',
+      data: { localRuntimeId },
+    }),
   usage: (agentId: number, days = 30) =>
     request<any[]>(`${BASE}/super-agents/${agentId}/usage`, {
       params: { days },

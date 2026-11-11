@@ -5,17 +5,12 @@ import {
   CheckOutlined,
   CloseOutlined,
   ContactsOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  ExperimentOutlined,
   GlobalOutlined,
   HomeOutlined,
   LogoutOutlined,
   MessageOutlined,
   MinusOutlined,
   MoreOutlined,
-  PauseCircleOutlined,
-  PlayCircleOutlined,
   PlusOutlined,
   PushpinOutlined,
   RobotOutlined,
@@ -127,6 +122,7 @@ import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
 import { TrainingPanel } from './training/TrainingPanel';
+import { AvatarDetailDrawer } from './avatars/AvatarDetailDrawer';
 
 type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'me';
 
@@ -560,8 +556,6 @@ function AvatarsTab({
   const [loading, setLoading] = useState(true);
   const [agents, setAgents] = useState<SuperAgent[]>([]);
   const [positions, setPositions] = useState<SystemDicEntry[]>([]);
-  const [startingChat, setStartingChat] = useState(false);
-  const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [runtimes, setRuntimes] = useState<LocalRuntime[]>([]);
@@ -569,18 +563,6 @@ function AvatarsTab({
   const nameValue = Form.useWatch('name', form);
   const createType = Form.useWatch('agentType', form);
   const [editingAgent, setEditingAgent] = useState<SuperAgent | null>(null);
-  const [agentModalMode, setAgentModalMode] = useState<'view' | 'edit'>('view');
-  const [editSubmitting, setEditSubmitting] = useState(false);
-  const [editForm] = Form.useForm();
-  const editName = Form.useWatch('name', editForm);
-  const [agentInstances, setAgentInstances] = useState<any>(null);
-  const [agentRoutes, setAgentRoutes] = useState<any[]>([]);
-  const [agentModelRouteId, setAgentModelRouteId] = useState<
-    number | undefined
-  >();
-  const [agentModelMixed, setAgentModelMixed] = useState(false);
-  const [agentModelLoading, setAgentModelLoading] = useState(false);
-  const [agentModelSaving, setAgentModelSaving] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -645,180 +627,8 @@ function AvatarsTab({
     }
   };
 
-  const loadAgentModel = async (agentId: number) => {
-    setAgentModelLoading(true);
-    setAgentInstances(null);
-    setAgentModelRouteId(undefined);
-    setAgentModelMixed(false);
-    try {
-      const [instances, routes] = await Promise.all([
-        superAgentApi.instances(agentId),
-        agentApi.routes.listAll(),
-      ]);
-      setAgentInstances(instances || null);
-      setAgentRoutes(routes || []);
-      const routerRoute = (instances as any)?.routerInstance?.modelRouteId;
-      const workerRoute = (instances as any)?.workerInstance?.modelRouteId;
-      const same = routerRoute != null && routerRoute === workerRoute;
-      setAgentModelRouteId(same ? routerRoute : undefined);
-      setAgentModelMixed(!same && (routerRoute != null || workerRoute != null));
-    } catch {
-      setAgentInstances(null);
-      setAgentRoutes([]);
-    } finally {
-      setAgentModelLoading(false);
-    }
-  };
-
-  const routeLabel = (routeId?: number) => {
-    if (routeId == null) return '-';
-    const route = agentRoutes.find((item) => item.id === routeId);
-    if (!route) return `#${routeId}`;
-    return `${route.providerName ? `${route.providerName} · ` : ''}${route.modelName}`;
-  };
-
   const openAgent = (agent: SuperAgent) => {
     setEditingAgent(agent);
-    setAgentModalMode('view');
-    void loadAgentModel(agent.id);
-  };
-
-  const startEdit = () => {
-    if (!editingAgent) return;
-    editForm.setFieldsValue({
-      name: editingAgent.name,
-      description: editingAgent.description,
-      positionCode: editingAgent.positionCode,
-    });
-    setAgentModalMode('edit');
-  };
-
-  const startChat = async () => {
-    if (!editingAgent || startingChat) return;
-    if (editingAgent.status !== STATUS.ACTIVE) {
-      message.warning(
-        tw(
-          'avatars.chatPaused',
-          'This avatar is paused. Resume it before chatting.',
-        ),
-      );
-      return;
-    }
-    setStartingChat(true);
-    try {
-      const conversation = await imApi.createAgentDm(editingAgent.id);
-      setEditingAgent(null);
-      onOpenChat(conversation.id);
-    } catch {
-      message.error(tw('avatars.chatFailed', 'Failed to start chat'));
-    } finally {
-      setStartingChat(false);
-    }
-  };
-
-  const startTraining = () => {
-    if (!editingAgent) return;
-    if (editingAgent.status === SUPER_AGENT_STATUS_CODE.ARCHIVED) {
-      message.warning(
-        tw('training.archived', 'Archived avatars cannot enter training mode.'),
-      );
-      return;
-    }
-    const agent = editingAgent;
-    setEditingAgent(null);
-    onStartTraining(agent);
-  };
-
-  const toggleVisibility = async (checked: boolean) => {
-    if (!editingAgent || visibilitySaving) return;
-    setVisibilitySaving(true);
-    try {
-      const updated = await superAgentApi.updateVisibility(
-        editingAgent.id,
-        checked,
-      );
-      setEditingAgent(updated);
-      load();
-      message.success(
-        checked
-          ? tw(
-              'avatars.publicOn',
-              'This avatar is now visible in group creation',
-            )
-          : tw('avatars.publicOff', 'This avatar is now private'),
-      );
-    } catch {
-      message.error(tw('common.saveFailed', 'Save failed'));
-    } finally {
-      setVisibilitySaving(false);
-    }
-  };
-
-  const saveEdit = async () => {
-    if (!editingAgent) return;
-    const values = await editForm.validateFields();
-    setEditSubmitting(true);
-    try {
-      const updated = await superAgentApi.update(editingAgent.id, {
-        name: values.name,
-        description: values.description,
-        positionCode: values.positionCode,
-      });
-      message.success(tw('avatars.saved', 'Saved'));
-      setEditingAgent(updated);
-      setAgentModalMode('view');
-      load();
-    } finally {
-      setEditSubmitting(false);
-    }
-  };
-
-  const changeAgentModelRoute = async (routeId: number) => {
-    if (!editingAgent || agentModelSaving) return;
-    const route = agentRoutes.find((item) => item.id === routeId);
-    if (route?.apiKeyConfigured === false) {
-      message.warning(tw('avatars.modelNoKey', 'This route has no API key'));
-      return;
-    }
-    setAgentModelSaving(true);
-    try {
-      await superAgentApi.updateModelRoute(editingAgent.id, routeId);
-      setAgentModelRouteId(routeId);
-      setAgentModelMixed(false);
-      message.success(tw('avatars.modelSaved', 'Model route updated'));
-    } catch {
-      message.error(tw('common.saveFailed', 'Save failed'));
-    } finally {
-      setAgentModelSaving(false);
-    }
-  };
-
-  const toggle = async (agent: SuperAgent) => {
-    const updated =
-      agent.status === STATUS.ACTIVE
-        ? await superAgentApi.pause(agent.id)
-        : await superAgentApi.resume(agent.id);
-    setEditingAgent(updated);
-    load();
-  };
-
-  const remove = (agent: SuperAgent) => {
-    modal.confirm({
-      title: tw('avatars.deleteTitle', 'Delete {name}', { name: agent.name }),
-      content: tw(
-        'avatars.deleteContent',
-        'The avatar will be archived after deletion. Continue?',
-      ),
-      okText: tw('common.delete', 'Delete'),
-      cancelText: tw('avatars.keep', 'Keep it'),
-      okType: 'danger',
-      onOk: async () => {
-        await superAgentApi.delete(agent.id);
-        message.success(tw('avatars.deleted', 'Deleted'));
-        setEditingAgent(null);
-        load();
-      },
-    });
   };
 
   return (
@@ -1103,346 +913,16 @@ function AvatarsTab({
         </div>
       </Modal>
 
-      <Drawer
+      <AvatarDetailDrawer
+        agent={editingAgent}
         open={editingAgent != null}
-        placement="right"
-        width={440}
-        closable={false}
+        positionOptions={positionOptions}
         onClose={() => setEditingAgent(null)}
-        destroyOnHidden
-        rootClassName={styles.avatarDrawerRoot}
-        getContainer={() =>
-          document.getElementById('workspace-main') ?? document.body
-        }
-        styles={{ body: { padding: 0 } }}
-      >
-        <div className={styles.avatarDrawerBody}>
-          <div className={styles.avatarDetailHeader}>
-            <Avatar
-              className={styles.avatarDetailAvatar}
-              size={52}
-              shape="square"
-              style={avatarStyle(
-                agentModalMode === 'edit'
-                  ? editName || editingAgent?.name
-                  : editingAgent?.name,
-              )}
-            >
-              {initials(
-                agentModalMode === 'edit'
-                  ? editName || editingAgent?.name
-                  : editingAgent?.name,
-              )}
-            </Avatar>
-            <div className={styles.avatarDetailHeadText}>
-              <div className={styles.avatarDetailName}>
-                {agentModalMode === 'view'
-                  ? editingAgent?.name || tw('nav.avatars', 'Avatars')
-                  : tw('avatars.editTitle', 'Edit avatar')}
-              </div>
-              <div className={styles.avatarDetailSub}>
-                {agentModalMode === 'view'
-                  ? tw('avatars.detailTitle', 'Avatar details')
-                  : tw(
-                      'avatars.editSubtitle',
-                      'Change the name and responsibility',
-                    )}
-              </div>
-            </div>
-            <button
-              type="button"
-              className={styles.avatarDetailClose}
-              onClick={() => setEditingAgent(null)}
-            >
-              <CloseOutlined />
-            </button>
-          </div>
-
-          {agentModalMode === 'view' ? (
-            <>
-              <div className={styles.avatarDetailSection}>
-                <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.position', 'Role')}
-                </div>
-                <span className={styles.avatarRoleTag}>
-                  {positionLabel(editingAgent) ||
-                    tw('avatars.positionUnset', 'Not set')}
-                </span>
-              </div>
-
-              <div className={styles.avatarDetailSection}>
-                <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.desc', 'Responsibility')}
-                </div>
-                <div className={styles.avatarDetailValue}>
-                  {editingAgent?.description ||
-                    tw('common.noDescription', 'No description')}
-                </div>
-              </div>
-
-              <div className={styles.avatarDetailSection}>
-                <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.status', 'Status')}
-                </div>
-                <div className={styles.avatarStatusRow}>
-                  <span
-                    className={`${styles.avatarStatusDot} ${
-                      editingAgent?.status === STATUS.ACTIVE
-                        ? ''
-                        : styles.avatarStatusDotPaused
-                    }`}
-                  />
-                  {statusLabel(editingAgent?.status)}
-                </div>
-              </div>
-
-              <div className={styles.avatarDetailSection}>
-                <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.model', 'Model')}
-                </div>
-                <Select
-                  className={styles.softField}
-                  loading={agentModelLoading}
-                  value={agentModelRouteId}
-                  placeholder={
-                    agentModelMixed
-                      ? tw(
-                          'avatars.modelMixed',
-                          'Router and Worker use different routes',
-                        )
-                      : tw('avatars.modelPlaceholder', 'Select a model route')
-                  }
-                  disabled={
-                    editingAgent?.status === SUPER_AGENT_STATUS_CODE.ARCHIVED ||
-                    agentModelSaving
-                  }
-                  onChange={(value) => void changeAgentModelRoute(value)}
-                  options={agentRoutes.map((route) => ({
-                    value: route.id,
-                    disabled: route.apiKeyConfigured === false,
-                    label: `${route.providerName ? `${route.providerName} · ` : ''}${route.modelName}`,
-                  }))}
-                  showSearch
-                  optionFilterProp="label"
-                />
-                {agentModelMixed ? (
-                  <div className={styles.fieldHint}>
-                    {tw('avatars.modelCurrent', 'Current routes')}: Router{' '}
-                    {routeLabel(agentInstances?.routerInstance?.modelRouteId)} /
-                    Worker{' '}
-                    {routeLabel(agentInstances?.workerInstance?.modelRouteId)}
-                  </div>
-                ) : null}
-                <div className={styles.fieldHint}>
-                  {tw(
-                    'avatars.modelHint',
-                    'Applies to both Router and Worker; takes effect on the next run.',
-                  )}
-                </div>
-              </div>
-
-              <div className={styles.avatarDetailSection}>
-                <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.publicVisible', 'Visible in group creation')}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Switch
-                    checked={Boolean(editingAgent?.publicVisible)}
-                    loading={visibilitySaving}
-                    disabled={
-                      editingAgent?.status === SUPER_AGENT_STATUS_CODE.ARCHIVED
-                    }
-                    onChange={(checked) => void toggleVisibility(checked)}
-                  />
-                  <span style={{ fontSize: 12, color: '#8c8c8c' }}>
-                    {tw(
-                      'avatars.publicVisibleHint',
-                      'Other members of this tenant can add the avatar to a group chat.',
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              <div className={styles.avatarDetailSection}>
-                <div className={styles.avatarDetailLabel}>
-                  {tw('avatars.createdAtLabel', 'Created')}
-                </div>
-                <div className={styles.avatarDetailValue}>
-                  {fullTime(editingAgent?.createdAt)}
-                </div>
-              </div>
-
-              {editingAgent?.status !== STATUS.ACTIVE ? (
-                <div className={styles.avatarPausedHint}>
-                  {tw(
-                    'avatars.chatPaused',
-                    'This avatar is paused. Resume it before chatting.',
-                  )}
-                </div>
-              ) : null}
-
-              <div className={styles.avatarDetailFooter}>
-                <Button
-                  type="primary"
-                  block
-                  icon={<MessageOutlined />}
-                  loading={startingChat}
-                  disabled={editingAgent?.status !== STATUS.ACTIVE}
-                  className={styles.avatarDetailPrimary}
-                  onClick={startChat}
-                >
-                  {tw('avatars.startChat', 'Start chat')}
-                </Button>
-                <Button
-                  block
-                  icon={<ExperimentOutlined />}
-                  style={{ marginTop: 8 }}
-                  disabled={
-                    editingAgent?.status === SUPER_AGENT_STATUS_CODE.ARCHIVED
-                  }
-                  onClick={startTraining}
-                >
-                  {tw('training.open', 'Training mode')}
-                </Button>
-                <div className={styles.avatarSecondaryActions}>
-                  <button
-                    type="button"
-                    className={`${styles.avatarSecondaryButton} ${styles.avatarEditButton}`}
-                    onClick={startEdit}
-                  >
-                    <EditOutlined />
-                    {tw('avatars.editProfile', 'Edit profile')}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.avatarSecondaryButton} ${styles.avatarPauseButton}`}
-                    onClick={() => editingAgent && toggle(editingAgent)}
-                  >
-                    {editingAgent?.status === STATUS.ACTIVE ? (
-                      <PauseCircleOutlined />
-                    ) : (
-                      <PlayCircleOutlined />
-                    )}
-                    {editingAgent?.status === STATUS.ACTIVE
-                      ? tw('avatars.pause', 'Pause avatar')
-                      : tw('avatars.resume', 'Resume avatar')}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.avatarSecondaryButton} ${styles.avatarDeleteButton}`}
-                    onClick={() => editingAgent && remove(editingAgent)}
-                  >
-                    <DeleteOutlined />
-                    {tw('avatars.delete', 'Delete avatar')}
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <Form
-                form={editForm}
-                layout="vertical"
-                className={styles.avatarEditForm}
-              >
-                <div className={styles.fieldBlock}>
-                  <div className={styles.fieldLabel}>
-                    {tw('avatars.name', 'Name')}{' '}
-                    <span className={styles.required}>*</span>
-                  </div>
-                  <Form.Item
-                    name="name"
-                    rules={[{ required: true, max: 128 }]}
-                    style={{ marginBottom: 0 }}
-                  >
-                    <Input
-                      className={styles.softField}
-                      maxLength={32}
-                      placeholder={tw(
-                        'avatars.namePlaceholder',
-                        'e.g. Product assistant',
-                      )}
-                    />
-                  </Form.Item>
-                </div>
-
-                <div className={styles.fieldBlock}>
-                  <div className={styles.fieldLabel}>
-                    {tw('avatars.position', 'Role')}{' '}
-                    <span className={styles.required}>*</span>
-                  </div>
-                  <Form.Item
-                    name="positionCode"
-                    rules={[
-                      {
-                        required: true,
-                        message: tw(
-                          'avatars.positionRequired',
-                          'Select a role',
-                        ),
-                      },
-                    ]}
-                    style={{ marginBottom: 0 }}
-                  >
-                    <Select
-                      className={styles.softField}
-                      placeholder={tw(
-                        'avatars.positionPlaceholder',
-                        'Select a role',
-                      )}
-                      options={positionOptions}
-                    />
-                  </Form.Item>
-                </div>
-
-                <div className={styles.fieldBlock} style={{ marginBottom: 10 }}>
-                  <div className={styles.fieldLabel}>
-                    {tw('avatars.desc', 'Responsibility')}{' '}
-                    <span className={styles.optional}>
-                      {tw('common.optional', 'Optional')}
-                    </span>
-                  </div>
-                  <Form.Item name="description" style={{ marginBottom: 14 }}>
-                    <Input.TextArea
-                      className={styles.softTextarea}
-                      rows={4}
-                      maxLength={200}
-                      showCount
-                      placeholder={tw(
-                        'avatars.descPlaceholder',
-                        'Briefly describe what it is good at',
-                      )}
-                    />
-                  </Form.Item>
-                  <div className={styles.fieldHint}>
-                    {tw(
-                      'avatars.editHint',
-                      'Changes take effect on the next run',
-                    )}
-                  </div>
-                </div>
-              </Form>
-
-              <div className={styles.avatarEditFooter}>
-                <Button
-                  className={styles.avatarCancelButton}
-                  onClick={() => setAgentModalMode('view')}
-                >
-                  {tw('common.cancel', 'Cancel')}
-                </Button>
-                <Button
-                  type="primary"
-                  className={styles.avatarSaveButton}
-                  loading={editSubmitting}
-                  onClick={saveEdit}
-                >
-                  {tw('avatars.saveEdit', 'Save changes')}
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      </Drawer>
+        onChanged={load}
+        onUpdated={setEditingAgent}
+        onOpenChat={onOpenChat}
+        onStartTraining={onStartTraining}
+      />
     </div>
   );
 }

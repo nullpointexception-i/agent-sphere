@@ -3,7 +3,6 @@ import {
   DisconnectOutlined,
   KeyOutlined,
   LogoutOutlined,
-  RobotOutlined,
   SettingOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -69,10 +68,6 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       history.push('/desktop/status');
       return;
     }
-    if (key === 'desktop-agents') {
-      history.push('/desktop/agents');
-      return;
-    }
     history.push(`/account/${key}`);
   };
 
@@ -132,14 +127,6 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
             label: intl.formatMessage({
               id: 'desktop.status.title',
               defaultMessage: 'Local runtime',
-            }),
-          },
-          {
-            key: 'desktop-agents',
-            icon: <RobotOutlined />,
-            label: intl.formatMessage({
-              id: 'desktop.agents.title',
-              defaultMessage: 'Local avatars',
             }),
           },
         ]
