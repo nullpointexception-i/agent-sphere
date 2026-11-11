@@ -17,18 +17,20 @@ function parseSessionRef(ref?: string): string | undefined {
   return ref.startsWith(SESSION_PREFIX) ? ref.slice(SESSION_PREFIX.length) : ref;
 }
 
-function textOf(result: unknown): string {
-  const value = result as AnyRecord | undefined;
-  if (!value) return '';
-  if (typeof value.text === 'string') return value.text;
-  const parts = value.parts ?? value.data?.parts;
-  if (Array.isArray(parts)) {
-    return parts
-      .filter((part) => part && (part.type === 'text' || typeof part.text === 'string'))
-      .map((part) => String(part.text ?? ''))
-      .join('');
-  }
-  return '';
+interface ModelRef {
+  providerID: string;
+  id: string;
+}
+
+/** Accepts `provider/model`; a bare model id keeps the opencode default provider. */
+function parseModel(value?: string): ModelRef | undefined {
+  if (!value) return undefined;
+  const separator = value.indexOf('/');
+  if (separator <= 0 || separator === value.length - 1) return undefined;
+  return {
+    providerID: value.slice(0, separator),
+    id: value.slice(separator + 1),
+  };
 }
 
 function permissionCategory(type: string | undefined): 'read' | 'write' | 'shell' | 'network' {
@@ -100,15 +102,22 @@ export class OpenCodeDriver implements RuntimeDriver {
     }
 
     const client = this.client as AnyRecord;
-    const endpoint = this.endpoint as AnyRecord;
+    const model = parseModel(context.profile.model);
     let sessionId = parseSessionRef(context.task.sessionRef);
 
     if (!sessionId) {
       const session = await client.session.create({
         location: { directory: context.profile.workspace },
+        ...(model ? { model } : {}),
       });
       sessionId = String(session.id);
       context.onSessionRef(`${SESSION_PREFIX}${sessionId}`);
+    } else if (model) {
+      try {
+        await client.session.switchModel({ sessionID: sessionId, model });
+      } catch (error) {
+        logger.warn(`opencode model switch failed: ${String(error)}`);
+      }
     }
 
     const controller = new AbortController();
@@ -116,123 +125,74 @@ export class OpenCodeDriver implements RuntimeDriver {
     context.signal.addEventListener('abort', abort, { once: true });
     this.active.set(context.task.taskId, { sessionId, controller });
 
+    const eventsAbort = new AbortController();
     let accumulated = '';
-    let finalText = '';
-    let settled = false;
-    let resolveDone!: () => void;
-    let rejectDone!: (error: Error) => void;
-
-    const done = new Promise<void>((resolve, reject) => {
-      resolveDone = resolve;
-      rejectDone = reject;
-    });
-    void done.catch(() => undefined);
-
-    const settle = (error?: Error): void => {
-      if (settled) return;
-      settled = true;
-      if (error) rejectDone(error);
-      else resolveDone();
-    };
+    let sawText = false;
+    let fatal: Error | undefined;
 
     const eventLoop = (async () => {
       try {
-        const events = client.event.subscribe({ signal: controller.signal });
+        const events = client.event.subscribe({ signal: eventsAbort.signal });
         for await (const event of events) {
           const type = String(event?.type ?? '');
-          const data = (event?.properties ?? event?.data ?? event) as AnyRecord;
-          const eventSession = String(data?.sessionID ?? data?.sessionId ?? '');
-          if (eventSession && eventSession !== sessionId) continue;
+          const data = (event?.data ?? event?.properties ?? event) as AnyRecord;
+          if (String(data?.sessionID ?? data?.sessionId ?? '') !== sessionId) continue;
 
-          switch (type) {
-            case 'session.text.delta': {
-              const delta = String(data?.delta ?? data?.text ?? '');
-              if (!delta) break;
-              accumulated += delta;
-              context.onChunk('reply', delta);
-              break;
-            }
-            case 'session.reasoning.delta': {
-              const delta = String(data?.delta ?? data?.text ?? '');
-              if (delta) context.onChunk('thinking', delta);
-              break;
-            }
-            case 'session.execution.succeeded': {
-              const text = textOf(data?.message ?? data?.result ?? data);
-              if (text) finalText = text;
-              settle();
-              break;
-            }
-            case 'session.execution.failed': {
-              settle(new Error(String(data?.error?.message ?? data?.message ?? 'opencode run failed')));
-              break;
-            }
-            case 'session.execution.interrupted': {
-              settle(new Error('Aborted'));
-              break;
-            }
-            case 'session.idle': {
-              settle();
-              break;
-            }
-            case 'permission.asked': {
-              await this.answerPermission(context, sessionId as string, data, endpoint);
-              break;
-            }
-            case 'form.created': {
-              settle(new Error('opencode forms are not supported by this client yet'));
-              controller.abort();
-              break;
-            }
-            default:
-              break;
+          if (type === 'session.text.delta') {
+            const delta = String(data?.delta ?? data?.text ?? '');
+            if (!delta) continue;
+            sawText = true;
+            accumulated += delta;
+            context.onChunk('reply', delta);
+          } else if (type === 'session.reasoning.delta') {
+            const delta = String(data?.delta ?? data?.text ?? '');
+            if (delta) context.onChunk('thinking', delta);
+          } else if (type === 'permission.asked') {
+            await this.answerPermission(context, sessionId as string, data);
+          } else if (type === 'form.created') {
+            fatal = new Error('opencode forms are not supported by this client yet');
+            controller.abort();
           }
         }
       } catch (error) {
-        if (!settled && !controller.signal.aborted) {
-          settle(error instanceof Error ? error : new Error(String(error)));
+        if (!eventsAbort.signal.aborted) {
+          logger.warn(`opencode event stream failed: ${String(error)}`);
         }
       }
     })();
+    void eventLoop;
 
     const timeoutMs = Math.max(1, this.settings.get().taskTimeoutSec * 1000);
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       void this.interrupt(sessionId as string);
-      settle(new Error('opencode task timed out'));
+      controller.abort();
     }, timeoutMs);
 
     try {
-      const prompt = client.session.prompt({
-        sessionID: sessionId,
-        text: context.prompt,
-        ...(context.profile.model ? { model: context.profile.model } : {}),
-      });
-
-      void Promise.resolve(prompt)
-        .then((result: unknown) => {
-          const text = textOf(result);
-          if (text) finalText = text;
-          settle();
-        })
-        .catch((error: unknown) => {
-          settle(error instanceof Error ? error : new Error(String(error)));
-        });
-
-      await done;
+      const result = (await client.session.generate(
+        { sessionID: sessionId, prompt: context.prompt },
+        { signal: controller.signal },
+      )) as AnyRecord;
+      const text = (String(result?.text ?? '') || accumulated).trim();
+      if (!text) throw fatal ?? new Error('opencode completed without a reply');
+      if (!sawText) context.onChunk('reply', text);
+      return {
+        text,
+        sessionRef: `${SESSION_PREFIX}${sessionId}`,
+      };
+    } catch (error) {
+      if (timedOut) throw new Error('opencode task timed out');
+      if (fatal) throw fatal;
+      throw error instanceof Error ? error : new Error(String(error));
     } finally {
       clearTimeout(timer);
+      eventsAbort.abort();
       controller.abort();
       context.signal.removeEventListener('abort', abort);
       this.active.delete(context.task.taskId);
-      void eventLoop;
     }
-
-    const text = (finalText || accumulated).trim();
-    if (!text) throw new Error('opencode completed without a reply');
-    return {
-      text,
-      sessionRef: `${SESSION_PREFIX}${sessionId}`,
-    };
   }
 
   async cancel(taskId: number): Promise<void> {
@@ -252,31 +212,25 @@ export class OpenCodeDriver implements RuntimeDriver {
     context: DriverRunContext,
     sessionId: string,
     data: AnyRecord,
-    endpoint: AnyRecord,
   ): Promise<void> {
-    const permissionId = String(
-      data.permissionID ?? data.permissionId ?? data.id ?? '',
-    );
-    if (!permissionId) return;
+    const requestId = String(data?.id ?? data?.requestID ?? '');
+    if (!requestId) return;
 
     const decision = await context.approvals.request({
       taskId: context.task.taskId,
       kind: 'opencode.permission',
-      category: permissionCategory(String(data.type ?? data.permission ?? '')),
+      category: permissionCategory(String(data?.action ?? data?.type ?? '')),
       title: 'Local avatar requests permission',
       detail: JSON.stringify(data).slice(0, 2000),
     });
 
-    const response =
+    const reply =
       decision === 'acceptForSession' ? 'always' : decision === 'accept' ? 'once' : 'reject';
-    const url = `${String(endpoint.url).replace(/\/+$/, '')}/api/session/${encodeURIComponent(
-      sessionId,
-    )}/permission/${encodeURIComponent(permissionId)}/reply`;
     try {
-      await fetch(url, {
-        method: 'POST',
-        headers: { ...this.headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ response }),
+      await (this.client as AnyRecord).permission.reply({
+        sessionID: sessionId,
+        requestID: requestId,
+        decision: reply,
       });
     } catch (error) {
       logger.warn(`opencode permission reply failed: ${String(error)}`);
@@ -285,15 +239,8 @@ export class OpenCodeDriver implements RuntimeDriver {
 
   private async interrupt(sessionId: string): Promise<void> {
     if (!this.client || !this.endpoint) return;
-    const url = `${String(this.endpoint.url).replace(/\/+$/, '')}/api/session/${encodeURIComponent(
-      sessionId,
-    )}/interrupt`;
     try {
-      await fetch(url, {
-        method: 'POST',
-        headers: { ...this.headers, 'Content-Type': 'application/json' },
-        body: '{}',
-      });
+      await (this.client as AnyRecord).session.interrupt({ sessionID: sessionId });
     } catch (error) {
       logger.warn(`opencode interrupt failed: ${String(error)}`);
     }
