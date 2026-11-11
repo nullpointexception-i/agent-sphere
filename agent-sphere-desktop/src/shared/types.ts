@@ -35,7 +35,6 @@ export interface AgentProfile {
   driver: DriverKind;
   workspace: string;
   additionalDirs?: string[];
-  model?: string;
   approvalPolicy: 'untrusted' | 'on-request' | 'never';
   sandbox: 'read-only' | 'workspace-write' | 'danger-full-access';
   autoRun: 'always' | 'mention-only' | 'confirm';

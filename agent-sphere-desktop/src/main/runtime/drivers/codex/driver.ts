@@ -114,7 +114,6 @@ export class CodexDriver implements RuntimeDriver {
         'thread/start',
         {
           cwd: context.profile.workspace,
-          model: context.profile.model,
           approvalPolicy: context.profile.approvalPolicy,
           sandbox: context.profile.sandbox,
           serviceName: 'agentsphere',
@@ -178,7 +177,6 @@ export class CodexDriver implements RuntimeDriver {
           threadId,
           input: [{ type: 'text', text: context.prompt, text_elements: [] }],
           cwd: context.profile.workspace,
-          ...(context.profile.model ? { model: context.profile.model } : {}),
           approvalPolicy: context.profile.approvalPolicy,
           sandboxPolicy: sandboxPolicy(context.profile.sandbox, context.profile.workspace),
         },

@@ -51,7 +51,6 @@ const profileSchema = z.object({
   driver: z.enum(['OPENCODE', 'CODEX']),
   workspace: z.string().min(1),
   additionalDirs: z.array(z.string()).optional(),
-  model: z.string().optional(),
   approvalPolicy: z.enum(['untrusted', 'on-request', 'never']),
   sandbox: z.enum(['read-only', 'workspace-write', 'danger-full-access']),
   autoRun: z.enum(['always', 'mention-only', 'confirm']),

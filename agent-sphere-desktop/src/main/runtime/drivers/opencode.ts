@@ -17,22 +17,6 @@ function parseSessionRef(ref?: string): string | undefined {
   return ref.startsWith(SESSION_PREFIX) ? ref.slice(SESSION_PREFIX.length) : ref;
 }
 
-interface ModelRef {
-  providerID: string;
-  id: string;
-}
-
-/** Accepts `provider/model`; a bare model id keeps the opencode default provider. */
-function parseModel(value?: string): ModelRef | undefined {
-  if (!value) return undefined;
-  const separator = value.indexOf('/');
-  if (separator <= 0 || separator === value.length - 1) return undefined;
-  return {
-    providerID: value.slice(0, separator),
-    id: value.slice(separator + 1),
-  };
-}
-
 function permissionCategory(type: string | undefined): 'read' | 'write' | 'shell' | 'network' {
   const value = (type ?? '').toLowerCase();
   if (value.includes('bash') || value.includes('shell') || value.includes('command')) return 'shell';
@@ -102,22 +86,14 @@ export class OpenCodeDriver implements RuntimeDriver {
     }
 
     const client = this.client as AnyRecord;
-    const model = parseModel(context.profile.model);
     let sessionId = parseSessionRef(context.task.sessionRef);
 
     if (!sessionId) {
       const session = await client.session.create({
         location: { directory: context.profile.workspace },
-        ...(model ? { model } : {}),
       });
       sessionId = String(session.id);
       context.onSessionRef(`${SESSION_PREFIX}${sessionId}`);
-    } else if (model) {
-      try {
-        await client.session.switchModel({ sessionID: sessionId, model });
-      } catch (error) {
-        logger.warn(`opencode model switch failed: ${String(error)}`);
-      }
     }
 
     const controller = new AbortController();
