@@ -4,6 +4,13 @@ import { logger } from '../../logging/logger';
 
 const SESSION_PREFIX = 'opencode:';
 const SUPPORTED_MAJOR_MINOR = '2.2';
+/** `session.wait` can resolve a moment before the last text delta is observed. */
+const REPLY_POLL_INTERVAL_MS = 100;
+const REPLY_POLL_ATTEMPTS = 20;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface ActiveRun {
   sessionId: string;
@@ -231,19 +238,23 @@ export class OpenCodeDriver implements RuntimeDriver {
     })();
     void eventLoop;
 
-    const lastAssistantText = async (): Promise<string> => {
+    /**
+     * Only this turn's persisted `text` parts count. Reasoning parts also carry
+     * a `text` field, and an earlier turn's reply must never be reported as the
+     * current answer.
+     */
+    const lastAssistantText = async (sinceMs: number): Promise<string> => {
       try {
         const result = await client.message.list({ sessionID: sessionId });
         const list = Array.isArray(result) ? result : (result?.data ?? []);
         for (let index = list.length - 1; index >= 0; index -= 1) {
           const message = list[index];
           if (message?.type !== 'assistant') continue;
+          const created = Number(message?.time?.created ?? 0);
+          if (created && created < sinceMs - 2_000) continue;
           const parts = Array.isArray(message.content) ? message.content : [];
           const text = parts
-            .filter(
-              (part: AnyRecord) =>
-                part && (part.type === 'text' || typeof part.text === 'string'),
-            )
+            .filter((part: AnyRecord) => part?.type === 'text')
             .map((part: AnyRecord) => String(part.text ?? ''))
             .join('')
             .trim();
@@ -282,8 +293,10 @@ export class OpenCodeDriver implements RuntimeDriver {
       controller.abort();
     }, timeoutMs);
 
+    let promptStartedAt = 0;
     try {
       try {
+        promptStartedAt = Date.now();
         await client.session.prompt({
           sessionID: sessionId,
           text: context.prompt,
@@ -298,6 +311,7 @@ export class OpenCodeDriver implements RuntimeDriver {
           ...(model ? { model } : {}),
         });
         sessionId = String(session.id);
+        promptStartedAt = Date.now();
         context.onSessionRef(`${SESSION_PREFIX}${sessionId}`);
         this.active.set(context.task.taskId, { sessionId, controller });
         await client.session.prompt({
@@ -307,7 +321,17 @@ export class OpenCodeDriver implements RuntimeDriver {
       }
 
       await Promise.race([waitForSession(sessionId), done]);
-      const text = accumulated.trim() || (await lastAssistantText());
+      let text = accumulated.trim();
+      // The wait can resolve just before the last fragment is observed: poll
+      // briefly so an empty accumulator never falls back to stale text.
+      for (
+        let attempt = 0;
+        !text && attempt < REPLY_POLL_ATTEMPTS;
+        attempt += 1
+      ) {
+        if (attempt > 0) await delay(REPLY_POLL_INTERVAL_MS);
+        text = accumulated.trim() || (await lastAssistantText(promptStartedAt));
+      }
       if (!text) throw fatal ?? new Error('opencode completed without a reply');
       if (!sawText) context.onChunk('reply', text);
       return {
