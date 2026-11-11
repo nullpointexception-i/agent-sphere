@@ -1,4 +1,4 @@
-import { BrowserWindow, app, shell } from 'electron';
+import { BrowserWindow, Notification, app, shell } from 'electron';
 import { cp, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type {
@@ -37,6 +37,12 @@ export class AppController {
     this.drivers = new DriverRegistry(this.settings);
     this.approvals = new ApprovalBroker(this.settings, (request) => {
       this.send(IPC.eventApproval, request);
+      if (Notification.isSupported()) {
+        new Notification({
+          title: request.title,
+          body: request.detail.slice(0, 200),
+        }).show();
+      }
     });
     const api = new LocalApiClient(this.settings);
     this.runtime = new RuntimeManager(

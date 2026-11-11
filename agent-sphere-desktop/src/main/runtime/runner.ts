@@ -10,6 +10,11 @@ import type { QueuedTask } from './queue';
 import { buildPrompt } from './prompt';
 import { logger } from '../logging/logger';
 
+function isMention(task: LocalTaskPayload): boolean {
+  const reason = (task.trigger?.reason ?? '').toLowerCase();
+  return reason.includes('mention') || reason.includes('dm') || reason.includes('direct');
+}
+
 class ChunkBuffer {
   private sequence = 0;
   private timer?: NodeJS.Timeout;
@@ -81,6 +86,16 @@ export class TaskRunner {
         leaseToken,
         'WORKSPACE_INVALID',
         `Workspace does not exist: ${profile.workspace}`,
+      );
+      return;
+    }
+
+    if (profile.autoRun === 'mention-only' && !isMention(task)) {
+      await this.fail(
+        task,
+        leaseToken,
+        'NOT_MENTIONED',
+        'Task was not a direct mention and the profile only runs on mentions',
       );
       return;
     }
