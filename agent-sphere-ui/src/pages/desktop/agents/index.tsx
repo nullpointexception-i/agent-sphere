@@ -143,7 +143,7 @@ export default function DesktopAgentsPage() {
   });
 
   return (
-    <div style={{ maxWidth: 1280, margin: '32px auto', padding: 24 }}>
+    <div style={{ maxWidth: 1440, margin: '32px auto', padding: 24 }}>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <DesktopPageNav />
         <div>
@@ -181,7 +181,7 @@ export default function DesktopAgentsPage() {
               {
                 title: tw('agents.agent', 'Avatar'),
                 dataIndex: 'name',
-                width: 180,
+                width: 150,
                 render: (value: string, agent) => (
                   <Space direction="vertical" size={0}>
                     <Typography.Text strong>{value}</Typography.Text>
@@ -194,7 +194,7 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: tw('agents.driver', 'Driver'),
-                width: 220,
+                width: 190,
                 render: (_value, agent) => (
                   <Select
                     value={profileOf(agent).driver}
@@ -210,11 +210,13 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: tw('agents.workspace', 'Workspace'),
+                width: 310,
                 render: (_value, agent) => (
                   <Space.Compact style={{ width: '100%' }}>
                     <Input
                       value={profileOf(agent).workspace}
                       placeholder="D:\\projects\\demo"
+                      style={{ flex: 1, minWidth: 200 }}
                       onChange={(event) =>
                         patch(agent, { workspace: event.target.value })
                       }
@@ -227,7 +229,7 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: tw('agents.model', 'Model (optional)'),
-                width: 180,
+                width: 160,
                 render: (_value, agent) => (
                   <Input
                     value={profileOf(agent).model}
@@ -240,7 +242,7 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: tw('agents.autoRun', 'Execution policy'),
-                width: 160,
+                width: 140,
                 render: (_value, agent) => (
                   <Select
                     value={profileOf(agent).autoRun}
@@ -275,7 +277,7 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: tw('agents.approvalPolicy', 'Tool approvals'),
-                width: 150,
+                width: 130,
                 render: (_value, agent) => (
                   <Select
                     value={profileOf(agent).approvalPolicy}
@@ -305,7 +307,7 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: tw('agents.sandbox', 'Sandbox'),
-                width: 170,
+                width: 150,
                 render: (_value, agent) => (
                   <Select
                     value={profileOf(agent).sandbox}
@@ -340,7 +342,7 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: tw('agents.enabled', 'Enabled'),
-                width: 90,
+                width: 80,
                 render: (_value, agent) => (
                   <Switch
                     checked={profileOf(agent).enabled}
