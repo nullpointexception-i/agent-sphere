@@ -40,6 +40,7 @@ import {
   Input,
   Modal,
   Select,
+  Space,
   Spin,
   Switch,
   Tag,
@@ -72,11 +73,8 @@ import {
   type SuperAgent,
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
-import {
-  type LocalRuntime,
-  localRuntimeApi,
-} from '@/services/agentSphere/localRuntime';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
+import { getDesktopBridge } from '@/utils/desktopBridge';
 import { isDesktop } from '@/utils/runtimeEnv';
 import { userDisplayLabel } from '@/utils/userLabel';
 import { messageText } from '../im/components/messageUtils';
@@ -123,6 +121,7 @@ import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
 import { TrainingPanel } from './training/TrainingPanel';
 import { AvatarDetailDrawer } from './avatars/AvatarDetailDrawer';
+import { LocalTaskModal } from './avatars/LocalTaskModal';
 
 type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'me';
 
@@ -558,11 +557,12 @@ function AvatarsTab({
   const [positions, setPositions] = useState<SystemDicEntry[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [runtimes, setRuntimes] = useState<LocalRuntime[]>([]);
   const [form] = Form.useForm();
   const nameValue = Form.useWatch('name', form);
   const createType = Form.useWatch('agentType', form);
   const [editingAgent, setEditingAgent] = useState<SuperAgent | null>(null);
+  const [taskAgent, setTaskAgent] = useState<SuperAgent | null>(null);
+  const bridge = getDesktopBridge();
 
   const load = () => {
     setLoading(true);
@@ -582,22 +582,9 @@ function AvatarsTab({
       .catch(() => setPositions([]));
   }, []);
 
-  useEffect(() => {
-    if (!createOpen || !isDesktop()) return;
-    localRuntimeApi
-      .list()
-      .then(setRuntimes)
-      .catch(() => setRuntimes([]));
-  }, [createOpen]);
-
   const positionOptions = positions.map((item) => ({
     value: item.code,
     label: getLocale() === 'en-US' ? item.nameEn : item.nameCn,
-  }));
-
-  const runtimeOptions = runtimes.map((item) => ({
-    value: item.id,
-    label: `${item.name} · ${item.runtimeKind}${item.online ? '' : ' (offline)'}`,
   }));
 
   const submit = async () => {
@@ -609,9 +596,7 @@ function AvatarsTab({
         name: values.name,
         description: values.description,
         positionCode: values.positionCode,
-        ...(local
-          ? { agentType: 'LOCAL' as const, localRuntimeId: values.localRuntimeId }
-          : {}),
+        ...(local ? { agentType: 'LOCAL' as const } : {}),
       });
       if (local) {
         await superAgentApi
@@ -700,6 +685,18 @@ function AvatarsTab({
                   <div className={styles.rowDesc}>
                     {agent.description || tw('nav.avatars', 'Avatars')}
                   </div>
+                  {bridge && agent.agentType === 'LOCAL' ? (
+                    <Button
+                      size="small"
+                      style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setTaskAgent(agent);
+                      }}
+                    >
+                      {tw('tasks.open', 'Tasks')}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ))
@@ -782,37 +779,6 @@ function AvatarsTab({
                   'Local avatars run on this machine through the desktop runtime.',
                 )}
               </div>
-            </div>
-          ) : null}
-
-          {isDesktop() && createType === 'LOCAL' ? (
-            <div className={styles.fieldBlock}>
-              <div className={styles.fieldLabel}>
-                {tw('avatars.runtime', 'Local runtime')}{' '}
-                <span className={styles.required}>*</span>
-              </div>
-              <Form.Item
-                name="localRuntimeId"
-                rules={[
-                  {
-                    required: true,
-                    message: tw(
-                      'avatars.runtimeRequired',
-                      'Select a local runtime',
-                    ),
-                  },
-                ]}
-                style={{ marginBottom: 0 }}
-              >
-                <Select
-                  className={styles.softField}
-                  placeholder={tw(
-                    'avatars.runtimePlaceholder',
-                    'Select a local runtime',
-                  )}
-                  options={runtimeOptions}
-                />
-              </Form.Item>
             </div>
           ) : null}
 
@@ -922,6 +888,13 @@ function AvatarsTab({
         onUpdated={setEditingAgent}
         onOpenChat={onOpenChat}
         onStartTraining={onStartTraining}
+      />
+
+      <LocalTaskModal
+        open={taskAgent != null}
+        agentId={taskAgent?.id}
+        agentName={taskAgent?.name}
+        onClose={() => setTaskAgent(null)}
       />
     </div>
   );

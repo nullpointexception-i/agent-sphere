@@ -28,7 +28,13 @@ export interface IssuedLocalRuntimeToken {
 
 export const localRuntimeApi = {
   list: () => request<LocalRuntime[]>(`${BASE}/local-runtimes`),
-  create: (data: { name: string; runtimeKind: 'OPENCODE' | 'CODEX' }) =>
+  create: (data: {
+    name: string;
+    runtimeKind: 'OPENCODE' | 'CODEX';
+    deviceKey?: string;
+    os?: string;
+    arch?: string;
+  }) =>
     request<IssuedLocalRuntimeToken>(`${BASE}/local-runtimes`, {
       method: 'POST',
       data,
@@ -37,6 +43,8 @@ export const localRuntimeApi = {
     request<IssuedLocalRuntimeToken>(`${BASE}/local-runtimes/${id}/token`, {
       method: 'POST',
     }),
+  delete: (id: number) =>
+    request<void>(`${BASE}/local-runtimes/${id}`, { method: 'DELETE' }),
   update: (id: number, data: { name?: string; status?: string }) =>
     request<LocalRuntime>(`${BASE}/local-runtimes/${id}`, {
       method: 'PATCH',

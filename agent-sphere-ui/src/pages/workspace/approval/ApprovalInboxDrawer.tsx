@@ -2,6 +2,7 @@ import { CheckCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import {
   App,
   Button,
+  Divider,
   Drawer,
   Empty,
   Popconfirm,
@@ -16,6 +17,8 @@ import type {
 } from '@/services/agentSphere/superAgent';
 import { superAgentApi } from '@/services/agentSphere/superAgent';
 import { tw } from '../i18n';
+import { LocalApprovalList } from './LocalApprovalList';
+import { useLocalApprovals } from './useLocalApprovals';
 import {
   approvalSourceLabel,
   optionsForScope,
@@ -58,6 +61,7 @@ export function ApprovalInboxDrawer({
     Record<string, Record<string, string>>
   >({});
   const [submitting, setSubmitting] = useState<string | null>(null);
+  const local = useLocalApprovals();
 
   const pick = (approvalId: string, callId: string, decision: string) => {
     setDecisions((previous) => ({
@@ -131,6 +135,9 @@ export function ApprovalInboxDrawer({
         </Button>
       }
     >
+      <Typography.Title level={5} style={{ marginTop: 0 }}>
+        {tw('approval.cloud', 'Cloud approvals')}
+      </Typography.Title>
       {items.length === 0 ? (
         <Empty
           description={tw('approval.empty', 'No pending approvals')}
@@ -298,6 +305,11 @@ export function ApprovalInboxDrawer({
           })}
         </div>
       )}
+      <Divider />
+      <Typography.Title level={5}>
+        {tw('approval.local', 'Local approvals')}
+      </Typography.Title>
+      <LocalApprovalList />
     </Drawer>
   );
 }

@@ -64,10 +64,6 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       history.push('/admin/users');
       return;
     }
-    if (key === 'desktop-status') {
-      history.push('/desktop/status');
-      return;
-    }
     history.push(`/account/${key}`);
   };
 

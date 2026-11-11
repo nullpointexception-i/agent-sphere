@@ -7,6 +7,7 @@ export interface DesktopBridgeStatus {
 export interface DesktopBridgeSettings {
   serverUrl: string;
   webOrigin: string;
+  deviceKey: string;
   runtimeId?: number;
   runtimeName: string;
   language: 'system' | 'zh-CN' | 'en-US';

@@ -45,10 +45,6 @@ import {
 } from '@/constants/status';
 import { dictApi, type SystemDicEntry } from '@/services/agentSphere/dict';
 import {
-  type LocalRuntime,
-  localRuntimeApi,
-} from '@/services/agentSphere/localRuntime';
-import {
   type SuperAgent,
   type SuperAgentInstances,
   superAgentApi,
@@ -88,7 +84,6 @@ export default function SuperAgentPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [runtimes, setRuntimes] = useState<LocalRuntime[]>([]);
   const [form] = Form.useForm();
   const agentType = Form.useWatch('agentType', form);
   const [selected, setSelected] = useState<SuperAgent | null>(null);
@@ -183,10 +178,6 @@ export default function SuperAgentPage() {
   const openCreate = () => {
     form.setFieldsValue({ agentType: 'CLOUD' });
     setCreateOpen(true);
-    localRuntimeApi
-      .list()
-      .then((list) => setRuntimes(list ?? []))
-      .catch(() => setRuntimes([]));
   };
 
   const submitCreate = async () => {
@@ -710,32 +701,6 @@ export default function SuperAgentPage() {
               ]}
             />
           </Form.Item>
-          {agentType === 'LOCAL' ? (
-            <Form.Item
-              name="localRuntimeId"
-              label={t('pages.superAgent.localRuntime', 'Local runtime')}
-              rules={[
-                {
-                  required: true,
-                  message: t(
-                    'pages.superAgent.localRuntimeRequired',
-                    'Select a local runtime',
-                  ),
-                },
-              ]}
-            >
-              <Select
-                options={runtimes.map((runtime) => ({
-                  value: runtime.id,
-                  label: `${runtime.name} · ${runtime.runtimeKind}${
-                    runtime.online
-                      ? ` · ${t('pages.superAgent.online', 'Online')}`
-                      : ''
-                  }`,
-                }))}
-              />
-            </Form.Item>
-          ) : null}
           <Form.Item
             name="name"
             label={t('pages.superAgent.name', 'Name')}

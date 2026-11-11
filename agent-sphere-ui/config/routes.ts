@@ -288,26 +288,6 @@ export default [
     ],
   },
   {
-    path: '/desktop',
-    layout: false,
-    routes: [
-      {
-        path: '/desktop',
-        redirect: '/desktop/setup',
-      },
-      {
-        path: '/desktop/setup',
-        name: 'desktopSetup',
-        component: './desktop/setup',
-      },
-      {
-        path: '/desktop/status',
-        name: 'desktopStatus',
-        component: './desktop/status',
-      },
-    ],
-  },
-  {
     path: '/workspace',
     layout: false,
     component: './workspace',
