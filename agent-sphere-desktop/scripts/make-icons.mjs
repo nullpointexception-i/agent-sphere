@@ -71,7 +71,7 @@ function render(size) {
 }
 
 await mkdir('resources', { recursive: true });
-for (const [name, size] of [['tray.png', 32], ['icon.png', 256]]) {
+for (const [name, size] of [['tray.png', 32], ['icon.png', 1024]]) {
   await writeFile(path.join('resources', name), render(size));
   console.log(`wrote resources/${name}`);
 }
