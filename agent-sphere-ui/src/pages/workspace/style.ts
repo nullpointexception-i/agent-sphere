@@ -958,6 +958,28 @@ export const useStyles = createStyles(({ css }) => ({
     background: linear-gradient(135deg, #95ecb0, #7fdc9d);
     color: #143d27;
   `,
+  messageSending: css`
+    display: block;
+    margin-top: 4px;
+    text-align: right;
+    font-size: 10px;
+    color: #a7a2b8;
+  `,
+  messageRetry: css`
+    display: block;
+    margin-top: 4px;
+    margin-left: auto;
+    padding: 0;
+    border: none;
+    background: transparent;
+    text-align: right;
+    font-size: 10px;
+    color: #f2637f;
+    cursor: pointer;
+    &:hover {
+      text-decoration: underline;
+    }
+  `,
   taskCard: css`
     padding: 12px 14px;
     border-radius: 10px;

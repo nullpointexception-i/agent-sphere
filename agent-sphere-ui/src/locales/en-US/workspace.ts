@@ -305,6 +305,8 @@ export default {
   'workspace.chat.unpinFailed': 'Failed to unpin',
   'workspace.chat.actionFailed': 'Operation failed',
   'workspace.chat.sendFailed': 'Failed to send',
+  'workspace.chat.sending': 'Sending…',
+  'workspace.chat.sendFailedRetry': 'Failed to send · Retry',
 
   'workspace.contacts.title': 'Contacts',
   'workspace.contacts.subtitle':

@@ -236,6 +236,12 @@ export function taskStatusLabel(status?: string) {
   }
 }
 
+/** A locally echoed message that the server has not confirmed yet. */
+export interface PendingMessage extends ImMessage {
+  /** Human-readable failure reason shown under a failed bubble. */
+  error?: string;
+}
+
 export function mergeMessages(older: ImMessage[], current: ImMessage[]) {
   const byId = new Map<number, ImMessage>();
   for (const message of [...older, ...current]) {

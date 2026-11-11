@@ -103,7 +103,8 @@ export default {
   'workspace.avatars.localRuntimePlaceholder': '请选择本地运行时',
   'workspace.avatars.localRuntimeSaved': '本地运行时已更新',
   'workspace.avatars.localRuntimeHint': '任务将通过该运行时在这台机器上执行。',
-  'workspace.avatars.runtimeDesktopOnly': '请在 AgentSphere Desktop 中连接本地运行时。',
+  'workspace.avatars.runtimeDesktopOnly':
+    '请在 AgentSphere Desktop 中连接本地运行时。',
   'workspace.avatars.runtimeMissing': '未检测到',
   'workspace.avatars.runtimeVersion': '版本',
   'workspace.avatars.runtimePath': '路径',
@@ -128,7 +129,8 @@ export default {
   'workspace.avatars.localConfigMissing': '本地配置不可用。',
   'workspace.avatars.localConfigUnbound':
     '请选择工作目录并保存本地配置，否则任务无法执行。',
-  'workspace.avatars.localModelPlaceholder': '例如 opencode-go/deepseek-v4.1-flash',
+  'workspace.avatars.localModelPlaceholder':
+    '例如 opencode-go/deepseek-v4.1-flash',
   'workspace.avatars.localModelHint': '留空使用 opencode 默认模型。',
   'workspace.avatars.modelListEmpty': '暂无可用的模型',
   'workspace.avatars.chooseWorkspace': '选择目录',
@@ -284,6 +286,8 @@ export default {
   'workspace.chat.unpinFailed': '取消置顶失败',
   'workspace.chat.actionFailed': '操作失败',
   'workspace.chat.sendFailed': '发送失败',
+  'workspace.chat.sending': '发送中…',
+  'workspace.chat.sendFailedRetry': '发送失败 · 点击重试',
 
   'workspace.contacts.title': '联系人',
   'workspace.contacts.subtitle': '找到同事或数字分身，开始聊天',

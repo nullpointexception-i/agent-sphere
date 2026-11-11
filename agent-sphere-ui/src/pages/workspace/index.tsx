@@ -115,6 +115,7 @@ import {
   mergeConversation,
   mergeMessages,
   messageTime,
+  type PendingMessage,
   positionLabel,
   sortConversations,
   statusLabel,
@@ -1635,6 +1636,8 @@ function ChatDetail({
   const [participants, setParticipants] = useState<any[]>([]);
   const [agents, setAgents] = useState<ConversationAgent[]>([]);
   const [messages, setMessages] = useState<ImMessage[]>([]);
+  /** Locally echoed messages awaiting (or failing) the server confirmation. */
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -1662,6 +1665,8 @@ function ChatDetail({
   const loadedIdRef = useRef<number | null>(null);
   const messagesRef = useRef<ImMessage[]>([]);
   messagesRef.current = messages;
+  /** Stable negative ids for optimistic rows; never collide with server ids. */
+  const pendingIdRef = useRef(-1);
   const agentStream = useAgentStream(conversationId);
 
   const avatarCandidates = useMemo(
@@ -1862,6 +1867,7 @@ function ChatDetail({
     const first = loadedIdRef.current !== conversationId;
     if (first) {
       setMessages([]);
+      setPendingMessages([]);
       setParticipants([]);
       setAgents([]);
       setConversation(null);
@@ -1894,7 +1900,7 @@ function ChatDetail({
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
     // Reasoning fragments now live in the floating title chip, not the flow.
-  }, [messages, agentStream?.reply]);
+  }, [messages, pendingMessages, agentStream?.reply]);
 
   useEffect(() => {
     const lastSeq = messages[messages.length - 1]?.seq;
@@ -1928,6 +1934,12 @@ function ChatDetail({
       return;
     }
     if (type === 'message_created') {
+      if (data.clientMsgId) {
+        // The authoritative row landed: retire the matching local echo.
+        setPendingMessages((previous) =>
+          previous.filter((item) => item.clientMsgId !== data.clientMsgId),
+        );
+      }
       // Agent authoritative reply: retire the ephemeral stream bubble.
       if (data.senderType === 'AGENT') {
         finalizeAgentStream(conversationId, data.seq);
@@ -2037,14 +2049,22 @@ function ChatDetail({
     return () => window.clearTimeout(timer);
   }, [agentStream?.phase, agentStream?.runId, conversationId]);
 
-  const send = async () => {
+  const send = () => {
     const value = text.trim();
     if (!value || sending) return;
-    await sendText(value, `workspace-${Date.now()}`);
+    // Clear the composer immediately: the message is already on the wall as a
+    // pending bubble, so waiting for the POST would make sending feel slow.
     setText('');
     mention.close();
     if (composerRef.current) composerRef.current.style.height = 'auto';
+    void sendText(value, `workspace-${Date.now()}`);
   };
+
+  const sendErrorText = (error: any): string =>
+    error?.response?.data?.message ||
+    error?.data?.message ||
+    error?.message ||
+    tw('chat.sendFailed', 'Failed to send');
 
   /** Sends an arbitrary DM text; clarification option buttons reuse this path. */
   const sendText = async (value: string, clientMsgId?: string) => {
@@ -2058,8 +2078,26 @@ function ChatDetail({
       );
       return;
     }
-    // Only DMs with a digital avatar show the "processing" bubble; regular user/group sessions do not.
     const shouldStream = Boolean(chatAgentId);
+    const id = clientMsgId || `workspace-${Date.now()}`;
+    // Optimistic echo: the bubble appears before the server confirms, then is
+    // replaced by the authoritative row (same clientMsgId) on success.
+    setPendingMessages((previous) => [
+      ...previous,
+      {
+        id: pendingIdRef.current--,
+        conversationId,
+        seq: 0,
+        senderType: 'USER',
+        senderId: me?.id,
+        clientMsgId: id,
+        type: 'TEXT',
+        content: { text: value },
+        status: 'SENDING',
+        createdAt: new Date().toISOString(),
+        senderName: displayName(me),
+      },
+    ]);
     setSending(true);
     // Sending is an explicit jump-to-bottom intent even if the user had
     // scrolled up to read history.
@@ -2071,25 +2109,70 @@ function ChatDetail({
     try {
       // The body is the source of truth: deleting an @name also drops its routing.
       const mentionList = mentionsFromText(value, mentionCandidates);
-      await imApi.send(
-        conversationId,
-        value,
-        clientMsgId || `option-${Date.now()}`,
-        mentionList,
+      const sent = await imApi.send(conversationId, value, id, mentionList);
+      setPendingMessages((previous) =>
+        previous.filter((item) => item.clientMsgId !== id),
       );
-      load(true);
+      if (sent) {
+        setMessages((previous) => mergeMessages(previous, [sent]));
+      }
     } catch (error: any) {
+      const reason = sendErrorText(error);
+      setPendingMessages((previous) =>
+        previous.map((item) =>
+          item.clientMsgId === id
+            ? { ...item, status: 'FAILED', error: reason }
+            : item,
+        ),
+      );
       if (shouldStream) {
         resetAgentStream(conversationId);
       }
-      message.error(
-        error?.response?.data?.message ||
-          error?.data?.message ||
-          error?.message ||
-          tw('chat.sendFailed', 'Failed to send'),
-      );
+      message.error(reason);
     } finally {
       setSending(false);
+    }
+  };
+
+  /** Retries a failed echo; the server deduplicates by clientMsgId. */
+  const retryPending = async (item: PendingMessage) => {
+    if (item.status === 'SENDING') return;
+    const value = messageText(item) || '';
+    if (!value) return;
+    const id = item.clientMsgId || `retry-${Date.now()}`;
+    const shouldStream = Boolean(chatAgentId);
+    setPendingMessages((previous) =>
+      previous.map((row) =>
+        row.id === item.id
+          ? { ...row, clientMsgId: id, status: 'SENDING', error: undefined }
+          : row,
+      ),
+    );
+    if (shouldStream) beginAgentStream(conversationId);
+    try {
+      const sent = await imApi.send(
+        conversationId,
+        value,
+        id,
+        mentionsFromText(value, mentionCandidates),
+      );
+      setPendingMessages((previous) =>
+        previous.filter((row) => row.id !== item.id),
+      );
+      if (sent) {
+        setMessages((previous) => mergeMessages(previous, [sent]));
+      }
+    } catch (error: any) {
+      const reason = sendErrorText(error);
+      setPendingMessages((previous) =>
+        previous.map((row) =>
+          row.id === item.id
+            ? { ...row, status: 'FAILED', error: reason }
+            : row,
+        ),
+      );
+      if (shouldStream) resetAgentStream(conversationId);
+      message.error(reason);
     }
   };
 
@@ -2446,6 +2529,11 @@ function ChatDetail({
       member.participantType === 'AGENT' &&
       Number(member.participantId) !== Number(me?.id),
   );
+  // Local echoes render after the authoritative wall; they never participate in
+  // seq/cursor math until the server confirms them.
+  const renderedMessages = pendingMessages.length
+    ? [...messages, ...pendingMessages]
+    : messages;
   const conversationTitle = (() => {
     if (!conversation) return tw('conversation.chat', 'Chat');
     if (conversation.type === 'GROUP') {
@@ -2559,13 +2647,14 @@ function ChatDetail({
         }}
       >
         <Spin spinning={loading}>
-          {messages.length === 0 ? (
+          {renderedMessages.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={tw('conversation.noMessages', 'No messages')}
             />
           ) : (
-            messages.map((item) => {
+            renderedMessages.map((item) => {
+              const pending = item.id < 0;
               const sender = participants.find(
                 (member) =>
                   member.participantType === item.senderType &&
@@ -2633,6 +2722,7 @@ function ChatDetail({
               return (
                 <Dropdown
                   key={item.id}
+                  disabled={pending}
                   trigger={['contextMenu']}
                   menu={{
                     items: menuItems,
@@ -2720,6 +2810,25 @@ function ChatDetail({
                             tw('chat.messageFallback', '[Message]')}
                         </div>
                       )}
+                      {pending ? (
+                        item.status === 'FAILED' ? (
+                          <button
+                            type="button"
+                            className={styles.messageRetry}
+                            title={(item as PendingMessage).error}
+                            onClick={() => void retryPending(item)}
+                          >
+                            {tw(
+                              'chat.sendFailedRetry',
+                              'Failed to send · Retry',
+                            )}
+                          </button>
+                        ) : (
+                          <span className={styles.messageSending}>
+                            {tw('chat.sending', 'Sending…')}
+                          </span>
+                        )
+                      ) : null}
                     </div>
                   </div>
                 </Dropdown>
@@ -2736,7 +2845,8 @@ function ChatDetail({
             // render above a message the list does not show yet.
             hidden={
               agentStream.phase === AGENT_STREAM_PHASE.WAITING &&
-              messages[messages.length - 1]?.senderType !== 'USER'
+              renderedMessages[renderedMessages.length - 1]?.senderType !==
+                'USER'
             }
           />
         ) : null}
