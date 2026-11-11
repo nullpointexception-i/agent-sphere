@@ -9,6 +9,7 @@ import com.buukle.agent.common.annotation.RequirePermission;
 import com.buukle.agent.common.context.WithTenant;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.superagent.dtvo.dto.CreateSuperAgentDTO;
+import com.buukle.agent.superagent.dtvo.dto.UpdateSuperAgentLocalRuntimeDTO;
 import com.buukle.agent.superagent.dtvo.dto.UpdateSuperAgentModelRouteDTO;
 import com.buukle.agent.superagent.dtvo.dto.UpdateVisibilityDTO;
 import com.buukle.agent.superagent.service.SuperAgentService;
@@ -81,6 +82,14 @@ public class SuperAgentController extends BaseController {
     public ResponseEntity<?> updateModelRoute(@PathVariable Long id,
                                               @Valid @RequestBody UpdateSuperAgentModelRouteDTO dto) {
         return ok(superAgentService.updateModelRoute(id, dto.getModelRouteId()));
+    }
+
+    @AuditLog(action = "UPDATE_LOCAL_RUNTIME", resourceType = "SuperAgent", resourceId = "#id")
+    @RequirePermission(PermissionCodes.SUPER_AGENT_UPDATE)
+    @PatchMapping("/{id}/local-runtime")
+    public ResponseEntity<?> updateLocalRuntime(@PathVariable Long id,
+                                                @Valid @RequestBody UpdateSuperAgentLocalRuntimeDTO dto) {
+        return ok(superAgentService.updateLocalRuntime(id, dto.getLocalRuntimeId()));
     }
 
     @AuditLog(action = "DELETE", resourceType = "SuperAgent", resourceId = "#id")

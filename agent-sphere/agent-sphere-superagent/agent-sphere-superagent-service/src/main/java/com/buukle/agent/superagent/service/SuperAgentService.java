@@ -24,6 +24,9 @@ public interface SuperAgentService {
     /** Update the model route used by both Router and Worker instances. */
     SuperAgentVO updateModelRoute(Long id, Long modelRouteId);
 
+    /** Rebind a LOCAL avatar to another desktop runtime owned by the caller. */
+    SuperAgentVO updateLocalRuntime(Long id, Long localRuntimeId);
+
     void delete(Long id);
 
     SuperAgentVO pause(Long id);

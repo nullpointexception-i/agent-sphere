@@ -229,6 +229,10 @@ public class SuperAgentServiceImpl implements SuperAgentService {
     @Transactional
     public SuperAgentVO updateModelRoute(Long id, Long modelRouteId) {
         AgentSuperAgent agent = requireOwned(id);
+        if (AgentType.LOCAL.equals(agent.getAgentType())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "local avatars do not use a model route");
+        }
         if (modelRouteId == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID,
                     "modelRouteId is required");
@@ -246,6 +250,32 @@ public class SuperAgentServiceImpl implements SuperAgentService {
             throw new BizException(CommonErrorCode.PARAM_INVALID,
                     "avatar has no managed instances");
         }
+        return toVO(agent);
+    }
+
+    @Override
+    @Transactional
+    public SuperAgentVO updateLocalRuntime(Long id, Long localRuntimeId) {
+        AgentSuperAgent agent = requireOwned(id);
+        if (!AgentType.LOCAL.equals(agent.getAgentType())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "only local avatars bind a local runtime");
+        }
+        if (localRuntimeId == null) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "localRuntimeId is required");
+        }
+        AgentLocalRuntime runtime = localRuntimeMapper.selectById(localRuntimeId);
+        if (runtime == null || !LocalRuntimeStatus.ACTIVE.equals(runtime.getStatus())) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "local runtime not found or disabled");
+        }
+        if (!AuthContext.isSuperAdmin()
+                && !currentUserId().equals(runtime.getOwnerUserId())) {
+            throw new BizException(CommonErrorCode.FORBIDDEN);
+        }
+        agent.setLocalRuntimeId(localRuntimeId);
+        superAgentMapper.updateById(agent);
         return toVO(agent);
     }
 

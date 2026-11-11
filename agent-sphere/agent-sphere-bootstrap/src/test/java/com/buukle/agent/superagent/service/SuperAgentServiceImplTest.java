@@ -12,8 +12,11 @@ import com.buukle.agent.instance.dtvo.vo.InstanceVO;
 import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.spi.RouteSpi;
+import com.buukle.agent.superagent.domain.AgentLocalRuntime;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.dtvo.dto.CreateSuperAgentDTO;
+import com.buukle.agent.superagent.dtvo.enums.AgentType;
+import com.buukle.agent.superagent.dtvo.enums.LocalRuntimeStatus;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.dtvo.vo.SuperAgentVO;
 import com.buukle.agent.superagent.repository.AgentLocalRuntimeMapper;
@@ -237,6 +240,63 @@ class SuperAgentServiceImplTest {
         assertEquals(7L, result.getSuperAgentId());
         assertEquals(11L, result.getRouterInstance().getId());
         assertEquals(12L, result.getWorkerInstance().getId());
+    }
+
+    @Test
+    void updateLocalRuntime_rebindsOwnedRuntime() {
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setAgentType(AgentType.LOCAL);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+        AgentLocalRuntime runtime = new AgentLocalRuntime();
+        runtime.setId(3L);
+        runtime.setOwnerUserId(1L);
+        runtime.setStatus(LocalRuntimeStatus.ACTIVE);
+        when(localRuntimeMapper.selectById(3L)).thenReturn(runtime);
+
+        service.updateLocalRuntime(7L, 3L);
+
+        assertEquals(3L, agent.getLocalRuntimeId());
+        verify(superAgentMapper).updateById(agent);
+    }
+
+    @Test
+    void updateLocalRuntime_rejectsCloudAgent() {
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setAgentType(AgentType.CLOUD);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+
+        assertThrows(BizException.class, () -> service.updateLocalRuntime(7L, 3L));
+    }
+
+    @Test
+    void updateLocalRuntime_rejectsForeignRuntime() {
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setAgentType(AgentType.LOCAL);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+        AgentLocalRuntime runtime = new AgentLocalRuntime();
+        runtime.setId(3L);
+        runtime.setOwnerUserId(2L);
+        runtime.setStatus(LocalRuntimeStatus.ACTIVE);
+        when(localRuntimeMapper.selectById(3L)).thenReturn(runtime);
+
+        assertThrows(BizException.class, () -> service.updateLocalRuntime(7L, 3L));
+    }
+
+    @Test
+    void updateModelRoute_rejectsLocalAgent() {
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setAgentType(AgentType.LOCAL);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+
+        assertThrows(BizException.class, () -> service.updateModelRoute(7L, 33L));
     }
 
     private static InstanceVO instance(Long id) {
