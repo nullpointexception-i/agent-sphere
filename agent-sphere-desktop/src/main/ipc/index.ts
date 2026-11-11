@@ -1,4 +1,5 @@
 import { app, dialog, ipcMain } from 'electron';
+import type { BrowserWindow } from 'electron';
 import { z } from 'zod';
 import type {
   AgentProfile,
@@ -70,6 +71,7 @@ export interface IpcDependencies {
   approvals: ApprovalBroker;
   bootstrap: () => BootstrapConfig;
   info: () => DesktopInfo;
+  window: () => BrowserWindow | null;
   reloadWindow: () => void;
   openLogs: () => Promise<void>;
   exportLogs: () => Promise<string>;
@@ -127,10 +129,15 @@ export function registerIpc(deps: IpcDependencies): void {
     return deps.profiles.remove(id);
   });
   ipcMain.handle(IPC.profilesPickWorkspace, async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    return result.canceled ? null : (result.filePaths[0] ?? null);
+    const parent = deps.window();
+    try {
+      const result = parent
+        ? await dialog.showOpenDialog(parent, { properties: ['openDirectory'] })
+        : await dialog.showOpenDialog({ properties: ['openDirectory'] });
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    } catch {
+      return null;
+    }
   });
 
   ipcMain.handle(IPC.tasksList, () => deps.runtime.listTasks());

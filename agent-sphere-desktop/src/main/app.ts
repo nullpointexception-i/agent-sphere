@@ -65,6 +65,7 @@ export class AppController {
       approvals: this.approvals,
       bootstrap: () => this.bootstrap(),
       info: () => this.info(),
+      window: () => this.window,
       reloadWindow: () => this.loadHome(),
       openLogs: async () => {
         await shell.openPath(paths.logsDir());
@@ -72,7 +73,7 @@ export class AppController {
       exportLogs: () => this.exportLogs(),
     });
 
-    this.window = createMainWindow(this.settings.isConfigured() ? '/index.html' : '/desktop/setup');
+    this.window = createMainWindow(this.settings.isConfigured() ? '/workspace' : '/desktop/setup');
     this.window.on('close', (event) => {
       if (!this.quitting && this.settings.get().closeToTray) {
         event.preventDefault();
@@ -99,7 +100,7 @@ export class AppController {
 
   show(): void {
     if (!this.window) {
-      this.window = createMainWindow(this.settings.isConfigured() ? '/index.html' : '/desktop/setup');
+      this.window = createMainWindow(this.settings.isConfigured() ? '/workspace' : '/desktop/setup');
     }
     if (this.window.isMinimized()) this.window.restore();
     this.window.show();
@@ -114,7 +115,7 @@ export class AppController {
     if (!this.window || this.window.isDestroyed()) return;
     const devUrl = process.env.AS_DEV_URL;
     void this.window.loadURL(
-      devUrl ? `${devUrl.replace(/\/+$/, '')}/` : 'app://bundle/index.html',
+      devUrl ? `${devUrl.replace(/\/+$/, '')}/` : 'app://bundle/workspace',
     );
   }
 
