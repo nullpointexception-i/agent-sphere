@@ -229,7 +229,7 @@ export default function DesktopAgentsPage() {
                 render: (_value, agent) => (
                   <Input
                     value={profileOf(agent).model}
-                    placeholder="gpt-6-luna"
+                    placeholder="provider/model"
                     onChange={(event) =>
                       patch(agent, { model: event.target.value })
                     }
