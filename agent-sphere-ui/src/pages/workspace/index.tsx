@@ -5,6 +5,7 @@ import {
   CheckOutlined,
   CloseOutlined,
   ContactsOutlined,
+  FileTextOutlined,
   GlobalOutlined,
   HomeOutlined,
   LogoutOutlined,
@@ -129,8 +130,9 @@ import { useStyles } from './style';
 import { TrainingPanel } from './training/TrainingPanel';
 import { AvatarDetailDrawer } from './avatars/AvatarDetailDrawer';
 import { LocalTaskModal } from './avatars/LocalTaskModal';
+import { DocumentsTab } from './documents/DocumentsTab';
 
-type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'me';
+type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'documents' | 'me';
 
 export default function WorkspacePage() {
   const { styles } = useStyles();
@@ -192,6 +194,7 @@ export default function WorkspacePage() {
                   {tab === 'contacts' ? (
                     <ContactsTab onOpenChat={openChat} />
                   ) : null}
+                  {tab === 'documents' ? <DocumentsTab /> : null}
                   {tab === 'me' ? (
                     <MeTab me={me} onOpenAvatars={() => setTab('avatars')} />
                   ) : null}
@@ -288,6 +291,11 @@ function SideRail({
       icon: <TeamOutlined />,
     },
     { key: 'chat', label: tw('nav.chat', 'Chats'), icon: <MessageOutlined /> },
+    {
+      key: 'documents',
+      label: tw('nav.documents', 'Documents'),
+      icon: <FileTextOutlined />,
+    },
     {
       key: 'contacts',
       label: tw('nav.contacts', 'Contacts'),

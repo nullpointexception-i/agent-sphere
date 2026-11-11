@@ -18,6 +18,10 @@ public interface SessionInputSpi {
     /** Returns a specific pending input by its business id, or null when it is gone/resolved. */
     com.buukle.agent.superagent.dtvo.vo.SessionInputVO findPendingByInput(Long threadId, String inputId);
 
+    /** Returns a specific pending tool approval by its business id, or null when it is gone/resolved. */
+    com.buukle.agent.superagent.dtvo.vo.SessionInputVO findPendingApprovalByInput(
+            Long threadId, String inputId);
+
     /** Returns the pending clarification of one avatar in a thread, or null when none. */
     com.buukle.agent.superagent.dtvo.vo.SessionInputVO findPendingByThreadAndAgent(
             Long threadId, Long superAgentId);

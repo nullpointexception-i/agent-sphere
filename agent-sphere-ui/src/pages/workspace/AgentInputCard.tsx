@@ -309,7 +309,7 @@ export function AgentInputCard({
   };
 
   const submitApproval = async () => {
-    if (!approval || !card.inputId || !onApprove || busy) return;
+    if (!approval || !canAnswer || !card.inputId || !onApprove || busy) return;
     const list: SessionInputDecision[] = toolCalls
       .map((call) => ({
         callId: call.callId,
@@ -340,6 +340,14 @@ export function AgentInputCard({
       </div>
       {card.description ? (
         <div className={styles.agentInputPrompt}>{card.description}</div>
+      ) : null}
+      {approval && !canAnswer ? (
+        <div className={styles.agentInputDenied}>
+          {tw(
+            'chat.approvalOwnerOnly',
+            'Only the avatar owner can approve this action',
+          )}
+        </div>
       ) : null}
       {clarification ? (
         <>
@@ -426,7 +434,7 @@ export function AgentInputCard({
                       <button
                         key={decision}
                         type="button"
-                        disabled={busy}
+                        disabled={disabled}
                         className={`${styles.agentInputDecision} ${
                           active ? styles.agentInputDecisionActive : ''
                         } ${
@@ -451,9 +459,11 @@ export function AgentInputCard({
             ))}
             <button
               type="button"
-              disabled={busy}
+              disabled={disabled}
               className={`${styles.agentInputSubmit} ${
-                toolCalls.some((call) => !decisions[call.callId]) || busy
+                toolCalls.some((call) => !decisions[call.callId]) ||
+                busy ||
+                !canAnswer
                   ? styles.agentInputSubmitDisabled
                   : ''
               }`}

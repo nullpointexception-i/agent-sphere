@@ -242,6 +242,38 @@ class ImMessageServiceImplTest {
     }
 
     @Test
+    void page_approvalCardIsOwnerOnly() {
+        ImMessage card = message(3L, 3L, "");
+        card.setType(ImMessageType.CARD);
+        card.setContent("{\"cardType\":\"ROUTER_APPROVAL\",\"inputId\":\"in1\","
+                + "\"superAgentId\":3,\"title\":\"Doc write\",\"toolCallsJson\":\"[]\"}");
+        when(messageMapper.selectList(any())).thenReturn(List.of(card));
+        ImConversation conversation = conversation(10L, 4L);
+        conversation.setThreadId(77L);
+        when(conversationMapper.selectById(10L)).thenReturn(conversation);
+        com.buukle.agent.superagent.dtvo.vo.SessionInputVO input =
+                new com.buukle.agent.superagent.dtvo.vo.SessionInputVO();
+        input.setSuperAgentId(3L);
+        input.setInputId("in1");
+        when(sessionInputSpi.findPendingApprovalByInput(77L, "in1")).thenReturn(input);
+        when(directoryPortProvider.getIfAvailable()).thenReturn(directorySpi);
+        when(directorySpi.findByIds(any())).thenReturn(Map.of(
+                3L, new ChatAgentIdentity(3L, "finance", 1L, "ACTIVE")));
+
+        AuthContext.setUserId(1L);
+        ImMessagePageVO ownerPage = service.page(10L, null, null, 10);
+        assertTrue(ownerPage.getRows().get(0).getCanView());
+        assertTrue(ownerPage.getRows().get(0).getCanAnswer());
+
+        AuthContext.setUserId(2L);
+        ImMessagePageVO memberPage = service.page(10L, null, null, 10);
+        assertTrue(memberPage.getRows().get(0).getCanView());
+        assertFalse(memberPage.getRows().get(0).getCanAnswer());
+        assertEquals("approval_owner_only",
+                memberPage.getRows().get(0).getDeniedReason());
+    }
+
+    @Test
     void search_returnsMatchesInAscendingSeqOrder() {
         ImMessage first = message(1L, 1L, "hello one");
         ImMessage second = message(2L, 2L, "hello two");

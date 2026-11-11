@@ -1,6 +1,7 @@
 package com.buukle.agent.instance.spi;
 
 import com.buukle.agent.common.util.PageResult;
+import com.buukle.agent.instance.dtvo.vo.DocumentSummaryVO;
 import com.buukle.agent.instance.dtvo.vo.DocumentVO;
 
 import java.util.List;
@@ -15,6 +16,13 @@ public interface DocumentSpi {
     List<DocumentVO> listByInstanceAndCreator(Long instanceId, String createdBy, int page, int size);
 
     PageResult<DocumentVO> listAll(int page, int size);
+
+    /** Documents created by the current user (workspace "My documents"). */
+    PageResult<DocumentSummaryVO> listMine(String username, String keyword, int page, int size);
+
+    /** Tenant documents created by other users (workspace "Team documents"). */
+    PageResult<DocumentSummaryVO> listTeam(String username, Long tenantId, String keyword,
+                                           int page, int size);
 
     void update(Long id, String title, String content);
 

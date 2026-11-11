@@ -1125,6 +1125,11 @@ export const useStyles = createStyles(({ css }) => ({
     color: #9b95b5;
     font-size: 12px;
   `,
+  agentInputDenied: css`
+    margin-top: 8px;
+    color: #d46b08;
+    font-size: 12px;
+  `,
   agentStreamRow: css`
     display: flex;
     gap: 8px;

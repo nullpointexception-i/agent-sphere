@@ -5,9 +5,14 @@ package com.buukle.agent.instance.controller;
 import com.buukle.agent.common.constant.ApiPrefix;
 import com.buukle.agent.common.constant.PermissionCodes;
 import com.buukle.agent.common.annotation.RequirePermission;
+import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.WithTenant;
+import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.util.BaseController;
 import com.buukle.agent.instance.dtvo.dto.UpdateDocumentDTO;
+import com.buukle.agent.instance.dtvo.enums.DocumentListScope;
 import com.buukle.agent.instance.dtvo.vo.DocumentShareVO;
 import com.buukle.agent.instance.dtvo.vo.DocumentVO;
 import com.buukle.agent.instance.spi.DocumentSpi;
@@ -15,6 +20,7 @@ import com.buukle.agent.instance.service.support.SessionAccessGuard;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,11 +37,24 @@ public class DocumentController extends BaseController {
     @GetMapping
     public ResponseEntity<?> list(
             @RequestParam(required = false) Long sessionId,
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (sessionId != null) {
             sessionAccessGuard.requireReadable(sessionId);
             return ok(documentSpi.listBySession(sessionId, page, size));
+        }
+        if (StringUtils.hasText(scope)) {
+            String username = AuthContext.getUsername();
+            if (DocumentListScope.MINE.equalsIgnoreCase(scope)) {
+                return ok(documentSpi.listMine(username, keyword, page, size));
+            }
+            if (DocumentListScope.TEAM.equalsIgnoreCase(scope)) {
+                return ok(documentSpi.listTeam(username, TenantContext.get(), keyword, page, size));
+            }
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "Unknown document scope: " + scope);
         }
         return ok(documentSpi.listAll(page, size));
     }

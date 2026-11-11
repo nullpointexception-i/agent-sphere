@@ -1,6 +1,7 @@
 package com.buukle.agent.bootstrap.controller;
 
 import com.buukle.agent.capability.builtin.dtvo.enums.BuiltinToolEnum;
+import com.buukle.agent.capability.builtin.tool.docwrite.tool.CapabilityBuiltinToolDocOperation;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -20,11 +21,16 @@ class BuiltinToolPolicyTest {
     @Test
     void writeToolsUseExpectedSecurity() {
         assertEquals("WRITE", BuiltinToolEnum.DOCWRITE.getAccessMode().name());
-        assertEquals("L2", BuiltinToolEnum.DOCWRITE.getSecurityLevel().name());
+        assertEquals("L1", BuiltinToolEnum.DOCWRITE.getSecurityLevel().name());
         assertEquals("READ", BuiltinToolEnum.DOC_READ.getAccessMode().name());
         assertEquals("L1", BuiltinToolEnum.DOC_READ.getSecurityLevel().name());
         assertEquals("WRITE", BuiltinToolEnum.SKILL_MANAGE.getAccessMode().name());
         assertEquals("L2", BuiltinToolEnum.SKILL_MANAGE.getSecurityLevel().name());
         assertFalse(BuiltinToolEnum.SKILL_LIBRARY.isCompressEnabled());
+    }
+
+    @Test
+    void docWriteMustBeBoundExplicitly() {
+        assertTrue(new CapabilityBuiltinToolDocOperation(null, null).needConfig());
     }
 }

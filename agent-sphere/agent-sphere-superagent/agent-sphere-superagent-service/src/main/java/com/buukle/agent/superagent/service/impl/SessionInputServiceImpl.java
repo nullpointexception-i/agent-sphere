@@ -210,6 +210,28 @@ public class SessionInputServiceImpl implements SessionInputSpi {
     }
 
     @Override
+    public SessionInputVO findPendingApprovalByInput(Long threadId, String inputId) {
+        if (threadId == null || inputId == null || inputId.isBlank()) {
+            return null;
+        }
+        TenantUtil.stop();
+        TenantScopeHolder.clear();
+        TenantContext.clear();
+        try {
+            AgentSessionInput input = sessionInputMapper.selectOne(
+                    Wrappers.<AgentSessionInput>lambdaQuery()
+                            .eq(AgentSessionInput::getThreadId, threadId)
+                            .eq(AgentSessionInput::getInputType, SessionInputType.APPROVAL)
+                            .eq(AgentSessionInput::getInputId, inputId)
+                            .eq(AgentSessionInput::getStatus, SessionInputStatus.PENDING)
+                            .last(LIMIT_ONE));
+            return input == null ? null : toVO(input);
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    @Override
     public SessionInputVO findPendingByThreadAndAgent(Long threadId, Long superAgentId) {
         if (threadId == null || superAgentId == null) {
             return null;

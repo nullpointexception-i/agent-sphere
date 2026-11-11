@@ -81,8 +81,10 @@ public class ImMessageServiceImpl implements ImMessageService {
     private static final String DEFAULT_DEVICE = "default";
     private static final String CHANNEL_IM = "IM_BUILTIN";
     private static final String ROUTER_CLARIFICATION_CARD = "ROUTER_CLARIFICATION";
+    private static final String ROUTER_APPROVAL_CARD = "ROUTER_APPROVAL";
     private static final String CLARIFICATION_DENIED_REASON =
             "Only the asker, the avatar owner or a group admin can answer this clarification";
+    private static final String APPROVAL_DENIED_REASON = "approval_owner_only";
 
     private final ImMessageMapper messageMapper;
     private final ImConversationMapper conversationMapper;
@@ -752,13 +754,40 @@ public class ImMessageServiceImpl implements ImMessageService {
                     continue;
                 }
                 TaskCardPayload card = parseCard(row.getContent());
-                if (card == null || card.getInputId() == null
-                        || !ROUTER_CLARIFICATION_CARD.equalsIgnoreCase(card.getCardType())) {
+                if (card == null || card.getInputId() == null) {
+                    continue;
+                }
+                boolean approval = ROUTER_APPROVAL_CARD.equalsIgnoreCase(card.getCardType());
+                if (!approval && !ROUTER_CLARIFICATION_CARD.equalsIgnoreCase(card.getCardType())) {
                     continue;
                 }
                 ClarificationContext context = conversations.computeIfAbsent(
                         row.getConversationId(), id -> clarificationContext(id, viewerId));
                 if (context == null) {
+                    continue;
+                }
+                if (approval) {
+                    // Approval cards stay visible to the room, but only the avatar
+                    // owner (or a platform super admin) may authorize the tool calls.
+                    row.setCanView(true);
+                    if (viewerId == null) {
+                        row.setCanAnswer(false);
+                        continue;
+                    }
+                    SessionInputVO input = spi.findPendingApprovalByInput(
+                            context.threadId(), card.getInputId());
+                    caller.restore();
+                    if (input == null) {
+                        row.setCanAnswer(false);
+                        continue;
+                    }
+                    Long superAgentId = card.getSuperAgentId() != null
+                            ? card.getSuperAgentId() : input.getSuperAgentId();
+                    boolean allowed = isAvatarOwnerOrSuperAdmin(superAgentId);
+                    row.setCanAnswer(allowed);
+                    if (!allowed) {
+                        row.setDeniedReason(APPROVAL_DENIED_REASON);
+                    }
                     continue;
                 }
                 if (viewerId == null || !context.strict()) {
@@ -786,6 +815,21 @@ public class ImMessageServiceImpl implements ImMessageService {
         } finally {
             caller.restore();
         }
+    }
+
+    private boolean isAvatarOwnerOrSuperAdmin(Long superAgentId) {
+        if (AuthContext.isSuperAdmin()) {
+            return true;
+        }
+        if (superAgentId == null) {
+            return false;
+        }
+        SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+        if (directory == null) {
+            return false;
+        }
+        ChatAgentIdentity identity = directory.findByIds(List.of(superAgentId)).get(superAgentId);
+        return identity != null && Objects.equals(AuthContext.getUserId(), identity.ownerUserId());
     }
 
     private ClarificationContext clarificationContext(Long conversationId, Long viewerId) {

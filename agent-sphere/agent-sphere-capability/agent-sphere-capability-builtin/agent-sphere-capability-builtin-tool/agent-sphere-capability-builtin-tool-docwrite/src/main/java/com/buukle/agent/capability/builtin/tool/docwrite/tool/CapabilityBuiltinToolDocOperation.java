@@ -59,7 +59,8 @@ public class CapabilityBuiltinToolDocOperation implements CapabilityBuiltinToolS
 
     @Override
     public boolean needConfig() {
-        return false;
+        // Document write is powerful and must be bound explicitly per instance.
+        return true;
     }
 
     @Override

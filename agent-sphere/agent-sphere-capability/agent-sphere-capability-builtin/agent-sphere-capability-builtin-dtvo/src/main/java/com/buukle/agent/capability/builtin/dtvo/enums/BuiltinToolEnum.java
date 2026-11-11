@@ -9,7 +9,7 @@ public enum BuiltinToolEnum {
     TODOWRITE(3, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     WEB_READ(4, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     CHROME(5, ToolAccessMode.READ_WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, true),
-    DOCWRITE(6, ToolAccessMode.WRITE, ToolSecurityLevel.L2, ToolApprovalScope.SESSION, false),
+    DOCWRITE(6, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     ASK_CLARIFICATION(7, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     SKILL_LIBRARY(8, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     SKILL_MANAGE(9, ToolAccessMode.WRITE, ToolSecurityLevel.L2, ToolApprovalScope.SESSION, false),

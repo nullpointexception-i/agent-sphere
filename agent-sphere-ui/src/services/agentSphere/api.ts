@@ -5,6 +5,21 @@ import { API_BASE } from '@/constants/api';
 
 const BASE = API_BASE;
 
+/** Workspace document grid row (backend DocumentSummaryVO). */
+export interface DocumentSummary {
+  id: number;
+  title: string;
+  contentType?: string;
+  version?: number;
+  sessionId?: number;
+  instanceId?: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  contentLength?: number;
+  preview?: string;
+}
+
 /**
  * Session cleanup execution report (backend SessionCleanupReportVO).
  * tableStats keys are database table names, directly understandable to operations.
@@ -541,8 +556,19 @@ export const agentApi = {
 
   artifacts: {
     documents: {
-      list: (params?: { sessionId?: number; page?: number; size?: number }) =>
-        request<any>(`${BASE}/artifacts/documents`, { params }),
+      list: (params?: {
+        sessionId?: number;
+        page?: number;
+        size?: number;
+        scope?: 'mine' | 'team';
+        keyword?: string;
+      }) =>
+        request<{
+          records: DocumentSummary[];
+          total: number;
+          page: number;
+          pageSize: number;
+        }>(`${BASE}/artifacts/documents`, { params }),
       getById: (id: number) => request<any>(`${BASE}/artifacts/documents/${id}`),
       delete: (id: number) =>
         request<void>(`${BASE}/artifacts/documents/${id}`, { method: 'DELETE' }),
