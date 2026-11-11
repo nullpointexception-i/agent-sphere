@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, dialog, ipcMain } from 'electron';
 import { z } from 'zod';
 import type {
   AgentProfile,
@@ -125,6 +125,12 @@ export function registerIpc(deps: IpcDependencies): void {
   ipcMain.handle(IPC.profilesRemove, async (_event, agentId: unknown) => {
     const id = z.number().int().positive().parse(agentId);
     return deps.profiles.remove(id);
+  });
+  ipcMain.handle(IPC.profilesPickWorkspace, async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
   ipcMain.handle(IPC.tasksList, () => deps.runtime.listTasks());

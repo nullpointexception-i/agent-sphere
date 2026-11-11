@@ -8,6 +8,8 @@ export interface SuperAgent {
   id: number;
   ownerUserId?: number;
   agentKey?: string;
+  agentType?: 'CLOUD' | 'LOCAL';
+  localRuntimeId?: number;
   name: string;
   description?: string;
   publicVisible?: boolean;
@@ -110,6 +112,8 @@ export const superAgentApi = {
     description?: string;
     positionCode: string;
     config?: string;
+    agentType?: 'CLOUD' | 'LOCAL';
+    localRuntimeId?: number;
   }) =>
     request<SuperAgent>(`${BASE}/super-agents`, {
       method: 'POST',

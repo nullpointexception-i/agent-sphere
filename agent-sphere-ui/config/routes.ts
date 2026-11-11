@@ -305,6 +305,11 @@ export default [
         name: 'desktopStatus',
         component: './desktop/status',
       },
+      {
+        path: '/desktop/agents',
+        name: 'desktopAgents',
+        component: './desktop/agents',
+      },
     ],
   },
   {

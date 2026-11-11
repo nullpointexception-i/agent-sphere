@@ -27,6 +27,15 @@ export default {
   'desktop.setup.manageInConsole': '在控制台中管理',
   'desktop.setup.openWorkspace': '打开工作区',
   'desktop.setup.alreadyConfigured': '本设备已连接。',
+  'desktop.setup.createRuntime': '创建本地运行时',
+  'desktop.setup.createHint':
+    '先登录 AgentSphere，然后在这里创建运行时。令牌只保存在本机。',
+  'desktop.setup.create': '创建',
+  'desktop.setup.signIn': '登录',
+  'desktop.setup.manualBinding': '使用已有运行时',
+  'desktop.setup.runtimeNameRequired': '请输入运行时名称',
+  'desktop.setup.serverUrlRequired': '请先填写服务器地址',
+  'desktop.setup.loginRequired': '请先登录 AgentSphere 再创建运行时',
 
   'desktop.status.title': '本地运行时',
   'desktop.status.refresh': '刷新',
@@ -75,6 +84,10 @@ export default {
   'desktop.agents.sandbox.read-only': '只读',
   'desktop.agents.sandbox.workspace-write': '工作目录可写',
   'desktop.agents.sandbox.danger-full-access': '完全访问',
+  'desktop.agents.saved': '本地分身配置已保存',
+  'desktop.agents.workspaceRequired': '请选择工作目录',
+  'desktop.agents.noLocal': '没有 LOCAL 类型的分身',
+  'desktop.agents.pick': '选择',
 
   'desktop.tasks.title': '任务',
   'desktop.tasks.empty': '暂无任务',

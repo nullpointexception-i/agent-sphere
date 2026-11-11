@@ -39,6 +39,19 @@ export interface DesktopBridgeTask {
   error?: string;
 }
 
+export interface DesktopAgentProfile {
+  agentId: number;
+  agentName: string;
+  driver: DesktopDriverKind;
+  workspace: string;
+  additionalDirs?: string[];
+  model?: string;
+  approvalPolicy: 'untrusted' | 'on-request' | 'never';
+  sandbox: 'read-only' | 'workspace-write' | 'danger-full-access';
+  autoRun: 'always' | 'mention-only' | 'confirm';
+  enabled: boolean;
+}
+
 export interface DesktopBridgeApproval {
   id: string;
   taskId: number;
@@ -66,6 +79,12 @@ export interface DesktopBridge {
   };
   drivers: {
     detect(): Promise<DesktopBridgeDriver[]>;
+  };
+  profiles: {
+    list(): Promise<DesktopAgentProfile[]>;
+    save(profile: DesktopAgentProfile): Promise<DesktopAgentProfile[]>;
+    remove(agentId: number): Promise<DesktopAgentProfile[]>;
+    pickWorkspace(): Promise<string | null>;
   };
   tasks: {
     list(): Promise<DesktopBridgeTask[]>;

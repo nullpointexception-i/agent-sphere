@@ -6,11 +6,14 @@ import {
   Form,
   Input,
   InputNumber,
+  Select,
   Space,
   Tag,
   Typography,
 } from 'antd';
 import { useEffect, useState } from 'react';
+import { localRuntimeApi } from '@/services/agentSphere/localRuntime';
+import { getToken } from '@/utils/auth';
 import {
   type DesktopBridgeStatus,
   getDesktopBridge,
@@ -40,6 +43,13 @@ export default function DesktopSetupPage() {
   const [status, setStatus] = useState<DesktopBridgeStatus>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  const [serverUrl, setServerUrl] = useState('');
+  const [createName, setCreateName] = useState('');
+  const [createKind, setCreateKind] = useState<'OPENCODE' | 'CODEX'>(
+    'OPENCODE',
+  );
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string>();
 
   useEffect(() => {
     if (!bridge) return;
@@ -54,6 +64,7 @@ export default function DesktopSetupPage() {
           runtimeId: settings.runtimeId,
           runtimeName: settings.runtimeName,
         });
+        setServerUrl(settings.serverUrl);
         setStatus(current);
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason));
@@ -78,6 +89,55 @@ export default function DesktopSetupPage() {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const createRuntime = async () => {
+    if (!bridge) return;
+    const name = createName.trim();
+    if (!name) {
+      setCreateError(tw('setup.runtimeNameRequired', 'Enter a runtime name'));
+      return;
+    }
+    const token = getToken();
+    if (!token) {
+      setCreateError(
+        tw(
+          'setup.loginRequired',
+          'Sign in to AgentSphere before creating a runtime',
+        ),
+      );
+      return;
+    }
+    const targetServer = (
+      form.getFieldValue('serverUrl') ||
+      serverUrl ||
+      ''
+    ).trim();
+    if (!targetServer) {
+      setCreateError(
+        tw('setup.serverUrlRequired', 'Enter the server URL first'),
+      );
+      return;
+    }
+    setCreating(true);
+    setCreateError(undefined);
+    try {
+      const issued = await localRuntimeApi.create({
+        name,
+        runtimeKind: createKind,
+      });
+      await bridge.runtime.configure({
+        serverUrl: targetServer,
+        runtimeId: issued.id,
+        deviceToken: issued.token,
+        runtimeName: issued.name,
+      });
+      message.success(tw('setup.success', 'Connected'));
+    } catch (reason) {
+      setCreateError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -157,7 +217,66 @@ export default function DesktopSetupPage() {
           />
         ) : null}
 
-        <Card>
+        <Card
+          title={tw('setup.createRuntime', 'Create a runtime')}
+          size="small"
+        >
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+            <Typography.Text type="secondary">
+              {tw(
+                'setup.createHint',
+                'Sign in to AgentSphere, then create a runtime here. Its token is stored only on this device.',
+              )}
+            </Typography.Text>
+            <Space.Compact style={{ width: '100%' }}>
+              <Input
+                value={createName}
+                placeholder={tw('setup.runtimeName', 'Runtime name')}
+                onChange={(event) => setCreateName(event.target.value)}
+              />
+              <Select
+                value={createKind}
+                style={{ width: 170 }}
+                onChange={(value: 'OPENCODE' | 'CODEX') => setCreateKind(value)}
+                options={[
+                  {
+                    value: 'OPENCODE',
+                    label: tw('runtime.opencode', 'opencode Desktop'),
+                  },
+                  {
+                    value: 'CODEX',
+                    label: tw('runtime.codex', 'ChatGPT / Codex Desktop'),
+                  },
+                ]}
+              />
+              <Button
+                type="primary"
+                loading={creating}
+                onClick={() => void createRuntime()}
+              >
+                {tw('setup.create', 'Create')}
+              </Button>
+            </Space.Compact>
+            {createError ? (
+              <Alert type="error" showIcon message={createError} />
+            ) : null}
+            {!getToken() ? (
+              <Button
+                size="small"
+                onClick={() =>
+                  window.location.assign('/user/login?redirect=/desktop/setup')
+                }
+              >
+                {tw('setup.signIn', 'Sign in')}
+              </Button>
+            ) : null}
+          </Space>
+        </Card>
+
+        <Card
+          title={tw('setup.manualBinding', 'Use an existing runtime')}
+          size="small"
+        >
           <Form
             form={form}
             layout="vertical"

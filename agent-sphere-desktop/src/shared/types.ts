@@ -152,6 +152,7 @@ export interface DesktopBridge {
     list(): Promise<AgentProfile[]>;
     save(profile: AgentProfile): Promise<AgentProfile[]>;
     remove(agentId: number): Promise<AgentProfile[]>;
+    pickWorkspace(): Promise<string | null>;
   };
   tasks: {
     list(): Promise<TaskView[]>;

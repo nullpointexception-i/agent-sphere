@@ -30,6 +30,16 @@ export default {
   'desktop.setup.manageInConsole': 'Manage in console',
   'desktop.setup.openWorkspace': 'Open workspace',
   'desktop.setup.alreadyConfigured': 'This device is connected.',
+  'desktop.setup.createRuntime': 'Create a runtime',
+  'desktop.setup.createHint':
+    'Sign in to AgentSphere, then create a runtime here. Its token is stored only on this device.',
+  'desktop.setup.create': 'Create',
+  'desktop.setup.signIn': 'Sign in',
+  'desktop.setup.manualBinding': 'Use an existing runtime',
+  'desktop.setup.runtimeNameRequired': 'Enter a runtime name',
+  'desktop.setup.serverUrlRequired': 'Enter the server URL first',
+  'desktop.setup.loginRequired':
+    'Sign in to AgentSphere before creating a runtime',
 
   'desktop.status.title': 'Local runtime',
   'desktop.status.refresh': 'Refresh',
@@ -79,6 +89,10 @@ export default {
   'desktop.agents.sandbox.read-only': 'Read only',
   'desktop.agents.sandbox.workspace-write': 'Workspace write',
   'desktop.agents.sandbox.danger-full-access': 'Full access',
+  'desktop.agents.saved': 'Local avatar profile saved',
+  'desktop.agents.workspaceRequired': 'Choose a workspace',
+  'desktop.agents.noLocal': 'No LOCAL avatars found',
+  'desktop.agents.pick': 'Choose',
 
   'desktop.tasks.title': 'Tasks',
   'desktop.tasks.empty': 'No tasks yet',

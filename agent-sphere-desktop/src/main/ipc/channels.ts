@@ -11,6 +11,7 @@ export const IPC = {
   profilesList: 'profiles:list',
   profilesSave: 'profiles:save',
   profilesRemove: 'profiles:remove',
+  profilesPickWorkspace: 'profiles:pick-workspace',
   tasksList: 'tasks:list',
   taskCancel: 'task:cancel',
   approvalsList: 'approvals:list',

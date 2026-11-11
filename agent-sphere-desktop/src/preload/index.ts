@@ -39,6 +39,7 @@ const bridge: DesktopBridge = {
     list: () => ipcRenderer.invoke(IPC.profilesList),
     save: (profile) => ipcRenderer.invoke(IPC.profilesSave, profile),
     remove: (agentId: number) => ipcRenderer.invoke(IPC.profilesRemove, agentId),
+    pickWorkspace: () => ipcRenderer.invoke(IPC.profilesPickWorkspace),
   },
   tasks: {
     list: () => ipcRenderer.invoke(IPC.tasksList),
