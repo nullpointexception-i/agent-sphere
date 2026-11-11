@@ -45,6 +45,10 @@ import {
 } from '@/constants/status';
 import { dictApi, type SystemDicEntry } from '@/services/agentSphere/dict';
 import {
+  type LocalRuntime,
+  localRuntimeApi,
+} from '@/services/agentSphere/localRuntime';
+import {
   type SuperAgent,
   type SuperAgentInstances,
   superAgentApi,
@@ -84,7 +88,9 @@ export default function SuperAgentPage() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [runtimes, setRuntimes] = useState<LocalRuntime[]>([]);
   const [form] = Form.useForm();
+  const agentType = Form.useWatch('agentType', form);
   const [selected, setSelected] = useState<SuperAgent | null>(null);
   const [selectedInstances, setSelectedInstances] =
     useState<SuperAgentInstances | null>(null);
@@ -173,6 +179,15 @@ export default function SuperAgentPage() {
       active = false;
     };
   }, [selected]);
+
+  const openCreate = () => {
+    form.setFieldsValue({ agentType: 'CLOUD' });
+    setCreateOpen(true);
+    localRuntimeApi
+      .list()
+      .then((list) => setRuntimes(list ?? []))
+      .catch(() => setRuntimes([]));
+  };
 
   const submitCreate = async () => {
     const values = await form.validateFields();
@@ -497,11 +512,7 @@ export default function SuperAgentPage() {
         </Typography.Title>
         <Space wrap>
           <Can key="create" code={PERM.superAgentCreate}>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => setCreateOpen(true)}
-            >
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               {t('pages.superAgent.create', 'New Super Agent')}
             </Button>
           </Can>
@@ -681,6 +692,50 @@ export default function SuperAgentPage() {
         destroyOnHidden
       >
         <Form form={form} layout="vertical">
+          <Form.Item
+            name="agentType"
+            label={t('pages.superAgent.agentType', 'Type')}
+            initialValue="CLOUD"
+          >
+            <Select
+              options={[
+                {
+                  value: 'CLOUD',
+                  label: t('pages.superAgent.agentTypeCloud', 'Cloud'),
+                },
+                {
+                  value: 'LOCAL',
+                  label: t('pages.superAgent.agentTypeLocal', 'Local'),
+                },
+              ]}
+            />
+          </Form.Item>
+          {agentType === 'LOCAL' ? (
+            <Form.Item
+              name="localRuntimeId"
+              label={t('pages.superAgent.localRuntime', 'Local runtime')}
+              rules={[
+                {
+                  required: true,
+                  message: t(
+                    'pages.superAgent.localRuntimeRequired',
+                    'Select a local runtime',
+                  ),
+                },
+              ]}
+            >
+              <Select
+                options={runtimes.map((runtime) => ({
+                  value: runtime.id,
+                  label: `${runtime.name} · ${runtime.runtimeKind}${
+                    runtime.online
+                      ? ` · ${t('pages.superAgent.online', 'Online')}`
+                      : ''
+                  }`,
+                }))}
+              />
+            </Form.Item>
+          ) : null}
           <Form.Item
             name="name"
             label={t('pages.superAgent.name', 'Name')}
