@@ -2052,6 +2052,15 @@ function ChatDetail({
   const send = () => {
     const value = text.trim();
     if (!value || sending) return;
+    if (agentPaused) {
+      message.warning(
+        tw(
+          'avatars.chatPaused',
+          'This avatar is paused. Resume it before chatting.',
+        ),
+      );
+      return;
+    }
     // Clear the composer immediately: the message is already on the wall as a
     // pending bubble, so waiting for the POST would make sending feel slow.
     setText('');
