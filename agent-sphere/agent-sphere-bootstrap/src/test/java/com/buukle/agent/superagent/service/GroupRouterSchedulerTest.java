@@ -182,6 +182,77 @@ class GroupRouterSchedulerTest {
     }
 
     @Test
+    void parseDecision_bindsExactProductionReply() {
+        GroupRouterScheduler scheduler = scheduler();
+
+        GroupRouterDecision decision = ReflectionTestUtils.invokeMethod(scheduler, "parseDecision",
+                "{\"deliver\":[{\"agentId\":14,\"reason\":\"消息明确请求技术支持，"
+                        + "code-agent负责技术问题处理\"}],"
+                        + "\"ignore\":[{\"agentId\":9,\"reason\":\"财务职责与技术支持无关\"},"
+                        + "{\"agentId\":10,\"reason\":\"个人助理负责日常事务，不涉及技术支持\"}],"
+                        + "\"summary\":\"群内成员提出需要技术支持，转交 code-agent处理技术问题。\"}");
+
+        assertNotNull(decision);
+        assertEquals(14L, decision.getDeliver().get(0).getAgentId());
+        assertEquals(9L, decision.getIgnore().get(0).getAgentId());
+        assertEquals(10L, decision.getIgnore().get(1).getAgentId());
+    }
+
+    @Test
+    void processThread_writesRelevantDeliveryForMatchedAgent() {
+        GroupRouterScheduler scheduler = scheduler();
+        ReflectionTestUtils.setField(scheduler, "maxEvents", 20);
+        ReflectionTestUtils.setField(scheduler, "maxChars", 12000);
+        ReflectionTestUtils.setField(scheduler, "summaryMaxChars", 2000);
+
+        when(threadMapper.selectById(10L)).thenReturn(thread());
+        AgentEvent event = event();
+        event.setPayload(
+                "{\"text\":\"need support\",\"rawMeta\":\"{\\\"agentIds\\\":[3,8,9]}\"}");
+        when(eventMapper.selectList(any())).thenReturn(List.of(event));
+
+        AgentSuperAgent local = new AgentSuperAgent();
+        local.setId(3L);
+        local.setStatus("ACTIVE");
+        AgentSuperAgent cloud = new AgentSuperAgent();
+        cloud.setId(8L);
+        cloud.setStatus("ACTIVE");
+        when(superAgentMapper.selectBatchIds(any())).thenReturn(List.of(local, cloud));
+        when(deliveryMapper.insert(any(AgentEventDelivery.class))).thenAnswer(invocation -> {
+            // The run port clears the caller's tenant context in its finally;
+            // delivery rows must still be written under the thread tenant.
+            assertEquals(1L, com.buukle.agent.common.context.TenantScopeHolder
+                    .currentTenantId());
+            AgentEventDelivery row = invocation.getArgument(0);
+            row.setId(1_000L + row.getSuperAgentId());
+            return 1;
+        });
+        when(groupRouterRunPort.route(any())).thenAnswer(invocation -> {
+            com.buukle.agent.common.context.TenantScopeHolder.clear();
+            com.buukle.agent.common.context.TenantContext.clear();
+            return GroupRouterRunResult.accepted(500L,
+                    "{\"deliver\":[{\"agentId\":3,\"reason\":\"local owns it\"}],"
+                            + "\"ignore\":[{\"agentId\":8,\"reason\":\"unrelated\"}],"
+                            + "\"summary\":\"to local\"}");
+        });
+
+        ReflectionTestUtils.invokeMethod(scheduler, "processThread", 10L);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AgentEventDelivery.class);
+        verify(deliveryMapper, org.mockito.Mockito.times(2)).insert(captor.capture());
+        AgentEventDelivery relevant = captor.getAllValues().stream()
+                .filter(row -> row.getSuperAgentId().equals(3L)).findFirst().orElseThrow();
+        AgentEventDelivery ignored = captor.getAllValues().stream()
+                .filter(row -> row.getSuperAgentId().equals(8L)).findFirst().orElseThrow();
+        assertEquals("RELEVANT", relevant.getDecision());
+        assertEquals("PENDING", relevant.getStatus());
+        assertEquals("IGNORE", ignored.getDecision());
+        assertEquals("PROCESSED", ignored.getStatus());
+        verify(eventPublisher).publishEvent(any(
+                com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent.class));
+    }
+
+    @Test
     void processThread_schedulesRetryOnLlmFailure() {
         GroupRouterScheduler scheduler = scheduler();
         ReflectionTestUtils.setField(scheduler, "maxEvents", 20);

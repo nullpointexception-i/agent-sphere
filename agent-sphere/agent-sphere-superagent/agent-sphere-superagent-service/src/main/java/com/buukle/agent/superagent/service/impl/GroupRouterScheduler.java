@@ -1,5 +1,6 @@
 package com.buukle.agent.superagent.service.impl;
 
+import com.buukle.agent.common.context.TenantScope;
 import com.buukle.agent.common.context.TenantScopeHolder;
 
 
@@ -135,6 +136,7 @@ public class GroupRouterScheduler {
                 if (locked && lock.isHeldByCurrentThread()) {
                     lock.unlock();
                 }
+                TenantScopeHolder.clear();
                 TenantContext.clear();
                 SuperAgentTraceContext.clear();
             }
@@ -168,7 +170,7 @@ public class GroupRouterScheduler {
         if (thread == null) {
             return;
         }
-        TenantContext.set(thread.getTenantId());
+        bindTenant(thread);
         SuperAgentTraceContext.put(null, threadId, null);
         List<AgentEvent> events = eventMapper.selectList(Wrappers.<AgentEvent>lambdaQuery()
                 .eq(AgentEvent::getThreadId, threadId)
@@ -239,10 +241,17 @@ public class GroupRouterScheduler {
             run = groupRouterRunPort.route(new GroupRouterRunCommand(
                     sessionId, threadId, thread.getTenantId(), userPrompt));
         } catch (Exception e) {
+            // The run port clears the caller's tenant context in its finally;
+            // restore it before any persistence on the retry path.
+            bindTenant(thread);
             log.warn("Group router run failed for thread {}: {}", threadId, e.getMessage());
             scheduleRetry(events);
             return;
         }
+        // GroupRouterRunService clears TenantContext/TenantScopeHolder in finally.
+        // Without rebinding here the delivery inserts below get tenant_id=0 and
+        // become invisible to every tenant-scoped query (including dispatch).
+        bindTenant(thread);
         if (run == null || !run.accepted()) {
             log.warn("Group router run rejected for thread {}: {}",
                     threadId, run == null ? "no result" : run.message());
@@ -260,11 +269,36 @@ public class GroupRouterScheduler {
         Map<Long, List<Long>> readyDeliveries = new HashMap<>();
         if (decision.getDeliver() != null) {
             for (GroupRouterDecision.Deliver deliver : decision.getDeliver()) {
-                if (deliver != null && deliver.getAgentId() != null && allowed.contains(deliver.getAgentId())) {
-                    deliverReasons.put(deliver.getAgentId(), deliver.getReason());
+                if (deliver == null) {
+                    continue;
                 }
+                if (deliver.getAgentId() == null) {
+                    log.warn("Group router deliver entry has no agentId: thread={}, raw={}",
+                            threadId, abbreviate(raw));
+                    continue;
+                }
+                if (!allowed.contains(deliver.getAgentId())) {
+                    log.warn("Group router deliver target is not a candidate: thread={}, agent={}, allowed={}",
+                            threadId, deliver.getAgentId(), allowed);
+                    continue;
+                }
+                deliverReasons.put(deliver.getAgentId(), deliver.getReason());
             }
         }
+        if (decision.getDeliver() != null && !decision.getDeliver().isEmpty()
+                && deliverReasons.isEmpty()) {
+            // The model named targets but none matched: without this line the
+            // batch silently becomes OBSERVE and the local agent never wakes.
+            log.warn("Group router decision matched no candidate: thread={}, allowed={}, raw={}",
+                    threadId, allowed, abbreviate(raw));
+        }
+        log.info("Group router decision: thread={}, deliver={}, ignore={}, allowed={}",
+                threadId,
+                decision.getDeliver() == null ? List.of() : decision.getDeliver().stream()
+                        .map(GroupRouterDecision.Deliver::getAgentId).toList(),
+                decision.getIgnore() == null ? List.of() : decision.getIgnore().stream()
+                        .map(GroupRouterDecision.Ignore::getAgentId).toList(),
+                allowed);
         for (AgentEvent event : events) {
             if (decision.getIgnore() != null) {
                 for (GroupRouterDecision.Ignore ignore : decision.getIgnore()) {
@@ -343,6 +377,7 @@ public class GroupRouterScheduler {
         for (AgentSuperAgent agent : agents) {
             sb.append(agent.getId()).append(" | ").append(agent.getName())
                     .append(" | ").append(agent.getDescription() == null ? "" : agent.getDescription())
+                    .append(" | type=").append(agent.getAgentType())
                     .append(" | status=").append(agent.getStatus())
                     .append('\n');
         }
@@ -441,9 +476,40 @@ public class GroupRouterScheduler {
             deliveryMapper.insert(delivery);
             return delivery.getId();
         } catch (DuplicateKeyException ignored) {
-            // already delivered; idempotent
+            // The row already exists. Re-publish the wake when it is still
+            // pending: a lost realtime wake must not strand the delivery until
+            // the compensation scan, and a silent null here hides that state.
+            AgentEventDelivery existing = deliveryMapper.selectOne(
+                    Wrappers.<AgentEventDelivery>lambdaQuery()
+                            .eq(AgentEventDelivery::getEventId, event.getId())
+                            .eq(AgentEventDelivery::getSuperAgentId, agentId)
+                            .last("LIMIT 1"));
+            if (existing != null
+                    && AgentEventDeliveryStatus.PENDING.equals(existing.getStatus())) {
+                log.debug("Delivery exists; re-publishing wake: event={}, agent={}, delivery={}",
+                        event.getId(), agentId, existing.getId());
+                return existing.getId();
+            }
             return null;
         }
+    }
+
+    private static String abbreviate(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() <= 500 ? value : value.substring(0, 500);
+    }
+
+    private static void bindTenant(AgentThread thread) {
+        if (thread.getTenantId() == null) {
+            TenantContext.clear();
+            TenantScopeHolder.clear();
+            return;
+        }
+        TenantContext.set(thread.getTenantId());
+        TenantScopeHolder.start(TenantScope.tenantOnly(
+                thread.getTenantId(), thread.getCreatedBy()));
     }
 
     private void markEvents(List<AgentEvent> events, String decision, String reason, String summary) {
