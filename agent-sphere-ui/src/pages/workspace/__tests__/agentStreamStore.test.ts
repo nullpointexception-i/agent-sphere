@@ -1,5 +1,6 @@
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 import {
+  appendLocalChunk,
   applyAgentStreamEvent,
   beginAgentStream,
   failAgentStream,
@@ -182,5 +183,96 @@ describe('agentStreamStore', () => {
     applyAgentStreamEvent({ conversationId: 999, phase: 'reply', delta: 'y' });
 
     expect(peekAgentStream(CONVERSATION)).toBeUndefined();
+  });
+
+  it('local fragments render before any server event arrives', () => {
+    appendLocalChunk(CONVERSATION, {
+      taskId: 31,
+      agentId: 14,
+      phase: 'reply',
+      delta: '本地先渲染',
+    });
+
+    const state = peekAgentStream(CONVERSATION);
+    expect(state?.phase).toBe('reply');
+    expect(state?.reply).toBe('本地先渲染');
+    expect(state?.taskId).toBe(31);
+  });
+
+  it('server catch-up replaces the optimistic text without rewinding', () => {
+    beginAgentStream(CONVERSATION);
+    appendLocalChunk(CONVERSATION, {
+      taskId: 31,
+      phase: 'reply',
+      delta: '完整的本地回答',
+    });
+
+    // The backend relay is one batch behind: it reports the first fragment.
+    applyAgentStreamEvent(
+      streamEvent({ phase: 'reply', delta: '完整的', runId: 7, streamSeq: 1 }),
+    );
+    expect(peekAgentStream(CONVERSATION)?.reply).toBe('完整的本地回答');
+
+    // It catches up with the full text: the authoritative copy is displayed.
+    applyAgentStreamEvent(
+      streamEvent({
+        phase: 'reply',
+        delta: '本地回答',
+        runId: 7,
+        streamSeq: 2,
+      }),
+    );
+    expect(peekAgentStream(CONVERSATION)?.reply).toBe('完整的本地回答');
+  });
+
+  it('a reconnected server stream never truncates the longer local text', () => {
+    beginAgentStream(CONVERSATION);
+    appendLocalChunk(CONVERSATION, {
+      taskId: 31,
+      phase: 'reply',
+      delta: '前半段后半段',
+    });
+
+    // SSE reconnects mid-run and only delivers the tail.
+    applyAgentStreamEvent(
+      streamEvent({ phase: 'reply', delta: '后半段', runId: 7, streamSeq: 9 }),
+    );
+
+    expect(peekAgentStream(CONVERSATION)?.reply).toBe('前半段后半段');
+  });
+
+  it('ignores local fragments after the stream is finalized', () => {
+    beginAgentStream(CONVERSATION);
+    appendLocalChunk(CONVERSATION, {
+      taskId: 31,
+      phase: 'reply',
+      delta: '正文',
+    });
+    finalizeAgentStream(CONVERSATION, 12);
+
+    appendLocalChunk(CONVERSATION, {
+      taskId: 31,
+      phase: 'reply',
+      delta: '迟到',
+    });
+
+    expect(peekAgentStream(CONVERSATION)?.reply).toBe('正文');
+  });
+
+  it('a new local task replaces the previous optimistic text', () => {
+    appendLocalChunk(CONVERSATION, {
+      taskId: 31,
+      phase: 'reply',
+      delta: '旧任务',
+    });
+    appendLocalChunk(CONVERSATION, {
+      taskId: 32,
+      phase: 'reply',
+      delta: '新任务',
+    });
+
+    const state = peekAgentStream(CONVERSATION);
+    expect(state?.taskId).toBe(32);
+    expect(state?.reply).toBe('新任务');
   });
 });

@@ -6,6 +6,7 @@ import type {
   DesktopBridge,
   DesktopSettings,
   RuntimeStatus,
+  TaskChunk,
   TaskView,
 } from '../shared/types';
 import { IPC } from '../main/ipc/channels';
@@ -62,6 +63,8 @@ const bridge: DesktopBridge = {
       subscribe(IPC.eventRuntime, callback),
     onTask: (callback: (task: TaskView) => void) =>
       subscribe(IPC.eventTask, callback),
+    onChunk: (callback: (chunk: TaskChunk) => void) =>
+      subscribe(IPC.eventChunk, callback),
   },
 };
 

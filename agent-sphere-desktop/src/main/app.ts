@@ -55,6 +55,7 @@ export class AppController {
       },
       (status) => this.onRuntimeStatus(status),
       (task) => this.send(IPC.eventTask, task),
+      (chunk) => this.send(IPC.eventChunk, chunk),
     );
 
     registerIpc({

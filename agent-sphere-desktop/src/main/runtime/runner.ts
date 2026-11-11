@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
-import type { AgentProfile, TaskView } from '../../shared/types';
+import type { AgentProfile, TaskChunk, TaskView } from '../../shared/types';
 import type { LocalTaskPayload } from '../api/contracts';
 import type { LocalApiClient } from '../api/client';
 import type { ProfileStore } from '../config/profiles';
@@ -14,6 +14,13 @@ function isMention(task: LocalTaskPayload): boolean {
   const reason = (task.trigger?.reason ?? '').toLowerCase();
   return reason.includes('mention') || reason.includes('dm') || reason.includes('direct');
 }
+
+/**
+ * Local fragments are coalesced for about one frame before crossing IPC: token
+ * deltas can arrive dozens of times per second, and re-rendering on each one
+ * would waste work without improving perceived latency.
+ */
+const LOCAL_CHUNK_FLUSH_MS = 24;
 
 class ChunkBuffer {
   private sequence = 0;
@@ -70,6 +77,7 @@ export class TaskRunner {
       approvals: ApprovalBroker;
     },
     private readonly onTask: (view: TaskView) => void,
+    private readonly onChunk?: (chunk: TaskChunk) => void,
   ) {}
 
   async run(item: QueuedTask): Promise<void> {
@@ -165,6 +173,42 @@ export class TaskRunner {
       this.deps.api.chunk(task.taskId, leaseToken, seq, phase, delta),
     );
 
+    // Optimistic path: the renderer shows fragments as soon as the driver emits
+    // them; the ChunkBuffer above uploads the same text on its own cadence, and
+    // the server SSE remains the authoritative source for this conversation.
+    let localSeq = 0;
+    let localTimer: NodeJS.Timeout | undefined;
+    const localPending = new Map<'reply' | 'thinking', string>();
+    const flushLocal = (): void => {
+      if (localTimer) {
+        clearTimeout(localTimer);
+        localTimer = undefined;
+      }
+      if (!this.onChunk) {
+        localPending.clear();
+        return;
+      }
+      for (const [phase, text] of localPending) {
+        if (!text) continue;
+        localPending.set(phase, '');
+        this.onChunk({
+          taskId: task.taskId,
+          agentId: task.agentId,
+          threadId: task.thread.id,
+          seq: ++localSeq,
+          phase,
+          delta: text,
+          at: Date.now(),
+        });
+      }
+    };
+    const emitLocal = (phase: 'reply' | 'thinking', delta: string): void => {
+      if (!delta || !this.onChunk) return;
+      localPending.set(phase, (localPending.get(phase) ?? '') + delta);
+      if (localTimer) return;
+      localTimer = setTimeout(flushLocal, LOCAL_CHUNK_FLUSH_MS);
+    };
+
     const deadline = task.deadlineAt
       ? new Date(task.deadlineAt).getTime()
       : Number.POSITIVE_INFINITY;
@@ -194,7 +238,10 @@ export class TaskRunner {
         prompt,
         signal: controller.signal,
         approvals: this.deps.approvals,
-        onChunk: (phase, delta) => chunks.push(phase, delta),
+        onChunk: (phase, delta) => {
+          emitLocal(phase, delta);
+          chunks.push(phase, delta);
+        },
         onSessionRef: (ref) => {
           sessionRef = ref;
         },
@@ -214,6 +261,7 @@ export class TaskRunner {
       });
 
       await chunks.flush();
+      flushLocal();
       await this.deps.api.complete(task.taskId, leaseToken, {
         text: result.text,
         sessionRef: result.sessionRef ?? sessionRef,
@@ -229,6 +277,7 @@ export class TaskRunner {
         finishedAt: Date.now(),
       });
     } catch (error) {
+      flushLocal();
       await chunks.flush().catch(() => undefined);
       const aborted = controller.signal.aborted;
       const message = error instanceof Error ? error.message : String(error);
@@ -250,6 +299,7 @@ export class TaskRunner {
         error: message,
       });
     } finally {
+      if (localTimer) clearTimeout(localTimer);
       clearTimeout(timer);
       this.controllers.delete(task.taskId);
     }

@@ -27,6 +27,7 @@ export interface AgentStreamState {
   conversationId: number;
   runId?: number;
   agentId?: number;
+  taskId?: number;
   phase: AgentStreamPhase;
   thinking: string;
   reply: string;
@@ -40,6 +41,15 @@ export interface AgentStreamState {
   lastStreamSeq: number;
   finalized: boolean;
   finalSeq?: number;
+  /**
+   * Optimistic text pushed straight from the desktop driver over IPC. The
+   * backend relays the same fragments over SSE into the server fields below.
+   */
+  localReply?: string;
+  localThinking?: string;
+  /** Authoritative text received on the IM `agent_stream` SSE stream. */
+  serverReply?: string;
+  serverThinking?: string;
 }
 
 interface Store {
@@ -98,6 +108,61 @@ function beginState(conversationId: number): AgentStreamState {
 export function beginAgentStream(conversationId: number) {
   if (!conversationId) return;
   store.states.set(conversationId, beginState(conversationId));
+  notify(conversationId);
+}
+
+/** One optimistic fragment received from the desktop driver over IPC. */
+export interface LocalStreamChunk {
+  taskId: number;
+  agentId?: number;
+  phase: 'reply' | 'thinking';
+  delta: string;
+}
+
+/**
+ * Both channels append the same fragments. The server copy can lag behind the
+ * local one (200ms upload batch) or resume mid-run after an SSE reconnect, so
+ * the longer text is shown: it never rewinds, and the authoritative message
+ * still replaces the bubble at the end.
+ */
+function mergeText(local: string, server: string): string {
+  return server.length >= local.length ? server : local;
+}
+
+/**
+ * Applies a fragment that reached the renderer directly from the local runtime,
+ * before the backend has relayed it back through the user SSE stream.
+ */
+export function appendLocalChunk(
+  conversationId: number,
+  chunk: LocalStreamChunk,
+) {
+  if (!conversationId || !chunk.delta) return;
+  let existing = currentState(conversationId);
+  if (existing?.finalized) return;
+  if (existing?.taskId && existing.taskId !== chunk.taskId)
+    existing = undefined;
+  const base = existing ?? beginState(conversationId);
+  const localReply =
+    (base.localReply ?? '') + (chunk.phase === 'reply' ? chunk.delta : '');
+  const localThinking =
+    (base.localThinking ?? '') +
+    (chunk.phase === 'thinking' ? chunk.delta : '');
+  const next: AgentStreamState = {
+    ...base,
+    taskId: chunk.taskId,
+    agentId: chunk.agentId ?? base.agentId,
+    phase:
+      chunk.phase === 'thinking'
+        ? AGENT_STREAM_PHASE.THINKING
+        : AGENT_STREAM_PHASE.REPLY,
+    localReply,
+    localThinking,
+    reply: mergeText(localReply, base.serverReply ?? ''),
+    thinking: mergeText(localThinking, base.serverThinking ?? ''),
+    lastEventAt: Date.now(),
+  };
+  store.states.set(conversationId, next);
   notify(conversationId);
 }
 
@@ -197,9 +262,14 @@ export function applyAgentStreamEvent(event: ImStreamPayload) {
   };
 
   if (event.phase === STREAM_EVENT_PHASE.THINKING) {
-    next.thinking = existing.thinking + (event.delta ?? '');
+    const serverThinking =
+      (existing.serverThinking ?? '') + (event.delta ?? '');
+    next.serverThinking = serverThinking;
+    next.thinking = mergeText(existing.localThinking ?? '', serverThinking);
   } else if (event.phase === STREAM_EVENT_PHASE.REPLY) {
-    next.reply = existing.reply + (event.delta ?? '');
+    const serverReply = (existing.serverReply ?? '') + (event.delta ?? '');
+    next.serverReply = serverReply;
+    next.reply = mergeText(existing.localReply ?? '', serverReply);
   } else if (event.phase === STREAM_EVENT_PHASE.STATUS) {
     const status = String(event.streamStatus ?? '');
     if (status.startsWith('tool_')) {
@@ -208,6 +278,8 @@ export function applyAgentStreamEvent(event: ImStreamPayload) {
       if (status === TIMELINE_STATE.TOOL_PENDING) {
         // Tool turn started: the reply draft restarts after the tool completes.
         next.reply = '';
+        next.serverReply = '';
+        next.localReply = '';
       }
     } else if (
       status === TIMELINE_STATE.TOOL_FAILED ||

@@ -21,5 +21,6 @@ export const IPC = {
   logsExport: 'logs:export',
   eventRuntime: 'event:runtime',
   eventTask: 'event:task',
+  eventChunk: 'event:chunk',
   eventApproval: 'event:approval',
 } as const;

@@ -96,6 +96,21 @@ export interface TaskView {
   error?: string;
 }
 
+/**
+ * One optimistic streaming fragment produced by a local driver. It is rendered
+ * immediately by the desktop UI; the same delta is uploaded to the backend,
+ * whose SSE stream stays authoritative.
+ */
+export interface TaskChunk {
+  taskId: number;
+  agentId: number;
+  threadId: number;
+  seq: number;
+  phase: 'reply' | 'thinking';
+  delta: string;
+  at: number;
+}
+
 export type ApprovalCategory = 'read' | 'write' | 'shell' | 'network' | 'input';
 
 export interface ApprovalView {
@@ -180,5 +195,6 @@ export interface DesktopBridge {
   events: {
     onRuntime(callback: (status: RuntimeStatus) => void): () => void;
     onTask(callback: (task: TaskView) => void): () => void;
+    onChunk(callback: (chunk: TaskChunk) => void): () => void;
   };
 }

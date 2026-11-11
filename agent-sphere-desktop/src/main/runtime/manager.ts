@@ -2,6 +2,7 @@ import { app } from 'electron';
 import type {
   DriverStatus,
   RuntimeStatus,
+  TaskChunk,
   TaskView,
 } from '../../shared/types';
 import type { SettingsStore } from '../config/settings';
@@ -44,8 +45,13 @@ export class RuntimeManager {
     },
     private readonly emitRuntime: (status: RuntimeStatus) => void,
     private readonly emitTask: (task: TaskView) => void,
+    private readonly emitChunk: (chunk: TaskChunk) => void,
   ) {
-    this.runner = new TaskRunner(deps, (task) => this.upsertTask(task));
+    this.runner = new TaskRunner(
+      deps,
+      (task) => this.upsertTask(task),
+      (chunk) => this.emitChunk(chunk),
+    );
     this.scheduler = new TaskScheduler(
       () => this.deps.settings.get().maxConcurrentTasks,
       (item) => this.runner.run(item),

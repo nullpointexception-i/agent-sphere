@@ -59,6 +59,7 @@ import {
 import { useMentionSuggest } from '@/components/mention/useMentionSuggest';
 import { API_PATHS } from '@/constants/endpoints';
 import { STATUS, SUPER_AGENT_STATUS_CODE } from '@/constants/status';
+import { TIMING } from '@/constants/timing';
 import type { ImStreamPayload } from '@/hooks/useReconnectingSse';
 import { useReconnectingSse } from '@/hooks/useReconnectingSse';
 import { agentApi } from '@/services/agentSphere/api';
@@ -89,9 +90,12 @@ import {
 import { AgentStreamBubble } from './AgentStreamBubble';
 import {
   AGENT_STREAM_PHASE,
+  appendLocalChunk,
   applyAgentStreamEvent,
   beginAgentStream,
+  failAgentStream,
   finalizeAgentStream,
+  peekAgentStream,
   resetAgentStream,
   useAgentStream,
 } from './agentStreamStore';
@@ -684,7 +688,9 @@ function AvatarsTab({
                     ) : null}
                   </div>
                   <div className={styles.avatarTags}>
-                    <Tag color={agent.agentType === 'LOCAL' ? 'blue' : 'default'}>
+                    <Tag
+                      color={agent.agentType === 'LOCAL' ? 'blue' : 'default'}
+                    >
                       {agent.agentType === 'LOCAL'
                         ? tw('avatars.typeLocal', 'Local')
                         : tw('avatars.typeCloud', 'Cloud')}
@@ -1724,6 +1730,78 @@ function ChatDetail({
   useEffect(() => {
     setSettingsOpen(false);
   }, [conversationId]);
+
+  /**
+   * Desktop runtime fragments arrive here directly, before the backend relays
+   * them on the user SSE stream. Render them immediately; the server stream and
+   * the authoritative `message_created` still replace this optimistic text.
+   */
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    const threadId =
+      conversation?.id === conversationId ? conversation.threadId : undefined;
+    if (!bridge || !threadId) return undefined;
+    // Tasks already finished on this machine must not recreate a bubble when a
+    // late fragment arrives after the authoritative message was merged.
+    const finishedTasks = new Set<number>();
+    const timers = new Set<number>();
+    const rememberFinished = (taskId: number) => {
+      finishedTasks.add(taskId);
+      if (finishedTasks.size > 20) {
+        const oldest = finishedTasks.values().next().value;
+        if (oldest !== undefined) finishedTasks.delete(oldest);
+      }
+    };
+    const unsubscribeChunk = bridge.events.onChunk((chunk) => {
+      if (chunk.threadId !== threadId || finishedTasks.has(chunk.taskId)) {
+        return;
+      }
+      appendLocalChunk(conversationId, {
+        taskId: chunk.taskId,
+        agentId: chunk.agentId,
+        phase: chunk.phase,
+        delta: chunk.delta,
+      });
+    });
+    const unsubscribeTask = bridge.events.onTask((task) => {
+      if (task.threadId !== threadId) return;
+      if (
+        task.status !== 'COMPLETED' &&
+        task.status !== 'FAILED' &&
+        task.status !== 'CANCELLED'
+      ) {
+        return;
+      }
+      rememberFinished(task.taskId);
+      if (task.status === 'FAILED' || task.status === 'CANCELLED') {
+        if (!peekAgentStream(conversationId)) beginAgentStream(conversationId);
+        const state = peekAgentStream(conversationId);
+        if (state?.taskId && state.taskId !== task.taskId) return;
+        if (state && !state.finalized) {
+          failAgentStream(
+            conversationId,
+            task.error || tw('chat.localTaskFailed', 'Local task failed'),
+          );
+        }
+        return;
+      }
+      // The server SSE normally finalizes first. If it is down or late, route
+      // the bubble into the authoritative refetch path instead of hanging.
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
+        const state = peekAgentStream(conversationId);
+        if (state?.taskId && state.taskId !== task.taskId) return;
+        if (state && !state.finalized) finalizeAgentStream(conversationId);
+      }, TIMING.LOCAL_STREAM_COMPLETE_GRACE_MS);
+      timers.add(timer);
+    });
+    return () => {
+      unsubscribeChunk();
+      unsubscribeTask();
+      for (const timer of timers) window.clearTimeout(timer);
+      timers.clear();
+    };
+  }, [conversationId, conversation?.threadId]);
 
   /**
    * Scroll-up pagination for the message list. The viewport is pinned to the

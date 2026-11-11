@@ -46,6 +46,17 @@ export interface DesktopBridgeTask {
   error?: string;
 }
 
+/** One optimistic fragment emitted straight by the desktop runtime. */
+export interface DesktopBridgeChunk {
+  taskId: number;
+  agentId: number;
+  threadId: number;
+  seq: number;
+  phase: 'reply' | 'thinking';
+  delta: string;
+  at: number;
+}
+
 export interface DesktopAgentProfile {
   agentId: number;
   agentName: string;
@@ -106,6 +117,7 @@ export interface DesktopBridge {
   events: {
     onRuntime(callback: (status: DesktopBridgeStatus) => void): () => void;
     onTask(callback: (task: DesktopBridgeTask) => void): () => void;
+    onChunk(callback: (chunk: DesktopBridgeChunk) => void): () => void;
   };
 }
 
