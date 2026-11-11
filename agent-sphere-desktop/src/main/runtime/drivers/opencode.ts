@@ -25,6 +25,12 @@ function permissionCategory(type: string | undefined): 'read' | 'write' | 'shell
   return 'read';
 }
 
+/** Returns true when the stored opencode session no longer exists on the server. */
+function isInvalidSessionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /invalid session/i.test(message) || /session.*not found/i.test(message);
+}
+
 export class OpenCodeDriver implements RuntimeDriver {
   readonly kind = 'OPENCODE' as const;
 
@@ -147,10 +153,28 @@ export class OpenCodeDriver implements RuntimeDriver {
     }, timeoutMs);
 
     try {
-      const result = (await client.session.generate(
-        { sessionID: sessionId, prompt: context.prompt },
-        { signal: controller.signal },
-      )) as AnyRecord;
+      let result: AnyRecord;
+      try {
+        result = (await client.session.generate(
+          { sessionID: sessionId, prompt: context.prompt },
+          { signal: controller.signal },
+        )) as AnyRecord;
+      } catch (error) {
+        if (!isInvalidSessionError(error)) throw error;
+        // The shared opencode service was restarted or the session was removed;
+        // start a fresh session and retry once.
+        logger.warn('opencode session is invalid; starting a new session');
+        const session = await client.session.create({
+          location: { directory: context.profile.workspace },
+        });
+        sessionId = String(session.id);
+        context.onSessionRef(`${SESSION_PREFIX}${sessionId}`);
+        this.active.set(context.task.taskId, { sessionId, controller });
+        result = (await client.session.generate(
+          { sessionID: sessionId, prompt: context.prompt },
+          { signal: controller.signal },
+        )) as AnyRecord;
+      }
       const text = (String(result?.text ?? '') || accumulated).trim();
       if (!text) throw fatal ?? new Error('opencode completed without a reply');
       if (!sawText) context.onChunk('reply', text);

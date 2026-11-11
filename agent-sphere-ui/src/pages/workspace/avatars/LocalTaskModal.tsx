@@ -67,7 +67,7 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
         'Tasks',
       )}`}
       footer={null}
-      width={1200}
+      width={1080}
       centered
       styles={{ body: { minHeight: 300 } }}
       onCancel={onClose}

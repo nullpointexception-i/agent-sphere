@@ -126,6 +126,8 @@ export default {
   'workspace.avatars.localConfig': '本地配置',
   'workspace.avatars.localConfigDesktopOnly': '本地配置请在桌面客户端中维护。',
   'workspace.avatars.localConfigMissing': '本地配置不可用。',
+  'workspace.avatars.localConfigUnbound':
+    '请选择工作目录并保存本地配置，否则任务无法执行。',
   'workspace.avatars.chooseWorkspace': '选择目录',
   'workspace.avatars.workspaceRequired': '请选择工作目录',
   'workspace.avatars.enabled': '启用',

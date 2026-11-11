@@ -75,8 +75,22 @@ export class TaskRunner {
   async run(item: QueuedTask): Promise<void> {
     const { task, leaseToken } = item;
     const profile = this.deps.profiles.find(task.agentId);
-    if (!profile || !profile.enabled) {
-      await this.fail(task, leaseToken, 'NO_PROFILE', `No enabled local profile for agent ${task.agentId}`);
+    if (!profile) {
+      await this.fail(
+        task,
+        leaseToken,
+        'NO_PROFILE',
+        `No local settings saved for ${task.agentName}. Open the avatar, choose a workspace and save the local settings.`,
+      );
+      return;
+    }
+    if (!profile.enabled) {
+      await this.fail(
+        task,
+        leaseToken,
+        'PROFILE_DISABLED',
+        `Local settings are disabled for ${task.agentName}. Enable them in the avatar drawer.`,
+      );
       return;
     }
 

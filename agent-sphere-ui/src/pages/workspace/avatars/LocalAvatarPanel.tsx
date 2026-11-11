@@ -14,6 +14,7 @@ import {
   Switch,
   Tag,
   Tooltip,
+  Typography,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -272,7 +273,11 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
     }
     setSavingProfile(true);
     try {
-      const driver = boundRuntime?.runtimeKind ?? profile.driver;
+      const list = boundRuntime
+        ? runtimes
+        : await localRuntimeApi.list().catch(() => runtimes);
+      const bound = list.find((item) => item.id === agent.localRuntimeId);
+      const driver = bound?.runtimeKind ?? boundRuntime?.runtimeKind ?? profile.driver;
       const next = await bridge.profiles.save({
         ...profile,
         agentId: agent.id,
@@ -611,6 +616,16 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
               checked={profile.enabled}
               onChange={(checked) => patchProfile({ enabled: checked })}
             />
+            {!profile.workspace.trim() ? (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                  {tw(
+                    'avatars.localConfigUnbound',
+                    'Choose a workspace and save; tasks will fail until then.',
+                  )}
+                </Typography.Text>
+              </div>
+            ) : null}
           </div>
           <Space style={{ marginTop: 12 }}>
             <Button

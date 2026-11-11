@@ -137,6 +137,8 @@ export default {
   'workspace.avatars.localConfigDesktopOnly':
     'Edit local settings in AgentSphere Desktop.',
   'workspace.avatars.localConfigMissing': 'Local settings are unavailable.',
+  'workspace.avatars.localConfigUnbound':
+    'Choose a workspace and save; tasks will fail until then.',
   'workspace.avatars.chooseWorkspace': 'Choose',
   'workspace.avatars.workspaceRequired': 'Choose a workspace',
   'workspace.avatars.enabled': 'Enabled',
