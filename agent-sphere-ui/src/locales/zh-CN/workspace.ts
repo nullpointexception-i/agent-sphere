@@ -130,6 +130,7 @@ export default {
     '请选择工作目录并保存本地配置，否则任务无法执行。',
   'workspace.avatars.localModelPlaceholder': '例如 opencode-go/deepseek-v4.1-flash',
   'workspace.avatars.localModelHint': '留空使用 opencode 默认模型。',
+  'workspace.avatars.modelListEmpty': '暂无可用的模型',
   'workspace.avatars.chooseWorkspace': '选择目录',
   'workspace.avatars.workspaceRequired': '请选择工作目录',
   'workspace.avatars.enabled': '启用',

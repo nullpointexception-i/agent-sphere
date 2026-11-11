@@ -28,6 +28,12 @@ export interface DesktopBridgeDriver {
   message?: string;
 }
 
+export interface DesktopBridgeModel {
+  providerID: string;
+  id: string;
+  name: string;
+}
+
 export interface DesktopBridgeTask {
   taskId: number;
   agentId?: number;
@@ -80,6 +86,7 @@ export interface DesktopBridge {
   };
   drivers: {
     detect(): Promise<DesktopBridgeDriver[]>;
+    models(kind: DesktopDriverKind): Promise<DesktopBridgeModel[]>;
   };
   profiles: {
     list(): Promise<DesktopAgentProfile[]>;

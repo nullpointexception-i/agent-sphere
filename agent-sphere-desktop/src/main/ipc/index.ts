@@ -117,6 +117,9 @@ export function registerIpc(deps: IpcDependencies): void {
   ipcMain.handle(IPC.runtimePause, () => deps.runtime.pause());
   ipcMain.handle(IPC.runtimeResume, () => deps.runtime.resume());
   ipcMain.handle(IPC.driversDetect, () => deps.runtime.detectDrivers());
+  ipcMain.handle(IPC.driversModels, (_event, kind: unknown) =>
+    deps.drivers.listModels(z.enum(['OPENCODE', 'CODEX']).parse(kind)),
+  );
 
   ipcMain.handle(IPC.profilesList, () => deps.profiles.list());
   ipcMain.handle(IPC.profilesSave, async (_event, raw: unknown) => {

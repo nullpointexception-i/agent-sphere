@@ -1,6 +1,7 @@
 import type {
   AgentProfile,
   DriverKind,
+  DriverModel,
   DriverStatus,
 } from '../../../shared/types';
 import type { LocalTaskPayload } from '../../api/contracts';
@@ -25,6 +26,8 @@ export interface DriverRunResult {
 export interface RuntimeDriver {
   readonly kind: DriverKind;
   detect(): Promise<DriverStatus>;
+  /** Models the local runtime can run; empty when the driver has no catalog. */
+  listModels?(): Promise<DriverModel[]>;
   run(context: DriverRunContext): Promise<DriverRunResult>;
   cancel(taskId: number): Promise<void>;
   dispose(): void;

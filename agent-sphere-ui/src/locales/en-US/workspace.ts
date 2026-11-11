@@ -143,6 +143,7 @@ export default {
     'e.g. opencode-go/deepseek-v4.1-flash',
   'workspace.avatars.localModelHint':
     'Leave empty to use the opencode default model.',
+  'workspace.avatars.modelListEmpty': 'No models available',
   'workspace.avatars.chooseWorkspace': 'Choose',
   'workspace.avatars.workspaceRequired': 'Choose a workspace',
   'workspace.avatars.enabled': 'Enabled',

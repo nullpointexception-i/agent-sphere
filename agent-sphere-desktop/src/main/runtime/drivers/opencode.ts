@@ -1,4 +1,4 @@
-import type { DriverStatus } from '../../../shared/types';
+import type { DriverModel, DriverStatus } from '../../../shared/types';
 import type { DriverRunContext, DriverRunResult, RuntimeDriver } from './types';
 import { logger } from '../../logging/logger';
 
@@ -98,6 +98,33 @@ export class OpenCodeDriver implements RuntimeDriver {
           'opencode shared service not found. Install and start opencode Desktop.',
       };
     }
+  }
+
+  async listModels(): Promise<DriverModel[]> {
+    if (!this.client) {
+      const status = await this.detect();
+      if (status.state !== 'READY') return [];
+    }
+    const client = this.client as AnyRecord;
+    const result = await client.model.list();
+    const list = Array.isArray(result) ? result : (result?.data ?? []);
+    const seen = new Set<string>();
+    const models: DriverModel[] = [];
+    for (const item of list) {
+      const providerID = String(item?.providerID ?? '');
+      const id = String(item?.modelID ?? item?.id ?? '');
+      if (!providerID || !id) continue;
+      if (item?.enabled === false || item?.status === 'deprecated') continue;
+      const key = `${providerID}/${id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      models.push({
+        providerID,
+        id,
+        name: String(item?.name ?? id),
+      });
+    }
+    return models;
   }
 
   async run(context: DriverRunContext): Promise<DriverRunResult> {

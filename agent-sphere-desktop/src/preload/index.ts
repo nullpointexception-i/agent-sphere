@@ -34,6 +34,7 @@ const bridge: DesktopBridge = {
   },
   drivers: {
     detect: () => ipcRenderer.invoke(IPC.driversDetect),
+    models: (kind) => ipcRenderer.invoke(IPC.driversModels, kind),
   },
   profiles: {
     list: () => ipcRenderer.invoke(IPC.profilesList),

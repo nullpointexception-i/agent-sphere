@@ -29,6 +29,7 @@ import {
 import {
   type DesktopAgentProfile,
   type DesktopBridgeDriver,
+  type DesktopBridgeModel,
   type DesktopDriverKind,
   getDesktopBridge,
 } from '@/utils/desktopBridge';
@@ -81,6 +82,8 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
   const [profile, setProfile] = useState<DesktopAgentProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [models, setModels] = useState<DesktopBridgeModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
 
   const boundRuntime = useMemo(
     () => runtimes.find((item) => item.id === agent.localRuntimeId),
@@ -134,6 +137,34 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
       active = false;
     };
   }, [agent.id, agent.name, bridge]);
+
+  const effectiveKind = (boundRuntime?.runtimeKind ??
+    connecting ??
+    profile?.driver ??
+    'OPENCODE') as DesktopDriverKind;
+
+  useEffect(() => {
+    if (!bridge || effectiveKind !== 'OPENCODE') {
+      setModels([]);
+      return;
+    }
+    let active = true;
+    setModelsLoading(true);
+    void bridge.drivers
+      .models('OPENCODE')
+      .then((list) => {
+        if (active) setModels(list ?? []);
+      })
+      .catch(() => {
+        if (active) setModels([]);
+      })
+      .finally(() => {
+        if (active) setModelsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [bridge, effectiveKind]);
 
   const driverOf = (kind: DesktopDriverKind) =>
     drivers.find((item) => item.kind === kind);
@@ -550,22 +581,28 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
               {boundRuntime?.runtimeKind ?? profile.driver}
             </Tag>
 
-            {(boundRuntime?.runtimeKind ??
-              connecting ??
-              profile.driver) === 'OPENCODE' ? (
+            {effectiveKind === 'OPENCODE' ? (
               <>
                 <span className={styles.avatarFormLabel}>
                   {tw('avatars.model', 'Model')}
                 </span>
-                <Input
-                  value={profile.model ?? ''}
+                <Select
+                  showSearch
+                  allowClear
+                  loading={modelsLoading}
+                  value={profile.model || undefined}
                   placeholder={tw(
                     'avatars.localModelPlaceholder',
                     'opencode-go/deepseek-v4.1-flash',
                   )}
-                  onChange={(event) =>
-                    patchProfile({ model: event.target.value })
+                  optionFilterProp="label"
+                  onChange={(value: string | undefined) =>
+                    patchProfile({ model: value ?? '' })
                   }
+                  options={models.map((item) => ({
+                    value: `${item.providerID}/${item.id}`,
+                    label: `${item.name || item.id} · ${item.providerID}`,
+                  }))}
                 />
                 <div
                   className={styles.fieldHint}

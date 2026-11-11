@@ -61,6 +61,12 @@ export interface DriverStatus {
   message?: string;
 }
 
+export interface DriverModel {
+  providerID: string;
+  id: string;
+  name: string;
+}
+
 export interface RuntimeStatus {
   state: RuntimeState;
   since: number;
@@ -150,6 +156,7 @@ export interface DesktopBridge {
   };
   drivers: {
     detect(): Promise<DriverStatus[]>;
+    models(kind: DriverKind): Promise<DriverModel[]>;
   };
   profiles: {
     list(): Promise<AgentProfile[]>;

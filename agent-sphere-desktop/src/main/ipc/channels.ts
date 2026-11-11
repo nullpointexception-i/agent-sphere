@@ -8,6 +8,7 @@ export const IPC = {
   runtimePause: 'runtime:pause',
   runtimeResume: 'runtime:resume',
   driversDetect: 'drivers:detect',
+  driversModels: 'drivers:models',
   profilesList: 'profiles:list',
   profilesSave: 'profiles:save',
   profilesRemove: 'profiles:remove',

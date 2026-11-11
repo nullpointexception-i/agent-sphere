@@ -1,4 +1,4 @@
-import type { DriverKind, DriverStatus } from '../../../shared/types';
+import type { DriverKind, DriverModel, DriverStatus } from '../../../shared/types';
 import type { SettingsStore } from '../../config/settings';
 import type { RuntimeDriver } from './types';
 import { OpenCodeDriver } from './opencode';
@@ -21,6 +21,16 @@ export class DriverRegistry {
 
   getStatuses(): DriverStatus[] {
     return this.statuses;
+  }
+
+  async listModels(kind: DriverKind): Promise<DriverModel[]> {
+    const driver = this.drivers[kind];
+    if (!driver.listModels) return [];
+    try {
+      return await driver.listModels();
+    } catch {
+      return [];
+    }
   }
 
   async detectAll(): Promise<DriverStatus[]> {
