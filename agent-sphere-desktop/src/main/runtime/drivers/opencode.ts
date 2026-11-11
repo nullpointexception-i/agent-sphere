@@ -154,14 +154,35 @@ export class OpenCodeDriver implements RuntimeDriver {
     }
 
     const controller = new AbortController();
-    const abort = (): void => controller.abort();
-    context.signal.addEventListener('abort', abort, { once: true });
-    this.active.set(context.task.taskId, { sessionId, controller });
-
     const eventsAbort = new AbortController();
     let accumulated = '';
     let sawText = false;
+    let started = false;
+    let settled = false;
     let fatal: Error | undefined;
+
+    let resolveDone!: () => void;
+    let rejectDone!: (error: Error) => void;
+    const done = new Promise<void>((resolve, reject) => {
+      resolveDone = resolve;
+      rejectDone = reject;
+    });
+    void done.catch(() => undefined);
+    const settle = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      if (error) rejectDone(error);
+      else resolveDone();
+    };
+
+    const abort = (): void => controller.abort();
+    context.signal.addEventListener('abort', abort, { once: true });
+    controller.signal.addEventListener(
+      'abort',
+      () => settle(new Error('Aborted')),
+      { once: true },
+    );
+    this.active.set(context.task.taskId, { sessionId, controller });
 
     const eventLoop = (async () => {
       try {
@@ -174,12 +195,27 @@ export class OpenCodeDriver implements RuntimeDriver {
           if (type === 'session.text.delta') {
             const delta = String(data?.delta ?? data?.text ?? '');
             if (!delta) continue;
+            started = true;
             sawText = true;
             accumulated += delta;
             context.onChunk('reply', delta);
           } else if (type === 'session.reasoning.delta') {
             const delta = String(data?.delta ?? data?.text ?? '');
             if (delta) context.onChunk('thinking', delta);
+          } else if (type === 'session.execution.started') {
+            started = true;
+          } else if (type === 'session.execution.failed') {
+            settle(
+              new Error(
+                String(
+                  data?.error?.message ?? data?.message ?? 'opencode run failed',
+                ),
+              ),
+            );
+          } else if (type === 'session.execution.interrupted') {
+            settle(new Error('Aborted'));
+          } else if (type === 'session.idle') {
+            if (started) settle();
           } else if (type === 'permission.asked') {
             await this.answerPermission(context, sessionId as string, data);
           } else if (type === 'form.created') {
@@ -195,21 +231,63 @@ export class OpenCodeDriver implements RuntimeDriver {
     })();
     void eventLoop;
 
+    const lastAssistantText = async (): Promise<string> => {
+      try {
+        const result = await client.message.list({ sessionID: sessionId });
+        const list = Array.isArray(result) ? result : (result?.data ?? []);
+        for (let index = list.length - 1; index >= 0; index -= 1) {
+          const message = list[index];
+          if (message?.type !== 'assistant') continue;
+          const parts = Array.isArray(message.content) ? message.content : [];
+          const text = parts
+            .filter(
+              (part: AnyRecord) =>
+                part && (part.type === 'text' || typeof part.text === 'string'),
+            )
+            .map((part: AnyRecord) => String(part.text ?? ''))
+            .join('')
+            .trim();
+          if (text) return text;
+        }
+      } catch (error) {
+        logger.warn(`opencode message lookup failed: ${String(error)}`);
+      }
+      return '';
+    };
+
+    const waitForSession = async (sid: string): Promise<void> => {
+      const experimentalWait = (client.experimental as AnyRecord | undefined)
+        ?.session?.wait;
+      if (typeof experimentalWait === 'function') {
+        await experimentalWait.call(
+          (client.experimental as AnyRecord).session,
+          { sessionID: sid },
+        );
+        return;
+      }
+      const legacyWait = (client.session as AnyRecord | undefined)?.wait;
+      if (typeof legacyWait === 'function') {
+        await legacyWait.call(client.session, { sessionID: sid });
+        return;
+      }
+      await done;
+    };
+
     const timeoutMs = Math.max(1, this.settings.get().taskTimeoutSec * 1000);
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       void this.interrupt(sessionId as string);
+      settle(new Error('opencode task timed out'));
       controller.abort();
     }, timeoutMs);
 
     try {
-      let result: AnyRecord;
       try {
-        result = (await client.session.generate(
-          { sessionID: sessionId, prompt: context.prompt },
-          { signal: controller.signal },
-        )) as AnyRecord;
+        await client.session.prompt({
+          sessionID: sessionId,
+          text: context.prompt,
+        });
       } catch (error) {
         if (!isInvalidSessionError(error)) throw error;
         // The shared opencode service was restarted or the session was removed;
@@ -222,12 +300,14 @@ export class OpenCodeDriver implements RuntimeDriver {
         sessionId = String(session.id);
         context.onSessionRef(`${SESSION_PREFIX}${sessionId}`);
         this.active.set(context.task.taskId, { sessionId, controller });
-        result = (await client.session.generate(
-          { sessionID: sessionId, prompt: context.prompt },
-          { signal: controller.signal },
-        )) as AnyRecord;
+        await client.session.prompt({
+          sessionID: sessionId,
+          text: context.prompt,
+        });
       }
-      const text = (String(result?.text ?? '') || accumulated).trim();
+
+      await Promise.race([waitForSession(sessionId), done]);
+      const text = accumulated.trim() || (await lastAssistantText());
       if (!text) throw fatal ?? new Error('opencode completed without a reply');
       if (!sawText) context.onChunk('reply', text);
       return {
