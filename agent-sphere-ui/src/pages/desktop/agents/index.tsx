@@ -3,7 +3,10 @@ import {
   Button,
   Card,
   Empty,
+  Form,
   Input,
+  Modal,
+  Popconfirm,
   Select,
   Space,
   Switch,
@@ -16,6 +19,11 @@ import {
   type SuperAgent,
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
+import {
+  type LocalRuntime,
+  localRuntimeApi,
+} from '@/services/agentSphere/localRuntime';
+import { dictApi, type SystemDicEntry } from '@/services/agentSphere/dict';
 import {
   type DesktopAgentProfile,
   type DesktopBridgeDriver,
@@ -42,6 +50,11 @@ export default function DesktopAgentsPage() {
   );
   const [drivers, setDrivers] = useState<DesktopBridgeDriver[]>([]);
   const [loading, setLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [runtimes, setRuntimes] = useState<LocalRuntime[]>([]);
+  const [positions, setPositions] = useState<SystemDicEntry[]>([]);
+  const [createForm] = Form.useForm();
 
   const localAgents = useMemo(
     () => agents.filter((agent) => agent.agentType === 'LOCAL'),
@@ -115,6 +128,83 @@ export default function DesktopAgentsPage() {
     }
   };
 
+  const reloadAgents = async () => {
+    try {
+      const list = await superAgentApi.list();
+      setAgents(list ?? []);
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const openCreate = () => {
+    setCreateOpen(true);
+  };
+
+  useEffect(() => {
+    if (!createOpen || !bridge) return;
+    void (async () => {
+      try {
+        const [list, dictionary, settings] = await Promise.all([
+          localRuntimeApi.list(),
+          dictApi.listActive(),
+          bridge.settings.get(),
+        ]);
+        setRuntimes(list ?? []);
+        setPositions(dictionary ?? []);
+        const preferred = (list ?? []).find(
+          (item) => item.id === settings.runtimeId,
+        );
+        if (preferred) {
+          createForm.setFieldValue('localRuntimeId', preferred.id);
+        } else if ((list ?? []).length === 1) {
+          createForm.setFieldValue('localRuntimeId', list[0].id);
+        }
+      } catch (reason) {
+        message.error(
+          reason instanceof Error ? reason.message : String(reason),
+        );
+      }
+    })();
+  }, [createOpen, createForm, bridge, message]);
+
+  const createLocal = async () => {
+    try {
+      const values = await createForm.validateFields();
+      setCreating(true);
+      const created = await superAgentApi.create({
+        name: values.name,
+        positionCode: values.positionCode,
+        agentType: 'LOCAL',
+        localRuntimeId: values.localRuntimeId,
+      });
+      await superAgentApi
+        .updateVisibility(created.id, true)
+        .catch(() => undefined);
+      message.success(tw('agents.created', 'Local avatar created'));
+      setCreateOpen(false);
+      createForm.resetFields();
+      await reloadAgents();
+    } catch (reason) {
+      if (reason instanceof Error) message.error(reason.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const removeBinding = async (agent: SuperAgent) => {
+    if (!bridge) return;
+    try {
+      const next = await bridge.profiles.remove(agent.id);
+      const map: Record<number, DesktopAgentProfile> = {};
+      for (const row of next) map[row.agentId] = row;
+      setProfiles(map);
+      message.success(tw('agents.removed', 'Local binding removed'));
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   if (!bridge) {
     return (
       <div style={{ maxWidth: 960, margin: '60px auto', padding: 24 }}>
@@ -146,16 +236,29 @@ export default function DesktopAgentsPage() {
     <div style={{ maxWidth: 1440, margin: '32px auto', padding: 24 }}>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <DesktopPageNav />
-        <div>
-          <Typography.Title level={3} style={{ marginBottom: 4 }}>
-            {tw('agents.title', 'Local avatar bindings')}
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            {tw(
-              'agents.description',
-              'Choose the driver, workspace and execution policy for each local avatar.',
-            )}
-          </Typography.Paragraph>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <Typography.Title level={3} style={{ marginBottom: 4 }}>
+              {tw('agents.title', 'Local avatar bindings')}
+            </Typography.Title>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+              {tw(
+                'agents.description',
+                'Choose the driver, workspace and execution policy for each local avatar.',
+              )}
+            </Typography.Paragraph>
+          </div>
+          <Button type="primary" onClick={openCreate}>
+            {tw('agents.create', 'New local avatar')}
+          </Button>
         </div>
 
         <Card size="small">
@@ -228,7 +331,10 @@ export default function DesktopAgentsPage() {
                 ),
               },
               {
-                title: tw('agents.model', 'Model (optional)'),
+                title: tw(
+                  'agents.model',
+                  'Model (optional, empty = local default)',
+                ),
                 width: 160,
                 render: (_value, agent) => (
                   <Input
@@ -352,16 +458,80 @@ export default function DesktopAgentsPage() {
               },
               {
                 title: '',
-                width: 90,
+                width: 110,
                 render: (_value, agent) => (
-                  <Button type="primary" onClick={() => void save(agent)}>
-                    {tw('agents.save', 'Save')}
-                  </Button>
+                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                    <Button
+                      type="primary"
+                      block
+                      onClick={() => void save(agent)}
+                    >
+                      {tw('agents.save', 'Save')}
+                    </Button>
+                    <Popconfirm
+                      title={tw(
+                        'agents.removeConfirm',
+                        'Remove the local binding for this avatar?',
+                      )}
+                      okText={tw('common.remove', 'Remove')}
+                      cancelText={tw('common.cancel', 'Cancel')}
+                      onConfirm={() => void removeBinding(agent)}
+                    >
+                      <Button type="text" danger size="small" block>
+                        {tw('agents.removeBinding', 'Remove binding')}
+                      </Button>
+                    </Popconfirm>
+                  </Space>
                 ),
               },
             ]}
           />
         </Card>
+
+        <Modal
+          open={createOpen}
+          title={tw('agents.createTitle', 'New local avatar')}
+          okText={tw('agents.create', 'New local avatar')}
+          cancelText={tw('common.cancel', 'Cancel')}
+          confirmLoading={creating}
+          onOk={() => void createLocal()}
+          onCancel={() => setCreateOpen(false)}
+          destroyOnClose
+        >
+          <Form form={createForm} layout="vertical" preserve={false}>
+            <Form.Item
+              name="name"
+              label={tw('agents.createName', 'Name')}
+              rules={[{ required: true, max: 128 }]}
+            >
+              <Input maxLength={32} />
+            </Form.Item>
+            <Form.Item
+              name="positionCode"
+              label={tw('agents.createPosition', 'Role')}
+              rules={[{ required: true }]}
+            >
+              <Select
+                options={positions.map((item) => ({
+                  value: item.code,
+                  label: item.nameCn ?? item.code,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              name="localRuntimeId"
+              label={tw('agents.createRuntime', 'Local runtime')}
+              rules={[{ required: true }]}
+            >
+              <Select
+                options={runtimes.map((item) => ({
+                  value: item.id,
+                  label: `${item.name} · ${item.runtimeKind}${item.online ? '' : ' (offline)'}`,
+                }))}
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
       </Space>
     </div>
   );

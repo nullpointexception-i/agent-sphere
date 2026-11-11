@@ -7,8 +7,6 @@ export default {
   'workspace.nav.chat': 'Chats',
   'workspace.nav.contacts': 'Contacts',
   'workspace.nav.me': 'Me',
-  'workspace.nav.localAgents': 'Local avatars',
-  'workspace.nav.localRuntime': 'Local runtime',
   'workspace.app.online': 'Online',
   'workspace.app.operations': 'console',
   'workspace.status.active': 'Active',
@@ -70,6 +68,14 @@ export default {
   'workspace.avatars.createSubtitle':
     'Give it a name and responsibility to start working for you',
   'workspace.avatars.name': 'Name',
+  'workspace.avatars.type': 'Type',
+  'workspace.avatars.typeCloud': 'Cloud',
+  'workspace.avatars.typeLocal': 'Local',
+  'workspace.avatars.typeHint':
+    'Local avatars run on this machine through the desktop client.',
+  'workspace.avatars.runtime': 'Local runtime',
+  'workspace.avatars.runtimePlaceholder': 'Select a local runtime',
+  'workspace.avatars.runtimeRequired': 'Select a local runtime',
   'workspace.avatars.position': 'Role',
   'workspace.avatars.positionRequired': 'Select a role',
   'workspace.avatars.positionPlaceholder': 'Select a role',

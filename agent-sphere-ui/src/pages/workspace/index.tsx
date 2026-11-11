@@ -77,6 +77,10 @@ import {
   type SuperAgent,
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
+import {
+  type LocalRuntime,
+  localRuntimeApi,
+} from '@/services/agentSphere/localRuntime';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
 import { isDesktop } from '@/utils/runtimeEnv';
 import { userDisplayLabel } from '@/utils/userLabel';
@@ -332,34 +336,6 @@ function SideRail({
           {tw('app.operations', 'console')}
         </span>
       </div>
-      {isDesktop() ? (
-        <>
-          <div
-            className={styles.railItem}
-            title={tw('nav.localAgents', 'Local avatars')}
-            onClick={() => history.push('/desktop/agents')}
-          >
-            <span className={styles.railIcon}>
-              <RobotOutlined />
-            </span>
-            <span className={styles.railLabel}>
-              {tw('nav.localAgents', 'Local avatars')}
-            </span>
-          </div>
-          <div
-            className={styles.railItem}
-            title={tw('nav.localRuntime', 'Local runtime')}
-            onClick={() => history.push('/desktop/status')}
-          >
-            <span className={styles.railIcon}>
-              <SettingOutlined />
-            </span>
-            <span className={styles.railLabel}>
-              {tw('nav.localRuntime', 'Local runtime')}
-            </span>
-          </div>
-        </>
-      ) : null}
       <div className={styles.railUser} title={displayName(me)}>
         <Avatar
           className={styles.railAvatar}
@@ -588,8 +564,10 @@ function AvatarsTab({
   const [visibilitySaving, setVisibilitySaving] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [runtimes, setRuntimes] = useState<LocalRuntime[]>([]);
   const [form] = Form.useForm();
   const nameValue = Form.useWatch('name', form);
+  const createType = Form.useWatch('agentType', form);
   const [editingAgent, setEditingAgent] = useState<SuperAgent | null>(null);
   const [agentModalMode, setAgentModalMode] = useState<'view' | 'edit'>('view');
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -622,20 +600,42 @@ function AvatarsTab({
       .catch(() => setPositions([]));
   }, []);
 
+  useEffect(() => {
+    if (!createOpen || !isDesktop()) return;
+    localRuntimeApi
+      .list()
+      .then(setRuntimes)
+      .catch(() => setRuntimes([]));
+  }, [createOpen]);
+
   const positionOptions = positions.map((item) => ({
     value: item.code,
     label: getLocale() === 'en-US' ? item.nameEn : item.nameCn,
+  }));
+
+  const runtimeOptions = runtimes.map((item) => ({
+    value: item.id,
+    label: `${item.name} · ${item.runtimeKind}${item.online ? '' : ' (offline)'}`,
   }));
 
   const submit = async () => {
     const values = await form.validateFields();
     setSubmitting(true);
     try {
-      await superAgentApi.create({
+      const local = isDesktop() && values.agentType === 'LOCAL';
+      const created = await superAgentApi.create({
         name: values.name,
         description: values.description,
         positionCode: values.positionCode,
+        ...(local
+          ? { agentType: 'LOCAL' as const, localRuntimeId: values.localRuntimeId }
+          : {}),
       });
+      if (local) {
+        await superAgentApi
+          .updateVisibility(created.id, true)
+          .catch(() => undefined);
+      }
       message.success(tw('avatars.created', 'Created'));
       setCreateOpen(false);
       form.resetFields();
@@ -836,7 +836,10 @@ function AvatarsTab({
           type="primary"
           className={styles.primaryAction}
           icon={<PlusOutlined />}
-          onClick={() => setCreateOpen(true)}
+          onClick={() => {
+            form.resetFields();
+            setCreateOpen(true);
+          }}
         >
           {tw('avatars.create', 'Create avatar')}
         </Button>
@@ -936,7 +939,73 @@ function AvatarsTab({
           </div>
         </div>
 
-        <Form form={form} layout="vertical" className={styles.createBody}>
+        <Form
+          form={form}
+          layout="vertical"
+          className={styles.createBody}
+          initialValues={{ agentType: 'CLOUD' }}
+        >
+          {isDesktop() ? (
+            <div className={styles.fieldBlock}>
+              <div className={styles.fieldLabel}>
+                {tw('avatars.type', 'Type')}{' '}
+                <span className={styles.required}>*</span>
+              </div>
+              <Form.Item name="agentType" style={{ marginBottom: 0 }}>
+                <Select
+                  className={styles.softField}
+                  options={[
+                    {
+                      value: 'CLOUD',
+                      label: tw('avatars.typeCloud', 'Cloud'),
+                    },
+                    {
+                      value: 'LOCAL',
+                      label: tw('avatars.typeLocal', 'Local'),
+                    },
+                  ]}
+                />
+              </Form.Item>
+              <div className={styles.fieldHint}>
+                {tw(
+                  'avatars.typeHint',
+                  'Local avatars run on this machine through the desktop runtime.',
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {isDesktop() && createType === 'LOCAL' ? (
+            <div className={styles.fieldBlock}>
+              <div className={styles.fieldLabel}>
+                {tw('avatars.runtime', 'Local runtime')}{' '}
+                <span className={styles.required}>*</span>
+              </div>
+              <Form.Item
+                name="localRuntimeId"
+                rules={[
+                  {
+                    required: true,
+                    message: tw(
+                      'avatars.runtimeRequired',
+                      'Select a local runtime',
+                    ),
+                  },
+                ]}
+                style={{ marginBottom: 0 }}
+              >
+                <Select
+                  className={styles.softField}
+                  placeholder={tw(
+                    'avatars.runtimePlaceholder',
+                    'Select a local runtime',
+                  )}
+                  options={runtimeOptions}
+                />
+              </Form.Item>
+            </div>
+          ) : null}
+
           <div className={styles.fieldBlock}>
             <div className={styles.fieldLabel}>
               {tw('avatars.name', 'Name')}{' '}
