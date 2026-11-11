@@ -28,6 +28,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      # Windows runners default to core.longpaths=false; the backend module tree
+      # exceeds MAX_PATH and checkout fails before any build step runs.
+      - name: Enable Git long paths
+        run: git config --global core.longpaths true
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
