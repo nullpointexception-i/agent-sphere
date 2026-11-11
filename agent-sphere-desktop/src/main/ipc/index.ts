@@ -110,7 +110,6 @@ export function registerIpc(deps: IpcDependencies): void {
     });
     await deps.settings.updateSecrets({ deviceToken: input.deviceToken });
     await deps.runtime.restart();
-    deps.reloadWindow();
     return deps.runtime.getStatus();
   });
 

@@ -46,8 +46,10 @@ export class SettingsStore {
   private secrets: DesktopSecrets = {};
 
   async load(): Promise<void> {
+    let storedDeviceKey: string | undefined;
     try {
       const raw = JSON.parse(await readFile(paths.settingsFile(), 'utf8')) as Partial<DesktopSettings>;
+      storedDeviceKey = raw.deviceKey;
       this.settings = {
         ...defaultSettings(),
         ...raw,
@@ -62,7 +64,7 @@ export class SettingsStore {
 
     // Older installs have no device key; persist one so the backend can keep
     // one runtime per physical device across restarts.
-    if (!this.settings.deviceKey) {
+    if (!storedDeviceKey) {
       this.settings.deviceKey = randomUUID();
       await atomicWrite(paths.settingsFile(), JSON.stringify(this.settings, null, 2));
     }
