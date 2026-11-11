@@ -10,6 +10,8 @@ export type RuntimeState =
 export interface DesktopSettings {
   serverUrl: string;
   webOrigin: string;
+  /** Stable per-install key; the backend allows one runtime per device key. */
+  deviceKey: string;
   runtimeId?: number;
   runtimeName: string;
   /** Desktop chrome language; the web UI keeps its own locale switcher. */

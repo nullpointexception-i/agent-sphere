@@ -73,7 +73,7 @@ export class AppController {
       exportLogs: () => this.exportLogs(),
     });
 
-    this.window = createMainWindow(this.settings.isConfigured() ? '/workspace' : '/desktop/setup');
+    this.window = createMainWindow('/workspace');
     this.window.on('close', (event) => {
       if (!this.quitting && this.settings.get().closeToTray) {
         event.preventDefault();
@@ -100,7 +100,7 @@ export class AppController {
 
   show(): void {
     if (!this.window) {
-      this.window = createMainWindow(this.settings.isConfigured() ? '/workspace' : '/desktop/setup');
+      this.window = createMainWindow('/workspace');
     }
     if (this.window.isMinimized()) this.window.restore();
     this.window.show();

@@ -1,4 +1,5 @@
 import { safeStorage } from 'electron';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { paths } from './paths';
@@ -15,6 +16,7 @@ function defaultSettings(): DesktopSettings {
   return {
     serverUrl: DEFAULT_SERVER_URL,
     webOrigin: DEFAULT_SERVER_URL,
+    deviceKey: randomUUID(),
     runtimeName: process.env.COMPUTERNAME || process.env.HOSTNAME || 'AgentSphere Desktop',
     language: 'system',
     startAtLogin: false,
@@ -56,6 +58,13 @@ export class SettingsStore {
       };
     } catch {
       this.settings = defaultSettings();
+    }
+
+    // Older installs have no device key; persist one so the backend can keep
+    // one runtime per physical device across restarts.
+    if (!this.settings.deviceKey) {
+      this.settings.deviceKey = randomUUID();
+      await atomicWrite(paths.settingsFile(), JSON.stringify(this.settings, null, 2));
     }
 
     try {
