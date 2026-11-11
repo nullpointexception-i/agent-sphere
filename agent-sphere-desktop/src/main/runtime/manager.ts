@@ -28,6 +28,7 @@ export class RuntimeManager {
   private readonly runner: TaskRunner;
   private readonly scheduler: TaskScheduler;
   private heartbeatTimer?: NodeJS.Timeout;
+  private pollTimer?: NodeJS.Timeout;
   private streamController?: AbortController;
   private reconnectTimer?: NodeJS.Timeout;
   private started = false;
@@ -74,8 +75,10 @@ export class RuntimeManager {
   stop(): void {
     this.started = false;
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.heartbeatTimer = undefined;
+    this.pollTimer = undefined;
     this.reconnectTimer = undefined;
     this.streamController?.abort();
     this.streamController = undefined;
@@ -131,6 +134,7 @@ export class RuntimeManager {
       this.setStatus('ONLINE');
       this.startHeartbeat();
       this.startStream();
+      void this.catchUp();
       void this.detectDrivers();
     } catch (error) {
       logger.warn(`runtime connect failed: ${String(error)}`);
@@ -149,10 +153,28 @@ export class RuntimeManager {
 
   private startHeartbeat(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (!this.pollTimer) {
+      this.pollTimer = setInterval(() => {
+        void this.catchUp();
+      }, 60_000);
+    }
     void this.heartbeat();
     this.heartbeatTimer = setInterval(() => {
       void this.heartbeat();
     }, 20_000);
+  }
+
+  /** SSE is notification-only: recover tasks created while the stream was down. */
+  private async catchUp(): Promise<void> {
+    if (!this.started || this.status.state === 'PAUSED') return;
+    try {
+      const tasks = await this.deps.api.listTasks(['PENDING']);
+      for (const task of tasks) {
+        if (task.taskId) void this.acceptTask(task.taskId);
+      }
+    } catch (error) {
+      logger.debug(`local task catch-up failed: ${String(error)}`);
+    }
   }
 
   private async heartbeat(): Promise<void> {

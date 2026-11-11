@@ -60,3 +60,12 @@ export interface StreamEvent {
   taskId?: number;
   [key: string]: unknown;
 }
+
+export interface LocalTaskSummary {
+  taskId: number;
+  agentId?: number;
+  threadId?: number;
+  status: string;
+  errorCode?: string;
+  errorMessage?: string;
+}

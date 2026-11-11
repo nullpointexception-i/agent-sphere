@@ -2,6 +2,7 @@ import type { SettingsStore } from '../config/settings';
 import type {
   HeartbeatRequest,
   LocalTaskPayload,
+  LocalTaskSummary,
   RuntimeInfo,
   StreamEvent,
   TaskAckResponse,
@@ -66,6 +67,17 @@ export class LocalApiClient {
       method: 'POST',
       body: JSON.stringify(body),
     }, 10_000);
+  }
+
+  listTasks(statuses: string[]): Promise<LocalTaskSummary[]> {
+    const query = statuses
+      .map((status) => `status=${encodeURIComponent(status)}`)
+      .join('&');
+    return this.request<LocalTaskSummary[]>(
+      `/local-runtimes/me/tasks${query ? `?${query}` : ''}`,
+      {},
+      15_000,
+    );
   }
 
   ack(taskId: number): Promise<TaskAckResponse> {
