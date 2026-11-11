@@ -30,4 +30,17 @@ public interface AgentLocalTaskDeliveryMapper extends BaseMapper<AgentLocalTaskD
               AND d.delete_flag = FALSE
             """)
     int markFailed(@Param("taskId") Long taskId, @Param("remark") String remark);
+
+    @Update("""
+            UPDATE agent_event_delivery d
+            SET status = 'FAILED', remark = 'local task lease expired', updated_at = now()
+            FROM agent_local_task t
+            JOIN agent_local_task_delivery td
+              ON td.task_id = t.id AND td.delete_flag = FALSE
+            WHERE t.status = 'EXPIRED'
+              AND d.id = td.delivery_id
+              AND d.status IN ('CLAIMED', 'RUNNING')
+              AND d.delete_flag = FALSE
+            """)
+    int markExpiredDeliveries();
 }

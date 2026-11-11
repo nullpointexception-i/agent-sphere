@@ -39,6 +39,15 @@ public interface AgentEventDeliveryMapper extends BaseMapper<AgentEventDelivery>
             """)
     int release(@Param("id") Long id, @Param("nextRetryAt") LocalDateTime nextRetryAt);
 
+    /** Keeps an offline local runtime's delivery pending without a hot retry loop. */
+    @Update("""
+            UPDATE agent_event_delivery
+            SET next_retry_at = #{nextRetryAt}, remark = #{remark}, updated_at = now()
+            WHERE id = #{id} AND status = 'PENDING' AND delete_flag = FALSE
+            """)
+    int backoffPending(@Param("id") Long id, @Param("nextRetryAt") LocalDateTime nextRetryAt,
+                       @Param("remark") String remark);
+
     /**
      * Terminal-fails a PENDING delivery that can never be consumed (agent removed,
      * archived or not configured). Without this the row is picked up forever by

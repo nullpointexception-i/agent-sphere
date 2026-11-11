@@ -104,6 +104,7 @@ class AgentRouterSchedulerIdentityTest {
                 mock(com.buukle.agent.instance.spi.RunSpi.class),
                 mock(com.buukle.agent.superagent.repository.AgentRouterForkMapper.class),
                 mock(ObjectProvider.class),
+                mock(ObjectProvider.class),
                 provider,
                 mock(AgentMetrics.class),
                 mock(RedissonClient.class),

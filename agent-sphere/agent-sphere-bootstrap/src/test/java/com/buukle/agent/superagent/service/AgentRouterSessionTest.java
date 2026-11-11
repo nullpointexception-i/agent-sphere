@@ -100,6 +100,7 @@ class AgentRouterSessionTest {
                 mock(com.buukle.agent.superagent.repository.AgentRouterForkMapper.class),
                 provider,
                 provider,
+                provider,
                 mock(AgentMetrics.class),
                 mock(RedissonClient.class),
                 mock(Executor.class));

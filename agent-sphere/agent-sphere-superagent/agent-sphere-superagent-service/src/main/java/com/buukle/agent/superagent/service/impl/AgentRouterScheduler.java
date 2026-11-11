@@ -25,6 +25,7 @@ import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.domain.AgentThread;
 import com.buukle.agent.superagent.dtvo.enums.AgentEventDeliveryStatus;
 import com.buukle.agent.superagent.dtvo.enums.AgentRouterRunStatus;
+import com.buukle.agent.superagent.dtvo.enums.AgentType;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.repository.AgentEventDeliveryMapper;
 import com.buukle.agent.superagent.repository.AgentEventMapper;
@@ -35,6 +36,9 @@ import com.buukle.agent.superagent.repository.PendingDeliveryGroup;
 import com.buukle.agent.superagent.spi.AgentRouterRunCommand;
 import com.buukle.agent.superagent.spi.AgentRouterRunPort;
 import com.buukle.agent.superagent.spi.AgentRouterRunResult;
+import com.buukle.agent.superagent.spi.LocalAgentDispatchCommand;
+import com.buukle.agent.superagent.spi.LocalAgentDispatchPort;
+import com.buukle.agent.superagent.spi.LocalAgentDispatchResult;
 import com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -87,6 +91,8 @@ public class AgentRouterScheduler {
     /** Metric tag value for deliveries terminally failed because nothing can consume them. */
     private static final String DELIVERY_STATUS_TAG = "status";
     private static final String DELIVERY_STATUS_UNDELIVERABLE = "UNDELIVERABLE";
+    private static final String LOCAL_STATUS_QUEUED = "LOCAL_QUEUED";
+    private static final String LOCAL_STATUS_REJECTED = "LOCAL_REJECTED";
 
     private final AgentEventDeliveryMapper deliveryMapper;
     private final AgentEventMapper eventMapper;
@@ -96,6 +102,7 @@ public class AgentRouterScheduler {
     private final RunSpi runSpi;
     private final AgentRouterForkMapper forkMapper;
     private final ObjectProvider<AgentRouterRunPort> agentRouterRunPortProvider;
+    private final ObjectProvider<LocalAgentDispatchPort> localAgentDispatchPortProvider;
     private final ObjectProvider<UserSpi> userSpiProvider;
     private final AgentMetrics metrics;
     private final RedissonClient redissonClient;
@@ -187,10 +194,6 @@ public class AgentRouterScheduler {
      * this method; the group lock keeps the same conversation serial without blocking other groups.
      */
     private void dispatchGroup(Long agentId, Long threadId, List<Long> preferredIds) {
-        AgentRouterRunPort port = agentRouterRunPortProvider.getIfAvailable();
-        if (port == null) {
-            return;
-        }
         RLock lock = redissonClient.getLock(GROUP_LOCK_PREFIX + agentId + ":" + threadId);
         boolean locked = false;
         try {
@@ -237,13 +240,25 @@ public class AgentRouterScheduler {
                     failUndeliverable(delivery, "agent " + agent.getStatus());
                     continue;
                 }
-                if (agent.getRouterInstanceId() == null) {
-                    failUndeliverable(delivery, "agent has no router instance");
-                    continue;
-                }
                 contexts.add(new DeliveryContext(delivery, event, agent));
             }
             if (contexts.isEmpty()) {
+                return;
+            }
+
+            AgentSuperAgent dispatchAgent = contexts.get(0).agent();
+            if (AgentType.LOCAL.equals(dispatchAgent.getAgentType())) {
+                dispatchLocal(dispatchAgent, threadId, contexts);
+                return;
+            }
+            if (dispatchAgent.getRouterInstanceId() == null) {
+                for (DeliveryContext context : contexts) {
+                    failUndeliverable(context.delivery(), "agent has no router instance");
+                }
+                return;
+            }
+            AgentRouterRunPort port = agentRouterRunPortProvider.getIfAvailable();
+            if (port == null) {
                 return;
             }
 
@@ -315,6 +330,38 @@ public class AgentRouterScheduler {
                 lock.unlock();
             }
             TenantContext.clear();
+        }
+    }
+
+    /** Local avatars do not have router sessions: the dispatcher persists a task instead. */
+    private void dispatchLocal(AgentSuperAgent agent, Long threadId,
+                               List<DeliveryContext> contexts) {
+        LocalAgentDispatchPort localPort = localAgentDispatchPortProvider.getIfAvailable();
+        if (localPort == null) {
+            log.warn("Local agent dispatch port is unavailable: agent={}", agent.getId());
+            return;
+        }
+        TenantContext.set(agent.getTenantId());
+        List<Long> deliveryIds = contexts.stream()
+                .map(context -> context.delivery().getId())
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        try {
+            LocalAgentDispatchResult result = localPort.dispatch(
+                    new LocalAgentDispatchCommand(agent.getId(), threadId, deliveryIds));
+            if (result != null && result.accepted()) {
+                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY,
+                        AgentMetrics.TAG_STATUS, LOCAL_STATUS_QUEUED);
+            } else {
+                metrics.increment(AgentMetrics.AGENT_ROUTER_DELIVERY,
+                        AgentMetrics.TAG_STATUS, LOCAL_STATUS_REJECTED);
+                log.info("Local task not queued: agent={}, thread={}, reason={}",
+                        agent.getId(), threadId, result == null ? "no result" : result.message());
+            }
+        } catch (Exception e) {
+            metrics.increment(AgentMetrics.AGENT_ROUTER_START_FAILED);
+            log.warn("Local task dispatch failed: agent={}, thread={}, error={}",
+                    agent.getId(), threadId, e.getMessage());
         }
     }
 
