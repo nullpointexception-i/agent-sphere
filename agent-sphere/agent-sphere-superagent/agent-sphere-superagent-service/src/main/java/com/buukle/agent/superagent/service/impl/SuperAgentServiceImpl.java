@@ -88,19 +88,18 @@ public class SuperAgentServiceImpl implements SuperAgentService {
 
         if (AgentType.LOCAL.equals(agentType)) {
             Long runtimeId = dto.getLocalRuntimeId();
-            if (runtimeId == null) {
-                throw new BizException(CommonErrorCode.PARAM_INVALID,
-                        "localRuntimeId is required for a local avatar");
+            if (runtimeId != null) {
+                AgentLocalRuntime runtime = localRuntimeMapper.selectById(runtimeId);
+                if (runtime == null || !LocalRuntimeStatus.ACTIVE.equals(runtime.getStatus())) {
+                    throw new BizException(CommonErrorCode.PARAM_INVALID,
+                            "local runtime not found or disabled");
+                }
+                if (!userId.equals(runtime.getOwnerUserId())) {
+                    throw new BizException(CommonErrorCode.FORBIDDEN);
+                }
+                requireRuntimeAvailable(runtimeId, null);
+                agent.setLocalRuntimeId(runtimeId);
             }
-            AgentLocalRuntime runtime = localRuntimeMapper.selectById(runtimeId);
-            if (runtime == null || !LocalRuntimeStatus.ACTIVE.equals(runtime.getStatus())) {
-                throw new BizException(CommonErrorCode.PARAM_INVALID,
-                        "local runtime not found or disabled");
-            }
-            if (!userId.equals(runtime.getOwnerUserId())) {
-                throw new BizException(CommonErrorCode.FORBIDDEN);
-            }
-            agent.setLocalRuntimeId(runtimeId);
             superAgentMapper.insert(agent);
             return toVO(agent);
         }
@@ -274,9 +273,24 @@ public class SuperAgentServiceImpl implements SuperAgentService {
                 && !currentUserId().equals(runtime.getOwnerUserId())) {
             throw new BizException(CommonErrorCode.FORBIDDEN);
         }
+        requireRuntimeAvailable(localRuntimeId, id);
         agent.setLocalRuntimeId(localRuntimeId);
         superAgentMapper.updateById(agent);
         return toVO(agent);
+    }
+
+    /** One desktop runtime hosts one avatar; archived avatars no longer hold the runtime. */
+    private void requireRuntimeAvailable(Long runtimeId, Long selfId) {
+        var query = Wrappers.<AgentSuperAgent>lambdaQuery()
+                .eq(AgentSuperAgent::getLocalRuntimeId, runtimeId)
+                .ne(AgentSuperAgent::getStatus, SuperAgentStatus.ARCHIVED);
+        if (selfId != null) {
+            query.ne(AgentSuperAgent::getId, selfId);
+        }
+        if (superAgentMapper.selectCount(query) > 0) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID,
+                    "local runtime is already bound to another avatar");
+        }
     }
 
     /**

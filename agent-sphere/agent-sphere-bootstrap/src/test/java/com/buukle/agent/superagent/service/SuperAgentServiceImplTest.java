@@ -254,6 +254,7 @@ class SuperAgentServiceImplTest {
         runtime.setOwnerUserId(1L);
         runtime.setStatus(LocalRuntimeStatus.ACTIVE);
         when(localRuntimeMapper.selectById(3L)).thenReturn(runtime);
+        when(superAgentMapper.selectCount(any())).thenReturn(0L);
 
         service.updateLocalRuntime(7L, 3L);
 
@@ -297,6 +298,43 @@ class SuperAgentServiceImplTest {
         when(superAgentMapper.selectById(7L)).thenReturn(agent);
 
         assertThrows(BizException.class, () -> service.updateModelRoute(7L, 33L));
+    }
+
+    @Test
+    void createLocal_rejectsRuntimeBoundToAnotherAvatar() {
+        when(systemDicSpi.findActive(SystemDicConstants.TYPE_POSITION, "FINANCE"))
+                .thenReturn(new SystemDicEntry("FINANCE", "财务专家", "Finance Specialist"));
+        AgentLocalRuntime runtime = new AgentLocalRuntime();
+        runtime.setId(3L);
+        runtime.setOwnerUserId(1L);
+        runtime.setStatus(LocalRuntimeStatus.ACTIVE);
+        when(localRuntimeMapper.selectById(3L)).thenReturn(runtime);
+        when(superAgentMapper.selectCount(any())).thenReturn(1L);
+
+        CreateSuperAgentDTO dto = new CreateSuperAgentDTO();
+        dto.setName("Local");
+        dto.setPositionCode("FINANCE");
+        dto.setAgentType("LOCAL");
+        dto.setLocalRuntimeId(3L);
+
+        assertThrows(BizException.class, () -> service.create(dto));
+    }
+
+    @Test
+    void updateLocalRuntime_rejectsRuntimeBoundToAnotherAvatar() {
+        AgentSuperAgent agent = new AgentSuperAgent();
+        agent.setId(7L);
+        agent.setOwnerUserId(1L);
+        agent.setAgentType(AgentType.LOCAL);
+        when(superAgentMapper.selectById(7L)).thenReturn(agent);
+        AgentLocalRuntime runtime = new AgentLocalRuntime();
+        runtime.setId(3L);
+        runtime.setOwnerUserId(1L);
+        runtime.setStatus(LocalRuntimeStatus.ACTIVE);
+        when(localRuntimeMapper.selectById(3L)).thenReturn(runtime);
+        when(superAgentMapper.selectCount(any())).thenReturn(1L);
+
+        assertThrows(BizException.class, () -> service.updateLocalRuntime(7L, 3L));
     }
 
     private static InstanceVO instance(Long id) {
