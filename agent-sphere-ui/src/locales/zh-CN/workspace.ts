@@ -113,6 +113,7 @@ export default {
   'workspace.avatars.manualConnect': '手动连接',
   'workspace.avatars.connectTimeout': '连接超时，请重试或手动连接。',
   'workspace.avatars.runtimeConnected': '本地运行时已连接',
+  'workspace.avatars.reconnect': '连接',
   'workspace.avatars.driver': '驱动',
   'workspace.avatars.runtimeOnline': '在线',
   'workspace.avatars.runtimeOffline': '离线',

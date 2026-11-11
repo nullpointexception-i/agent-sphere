@@ -18,6 +18,7 @@ import {
   SettingOutlined,
   StarFilled,
   TeamOutlined,
+  UnorderedListOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import {
@@ -44,6 +45,7 @@ import {
   Spin,
   Switch,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
@@ -664,8 +666,29 @@ function AvatarsTab({
                   {initials(agent.name)}
                 </Avatar>
                 <div className={styles.rowBody}>
-                  <div className={styles.rowTitle}>
-                    {agent.name}
+                  <div className={styles.avatarNameRow}>
+                    <span className={styles.avatarName}>{agent.name}</span>
+                    {bridge && agent.agentType === 'LOCAL' ? (
+                      <Tooltip title={tw('tasks.open', 'Tasks')}>
+                        <Button
+                          size="small"
+                          type="text"
+                          shape="circle"
+                          icon={<UnorderedListOutlined />}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setTaskAgent(agent);
+                          }}
+                        />
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                  <div className={styles.avatarTags}>
+                    <Tag color={agent.agentType === 'LOCAL' ? 'blue' : 'default'}>
+                      {agent.agentType === 'LOCAL'
+                        ? tw('avatars.typeLocal', 'Local')
+                        : tw('avatars.typeCloud', 'Cloud')}
+                    </Tag>
                     <Tag
                       color={
                         agent.status === STATUS.ACTIVE ? 'green' : 'default'
@@ -685,18 +708,6 @@ function AvatarsTab({
                   <div className={styles.rowDesc}>
                     {agent.description || tw('nav.avatars', 'Avatars')}
                   </div>
-                  {bridge && agent.agentType === 'LOCAL' ? (
-                    <Button
-                      size="small"
-                      style={{ marginTop: 8, alignSelf: 'flex-start' }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setTaskAgent(agent);
-                      }}
-                    >
-                      {tw('tasks.open', 'Tasks')}
-                    </Button>
-                  ) : null}
                 </div>
               </div>
             ))

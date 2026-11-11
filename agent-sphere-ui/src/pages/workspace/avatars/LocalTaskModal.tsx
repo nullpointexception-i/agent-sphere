@@ -66,11 +66,12 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
         'Tasks',
       )}`}
       footer={null}
-      width={900}
+      width={560}
+      centered
       onCancel={onClose}
       destroyOnHidden
     >
-      <Button size="small" onClick={() => void load()} style={{ marginBottom: 12 }}>
+      <Button size="small" onClick={() => void load()} style={{ marginBottom: 10 }}>
         {tw('tasks.refresh', 'Refresh')}
       </Button>
       <Table<DesktopBridgeTask>
@@ -78,24 +79,26 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
         size="small"
         loading={loading}
         dataSource={rows}
-        pagination={{ pageSize: 10, hideOnSinglePage: true }}
+        scroll={{ x: 520, y: 240 }}
+        pagination={{ pageSize: 5, hideOnSinglePage: true }}
         locale={{ emptyText: tw('tasks.empty', 'No tasks yet') }}
         columns={[
           {
             title: 'ID',
             dataIndex: 'taskId',
-            width: 80,
+            width: 70,
           },
           {
             title: tw('tasks.thread', 'Conversation'),
             dataIndex: 'threadTitle',
+            ellipsis: true,
             render: (value: string | undefined, task) =>
               value ?? `#${task.threadId ?? '-'}`,
           },
           {
             title: tw('tasks.status', 'Status'),
             dataIndex: 'status',
-            width: 130,
+            width: 120,
             render: (value: string) => (
               <Tag color={STATUS_COLOR[value] ?? 'default'}>{value}</Tag>
             ),
@@ -103,7 +106,7 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
           {
             title: tw('tasks.startedAt', 'Started'),
             dataIndex: 'startedAt',
-            width: 170,
+            width: 150,
             render: (value?: number) =>
               value ? new Date(value).toLocaleString() : '-',
           },
@@ -114,7 +117,7 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
           },
           {
             title: '',
-            width: 80,
+            width: 70,
             render: (_value, task) =>
               task.status === 'RUNNING' ? (
                 <Button

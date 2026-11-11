@@ -122,6 +122,7 @@ export default {
   'workspace.avatars.connectTimeout':
     'Connection timed out. Retry or use manual connect.',
   'workspace.avatars.runtimeConnected': 'Local runtime connected',
+  'workspace.avatars.reconnect': 'Connect',
   'workspace.avatars.driver': 'Driver',
   'workspace.avatars.runtimeOnline': 'Online',
   'workspace.avatars.runtimeOffline': 'Offline',

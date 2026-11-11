@@ -433,6 +433,19 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                   {boundRuntime.runtimeVersion ? (
                     <span>v{boundRuntime.runtimeVersion}</span>
                   ) : null}
+                  {!boundRuntime.online ? (
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() =>
+                        void connect(
+                          boundRuntime.runtimeKind as DesktopDriverKind,
+                        )
+                      }
+                    >
+                      {tw('avatars.reconnect', 'Connect')}
+                    </Button>
+                  ) : null}
                 </Space>
               ) : (
                 tw(

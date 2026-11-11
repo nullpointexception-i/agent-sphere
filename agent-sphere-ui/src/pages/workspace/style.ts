@@ -488,6 +488,31 @@ export const useStyles = createStyles(({ css }) => ({
     color: #241b4d;
     font-size: 13px;
   `,
+  avatarNameRow: css`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  `,
+  avatarName: css`
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    color: #241b4d;
+    font-size: 14px;
+  `,
+  avatarTags: css`
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    .ant-tag {
+      margin-inline-end: 0;
+    }
+  `,
   conversationNameText: css`
     flex: 1;
     min-width: 0;
@@ -630,7 +655,7 @@ export const useStyles = createStyles(({ css }) => ({
   `,
   avatarGrid: css`
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 14px;
   `,
   avatarCard: css`
