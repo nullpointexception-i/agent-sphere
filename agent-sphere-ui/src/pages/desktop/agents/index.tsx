@@ -22,6 +22,7 @@ import {
   getDesktopBridge,
 } from '@/utils/desktopBridge';
 import { tw } from '../i18n';
+import { DesktopPageNav } from '../DesktopPageNav';
 
 const DEFAULT_PROFILE: Omit<DesktopAgentProfile, 'agentId' | 'agentName'> = {
   driver: 'OPENCODE',
@@ -144,6 +145,7 @@ export default function DesktopAgentsPage() {
   return (
     <div style={{ maxWidth: 1280, margin: '32px auto', padding: 24 }}>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <DesktopPageNav />
         <div>
           <Typography.Title level={3} style={{ marginBottom: 4 }}>
             {tw('agents.title', 'Local avatar bindings')}

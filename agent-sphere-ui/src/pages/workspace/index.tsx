@@ -78,6 +78,7 @@ import {
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
+import { isDesktop } from '@/utils/runtimeEnv';
 import { userDisplayLabel } from '@/utils/userLabel';
 import { messageText } from '../im/components/messageUtils';
 import {
@@ -331,6 +332,34 @@ function SideRail({
           {tw('app.operations', 'console')}
         </span>
       </div>
+      {isDesktop() ? (
+        <>
+          <div
+            className={styles.railItem}
+            title={tw('nav.localAgents', 'Local avatars')}
+            onClick={() => history.push('/desktop/agents')}
+          >
+            <span className={styles.railIcon}>
+              <RobotOutlined />
+            </span>
+            <span className={styles.railLabel}>
+              {tw('nav.localAgents', 'Local avatars')}
+            </span>
+          </div>
+          <div
+            className={styles.railItem}
+            title={tw('nav.localRuntime', 'Local runtime')}
+            onClick={() => history.push('/desktop/status')}
+          >
+            <span className={styles.railIcon}>
+              <SettingOutlined />
+            </span>
+            <span className={styles.railLabel}>
+              {tw('nav.localRuntime', 'Local runtime')}
+            </span>
+          </div>
+        </>
+      ) : null}
       <div className={styles.railUser} title={displayName(me)}>
         <Avatar
           className={styles.railAvatar}

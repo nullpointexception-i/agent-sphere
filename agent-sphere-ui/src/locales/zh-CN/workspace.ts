@@ -7,6 +7,8 @@ export default {
   'workspace.nav.chat': '聊天',
   'workspace.nav.contacts': '联系人',
   'workspace.nav.me': '我的',
+  'workspace.nav.localAgents': '本地分身',
+  'workspace.nav.localRuntime': '本地运行时',
   'workspace.app.online': '在线',
   'workspace.app.operations': 'console',
   'workspace.status.active': '运行中',

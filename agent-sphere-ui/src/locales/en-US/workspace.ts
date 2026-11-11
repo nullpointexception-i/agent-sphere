@@ -7,6 +7,8 @@ export default {
   'workspace.nav.chat': 'Chats',
   'workspace.nav.contacts': 'Contacts',
   'workspace.nav.me': 'Me',
+  'workspace.nav.localAgents': 'Local avatars',
+  'workspace.nav.localRuntime': 'Local runtime',
   'workspace.app.online': 'Online',
   'workspace.app.operations': 'console',
   'workspace.status.active': 'Active',

@@ -6,6 +6,8 @@ export default {
   'desktop.status.ONLINE': '在线',
   'desktop.status.OFFLINE': '离线',
   'desktop.status.PAUSED': '已暂停',
+  'desktop.nav.workspace': '返回工作台',
+  'desktop.nav.console': '控制台',
 
   'desktop.setup.title': '连接 AgentSphere',
   'desktop.setup.description':

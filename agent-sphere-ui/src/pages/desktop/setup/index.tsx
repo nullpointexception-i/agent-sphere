@@ -20,6 +20,7 @@ import {
 } from '@/utils/desktopBridge';
 import { getWebOrigin } from '@/utils/runtimeEnv';
 import { tw } from '../i18n';
+import { DesktopPageNav } from '../DesktopPageNav';
 
 interface SetupValues {
   serverUrl: string;
@@ -163,6 +164,7 @@ export default function DesktopSetupPage() {
   return (
     <div style={{ maxWidth: 680, margin: '60px auto', padding: 24 }}>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <DesktopPageNav />
         <div>
           <Typography.Title level={3} style={{ marginBottom: 4 }}>
             {tw('setup.title', 'Connect to AgentSphere')}

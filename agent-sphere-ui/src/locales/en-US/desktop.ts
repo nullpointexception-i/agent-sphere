@@ -6,6 +6,8 @@ export default {
   'desktop.status.ONLINE': 'Online',
   'desktop.status.OFFLINE': 'Offline',
   'desktop.status.PAUSED': 'Paused',
+  'desktop.nav.workspace': 'Workspace',
+  'desktop.nav.console': 'Console',
 
   'desktop.setup.title': 'Connect to AgentSphere',
   'desktop.setup.description':

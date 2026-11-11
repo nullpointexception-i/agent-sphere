@@ -8,6 +8,7 @@ import {
   getDesktopBridge,
 } from '@/utils/desktopBridge';
 import { tw } from '../i18n';
+import { DesktopPageNav } from '../DesktopPageNav';
 
 const STATE_COLOR: Record<string, string> = {
   ONLINE: 'green',
@@ -99,6 +100,7 @@ export default function DesktopStatusPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '32px auto', padding: 24 }}>
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <DesktopPageNav />
         <Space style={{ justifyContent: 'space-between', width: '100%' }}>
           <div>
             <Typography.Title level={3} style={{ marginBottom: 4 }}>
