@@ -92,6 +92,14 @@ ol {
   width: 1200px !important;
 }
 
+/* Local task list stays compact even though it contains a table. */
+.ant-modal.local-task-modal:has(
+    > .ant-modal-container > .ant-modal-body > .ant-table-wrapper
+  ) {
+  width: 1200px !important;
+  max-width: calc(100vw - 48px);
+}
+
 @media (max-width: 768px) {
   .ant-table {
     width: 100%;

@@ -130,7 +130,7 @@ export const useStyles = createStyles(({ css }) => ({
   avatarDrawerBody: css`
     min-height: 100%;
     box-sizing: border-box;
-    padding: 20px 24px 24px;
+    padding: 0 24px 24px;
     display: flex;
     flex-direction: column;
   `,
@@ -138,8 +138,12 @@ export const useStyles = createStyles(({ css }) => ({
     display: flex;
     align-items: center;
     gap: 14px;
-    padding-bottom: 18px;
+    padding: 20px 0 18px;
     border-bottom: 1px solid #f0ecfa;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #fff;
   `,
   avatarDetailAvatar: css`
     flex: 0 0 52px;
@@ -512,6 +516,46 @@ export const useStyles = createStyles(({ css }) => ({
     .ant-tag {
       margin-inline-end: 0;
     }
+  `,
+  avatarForm: css`
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 10px;
+    padding: 12px;
+    border-radius: 10px;
+    background: #faf9fe;
+    > .ant-tag,
+    > .ant-switch {
+      justify-self: start;
+    }
+  `,
+  runtimeOption: css`
+    margin-inline-end: 0;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #eceaf5;
+    border-radius: 8px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    &:hover {
+      border-color: #d9d3f5;
+    }
+    &:has(.ant-radio-checked) {
+      border-color: #8b7bff;
+      background: #f7f6ff;
+    }
+  `,
+  runtimeDot: css`
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  `,
+  avatarFormLabel: css`
+    color: #8b86a0;
+    font-size: 12px;
+    white-space: nowrap;
   `,
   conversationNameText: css`
     flex: 1;

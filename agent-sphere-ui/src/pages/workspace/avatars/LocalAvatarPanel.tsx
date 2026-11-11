@@ -13,6 +13,7 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -139,6 +140,11 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
   const driverReady = (kind: DesktopDriverKind) =>
     driverOf(kind)?.state === 'READY';
 
+  const recordOf = (kind: DesktopDriverKind) =>
+    boundRuntime?.runtimeKind === kind
+      ? boundRuntime
+      : runtimes.find((item) => item.runtimeKind === kind);
+
   const waitUntilOnline = async (): Promise<boolean> => {
     if (!bridge) return false;
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -213,6 +219,18 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
           tw(
             'avatars.connectTimeout',
             'Connection timed out. Retry or use manual connect.',
+          ),
+        );
+      }
+
+      const probe = (await bridge.drivers.detect()).find(
+        (item) => item.kind === kind,
+      );
+      if (!probe || probe.state !== 'READY') {
+        throw new Error(
+          tw(
+            'avatars.probeFailed',
+            'Runtime query failed. Retry or use manual connect.',
           ),
         );
       }
@@ -375,8 +393,22 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                 const driver = driverOf(kind);
                 const ready = driverReady(kind);
                 const meta = RUNTIME_META[kind];
+                const record = recordOf(kind);
+                const online = Boolean(record?.online);
+                const dotTitle = record
+                  ? `${meta.label} · ${
+                      online
+                        ? tw('avatars.runtimeOnline', 'Online')
+                        : tw('avatars.runtimeOffline', 'Offline')
+                    }${record.runtimeVersion ? ` · v${record.runtimeVersion}` : ''}`
+                  : tw('avatars.runtimeNotConnected', 'Not connected');
                 return (
-                  <Radio key={kind} value={kind} disabled={!ready}>
+                  <Radio
+                    key={kind}
+                    value={kind}
+                    disabled={!ready}
+                    className={styles.runtimeOption}
+                  >
                     <Space size={8}>
                       <img
                         src={meta.icon}
@@ -386,9 +418,6 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                         style={{ borderRadius: 4, display: 'block' }}
                       />
                       <span>{meta.label}</span>
-                      {!ready ? (
-                        <Tag>{tw('avatars.runtimeMissing', 'Not detected')}</Tag>
-                      ) : null}
                       <Popover
                         content={
                           <div style={{ fontSize: 12, lineHeight: 1.7 }}>
@@ -409,51 +438,56 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                       >
                         <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
                       </Popover>
+                      <Tooltip title={dotTitle}>
+                        <span
+                          className={styles.runtimeDot}
+                          style={{
+                            background: online ? '#52c41a' : '#d9d9d9',
+                          }}
+                        />
+                      </Tooltip>
+                      {!ready ? (
+                        <Tag>
+                          {tw('avatars.runtimeMissing', 'Not detected')}
+                        </Tag>
+                      ) : null}
+                      {boundRuntime?.runtimeKind === kind &&
+                      !online &&
+                      !connecting ? (
+                        <Button
+                          type="link"
+                          size="small"
+                          style={{ padding: 0 }}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void connect(kind);
+                          }}
+                        >
+                          {tw('avatars.reconnect', 'Connect')}
+                        </Button>
+                      ) : null}
                     </Space>
                   </Radio>
                 );
               })}
             </Radio.Group>
 
-            <div className={styles.fieldHint}>
-              {connecting ? (
+            {connecting ? (
+              <div className={styles.fieldHint}>
                 <Space size={6}>
                   <LinkOutlined />
                   {tw('avatars.runtimeConnecting', 'Connecting...')}
                 </Space>
-              ) : boundRuntime ? (
-                <Space size={8} wrap>
-                  <Tag color={boundRuntime.online ? 'green' : 'default'}>
-                    {boundRuntime.online
-                      ? tw('avatars.runtimeOnline', 'Online')
-                      : tw('avatars.runtimeOffline', 'Offline')}
-                  </Tag>
-                  <span>{boundRuntime.name}</span>
-                  <Tag color="blue">{boundRuntime.runtimeKind}</Tag>
-                  {boundRuntime.runtimeVersion ? (
-                    <span>v{boundRuntime.runtimeVersion}</span>
-                  ) : null}
-                  {!boundRuntime.online ? (
-                    <Button
-                      size="small"
-                      type="primary"
-                      onClick={() =>
-                        void connect(
-                          boundRuntime.runtimeKind as DesktopDriverKind,
-                        )
-                      }
-                    >
-                      {tw('avatars.reconnect', 'Connect')}
-                    </Button>
-                  ) : null}
-                </Space>
-              ) : (
-                tw(
+              </div>
+            ) : !boundRuntime ? (
+              <div className={styles.fieldHint}>
+                {tw(
                   'avatars.runtimeEmpty',
                   'Choose a runtime to connect this device.',
-                )
-              )}
-            </div>
+                )}
+              </div>
+            ) : null}
 
             {connectError ? (
               <Alert
@@ -501,15 +535,18 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
               : tw('avatars.localConfigMissing', 'Local settings are unavailable.')}
           </div>
         ) : (
-          <Space direction="vertical" size={10} style={{ width: '100%' }}>
-            <div className={styles.avatarStatusRow}>
-              <span className={styles.avatarDetailLabel}>
-                {tw('avatars.driver', 'Driver')}
-              </span>
-              <Tag color="blue">
-                {boundRuntime?.runtimeKind ?? profile.driver}
-              </Tag>
-            </div>
+          <>
+          <div className={styles.avatarForm}>
+            <span className={styles.avatarFormLabel}>
+              {tw('avatars.driver', 'Driver')}
+            </span>
+            <Tag color="blue">
+              {boundRuntime?.runtimeKind ?? profile.driver}
+            </Tag>
+
+            <span className={styles.avatarFormLabel}>
+              {tw('avatars.workspace', 'Workspace')}
+            </span>
             <Space.Compact style={{ width: '100%' }}>
               <Input
                 value={profile.workspace}
@@ -523,6 +560,10 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                 {tw('avatars.chooseWorkspace', 'Choose')}
               </Button>
             </Space.Compact>
+
+            <span className={styles.avatarFormLabel}>
+              {tw('avatars.autoRun', 'Execution policy')}
+            </span>
             <Select
               style={{ width: '100%' }}
               value={profile.autoRun}
@@ -533,6 +574,10 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
               }
               options={autoRunOptions}
             />
+
+            <span className={styles.avatarFormLabel}>
+              {tw('avatars.approvalPolicy', 'Tool approvals')}
+            </span>
             <Select
               style={{ width: '100%' }}
               value={profile.approvalPolicy}
@@ -544,6 +589,10 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
               }
               options={approvalOptions}
             />
+
+            <span className={styles.avatarFormLabel}>
+              {tw('avatars.sandbox', 'Sandbox')}
+            </span>
             <Select
               style={{ width: '100%' }}
               value={profile.sandbox}
@@ -554,28 +603,28 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
               }
               options={sandboxOptions}
             />
-            <div className={styles.avatarStatusRow}>
-              <span className={styles.avatarDetailLabel}>
-                {tw('avatars.enabled', 'Enabled')}
-              </span>
-              <Switch
-                checked={profile.enabled}
-                onChange={(checked) => patchProfile({ enabled: checked })}
-              />
-            </div>
-            <Space>
-              <Button
-                type="primary"
-                loading={savingProfile}
-                onClick={() => void saveProfile()}
-              >
-                {tw('avatars.saveLocal', 'Save local settings')}
-              </Button>
-              <Button danger type="text" onClick={() => void removeBinding()}>
-                {tw('avatars.removeBinding', 'Remove binding')}
-              </Button>
-            </Space>
+
+            <span className={styles.avatarFormLabel}>
+              {tw('avatars.enabled', 'Enabled')}
+            </span>
+            <Switch
+              checked={profile.enabled}
+              onChange={(checked) => patchProfile({ enabled: checked })}
+            />
+          </div>
+          <Space style={{ marginTop: 12 }}>
+            <Button
+              type="primary"
+              loading={savingProfile}
+              onClick={() => void saveProfile()}
+            >
+              {tw('avatars.saveLocal', 'Save local settings')}
+            </Button>
+            <Button danger type="text" onClick={() => void removeBinding()}>
+              {tw('avatars.removeBinding', 'Remove binding')}
+            </Button>
           </Space>
+          </>
         )}
       </div>
     </>

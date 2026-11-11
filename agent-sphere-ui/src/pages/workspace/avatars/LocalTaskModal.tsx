@@ -60,14 +60,16 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
 
   return (
     <Modal
+      className="local-task-modal"
       open={open}
       title={`${agentName ?? tw('nav.avatars', 'Avatars')} · ${tw(
         'tasks.title',
         'Tasks',
       )}`}
       footer={null}
-      width={560}
+      width={1200}
       centered
+      styles={{ body: { minHeight: 300 } }}
       onCancel={onClose}
       destroyOnHidden
     >
@@ -79,8 +81,8 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
         size="small"
         loading={loading}
         dataSource={rows}
-        scroll={{ x: 520, y: 240 }}
-        pagination={{ pageSize: 5, hideOnSinglePage: true }}
+        scroll={{ y: 320 }}
+        pagination={{ pageSize: 10, hideOnSinglePage: true }}
         locale={{ emptyText: tw('tasks.empty', 'No tasks yet') }}
         columns={[
           {

@@ -123,6 +123,13 @@ export default {
     'Connection timed out. Retry or use manual connect.',
   'workspace.avatars.runtimeConnected': 'Local runtime connected',
   'workspace.avatars.reconnect': 'Connect',
+  'workspace.avatars.runtimeNotConnected': 'Not connected',
+  'workspace.avatars.probeFailed':
+    'Runtime query failed. Retry or use manual connect.',
+  'workspace.avatars.workspace': 'Workspace',
+  'workspace.avatars.autoRun': 'Execution policy',
+  'workspace.avatars.approvalPolicy': 'Tool approvals',
+  'workspace.avatars.sandbox': 'Sandbox',
   'workspace.avatars.driver': 'Driver',
   'workspace.avatars.runtimeOnline': 'Online',
   'workspace.avatars.runtimeOffline': 'Offline',
