@@ -139,6 +139,10 @@ export default {
   'workspace.avatars.localConfigMissing': 'Local settings are unavailable.',
   'workspace.avatars.localConfigUnbound':
     'Choose a workspace and save; tasks will fail until then.',
+  'workspace.avatars.localModelPlaceholder':
+    'e.g. opencode-go/deepseek-v4.1-flash',
+  'workspace.avatars.localModelHint':
+    'Leave empty to use the opencode default model.',
   'workspace.avatars.chooseWorkspace': 'Choose',
   'workspace.avatars.workspaceRequired': 'Choose a workspace',
   'workspace.avatars.enabled': 'Enabled',

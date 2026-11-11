@@ -283,6 +283,7 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
         agentId: agent.id,
         agentName: agent.name,
         driver,
+        model: profile.model?.trim() || undefined,
         workspace: profile.workspace.trim(),
       });
       const saved = (next ?? []).find((item) => item.agentId === agent.id);
@@ -548,6 +549,35 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
             <Tag color="blue">
               {boundRuntime?.runtimeKind ?? profile.driver}
             </Tag>
+
+            {(boundRuntime?.runtimeKind ??
+              connecting ??
+              profile.driver) === 'OPENCODE' ? (
+              <>
+                <span className={styles.avatarFormLabel}>
+                  {tw('avatars.model', 'Model')}
+                </span>
+                <Input
+                  value={profile.model ?? ''}
+                  placeholder={tw(
+                    'avatars.localModelPlaceholder',
+                    'opencode-go/deepseek-v4.1-flash',
+                  )}
+                  onChange={(event) =>
+                    patchProfile({ model: event.target.value })
+                  }
+                />
+                <div
+                  className={styles.fieldHint}
+                  style={{ gridColumn: '1 / -1', marginTop: -4 }}
+                >
+                  {tw(
+                    'avatars.localModelHint',
+                    'Leave empty to use the opencode default model.',
+                  )}
+                </div>
+              </>
+            ) : null}
 
             <span className={styles.avatarFormLabel}>
               {tw('avatars.workspace', 'Workspace')}

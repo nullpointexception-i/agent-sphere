@@ -37,6 +37,8 @@ export interface AgentProfile {
   driver: DriverKind;
   workspace: string;
   additionalDirs?: string[];
+  /** opencode only: `provider/model`; empty keeps the local default. */
+  model?: string;
   approvalPolicy: 'untrusted' | 'on-request' | 'never';
   sandbox: 'read-only' | 'workspace-write' | 'danger-full-access';
   autoRun: 'always' | 'mention-only' | 'confirm';
