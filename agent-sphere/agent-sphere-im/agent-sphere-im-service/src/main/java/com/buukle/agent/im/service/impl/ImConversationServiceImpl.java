@@ -101,6 +101,7 @@ public class ImConversationServiceImpl implements ImConversationService {
             Long otherUserId = firstOtherUser(dto.getParticipantUserIds(), userId);
             ImConversation existing = findExistingDm(userId, otherUserId, null);
             if (existing != null) {
+                revealHiddenConversation(existing.getId(), userId);
                 return toVO(existing, userId);
             }
         }
@@ -811,6 +812,7 @@ public class ImConversationServiceImpl implements ImConversationService {
         }
         ImConversation existing = findExistingDm(userId, null, agent.agentId());
         if (existing != null) {
+            revealHiddenConversation(existing.getId(), userId);
             return toVO(existing, userId);
         }
         ImConversation conversation = new ImConversation();
@@ -1002,6 +1004,25 @@ public class ImConversationServiceImpl implements ImConversationService {
 
     private static boolean isHidden(ImConversationSetting setting) {
         return setting != null && Boolean.TRUE.equals(setting.getHidden());
+    }
+
+    /**
+     * Deleting a conversation only hides it for the current user. Reusing the same DM
+     * (avatar "start chat" or a direct chat with a contact) must make it visible again,
+     * otherwise the conversation stays out of the list even though the chat page opens.
+     */
+    private void revealHiddenConversation(Long conversationId, Long userId) {
+        ImConversationSetting setting = findSetting(conversationId, userId);
+        if (!isHidden(setting)) {
+            return;
+        }
+        setting.setHidden(false);
+        settingMapper.updateById(setting);
+        publishToUserAfterCommit(userId, ImStreamEvent.builder()
+                .type(ImStreamEventType.CONVERSATION_CREATED)
+                .conversationId(conversationId)
+                .timestamp(System.currentTimeMillis())
+                .build());
     }
 
     private ImConversationSetting findSetting(Long conversationId, Long userId) {
