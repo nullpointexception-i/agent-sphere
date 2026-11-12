@@ -43,6 +43,30 @@ export default {
   'desktop.setup.loginRequired':
     'Sign in to AgentSphere before creating a runtime',
 
+  'desktop.server.open': 'Connection settings',
+  'desktop.server.title': 'Server connection',
+  'desktop.server.description':
+    'Choose which backend this desktop client connects to. Online and local environments keep separate login sessions and runtime bindings.',
+  'desktop.server.current': 'Current environment',
+  'desktop.server.online': 'Online',
+  'desktop.server.local': 'Local',
+  'desktop.server.custom': 'Custom',
+  'desktop.server.recent': 'Recently used',
+  'desktop.server.test': 'Test connection',
+  'desktop.server.testOk': 'Connection succeeded',
+  'desktop.server.testFailed': 'Connection failed: {error}',
+  'desktop.server.save': 'Save & switch',
+  'desktop.server.switched': 'Switched, reloading…',
+  'desktop.server.saveFailed': 'Failed to switch environment',
+  'desktop.server.same': 'This environment is already active',
+  'desktop.server.invalid': 'Enter a valid http:// or https:// address',
+  'desktop.server.confirmTitle': 'Switch to {origin}?',
+  'desktop.server.confirmContent':
+    'The saved login session and local runtime binding for that environment will be restored. You only need to sign in if it has never been used.',
+  'desktop.server.runtimeBound': 'Runtime #{id}',
+  'desktop.server.runtimeUnbound': 'No local runtime',
+  'desktop.server.cancel': 'Cancel',
+
   'desktop.status.title': 'Local runtime',
   'desktop.status.refresh': 'Refresh',
   'desktop.status.none': 'Nothing detected yet',

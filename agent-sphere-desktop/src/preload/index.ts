@@ -26,6 +26,7 @@ const bridge: DesktopBridge = {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
     update: (patch: Partial<DesktopSettings>) =>
       ipcRenderer.invoke(IPC.settingsUpdate, patch),
+    test: (serverUrl: string) => ipcRenderer.invoke(IPC.settingsTest, serverUrl),
   },
   runtime: {
     status: () => ipcRenderer.invoke(IPC.runtimeStatus),

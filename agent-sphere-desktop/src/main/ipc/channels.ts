@@ -3,6 +3,7 @@ export const IPC = {
   info: 'desktop:info',
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
+  settingsTest: 'settings:test',
   runtimeStatus: 'runtime:status',
   runtimeConfigure: 'runtime:configure',
   runtimePause: 'runtime:pause',

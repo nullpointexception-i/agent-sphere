@@ -4,6 +4,7 @@ import {
   BellOutlined,
   CheckOutlined,
   CloseOutlined,
+  CloudServerOutlined,
   ContactsOutlined,
   FileTextOutlined,
   GlobalOutlined,
@@ -58,6 +59,7 @@ import {
   mentionsFromText,
 } from '@/components/mention/mentionModel';
 import { useMentionSuggest } from '@/components/mention/useMentionSuggest';
+import { ServerSettingsModal } from '@/components/ServerSettings';
 import { API_PATHS } from '@/constants/endpoints';
 import { STATUS, SUPER_AGENT_STATUS_CODE } from '@/constants/status';
 import { TIMING } from '@/constants/timing';
@@ -102,6 +104,8 @@ import {
 } from './agentStreamStore';
 import { ApprovalInboxDrawer } from './approval/ApprovalInboxDrawer';
 import { usePendingApprovals } from './approval/usePendingApprovals';
+import { AvatarDetailDrawer } from './avatars/AvatarDetailDrawer';
+import { LocalTaskModal } from './avatars/LocalTaskModal';
 import { CollapsibleMarkdown } from './CollapsibleMarkdown';
 import {
   conversationAvatar,
@@ -123,14 +127,12 @@ import {
   taskCardOf,
   taskStatusLabel,
 } from './conversationModel';
+import { DocumentsTab } from './documents/DocumentsTab';
 import { tw } from './i18n';
 import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, displayName, initials } from './shared';
 import { useStyles } from './style';
 import { TrainingPanel } from './training/TrainingPanel';
-import { AvatarDetailDrawer } from './avatars/AvatarDetailDrawer';
-import { LocalTaskModal } from './avatars/LocalTaskModal';
-import { DocumentsTab } from './documents/DocumentsTab';
 
 type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'documents' | 'me';
 
@@ -3664,6 +3666,7 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
   const [keyValue, setKeyValue] = useState('');
   const [savingKey, setSavingKey] = useState(false);
   const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
   const [defaultRouteId, setDefaultRouteId] = useState<number | undefined>();
   const [defaultRoute, setDefaultRoute] = useState<any>(null);
 
@@ -3844,6 +3847,28 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
             </div>
             <span className={styles.sectionMore}>›</span>
           </div>
+          {isDesktop() ? (
+            <div
+              className={styles.menuRow}
+              onClick={() => setServerSettingsOpen(true)}
+            >
+              <div className={styles.menuIcon}>
+                <CloudServerOutlined />
+              </div>
+              <div className={styles.menuBody}>
+                <div className={styles.menuTitle}>
+                  {tw('me.server', 'Server connection')}
+                </div>
+                <div className={styles.menuDesc}>
+                  {tw(
+                    'me.serverDesc',
+                    'Switch between online and local backend',
+                  )}
+                </div>
+              </div>
+              <span className={styles.sectionMore}>›</span>
+            </div>
+          ) : null}
           <div
             className={styles.menuRow}
             onClick={() => {
@@ -3921,6 +3946,11 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
           }))}
         />
       </Modal>
+
+      <ServerSettingsModal
+        open={serverSettingsOpen}
+        onClose={() => setServerSettingsOpen(false)}
+      />
     </div>
   );
 }

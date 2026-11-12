@@ -26,16 +26,16 @@ export class LocalApiClient {
   }
 
   private headers(json = false): Record<string, string> {
-    const secrets = this.settings.getSecrets();
-    const settings = this.settings.get();
+    const deviceToken = this.settings.getDeviceToken();
+    const runtimeId = this.settings.getRuntimeId();
     const headers: Record<string, string> = {
       Accept: 'application/json',
     };
-    if (secrets.deviceToken) {
-      headers.Authorization = `Bearer ${secrets.deviceToken}`;
+    if (deviceToken) {
+      headers.Authorization = `Bearer ${deviceToken}`;
     }
-    if (settings.runtimeId) {
-      headers['X-AgentSphere-Runtime'] = String(settings.runtimeId);
+    if (runtimeId) {
+      headers['X-AgentSphere-Runtime'] = String(runtimeId);
     }
     if (json) headers['Content-Type'] = 'application/json';
     return headers;

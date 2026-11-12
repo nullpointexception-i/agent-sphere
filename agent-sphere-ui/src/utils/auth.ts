@@ -1,3 +1,17 @@
+import { getApiOrigin } from './runtimeEnv';
+
+const LEGACY_STORAGE_KEY = 'agent-user';
+
+/**
+ * One login per server environment: the desktop app can switch between online and
+ * local backends, and each keeps its own session instead of overwriting the other.
+ * The web build has no api origin, so it keeps the legacy single key.
+ */
+function storageKey(): string {
+  const origin = getApiOrigin();
+  return origin ? `${LEGACY_STORAGE_KEY}:${origin}` : LEGACY_STORAGE_KEY;
+}
+
 export interface UserVO {
   id: number;
   username: string;
@@ -18,7 +32,17 @@ export interface UserVO {
 
 export function getStoredUser(): UserVO | null {
   try {
-    const stored = localStorage.getItem('agent-user');
+    const key = storageKey();
+    let stored = localStorage.getItem(key);
+    if (!stored && key !== LEGACY_STORAGE_KEY) {
+      // First run after the upgrade: adopt the old single-server session for the
+      // environment that was active when the app was updated.
+      stored = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (stored) {
+        localStorage.setItem(key, stored);
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+      }
+    }
     if (stored) return JSON.parse(stored) as UserVO;
   } catch {}
   return null;
@@ -30,11 +54,11 @@ export function getToken(): string | null {
 }
 
 export function setStoredUser(user: UserVO): void {
-  localStorage.setItem('agent-user', JSON.stringify(user));
+  localStorage.setItem(storageKey(), JSON.stringify(user));
 }
 
 export function clearStoredUser(): void {
-  localStorage.removeItem('agent-user');
+  localStorage.removeItem(storageKey());
 }
 
 export function toProCurrentUser(user: UserVO): API.CurrentUser {

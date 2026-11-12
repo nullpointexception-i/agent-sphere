@@ -12,7 +12,12 @@ export interface DesktopSettings {
   webOrigin: string;
   /** Stable per-install key; the backend allows one runtime per device key. */
   deviceKey: string;
+  /** Legacy single-runtime id; new builds keep one binding per server origin. */
   runtimeId?: number;
+  /** Runtime id per normalized server origin, so local and online keep their own binding. */
+  environments?: Record<string, DesktopEnvironment>;
+  /** Recently used server origins, newest first. */
+  recentServers?: string[];
   runtimeName: string;
   /** Desktop chrome language; the web UI keeps its own locale switcher. */
   language: 'system' | 'zh-CN' | 'en-US';
@@ -29,6 +34,10 @@ export interface DesktopSettings {
   };
   telemetryEnabled: boolean;
   codexPath?: string;
+}
+
+export interface DesktopEnvironment {
+  runtimeId?: number;
 }
 
 export interface AgentProfile {
@@ -157,11 +166,18 @@ export interface RuntimeConfigureInput {
   runtimeName?: string;
 }
 
+export interface ConnectionTestResult {
+  ok: boolean;
+  status?: number;
+  message?: string;
+}
+
 export interface DesktopBridge {
   info(): Promise<DesktopInfo>;
   settings: {
     get(): Promise<DesktopSettings>;
     update(patch: Partial<DesktopSettings>): Promise<DesktopSettings>;
+    test(serverUrl: string): Promise<ConnectionTestResult>;
   };
   runtime: {
     status(): Promise<RuntimeStatus>;

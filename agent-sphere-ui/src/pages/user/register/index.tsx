@@ -3,6 +3,7 @@ import { LoginForm, ProFormText } from '@ant-design/pro-components';
 import { Helmet, history, SelectLang, useIntl } from '@umijs/max';
 import { Alert, App } from 'antd';
 import React, { useState } from 'react';
+import { ServerSettingsEntry } from '@/components/ServerSettings';
 import { agentApi } from '@/services/agentSphere/api';
 import { setStoredUser } from '@/utils/auth';
 import { localizeApiError } from '@/utils/errorMessage';
@@ -83,6 +84,9 @@ const Register: React.FC = () => {
         </title>
       </Helmet>
       <Lang />
+      <ServerSettingsEntry
+        style={{ position: 'fixed', top: 12, left: 16, zIndex: 10 }}
+      />
       <style>{`.ant-pro-form-login-header { flex-direction: column !important; align-items: center !important; gap: 4px; margin-bottom: 38px; }`}</style>
       <div className={styles.wrapper}>
         <LoginForm

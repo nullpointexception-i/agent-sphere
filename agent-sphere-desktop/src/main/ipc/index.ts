@@ -5,10 +5,12 @@ import type {
   AgentProfile,
   ApprovalDecision,
   BootstrapConfig,
+  ConnectionTestResult,
   DesktopInfo,
   DesktopSettings,
   RuntimeConfigureInput,
 } from '../../shared/types';
+import { normalizeServerUrl } from '../config/settings';
 import type { SettingsStore } from '../config/settings';
 import type { ProfileStore } from '../config/profiles';
 import type { DriverRegistry } from '../runtime/drivers/registry';
@@ -44,6 +46,29 @@ const configureSchema = z.object({
   runtimeId: z.number().int().positive(),
   runtimeName: z.string().min(1).optional(),
 });
+
+const CONNECTIVITY_TIMEOUT_MS = 5_000;
+const HEALTH_PATH = '/actuator/health';
+
+/** Probe the server from the main process: app:// pages cannot call plain http directly. */
+async function testConnection(raw: unknown): Promise<ConnectionTestResult> {
+  const origin = normalizeServerUrl(z.string().min(1).parse(raw));
+  try {
+    const response = await fetch(`${origin}${HEALTH_PATH}`, {
+      signal: AbortSignal.timeout(CONNECTIVITY_TIMEOUT_MS),
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      message: response.ok ? undefined : `HTTP ${response.status}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 const profileSchema = z.object({
   agentId: z.number().int().positive(),
@@ -87,6 +112,8 @@ export function registerIpc(deps: IpcDependencies): void {
 
   ipcMain.handle(IPC.settingsUpdate, async (_event, raw: unknown) => {
     const patch = settingsPatchSchema.parse(raw) as Partial<DesktopSettings>;
+    if (patch.serverUrl) patch.serverUrl = normalizeServerUrl(patch.serverUrl);
+    if (patch.webOrigin) patch.webOrigin = normalizeServerUrl(patch.webOrigin);
     const before = deps.settings.get();
     const next = await deps.settings.update(patch);
     applyLoginItem(next);
@@ -97,19 +124,19 @@ export function registerIpc(deps: IpcDependencies): void {
     return next;
   });
 
+  ipcMain.handle(IPC.settingsTest, (_event, raw: unknown) => testConnection(raw));
+
   ipcMain.handle(IPC.runtimeStatus, () => deps.runtime.getStatus());
 
   ipcMain.handle(IPC.runtimeConfigure, async (_event, raw: unknown) => {
     const input = configureSchema.parse(raw) as RuntimeConfigureInput;
-    const serverUrl = input.serverUrl.replace(/\/+$/, '');
-    new URL(serverUrl);
+    const serverUrl = normalizeServerUrl(input.serverUrl);
     await deps.settings.update({
       serverUrl,
       webOrigin: serverUrl,
-      runtimeId: input.runtimeId,
       ...(input.runtimeName ? { runtimeName: input.runtimeName } : {}),
     });
-    await deps.settings.updateSecrets({ deviceToken: input.deviceToken });
+    await deps.settings.setRuntimeBinding(input.runtimeId, input.deviceToken, serverUrl);
     await deps.runtime.restart();
     return deps.runtime.getStatus();
   });

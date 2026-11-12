@@ -147,7 +147,7 @@ export class AppController {
       platform: process.platform,
       arch: process.arch,
       serverUrl: settings.serverUrl,
-      runtimeId: settings.runtimeId,
+      runtimeId: this.settings.getRuntimeId(),
       configured: this.settings.isConfigured(),
     };
   }

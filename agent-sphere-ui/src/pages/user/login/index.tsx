@@ -20,6 +20,7 @@ import {
 } from '@umijs/max';
 import { Alert, App, Button, Card, Col, Dropdown, Row } from 'antd';
 import React, { startTransition, useEffect, useState } from 'react';
+import { ServerSettingsEntry } from '@/components/ServerSettings';
 import { API_BASE } from '@/constants/api';
 import { API_PATHS } from '@/constants/endpoints';
 import { agentApi } from '@/services/agentSphere/api';
@@ -231,6 +232,9 @@ const Login: React.FC = () => {
         </title>
       </Helmet>
       <Lang />
+      <ServerSettingsEntry
+        style={{ position: 'fixed', top: 12, left: 16, zIndex: 10 }}
+      />
       <style>{`.ant-pro-form-login-header { flex-direction: column !important; align-items: center !important; gap: 4px; margin-bottom: 38px; }`}</style>
       <div className={styles.wrapper}>
         <Row

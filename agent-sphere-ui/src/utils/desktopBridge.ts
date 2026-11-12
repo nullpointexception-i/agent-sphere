@@ -4,13 +4,25 @@ export interface DesktopBridgeStatus {
   runningTasks: number;
 }
 
+export interface DesktopEnvironmentBinding {
+  runtimeId?: number;
+}
+
 export interface DesktopBridgeSettings {
   serverUrl: string;
   webOrigin: string;
   deviceKey: string;
   runtimeId?: number;
+  environments?: Record<string, DesktopEnvironmentBinding>;
+  recentServers?: string[];
   runtimeName: string;
   language: 'system' | 'zh-CN' | 'en-US';
+}
+
+export interface DesktopConnectionTestResult {
+  ok: boolean;
+  status?: number;
+  message?: string;
 }
 
 export type DesktopDriverKind = 'OPENCODE' | 'CODEX';
@@ -85,6 +97,10 @@ export interface DesktopBridgeApproval {
 export interface DesktopBridge {
   settings: {
     get(): Promise<DesktopBridgeSettings>;
+    update(
+      patch: Partial<DesktopBridgeSettings>,
+    ): Promise<DesktopBridgeSettings>;
+    test(serverUrl: string): Promise<DesktopConnectionTestResult>;
   };
   runtime: {
     status(): Promise<DesktopBridgeStatus>;
@@ -94,6 +110,8 @@ export interface DesktopBridge {
       runtimeId: number;
       runtimeName?: string;
     }): Promise<DesktopBridgeStatus>;
+    pause(): Promise<void>;
+    resume(): Promise<void>;
   };
   drivers: {
     detect(): Promise<DesktopBridgeDriver[]>;
