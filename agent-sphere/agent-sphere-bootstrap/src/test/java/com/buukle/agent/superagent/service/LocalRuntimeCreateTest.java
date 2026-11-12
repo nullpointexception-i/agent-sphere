@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
-import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.superagent.domain.AgentLocalRuntime;
 import com.buukle.agent.superagent.dtvo.dto.CreateLocalRuntimeDTO;
 import com.buukle.agent.superagent.dtvo.vo.IssuedLocalRuntimeTokenVO;
@@ -22,7 +21,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -77,10 +75,18 @@ class LocalRuntimeCreateTest {
     }
 
     @Test
-    void deviceOwnedByAnotherUserStillFails() {
-        given(runtimeMapper.selectOne(any())).willReturn(existing(5L, 99L));
+    void sameDeviceUnderAnotherOwnerCreatesItsOwnRuntime() {
+        given(runtimeMapper.selectOne(any())).willReturn(null);
+        given(runtimeMapper.insert(any(AgentLocalRuntime.class))).willAnswer(invocation -> {
+            AgentLocalRuntime runtime = invocation.getArgument(0);
+            runtime.setId(10L);
+            return 1;
+        });
 
-        assertThrows(BizException.class, () -> service.create(dto()));
+        IssuedLocalRuntimeTokenVO issued = service.create(dto());
+
+        assertEquals(10L, issued.getId());
+        verify(runtimeMapper).insert(any(AgentLocalRuntime.class));
     }
 
     @Test

@@ -48,12 +48,8 @@ public class LocalRuntimeServiceImpl implements LocalRuntimeService {
         String deviceKey = dto.getDeviceKey() == null || dto.getDeviceKey().isBlank()
                 ? UUID.randomUUID().toString() : dto.getDeviceKey().trim();
 
-        AgentLocalRuntime existing = findExistingDevice(deviceKey);
+        AgentLocalRuntime existing = findExistingDevice(deviceKey, userId);
         if (existing != null) {
-            if (!userId.equals(existing.getOwnerUserId())) {
-                throw new BizException(CommonErrorCode.PARAM_INVALID,
-                        "this device is already registered");
-            }
             // Reconnecting a device must not fail just because its runtime record
             // already exists: reuse it and issue a fresh token. The desktop then
             // rebinds the avatar to the same runtime instead of creating a duplicate.
@@ -86,9 +82,10 @@ public class LocalRuntimeServiceImpl implements LocalRuntimeService {
         return issued(runtime, token);
     }
 
-    private AgentLocalRuntime findExistingDevice(String deviceKey) {
+    private AgentLocalRuntime findExistingDevice(String deviceKey, Long ownerUserId) {
         return runtimeMapper.selectOne(Wrappers.<AgentLocalRuntime>lambdaQuery()
                 .eq(AgentLocalRuntime::getDeviceKey, deviceKey)
+                .eq(AgentLocalRuntime::getOwnerUserId, ownerUserId)
                 .last("LIMIT 1"));
     }
 
