@@ -16,6 +16,7 @@ import { RuntimeManager } from './runtime/manager';
 import { LocalApiClient } from './api/client';
 import { createMainWindow } from './windows/mainWindow';
 import { type TrayController, createTray } from './windows/tray';
+import { type UpdaterController, createUpdater } from './update/updater';
 import { registerIpc } from './ipc';
 import { IPC } from './ipc/channels';
 import { logger } from './logging/logger';
@@ -28,6 +29,7 @@ export class AppController {
   private runtime!: RuntimeManager;
   private window: BrowserWindow | null = null;
   private tray: TrayController | null = null;
+  private updater: UpdaterController | null = null;
   private quitting = false;
 
   async start(): Promise<void> {
@@ -85,12 +87,15 @@ export class AppController {
       this.window = null;
     });
 
+    this.updater = createUpdater(() => this.window);
+
     this.tray = createTray({
       onOpen: () => this.show(),
       onTogglePause: () => this.togglePause(),
       onOpenLogs: () => {
         void shell.openPath(paths.logsDir());
       },
+      onCheckUpdates: () => void this.updater?.check(true),
       onQuit: () => app.quit(),
     });
 
@@ -122,6 +127,7 @@ export class AppController {
 
   dispose(): void {
     this.quitting = true;
+    this.updater?.dispose();
     this.runtime?.dispose();
     this.tray?.destroy();
   }

@@ -12,6 +12,7 @@ export function createTray(options: {
   onOpen(): void;
   onTogglePause(): void;
   onOpenLogs(): void;
+  onCheckUpdates(): void;
   onQuit(): void;
 }): TrayController {
   let image = nativeImage.createFromPath(paths.resource('tray.png'));
@@ -42,6 +43,7 @@ export function createTray(options: {
         click: options.onTogglePause,
       },
       { label: 'Open log folder', click: options.onOpenLogs },
+      { label: 'Check for updates', click: options.onCheckUpdates },
       { type: 'separator' },
       { label: 'Quit', click: options.onQuit },
     ]);
