@@ -81,7 +81,7 @@ import {
 } from '@/services/agentSphere/superAgent';
 import { clearStoredUser, getStoredUser } from '@/utils/auth';
 import { getDesktopBridge } from '@/utils/desktopBridge';
-import { isDesktop } from '@/utils/runtimeEnv';
+import { getAppVersion, isDesktop } from '@/utils/runtimeEnv';
 import { userDisplayLabel } from '@/utils/userLabel';
 import { messageText } from '../im/components/messageUtils';
 import {
@@ -3897,6 +3897,21 @@ function MeTab({ me, onOpenAvatars }: { me: any; onOpenAvatars: () => void }) {
           <span>{tw('me.logout', 'Sign out')}</span>
         </button>
       </div>
+
+      {isDesktop() ? (
+        <div
+          style={{
+            marginTop: 10,
+            textAlign: 'center',
+            fontSize: 11,
+            color: '#a7a2b8',
+          }}
+        >
+          {tw('me.clientVersion', 'Desktop version {version}', {
+            version: getAppVersion() || '-',
+          })}
+        </div>
+      ) : null}
 
       <Modal
         className={styles.softModal}

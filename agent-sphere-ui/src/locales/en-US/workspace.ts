@@ -385,6 +385,7 @@ export default {
   'workspace.me.admin': 'console',
   'workspace.me.adminDesc': 'Open console',
   'workspace.me.logout': 'Sign out',
+  'workspace.me.clientVersion': 'Desktop version {version}',
   'workspace.me.keySaved': 'API Key saved',
   'workspace.me.defaultUpdated': 'Default model updated',
   'workspace.me.apiKeyTitle': '{name} API Key',

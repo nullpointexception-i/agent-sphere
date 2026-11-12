@@ -27,7 +27,7 @@ import { agentApi } from '@/services/agentSphere/api';
 import { setStoredUser, type UserVO } from '@/utils/auth';
 import { localizeApiError } from '@/utils/errorMessage';
 import { labelWithRule } from '@/utils/labelWithRule';
-import { isDesktop } from '@/utils/runtimeEnv';
+import { getAppVersion, isDesktop } from '@/utils/runtimeEnv';
 import Settings from '../../../../config/defaultSettings';
 import { useStyles } from './style';
 
@@ -235,6 +235,19 @@ const Login: React.FC = () => {
       <ServerSettingsEntry
         style={{ position: 'fixed', top: 12, left: 16, zIndex: 10 }}
       />
+      {isDesktop() ? (
+        <div
+          style={{
+            position: 'fixed',
+            right: 16,
+            bottom: 12,
+            fontSize: 12,
+            color: '#a7a2b8',
+          }}
+        >
+          v{getAppVersion() || '-'}
+        </div>
+      ) : null}
       <style>{`.ant-pro-form-login-header { flex-direction: column !important; align-items: center !important; gap: 4px; margin-bottom: 38px; }`}</style>
       <div className={styles.wrapper}>
         <Row

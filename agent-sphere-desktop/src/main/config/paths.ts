@@ -29,6 +29,9 @@ export const paths = {
     return path.resolve(app.getAppPath(), '..', 'agent-sphere-ui', 'dist-desktop');
   },
   resource(...parts: string[]): string {
-    return path.join(app.getAppPath(), 'resources', ...parts);
+    const root = app.isPackaged
+      ? process.resourcesPath
+      : path.join(app.getAppPath(), 'resources');
+    return path.join(root, ...parts);
   },
 };

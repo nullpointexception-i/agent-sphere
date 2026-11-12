@@ -9,6 +9,8 @@ files:
 extraResources:
   - from: ../agent-sphere-ui/dist-desktop
     to: renderer
+  - from: resources/tray.png
+    to: tray.png
 asar: true
 win:
   target:

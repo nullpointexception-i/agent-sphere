@@ -27,3 +27,9 @@ export function getWebOrigin(): string {
   if (typeof window === 'undefined') return '';
   return window.__AS_RUNTIME__?.webOrigin || window.location.origin;
 }
+
+/** Desktop client version, empty in the web build. */
+export function getAppVersion(): string {
+  if (typeof window === 'undefined') return '';
+  return window.__AS_RUNTIME__?.appVersion || '';
+}

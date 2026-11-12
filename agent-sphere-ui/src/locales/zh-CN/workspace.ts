@@ -362,6 +362,7 @@ export default {
   'workspace.me.admin': 'console',
   'workspace.me.adminDesc': '进入 console',
   'workspace.me.logout': '退出登录',
+  'workspace.me.clientVersion': '客户端版本 {version}',
   'workspace.me.keySaved': 'API Key 已保存',
   'workspace.me.defaultUpdated': '默认模型已更新',
   'workspace.me.apiKeyTitle': '{name} API Key',

@@ -95,7 +95,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          for attempt in $(seq 1 30); do
+          # The deploy workflow builds and pushes three images before it creates the
+          # release; cross-border pushes have taken 25+ minutes. Wait up to 40 minutes
+          # so the desktop assets are not lost when image pushes are slow.
+          for attempt in $(seq 1 240); do
             if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
               break
             fi

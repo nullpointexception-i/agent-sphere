@@ -1,5 +1,6 @@
 import { Menu, Tray, app, nativeImage } from 'electron';
 import { paths } from '../config/paths';
+import { logger } from '../logging/logger';
 import type { RuntimeStatus } from '../../shared/types';
 
 export interface TrayController {
@@ -16,7 +17,10 @@ export function createTray(options: {
   onQuit(): void;
 }): TrayController {
   let image = nativeImage.createFromPath(paths.resource('tray.png'));
-  if (image.isEmpty()) image = nativeImage.createEmpty();
+  if (image.isEmpty()) {
+    logger.warn(`tray icon missing: ${paths.resource('tray.png')}`);
+    image = nativeImage.createEmpty();
+  }
 
   const tray = new Tray(image);
   tray.setToolTip(`AgentSphere ${app.getVersion()}`);
@@ -33,8 +37,9 @@ export function createTray(options: {
       OFFLINE: 'Offline',
       PAUSED: 'Paused',
     };
+    const version = app.getVersion();
     const menu = Menu.buildFromTemplate([
-      { label: `AgentSphere · ${status[state] ?? state}`, enabled: false },
+      { label: `AgentSphere ${version} · ${status[state] ?? state}`, enabled: false },
       { label: `Running tasks: ${current?.runningTasks ?? 0}`, enabled: false },
       { type: 'separator' },
       { label: 'Open window', click: options.onOpen },
@@ -48,7 +53,7 @@ export function createTray(options: {
       { label: 'Quit', click: options.onQuit },
     ]);
     tray.setContextMenu(menu);
-    tray.setToolTip(`AgentSphere · ${status[state] ?? state}`);
+    tray.setToolTip(`AgentSphere ${version} · ${status[state] ?? state}`);
   };
 
   rebuild();
