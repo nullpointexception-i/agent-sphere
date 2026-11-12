@@ -1,6 +1,12 @@
 package com.buukle.agent.instance.spi;
 
 import com.buukle.agent.common.util.PageResult;
+import com.buukle.agent.instance.dtvo.dto.CreateDocumentCommentDTO;
+import com.buukle.agent.instance.dtvo.dto.CreateDocumentFolderDTO;
+import com.buukle.agent.instance.dtvo.dto.UpdateDocumentCommentDTO;
+import com.buukle.agent.instance.dtvo.dto.UpdateDocumentFolderDTO;
+import com.buukle.agent.instance.dtvo.vo.DocumentCommentVO;
+import com.buukle.agent.instance.dtvo.vo.DocumentFolderVO;
 import com.buukle.agent.instance.dtvo.vo.DocumentSummaryVO;
 import com.buukle.agent.instance.dtvo.vo.DocumentVO;
 
@@ -18,7 +24,8 @@ public interface DocumentSpi {
     PageResult<DocumentVO> listAll(int page, int size);
 
     /** Documents created by the current user (workspace "My documents"). */
-    PageResult<DocumentSummaryVO> listMine(String username, String keyword, int page, int size);
+    PageResult<DocumentSummaryVO> listMine(String username, String keyword, Long folderId,
+                                           int page, int size);
 
     /** Tenant documents created by other users (workspace "Team documents"). */
     PageResult<DocumentSummaryVO> listTeam(String username, Long tenantId, String keyword,
@@ -37,4 +44,24 @@ public interface DocumentSpi {
     String createShareToken(Long documentId);
 
     DocumentVO getByShareToken(String token);
+
+    List<DocumentFolderVO> listFolders(String username, Long tenantId);
+
+    DocumentFolderVO createFolder(String username, Long tenantId, CreateDocumentFolderDTO dto);
+
+    DocumentFolderVO updateFolder(String username, Long folderId, UpdateDocumentFolderDTO dto);
+
+    void deleteFolder(String username, Long folderId, String mode);
+
+    void moveDocument(Long id, Long folderId);
+
+    List<DocumentCommentVO> listComments(Long documentId);
+
+    DocumentCommentVO createComment(Long documentId, CreateDocumentCommentDTO dto);
+
+    DocumentCommentVO updateComment(Long commentId, UpdateDocumentCommentDTO dto);
+
+    void deleteComment(Long commentId);
+
+    DocumentCommentVO setCommentResolved(Long commentId, boolean resolved);
 }

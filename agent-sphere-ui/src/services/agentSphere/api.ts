@@ -13,11 +13,40 @@ export interface DocumentSummary {
   version?: number;
   sessionId?: number;
   instanceId?: number;
+  folderId?: number | null;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
   contentLength?: number;
   preview?: string;
+  commentCount?: number;
+}
+
+/** Wiki page tree node (backend DocumentFolderVO). */
+export interface DocumentFolder {
+  id: number;
+  parentId?: number | null;
+  name: string;
+  instanceId?: number | null;
+  systemKey?: string | null;
+  sortOrder?: number;
+  documentCount?: number;
+}
+
+/** Page-level comment (backend DocumentCommentVO). */
+export interface DocumentComment {
+  id: number;
+  documentId: number;
+  parentId?: number | null;
+  authorName?: string;
+  content: string;
+  quotedText?: string | null;
+  status: 'OPEN' | 'RESOLVED';
+  resolvedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  mine: boolean;
+  canModerate: boolean;
 }
 
 /**
@@ -562,6 +591,7 @@ export const agentApi = {
         size?: number;
         scope?: 'mine' | 'team';
         keyword?: string;
+        folderId?: number;
       }) =>
         request<{
           records: DocumentSummary[];
@@ -578,6 +608,60 @@ export const agentApi = {
         request<void>(`${BASE}/artifacts/documents/${id}`, { method: 'PUT', data: { title, content } }),
       createShare: (id: number) =>
         request<{ shareToken: string }>(`${BASE}/artifacts/documents/${id}/share`, { method: 'POST' }),
+      folders: () =>
+        request<DocumentFolder[]>(`${BASE}/artifacts/documents/folders`),
+      createFolder: (data: { name: string; parentId?: number | null }) =>
+        request<DocumentFolder>(`${BASE}/artifacts/documents/folders`, {
+          method: 'POST',
+          data,
+        }),
+      updateFolder: (
+        id: number,
+        data: { name?: string; parentId?: number | null; moveToRoot?: boolean },
+      ) =>
+        request<DocumentFolder>(`${BASE}/artifacts/documents/folders/${id}`, {
+          method: 'PATCH',
+          data,
+        }),
+      deleteFolder: (id: number, mode: 'move' | 'purge' = 'move') =>
+        request<void>(`${BASE}/artifacts/documents/folders/${id}`, {
+          method: 'DELETE',
+          params: { mode },
+        }),
+      moveDocument: (id: number, folderId: number | null) =>
+        request<void>(`${BASE}/artifacts/documents/${id}/folder`, {
+          method: 'PATCH',
+          data: { folderId },
+        }),
+      comments: (id: number) =>
+        request<DocumentComment[]>(`${BASE}/artifacts/documents/${id}/comments`),
+      createComment: (
+        id: number,
+        data: { content: string; quotedText?: string; parentId?: number },
+      ) =>
+        request<DocumentComment>(`${BASE}/artifacts/documents/${id}/comments`, {
+          method: 'POST',
+          data,
+        }),
+      updateComment: (id: number, content: string) =>
+        request<DocumentComment>(`${BASE}/artifacts/documents/comments/${id}`, {
+          method: 'PATCH',
+          data: { content },
+        }),
+      deleteComment: (id: number) =>
+        request<void>(`${BASE}/artifacts/documents/comments/${id}`, {
+          method: 'DELETE',
+        }),
+      resolveComment: (id: number) =>
+        request<DocumentComment>(
+          `${BASE}/artifacts/documents/comments/${id}/resolve`,
+          { method: 'POST' },
+        ),
+      reopenComment: (id: number) =>
+        request<DocumentComment>(
+          `${BASE}/artifacts/documents/comments/${id}/reopen`,
+          { method: 'POST' },
+        ),
     },
   },
 

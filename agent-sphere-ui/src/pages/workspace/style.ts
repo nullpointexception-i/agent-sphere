@@ -13,6 +13,10 @@ export const useStyles = createStyles(({ css }) => ({
     justify-content: center;
     box-sizing: border-box;
   `,
+  backdropDesktop: css`
+    padding: 0;
+    background: #f7f6fb;
+  `,
   app: css`
     width: min(1180px, 100%);
     height: min(820px, calc(100vh - 48px));
@@ -24,6 +28,14 @@ export const useStyles = createStyles(({ css }) => ({
     box-shadow:
       0 30px 80px rgba(38, 28, 84, 0.16),
       0 2px 8px rgba(38, 28, 84, 0.06);
+  `,
+  appDesktop: css`
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    min-height: 0;
+    border-radius: 0;
+    box-shadow: none;
   `,
   rail: css`
     width: 78px;

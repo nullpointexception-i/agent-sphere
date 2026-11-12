@@ -14,6 +14,7 @@ public class DocumentVO implements Serializable {
     private Integer version;
     private Long sessionId;
     private Long instanceId;
+    private Long folderId;
     private Long runId;
     private String shareToken;
     private String createdBy;

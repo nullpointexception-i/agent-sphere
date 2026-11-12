@@ -138,6 +138,7 @@ type Tab = 'home' | 'avatars' | 'chat' | 'contacts' | 'documents' | 'me';
 
 export default function WorkspacePage() {
   const { styles } = useStyles();
+  const desktopShell = isDesktop();
   useIntl();
   const { initialState } = useModel('@@initialState');
   const me = getStoredUser() || initialState?.currentUser;
@@ -159,8 +160,10 @@ export default function WorkspacePage() {
 
   return (
     <>
-      <div className={styles.backdrop}>
-        <div className={styles.app}>
+      <div
+        className={`${styles.backdrop} ${desktopShell ? styles.backdropDesktop : ''}`}
+      >
+        <div className={`${styles.app} ${desktopShell ? styles.appDesktop : ''}`}>
           <SideRail
             tab={tab}
             onChange={setTab}

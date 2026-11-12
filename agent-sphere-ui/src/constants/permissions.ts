@@ -50,6 +50,7 @@ export const PERM = {
   capabilitySkillUpdate: 'capability:skill:update',
   documentDelete: 'document:delete',
   documentRead: 'document:read',
+  documentCreate: 'document:create',
   documentShare: 'document:share',
   documentUpdate: 'document:update',
   imConversationCreate: 'im:conversation:create',

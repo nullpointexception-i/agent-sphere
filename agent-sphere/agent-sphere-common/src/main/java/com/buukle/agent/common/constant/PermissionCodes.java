@@ -85,6 +85,8 @@ public final class PermissionCodes {
     public static final String CAPABILITY_CLI_DELETE = "capability:cli:delete";
 
     // ---- document ----
+    public static final String DOCUMENT_READ = "document:read";
+    public static final String DOCUMENT_CREATE = "document:create";
     public static final String DOCUMENT_UPDATE = "document:update";
     public static final String DOCUMENT_DELETE = "document:delete";
     public static final String DOCUMENT_SHARE = "document:share";

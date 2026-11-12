@@ -1,4 +1,5 @@
 import {
+  CommentOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
@@ -138,6 +139,12 @@ export function DocumentCard({
           <span className={styles.documentMetaRow}>
             {updated}
             {size ? ` · ${size} ${tw('documents.chars', 'chars')}` : ''}
+            {document.commentCount ? (
+              <span className={styles.documentCommentBadge}>
+                {' · '}
+                <CommentOutlined /> {document.commentCount}
+              </span>
+            ) : null}
           </span>
         </span>
       </button>

@@ -14,6 +14,7 @@ public class DocumentSummaryVO implements Serializable {
     private Integer version;
     private Long sessionId;
     private Long instanceId;
+    private Long folderId;
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -21,4 +22,6 @@ public class DocumentSummaryVO implements Serializable {
     private Integer contentLength;
     /** First characters of the content, for the card preview. */
     private String preview;
+    /** Number of page comments, excluding deleted ones. */
+    private Long commentCount;
 }

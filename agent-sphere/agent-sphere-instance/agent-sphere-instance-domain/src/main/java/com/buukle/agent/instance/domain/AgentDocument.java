@@ -17,6 +17,7 @@ public class AgentDocument {
     private Integer version;
     private Long sessionId;
     private Long instanceId;
+    private Long folderId;
     private Long runId;
     @TableLogic
     private Boolean deleteFlag;
