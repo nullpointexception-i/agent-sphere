@@ -246,6 +246,10 @@ buukle:
             supported: true
             mode: levels
             levels: [low, medium, high]
+          uberllm:
+            supported: true
+            mode: levels
+            levels: [low, medium, high]
 
     # ============================================================
     # Runner Config
