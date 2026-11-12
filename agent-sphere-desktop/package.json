@@ -1,6 +1,6 @@
 {
   "name": "agent-sphere-desktop",
-  "version": "0.1.0",
+  "version": "1.0.219",
   "private": true,
   "description": "AgentSphere desktop client and local agent runtime connector",
   "type": "module",

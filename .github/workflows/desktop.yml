@@ -62,6 +62,12 @@ jobs:
           npm run typecheck
           npm run build:main
 
+      - name: Align desktop version with release tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.release_tag || github.ref_name }}"
+          node agent-sphere-desktop/scripts/apply-version.mjs "$TAG"
+
       - name: Package desktop
         shell: bash
         env:
