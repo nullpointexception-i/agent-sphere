@@ -952,11 +952,13 @@ export const useStyles = createStyles(({ css }) => ({
     font-size: 13px;
     line-height: 1.6;
     word-break: break-word;
+    text-align: left;
     box-shadow: 0 3px 10px rgba(44, 34, 94, 0.04);
   `,
   bubbleSelf: css`
     background: linear-gradient(135deg, #95ecb0, #7fdc9d);
     color: #143d27;
+    text-align: left;
   `,
   messageSending: css`
     display: block;
@@ -1147,6 +1149,7 @@ export const useStyles = createStyles(({ css }) => ({
     font-size: 13px;
     line-height: 1.6;
     word-break: break-word;
+    text-align: left;
     box-shadow: 0 3px 10px rgba(44, 34, 94, 0.04);
   `,
   /** Title line of the ephemeral row: single line, never re-wraps the header. */
@@ -1258,6 +1261,7 @@ export const useStyles = createStyles(({ css }) => ({
     font-size: 13px;
     line-height: 1.6;
     word-break: break-word;
+    text-align: left;
     box-shadow: 0 3px 10px rgba(44, 34, 94, 0.04);
     transform-origin: 0 100%;
     @keyframes agent-reply-enter {
