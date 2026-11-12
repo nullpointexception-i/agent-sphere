@@ -45,14 +45,27 @@ public class LocalRuntimeServiceImpl implements LocalRuntimeService {
     public IssuedLocalRuntimeTokenVO create(CreateLocalRuntimeDTO dto) {
         Long userId = currentUserId();
         String runtimeKind = normalizeKind(dto.getRuntimeKind());
-        String token = TokenHasher.generate();
+        String deviceKey = dto.getDeviceKey() == null || dto.getDeviceKey().isBlank()
+                ? UUID.randomUUID().toString() : dto.getDeviceKey().trim();
 
+        AgentLocalRuntime existing = findExistingDevice(deviceKey);
+        if (existing != null) {
+            if (!userId.equals(existing.getOwnerUserId())) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "this device is already registered");
+            }
+            // Reconnecting a device must not fail just because its runtime record
+            // already exists: reuse it and issue a fresh token. The desktop then
+            // rebinds the avatar to the same runtime instead of creating a duplicate.
+            return reuse(existing, dto, runtimeKind);
+        }
+
+        String token = TokenHasher.generate();
         AgentLocalRuntime runtime = new AgentLocalRuntime();
         runtime.setOwnerUserId(userId);
         runtime.setName(dto.getName().trim());
         runtime.setRuntimeKind(runtimeKind);
-        runtime.setDeviceKey(dto.getDeviceKey() == null || dto.getDeviceKey().isBlank()
-                ? UUID.randomUUID().toString() : dto.getDeviceKey().trim());
+        runtime.setDeviceKey(deviceKey);
         runtime.setTokenHash(TokenHasher.sha256(token));
         runtime.setTokenPrefix(TokenHasher.prefix(token));
         runtime.setOs(dto.getOs());
@@ -65,10 +78,38 @@ public class LocalRuntimeServiceImpl implements LocalRuntimeService {
         try {
             runtimeMapper.insert(runtime);
         } catch (DuplicateKeyException e) {
+            // Concurrent create for the same device won the race; let the caller retry.
             throw new BizException(CommonErrorCode.PARAM_INVALID,
                     "this device is already registered");
         }
 
+        return issued(runtime, token);
+    }
+
+    private AgentLocalRuntime findExistingDevice(String deviceKey) {
+        return runtimeMapper.selectOne(Wrappers.<AgentLocalRuntime>lambdaQuery()
+                .eq(AgentLocalRuntime::getDeviceKey, deviceKey)
+                .last("LIMIT 1"));
+    }
+
+    private IssuedLocalRuntimeTokenVO reuse(AgentLocalRuntime existing,
+                                            CreateLocalRuntimeDTO dto,
+                                            String runtimeKind) {
+        String token = TokenHasher.generate();
+        existing.setName(dto.getName().trim());
+        existing.setRuntimeKind(runtimeKind);
+        existing.setTokenHash(TokenHasher.sha256(token));
+        existing.setTokenPrefix(TokenHasher.prefix(token));
+        existing.setOs(dto.getOs());
+        existing.setArch(dto.getArch());
+        existing.setAppVersion(dto.getAppVersion());
+        existing.setRuntimeVersion(dto.getRuntimeVersion());
+        existing.setStatus(LocalRuntimeStatus.ACTIVE);
+        runtimeMapper.updateById(existing);
+        return issued(existing, token);
+    }
+
+    private IssuedLocalRuntimeTokenVO issued(AgentLocalRuntime runtime, String token) {
         IssuedLocalRuntimeTokenVO vo = new IssuedLocalRuntimeTokenVO();
         vo.setId(runtime.getId());
         vo.setName(runtime.getName());

@@ -27,7 +27,12 @@ export interface IssuedLocalRuntimeToken {
 }
 
 export const localRuntimeApi = {
-  list: () => request<LocalRuntime[]>(`${BASE}/local-runtimes`),
+  // These calls are used for device cleanup/recovery; their 404s are expected and
+  // must not raise the global error toast.
+  list: () =>
+    request<LocalRuntime[]>(`${BASE}/local-runtimes`, {
+      skipErrorHandler: true,
+    }),
   create: (data: {
     name: string;
     runtimeKind: 'OPENCODE' | 'CODEX';
@@ -44,7 +49,10 @@ export const localRuntimeApi = {
       method: 'POST',
     }),
   delete: (id: number) =>
-    request<void>(`${BASE}/local-runtimes/${id}`, { method: 'DELETE' }),
+    request<void>(`${BASE}/local-runtimes/${id}`, {
+      method: 'DELETE',
+      skipErrorHandler: true,
+    }),
   update: (id: number, data: { name?: string; status?: string }) =>
     request<LocalRuntime>(`${BASE}/local-runtimes/${id}`, {
       method: 'PATCH',
