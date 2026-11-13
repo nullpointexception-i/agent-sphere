@@ -14,7 +14,9 @@ public enum InstanceRole {
     GROUP_ROUTER,
     ROUTER,
     WORKER,
-    WATCHDOG;
+    WATCHDOG,
+    /** Tenant-level assistant of the project space. */
+    PROJECT_ROUTER;
 
     public String value() {
         return name();

@@ -14,10 +14,12 @@ public class SessionVO implements Serializable {
     private Long tenantId;
     private String status;
     private String runMode;
-    /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / ROUTER / WORKER / TRAINING / WATCHDOG。 */
+    /** CONSOLE / WIDGET / TASK / GROUP_ROUTER / PROJECT_ROUTER / ROUTER / WORKER / TRAINING / WATCHDOG。 */
     private String sessionType;
     private Long superAgentId;
     private Long threadId;
+    /** Session-scoped metadata; project assistant stores {@code projectId}/{@code requesterUserId}. */
+    private String contextData;
     /** Non-null when this session is a soft fork of another Router session. */
     private Long parentSessionId;
     private String forkKind;

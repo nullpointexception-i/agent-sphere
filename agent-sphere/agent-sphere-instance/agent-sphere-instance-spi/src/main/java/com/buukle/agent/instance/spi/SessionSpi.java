@@ -10,6 +10,9 @@ public interface SessionSpi {
 
     SessionVO getSession(Long id);
 
+    /** Cross-user read of a tenant-owned session (project assistant canonical/fork). */
+    SessionVO getSessionShared(Long id);
+
     List<SessionVO> listSessions(int offset, int limit, String keyword);
 
     /**
@@ -23,6 +26,15 @@ public interface SessionSpi {
 
     /** The agent's own ROUTER session for a thread, or null. */
     SessionVO findRouterSession(Long threadId, Long superAgentId);
+
+    /** The user's project-assistant session in a project thread, or null. */
+    SessionVO findProjectRouterSession(Long threadId, String createdBy);
+
+    /** The user's fork of the project canonical session, or null. */
+    SessionVO findProjectForkSession(Long threadId, String createdBy, Long parentSessionId);
+
+    /** The project's canonical assistant session (parent_session_id is null), or null. */
+    SessionVO findProjectCanonicalSession(Long threadId);
 
     void closeSession(Long id);
 

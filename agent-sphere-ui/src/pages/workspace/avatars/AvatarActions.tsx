@@ -7,8 +7,8 @@ import {
   PlayCircleOutlined,
 } from '@ant-design/icons';
 import { Button } from 'antd';
-import type { SuperAgent } from '@/services/agentSphere/superAgent';
 import { STATUS } from '@/constants/status';
+import type { SuperAgent } from '@/services/agentSphere/superAgent';
 import { tw } from '../i18n';
 import { useStyles } from '../style';
 

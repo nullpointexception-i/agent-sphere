@@ -320,6 +320,19 @@ export const agentApi = {
         { method: 'POST', data: formData },
       );
     },
+    uploadCommentAttachment: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return request<{
+        fileKey: string;
+        fileName: string;
+        contentType: string;
+        sizeBytes: number;
+      }>(`${BASE}/files/comment-attachments`, {
+        method: 'POST',
+        data: formData,
+      });
+    },
     // Read attachment bytes back by fileKey (chat history image display); returns a Blob, and the view creates its own objectURL
     get: (fileKey: string) =>
       request<Blob>(`${BASE}/files/${fileKey}`, { responseType: 'blob' }),

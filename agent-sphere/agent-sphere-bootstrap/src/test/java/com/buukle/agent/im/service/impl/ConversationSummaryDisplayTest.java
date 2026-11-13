@@ -16,6 +16,8 @@ import com.buukle.agent.instance.dtvo.vo.UserIdentityVO;
 import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.sso.spi.SsoUserLabelVO;
+import com.buukle.agent.superagent.spi.EntityAccessGuard;
+import com.buukle.agent.superagent.spi.EntityAgentDirectorySpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +62,10 @@ class ConversationSummaryDisplayTest {
     ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
     @Mock
     ObjectProvider<com.buukle.agent.superagent.spi.GroupChatBootstrapSpi> groupChatBootstrapProvider;
+    @Mock
+    ObjectProvider<EntityAccessGuard> entityAccessGuardProvider;
+    @Mock
+    ObjectProvider<EntityAgentDirectorySpi> entityAgentDirectoryProvider;
 
     ImConversationServiceImpl service;
 
@@ -67,7 +73,8 @@ class ConversationSummaryDisplayTest {
     void setUp() {
         service = new ImConversationServiceImpl(conversationMapper, participantMapper,
                 messageMapper, readCursorMapper, settingMapper, userSpi, ssoIdentitySpi,
-                streamService, directoryPortProvider, groupChatBootstrapProvider);
+                streamService, directoryPortProvider, groupChatBootstrapProvider,
+                entityAccessGuardProvider, entityAgentDirectoryProvider);
         AuthContext.setUserId(SELF_ID);
         AuthContext.setUsername("bole_7");
         AuthContext.setDisplayName("elvin");

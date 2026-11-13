@@ -1,5 +1,4 @@
-import { Button, Empty, Space, Tag, Typography } from 'antd';
-import { App } from 'antd';
+import { App, Button, Empty, Space, Tag, Typography } from 'antd';
 import {
   type DesktopBridgeApproval,
   getDesktopBridge,
@@ -34,9 +33,7 @@ export function LocalApprovalList() {
       message.success(tw('approval.submitted', 'Approval submitted'));
       await reload();
     } catch (reason) {
-      message.error(
-        reason instanceof Error ? reason.message : String(reason),
-      );
+      message.error(reason instanceof Error ? reason.message : String(reason));
     }
   };
 
@@ -51,7 +48,12 @@ export function LocalApprovalList() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <Button type="text" size="small" loading={loading} onClick={() => void reload()}>
+      <Button
+        type="text"
+        size="small"
+        loading={loading}
+        onClick={() => void reload()}
+      >
         {tw('common.refresh', 'Refresh')}
       </Button>
       {items.map((item) => (

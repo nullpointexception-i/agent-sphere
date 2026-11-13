@@ -93,7 +93,10 @@ export function WikiPageView({
 
   useEffect(() => {
     void loadComments();
-    const timer = window.setInterval(() => void loadComments(), COMMENT_POLL_MS);
+    const timer = window.setInterval(
+      () => void loadComments(),
+      COMMENT_POLL_MS,
+    );
     return () => window.clearInterval(timer);
   }, [document.id]);
 
@@ -150,7 +153,9 @@ export function WikiPageView({
           await agentApi.artifacts.documents.deleteComment(comment.id);
           await loadComments();
         } catch {
-          message.error(tw('documents.commentFailed', 'Failed to post comment'));
+          message.error(
+            tw('documents.commentFailed', 'Failed to post comment'),
+          );
         }
       },
     });
@@ -271,176 +276,181 @@ export function WikiPageView({
         />
       ) : detail ? (
         <>
-        <div className={styles.wikiPage}>
-          <div className={styles.wikiPageMain}>
-            <div className={styles.wikiPageHeader}>
-              <div>
-                <div className={styles.wikiPageTitle}>{detail.title || '-'}</div>
-                <div className={styles.documentPreviewMeta}>
-                  <span>
-                    {tw('documents.owner', 'Owner')}: {detail.createdBy || '-'}
-                  </span>
-                  <span>
-                    {tw('documents.updatedAt', 'Updated')}:{' '}
-                    {documentUpdatedAt(detail.updatedAt) || '-'}
-                  </span>
-                  <span>
-                    {tw('documents.version', 'Version')}: {detail.version ?? 1}
-                  </span>
-                  <span>
-                    {formatDocumentSize(detail.contentLength)}{' '}
-                    {tw('documents.chars', 'chars')}
-                  </span>
-                  {!mine ? (
-                    <span>{tw('documents.readonly', 'Read-only')}</span>
-                  ) : null}
+          <div className={styles.wikiPage}>
+            <div className={styles.wikiPageMain}>
+              <div className={styles.wikiPageHeader}>
+                <div>
+                  <div className={styles.wikiPageTitle}>
+                    {detail.title || '-'}
+                  </div>
+                  <div className={styles.documentPreviewMeta}>
+                    <span>
+                      {tw('documents.owner', 'Owner')}:{' '}
+                      {detail.createdBy || '-'}
+                    </span>
+                    <span>
+                      {tw('documents.updatedAt', 'Updated')}:{' '}
+                      {documentUpdatedAt(detail.updatedAt) || '-'}
+                    </span>
+                    <span>
+                      {tw('documents.version', 'Version')}:{' '}
+                      {detail.version ?? 1}
+                    </span>
+                    <span>
+                      {formatDocumentSize(detail.contentLength)}{' '}
+                      {tw('documents.chars', 'chars')}
+                    </span>
+                    {!mine ? (
+                      <span>{tw('documents.readonly', 'Read-only')}</span>
+                    ) : null}
+                  </div>
                 </div>
+              </div>
+
+              <div ref={contentRef}>
+                {kind === 'markdown' ? (
+                  <MessageMarkdown text={content} />
+                ) : (
+                  <div className={styles.documentPreviewText}>{content}</div>
+                )}
               </div>
             </div>
 
-            <div ref={contentRef}>
-              {kind === 'markdown' ? (
-                <MessageMarkdown text={content} />
+            <div
+              className={`${styles.wikiToc} ${tocOpen ? '' : styles.wikiTocCollapsed}`}
+            >
+              {tocOpen ? (
+                <>
+                  <div
+                    className={styles.wikiTocHeader}
+                    onClick={() => setTocOpen(false)}
+                  >
+                    <span className={styles.wikiTocTitle}>
+                      {tw('documents.toc', 'Contents')}
+                    </span>
+                    <Button type="text" size="small" icon={<RightOutlined />} />
+                  </div>
+                  {toc.length === 0 ? (
+                    <span style={{ color: '#b7b1c9' }}>
+                      {tw('documents.tocEmpty', 'No headings')}
+                    </span>
+                  ) : (
+                    toc.map((item) => (
+                      <span
+                        key={`${item.index}-${item.text}`}
+                        className={`${styles.wikiTocItem} ${
+                          item.level === 2
+                            ? styles.wikiTocLevel2
+                            : item.level === 3
+                              ? styles.wikiTocLevel3
+                              : ''
+                        }`}
+                        onClick={() => jumpToHeading(item.index)}
+                      >
+                        {item.text}
+                      </span>
+                    ))
+                  )}
+                </>
               ) : (
-                <div className={styles.documentPreviewText}>{content}</div>
+                <span
+                  className={styles.wikiTocCollapsedLabel}
+                  onClick={() => setTocOpen(true)}
+                >
+                  {tw('documents.toc', 'Contents')}
+                </span>
               )}
             </div>
-
-            </div>
-
-          <div className={`${styles.wikiToc} ${tocOpen ? '' : styles.wikiTocCollapsed}`}>
-            {tocOpen ? (
-              <>
-                <div
-                  className={styles.wikiTocHeader}
-                  onClick={() => setTocOpen(false)}
-                >
-                  <span className={styles.wikiTocTitle}>
-                    {tw('documents.toc', 'Contents')}
-                  </span>
-                  <Button type="text" size="small" icon={<RightOutlined />} />
-                </div>
-                {toc.length === 0 ? (
-                  <span style={{ color: '#b7b1c9' }}>
-                    {tw('documents.tocEmpty', 'No headings')}
-                  </span>
-                ) : (
-                  toc.map((item) => (
-                    <span
-                      key={`${item.index}-${item.text}`}
-                      className={`${styles.wikiTocItem} ${
-                        item.level === 2
-                          ? styles.wikiTocLevel2
-                          : item.level === 3
-                            ? styles.wikiTocLevel3
-                            : ''
-                      }`}
-                      onClick={() => jumpToHeading(item.index)}
-                    >
-                      {item.text}
-                    </span>
-                  ))
-                )}
-              </>
-            ) : (
-              <span
-                className={styles.wikiTocCollapsedLabel}
-                onClick={() => setTocOpen(true)}
-              >
-                {tw('documents.toc', 'Contents')}
-              </span>
-            )}
           </div>
-        </div>
 
-        {commentsOpen ? (
-          <div className={styles.commentDock}>
-            <div
-              className={styles.commentDockHeader}
-              onClick={() => setCommentsOpen(false)}
-            >
-              <span>
-                <CommentOutlined />{' '}
-                {tw('documents.comments', 'Comments')} ({comments.length})
-              </span>
-              <Button type="text" size="small" icon={<RightOutlined />} />
-            </div>
-            <div className={styles.commentDockBody}>
-              {commentsLoading && comments.length === 0 ? <Spin /> : null}
-              {topLevel.map((comment) => (
-                <div key={comment.id}>
-                  {renderComment(comment)}
-                  {comments
-                    .filter((reply) => reply.parentId === comment.id)
-                    .map((reply) => renderComment(reply, true))}
-                </div>
-              ))}
-              {!commentsLoading && comments.length === 0 ? (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={tw(
-                    'documents.noComments',
-                    'No comments yet. Start the discussion.',
-                  )}
-                />
-              ) : null}
-
-              <div className={styles.commentComposer}>
-                {replyTo || quotedText ? (
-                  <div className={styles.commentReplyHint}>
-                    <span>
-                      {replyTo
-                        ? tw('documents.replying', 'Replying to a comment')
-                        : tw('documents.quoting', 'Quoting a comment')}
-                    </span>
-                    <a
-                      onClick={() => {
-                        setReplyTo(undefined);
-                        setQuotedText('');
-                      }}
-                    >
-                      {tw('common.cancel', 'Cancel')}
-                    </a>
+          {commentsOpen ? (
+            <div className={styles.commentDock}>
+              <div
+                className={styles.commentDockHeader}
+                onClick={() => setCommentsOpen(false)}
+              >
+                <span>
+                  <CommentOutlined /> {tw('documents.comments', 'Comments')} (
+                  {comments.length})
+                </span>
+                <Button type="text" size="small" icon={<RightOutlined />} />
+              </div>
+              <div className={styles.commentDockBody}>
+                {commentsLoading && comments.length === 0 ? <Spin /> : null}
+                {topLevel.map((comment) => (
+                  <div key={comment.id}>
+                    {renderComment(comment)}
+                    {comments
+                      .filter((reply) => reply.parentId === comment.id)
+                      .map((reply) => renderComment(reply, true))}
                   </div>
+                ))}
+                {!commentsLoading && comments.length === 0 ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={tw(
+                      'documents.noComments',
+                      'No comments yet. Start the discussion.',
+                    )}
+                  />
                 ) : null}
-                {quotedText ? (
-                  <div className={styles.commentQuote}>{quotedText}</div>
-                ) : null}
-                <Input.TextArea
-                  rows={2}
-                  value={commentText}
-                  maxLength={5000}
-                  placeholder={tw(
-                    'documents.commentPlaceholder',
-                    'Write a comment…',
-                  )}
-                  onChange={(event) => setCommentText(event.target.value)}
-                />
-                <div style={{ marginTop: 8, textAlign: 'right' }}>
-                  <Button
-                    type="primary"
-                    icon={<SendOutlined />}
-                    loading={submitting}
-                    disabled={!commentText.trim()}
-                    onClick={() => void submitComment()}
-                  >
-                    {tw('documents.postComment', 'Comment')}
-                  </Button>
+
+                <div className={styles.commentComposer}>
+                  {replyTo || quotedText ? (
+                    <div className={styles.commentReplyHint}>
+                      <span>
+                        {replyTo
+                          ? tw('documents.replying', 'Replying to a comment')
+                          : tw('documents.quoting', 'Quoting a comment')}
+                      </span>
+                      <a
+                        onClick={() => {
+                          setReplyTo(undefined);
+                          setQuotedText('');
+                        }}
+                      >
+                        {tw('common.cancel', 'Cancel')}
+                      </a>
+                    </div>
+                  ) : null}
+                  {quotedText ? (
+                    <div className={styles.commentQuote}>{quotedText}</div>
+                  ) : null}
+                  <Input.TextArea
+                    rows={2}
+                    value={commentText}
+                    maxLength={5000}
+                    placeholder={tw(
+                      'documents.commentPlaceholder',
+                      'Write a comment…',
+                    )}
+                    onChange={(event) => setCommentText(event.target.value)}
+                  />
+                  <div style={{ marginTop: 8, textAlign: 'right' }}>
+                    <Button
+                      type="primary"
+                      icon={<SendOutlined />}
+                      loading={submitting}
+                      disabled={!commentText.trim()}
+                      onClick={() => void submitComment()}
+                    >
+                      {tw('documents.postComment', 'Comment')}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div
-            className={styles.commentDockTab}
-            onClick={() => setCommentsOpen(true)}
-          >
-            <CommentOutlined />
-            <span>
-              {tw('documents.comments', 'Comments')} ({comments.length})
-            </span>
-          </div>
-        )}
+          ) : (
+            <div
+              className={styles.commentDockTab}
+              onClick={() => setCommentsOpen(true)}
+            >
+              <CommentOutlined />
+              <span>
+                {tw('documents.comments', 'Comments')} ({comments.length})
+              </span>
+            </div>
+          )}
         </>
       ) : null}
     </Spin>

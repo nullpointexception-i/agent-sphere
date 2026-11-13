@@ -2,6 +2,8 @@ package com.buukle.agent.runtime.kernel.prompt;
 
 import com.buukle.agent.model.dtvo.dto.complete.FunctionDefinitionDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ToolDefinitionDTO;
+import com.buukle.agent.common.constant.ProjectRouterPrompt;
+import com.buukle.agent.instance.dtvo.enums.InstanceRole;
 import com.buukle.agent.runtime.kernel.constants.ChatClarification;
 import com.buukle.agent.runtime.kernel.constants.FinishConstants;
 import com.buukle.agent.runtime.kernel.constants.RunnerConstants;
@@ -35,8 +37,14 @@ public class RunPromptBuilder {
     public String buildSystemPrompt(KernelContext ctx) {
         StringBuilder sb = new StringBuilder();
         if (ctx != null && ctx.getAgentInstance() != null) {
-            sb.append(ctx.getAgentInstance().getSystemPrompt() != null
-                    ? ctx.getAgentInstance().getSystemPrompt() : "");
+            String prompt = ctx.getAgentInstance().getSystemPrompt();
+            if ((prompt == null || prompt.isBlank())
+                    && InstanceRole.PROJECT_ROUTER.value().equals(ctx.getAgentInstance().getInstanceRole())) {
+                // The tenant project assistant normally leaves the column empty and relies on the
+                // built-in prompt; without this fallback the runtime would send an empty system prompt.
+                prompt = ProjectRouterPrompt.DEFAULT;
+            }
+            sb.append(prompt != null ? prompt : "");
         }
         List<RuntimeTool> tools = ctx != null ? ctx.getTools() : null;
         // List tool names only: the full description/schema already appears once each in the request's `tools`,

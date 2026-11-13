@@ -49,7 +49,7 @@ public class RuntimeValidator {
 
         InstanceVO agentInstance;
         if (session.getAgentInstanceId() != null) {
-            agentInstance = instanceSpi.getInstance(session.getAgentInstanceId());
+            agentInstance = instanceSpi.getInstanceShared(session.getAgentInstanceId());
         } else {
             agentInstance = null;
         }
@@ -62,7 +62,7 @@ public class RuntimeValidator {
             throw new BizException(OrchestrationErrorCode.MODEL_ROUTE_NOT_FOUND);
         }
         if (primaryRoute.getApiKeyConfigured() != null && !primaryRoute.getApiKeyConfigured()) {
-            ModelProviderVO provider = providerSpi.getProvider(primaryRoute.getProviderId());
+            ModelProviderVO provider = getProviderShared(primaryRoute.getProviderId());
             String name = provider != null ? provider.getName() : String.valueOf(primaryRoute.getProviderId());
             throw new BizException(OrchestrationErrorCode.MODEL_ROUTE_NO_API_KEY,
                     "Provider [" + name + "] has no API key configured");
@@ -76,7 +76,7 @@ public class RuntimeValidator {
             for (String idStr : primaryRoute.getFallbackIds().split(",")) {
                 try {
                     Long fbId = Long.parseLong(idStr.trim());
-                    ModelRouteVO fbRoute = routeSpi.getRoute(fbId);
+                    ModelRouteVO fbRoute = getRouteShared(fbId);
                     if (fbRoute != null && (fbRoute.getApiKeyConfigured() == null || fbRoute.getApiKeyConfigured())) {
                         fallbackRoutes.add(toFull(fbRoute));
                     }
@@ -95,21 +95,47 @@ public class RuntimeValidator {
     }
 
     private ModelRouteVO resolvePrimaryRoute(InstanceVO agentInstance, Long overrideRouteId) {
-        // User-specified override takes priority
-        if (overrideRouteId != null) {
-            ModelRouteVO route = routeSpi.getRoute(overrideRouteId);
-            if (route != null) return route;
-            // The route pinned on the run was deleted/disabled: fall back to the instance's current config so the run does not get stuck
-            log.warn("Pinned model route {} no longer exists; falling back to instance route", overrideRouteId);
+        return withSharedTenant(() -> {
+            // User-specified override takes priority
+            if (overrideRouteId != null) {
+                ModelRouteVO route = routeSpi.getRoute(overrideRouteId);
+                if (route != null) return route;
+                // The route pinned on the run was deleted/disabled: fall back to the instance's current config so the run does not get stuck
+                log.warn("Pinned model route {} no longer exists; falling back to instance route", overrideRouteId);
+            }
+            // If instance has a specific modelRouteId, use it directly
+            if (agentInstance.getModelRouteId() != null) {
+                return routeSpi.getRoute(agentInstance.getModelRouteId());
+            }
+            // No specific route assigned — pick one by weight from all routes
+            List<ModelRouteVO> allRoutes = routeSpi.listRoutesByProvider(null, null);
+            if (allRoutes.isEmpty()) return null;
+            return weightedSelect(allRoutes);
+        });
+    }
+
+    private ModelRouteVO getRouteShared(Long routeId) {
+        return withSharedTenant(() -> routeSpi.getRoute(routeId));
+    }
+
+    private ModelProviderVO getProviderShared(Long providerId) {
+        return withSharedTenant(() -> providerSpi.getProvider(providerId));
+    }
+
+    /** Tenant-owned resources may be created by another admin/system user. */
+    private <T> T withSharedTenant(java.util.function.Supplier<T> supplier) {
+        com.buukle.agent.common.context.TenantScope previous =
+                com.buukle.agent.common.context.TenantScopeHolder.get();
+        try {
+            com.buukle.agent.common.context.TenantScopeHolder.clear();
+            return supplier.get();
+        } finally {
+            if (previous == null) {
+                com.buukle.agent.common.context.TenantScopeHolder.clear();
+            } else {
+                com.buukle.agent.common.context.TenantScopeHolder.start(previous);
+            }
         }
-        // If instance has a specific modelRouteId, use it directly
-        if (agentInstance.getModelRouteId() != null) {
-            return routeSpi.getRoute(agentInstance.getModelRouteId());
-        }
-        // No specific route assigned — pick one by weight from all routes
-        List<ModelRouteVO> allRoutes = routeSpi.listRoutesByProvider(null, null);
-        if (allRoutes.isEmpty()) return null;
-        return weightedSelect(allRoutes);
     }
 
     private ModelRouteFullVO toFull(ModelRouteVO route) {

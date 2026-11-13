@@ -23,9 +23,11 @@ import com.buukle.agent.superagent.repository.AgentThreadMapper;
 import com.buukle.agent.superagent.repository.AgentWorkItemMapper;
 import com.buukle.agent.superagent.spi.WorkerReport;
 import com.buukle.agent.superagent.spi.WorkerReportPort;
+import com.buukle.agent.superagent.spi.WorkItemLifecycleSpi;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -55,6 +57,7 @@ public class WorkerReportServiceImpl implements WorkerReportPort {
     private final RunSpi runSpi;
     private final UserSpi userSpi;
     private final AgentMetrics metrics;
+    private final ObjectProvider<WorkItemLifecycleSpi> lifecycleProvider;
 
     @Override
     public void onWorkerTerminal(WorkerReport report) {
@@ -84,6 +87,10 @@ public class WorkerReportServiceImpl implements WorkerReportPort {
         item.setSummary(summarize(report));
         item.setLastProgressAt(LocalDateTime.now());
         workItemMapper.updateById(item);
+        if (TERMINAL_STATUSES.contains(status)) {
+            lifecycleProvider.orderedStream().forEach(listener -> listener.onTerminal(
+                    item.getId(), status, report.summary(), report.errorMessage()));
+        }
 
         if (item.getThreadId() != null && TERMINAL_STATUSES.contains(status)) {
             if (WorkItemStatus.COMPLETED.equals(status) || WorkItemStatus.DONE.equals(status)) {

@@ -94,6 +94,14 @@
         </dependency>
         <dependency>
             <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-application-controller</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
+            <artifactId>agent-sphere-project-controller</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.buukle.agent</groupId>
             <artifactId>agent-sphere-infrastructure</artifactId>
         </dependency>
         <dependency>

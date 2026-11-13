@@ -2,7 +2,7 @@ import { TIMING } from '../timing';
 
 describe('timing constants', () => {
   it('exposes positive values for every timing knob', () => {
-    for (const [key, value] of Object.entries(TIMING)) {
+    for (const [_key, value] of Object.entries(TIMING)) {
       expect(value).toBeGreaterThan(0);
       expect(Number.isFinite(value)).toBe(true);
     }

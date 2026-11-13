@@ -22,7 +22,7 @@ import type {
 import { tw } from '../i18n';
 import { folderDisplayName } from './folderDisplay';
 import { useStyles } from './style';
-import { type FolderNode, buildFolderTree } from './wikiModel';
+import { buildFolderTree, type FolderNode } from './wikiModel';
 
 const SYSTEM_INSTANCE_ROOT = 'INSTANCE_ROOT';
 
@@ -120,7 +120,10 @@ export function FolderTree({
         ],
         onClick: ({ key, domEvent }) => {
           domEvent.stopPropagation();
-          onDocumentAction?.(document, key as 'move' | 'export' | 'share' | 'edit' | 'delete');
+          onDocumentAction?.(
+            document,
+            key as 'move' | 'export' | 'share' | 'edit' | 'delete',
+          );
         },
       }}
     >

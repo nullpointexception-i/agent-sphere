@@ -477,6 +477,7 @@ public class ChatRuntimeService {
                 new LambdaQueryWrapper<AgentPendingClarification>()
                         .eq(AgentPendingClarification::getSessionId, sessionId)
                         .isNull(AgentPendingClarification::getUserResponse)
+                        .isNull(AgentPendingClarification::getTargetUserId)
                         .orderByAsc(AgentPendingClarification::getCreatedAt));
         RunVO active = runSpi.findActiveRun(sessionId);
         if (active != null) {
@@ -882,7 +883,8 @@ public class ChatRuntimeService {
     private void assertWritable(Long sessionId) {
         SessionVO session = sessionSpi.getSession(sessionId);
         if (session == null || !SessionAccessPolicy.canWrite(
-                session.getTenantId(), session.getCreatedBy(), session.getSessionType())) {
+                session.getTenantId(), session.getCreatedBy(), session.getSessionType(),
+                session.getParentSessionId())) {
             throw new BizException(CommonErrorCode.FORBIDDEN);
         }
     }

@@ -129,6 +129,16 @@ buukle:
         max-batches: 20
         batch-sleep-ms: 100
     # ============================================================
+    # Application scenes (periodic dispatch)
+    # ============================================================
+    application:
+      periodic-enabled: ${APPLICATION_PERIODIC_ENABLED:false}
+      periodic-interval-ms: 60000
+      reconcile-enabled: ${APPLICATION_RECONCILE_ENABLED:true}
+      reconcile-interval-ms: 60000
+      reconcile-stale-minutes: ${APPLICATION_RECONCILE_STALE_MINUTES:10}
+      reconcile-max-attempts: ${APPLICATION_RECONCILE_MAX_ATTEMPTS:3}
+    # ============================================================
     # Built-in IM
     # ============================================================
     im:

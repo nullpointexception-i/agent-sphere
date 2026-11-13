@@ -4,6 +4,7 @@ import com.buukle.agent.infrastructure.controller.FileController;
 import com.buukle.agent.infrastructure.controller.dtvo.AttachmentUploadResult;
 import com.buukle.agent.infrastructure.file.StoredFile;
 import com.buukle.agent.infrastructure.service.AttachmentFileService;
+import com.buukle.agent.infrastructure.service.CommentAttachmentService;
 import com.buukle.agent.infrastructure.service.ScreenshotFileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +35,9 @@ class FileControllerTest {
 
     @Mock
     ScreenshotFileService screenshotFileService;
+
+    @Mock
+    CommentAttachmentService commentAttachmentService;
 
     @InjectMocks
     FileController controller;
@@ -73,6 +77,7 @@ class FileControllerTest {
     void download_returns404WhenAbsent() throws Exception {
         given(attachmentFileService.load("missing")).willReturn(null);
         given(screenshotFileService.load("missing")).willReturn(null);
+        given(commentAttachmentService.load("missing")).willReturn(null);
 
         mockMvc.perform(get("/api/v1/files/missing"))
                 .andExpect(status().isNotFound());

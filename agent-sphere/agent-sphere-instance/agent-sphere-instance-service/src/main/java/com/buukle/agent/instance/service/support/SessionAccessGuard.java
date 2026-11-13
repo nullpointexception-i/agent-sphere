@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>SPI-level lookups stay unrestricted for background tasks; API endpoints call this guard so
  * "visible" (tenant administrators) and "writable" (creator only) are enforced consistently.
+ * A project assistant baseline is visible to tenant administrators but read-only from the console.
  */
 @Component
 @RequiredArgsConstructor
@@ -31,7 +32,8 @@ public class SessionAccessGuard {
             throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND, "Session not found");
         }
         session.setReadOnly(!SessionAccessPolicy.canWrite(
-                session.getTenantId(), session.getCreatedBy(), session.getSessionType()));
+                session.getTenantId(), session.getCreatedBy(), session.getSessionType(),
+                session.getParentSessionId()));
         return session;
     }
 

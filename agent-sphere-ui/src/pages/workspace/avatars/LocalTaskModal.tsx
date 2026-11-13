@@ -45,7 +45,8 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
   }, [open]);
 
   const rows = tasks.filter(
-    (task) => agentId == null || task.agentId == null || task.agentId === agentId,
+    (task) =>
+      agentId == null || task.agentId == null || task.agentId === agentId,
   );
 
   const cancel = async (taskId: number) => {
@@ -73,7 +74,11 @@ export function LocalTaskModal({ open, agentId, agentName, onClose }: Props) {
       onCancel={onClose}
       destroyOnHidden
     >
-      <Button size="small" onClick={() => void load()} style={{ marginBottom: 10 }}>
+      <Button
+        size="small"
+        onClick={() => void load()}
+        style={{ marginBottom: 10 }}
+      >
         {tw('tasks.refresh', 'Refresh')}
       </Button>
       <Table<DesktopBridgeTask>

@@ -11,13 +11,18 @@ import { Conversations } from '@ant-design/x';
 import { useIntl } from '@umijs/max';
 import { App, Button, Input, Modal, Segmented, Tabs, Tag } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import { SESSION_TYPE } from '@/constants/session';
 import { agentApi } from '@/services/agentSphere/api';
 import { formatTime } from '@/utils/format';
 import { useStyles } from '../../style';
 import RunDrawer from '../RunDrawer';
 
 /** Internal sessions are view-only: no rename/summary/delete from the chat list. */
-const READ_ONLY_SESSION_TYPES = new Set(['ROUTER', 'WORKER', 'GROUP_ROUTER']);
+const READ_ONLY_SESSION_TYPES = new Set([
+  SESSION_TYPE.ROUTER,
+  SESSION_TYPE.WORKER,
+  SESSION_TYPE.GROUP_ROUTER,
+]);
 
 function isReadOnlySession(session: any): boolean {
   return session?.readOnly ?? READ_ONLY_SESSION_TYPES.has(session?.sessionType);
@@ -232,6 +237,29 @@ export default function Sidebar({
                             : ''
                         }`
                       : s.agentInstanceName}
+                  </Tag>
+                )}
+                {s.sessionType === SESSION_TYPE.PROJECT_ROUTER && (
+                  <Tag
+                    bordered={false}
+                    color={s.parentSessionId ? 'purple' : 'blue'}
+                    style={{
+                      marginInlineEnd: 0,
+                      marginTop: 2,
+                      padding: '0 4px',
+                      fontSize: 10,
+                      lineHeight: '16px',
+                    }}
+                  >
+                    {s.parentSessionId
+                      ? `${intl.formatMessage({
+                          id: 'pages.chat.projectFork',
+                          defaultMessage: 'User fork',
+                        })}${s.createdBy ? ` · ${s.createdBy}` : ''}`
+                      : intl.formatMessage({
+                          id: 'pages.chat.projectBaseline',
+                          defaultMessage: 'Project baseline',
+                        })}
                   </Tag>
                 )}
               </span>

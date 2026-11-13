@@ -17,14 +17,14 @@ import type {
 } from '@/services/agentSphere/superAgent';
 import { superAgentApi } from '@/services/agentSphere/superAgent';
 import { tw } from '../i18n';
-import { LocalApprovalList } from './LocalApprovalList';
-import { useLocalApprovals } from './useLocalApprovals';
 import {
   approvalSourceLabel,
   optionsForScope,
   parseApprovalCalls,
   prettyArguments,
 } from './approvalModel';
+import { LocalApprovalList } from './LocalApprovalList';
+import { useLocalApprovals } from './useLocalApprovals';
 
 interface Props {
   open: boolean;
@@ -61,7 +61,7 @@ export function ApprovalInboxDrawer({
     Record<string, Record<string, string>>
   >({});
   const [submitting, setSubmitting] = useState<string | null>(null);
-  const local = useLocalApprovals();
+  const _local = useLocalApprovals();
 
   const pick = (approvalId: string, callId: string, decision: string) => {
     setDecisions((previous) => ({

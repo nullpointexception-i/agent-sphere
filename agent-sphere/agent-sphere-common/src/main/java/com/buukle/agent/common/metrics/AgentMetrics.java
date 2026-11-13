@@ -35,6 +35,9 @@ public class AgentMetrics {
     public static final String RETENTION_ROWS = "superagent.retention.rows";
     public static final String RETENTION_TRUNCATED = "superagent.retention.truncated";
     public static final String WATCHDOG_RECOVERED = "superagent.watchdog.recovered";
+    public static final String APPLICATION_RUN_TRIGGERED = "application.run.triggered";
+    public static final String APPLICATION_RUN_TRANSITION = "application.run.transition";
+    public static final String APPLICATION_RUN_RETRY = "application.run.retry";
     public static final String IM_MESSAGE_SENT = "im.message.sent";
     public static final String IM_SSE_REGISTERED = "im.sse.registered";
     public static final String IM_SSE_PUBLISH_FAILED = "im.sse.publish_failed";

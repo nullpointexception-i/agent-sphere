@@ -100,6 +100,29 @@ export interface WorkItem {
 }
 
 export const superAgentApi = {
+  entityBindings: (entityType: string, entityId: number) =>
+    request<any[]>(`${BASE}/super-agent/entity-bindings`, {
+      params: { entityType, entityId },
+    }),
+  bindEntityAgent: (data: {
+    entityType: string;
+    entityId: number;
+    agentId: number;
+    bindingRole?: string;
+  }) =>
+    request<any>(`${BASE}/super-agent/entity-bindings`, {
+      method: 'POST',
+      data,
+    }),
+  unbindEntityAgent: (
+    entityType: string,
+    entityId: number,
+    agentId: number,
+  ) =>
+    request<void>(`${BASE}/super-agent/entity-bindings`, {
+      method: 'DELETE',
+      params: { entityType, entityId, agentId },
+    }),
   list: (limit?: number) =>
     request<SuperAgent[]>(`${BASE}/super-agents`, {
       params: limit ? { limit } : undefined,

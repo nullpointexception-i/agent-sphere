@@ -83,8 +83,7 @@ export function folderPath(
   while (current && !seen.has(current.id)) {
     seen.add(current.id);
     path.unshift(current);
-    current =
-      current.parentId == null ? undefined : byId.get(current.parentId);
+    current = current.parentId == null ? undefined : byId.get(current.parentId);
   }
   return path;
 }
@@ -110,7 +109,9 @@ export function folderMoveOptions(
   folders: DocumentFolder[],
   excludedId?: number,
 ): Array<{ value: number; label: string; depth: number }> {
-  const excluded = excludedId ? new Set(descendantFolderIds(folders, excludedId)) : new Set<number>();
+  const excluded = excludedId
+    ? new Set(descendantFolderIds(folders, excludedId))
+    : new Set<number>();
   const options: Array<{ value: number; label: string; depth: number }> = [];
   const walk = (parentId: number | null, depth: number): void => {
     for (const folder of folders

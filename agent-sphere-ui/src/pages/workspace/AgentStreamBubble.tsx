@@ -2,10 +2,10 @@ import { Avatar } from 'antd';
 import { memo, useEffect, useRef, useState } from 'react';
 import type { ImParticipant } from '@/services/agentSphere/im';
 import { AGENT_STREAM_PHASE, type AgentStreamState } from './agentStreamStore';
+import { useChatStyles } from './chat/style';
 import { tw } from './i18n';
 import { MessageMarkdown } from './MessageMarkdown';
 import { avatarStyle, initials } from './shared';
-import { useStyles } from './style';
 
 function streamStatusLabel(state: AgentStreamState) {
   if (state.phase === AGENT_STREAM_PHASE.FAILED) {
@@ -48,7 +48,7 @@ const ThinkingChip = memo(function ThinkingChip({
   live: boolean;
   seconds?: number | null;
 }) {
-  const { styles } = useStyles();
+  const { styles } = useChatStyles();
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLSpanElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -123,7 +123,7 @@ export const AgentStreamBubble = memo(function AgentStreamBubble({
    */
   hidden?: boolean;
 }) {
-  const { styles } = useStyles();
+  const { styles } = useChatStyles();
   const [elapsed, setElapsed] = useState(0);
   const [thinkingSeconds, setThinkingSeconds] = useState<number | null>(null);
 

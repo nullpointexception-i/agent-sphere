@@ -56,7 +56,7 @@ public class ContextPreparer {
      * offsets hub ids to avoid collisions. Runtime capabilityType stays "mcp" for ToolExecutor.
      */
     private static final long MCP_HUB_ID_BASE = 1_000_000_000L;
-    private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (clear, friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"confirm=yes/no; choice=provide 2-5 concise distinct options; input=free-form answer\"},\"multiple\":{\"type\":\"boolean\",\"description\":\"For type=choice: true when the user may select more than one option.\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Short display text shown to the user (max ~20 chars, a concise option phrase, NOT a full sentence, NOT placeholder like 'http://')\"},\"value\":{\"type\":\"string\",\"description\":\"Machine value sent back to the agent when the user picks this option\"},\"description\":{\"type\":\"string\",\"description\":\"Optional short explanation for the option\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"description\":\"2-5 concise, distinct choices (required when type=choice). No duplicates, no placeholder URLs, no full sentences.\"},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"}},\"required\":[\"title\",\"type\"]}";
+    private static final String CLARIFICATION_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"Question or prompt for the user (clear, friendly, as if speaking to them)\"},\"type\":{\"type\":\"string\",\"enum\":[\"confirm\",\"choice\",\"input\"],\"description\":\"confirm=yes/no; choice=provide 2-5 concise distinct options; input=free-form answer\"},\"multiple\":{\"type\":\"boolean\",\"description\":\"For type=choice: true when the user may select more than one option.\"},\"options\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\",\"description\":\"Short display text shown to the user (max ~20 chars, a concise option phrase, NOT a full sentence, NOT placeholder like 'http://')\"},\"value\":{\"type\":\"string\",\"description\":\"Machine value sent back to the agent when the user picks this option\"},\"description\":{\"type\":\"string\",\"description\":\"Optional short explanation for the option\"}},\"required\":[\"label\"],\"additionalProperties\":false},\"description\":\"2-5 concise, distinct choices (required when type=choice). No duplicates, no placeholder URLs, no full sentences.\"},\"description\":{\"type\":\"string\",\"description\":\"Additional context or explanation to help the user understand the question\"},\"targetUserId\":{\"type\":\"integer\",\"description\":\"Optional. Ask a specific project member instead of the current user. The run pauses until that member answers or the question expires.\"},\"expiresInHours\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":168,\"description\":\"Optional. Hours before a targeted question expires (default 24).\"}},\"required\":[\"title\",\"type\"]}";
 
     private static final String WAIT_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"ms\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":600000,\"description\":\"Milliseconds to wait (100-600000). The run suspends immediately and resumes automatically afterwards. Use it to give dynamic content time to appear or settle.\"}},\"required\":[\"ms\"],\"additionalProperties\":false}";
     private static final String FINISH_PARAM_SCHEMA = "{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"enum\":[\"success\",\"failed\",\"blocked\"],\"description\":\"success=work done and verified; failed=tried but could not complete; blocked=cannot proceed without something external (login/permission/missing data)\"},\"summary\":{\"type\":\"string\",\"description\":\"Complete, self-contained answer for the user; the run's final reply is taken from it\"}},\"required\":[\"status\",\"summary\"],\"additionalProperties\":false}";
@@ -67,6 +67,9 @@ public class ContextPreparer {
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.ASK_CLARIFICATION.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROGRESS.getId(),
+            // Insight writing is an analysis side channel, not a project-data mutation, so a
+            // READ_ONLY analysis run may still persist its findings.
+            LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROJECT_INSIGHT.getId(),
             SubAgentConstants.DELEGATE_TOOL);
     private static final Set<Long> ROUTER_TOOL_IDS = Set.of(
             (long) BuiltinToolEnum.DISPATCH_WORKER.getId(),
@@ -90,6 +93,12 @@ public class ContextPreparer {
             // hitting SessionRunner's L2 approval interceptor → TOOL_APPROVAL_PENDING → ROUTER_APPROVAL card delivered to IM.
             (long) BuiltinToolEnum.DOCWRITE.getId(),
             (long) BuiltinToolEnum.SKILL_MANAGE.getId());
+    /** Tools the tenant project assistant always receives, even if the DB binding is missing. */
+    private static final Set<Long> PROJECT_TOOL_IDS = Set.of(
+            (long) BuiltinToolEnum.PROJECT_QUERY.getId(),
+            (long) BuiltinToolEnum.PROJECT_MUTATE.getId(),
+            (long) BuiltinToolEnum.PROJECT_AVATAR.getId(),
+            (long) BuiltinToolEnum.PROJECT_INSIGHT.getId());
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
     private final McpHubSpi mcpHubSpi;
@@ -205,6 +214,30 @@ public class ContextPreparer {
         if (SessionType.GROUP_ROUTER.equals(sessionType)) {
             return List.of();
         }
+        if (SessionType.PROJECT_ROUTER.equals(sessionType)) {
+            // The project assistant is a focused worker: no wait, no sub-agent delegation,
+            // and none of the Super-Agent router tools.
+            tools.removeIf(tool -> SubAgentConstants.DELEGATE_TOOL.equals(tool.getLlmToolName())
+                    || (CAPABILITY_TYPE_BUILTIN.equals(tool.getCapabilityType())
+                    && tool.getCapabilityId() != null
+                    && (ROUTER_TOOL_IDS.contains(tool.getCapabilityId())
+                    || tool.getCapabilityId() == BuiltinToolEnum.WAIT.getId())));
+            // Capability rows may be hidden by a self-only data scope; finish is mandatory for
+            // an agentic run, so make sure it is present regardless of the DB binding.
+            boolean hasFinish = tools.stream().anyMatch(tool ->
+                    CAPABILITY_TYPE_BUILTIN.equals(tool.getCapabilityType())
+                            && tool.getCapabilityId() != null
+                            && tool.getCapabilityId() == BuiltinToolEnum.FINISH.getId());
+            if (!hasFinish) {
+                for (BuiltinToolVO tool : builtinSpi.listBuiltinTools()) {
+                    if (tool.getId() == BuiltinToolEnum.FINISH.getId()) {
+                        tools.add(toRuntimeTool(tool));
+                        break;
+                    }
+                }
+            }
+            return tools;
+        }
         if (SessionType.ROUTER.equals(sessionType)) {
             List<RuntimeTool> filtered = new ArrayList<>();
             Set<Long> present = new HashSet<>();
@@ -258,6 +291,7 @@ public class ContextPreparer {
         List<RuntimeTool> result = new ArrayList<>();
         resolveCapabilityTools(capabilities, result);
         addAutoIncludeBuiltinTools(result);
+        addProjectAssistantTools(validated, result);
         addDelegateTool(result);
         addClarificationTool(noClarification, result);
         addWaitTool(result);
@@ -298,6 +332,29 @@ public class ContextPreparer {
     private void addAutoIncludeBuiltinTools(List<RuntimeTool> result) {
         for (BuiltinToolVO tool : builtinSpi.listAutoIncludeBuiltinTools()) {
             result.add(toRuntimeTool(tool));
+        }
+    }
+
+    /**
+     * The project assistant must keep working even when its capability rows were not created
+     * (tenant upgrade edge case). Bindings are a fast path, not the only path.
+     */
+    private void addProjectAssistantTools(ValidationResult validated, List<RuntimeTool> result) {
+        String sessionType = validated.getSession() == null ? null
+                : validated.getSession().getSessionType();
+        if (!SessionType.PROJECT_ROUTER.equals(sessionType)) {
+            return;
+        }
+        Set<Long> present = new HashSet<>();
+        for (RuntimeTool tool : result) {
+            if (CAPABILITY_TYPE_BUILTIN.equals(tool.getCapabilityType()) && tool.getCapabilityId() != null) {
+                present.add(tool.getCapabilityId());
+            }
+        }
+        for (BuiltinToolVO tool : builtinSpi.listBuiltinTools()) {
+            if (PROJECT_TOOL_IDS.contains(tool.getId()) && !present.contains(tool.getId())) {
+                result.add(toRuntimeTool(tool));
+            }
         }
     }
 

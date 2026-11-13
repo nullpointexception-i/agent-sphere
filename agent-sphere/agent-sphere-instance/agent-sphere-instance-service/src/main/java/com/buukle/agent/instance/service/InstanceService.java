@@ -10,4 +10,7 @@ public interface InstanceService extends IService<AgentInstance>, InstanceSpi {
     InstanceVO createInstance(CreateInstanceDTO dto);
 
     InstanceVO setModelRoute(Long id, Long modelRouteId);
+
+    /** Provisioning entry used by tenant bootstrap; the same contract as {@link InstanceSpi#ensureProjectRouter}. */
+    InstanceVO ensureProjectRouter(Long tenantId);
 }

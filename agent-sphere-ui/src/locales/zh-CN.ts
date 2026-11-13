@@ -1,9 +1,12 @@
+import apps from './zh-CN/apps';
 import component from './zh-CN/component';
 import desktop from './zh-CN/desktop';
 import globalHeader from './zh-CN/globalHeader';
 import menu from './zh-CN/menu';
 import network from './zh-CN/network';
+import notifications from './zh-CN/notifications';
 import pages from './zh-CN/pages';
+import projects from './zh-CN/projects';
 import settingDrawer from './zh-CN/settingDrawer';
 import settings from './zh-CN/settings';
 import workspace from './zh-CN/workspace';
@@ -16,6 +19,8 @@ export default {
   'app.preview.down.block': '下载此页面到本地项目',
   ...pages,
   ...workspace,
+  ...apps,
+  ...projects,
   ...desktop,
   ...globalHeader,
   ...menu,
@@ -23,4 +28,5 @@ export default {
   ...settings,
   ...network,
   ...component,
+  ...notifications,
 };

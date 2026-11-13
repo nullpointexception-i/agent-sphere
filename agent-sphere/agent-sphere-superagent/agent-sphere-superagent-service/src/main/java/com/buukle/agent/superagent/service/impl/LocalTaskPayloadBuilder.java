@@ -11,6 +11,7 @@ import com.buukle.agent.superagent.dtvo.vo.LocalTaskPayloadVO;
 import com.buukle.agent.superagent.repository.AgentEventMapper;
 import com.buukle.agent.superagent.repository.AgentLocalSessionMapper;
 import com.buukle.agent.superagent.repository.AgentThreadMapper;
+import com.buukle.agent.superagent.spi.ImEventMetaKeys;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -177,7 +178,7 @@ public class LocalTaskPayloadBuilder {
                 if (!rawMeta.isBlank()) {
                     JsonNode meta = parse(rawMeta);
                     if (meta != null) {
-                        String name = meta.path("speakerName").asText("");
+                        String name = meta.path(ImEventMetaKeys.SPEAKER_NAME).asText("");
                         if (!name.isBlank()) return name;
                     }
                 }

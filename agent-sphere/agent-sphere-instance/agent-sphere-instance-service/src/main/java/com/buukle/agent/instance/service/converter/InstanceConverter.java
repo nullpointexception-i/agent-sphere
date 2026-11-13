@@ -4,6 +4,7 @@ package com.buukle.agent.instance.service.converter;
 import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.constant.GroupRouterPrompt;
 import com.buukle.agent.common.constant.OwnerScope;
+import com.buukle.agent.common.constant.ProjectRouterPrompt;
 import com.buukle.agent.instance.dtvo.enums.InstanceRole;
 import com.buukle.agent.instance.domain.AgentInstance;
 import com.buukle.agent.instance.dtvo.dto.CreateInstanceDTO;
@@ -24,16 +25,22 @@ public class InstanceConverter {
         vo.setName(instance.getName());
         vo.setDescription(instance.getDescription());
         vo.setSystemPrompt(instance.getSystemPrompt());
-        if (InstanceRole.GROUP_ROUTER.value().equals(instance.getInstanceRole())
-                && (instance.getSystemPrompt() == null || instance.getSystemPrompt().isBlank())) {
+        String role = instance.getInstanceRole();
+        boolean promptBlank = instance.getSystemPrompt() == null || instance.getSystemPrompt().isBlank();
+        if (InstanceRole.GROUP_ROUTER.value().equals(role) && promptBlank) {
             // Echo the effective prompt so the editor/detail page and the runtime share one value.
             vo.setSystemPrompt(GroupRouterPrompt.DEFAULT);
+            vo.setSystemPromptDefaulted(true);
+        } else if (InstanceRole.PROJECT_ROUTER.value().equals(role) && promptBlank) {
+            vo.setSystemPrompt(ProjectRouterPrompt.DEFAULT);
             vo.setSystemPromptDefaulted(true);
         } else {
             vo.setSystemPromptDefaulted(false);
         }
-        if (InstanceRole.GROUP_ROUTER.value().equals(instance.getInstanceRole())) {
+        if (InstanceRole.GROUP_ROUTER.value().equals(role)) {
             vo.setDefaultSystemPrompt(GroupRouterPrompt.DEFAULT);
+        } else if (InstanceRole.PROJECT_ROUTER.value().equals(role)) {
+            vo.setDefaultSystemPrompt(ProjectRouterPrompt.DEFAULT);
         }
         vo.setModelRouteId(instance.getModelRouteId());
         vo.setCustomInstructions(instance.getCustomInstructions());

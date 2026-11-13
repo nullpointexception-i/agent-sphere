@@ -16,6 +16,8 @@ public final class SessionTypeCodes {
     public static final String WORKER = "WORKER";
     public static final String TRAINING = "TRAINING";
     public static final String WATCHDOG = "WATCHDOG";
+    /** Tenant-level project assistant; one session per user per project. */
+    public static final String PROJECT_ROUTER = "PROJECT_ROUTER";
 
     private SessionTypeCodes() {
     }

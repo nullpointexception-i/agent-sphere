@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import SetModelRouteModal from '@/components/SetModelRouteModal';
 import { API_PATHS } from '@/constants/endpoints';
 import { PERM } from '@/constants/permissions';
+import { SESSION_TYPE } from '@/constants/session';
 import { STATUS } from '@/constants/status';
 import { TIMELINE_STATE } from '@/constants/timeline';
 import { TIMING } from '@/constants/timing';
@@ -75,7 +76,11 @@ function persistChatPreference(key: string, value: string) {
 }
 
 /** Internal sessions (router / worker / group router) are view-only. */
-const READ_ONLY_SESSION_TYPES = new Set(['ROUTER', 'WORKER', 'GROUP_ROUTER']);
+const READ_ONLY_SESSION_TYPES = new Set([
+  SESSION_TYPE.ROUTER,
+  SESSION_TYPE.WORKER,
+  SESSION_TYPE.GROUP_ROUTER,
+]);
 
 /**
  * Local guard key for the optimistic clarification state. It must include clarificationId: when
@@ -112,6 +117,8 @@ export interface SessionChatProps {
   sessionId?: number;
   /** Hide the console sidebar and fit the chat into an embedded host. */
   trainingMode?: boolean;
+  /** Embedded in a drawer: also hide the chat header. */
+  embedded?: boolean;
   /** Notifies the host when the runtime SSE connects or drops. */
   onSseStatusChange?: (connected: boolean) => void;
 }
@@ -121,6 +128,7 @@ export function SessionChat(props: SessionChatProps = {}) {
   const sessionId =
     props.sessionId != null ? String(props.sessionId) : routeSessionId;
   const trainingMode = Boolean(props.trainingMode);
+  const embedded = Boolean(props.embedded);
   const navigate = useNavigate();
   const location = useLocation();
   const intl = useIntl();
@@ -2258,6 +2266,7 @@ export function SessionChat(props: SessionChatProps = {}) {
               currentSession={currentSession}
               instances={instances}
               trainingMode={trainingMode}
+              embedded={embedded}
               hideSessionPanel={trainingMode}
               readOnly={
                 !!currentSession &&
@@ -2465,7 +2474,13 @@ export function SessionChat(props: SessionChatProps = {}) {
   );
 
   if (trainingMode) {
-    return <div className={styles.trainingRoot}>{content}</div>;
+    return (
+      <div
+        className={`${styles.trainingRoot} ${embedded ? styles.embeddedRoot : ''}`}
+      >
+        {content}
+      </div>
+    );
   }
 
   return (

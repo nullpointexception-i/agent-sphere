@@ -1,5 +1,6 @@
 import { useIntl } from '@umijs/max';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { SESSION_TYPE } from '@/constants/session';
 import { STATUS } from '@/constants/status';
 import { useStyles } from '../../style';
 import ClarificationDrawer, {
@@ -74,6 +75,8 @@ interface ChatMainProps {
   trainingMode?: boolean;
   /** Training hides the console session panel (its Worker rail already shows the live state). */
   hideSessionPanel?: boolean;
+  /** Embedded in a drawer: hide the page header but keep the chat stage/scroll. */
+  embedded?: boolean;
   /** Internal sessions (router/worker/group router) are view-only. */
   readOnly?: boolean;
 }
@@ -119,6 +122,7 @@ export default function ChatMain({
   onWithdrawQueued,
   trainingMode = false,
   hideSessionPanel = false,
+  embedded = false,
   readOnly = false,
 }: ChatMainProps) {
   const sessionKey = currentSession?.id || '';
@@ -255,20 +259,22 @@ export default function ChatMain({
 
   return (
     <>
-      <Header
-        currentSession={currentSession}
-        instances={instances}
-        selectedModelRouteId={selectedModelRouteId}
-        onModelRouteChange={onModelRouteChange}
-        modelRoutes={modelRoutes}
-        reasoningCapability={reasoningCapability}
-        reasoningEffort={reasoningEffort}
-        onReasoningChange={onReasoningChange}
-        sseConnected={sseConnected}
-        sessionPanelOpen={sessionPanelOpen}
-        onTogglePanel={onTogglePanel}
-        hideSessionPanel={hideSessionPanel}
-      />
+      {embedded ? null : (
+        <Header
+          currentSession={currentSession}
+          instances={instances}
+          selectedModelRouteId={selectedModelRouteId}
+          onModelRouteChange={onModelRouteChange}
+          modelRoutes={modelRoutes}
+          reasoningCapability={reasoningCapability}
+          reasoningEffort={reasoningEffort}
+          onReasoningChange={onReasoningChange}
+          sseConnected={sseConnected}
+          sessionPanelOpen={sessionPanelOpen}
+          onTogglePanel={onTogglePanel}
+          hideSessionPanel={hideSessionPanel}
+        />
+      )}
       {readOnly && (
         <div
           style={{
@@ -279,11 +285,18 @@ export default function ChatMain({
             borderBottom: '1px solid #f0f0f0',
           }}
         >
-          {intl.formatMessage({
-            id: 'pages.chat.readOnlyHint',
-            defaultMessage:
-              'Read-only conversation: other users or an internal session',
-          })}
+          {currentSession?.sessionType === SESSION_TYPE.PROJECT_ROUTER &&
+          !currentSession?.parentSessionId
+            ? intl.formatMessage({
+                id: 'pages.chat.projectBaselineReadOnly',
+                defaultMessage:
+                  'The project baseline is read-only. Continue in your own user fork from the project assistant.',
+              })
+            : intl.formatMessage({
+                id: 'pages.chat.readOnlyHint',
+                defaultMessage:
+                  'Read-only conversation: other users or an internal session',
+              })}
         </div>
       )}
       <div className={styles.chatStage}>
@@ -329,7 +342,7 @@ export default function ChatMain({
               <div
                 style={{ padding: 24, color: '#8c8c8c', textAlign: 'center' }}
               >
-                {currentSession?.sessionType === 'GROUP_ROUTER'
+                {currentSession?.sessionType === SESSION_TYPE.GROUP_ROUTER
                   ? intl.formatMessage({
                       id: 'pages.chat.groupRouterEmpty',
                       defaultMessage:

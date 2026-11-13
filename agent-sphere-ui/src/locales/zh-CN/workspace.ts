@@ -347,7 +347,8 @@ export default {
   'workspace.documents.deleteFolderTitle': '删除文件夹「{name}」？',
   'workspace.documents.deleteFolderHint': '请选择如何处理文件夹里的内容。',
   'workspace.documents.deleteFolderMove': '仅删除文件夹，内容移到父文件夹',
-  'workspace.documents.deleteFolderPurge': '删除文件夹及内部全部文档（无法恢复）',
+  'workspace.documents.deleteFolderPurge':
+    '删除文件夹及内部全部文档（无法恢复）',
   'workspace.documents.folderName': '文件夹名称',
   'workspace.documents.folderNameRequired': '请输入文件夹名称',
   'workspace.documents.folderCreated': '文件夹已创建',

@@ -108,7 +108,10 @@ export function DocumentPreviewDrawer({
   useEffect(() => {
     if (!open || !documentId) return;
     void loadComments();
-    const timer = window.setInterval(() => void loadComments(), COMMENT_POLL_MS);
+    const timer = window.setInterval(
+      () => void loadComments(),
+      COMMENT_POLL_MS,
+    );
     return () => window.clearInterval(timer);
   }, [open, documentId]);
 
@@ -166,7 +169,9 @@ export function DocumentPreviewDrawer({
           await agentApi.artifacts.documents.deleteComment(comment.id);
           await loadComments();
         } catch {
-          message.error(tw('documents.commentFailed', 'Failed to post comment'));
+          message.error(
+            tw('documents.commentFailed', 'Failed to post comment'),
+          );
         }
       },
     });
@@ -216,7 +221,9 @@ export function DocumentPreviewDrawer({
             <a onClick={() => void saveEdit(comment)}>
               {tw('common.save', 'Save')}
             </a>
-            <a onClick={() => setEditId(null)}>{tw('common.cancel', 'Cancel')}</a>
+            <a onClick={() => setEditId(null)}>
+              {tw('common.cancel', 'Cancel')}
+            </a>
           </div>
         </div>
       ) : (
@@ -263,7 +270,8 @@ export function DocumentPreviewDrawer({
               </a>
               {!comment.mine ? (
                 <a onClick={() => removeComment(comment)}>
-                  <DeleteOutlined /> {tw('documents.deleteCommentAction', 'Delete')}
+                  <DeleteOutlined />{' '}
+                  {tw('documents.deleteCommentAction', 'Delete')}
                 </a>
               ) : null}
             </>

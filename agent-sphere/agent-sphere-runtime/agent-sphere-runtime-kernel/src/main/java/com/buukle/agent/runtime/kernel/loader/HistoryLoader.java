@@ -6,10 +6,13 @@ import com.buukle.agent.instance.dtvo.vo.AgentLlmInteractionRecordVO;
 import com.buukle.agent.instance.dtvo.vo.AgentToolCallRecordVO;
 import com.buukle.agent.common.config.AgentRuntimeProperties;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
+import com.buukle.agent.instance.dtvo.vo.SessionVO;
 import com.buukle.agent.instance.spi.AgentCompactRecordSpi;
 import com.buukle.agent.instance.spi.AgentLlmInteractionRecordSpi;
 import com.buukle.agent.instance.spi.AgentToolCallRecordSpi;
+import com.buukle.agent.instance.spi.ProjectContextSpi;
 import com.buukle.agent.instance.spi.RunSpi;
+import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessageDTO;
 import com.buukle.agent.model.dtvo.dto.complete.ChatMessagePartDTO;
 import com.buukle.agent.instance.dtvo.enums.RunStatus;
@@ -24,6 +27,8 @@ import com.buukle.agent.util.json.ToolCallReason;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -45,6 +50,17 @@ public class HistoryLoader {
     private final AgentLlmInteractionRecordSpi interactionSpi;
     private final AgentRuntimeProperties agentRuntimeProperties;
     private final com.buukle.agent.runtime.kernel.port.ChatAttachmentResolver attachmentResolver;
+    /**
+     * Optional so the loader can still be constructed in isolation (tests / preview paths);
+     * the runtime context always provides them.
+     */
+    @Autowired
+    private ObjectProvider<SessionSpi> sessionSpiProvider;
+    @Autowired
+    private ObjectProvider<ProjectContextSpi> projectContextSpi;
+
+    /** A fork may chain only a couple of levels; the canonical session has no parent. */
+    private static final int MAX_FORK_DEPTH = 3;
 
     /** Messages + the start index of the current run (-1 = the current run was not loaded this time). */
     public record HistoryResult(List<ChatMessageDTO> messages, int currentRunStart) {
@@ -65,7 +81,19 @@ public class HistoryLoader {
      *                          and only the run-local summary prefix is added here, without replaying the tail.
      */
     public HistoryResult loadResult(Long sessionId, Long excludeRunId, boolean restoreCurrentRun) {
+        return loadResultInternal(sessionId, excludeRunId, restoreCurrentRun, 0);
+    }
+
+    private HistoryResult loadResultInternal(Long sessionId, Long excludeRunId,
+                                             boolean restoreCurrentRun, int depth) {
         List<ChatMessageDTO> messages = new ArrayList<>();
+
+        // A user fork starts from the canonical project-assistant session's history,
+        // then adds its own runs. The shared project context is injected only once below.
+        appendForkParentHistory(messages, sessionId, depth);
+        if (depth == 0) {
+            appendProjectContext(messages, sessionId);
+        }
 
         AgentCompactRecordVO latestCompact = compactRecordSpi.getLatestCompleted(sessionId);
         appendSessionSummary(messages, latestCompact);
@@ -105,6 +133,57 @@ public class HistoryLoader {
         messages.add(new ChatMessageDTO()
                 .setRole(LlmRoles.SYSTEM)
                 .setContent(RunnerConstants.HISTORY_SUMMARY_PREFIX + latestCompact.getSummaryAfter()));
+    }
+
+    /** Prepend the canonical project-assistant history to a user fork. */
+    private void appendForkParentHistory(List<ChatMessageDTO> messages, Long sessionId, int depth) {
+        if (depth >= MAX_FORK_DEPTH) {
+            return;
+        }
+        SessionVO session = safeSession(sessionId);
+        if (session == null || session.getParentSessionId() == null) {
+            return;
+        }
+        HistoryResult parent = loadResultInternal(
+                session.getParentSessionId(), null, false, depth + 1);
+        messages.addAll(parent.messages());
+    }
+
+    private SessionVO safeSession(Long sessionId) {
+        if (sessionId == null || sessionSpiProvider == null) {
+            return null;
+        }
+        SessionSpi sessionSpi = sessionSpiProvider.getIfAvailable();
+        if (sessionSpi == null) {
+            return null;
+        }
+        try {
+            return sessionSpi.getSessionShared(sessionId);
+        } catch (Exception e) {
+            log.debug("History parent session {} not readable: {}", sessionId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** Shared project context: project/requirement changes, comments, and assistant writes. */
+    private void appendProjectContext(List<ChatMessageDTO> messages, Long sessionId) {
+        if (projectContextSpi == null) {
+            return;
+        }
+        ProjectContextSpi spi = projectContextSpi.getIfAvailable();
+        if (spi == null) {
+            return;
+        }
+        try {
+            String context = spi.buildContext(sessionId);
+            if (context != null && !context.isBlank()) {
+                messages.add(new ChatMessageDTO()
+                        .setRole(LlmRoles.SYSTEM)
+                        .setContent(context));
+            }
+        } catch (Exception e) {
+            log.warn("Project context load failed for session {}: {}", sessionId, e.getMessage());
+        }
     }
 
     /**

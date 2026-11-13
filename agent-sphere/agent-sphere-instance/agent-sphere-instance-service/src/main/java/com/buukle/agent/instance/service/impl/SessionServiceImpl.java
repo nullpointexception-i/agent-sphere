@@ -47,7 +47,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
 
     @Override
     public SessionVO createSession(CreateSessionDTO dto) {
-        AgentInstance instance = instanceMapper.selectById(dto.getAgentInstanceId());
+        AgentInstance instance = loadInstanceShared(dto.getAgentInstanceId());
         if (instance == null) {
             throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
         }
@@ -76,6 +76,39 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         SessionVO vo = sessionConverter.toVO(session);
         fillInstanceNames(List.of(vo));
         return vo;
+    }
+
+    @Override
+    public SessionVO getSessionShared(Long id) {
+        TenantScope previous = TenantScopeHolder.get();
+        try {
+            TenantScopeHolder.clear();
+            return getSession(id);
+        } finally {
+            if (previous == null) {
+                TenantScopeHolder.clear();
+            } else {
+                TenantScopeHolder.start(previous);
+            }
+        }
+    }
+
+    /** Tenant-level instances may be created by 'system' or another admin. */
+    private AgentInstance loadInstanceShared(Long instanceId) {
+        if (instanceId == null) {
+            return null;
+        }
+        TenantScope previous = TenantScopeHolder.get();
+        try {
+            TenantScopeHolder.clear();
+            return instanceMapper.selectById(instanceId);
+        } finally {
+            if (previous == null) {
+                TenantScopeHolder.clear();
+            } else {
+                TenantScopeHolder.start(previous);
+            }
+        }
     }
 
     @Override
@@ -144,14 +177,21 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
             }
             var query = lambdaQuery()
                     .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
-                    .isNull(AgentSession::getParentSessionId)
                     .like(keyword != null && !keyword.isBlank(), AgentSession::getTitle, keyword);
-            if (tenantScope || groupScope) {
-                query.eq(AgentSession::getSessionType, SessionType.GROUP_ROUTER);
-                if (groupScope) {
-                    query.eq(AgentSession::getCreatedBy, username);
-                }
+            if (tenantScope) {
+                // Tenant conversations include group chats and the tenant-owned project assistant:
+                // its canonical baseline plus every user fork (forks have a parent session).
+                query.and(w -> w
+                        .eq(AgentSession::getSessionType, SessionType.GROUP_ROUTER)
+                        .isNull(AgentSession::getParentSessionId)
+                        .or()
+                        .eq(AgentSession::getSessionType, SessionType.PROJECT_ROUTER));
+            } else if (groupScope) {
+                query.eq(AgentSession::getSessionType, SessionType.GROUP_ROUTER)
+                        .isNull(AgentSession::getParentSessionId)
+                        .eq(AgentSession::getCreatedBy, username);
             } else {
+                query.isNull(AgentSession::getParentSessionId);
                 // Legacy rows may have a null session_type; they are console conversations.
                 query.and(w -> w.in(AgentSession::getSessionType, sessionTypes)
                         .or().isNull(AgentSession::getSessionType));
@@ -182,7 +222,8 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
         SessionVO vo = sessionConverter.toVO(session);
         if (vo != null) {
             vo.setReadOnly(!SessionAccessPolicy.canWrite(
-                    session.getTenantId(), session.getCreatedBy(), session.getSessionType()));
+                    session.getTenantId(), session.getCreatedBy(), session.getSessionType(),
+                    session.getParentSessionId()));
         }
         return vo;
     }
@@ -269,6 +310,55 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
     }
 
     @Override
+    public SessionVO findProjectRouterSession(Long threadId, String createdBy) {
+        if (threadId == null || createdBy == null || createdBy.isBlank()) {
+            return null;
+        }
+        AgentSession session = lambdaQuery()
+                .eq(AgentSession::getThreadId, threadId)
+                .eq(AgentSession::getCreatedBy, createdBy)
+                .eq(AgentSession::getSessionType, SessionType.PROJECT_ROUTER)
+                .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
+                .orderByDesc(AgentSession::getId)
+                .last("LIMIT 1")
+                .one();
+        return session == null ? null : sessionConverter.toVO(session);
+    }
+
+    @Override
+    public SessionVO findProjectForkSession(Long threadId, String createdBy, Long parentSessionId) {
+        if (threadId == null || createdBy == null || createdBy.isBlank() || parentSessionId == null) {
+            return null;
+        }
+        AgentSession session = lambdaQuery()
+                .eq(AgentSession::getThreadId, threadId)
+                .eq(AgentSession::getCreatedBy, createdBy)
+                .eq(AgentSession::getSessionType, SessionType.PROJECT_ROUTER)
+                .eq(AgentSession::getParentSessionId, parentSessionId)
+                .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
+                .orderByDesc(AgentSession::getId)
+                .last("LIMIT 1")
+                .one();
+        return session == null ? null : sessionConverter.toVO(session);
+    }
+
+    @Override
+    public SessionVO findProjectCanonicalSession(Long threadId) {
+        if (threadId == null) {
+            return null;
+        }
+        AgentSession session = lambdaQuery()
+                .eq(AgentSession::getThreadId, threadId)
+                .eq(AgentSession::getSessionType, SessionType.PROJECT_ROUTER)
+                .isNull(AgentSession::getParentSessionId)
+                .eq(AgentSession::getStatus, SessionStatus.STATUS_ACTIVE)
+                .orderByAsc(AgentSession::getId)
+                .last("LIMIT 1")
+                .one();
+        return session == null ? null : sessionConverter.toVO(session);
+    }
+
+    @Override
     public void closeSession(Long id) {
         AgentSession session = getById(id);
         if (session == null) throw new BizException(InstanceErrorCode.SESSION_NOT_FOUND);
@@ -344,7 +434,7 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, AgentSession>
                 && AuthContext.getUsername().equals(session.getCreatedBy())) {
             return;
         }
-        AgentInstance instance = instanceMapper.selectById(session.getAgentInstanceId());
+        AgentInstance instance = loadInstanceShared(session.getAgentInstanceId());
         if (instance == null) {
             throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
         }

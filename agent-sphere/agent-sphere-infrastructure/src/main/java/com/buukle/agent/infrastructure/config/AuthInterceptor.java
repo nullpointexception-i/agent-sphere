@@ -8,6 +8,7 @@ import com.buukle.agent.common.constant.ApiPaths;
 import com.buukle.agent.common.constant.HttpHeaders;import com.buukle.agent.admin.spi.PermissionSpi;
 import com.buukle.agent.admin.spi.TenantScopeSpi;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.LocaleContext;
 import com.buukle.agent.common.context.SessionSurfaceHolder;
 import com.buukle.agent.common.context.SessionSurfaceResolver;
 import com.buukle.agent.common.context.TenantContext;
@@ -102,6 +103,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         AuthContext.setUserId(user.getId());
         AuthContext.setUsername(user.getUsername());
         AuthContext.setDisplayName(user.getDisplayName());
+        LocaleContext.set(request.getHeader("Accept-Language"));
         boolean isSuperAdmin = UserEnum.IS_SUPER_ADMIN.equals(user.getSuperAdmin());
         AuthContext.setSuperAdmin(isSuperAdmin);
 
@@ -153,6 +155,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         TenantScopeHolder.clear();
         TenantUtil.stop();
         TenantContext.clear();
+        LocaleContext.clear();
         AuthContext.clear();
         // The Tomcat thread pool reuses threads: not clearing leaks this request's client surface into the next one
         SessionSurfaceHolder.clear();

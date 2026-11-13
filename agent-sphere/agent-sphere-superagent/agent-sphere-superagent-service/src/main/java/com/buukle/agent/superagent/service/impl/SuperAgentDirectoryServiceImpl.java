@@ -6,6 +6,7 @@ import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.superagent.domain.AgentSuperAgent;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
+import com.buukle.agent.superagent.spi.AvatarInfo;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import lombok.RequiredArgsConstructor;
@@ -90,6 +91,38 @@ public class SuperAgentDirectoryServiceImpl implements SuperAgentDirectorySpi {
                     agent.getOwnerUserId(), agent.getStatus()));
         }
         return result;
+    }
+
+    @Override
+    public List<ChatAgentIdentity> listActiveOwnedBy(Long ownerUserId) {
+        if (ownerUserId == null) {
+            return List.of();
+        }
+        List<AgentSuperAgent> agents = superAgentMapper.selectList(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<AgentSuperAgent>lambdaQuery()
+                        .eq(AgentSuperAgent::getOwnerUserId, ownerUserId)
+                        .eq(AgentSuperAgent::getStatus, SuperAgentStatus.ACTIVE)
+                        .orderByAsc(AgentSuperAgent::getId));
+        List<ChatAgentIdentity> result = new ArrayList<>(agents.size());
+        for (AgentSuperAgent agent : agents) {
+            result.add(new ChatAgentIdentity(agent.getId(), agent.getName(),
+                    agent.getOwnerUserId(), agent.getStatus()));
+        }
+        return result;
+    }
+
+    @Override
+    public AvatarInfo findAvatar(Long agentId) {
+        if (agentId == null) {
+            return null;
+        }
+        AgentSuperAgent agent = superAgentMapper.selectById(agentId);
+        if (agent == null) {
+            return null;
+        }
+        return new AvatarInfo(agent.getId(), agent.getName(), agent.getOwnerUserId(), agent.getStatus(),
+                Boolean.TRUE.equals(agent.getPublicVisible()), agent.getRouterInstanceId(),
+                agent.getWorkerInstanceId());
     }
 
     @Override

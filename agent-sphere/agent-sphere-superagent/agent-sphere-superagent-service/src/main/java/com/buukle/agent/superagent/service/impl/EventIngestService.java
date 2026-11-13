@@ -22,6 +22,7 @@ import com.buukle.agent.superagent.repository.AgentThreadSubscriptionMapper;
 import com.buukle.agent.superagent.service.event.AgentDeliveryCreatedEvent;
 import com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent;
 import com.buukle.agent.superagent.service.event.GroupRouterWakeEvent;
+import com.buukle.agent.superagent.spi.ImEventMetaKeys;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -199,7 +200,7 @@ public class EventIngestService implements EventIngestPort {
                 return Set.of();
             }
             JsonNode meta = JsonUtils.getMapper().readTree(raw.asText());
-            JsonNode ids = meta == null ? null : meta.get("agentIds");
+            JsonNode ids = meta == null ? null : meta.get(ImEventMetaKeys.AGENT_IDS);
             if (ids == null || !ids.isArray()) {
                 return Set.of();
             }

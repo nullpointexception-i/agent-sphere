@@ -23,6 +23,8 @@ import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.EntityAccessGuard;
+import com.buukle.agent.superagent.spi.EntityAgentDirectorySpi;
 import com.buukle.agent.superagent.spi.GroupChatBootstrapSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
@@ -83,6 +85,10 @@ class ConversationRevealTest {
     @Mock
     ObjectProvider<GroupChatBootstrapSpi> bootstrapProvider;
     @Mock
+    ObjectProvider<EntityAccessGuard> entityAccessGuardProvider;
+    @Mock
+    ObjectProvider<EntityAgentDirectorySpi> entityAgentDirectoryProvider;
+    @Mock
     SuperAgentDirectorySpi directory;
 
     private ImConversationServiceImpl service;
@@ -103,7 +109,8 @@ class ConversationRevealTest {
         service = new ImConversationServiceImpl(
                 conversationMapper, participantMapper, messageMapper, readCursorMapper,
                 settingMapper, userSpi, ssoIdentitySpi, streamService,
-                directoryProvider, bootstrapProvider);
+                directoryProvider, bootstrapProvider, entityAccessGuardProvider,
+                entityAgentDirectoryProvider);
         AuthContext.setUserId(USER_ID);
         AuthContext.setUsername("alice");
         given(directoryProvider.getIfAvailable()).willReturn(directory);

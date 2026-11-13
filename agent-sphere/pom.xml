@@ -28,6 +28,8 @@
         <module>agent-sphere-channel-spi</module>
         <module>agent-sphere-im</module>
         <module>agent-sphere-superagent</module>
+        <module>agent-sphere-application</module>
+        <module>agent-sphere-project</module>
         <module>agent-sphere-resource-template</module>
         <module>agent-sphere-bootstrap</module>
     </modules>
@@ -416,6 +418,61 @@
             <dependency>
                 <groupId>com.buukle.agent</groupId>
                 <artifactId>agent-sphere-completions-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-application-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-application-dtvo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-application-repository</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-application-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-application-controller</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-project-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-project-dtvo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-project-repository</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-project-spi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-project-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.buukle.agent</groupId>
+                <artifactId>agent-sphere-project-controller</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

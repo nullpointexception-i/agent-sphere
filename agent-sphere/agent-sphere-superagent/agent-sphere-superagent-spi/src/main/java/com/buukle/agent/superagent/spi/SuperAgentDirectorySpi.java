@@ -29,6 +29,12 @@ public interface SuperAgentDirectorySpi {
      */
     List<ChatAgentIdentity> listPublicByOwners(Collection<Long> ownerUserIds);
 
+    /** All ACTIVE avatars owned by one user (including private ones). */
+    List<ChatAgentIdentity> listActiveOwnedBy(Long ownerUserId);
+
+    /** Full avatar record used by project consultation/dispatch. */
+    AvatarInfo findAvatar(Long agentId);
+
     /**
      * Owner user id of each agent, keyed by agent id. Used by the IM UI to nest
      * avatars under the member who owns them.

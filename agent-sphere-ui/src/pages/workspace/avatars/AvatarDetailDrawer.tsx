@@ -1,24 +1,12 @@
 import { CloseOutlined } from '@ant-design/icons';
-import {
-  App,
-  Avatar,
-  Button,
-  Drawer,
-  Form,
-  Input,
-  Select,
-  Switch,
-} from 'antd';
+import { App, Avatar, Button, Drawer, Form, Input, Select, Switch } from 'antd';
 import { useEffect, useState } from 'react';
+import { STATUS, SUPER_AGENT_STATUS_CODE } from '@/constants/status';
+import { imApi } from '@/services/agentSphere/im';
 import {
   type SuperAgent,
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
-import { imApi } from '@/services/agentSphere/im';
-import {
-  STATUS,
-  SUPER_AGENT_STATUS_CODE,
-} from '@/constants/status';
 import { fullTime, positionLabel, statusLabel } from '../conversationModel';
 import { tw } from '../i18n';
 import { avatarStyle, initials } from '../shared';
@@ -237,8 +225,7 @@ export function AvatarDetailDrawer({
                 {tw('avatars.position', 'Role')}
               </div>
               <span className={styles.avatarRoleTag}>
-                {positionLabel(agent) ||
-                  tw('avatars.positionUnset', 'Not set')}
+                {positionLabel(agent) || tw('avatars.positionUnset', 'Not set')}
               </span>
             </div>
 

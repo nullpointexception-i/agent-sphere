@@ -4,6 +4,8 @@ import com.buukle.agent.common.context.TenantScopeHolder;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.context.AuthContext;
+import com.buukle.agent.common.context.LocaleContext;
+import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
@@ -14,9 +16,11 @@ import com.buukle.agent.im.domain.ImParticipant;
 import com.buukle.agent.im.domain.ImReadCursor;
 import com.buukle.agent.im.dtvo.dto.AddParticipantDTO;
 import com.buukle.agent.im.dtvo.dto.CreateConversationDTO;
+import com.buukle.agent.im.dtvo.dto.EntityConversationDTO;
 import com.buukle.agent.im.dtvo.dto.ImGateConfig;
 import com.buukle.agent.im.dtvo.dto.MarkReadDTO;
 import com.buukle.agent.im.dtvo.dto.UpdateConversationSettingDTO;
+import com.buukle.agent.im.dtvo.enums.ConversationAgentSource;
 import com.buukle.agent.im.dtvo.enums.ImConversationStatus;
 import com.buukle.agent.im.dtvo.enums.ImConversationType;
 import com.buukle.agent.im.dtvo.enums.ImStreamEventType;
@@ -44,6 +48,10 @@ import com.buukle.agent.sso.spi.SsoIdentitySpi;
 import com.buukle.agent.sso.spi.SsoUserLabelVO;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.EntityAccessGuard;
+import com.buukle.agent.superagent.spi.EntityAgentDirectorySpi;
+import com.buukle.agent.superagent.spi.EntityConversationPurpose;
+import com.buukle.agent.superagent.spi.EntityTypes;
 import com.buukle.agent.superagent.spi.GroupChatBootstrapSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import com.buukle.agent.util.json.JsonUtils;
@@ -60,6 +68,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +86,13 @@ public class ImConversationServiceImpl implements ImConversationService {
     private static final int DEFAULT_PAGE_SIZE = 50;
     private static final int MAX_PAGE_SIZE = 100;
     private static final String CURSOR_SEPARATOR = "|";
+    private static final Set<String> ENTITY_BIZ_TYPES = Set.of(
+            EntityTypes.PROJECT, EntityTypes.REQUIREMENT,
+            EntityTypes.APPLICATION, EntityTypes.APPLICATION_RUN);
+    private static final Set<String> ENTITY_BIZ_PURPOSES = Set.of(
+            EntityConversationPurpose.DISCUSSION,
+            EntityConversationPurpose.CHAT,
+            EntityConversationPurpose.RUN);
 
     private final ImConversationMapper conversationMapper;
     private final ImParticipantMapper participantMapper;
@@ -88,6 +104,8 @@ public class ImConversationServiceImpl implements ImConversationService {
     private final ImStreamService streamService;
     private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
     private final ObjectProvider<GroupChatBootstrapSpi> groupChatBootstrapProvider;
+    private final ObjectProvider<EntityAccessGuard> entityAccessGuardProvider;
+    private final ObjectProvider<EntityAgentDirectorySpi> entityAgentDirectoryProvider;
 
     @Override
     @Transactional
@@ -477,6 +495,7 @@ public class ImConversationServiceImpl implements ImConversationService {
     public List<ConversationAgentVO> agents(Long conversationId) {
         assertMember(conversationId, currentUserId());
         ImConversation conversation = requireConversation(conversationId);
+        Map<Long, ConversationAgentVO> merged = new LinkedHashMap<>();
         if (ImConversationType.GROUP.equals(conversation.getType())) {
             List<Long> memberIds = systemRead(() -> participantMapper.selectList(
                             Wrappers.<ImParticipant>lambdaQuery()
@@ -487,32 +506,74 @@ public class ImConversationServiceImpl implements ImConversationService {
                     .filter(Objects::nonNull)
                     .distinct()
                     .toList();
-            if (memberIds.isEmpty()) {
-                return List.of();
+            if (!memberIds.isEmpty()) {
+                for (ChatAgentIdentity identity : requireDirectory().listPublicByOwners(memberIds)) {
+                    putAgent(merged, identity.agentId(), identity.name(), identity.ownerUserId(),
+                            identity.status(), ConversationAgentSource.MEMBER_PUBLIC);
+                }
             }
-            return requireDirectory().listPublicByOwners(memberIds).stream()
-                    .map(identity -> {
-                        ConversationAgentVO vo = new ConversationAgentVO();
-                        vo.setParticipantId(identity.agentId());
-                        vo.setDisplayName(identity.name());
-                        vo.setOwnerUserId(identity.ownerUserId());
-                        vo.setStatus(identity.status());
-                        return vo;
-                    })
-                    .toList();
+        } else {
+            List<ImParticipant> agentRows = systemRead(() -> participantMapper.selectList(
+                    Wrappers.<ImParticipant>lambdaQuery()
+                            .eq(ImParticipant::getConversationId, conversationId)
+                            .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)));
+            Map<Long, Long> owners = agentOwnersOf(agentRows);
+            for (ImParticipant row : agentRows) {
+                putAgent(merged, row.getParticipantId(), row.getDisplayName(),
+                        owners.get(row.getParticipantId()), null,
+                        ConversationAgentSource.PARTICIPANT);
+            }
         }
-        List<ImParticipant> agentRows = systemRead(() -> participantMapper.selectList(
-                Wrappers.<ImParticipant>lambdaQuery()
-                        .eq(ImParticipant::getConversationId, conversationId)
-                        .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)));
-        Map<Long, Long> owners = agentOwnersOf(agentRows);
-        return agentRows.stream().map(row -> {
-            ConversationAgentVO vo = new ConversationAgentVO();
-            vo.setParticipantId(row.getParticipantId());
-            vo.setDisplayName(row.getDisplayName());
-            vo.setOwnerUserId(owners.get(row.getParticipantId()));
-            return vo;
-        }).toList();
+        addEntityBoundAgents(merged, conversation);
+        return new ArrayList<>(merged.values());
+    }
+
+    /**
+     * Entity-bound avatars are merged into the same list so the mention picker
+     * shows one catalogue instead of asking the UI to call two endpoints.
+     */
+    private void addEntityBoundAgents(Map<Long, ConversationAgentVO> merged,
+                                      ImConversation conversation) {
+        if (conversation == null || conversation.getBizType() == null
+                || conversation.getBizId() == null) {
+            return;
+        }
+        EntityAgentDirectorySpi entityDirectory = entityAgentDirectoryProvider.getIfAvailable();
+        if (entityDirectory == null) {
+            return;
+        }
+        List<Long> boundIds = entityDirectory.listBoundAgentIds(
+                conversation.getBizType(), conversation.getBizId(), currentUserId());
+        List<Long> missing = boundIds.stream()
+                .filter(id -> id != null && !merged.containsKey(id))
+                .distinct()
+                .toList();
+        if (missing.isEmpty()) {
+            return;
+        }
+        Map<Long, ChatAgentIdentity> identities = requireDirectory().findByIds(missing);
+        for (Long agentId : missing) {
+            ChatAgentIdentity identity = identities.get(agentId);
+            putAgent(merged, agentId,
+                    identity == null ? null : identity.name(),
+                    identity == null ? null : identity.ownerUserId(),
+                    identity == null ? null : identity.status(),
+                    ConversationAgentSource.ENTITY_BINDING);
+        }
+    }
+
+    private void putAgent(Map<Long, ConversationAgentVO> merged, Long agentId,
+                          String displayName, Long ownerUserId, String status, String source) {
+        if (agentId == null || merged.containsKey(agentId)) {
+            return;
+        }
+        ConversationAgentVO vo = new ConversationAgentVO();
+        vo.setParticipantId(agentId);
+        vo.setDisplayName(displayName);
+        vo.setOwnerUserId(ownerUserId);
+        vo.setStatus(status);
+        vo.setSource(source);
+        merged.put(agentId, vo);
     }
 
     @Override
@@ -798,6 +859,99 @@ public class ImConversationServiceImpl implements ImConversationService {
 
     @Override
     @Transactional
+    public ConversationVO ensureEntityConversation(EntityConversationDTO dto) {
+        String bizType = normalizeEnum(dto.getBizType());
+        String bizPurpose = normalizeEnum(dto.getBizPurpose());
+        if (!ENTITY_BIZ_TYPES.contains(bizType) || !ENTITY_BIZ_PURPOSES.contains(bizPurpose)) {
+            throw new BizException(CommonErrorCode.PARAM_INVALID, "unsupported entity conversation");
+        }
+        assertEntityAccess(bizType, dto.getBizId(), currentUserId());
+        ConversationVO existing = findEntityConversation(dto);
+        if (existing != null) {
+            ensureEntityParticipant(existing.getId(), currentUserId());
+            return existing;
+        }
+        Long userId = currentUserId();
+        Long tenantId = TenantContext.get() == null ? 0L : TenantContext.get();
+        ImConversation conversation = new ImConversation();
+        conversation.setType(ImConversationType.GROUP);
+        conversation.setPurpose(bizPurpose);
+        conversation.setBizType(bizType);
+        conversation.setBizId(dto.getBizId());
+        conversation.setBizPurpose(bizPurpose);
+        conversation.setBizKey(bizType.toLowerCase() + ":" + dto.getBizId() + ":"
+                + bizPurpose.toLowerCase());
+        conversation.setLocale(LocaleContext.get());
+        conversation.setOwnerUserId(EntityTypes.APPLICATION.equals(bizType) ? userId : null);
+        conversation.setLastSeq(0L);
+        conversation.setStatus(ImConversationStatus.ACTIVE);
+        conversation.setTenantId(tenantId);
+        try {
+            conversationMapper.insert(conversation);
+        } catch (DuplicateKeyException duplicate) {
+            ConversationVO concurrent = findEntityConversation(dto);
+            if (concurrent != null) {
+                ensureEntityParticipant(concurrent.getId(), userId);
+                return concurrent;
+            }
+            throw duplicate;
+        }
+        ensureEntityParticipant(conversation.getId(), userId);
+        return toVO(conversation, userId);
+    }
+
+    /**
+     * Entity conversations are shared by every user who can see the entity, so
+     * membership is added lazily and idempotently instead of at creation time
+     * only.
+     */
+    private void ensureEntityParticipant(Long conversationId, Long userId) {
+        long exists = systemRead(() -> participantMapper.selectCount(
+                Wrappers.<ImParticipant>lambdaQuery()
+                        .eq(ImParticipant::getConversationId, conversationId)
+                        .eq(ImParticipant::getParticipantType, ImParticipantType.USER)
+                        .eq(ImParticipant::getParticipantId, userId)));
+        if (exists == 0) {
+            addParticipantInternal(conversationId, userId, ImParticipantType.USER,
+                    ImParticipantRole.OWNER, displayName());
+        }
+    }
+
+    @Override
+    public ConversationVO findEntityConversation(EntityConversationDTO dto) {
+        String bizType = normalizeEnum(dto.getBizType());
+        String bizPurpose = normalizeEnum(dto.getBizPurpose());
+        Long tenantId = TenantContext.get() == null ? 0L : TenantContext.get();
+        assertEntityAccess(bizType, dto.getBizId(), currentUserId());
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ImConversation> wrapper =
+                Wrappers.<ImConversation>lambdaQuery()
+                        .eq(ImConversation::getTenantId, tenantId)
+                        .eq(ImConversation::getBizType, bizType)
+                        .eq(ImConversation::getBizId, dto.getBizId())
+                        .eq(ImConversation::getBizPurpose, bizPurpose)
+                        .last("limit 1");
+        if (EntityTypes.APPLICATION.equals(bizType)) {
+            wrapper.eq(ImConversation::getOwnerUserId, currentUserId());
+        } else {
+            wrapper.isNull(ImConversation::getOwnerUserId);
+        }
+        ImConversation conversation = conversationMapper.selectOne(wrapper);
+        return conversation == null ? null : toVO(conversation, currentUserId());
+    }
+
+    private String normalizeEnum(String value) {
+        return value == null ? "" : value.trim().toUpperCase();
+    }
+
+    private void assertEntityAccess(String entityType, Long entityId, Long userId) {
+        entityAccessGuardProvider.orderedStream()
+                .filter(guard -> guard.supports(entityType))
+                .findFirst()
+                .ifPresent(guard -> guard.assertCanView(entityType, entityId, userId));
+    }
+
+    @Override
+    @Transactional
     public ConversationVO createAgentDm(Long agentId) {
         Long userId = currentUserId();
         SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
@@ -956,6 +1110,11 @@ public class ImConversationServiceImpl implements ImConversationService {
         vo.setType(conversation.getType());
         vo.setTitle(conversation.getTitle());
         vo.setPurpose(conversation.getPurpose());
+        vo.setBizType(conversation.getBizType());
+        vo.setBizId(conversation.getBizId());
+        vo.setBizPurpose(conversation.getBizPurpose());
+        vo.setBizKey(conversation.getBizKey());
+        vo.setLocale(conversation.getLocale());
         vo.setOwnerUserId(conversation.getOwnerUserId());
         vo.setThreadId(conversation.getThreadId());
         vo.setLastSeq(conversation.getLastSeq());

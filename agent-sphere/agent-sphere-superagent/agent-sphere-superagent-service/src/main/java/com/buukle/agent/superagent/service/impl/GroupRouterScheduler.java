@@ -37,6 +37,7 @@ import com.buukle.agent.superagent.service.event.AgentDeliveryReadyEvent;
 import com.buukle.agent.superagent.spi.GroupRouterRunCommand;
 import com.buukle.agent.superagent.spi.GroupRouterRunPort;
 import com.buukle.agent.superagent.spi.GroupRouterRunResult;
+import com.buukle.agent.superagent.spi.ImEventMetaKeys;
 import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
@@ -400,7 +401,7 @@ public class GroupRouterScheduler {
             if (meta == null) {
                 continue;
             }
-            JsonNode agentIds = meta.get("agentIds");
+            JsonNode agentIds = meta.get(ImEventMetaKeys.AGENT_IDS);
             if (agentIds != null && agentIds.isArray()) {
                 for (JsonNode id : agentIds) {
                     if (id.isNumber()) {

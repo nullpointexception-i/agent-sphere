@@ -212,3 +212,5 @@ export function useMentionSuggest({
     handleKeyDown,
   };
 }
+
+export type MentionSuggestController = ReturnType<typeof useMentionSuggest>;

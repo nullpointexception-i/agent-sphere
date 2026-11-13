@@ -367,9 +367,12 @@ export default {
   'workspace.documents.rootFolder': 'Root',
   'workspace.documents.deleteFolder': 'Delete folder',
   'workspace.documents.deleteFolderTitle': 'Delete folder "{name}"?',
-  'workspace.documents.deleteFolderHint': 'Choose what to do with the documents inside.',
-  'workspace.documents.deleteFolderMove': 'Delete the folder only; move contents to its parent',
-  'workspace.documents.deleteFolderPurge': 'Delete the folder and all documents inside (cannot be undone)',
+  'workspace.documents.deleteFolderHint':
+    'Choose what to do with the documents inside.',
+  'workspace.documents.deleteFolderMove':
+    'Delete the folder only; move contents to its parent',
+  'workspace.documents.deleteFolderPurge':
+    'Delete the folder and all documents inside (cannot be undone)',
   'workspace.documents.folderName': 'Folder name',
   'workspace.documents.folderNameRequired': 'Enter a folder name',
   'workspace.documents.folderCreated': 'Folder created',
@@ -398,7 +401,8 @@ export default {
   'workspace.documents.toc': 'Contents',
   'workspace.documents.tocEmpty': 'No headings',
   'workspace.documents.emptyFolder': 'No pages in this folder',
-  'workspace.documents.selectPage': 'Select a page from the left to start reading',
+  'workspace.documents.selectPage':
+    'Select a page from the left to start reading',
   'workspace.documents.searchResults': 'Results for "{keyword}"',
   'workspace.documents.searchEmpty': 'No matching pages',
 

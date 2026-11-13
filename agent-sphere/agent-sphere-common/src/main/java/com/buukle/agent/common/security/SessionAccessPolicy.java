@@ -18,7 +18,8 @@ import java.util.Set;
  *   <li>{@link #canRead} — tenant administrators may read every session in their visible
  *       tenants; ordinary users only their own, regardless of tenant visibility level.</li>
  *   <li>{@link #canWrite} — only the creator (or a platform super admin) may operate a session;
- *       internal sessions (router / worker / group router) are always read-only.</li>
+ *       internal sessions (router / worker / group router) are always read-only, and a project
+ *       assistant baseline is writable only by the runtime/analysis path.</li>
  * </ul>
  */
 public final class SessionAccessPolicy {
@@ -44,7 +45,25 @@ public final class SessionAccessPolicy {
         return isOwner(createdBy);
     }
 
+    /**
+     * Write check when the caller only has the session type.
+     *
+     * <p>A project router without its parent id is treated as a baseline and is therefore read-only;
+     * callers that have a {@code SessionVO} must use the overload with {@code parentSessionId} so a
+     * user fork remains writable by its owner.
+     */
     public static boolean canWrite(Long tenantId, String createdBy, String sessionType) {
+        return canWrite(tenantId, createdBy, sessionType, null);
+    }
+
+    public static boolean canWrite(Long tenantId, String createdBy, String sessionType,
+                                   Long parentSessionId) {
+        if (isCanonicalProjectRouter(sessionType, parentSessionId)) {
+            // The tenant-level project baseline is refreshed by the runtime, never edited from
+            // the console. HTTP callers always run on CONSOLE/WIDGET, so this only opens the
+            // internal analysis path.
+            return systemSurface();
+        }
         if (isInternal(sessionType)) {
             // Internal sessions are read-only from the console; only system/runtime callers may run them.
             return AuthContext.isSuperAdmin() && systemSurface();
@@ -61,6 +80,11 @@ public final class SessionAccessPolicy {
 
     public static boolean isInternal(String sessionType) {
         return sessionType != null && INTERNAL_SESSION_TYPES.contains(sessionType);
+    }
+
+    /** A project assistant baseline is the canonical session (no parent) of a project. */
+    public static boolean isCanonicalProjectRouter(String sessionType, Long parentSessionId) {
+        return SessionTypeCodes.PROJECT_ROUTER.equals(sessionType) && parentSessionId == null;
     }
 
     public static boolean isTenantAdmin() {

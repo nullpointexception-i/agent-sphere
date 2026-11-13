@@ -25,6 +25,11 @@ export interface ImConversation {
   purpose?: string;
   ownerUserId?: number;
   threadId?: number;
+  bizType?: string;
+  bizId?: number;
+  bizPurpose?: string;
+  bizKey?: string;
+  locale?: string;
   lastSeq?: number;
   unread?: number;
   lastMessageAt?: string;
@@ -130,6 +135,23 @@ export const imApi = {
   }) => request<ImConversationPage>(`${BASE}/im/conversations`, { params }),
   conversation: (id: number) =>
     request<ImConversation>(`${BASE}/im/conversations/${id}`),
+  ensureEntityConversation: (data: {
+    bizType: string;
+    bizId: number;
+    bizPurpose: string;
+  }) =>
+    request<ImConversation>(`${BASE}/im/conversations/entity`, {
+      method: 'POST',
+      data,
+    }),
+  findEntityConversation: (params: {
+    bizType: string;
+    bizId: number;
+    bizPurpose: string;
+  }) =>
+    request<ImConversation | null>(`${BASE}/im/conversations/entity`, {
+      params,
+    }),
   createConversation: (data: CreateConversationInput) =>
     request<ImConversation>(`${BASE}/im/conversations`, {
       method: 'POST',

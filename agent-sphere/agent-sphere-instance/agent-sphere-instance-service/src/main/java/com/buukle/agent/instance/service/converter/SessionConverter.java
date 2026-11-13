@@ -25,6 +25,7 @@ public class SessionConverter {
         vo.setSessionType(session.getSessionType());
         vo.setSuperAgentId(session.getSuperAgentId());
         vo.setThreadId(session.getThreadId());
+        vo.setContextData(session.getContextData());
         vo.setParentSessionId(session.getParentSessionId());
         vo.setForkKind(session.getForkKind());
         vo.setForkState(session.getForkState());
@@ -51,6 +52,7 @@ public class SessionConverter {
                 : dto.getSessionType().toUpperCase());
         session.setSuperAgentId(dto.getSuperAgentId());
         session.setThreadId(dto.getThreadId());
+        session.setContextData(dto.getContextData());
         session.setParentSessionId(dto.getParentSessionId());
         session.setForkKind(dto.getForkKind());
         session.setForkState(dto.getForkState());

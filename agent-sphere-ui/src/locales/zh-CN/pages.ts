@@ -656,6 +656,10 @@ export default {
   'pages.chat.userConversations': '用户对话',
   'pages.chat.groupConversations': '群聊',
   'pages.chat.tenantConversations': '租户对话',
+  'pages.chat.projectBaseline': '项目基线',
+  'pages.chat.projectFork': '用户分支',
+  'pages.chat.projectBaselineReadOnly':
+    '项目基线为只读会话；请在项目助手中使用自己的用户分支继续对话',
   'pages.chat.readOnlyHint': '只读会话：该会话属于其他用户或为内部会话',
   'pages.chat.groupRouterEmpty':
     '该群暂无路由批次。@成员的消息由系统直接投递，不经过 Group Router。',

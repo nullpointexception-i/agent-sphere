@@ -18,9 +18,14 @@ function folder(
 describe('wiki model', () => {
   it('extracts h1-h3 headings outside code fences', () => {
     const toc = extractToc(
-      ['# Intro', '## Details', '```', '# not a heading', '```', '### Deep'].join(
-        '\n',
-      ),
+      [
+        '# Intro',
+        '## Details',
+        '```',
+        '# not a heading',
+        '```',
+        '### Deep',
+      ].join('\n'),
     );
     expect(toc.map((item) => [item.level, item.text])).toEqual([
       [1, 'Intro'],
@@ -40,7 +45,11 @@ describe('wiki model', () => {
   });
 
   it('resolves the breadcrumb path', () => {
-    const folders = [folder(1, 'Root'), folder(2, 'Child', 1), folder(3, 'Leaf', 2)];
+    const folders = [
+      folder(1, 'Root'),
+      folder(2, 'Child', 1),
+      folder(3, 'Leaf', 2),
+    ];
     expect(folderPath(folders, 3).map((item) => item.name)).toEqual([
       'Root',
       'Child',
@@ -49,12 +58,22 @@ describe('wiki model', () => {
   });
 
   it('lists descendants including the folder itself', () => {
-    const folders = [folder(1, 'Root'), folder(2, 'Child', 1), folder(3, 'Leaf', 2)];
+    const folders = [
+      folder(1, 'Root'),
+      folder(2, 'Child', 1),
+      folder(3, 'Leaf', 2),
+    ];
     expect(descendantFolderIds(folders, 1).sort()).toEqual([1, 2, 3]);
   });
 
   it('excludes the moved subtree from target options', () => {
-    const folders = [folder(1, 'Root'), folder(2, 'Child', 1), folder(3, 'Other')];
-    expect(folderMoveOptions(folders, 1).map((item) => item.value)).toEqual([3]);
+    const folders = [
+      folder(1, 'Root'),
+      folder(2, 'Child', 1),
+      folder(3, 'Other'),
+    ];
+    expect(folderMoveOptions(folders, 1).map((item) => item.value)).toEqual([
+      3,
+    ]);
   });
 });

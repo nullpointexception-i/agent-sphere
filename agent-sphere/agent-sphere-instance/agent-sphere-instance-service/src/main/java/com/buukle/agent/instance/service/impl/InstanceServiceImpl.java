@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.buukle.agent.common.constant.CompletionProtocol;
 import com.buukle.agent.common.constant.GroupRouterPrompt;
 import com.buukle.agent.common.constant.OwnerScope;
+import com.buukle.agent.common.constant.ProjectRouterPrompt;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantScope;
 import com.buukle.agent.common.context.TenantScopeHolder;
@@ -39,6 +40,7 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     private final InstanceConverter instanceConverter;
     private final RouteSpi routeSpi;
     private final ApplicationEventPublisher eventPublisher;
+    private final ProjectRouterProvisioner projectRouterProvisioner;
 
     @Override
     public InstanceVO createInstance(CreateInstanceDTO dto) {
@@ -73,7 +75,8 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
         // A Group Router prompt equal to the built-in default is not persisted unless it changed:
         // leaving the column empty keeps the "system default" state.
         if (!clearSystemPrompt && (existing.getSystemPrompt() == null || existing.getSystemPrompt().isBlank())
-                && GroupRouterPrompt.isDefault(dto.getSystemPrompt())) {
+                && (GroupRouterPrompt.isDefault(dto.getSystemPrompt())
+                || ProjectRouterPrompt.isDefault(dto.getSystemPrompt()))) {
             dto.setSystemPrompt(null);
         }
         // MODEL_DEFAULT / blank = clear the instance override and follow the model route again.
@@ -189,10 +192,49 @@ public class InstanceServiceImpl extends ServiceImpl<InstanceMapper, AgentInstan
     }
 
     @Override
+    public InstanceVO findByRole(String role) {
+        if (role == null || role.isBlank()) {
+            return null;
+        }
+        Long tenantId = TenantContext.get();
+        if (tenantId == null) {
+            return null;
+        }
+        AgentInstance instance = lambdaQuery()
+                .eq(AgentInstance::getTenantId, tenantId)
+                .eq(AgentInstance::getInstanceRole, InstanceRole.from(role).value())
+                .orderByAsc(AgentInstance::getId)
+                .last("LIMIT 1")
+                .one();
+        return instance == null ? null : instanceConverter.toVO(instance);
+    }
+
+    @Override
+    public InstanceVO ensureProjectRouter(Long tenantId) {
+        Long effectiveTenant = tenantId != null ? tenantId : TenantContext.get();
+        return projectRouterProvisioner.ensure(effectiveTenant);
+    }
+
+    @Override
     public InstanceVO getInstance(Long id) {
         AgentInstance instance = getById(id);
         if (instance == null) throw new BizException(InstanceErrorCode.INSTANCE_NOT_FOUND);
         return instanceConverter.toVO(instance);
+    }
+
+    @Override
+    public InstanceVO getInstanceShared(Long id) {
+        TenantScope previous = TenantScopeHolder.get();
+        try {
+            TenantScopeHolder.clear();
+            return getInstance(id);
+        } finally {
+            if (previous == null) {
+                TenantScopeHolder.clear();
+            } else {
+                TenantScopeHolder.start(previous);
+            }
+        }
     }
 
     @Override

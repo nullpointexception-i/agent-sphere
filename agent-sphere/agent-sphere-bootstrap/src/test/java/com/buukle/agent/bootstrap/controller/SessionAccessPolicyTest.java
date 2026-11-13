@@ -70,6 +70,46 @@ class SessionAccessPolicyTest {
     }
 
     @Test
+    void projectBaselineIsReadOnlyFromConsole() {
+        login("alice", false, false);
+        scope(true);
+        SessionSurfaceHolder.set(SessionSurface.CONSOLE);
+
+        assertFalse(SessionAccessPolicy.canWrite(
+                TENANT, "alice", SessionTypeCodes.PROJECT_ROUTER, null));
+    }
+
+    @Test
+    void projectBaselineRemainsWritableByRuntime() {
+        login("alice", false, false);
+        scope(true);
+        SessionSurfaceHolder.set(SessionSurface.INTERNAL);
+
+        assertTrue(SessionAccessPolicy.canWrite(
+                TENANT, "alice", SessionTypeCodes.PROJECT_ROUTER, null));
+    }
+
+    @Test
+    void projectForkIsWritableByItsOwner() {
+        login("alice", false, false);
+        scope(true);
+        SessionSurfaceHolder.set(SessionSurface.CONSOLE);
+
+        assertTrue(SessionAccessPolicy.canWrite(
+                TENANT, "alice", SessionTypeCodes.PROJECT_ROUTER, 105L));
+    }
+
+    @Test
+    void tenantAdminCannotWriteAnotherUsersProjectFork() {
+        login("tenantAdmin", true, false);
+        scope(false);
+        SessionSurfaceHolder.set(SessionSurface.CONSOLE);
+
+        assertFalse(SessionAccessPolicy.canWrite(
+                TENANT, "someone", SessionTypeCodes.PROJECT_ROUTER, 105L));
+    }
+
+    @Test
     void tenantVisibilityStillChecksTheTenant() {
         login("alice", false, false);
         scope(true);

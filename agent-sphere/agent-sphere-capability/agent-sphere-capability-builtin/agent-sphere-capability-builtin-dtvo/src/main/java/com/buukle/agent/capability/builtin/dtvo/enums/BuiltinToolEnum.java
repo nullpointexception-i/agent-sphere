@@ -25,7 +25,11 @@ public enum BuiltinToolEnum {
     RECALL_EVENT(19, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     SUBSCRIBE_THREAD(20, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     CLOSE_THREAD(21, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
-    WORKER_CAPABILITY(22, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false);
+    WORKER_CAPABILITY(22, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
+    PROJECT_QUERY(23, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, true),
+    PROJECT_MUTATE(24, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
+    PROJECT_AVATAR(25, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
+    PROJECT_INSIGHT(26, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false);
 
     private final int id;
     private final ToolAccessMode accessMode;

@@ -11,6 +11,11 @@ public class ConversationVO implements Serializable {
     private String type;
     private String title;
     private String purpose;
+    private String bizType;
+    private Long bizId;
+    private String bizPurpose;
+    private String bizKey;
+    private String locale;
     private Long ownerUserId;
     private Long threadId;
     private Long lastSeq;

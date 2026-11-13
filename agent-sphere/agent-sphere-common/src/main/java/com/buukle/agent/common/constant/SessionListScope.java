@@ -7,7 +7,12 @@ public final class SessionListScope {
     public static final String USER = "USER";
     /** The caller's own group chats (GROUP_ROUTER sessions created by them). */
     public static final String GROUP = "GROUP";
-    /** All tenant-level group chats; tenant administrators only. */
+    /**
+     * All tenant-level conversations; tenant administrators only.
+     *
+     * <p>Includes group chats plus the tenant-owned project assistant: the project baseline and
+     * every user fork.
+     */
     public static final String TENANT = "TENANT";
 
     private SessionListScope() {

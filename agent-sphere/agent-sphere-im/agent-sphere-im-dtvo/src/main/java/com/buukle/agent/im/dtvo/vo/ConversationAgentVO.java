@@ -19,4 +19,6 @@ public class ConversationAgentVO implements Serializable {
     /** Member who owns this avatar. */
     private Long ownerUserId;
     private String status;
+    /** Where the avatar comes from: participant, member public catalogue or entity binding. */
+    private String source;
 }

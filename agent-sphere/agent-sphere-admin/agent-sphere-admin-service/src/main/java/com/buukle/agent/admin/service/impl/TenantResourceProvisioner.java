@@ -113,6 +113,8 @@ public class TenantResourceProvisioner {
                 }
             }
         }
+        // Every tenant gets exactly one project assistant, even when the template predates it.
+        instanceSpi.ensureProjectRouter(TenantContext.get());
         return currentInstanceId;
     }
 
@@ -163,8 +165,8 @@ public class TenantResourceProvisioner {
         dto.setInstanceRole(item.path("instanceRole").asText(InstanceRole.GROUP_ROUTER.value()));
         dto.setOwnerScope(OwnerScope.TENANT);
         dto.setCompletionProtocol(CompletionProtocol.IMPLICIT_TEXT.name());
-        dto.setAllowConsoleSession(false);
-        dto.setAllowWidgetSession(false);
+        dto.setAllowConsoleSession(item.path("allowConsoleSession").asBoolean(false));
+        dto.setAllowWidgetSession(item.path("allowWidgetSession").asBoolean(false));
         Long routeId = routes.get(item.path("route").asText(""));
         if (routeId == null && !routes.isEmpty()) {
             routeId = routes.values().iterator().next();

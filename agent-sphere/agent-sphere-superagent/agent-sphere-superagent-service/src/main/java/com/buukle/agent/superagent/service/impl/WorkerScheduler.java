@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantUtil;
+import com.buukle.agent.common.constant.RunMode;
 import com.buukle.agent.common.metrics.AgentMetrics;
 import com.buukle.agent.instance.dtvo.vo.UserVO;
 import com.buukle.agent.instance.spi.UserSpi;
@@ -18,6 +19,7 @@ import com.buukle.agent.superagent.repository.AgentWorkItemMapper;
 import com.buukle.agent.superagent.spi.DispatchResult;
 import com.buukle.agent.superagent.spi.WorkerDispatchCommand;
 import com.buukle.agent.superagent.spi.WorkerDispatchPort;
+import com.buukle.agent.superagent.spi.WorkItemLifecycleSpi;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -56,6 +58,7 @@ public class WorkerScheduler {
     private final ObjectProvider<WorkerDispatchPort> dispatchPortProvider;
     private final RedissonClient redissonClient;
     private final AgentMetrics metrics;
+    private final ObjectProvider<WorkItemLifecycleSpi> lifecycleProvider;
 
     @Value("${buukle.agent.super-agent.enabled:false}")
     private boolean superAgentEnabled;
@@ -206,7 +209,7 @@ public class WorkerScheduler {
                 item.getThreadId(),
                 workerInstanceId,
                 item.getGoal(),
-                "WRITE",
+                item.getRunMode() == null ? RunMode.WRITE.name() : item.getRunMode(),
                 item.getPriority() == null ? 100 : item.getPriority(),
                 item.getOwnerUserId(),
                 agent.getTenantId(),
@@ -225,6 +228,7 @@ public class WorkerScheduler {
             log.info("Worker finished before RUNNING transition: workItem={}, session={}",
                     item.getId(), result.workerSessionId());
         } else {
+            lifecycleProvider.orderedStream().forEach(listener -> listener.onStarted(item.getId()));
             log.info("Worker dispatched: workItem={}, session={}, run={}",
                     item.getId(), result.workerSessionId(), result.runId());
         }

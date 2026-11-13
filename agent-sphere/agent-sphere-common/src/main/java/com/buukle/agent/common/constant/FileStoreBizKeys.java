@@ -20,5 +20,8 @@ public final class FileStoreBizKeys {
     /** IM attachment (isolated per conversation: bizKey = im-attachment:{conversationId}). */
     public static final String IM_ATTACHMENT = "im-attachment";
 
+    /** Requirement comment attachment. */
+    public static final String REQUIREMENT_COMMENT_ATTACHMENT = "requirement-comment-attachment";
+
     private FileStoreBizKeys() {}
 }

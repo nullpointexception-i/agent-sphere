@@ -10,6 +10,7 @@ import com.buukle.agent.capability.builtin.tool.spi.dtvo.ExecuteResult;
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ToolInfoVO;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
+import com.buukle.agent.util.json.JsonUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
@@ -73,7 +74,7 @@ public class BuiltinToolService implements CapabilityBuiltinSpi {
     public String executeBuiltinTool(String toolName, String argumentsJson, Long sessionId, Long runId,
                                      String callId) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
+            ObjectMapper mapper = JsonUtils.getMapper();
             for (CapabilityBuiltinToolSpi tool : tools) {
                 ToolInfoVO info = tool.getInfo();
                 if (!info.getName().equals(toolName)) continue;

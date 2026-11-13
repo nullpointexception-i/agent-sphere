@@ -1,7 +1,7 @@
 import XMarkdown from '@ant-design/x-markdown';
 import '@ant-design/x-markdown/es/XMarkdown/index.css';
 import { memo } from 'react';
-import { useStyles } from './style';
+import { useChatStyles } from './chat/style';
 
 /**
  * Shared markdown renderer for DM agent messages. The streaming reply bubble and
@@ -14,7 +14,7 @@ export const MessageMarkdown = memo(function MessageMarkdown({
   text: string;
   streaming?: boolean;
 }) {
-  const { styles } = useStyles();
+  const { styles } = useChatStyles();
   const className = streaming
     ? `${styles.messageMarkdown} ${styles.messageMarkdownStreaming}`
     : styles.messageMarkdown;

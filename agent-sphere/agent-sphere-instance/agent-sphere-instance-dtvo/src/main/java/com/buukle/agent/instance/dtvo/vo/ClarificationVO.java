@@ -10,6 +10,7 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ClarificationVO implements Serializable {
+    private Long id;
     private String clarificationId;
     private Long runId;
     private Long sessionId;
@@ -22,4 +23,8 @@ public class ClarificationVO implements Serializable {
     private String toolCallsJson;
     private String userResponse;
     private String status;
+    private Long targetUserId;
+    private String expiresAt;
+    private Long answeredBy;
+    private String createdAt;
 }

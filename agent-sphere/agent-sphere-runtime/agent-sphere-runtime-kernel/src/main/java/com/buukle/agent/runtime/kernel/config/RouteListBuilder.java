@@ -37,7 +37,7 @@ public class RouteListBuilder {
         List<ModelRouteFullVO> routes = new ArrayList<>();
         if (agentInstanceId == null) return routes;
         try {
-            InstanceVO instance = instanceSpi.getInstance(agentInstanceId);
+            InstanceVO instance = instanceSpi.getInstanceShared(agentInstanceId);
             if (instance == null || instance.getModelRouteId() == null) return routes;
             routes.addAll(fromRouteId(instance.getModelRouteId()));
         } catch (Exception e) {
@@ -47,6 +47,21 @@ public class RouteListBuilder {
     }
 
     public List<ModelRouteFullVO> fromRouteId(Long modelRouteId) {
+        com.buukle.agent.common.context.TenantScope previous =
+                com.buukle.agent.common.context.TenantScopeHolder.get();
+        try {
+            com.buukle.agent.common.context.TenantScopeHolder.clear();
+            return fromRouteIdShared(modelRouteId);
+        } finally {
+            if (previous == null) {
+                com.buukle.agent.common.context.TenantScopeHolder.clear();
+            } else {
+                com.buukle.agent.common.context.TenantScopeHolder.start(previous);
+            }
+        }
+    }
+
+    private List<ModelRouteFullVO> fromRouteIdShared(Long modelRouteId) {
         List<ModelRouteFullVO> routes = new ArrayList<>();
         ModelRouteVO primary = routeSpi.getRoute(modelRouteId);
         if (primary != null) {

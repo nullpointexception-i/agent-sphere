@@ -3,10 +3,12 @@ package com.buukle.agent.im.service;
 import com.buukle.agent.channel.spi.EventIngestPort;
 import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.metrics.AgentMetrics;
+import com.buukle.agent.common.notification.UserNotificationPort;
 import com.buukle.agent.im.domain.ImConversation;
 import com.buukle.agent.im.domain.ImMessage;
 import com.buukle.agent.im.domain.ImParticipant;
 import com.buukle.agent.instance.spi.UserSpi;
+import com.buukle.agent.im.dtvo.dto.MentionDTO;
 import com.buukle.agent.im.dtvo.dto.SendMessageDTO;
 import com.buukle.agent.im.dtvo.enums.ImMessageStatus;
 import com.buukle.agent.im.dtvo.enums.ImMessageType;
@@ -22,6 +24,9 @@ import com.buukle.agent.im.repository.ImParticipantMapper;
 import com.buukle.agent.im.repository.ImReadCursorMapper;
 import com.buukle.agent.im.service.impl.ImMessageServiceImpl;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.EntityAccessGuard;
+import com.buukle.agent.superagent.spi.EntityAgentDirectorySpi;
+import com.buukle.agent.superagent.spi.EntityContextSpi;
 import com.buukle.agent.superagent.spi.SessionInputSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import org.junit.jupiter.api.AfterEach;
@@ -71,9 +76,17 @@ class ImMessageServiceImplTest {
     @Mock
     ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
     @Mock
+    ObjectProvider<EntityAgentDirectorySpi> entityDirectoryPortProvider;
+    @Mock
+    ObjectProvider<EntityAccessGuard> entityAccessGuardProvider;
+    @Mock
+    ObjectProvider<EntityContextSpi> entityContextProvider;
+    @Mock
     ObjectProvider<SessionInputSpi> sessionInputPortProvider;
     @Mock
     ObjectProvider<UserSpi> userSpiProvider;
+    @Mock
+    ObjectProvider<UserNotificationPort> notificationPortProvider;
     @Mock
     SessionInputSpi sessionInputSpi;
     @Mock
@@ -87,12 +100,18 @@ class ImMessageServiceImplTest {
     void setUp() {
         service = new ImMessageServiceImpl(messageMapper, conversationMapper, settingMapper,
                 participantMapper, readCursorMapper, streamService, ingestPortProvider,
-                directoryPortProvider, sessionInputPortProvider, userSpiProvider, metrics);
+                directoryPortProvider, entityDirectoryPortProvider, entityAccessGuardProvider,
+                entityContextProvider, sessionInputPortProvider, userSpiProvider,
+                notificationPortProvider, metrics);
         AuthContext.setUserId(1L);
         AuthContext.setUsername("alice");
         AuthContext.setDisplayName("Alice");
         lenient().when(ingestPortProvider.getIfAvailable()).thenReturn(null);
         lenient().when(directoryPortProvider.getIfAvailable()).thenReturn(null);
+        lenient().when(entityDirectoryPortProvider.getIfAvailable()).thenReturn(null);
+        lenient().when(entityAccessGuardProvider.orderedStream()).thenReturn(java.util.stream.Stream.empty());
+        lenient().when(entityContextProvider.orderedStream()).thenReturn(java.util.stream.Stream.empty());
+        lenient().when(notificationPortProvider.getIfAvailable()).thenReturn(null);
         lenient().when(sessionInputPortProvider.getIfAvailable()).thenReturn(sessionInputSpi);
         lenient().when(participantMapper.selectCount(any())).thenReturn(1L);
         lenient().when(readCursorMapper.selectOne(any())).thenReturn(null);
@@ -339,6 +358,46 @@ class ImMessageServiceImplTest {
         verify(sessionInputSpi, never())
                 .answerRouterClarification(any(), any(), any(), any());
         verify(ingestPortProvider).getIfAvailable();
+    }
+
+    @Test
+    void send_rejectsAgentMentionOutsideConversationCatalogue() {
+        ImConversation group = conversation(10L, 4L);
+        when(conversationMapper.selectById(10L)).thenReturn(group);
+        ImParticipant member = new ImParticipant();
+        member.setConversationId(10L);
+        member.setParticipantType(ImParticipantType.USER);
+        member.setParticipantId(1L);
+        when(participantMapper.selectList(any())).thenReturn(List.of(member));
+
+        MentionDTO mention = new MentionDTO();
+        mention.setType(ImParticipantType.AGENT);
+        mention.setId(99L);
+        SendMessageDTO dto = new SendMessageDTO();
+        dto.setContent(Map.of("text", "@unknown"));
+        dto.setMentions(List.of(mention));
+
+        assertThrows(BizException.class, () -> service.send(10L, dto));
+    }
+
+    @Test
+    void send_rejectsUserMentionOutsideMembers() {
+        ImConversation group = conversation(10L, 4L);
+        when(conversationMapper.selectById(10L)).thenReturn(group);
+        ImParticipant member = new ImParticipant();
+        member.setConversationId(10L);
+        member.setParticipantType(ImParticipantType.USER);
+        member.setParticipantId(1L);
+        when(participantMapper.selectList(any())).thenReturn(List.of(member));
+
+        MentionDTO mention = new MentionDTO();
+        mention.setType(ImParticipantType.USER);
+        mention.setId(77L);
+        SendMessageDTO dto = new SendMessageDTO();
+        dto.setContent(Map.of("text", "@outsider"));
+        dto.setMentions(List.of(mention));
+
+        assertThrows(BizException.class, () -> service.send(10L, dto));
     }
 
     private static ImMessage message(Long id, Long seq, String text) {

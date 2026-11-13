@@ -1,11 +1,10 @@
-import { Select } from 'antd';
+import { App, Select } from 'antd';
 import { useEffect, useState } from 'react';
+import { agentApi } from '@/services/agentSphere/api';
 import {
   type SuperAgent,
   superAgentApi,
 } from '@/services/agentSphere/superAgent';
-import { agentApi } from '@/services/agentSphere/api';
-import { App } from 'antd';
 import { tw } from '../i18n';
 import { useStyles } from '../style';
 
@@ -80,10 +79,7 @@ export function CloudAvatarPanel({ agent }: { agent: SuperAgent }) {
         value={routeId}
         placeholder={
           mixed
-            ? tw(
-                'avatars.modelMixed',
-                'Router and Worker use different routes',
-              )
+            ? tw('avatars.modelMixed', 'Router and Worker use different routes')
             : tw('avatars.modelPlaceholder', 'Select a model route')
         }
         disabled={saving}

@@ -679,6 +679,10 @@ export default {
   'pages.chat.userConversations': 'User chats',
   'pages.chat.groupConversations': 'Group chats',
   'pages.chat.tenantConversations': 'Tenant chats',
+  'pages.chat.projectBaseline': 'Project baseline',
+  'pages.chat.projectFork': 'User fork',
+  'pages.chat.projectBaselineReadOnly':
+    'The project baseline is read-only. Continue in your own user fork from the project assistant.',
   'pages.chat.readOnlyHint':
     'Read-only conversation: owned by another user or an internal session',
   'pages.chat.groupRouterEmpty':

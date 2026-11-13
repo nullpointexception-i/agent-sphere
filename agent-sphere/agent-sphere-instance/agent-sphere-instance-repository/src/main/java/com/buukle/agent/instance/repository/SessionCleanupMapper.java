@@ -50,13 +50,16 @@ public interface SessionCleanupMapper {
      *       and never the session row, so the updated_at condition above alone would still delete them by mistake.</li>
      * </ul>
      * Status values are passed in by the caller from RunStatus / TaskEnum (no literals in SQL).
+     *
+     * <p>Project assistant sessions are excluded: their lifecycle belongs to the project registry
+     * ({@code pm_project_assistant_session}) and project deletion, not to generic retention cleanup.
      */
     @Select("""
             <script>
             SELECT s.id
             FROM agent_session s
             WHERE s.delete_flag = 0
-              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER')
+              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER', 'PROJECT_ROUTER')
               AND s.created_at &lt; #{cutoff}
               AND s.updated_at  &lt; #{cutoff}
               AND NOT EXISTS (
@@ -89,7 +92,7 @@ public interface SessionCleanupMapper {
             <script>
             SELECT count(*) FROM agent_session s
             WHERE s.delete_flag = 0
-              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER')
+              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER', 'PROJECT_ROUTER')
               AND s.created_at &lt; #{cutoff}
               AND s.updated_at  &lt; #{cutoff}
               AND NOT EXISTS (
@@ -117,7 +120,7 @@ public interface SessionCleanupMapper {
             SELECT count(*)
             FROM agent_session s
             WHERE s.delete_flag = 0
-              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER')
+              AND COALESCE(s.session_type, 'CONSOLE') NOT IN ('GROUP_ROUTER', 'ROUTER', 'WORKER', 'PROJECT_ROUTER')
               AND s.created_at &lt; #{cutoff}
               AND s.updated_at  &lt; #{cutoff}
               AND ( EXISTS (SELECT 1 FROM agent_run r

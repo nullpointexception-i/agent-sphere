@@ -2,6 +2,7 @@ package com.buukle.agent.im.service;
 
 import com.buukle.agent.im.dtvo.dto.AddParticipantDTO;
 import com.buukle.agent.im.dtvo.dto.CreateConversationDTO;
+import com.buukle.agent.im.dtvo.dto.EntityConversationDTO;
 import com.buukle.agent.im.dtvo.dto.ImGateConfig;
 import com.buukle.agent.im.dtvo.dto.MarkReadDTO;
 import com.buukle.agent.im.dtvo.dto.UpdateConversationSettingDTO;
@@ -16,6 +17,12 @@ import java.util.List;
 public interface ImConversationService {
 
     ConversationVO create(CreateConversationDTO dto);
+
+    /** Create or reuse a conversation bound to an application/project/requirement. */
+    ConversationVO ensureEntityConversation(EntityConversationDTO dto);
+
+    /** Find an entity conversation without creating one. */
+    ConversationVO findEntityConversation(EntityConversationDTO dto);
 
     /** Create or reuse a DM between the current user and one Super-Agent. */
     ConversationVO createAgentDm(Long agentId);

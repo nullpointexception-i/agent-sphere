@@ -14,6 +14,12 @@ import com.buukle.agent.common.context.TenantUtil;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.common.metrics.AgentMetrics;
+import com.buukle.agent.common.notification.NotificationKeys;
+import com.buukle.agent.common.notification.NotificationPayloadKeys;
+import com.buukle.agent.common.notification.NotificationSourceTypes;
+import com.buukle.agent.common.notification.NotificationTypes;
+import com.buukle.agent.common.notification.UserNotificationCommand;
+import com.buukle.agent.common.notification.UserNotificationPort;
 import com.buukle.agent.im.domain.ImConversation;
 import com.buukle.agent.im.domain.ImMessage;
 import com.buukle.agent.im.domain.ImParticipant;
@@ -45,6 +51,11 @@ import com.buukle.agent.instance.spi.UserSpi;
 import com.buukle.agent.superagent.dtvo.enums.SuperAgentStatus;
 import com.buukle.agent.superagent.dtvo.vo.SessionInputVO;
 import com.buukle.agent.superagent.spi.ChatAgentIdentity;
+import com.buukle.agent.superagent.spi.EntityAccessGuard;
+import com.buukle.agent.superagent.spi.EntityAgentDirectorySpi;
+import com.buukle.agent.superagent.spi.EntityContext;
+import com.buukle.agent.superagent.spi.EntityContextKeys;
+import com.buukle.agent.superagent.spi.EntityContextSpi;
 import com.buukle.agent.superagent.spi.SessionInputSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import com.buukle.agent.util.json.JsonUtils;
@@ -64,6 +75,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -94,8 +107,12 @@ public class ImMessageServiceImpl implements ImMessageService {
     private final ImStreamService streamService;
     private final ObjectProvider<EventIngestPort> ingestPortProvider;
     private final ObjectProvider<SuperAgentDirectorySpi> directoryPortProvider;
+    private final ObjectProvider<EntityAgentDirectorySpi> entityDirectoryPortProvider;
+    private final ObjectProvider<EntityAccessGuard> entityAccessGuardProvider;
+    private final ObjectProvider<EntityContextSpi> entityContextProvider;
     private final ObjectProvider<SessionInputSpi> sessionInputPortProvider;
     private final ObjectProvider<UserSpi> userSpiProvider;
+    private final ObjectProvider<UserNotificationPort> notificationPortProvider;
     private final AgentMetrics metrics;
 
     @org.springframework.beans.factory.annotation.Value("${buukle.agent.im.max-message-chars:8000}")
@@ -118,6 +135,8 @@ public class ImMessageServiceImpl implements ImMessageService {
         assertActive(conversation);
         assertMember(conversationId, userId);
         assertAgentChattable(conversation, userId);
+        assertEntityAccess(conversation, userId);
+        assertMentionsAllowed(conversation, dto, userId);
 
         if (dto.getClientMsgId() != null && !dto.getClientMsgId().isBlank()) {
             ImMessage existing = messageMapper.selectOne(Wrappers.<ImMessage>lambdaQuery()
@@ -172,6 +191,7 @@ public class ImMessageServiceImpl implements ImMessageService {
 
         publishToMembers(conversationId, message, userId);
         metrics.increment(AgentMetrics.IM_MESSAGE_SENT, AgentMetrics.TAG_SENDER, ActorType.USER);
+        notifyMentions(conversation, message, dto, userId);
         ingest(conversationId, message, dto);
         return toVO(message);
     }
@@ -460,6 +480,117 @@ public class ImMessageServiceImpl implements ImMessageService {
         return "";
     }
 
+    private void assertEntityAccess(ImConversation conversation, Long userId) {
+        if (conversation == null || conversation.getBizType() == null
+                || conversation.getBizId() == null) {
+            return;
+        }
+        entityAccessGuardProvider.orderedStream()
+                .filter(guard -> guard.supports(conversation.getBizType()))
+                .findFirst()
+                .ifPresent(guard -> guard.assertCanView(
+                        conversation.getBizType(), conversation.getBizId(), userId));
+    }
+
+    /**
+     * Rejects @ targets the caller cannot see. Agent mentions must resolve to a
+     * member public avatar, a conversation participant or an entity binding;
+     * user mentions must resolve to a member of this conversation.
+     */
+    private void assertMentionsAllowed(ImConversation conversation, SendMessageDTO dto,
+                                       Long userId) {
+        if (dto.getMentions() == null || dto.getMentions().isEmpty()) {
+            return;
+        }
+        List<ImParticipant> userRows = systemRead(() -> participantMapper.selectList(
+                Wrappers.<ImParticipant>lambdaQuery()
+                        .eq(ImParticipant::getConversationId, conversation.getId())
+                        .eq(ImParticipant::getParticipantType, ImParticipantType.USER)));
+        Set<Long> memberIds = new HashSet<>();
+        for (ImParticipant row : userRows) {
+            if (row.getParticipantId() != null) {
+                memberIds.add(row.getParticipantId());
+            }
+        }
+        Set<Long> allowedAgents = new HashSet<>(participantAgentIds(conversation.getId()));
+        if (ImConversationType.GROUP.equalsIgnoreCase(conversation.getType())) {
+            SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
+            if (directory != null && !memberIds.isEmpty()) {
+                directory.listPublicByOwners(memberIds).stream()
+                        .map(ChatAgentIdentity::agentId)
+                        .filter(Objects::nonNull)
+                        .forEach(allowedAgents::add);
+            }
+        }
+        if (conversation.getBizType() != null && conversation.getBizId() != null) {
+            EntityAgentDirectorySpi entityDirectory = entityDirectoryPortProvider.getIfAvailable();
+            if (entityDirectory != null) {
+                allowedAgents.addAll(entityDirectory.listBoundAgentIds(
+                        conversation.getBizType(), conversation.getBizId(), userId));
+            }
+        }
+        for (MentionDTO mention : dto.getMentions()) {
+            if (mention == null || mention.getType() == null || mention.getId() == null) {
+                continue;
+            }
+            if (ImParticipantType.AGENT.equalsIgnoreCase(mention.getType())) {
+                if (!allowedAgents.contains(mention.getId())) {
+                    throw new BizException(CommonErrorCode.FORBIDDEN,
+                            "mention target is not available in this conversation");
+                }
+            } else if (ImParticipantType.USER.equalsIgnoreCase(mention.getType())
+                    && !memberIds.contains(mention.getId())) {
+                throw new BizException(CommonErrorCode.PARAM_INVALID,
+                        "mention target is not a member of this conversation");
+            }
+        }
+    }
+
+    /** One notification per mentioned member; the writer updates on re-send. */
+    private void notifyMentions(ImConversation conversation, ImMessage message,
+                                SendMessageDTO dto, Long senderId) {
+        if (dto.getMentions() == null || dto.getMentions().isEmpty()) {
+            return;
+        }
+        UserNotificationPort port = notificationPortProvider.getIfAvailable();
+        if (port == null) {
+            return;
+        }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put(NotificationPayloadKeys.SENDER_NAME, currentSpeakerName());
+        payload.put(NotificationPayloadKeys.CONVERSATION_ID, conversation.getId());
+        payload.put(NotificationPayloadKeys.CONVERSATION_TITLE,
+                conversation.getTitle() == null ? "" : conversation.getTitle());
+        payload.put(NotificationPayloadKeys.TEXT, extractText(dto.getContent()));
+        Set<Long> notified = new HashSet<>();
+        for (MentionDTO mention : dto.getMentions()) {
+            if (mention == null || mention.getId() == null
+                    || !ImParticipantType.USER.equalsIgnoreCase(mention.getType())) {
+                continue;
+            }
+            Long target = mention.getId();
+            if (target.equals(senderId) || !notified.add(target)) {
+                continue;
+            }
+            port.notifyUser(new UserNotificationCommand(
+                    conversation.getTenantId(), target, NotificationTypes.MENTION,
+                    NotificationKeys.MENTION_TITLE, null, payload,
+                    NotificationSourceTypes.IM_MESSAGE, message.getId()));
+        }
+    }
+
+    private List<Long> participantAgentIds(Long conversationId) {
+        return systemRead(() -> participantMapper.selectList(
+                        Wrappers.<ImParticipant>lambdaQuery()
+                                .eq(ImParticipant::getConversationId, conversationId)
+                                .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)))
+                .stream()
+                .map(ImParticipant::getParticipantId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
     /** Paused avatars cannot receive new messages in their direct chats. */
     private void assertAgentChattable(ImConversation conversation, Long userId) {
         if (!"DM".equalsIgnoreCase(conversation.getType())) {
@@ -529,8 +660,7 @@ public class ImMessageServiceImpl implements ImMessageService {
                     .toList();
             ImConversation conversation = systemRead(
                     () -> conversationMapper.selectById(conversationId));
-            List<Long> agentIds = agentIdsFor(conversationId,
-                    conversation == null ? null : conversation.getType(), memberIds);
+            List<Long> agentIds = agentIdsFor(conversationId, conversation, memberIds);
             var result = port.ingest(new NormalizedEvent(
                     CHANNEL_IM,
                     String.valueOf(conversationId),
@@ -557,9 +687,10 @@ public class ImMessageServiceImpl implements ImMessageService {
      * Avatars are not participants: a group exposes every public avatar of its
      * members, while a DM keeps the single agent participant it was opened with.
      */
-    private List<Long> agentIdsFor(Long conversationId, String conversationType,
+    private List<Long> agentIdsFor(Long conversationId, ImConversation conversation,
                                    List<Long> memberIds) {
-        if (!ImConversationType.GROUP.equalsIgnoreCase(conversationType)) {
+        if (conversation == null
+                || !ImConversationType.GROUP.equalsIgnoreCase(conversation.getType())) {
             return systemRead(() -> participantMapper.selectList(Wrappers.<ImParticipant>lambdaQuery()
                             .eq(ImParticipant::getConversationId, conversationId)
                             .eq(ImParticipant::getParticipantType, ImParticipantType.AGENT)))
@@ -568,15 +699,21 @@ public class ImMessageServiceImpl implements ImMessageService {
                     .distinct()
                     .toList();
         }
+        List<Long> result = new ArrayList<>();
         SuperAgentDirectorySpi directory = directoryPortProvider.getIfAvailable();
-        if (directory == null || memberIds.isEmpty()) {
-            return List.of();
+        if (directory != null && !memberIds.isEmpty()) {
+            result.addAll(directory.listPublicByOwners(memberIds).stream()
+                    .map(ChatAgentIdentity::agentId)
+                    .filter(Objects::nonNull)
+                    .toList());
         }
-        return directory.listPublicByOwners(memberIds).stream()
-                .map(ChatAgentIdentity::agentId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
+        EntityAgentDirectorySpi entityDirectory = entityDirectoryPortProvider.getIfAvailable();
+        if (entityDirectory != null && conversation.getBizType() != null
+                && conversation.getBizId() != null) {
+            result.addAll(entityDirectory.listBoundAgentIds(
+                    conversation.getBizType(), conversation.getBizId(), currentUserId()));
+        }
+        return result.stream().filter(Objects::nonNull).distinct().toList();
     }
 
     private ImEventMetaVO eventMeta(ImMessage message, SendMessageDTO dto,
@@ -590,10 +727,59 @@ public class ImMessageServiceImpl implements ImMessageService {
         meta.setConversationTitle(conversation == null ? "" : conversation.getTitle());
         meta.setPurpose(conversation == null ? "" : conversation.getPurpose());
         meta.setGateConfig(conversation == null ? "" : conversation.getGateConfig());
+        meta.setEntityType(conversation == null ? null : conversation.getBizType());
+        meta.setEntityId(conversation == null ? null : conversation.getBizId());
+        meta.setEntityPurpose(conversation == null ? null : conversation.getBizPurpose());
+        meta.setEntityContext(entityContext(conversation, message.getSenderId()));
+        meta.setLocale(conversation == null ? null : conversation.getLocale());
         meta.setMemberUserIds(memberIds);
         meta.setSpeakerId(message.getSenderId());
         meta.setSpeakerName(currentSpeakerName());
         return meta;
+    }
+
+    /**
+     * Resolved on the request thread so the provider can use the caller's
+     * access context; the router then injects the flat map into the prompt.
+     */
+    private Map<String, String> entityContext(ImConversation conversation, Long viewerId) {
+        if (conversation == null || conversation.getBizType() == null
+                || conversation.getBizId() == null || viewerId == null) {
+            return null;
+        }
+        EntityContextSpi provider = entityContextProvider.orderedStream()
+                .filter(candidate -> candidate.supports(conversation.getBizType()))
+                .findFirst()
+                .orElse(null);
+        if (provider == null) {
+            return null;
+        }
+        try {
+            EntityContext context = provider.describe(
+                    conversation.getBizType(), conversation.getBizId(), viewerId);
+            if (context == null) {
+                return null;
+            }
+            Map<String, String> result = new LinkedHashMap<>();
+            putContextValue(result, EntityContextKeys.TITLE, context.title());
+            putContextValue(result, EntityContextKeys.STATUS, context.status());
+            putContextValue(result, EntityContextKeys.SUMMARY, context.summary());
+            if (context.attributes() != null) {
+                context.attributes().forEach((key, value) -> putContextValue(result, key, value));
+            }
+            return result.isEmpty() ? null : result;
+        } catch (Exception e) {
+            log.warn("Entity context lookup failed: type={}, id={}, error={}",
+                    conversation.getBizType(), conversation.getBizId(), e.getMessage());
+            return null;
+        }
+    }
+
+    private static void putContextValue(Map<String, String> target, String key, String value) {
+        if (key == null || value == null || value.isBlank()) {
+            return;
+        }
+        target.put(key, value);
     }
 
     private static String currentSpeakerName() {

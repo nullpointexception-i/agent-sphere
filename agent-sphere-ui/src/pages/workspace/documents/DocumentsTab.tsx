@@ -1,4 +1,8 @@
-import { ReloadOutlined, SearchOutlined, ArrowLeftOutlined } from '@ant-design/icons';
+import {
+  ArrowLeftOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import {
   App,
   Button,
@@ -24,11 +28,11 @@ import { getWebOrigin } from '@/utils/runtimeEnv';
 import { tw } from '../i18n';
 import { DocumentCard } from './DocumentCard';
 import { DocumentEditDrawer } from './DocumentEditDrawer';
-import { FolderTree } from './FolderTree';
-import { WikiPageView } from './WikiPageView';
 import { documentDownloadName, downloadDocumentText } from './documentModel';
+import { FolderTree } from './FolderTree';
 import { folderDisplayName } from './folderDisplay';
 import { useStyles } from './style';
+import { WikiPageView } from './WikiPageView';
 import { folderMoveOptions, folderPath } from './wikiModel';
 
 type DocumentScope = 'mine' | 'team';
@@ -40,9 +44,9 @@ const ALL_DOCUMENTS_MAX_PAGES = 20;
 export function DocumentsTab() {
   const { styles } = useStyles();
   const { message, modal } = App.useApp();
-  const canEdit = useCan(PERM.documentUpdate);
-  const canShare = useCan(PERM.documentShare);
-  const canDelete = useCan(PERM.documentDelete);
+  const _canEdit = useCan(PERM.documentUpdate);
+  const _canShare = useCan(PERM.documentShare);
+  const _canDelete = useCan(PERM.documentDelete);
 
   const [scope, setScope] = useState<DocumentScope>('mine');
   const [keyword, setKeyword] = useState('');
@@ -72,8 +76,9 @@ export function DocumentsTab() {
   } | null>(null);
   const [folderMove, setFolderMove] = useState<DocumentFolder | null>(null);
   const [folderMoveParent, setFolderMoveParent] = useState<number>(0);
-  const [movingDocument, setMovingDocument] =
-    useState<DocumentSummary | null>(null);
+  const [movingDocument, setMovingDocument] = useState<DocumentSummary | null>(
+    null,
+  );
   const [documentTargetFolder, setDocumentTargetFolder] = useState<number>(0);
   const loadSeq = useRef(0);
   const mine = scope === 'mine';
@@ -126,7 +131,9 @@ export function DocumentsTab() {
       });
       setDocuments(unique);
       setSelectedDocument((previous) =>
-        previous ? unique.find((row) => row.id === previous.id) ?? null : null,
+        previous
+          ? (unique.find((row) => row.id === previous.id) ?? null)
+          : null,
       );
     } catch {
       if (seq === loadSeq.current) setDocumentsError(true);
@@ -237,7 +244,9 @@ export function DocumentsTab() {
     if (!folderModal) return;
     const name = folderModal.name.trim();
     if (!name) {
-      message.warning(tw('documents.folderNameRequired', 'Enter a folder name'));
+      message.warning(
+        tw('documents.folderNameRequired', 'Enter a folder name'),
+      );
       return;
     }
     try {
@@ -305,7 +314,9 @@ export function DocumentsTab() {
           if (selectedFolderId === folder.id) setSelectedFolderId(null);
           await refreshAll();
         } catch {
-          message.error(tw('documents.folderDeleteFailed', 'Failed to delete folder'));
+          message.error(
+            tw('documents.folderDeleteFailed', 'Failed to delete folder'),
+          );
         }
       },
     });
@@ -387,7 +398,9 @@ export function DocumentsTab() {
       setMovingDocument(null);
       await refreshAll();
     } catch {
-      message.error(tw('documents.documentMoveFailed', 'Failed to move document'));
+      message.error(
+        tw('documents.documentMoveFailed', 'Failed to move document'),
+      );
     }
   };
 
@@ -457,9 +470,7 @@ export function DocumentsTab() {
                   className={styles.wikiPageListItem}
                   onClick={() => {
                     setSelectedDocument(document);
-                    setSelectedFolderId(
-                      document.folderId ?? UNFILED_FOLDER_ID,
-                    );
+                    setSelectedFolderId(document.folderId ?? UNFILED_FOLDER_ID);
                     setKeyword('');
                     setSearch('');
                   }}
@@ -489,11 +500,16 @@ export function DocumentsTab() {
     if (selectedFolderId != null) {
       return (
         <div className={styles.wikiFolderOverview}>
-          <div className={styles.wikiPageTitle}>{selectedFolderName || '-'}</div>
+          <div className={styles.wikiPageTitle}>
+            {selectedFolderName || '-'}
+          </div>
           {folderDocuments.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={tw('documents.emptyFolder', 'No pages in this folder')}
+              description={tw(
+                'documents.emptyFolder',
+                'No pages in this folder',
+              )}
             />
           ) : (
             <div className={styles.wikiPageList}>
@@ -566,9 +582,7 @@ export function DocumentsTab() {
           />
           <Button
             icon={<ReloadOutlined />}
-            onClick={() =>
-              void (mine ? refreshAll() : fetchTeamPage(1, false))
-            }
+            onClick={() => void (mine ? refreshAll() : fetchTeamPage(1, false))}
           >
             {tw('documents.refresh', 'Refresh')}
           </Button>
@@ -606,9 +620,7 @@ export function DocumentsTab() {
             onDocumentAction={(document, action) => {
               if (action === 'move') {
                 setMovingDocument(document);
-                setDocumentTargetFolder(
-                  document.folderId ?? UNFILED_FOLDER_ID,
-                );
+                setDocumentTargetFolder(document.folderId ?? UNFILED_FOLDER_ID);
               }
               if (action === 'export') void exportDocument(document);
               if (action === 'share') void shareDocument(document);
@@ -670,7 +682,10 @@ export function DocumentsTab() {
               <div className={styles.documentsState}>
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={tw('documents.emptyTeam', 'No team documents yet')}
+                  description={tw(
+                    'documents.emptyTeam',
+                    'No team documents yet',
+                  )}
                 />
               </div>
             ) : (

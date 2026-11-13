@@ -48,6 +48,7 @@ public class ToolExecutor {
     private static final int CLARIFICATION_ID_LENGTH = 8;
     private static final String JSON_ERROR_UNKNOWN_TOOL = "{\"error\":\"Unknown tool: ";
     private static final String JSON_ERROR_CLARIFICATION = "{\"error\":\"Failed to process clarification\"}";
+    private static final String JSON_ERROR_TARGET = "{\"error\":\"Target user cannot receive this question\"}";
     private static final String JSON_ERROR_WAIT = "{\"error\":\"Failed to process wait\"}";
     private static final String JSON_ERROR_UNSUPPORTED_TYPE = "{\"error\":\"Unsupported capability type: ";
     private static final String JSON_ERROR_EXECUTION = "{\"error\":\"";
@@ -58,6 +59,9 @@ public class ToolExecutor {
     private final SessionTodoSpi sessionTodoSpi;
     private final ApplicationEventPublisher eventPublisher;
     private final ClarificationSpi clarificationSpi;
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.beans.factory.ObjectProvider<
+            com.buukle.agent.instance.spi.ClarificationTargetValidator> clarificationTargetValidator;
     private final PendingWaitSpi pendingWaitSpi;
     private final DelegateService delegateService;
     private final ToolResultReadService toolResultReadService;
@@ -135,11 +139,24 @@ public class ToolExecutor {
                     boolean multiple = argsNode.path(ChatClarification.CLARIFYING_JSON_MULTIPLE).asBoolean(false);
                     String optionsJson = argsNode.has("options") ? argsNode.get("options").toString() : null;
                     String description = argsNode.has("description") ? argsNode.get("description").asText() : null;
+                    Long targetUserId = argsNode.has("targetUserId") && !argsNode.get("targetUserId").isNull()
+                            ? argsNode.get("targetUserId").asLong() : null;
+                    java.time.LocalDateTime expiresAt = null;
+                    if (targetUserId != null) {
+                        var validator = clarificationTargetValidator.getIfAvailable();
+                        if (validator != null && !validator.canTarget(sessionId, targetUserId)) {
+                            return JSON_ERROR_TARGET;
+                        }
+                        long hours = argsNode.path("expiresInHours").asLong(
+                                com.buukle.agent.common.constant.ProjectAssistantConstants.QUESTION_EXPIRY_HOURS);
+                        hours = Math.min(Math.max(hours, 1), 168);
+                        expiresAt = java.time.LocalDateTime.now().plusHours(hours);
+                    }
                     String clarificationId = java.util.UUID.randomUUID().toString().substring(0, CLARIFICATION_ID_LENGTH);
                     // Create the DB row first, then emit the PENDING event: Timeline needs lookupClarificationRef to find the record when building the clarification row,
                     // otherwise the row has refClarificationId=null and after a refresh resolveContent cannot get response/options (leaving only "answered").
                     clarificationSpi.createPending(sessionId, runId, runId, title, clarifyType,
-                            multiple, optionsJson, description, clarificationId);
+                            multiple, optionsJson, description, clarificationId, targetUserId, expiresAt);
                     eventPublisher.publishEvent(new RuntimeEventVO(
                             ClarificationStatus.PENDING,
                             RuntimeEventDataVO.builder()

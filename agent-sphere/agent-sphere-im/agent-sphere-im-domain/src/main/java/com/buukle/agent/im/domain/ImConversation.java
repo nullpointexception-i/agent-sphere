@@ -22,6 +22,11 @@ public class ImConversation {
     private String type;
     private String title;
     private String purpose;
+    private String bizType;
+    private Long bizId;
+    private String bizPurpose;
+    private String bizKey;
+    private String locale;
     private Long ownerUserId;
     /** Corresponding session-level agent_thread. */
     private Long threadId;

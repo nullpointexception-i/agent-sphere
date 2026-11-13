@@ -36,6 +36,7 @@ import com.buukle.agent.superagent.repository.PendingDeliveryGroup;
 import com.buukle.agent.superagent.spi.AgentRouterRunCommand;
 import com.buukle.agent.superagent.spi.AgentRouterRunPort;
 import com.buukle.agent.superagent.spi.AgentRouterRunResult;
+import com.buukle.agent.superagent.spi.ImEventMetaKeys;
 import com.buukle.agent.superagent.spi.LocalAgentDispatchCommand;
 import com.buukle.agent.superagent.spi.LocalAgentDispatchPort;
 import com.buukle.agent.superagent.spi.LocalAgentDispatchResult;
@@ -597,13 +598,13 @@ public class AgentRouterScheduler {
     private String identityBlock(AgentSuperAgent agent, AgentEvent event) {
         JsonNode meta = rawMeta(event);
         Long ownerId = agent.getOwnerUserId();
-        List<Long> memberIds = numberList(meta, "memberUserIds");
-        Long speakerId = meta != null && meta.hasNonNull("speakerId")
-                ? meta.get("speakerId").asLong() : event.getActorId();
-        String speakerName = meta != null && meta.hasNonNull("speakerName")
-                ? meta.get("speakerName").asText() : null;
-        boolean group = meta != null && meta.hasNonNull("conversationType")
-                && "GROUP".equalsIgnoreCase(meta.get("conversationType").asText());
+        List<Long> memberIds = numberList(meta, ImEventMetaKeys.MEMBER_USER_IDS);
+        Long speakerId = meta != null && meta.hasNonNull(ImEventMetaKeys.SPEAKER_ID)
+                ? meta.get(ImEventMetaKeys.SPEAKER_ID).asLong() : event.getActorId();
+        String speakerName = meta != null && meta.hasNonNull(ImEventMetaKeys.SPEAKER_NAME)
+                ? meta.get(ImEventMetaKeys.SPEAKER_NAME).asText() : null;
+        boolean group = meta != null && meta.hasNonNull(ImEventMetaKeys.CONVERSATION_TYPE)
+                && "GROUP".equalsIgnoreCase(meta.get(ImEventMetaKeys.CONVERSATION_TYPE).asText());
         Set<Long> userIds = new LinkedHashSet<>();
         if (ownerId != null) {
             userIds.add(ownerId);
@@ -645,7 +646,57 @@ public class AgentRouterScheduler {
             }
             block.append(".\n");
         }
+        return block + contextBlock(meta);
+    }
+
+    private static String contextBlock(JsonNode meta) {
+        if (meta == null) {
+            return "";
+        }
+        String entityType = meta.hasNonNull(ImEventMetaKeys.ENTITY_TYPE)
+                ? meta.get(ImEventMetaKeys.ENTITY_TYPE).asText() : null;
+        Long entityId = meta.hasNonNull(ImEventMetaKeys.ENTITY_ID)
+                ? meta.get(ImEventMetaKeys.ENTITY_ID).asLong() : null;
+        String entityPurpose = meta.hasNonNull(ImEventMetaKeys.ENTITY_PURPOSE)
+                ? meta.get(ImEventMetaKeys.ENTITY_PURPOSE).asText() : null;
+        String locale = meta.hasNonNull(ImEventMetaKeys.LOCALE)
+                ? meta.get(ImEventMetaKeys.LOCALE).asText() : null;
+        if (entityType == null && locale == null) {
+            return "";
+        }
+        StringBuilder block = new StringBuilder();
+        if (entityType != null) {
+            block.append("[ENTITY_CONTEXT]\n")
+                    .append("entity_type: ").append(entityType).append('\n')
+                    .append("entity_id: ").append(entityId).append('\n')
+                    .append("entity_purpose: ").append(entityPurpose).append('\n');
+            appendEntitySummary(block, meta);
+            block.append("[/ENTITY_CONTEXT]\n");
+        }
+        if (locale != null) {
+            block.append("[LOCALE_CONTEXT]\n")
+                    .append("locale: ").append(locale).append('\n')
+                    .append("response_language: ").append(locale).append('\n')
+                    .append("do_not_translate_user_content: true\n")
+                    .append("[/LOCALE_CONTEXT]\n");
+        }
         return block.toString();
+    }
+
+    private static void appendEntitySummary(StringBuilder block, JsonNode meta) {
+        JsonNode context = meta.get(ImEventMetaKeys.ENTITY_CONTEXT);
+        if (context == null || !context.isObject()) {
+            return;
+        }
+        context.fields().forEachRemaining(entry ->
+                appendContextField(block, entry.getKey(), entry.getValue().asText()));
+    }
+
+    private static void appendContextField(StringBuilder block, String key, String value) {
+        if (key == null || value == null || value.isBlank()) {
+            return;
+        }
+        block.append(key).append(": ").append(value).append('\n');
     }
 
     private static List<Long> numberList(JsonNode meta, String field) {

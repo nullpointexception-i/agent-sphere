@@ -1,7 +1,4 @@
-import {
-  InfoCircleOutlined,
-  LinkOutlined,
-} from '@ant-design/icons';
+import { InfoCircleOutlined, LinkOutlined } from '@ant-design/icons';
 import {
   Alert,
   App,
@@ -18,14 +15,14 @@ import {
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  type SuperAgent,
-  superAgentApi,
-} from '@/services/agentSphere/superAgent';
-import {
   type IssuedLocalRuntimeToken,
   type LocalRuntime,
   localRuntimeApi,
 } from '@/services/agentSphere/localRuntime';
+import {
+  type SuperAgent,
+  superAgentApi,
+} from '@/services/agentSphere/superAgent';
 import {
   type DesktopAgentProfile,
   type DesktopBridgeDriver,
@@ -231,7 +228,9 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
       // One runtime per device: drop the avatar's previous record first so the
       // stable device key can be reused.
       if (agent.localRuntimeId) {
-        await localRuntimeApi.delete(agent.localRuntimeId).catch(() => undefined);
+        await localRuntimeApi
+          .delete(agent.localRuntimeId)
+          .catch(() => undefined);
       }
 
       const issued = await createRuntime(kind, settings.deviceKey);
@@ -258,7 +257,7 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
       const probe = (await bridge.drivers.detect()).find(
         (item) => item.kind === kind,
       );
-      if (!probe || probe.state !== 'READY') {
+      if (probe?.state !== 'READY') {
         throw new Error(
           tw(
             'avatars.probeFailed',
@@ -268,14 +267,18 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
       }
 
       const profiles = await bridge.profiles.list();
-      const existing = (profiles ?? []).find((item) => item.agentId === agent.id);
+      const existing = (profiles ?? []).find(
+        (item) => item.agentId === agent.id,
+      );
       if (existing && existing.driver !== kind) {
         await bridge.profiles.save({ ...existing, driver: kind });
         setProfile({ ...existing, driver: kind });
       }
 
       await reloadRuntimes();
-      message.success(tw('avatars.runtimeConnected', 'Local runtime connected'));
+      message.success(
+        tw('avatars.runtimeConnected', 'Local runtime connected'),
+      );
     } catch (reason) {
       setConnectError(
         reason instanceof Error ? reason.message : String(reason),
@@ -287,7 +290,9 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
   };
 
   const patchProfile = (values: Partial<DesktopAgentProfile>) => {
-    setProfile((previous) => (previous ? { ...previous, ...values } : previous));
+    setProfile((previous) =>
+      previous ? { ...previous, ...values } : previous,
+    );
   };
 
   const chooseWorkspace = async () => {
@@ -308,7 +313,8 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
         ? runtimes
         : await localRuntimeApi.list().catch(() => runtimes);
       const bound = list.find((item) => item.id === agent.localRuntimeId);
-      const driver = bound?.runtimeKind ?? boundRuntime?.runtimeKind ?? profile.driver;
+      const driver =
+        bound?.runtimeKind ?? boundRuntime?.runtimeKind ?? profile.driver;
       const next = await bridge.profiles.save({
         ...profile,
         agentId: agent.id,
@@ -344,7 +350,8 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
 
   const selectedKind =
     (boundRuntime?.runtimeKind as DesktopDriverKind | undefined) ??
-    (connecting ?? undefined);
+    connecting ??
+    undefined;
 
   const autoRunOptions = useMemo(
     () => [
@@ -382,7 +389,10 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
         value: 'workspace-write',
         label: tw('avatars.sandbox.workspace-write', 'Workspace write'),
       },
-      { value: 'read-only', label: tw('avatars.sandbox.read-only', 'Read only') },
+      {
+        value: 'read-only',
+        label: tw('avatars.sandbox.read-only', 'Read only'),
+      },
       {
         value: 'danger-full-access',
         label: tw('avatars.sandbox.danger-full-access', 'Full access'),
@@ -569,143 +579,146 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
           <div className={styles.fieldHint}>
             {profileLoading
               ? tw('common.loading', 'Loading...')
-              : tw('avatars.localConfigMissing', 'Local settings are unavailable.')}
+              : tw(
+                  'avatars.localConfigMissing',
+                  'Local settings are unavailable.',
+                )}
           </div>
         ) : (
           <>
-          <div className={styles.avatarForm}>
-            <span className={styles.avatarFormLabel}>
-              {tw('avatars.driver', 'Driver')}
-            </span>
-            <Tag color="blue">
-              {boundRuntime?.runtimeKind ?? profile.driver}
-            </Tag>
+            <div className={styles.avatarForm}>
+              <span className={styles.avatarFormLabel}>
+                {tw('avatars.driver', 'Driver')}
+              </span>
+              <Tag color="blue">
+                {boundRuntime?.runtimeKind ?? profile.driver}
+              </Tag>
 
-            {effectiveKind === 'OPENCODE' ? (
-              <>
-                <span className={styles.avatarFormLabel}>
-                  {tw('avatars.model', 'Model')}
-                </span>
-                <Select
-                  showSearch
-                  allowClear
-                  loading={modelsLoading}
-                  value={profile.model || undefined}
-                  placeholder={tw(
-                    'avatars.localModelPlaceholder',
-                    'opencode-go/deepseek-v4.1-flash',
-                  )}
-                  optionFilterProp="label"
-                  onChange={(value: string | undefined) =>
-                    patchProfile({ model: value ?? '' })
+              {effectiveKind === 'OPENCODE' ? (
+                <>
+                  <span className={styles.avatarFormLabel}>
+                    {tw('avatars.model', 'Model')}
+                  </span>
+                  <Select
+                    showSearch
+                    allowClear
+                    loading={modelsLoading}
+                    value={profile.model || undefined}
+                    placeholder={tw(
+                      'avatars.localModelPlaceholder',
+                      'opencode-go/deepseek-v4.1-flash',
+                    )}
+                    optionFilterProp="label"
+                    onChange={(value: string | undefined) =>
+                      patchProfile({ model: value ?? '' })
+                    }
+                    options={models.map((item) => ({
+                      value: `${item.providerID}/${item.id}`,
+                      label: `${item.name || item.id} · ${item.providerID}`,
+                    }))}
+                  />
+                  <div
+                    className={styles.fieldHint}
+                    style={{ gridColumn: '1 / -1', marginTop: -4 }}
+                  >
+                    {tw(
+                      'avatars.localModelHint',
+                      'Leave empty to use the opencode default model.',
+                    )}
+                  </div>
+                </>
+              ) : null}
+
+              <span className={styles.avatarFormLabel}>
+                {tw('avatars.workspace', 'Workspace')}
+              </span>
+              <Space.Compact style={{ width: '100%' }}>
+                <Input
+                  value={profile.workspace}
+                  placeholder="D:\\projects\\demo"
+                  style={{ flex: 1 }}
+                  onChange={(event) =>
+                    patchProfile({ workspace: event.target.value })
                   }
-                  options={models.map((item) => ({
-                    value: `${item.providerID}/${item.id}`,
-                    label: `${item.name || item.id} · ${item.providerID}`,
-                  }))}
                 />
-                <div
-                  className={styles.fieldHint}
-                  style={{ gridColumn: '1 / -1', marginTop: -4 }}
-                >
-                  {tw(
-                    'avatars.localModelHint',
-                    'Leave empty to use the opencode default model.',
-                  )}
-                </div>
-              </>
-            ) : null}
+                <Button onClick={() => void chooseWorkspace()}>
+                  {tw('avatars.chooseWorkspace', 'Choose')}
+                </Button>
+              </Space.Compact>
 
-            <span className={styles.avatarFormLabel}>
-              {tw('avatars.workspace', 'Workspace')}
-            </span>
-            <Space.Compact style={{ width: '100%' }}>
-              <Input
-                value={profile.workspace}
-                placeholder="D:\\projects\\demo"
-                style={{ flex: 1 }}
-                onChange={(event) =>
-                  patchProfile({ workspace: event.target.value })
+              <span className={styles.avatarFormLabel}>
+                {tw('avatars.autoRun', 'Execution policy')}
+              </span>
+              <Select
+                style={{ width: '100%' }}
+                value={profile.autoRun}
+                onChange={(value: string) =>
+                  patchProfile({
+                    autoRun: value as DesktopAgentProfile['autoRun'],
+                  })
                 }
+                options={autoRunOptions}
               />
-              <Button onClick={() => void chooseWorkspace()}>
-                {tw('avatars.chooseWorkspace', 'Choose')}
+
+              <span className={styles.avatarFormLabel}>
+                {tw('avatars.approvalPolicy', 'Tool approvals')}
+              </span>
+              <Select
+                style={{ width: '100%' }}
+                value={profile.approvalPolicy}
+                onChange={(value: string) =>
+                  patchProfile({
+                    approvalPolicy:
+                      value as DesktopAgentProfile['approvalPolicy'],
+                  })
+                }
+                options={approvalOptions}
+              />
+
+              <span className={styles.avatarFormLabel}>
+                {tw('avatars.sandbox', 'Sandbox')}
+              </span>
+              <Select
+                style={{ width: '100%' }}
+                value={profile.sandbox}
+                onChange={(value: string) =>
+                  patchProfile({
+                    sandbox: value as DesktopAgentProfile['sandbox'],
+                  })
+                }
+                options={sandboxOptions}
+              />
+
+              <span className={styles.avatarFormLabel}>
+                {tw('avatars.enabled', 'Enabled')}
+              </span>
+              <Switch
+                checked={profile.enabled}
+                onChange={(checked) => patchProfile({ enabled: checked })}
+              />
+              {!profile.workspace.trim() ? (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                    {tw(
+                      'avatars.localConfigUnbound',
+                      'Choose a workspace and save; tasks will fail until then.',
+                    )}
+                  </Typography.Text>
+                </div>
+              ) : null}
+            </div>
+            <Space style={{ marginTop: 12 }}>
+              <Button
+                type="primary"
+                loading={savingProfile}
+                onClick={() => void saveProfile()}
+              >
+                {tw('avatars.saveLocal', 'Save local settings')}
               </Button>
-            </Space.Compact>
-
-            <span className={styles.avatarFormLabel}>
-              {tw('avatars.autoRun', 'Execution policy')}
-            </span>
-            <Select
-              style={{ width: '100%' }}
-              value={profile.autoRun}
-              onChange={(value: string) =>
-                patchProfile({
-                  autoRun: value as DesktopAgentProfile['autoRun'],
-                })
-              }
-              options={autoRunOptions}
-            />
-
-            <span className={styles.avatarFormLabel}>
-              {tw('avatars.approvalPolicy', 'Tool approvals')}
-            </span>
-            <Select
-              style={{ width: '100%' }}
-              value={profile.approvalPolicy}
-              onChange={(value: string) =>
-                patchProfile({
-                  approvalPolicy:
-                    value as DesktopAgentProfile['approvalPolicy'],
-                })
-              }
-              options={approvalOptions}
-            />
-
-            <span className={styles.avatarFormLabel}>
-              {tw('avatars.sandbox', 'Sandbox')}
-            </span>
-            <Select
-              style={{ width: '100%' }}
-              value={profile.sandbox}
-              onChange={(value: string) =>
-                patchProfile({
-                  sandbox: value as DesktopAgentProfile['sandbox'],
-                })
-              }
-              options={sandboxOptions}
-            />
-
-            <span className={styles.avatarFormLabel}>
-              {tw('avatars.enabled', 'Enabled')}
-            </span>
-            <Switch
-              checked={profile.enabled}
-              onChange={(checked) => patchProfile({ enabled: checked })}
-            />
-            {!profile.workspace.trim() ? (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <Typography.Text type="warning" style={{ fontSize: 12 }}>
-                  {tw(
-                    'avatars.localConfigUnbound',
-                    'Choose a workspace and save; tasks will fail until then.',
-                  )}
-                </Typography.Text>
-              </div>
-            ) : null}
-          </div>
-          <Space style={{ marginTop: 12 }}>
-            <Button
-              type="primary"
-              loading={savingProfile}
-              onClick={() => void saveProfile()}
-            >
-              {tw('avatars.saveLocal', 'Save local settings')}
-            </Button>
-            <Button danger type="text" onClick={() => void removeBinding()}>
-              {tw('avatars.removeBinding', 'Remove binding')}
-            </Button>
-          </Space>
+              <Button danger type="text" onClick={() => void removeBinding()}>
+                {tw('avatars.removeBinding', 'Remove binding')}
+              </Button>
+            </Space>
           </>
         )}
       </div>

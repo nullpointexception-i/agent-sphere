@@ -14,6 +14,8 @@ public final class SessionType {
     /** Owner-only console session bound directly to a Super-Agent Worker instance. */
     public static final String TRAINING = SessionTypeCodes.TRAINING;
     public static final String WATCHDOG = SessionTypeCodes.WATCHDOG;
+    /** Tenant-level project assistant; one session per user per project. */
+    public static final String PROJECT_ROUTER = SessionTypeCodes.PROJECT_ROUTER;
 
     private SessionType() {
     }

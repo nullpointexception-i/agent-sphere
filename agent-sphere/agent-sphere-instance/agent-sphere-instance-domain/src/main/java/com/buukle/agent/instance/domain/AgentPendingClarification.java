@@ -28,6 +28,12 @@ public class AgentPendingClarification {
     /** L2 tool approval: JSON array of pending tool calls. */
     private String toolCallsJson;
     private String userResponse;
+    /** Targeted question: the project member expected to answer (null = the run's own user). */
+    private Long targetUserId;
+    /** Targeted question expiry; null = never expires. */
+    private LocalDateTime expiresAt;
+    /** User who actually answered a targeted question. */
+    private Long answeredBy;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT)

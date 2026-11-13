@@ -28,6 +28,13 @@ public class AgentWorkItem {
     private String goal;
     private Integer priority;
     private String status;
+    private String runMode;
+    private String requestSource;
+    private String sourceRef;
+    private String idempotencyKey;
+    private String entityType;
+    private Long entityId;
+    private Long sceneId;
     private String summary;
     private String blockedReason;
     private String speculationKey;

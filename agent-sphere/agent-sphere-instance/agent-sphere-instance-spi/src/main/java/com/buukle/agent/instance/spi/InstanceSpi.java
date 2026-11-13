@@ -12,6 +12,9 @@ public interface InstanceSpi {
 
     InstanceVO getInstance(Long id);
 
+    /** Cross-user read of a tenant-owned instance (project assistant canonical/fork). */
+    InstanceVO getInstanceShared(Long id);
+
     InstanceVO updateInstance(Long id, CreateInstanceDTO dto);
 
     /** Targeted update: refresh a managed instance's system prompt without touching other columns. */
@@ -41,6 +44,12 @@ public interface InstanceSpi {
 
     /** The tenant's current GROUP_ROUTER instance, or null. */
     InstanceVO findCurrentGroupRouter(Long tenantId);
+
+    /** A tenant-scoped instance by role (CHAT / GROUP_ROUTER / PROJECT_ROUTER ...), or null. */
+    InstanceVO findByRole(String role);
+
+    /** Idempotently provision the tenant-level PROJECT_ROUTER; null when no model route exists. */
+    InstanceVO ensureProjectRouter(Long tenantId);
 
     List<InstanceVO> listLatestNInstances(int n);
 
