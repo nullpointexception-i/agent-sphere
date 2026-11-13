@@ -1,9 +1,9 @@
 package com.buukle.agent.project.repository;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.buukle.agent.project.domain.PmProjectInsight;
+import com.buukle.agent.project.domain.PmProjectAnalysisBatch;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface PmProjectInsightMapper extends BaseMapper<PmProjectInsight> {
+public interface PmProjectAnalysisBatchMapper extends BaseMapper<PmProjectAnalysisBatch> {
 }

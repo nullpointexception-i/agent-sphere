@@ -19,8 +19,6 @@ const notifications = {
   'workspace.notification.projectAssistant.expired.title':
     '项目助手的提问已过期',
   'workspace.notification.projectAssistant.expired.body': '{question}',
-  'workspace.notification.projectAssistant.insight.title': '项目有新洞察',
-  'workspace.notification.projectAssistant.insight.body': '{title}',
 };
 
 export default notifications;

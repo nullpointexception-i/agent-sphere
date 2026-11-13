@@ -20,6 +20,15 @@ public class PmRequirementComment {
     private String content;
     /** JSON array of attachment metadata. */
     private String attachments;
+    /** USER / ASSISTANT / AVATAR, see CommentAuthorType. */
+    private String authorType;
+    private String authorName;
+    private Long parentCommentId;
+    private Long sourceSessionId;
+    private Long sourceRunId;
+    private String sourceBatchId;
+    /** Stable idempotency key within one assistant run. */
+    private String actionKey;
     private String status;
     private String remark;
     @TableLogic(value = "false", delval = "true")

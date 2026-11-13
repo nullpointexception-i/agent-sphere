@@ -41,7 +41,7 @@ public class ProjectRouterProvisioner {
             BuiltinToolEnum.PROJECT_QUERY.getId(),
             BuiltinToolEnum.PROJECT_MUTATE.getId(),
             BuiltinToolEnum.PROJECT_AVATAR.getId(),
-            BuiltinToolEnum.PROJECT_INSIGHT.getId());
+            BuiltinToolEnum.PROJECT_COMMENT.getId());
 
     private final InstanceMapper instanceMapper;
     private final InstanceCapabilitySpi capabilitySpi;

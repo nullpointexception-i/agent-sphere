@@ -9,10 +9,10 @@ import com.buukle.agent.project.dtvo.ProjectAssistantInboxVO;
 import com.buukle.agent.project.dtvo.ProjectAssistantSessionVO;
 import com.buukle.agent.project.dtvo.ProjectAssistantSettingsDTO;
 import com.buukle.agent.project.dtvo.ProjectAssistantSettingsVO;
+import com.buukle.agent.project.dtvo.ProjectBaselineVO;
 import com.buukle.agent.project.dtvo.ProjectContextEventVO;
-import com.buukle.agent.project.dtvo.ProjectInsightVO;
 import com.buukle.agent.project.service.ProjectAssistantService;
-import com.buukle.agent.project.service.ProjectInsightService;
+import com.buukle.agent.project.service.ProjectBaselineService;
 import com.buukle.agent.project.spi.ProjectAssistantRunResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +35,7 @@ import java.util.List;
 public class ProjectAssistantController extends BaseController {
 
     private final ProjectAssistantService assistantService;
-    private final ProjectInsightService insightService;
+    private final ProjectBaselineService baselineService;
 
     @PostMapping("/projects/{projectId}/assistant/session")
     public ResponseEntity<ProjectAssistantSessionVO> session(@PathVariable Long projectId) {
@@ -78,13 +78,17 @@ public class ProjectAssistantController extends BaseController {
         return ok(assistantService.triggerAnalysis(projectId, requirementId));
     }
 
-    @GetMapping("/projects/{projectId}/insights")
-    public ResponseEntity<List<ProjectInsightVO>> insights(
-            @PathVariable Long projectId,
-            @RequestParam(required = false) Long requirementId,
-            @RequestParam(defaultValue = "20") int limit) {
+    @GetMapping("/projects/{projectId}/assistant/baseline")
+    public ResponseEntity<ProjectBaselineVO> baseline(@PathVariable Long projectId) {
         assistantService.settings(projectId);
-        return ok(insightService.list(projectId, requirementId, limit));
+        return ok(baselineService.status(projectId));
+    }
+
+    @PostMapping("/projects/{projectId}/assistant/baseline/analyze")
+    public ResponseEntity<ProjectAssistantRunResult> analyzeBaseline(
+            @PathVariable Long projectId,
+            @RequestParam(required = false) Long requirementId) {
+        return ok(assistantService.triggerAnalysis(projectId, requirementId));
     }
 
     @GetMapping("/projects/{projectId}/assistant/context")

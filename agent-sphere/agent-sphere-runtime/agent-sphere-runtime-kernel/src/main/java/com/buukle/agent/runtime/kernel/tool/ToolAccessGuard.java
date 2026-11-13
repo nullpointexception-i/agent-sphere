@@ -18,7 +18,8 @@ public final class ToolAccessGuard {
             InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.TODOWRITE.getId(),
             InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.FINISH.getId(),
             InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.ASK_CLARIFICATION.getId(),
-            InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId());
+            InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId(),
+            InstanceCapabilityEnum.LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROJECT_COMMENT.getId());
     private static final Set<String> CHROME_READ_ACTIONS = Set.of(
             "getContent", "screenshot", "readInput", "query", "extract",
             "containers", "ready", "navigate", "scroll", "hover");

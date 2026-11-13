@@ -28,6 +28,13 @@ public class PmProjectContextEvent {
     private Long actorUserId;
     private String status;
     private String remark;
+    /** Baseline pipeline state, see ProjectAnalysisStatus. */
+    private String analysisStatus;
+    private String analysisBatchId;
+    private Long analysisRunId;
+    private Integer analysisAttempts;
+    private LocalDateTime analysisNextRetryAt;
+    private LocalDateTime analysisProcessedAt;
     @TableLogic(value = "false", delval = "true")
     private Boolean deleteFlag;
     @TableField(fill = FieldFill.INSERT)

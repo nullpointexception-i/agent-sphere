@@ -6,6 +6,7 @@
   FileAddOutlined,
   PaperClipOutlined,
   PlusOutlined,
+  ReloadOutlined,
   RobotOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
@@ -44,9 +45,12 @@ import {
 } from '@/constants/project';
 import { agentApi } from '@/services/agentSphere/api';
 import {
+  type CommentMentionInput,
+  type ProjectAssistantAvatarVO,
   type ProjectMemberVO,
   type ProjectVO,
   projectApi,
+  projectAssistantApi,
   type RequirementAttachmentVO,
   type RequirementCommentVO,
   type RequirementVO,
@@ -117,6 +121,10 @@ export function ProjectWorkspace({
   const [comments, setComments] = useState<RequirementCommentVO[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentDraft, setCommentDraft] = useState('');
+  const [mentionSelections, setMentionSelections] = useState<string[]>([]);
+  const [commentAvatars, setCommentAvatars] = useState<
+    ProjectAssistantAvatarVO[]
+  >([]);
   const [commentAttachments, setCommentAttachments] = useState<
     RequirementAttachmentVO[]
   >([]);
@@ -571,6 +579,12 @@ export function ProjectWorkspace({
     setDetailRequirement(requirement);
     setCommentDraft('');
     setCommentAttachments([]);
+    setMentionSelections([]);
+    refreshProjectMembers(requirement.projectId);
+    projectAssistantApi
+      .avatars(requirement.projectId)
+      .then((rows) => setCommentAvatars(rows || []))
+      .catch(() => setCommentAvatars([]));
     loadRequirementComments(requirement.id);
   };
 
@@ -616,15 +630,28 @@ export function ProjectWorkspace({
     }
     setCommentSubmitting(true);
     try {
+      const mentions: CommentMentionInput[] = mentionSelections.map((value) => {
+        const [mentionType, rawId] = value.split(':');
+        return mentionType === 'AVATAR'
+          ? { mentionType: 'AVATAR', targetAgentId: Number(rawId) }
+          : { mentionType: 'USER', targetUserId: Number(rawId) };
+      });
       const comment = await projectApi.addRequirementComment(
         detailRequirement.id,
         commentDraft.trim(),
         commentAttachments,
+        mentions,
       );
       setComments((previous) => [...previous, comment]);
       setCommentDraft('');
       setCommentAttachments([]);
+      setMentionSelections([]);
       message.success(tw('projects.commentAdded', 'Comment added'));
+      if (mentions.some((mention) => mention.mentionType === 'AVATAR')) {
+        window.setTimeout(() => {
+          loadRequirementComments(detailRequirement.id);
+        }, 10000);
+      }
     } catch {
       message.error(tw('projects.commentFailed', 'Failed to add comment'));
     } finally {
@@ -1071,7 +1098,30 @@ export function ProjectWorkspace({
           </div>
         )}
 
-        <Divider>{tw('projects.comments', 'Comments')}</Divider>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 12,
+          }}
+        >
+          <Divider style={{ margin: 0, flex: 1 }}>
+            {tw('projects.comments', 'Comments')}
+          </Divider>
+          <Button
+            type="text"
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              if (detailRequirement) {
+                loadRequirementComments(detailRequirement.id);
+              }
+            }}
+          >
+            {tw('projects.refresh', 'Refresh')}
+          </Button>
+        </div>
         <div className={styles.commentList}>
           <Spin spinning={commentsLoading}>
             {comments.length === 0 ? (
@@ -1081,9 +1131,39 @@ export function ProjectWorkspace({
               />
             ) : (
               comments.map((comment) => (
-                <div className={styles.commentItem} key={comment.id}>
+                <div
+                  className={styles.commentItem}
+                  key={comment.id}
+                  style={
+                    comment.parentCommentId
+                      ? {
+                          marginLeft: 20,
+                          paddingLeft: 12,
+                          borderLeft: '2px solid #ece7fb',
+                        }
+                      : undefined
+                  }
+                >
                   <div className={styles.commentMeta}>
-                    <strong>{comment.userName || `#${comment.userId}`}</strong>
+                    <Space size={6} wrap>
+                      <strong>
+                        {comment.authorType === 'ASSISTANT'
+                          ? tw('projects.assistantBadge', 'Project Assistant')
+                          : comment.authorName ||
+                            comment.userName ||
+                            (comment.userId ? `#${comment.userId}` : '-')}
+                      </strong>
+                      {comment.authorType === 'ASSISTANT' ? (
+                        <Tag bordered={false} color="blue">
+                          {tw('projects.assistantBadge', 'Project Assistant')}
+                        </Tag>
+                      ) : null}
+                      {comment.authorType === 'AVATAR' ? (
+                        <Tag bordered={false} color="purple">
+                          {tw('projects.avatarBadge', 'Avatar')}
+                        </Tag>
+                      ) : null}
+                    </Space>
                     <span>
                       {comment.createdAt
                         ? dayjs(comment.createdAt).format('YYYY-MM-DD HH:mm')
@@ -1091,6 +1171,19 @@ export function ProjectWorkspace({
                     </span>
                   </div>
                   <div className={styles.commentContent}>{comment.content}</div>
+                  {comment.mentions?.length ? (
+                    <div className={styles.commentAttachments}>
+                      {comment.mentions.map((mention) => (
+                        <Tag key={mention.id} bordered={false} color="geekblue">
+                          @
+                          {mention.targetAgentName ||
+                            mention.targetUserName ||
+                            mention.targetAgentId ||
+                            mention.targetUserId}
+                        </Tag>
+                      ))}
+                    </div>
+                  ) : null}
                   {comment.attachments?.length ? (
                     <div className={styles.commentAttachments}>
                       {comment.attachments.map((attachment) => (
@@ -1134,6 +1227,43 @@ export function ProjectWorkspace({
               ))}
             </div>
           ) : null}
+          <Select
+            mode="multiple"
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            style={{ width: '100%', marginBottom: 8 }}
+            placeholder={tw(
+              'projects.mentionPlaceholder',
+              '@ a member or avatar to notify',
+            )}
+            value={mentionSelections}
+            onChange={(values: string[]) => setMentionSelections(values)}
+            options={[
+              {
+                label: tw('projects.mentionMembers', 'Members'),
+                options: projectMembers
+                  .filter((member) => member.userId)
+                  .map((member) => ({
+                    value: `USER:${member.userId}`,
+                    label: `@${member.displayName || `#${member.userId}`}`,
+                  })),
+              },
+              ...(commentAvatars.length
+                ? [
+                    {
+                      label: tw('projects.mentionAvatars', 'Avatars'),
+                      options: commentAvatars.map((avatar) => ({
+                        value: `AVATAR:${avatar.agentId}`,
+                        label: `@${avatar.name}${
+                          avatar.ownerName ? ` · ${avatar.ownerName}` : ''
+                        }`,
+                      })),
+                    },
+                  ]
+                : []),
+            ]}
+          />
           <Input.TextArea
             rows={3}
             style={{ resize: 'none' }}

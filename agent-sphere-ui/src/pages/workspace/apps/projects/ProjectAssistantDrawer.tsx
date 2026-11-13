@@ -26,20 +26,23 @@ import {
   type ProjectAssistantAvatarVO,
   type ProjectAssistantInboxVO,
   type ProjectAssistantSettingsVO,
-  type ProjectInsightVO,
+  type ProjectBaselineVO,
+  type ProjectContextEventVO,
   projectAssistantApi,
 } from '@/services/agentSphere/project';
 import { tw } from '../../i18n';
 
 const TAB_CHAT = 'chat';
-const TAB_INSIGHTS = 'insights';
+const TAB_BASELINE = 'baseline';
 const TAB_INBOX = 'inbox';
 const TAB_AVATARS = 'avatars';
 
-const SEVERITY_COLOR: Record<string, string> = {
-  INFO: 'blue',
-  WARN: 'orange',
-  HIGH: 'red',
+const BASELINE_STATUS_COLOR: Record<string, string> = {
+  RUNNING: 'processing',
+  COMPLETED: 'green',
+  FAILED: 'red',
+  CANCELLED: 'orange',
+  PENDING: 'blue',
 };
 
 interface ProjectAssistantDrawerProps {
@@ -62,8 +65,11 @@ export function ProjectAssistantDrawer({
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [sessionError, setSessionError] = useState(false);
-  const [insights, setInsights] = useState<ProjectInsightVO[]>([]);
-  const [insightLoading, setInsightLoading] = useState(false);
+  const [baseline, setBaseline] = useState<ProjectBaselineVO | null>(null);
+  const [contextEvents, setContextEvents] = useState<ProjectContextEventVO[]>(
+    [],
+  );
+  const [baselineLoading, setBaselineLoading] = useState(false);
   const [settings, setSettings] = useState<ProjectAssistantSettingsVO | null>(
     null,
   );
@@ -100,11 +106,16 @@ export function ProjectAssistantDrawer({
     }
   }, [projectId, message]);
 
-  const loadInsights = useCallback(async () => {
+  const loadBaseline = useCallback(async () => {
     if (!projectId) return;
-    setInsightLoading(true);
+    setBaselineLoading(true);
     try {
-      setInsights(await projectAssistantApi.insights(projectId));
+      const [status, events] = await Promise.all([
+        projectAssistantApi.baseline(projectId),
+        projectAssistantApi.context(projectId, 30),
+      ]);
+      setBaseline(status);
+      setContextEvents(events || []);
     } catch {
       message.error(
         tw(
@@ -113,7 +124,7 @@ export function ProjectAssistantDrawer({
         ),
       );
     } finally {
-      setInsightLoading(false);
+      setBaselineLoading(false);
     }
   }, [projectId, message]);
 
@@ -150,7 +161,7 @@ export function ProjectAssistantDrawer({
     if (!open || !projectId) return;
     setSessionId(null);
     void loadSession();
-    void loadInsights();
+    void loadBaseline();
     void loadInbox();
     void loadAvatars();
     void loadSettings();
@@ -158,7 +169,7 @@ export function ProjectAssistantDrawer({
     open,
     projectId,
     loadSession,
-    loadInsights,
+    loadBaseline,
     loadInbox,
     loadAvatars,
     loadSettings,
@@ -168,12 +179,12 @@ export function ProjectAssistantDrawer({
     if (!projectId) return;
     setAnalyzing(true);
     try {
-      await projectAssistantApi.analyze(projectId);
+      await projectAssistantApi.analyzeBaseline(projectId);
       message.success(
         tw('projects.assistant.analyzeStarted', 'Analysis started'),
       );
       window.setTimeout(() => {
-        void loadInsights();
+        void loadBaseline();
       }, 4000);
     } catch {
       message.error(
@@ -191,7 +202,14 @@ export function ProjectAssistantDrawer({
     if (!projectId) return;
     try {
       await projectAssistantApi.updateSettings(projectId, checked);
-      setSettings((prev) => ({ projectId, autoAnalyze: checked, ...prev }));
+      setSettings((previous) => ({
+        ...previous,
+        projectId,
+        autoAnalyze: checked,
+      }));
+      window.setTimeout(() => {
+        void loadBaseline();
+      }, 800);
     } catch {
       message.error(
         tw('projects.assistant.settingsFailed', 'Failed to save settings'),
@@ -212,7 +230,7 @@ export function ProjectAssistantDrawer({
     }
   };
 
-  const insightTab = (
+  const baselineTab = (
     <div
       style={{
         height: 'calc(100vh - 170px)',
@@ -239,7 +257,7 @@ export function ProjectAssistantDrawer({
               ? tw('projects.assistant.analyzing', 'Analyzing')
               : tw('projects.assistant.analyze', 'Analyze now')}
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={() => void loadInsights()}>
+          <Button icon={<ReloadOutlined />} onClick={() => void loadBaseline()}>
             {tw('projects.assistant.refresh', 'Refresh')}
           </Button>
         </Space>
@@ -254,56 +272,78 @@ export function ProjectAssistantDrawer({
       <Typography.Paragraph type="secondary" style={{ marginTop: -4 }}>
         {tw(
           'projects.assistant.autoAnalyzeHint',
-          'Analyze once after project or requirement changes; off by default',
+          'Collects incremental changes and analyzes them in micro-batches; off by default',
         )}
       </Typography.Paragraph>
-      <Spin spinning={insightLoading}>
-        {insights.length === 0 ? (
+      <Spin spinning={baselineLoading}>
+        <Space size={8} wrap style={{ marginBottom: 12 }}>
+          <Tag color={baseline?.autoAnalyze ? 'green' : 'default'}>
+            {baseline?.autoAnalyze
+              ? tw('projects.assistant.baseline.on', 'Collecting changes')
+              : tw('projects.assistant.baseline.off', 'Collection paused')}
+          </Tag>
+          <Tag>
+            {tw('projects.assistant.baseline.pending', 'Pending events')}:{' '}
+            {baseline?.pendingEvents ?? 0}
+          </Tag>
+          <Tag color={baseline?.runningBatches ? 'processing' : 'default'}>
+            {tw('projects.assistant.baseline.running', 'Running batches')}:{' '}
+            {baseline?.runningBatches ?? 0}
+          </Tag>
+          {baseline?.lastBatchStatus ? (
+            <Tag
+              color={
+                BASELINE_STATUS_COLOR[baseline.lastBatchStatus] || 'default'
+              }
+            >
+              {tw('projects.assistant.baseline.last', 'Last batch')}:{' '}
+              {baseline.lastBatchStatus}
+            </Tag>
+          ) : null}
+          {baseline?.lastBatchAt ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {baseline.lastBatchAt}
+            </Typography.Text>
+          ) : null}
+        </Space>
+        {baseline?.lastBatchError ? (
+          <Typography.Paragraph type="danger" style={{ fontSize: 12 }}>
+            {baseline.lastBatchError}
+          </Typography.Paragraph>
+        ) : null}
+        {contextEvents.length === 0 ? (
           <Empty
-            description={tw('projects.assistant.noInsights', 'No insights yet')}
+            description={tw(
+              'projects.assistant.noContext',
+              'No project activity yet',
+            )}
           />
         ) : (
           <List
-            dataSource={insights}
+            dataSource={contextEvents}
             renderItem={(item) => (
               <List.Item>
                 <List.Item.Meta
-                  avatar={<Avatar icon={<BulbOutlined />} />}
                   title={
                     <Space wrap>
-                      <Tag color={SEVERITY_COLOR[item.severity] || 'blue'}>
-                        {tw(
-                          `projects.assistant.severity.${(item.severity || 'INFO').toLowerCase()}`,
-                          item.severity || 'INFO',
-                        )}
-                      </Tag>
-                      <Tag>
-                        {tw(
-                          `projects.assistant.insightType.${(item.insightType || 'SUMMARY').toLowerCase()}`,
-                          item.insightType || 'SUMMARY',
-                        )}
-                      </Tag>
-                      {item.requirementKey ? (
-                        <Tag>{item.requirementKey}</Tag>
+                      <Tag>{item.eventType}</Tag>
+                      {item.requirementId ? (
+                        <Typography.Text type="secondary">
+                          #{item.requirementId}
+                        </Typography.Text>
                       ) : null}
-                      <span>
-                        {item.title ||
-                          tw('projects.assistant.insights', 'Insights')}
-                      </span>
+                      {item.createdAt ? (
+                        <Typography.Text
+                          type="secondary"
+                          style={{ fontSize: 12 }}
+                        >
+                          {item.createdAt}
+                        </Typography.Text>
+                      ) : null}
                     </Space>
                   }
                   description={
-                    <div>
-                      <div style={{ whiteSpace: 'pre-wrap' }}>
-                        {item.content}
-                      </div>
-                      <Typography.Text
-                        type="secondary"
-                        style={{ fontSize: 12 }}
-                      >
-                        {item.createdAt}
-                      </Typography.Text>
-                    </div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{item.summary}</div>
                   }
                 />
               </List.Item>
@@ -577,9 +617,9 @@ export function ProjectAssistantDrawer({
             ),
           },
           {
-            key: TAB_INSIGHTS,
-            label: tw('projects.assistant.insights', 'Insights'),
-            children: insightTab,
+            key: TAB_BASELINE,
+            label: tw('projects.assistant.baseline', 'Baseline'),
+            children: baselineTab,
           },
           {
             key: TAB_INBOX,

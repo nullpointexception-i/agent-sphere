@@ -11,7 +11,12 @@ public class RequirementCommentVO {
     private Long requirementId;
     private Long userId;
     private String userName;
+    /** USER / ASSISTANT / AVATAR. */
+    private String authorType;
+    private String authorName;
+    private Long parentCommentId;
     private String content;
     private List<RequirementAttachmentVO> attachments;
+    private List<RequirementCommentMentionVO> mentions;
     private LocalDateTime createdAt;
 }

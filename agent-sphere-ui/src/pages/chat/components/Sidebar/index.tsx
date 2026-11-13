@@ -197,70 +197,40 @@ export default function Sidebar({
                   {selectedIds.has(s.id) ? '✓' : '○'}
                 </span>
               )}
-              <span
-                className="conv-label"
-                title={s.title}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                  minWidth: 0,
-                }}
-              >
-                <span
-                  style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: '100%',
-                  }}
-                >
-                  {s.title}
-                </span>
-                {(s.agentInstanceName || s.agentInstanceId) && (
-                  <Tag
-                    bordered={false}
-                    style={{
-                      marginInlineEnd: 0,
-                      marginTop: 2,
-                      padding: '0 4px',
-                      fontSize: 10,
-                      lineHeight: '16px',
-                      color: '#8c8c8c',
-                      background: '#f5f5f5',
-                    }}
-                  >
-                    {s.agentInstanceId
-                      ? `#${s.agentInstanceId}${
-                          s.agentInstanceName
-                            ? `（${s.agentInstanceName}）`
-                            : ''
-                        }`
-                      : s.agentInstanceName}
-                  </Tag>
-                )}
-                {s.sessionType === SESSION_TYPE.PROJECT_ROUTER && (
-                  <Tag
-                    bordered={false}
-                    color={s.parentSessionId ? 'purple' : 'blue'}
-                    style={{
-                      marginInlineEnd: 0,
-                      marginTop: 2,
-                      padding: '0 4px',
-                      fontSize: 10,
-                      lineHeight: '16px',
-                    }}
-                  >
-                    {s.parentSessionId
-                      ? `${intl.formatMessage({
-                          id: 'pages.chat.projectFork',
-                          defaultMessage: 'User fork',
-                        })}${s.createdBy ? ` · ${s.createdBy}` : ''}`
-                      : intl.formatMessage({
-                          id: 'pages.chat.projectBaseline',
-                          defaultMessage: 'Project baseline',
-                        })}
-                  </Tag>
+              <span className="conv-label" title={s.title}>
+                <span className="conv-title">{s.title}</span>
+                {(s.sessionType === SESSION_TYPE.PROJECT_ROUTER ||
+                  s.agentInstanceName ||
+                  s.agentInstanceId) && (
+                  <span className="conv-meta">
+                    {s.sessionType === SESSION_TYPE.PROJECT_ROUTER ? (
+                      <Tag
+                        bordered={false}
+                        color={s.parentSessionId ? 'purple' : 'blue'}
+                        className="conv-meta-tag"
+                      >
+                        {s.parentSessionId
+                          ? intl.formatMessage({
+                              id: 'pages.chat.projectFork',
+                              defaultMessage: 'User fork',
+                            })
+                          : intl.formatMessage({
+                              id: 'pages.chat.projectBaseline',
+                              defaultMessage: 'Project baseline',
+                            })}
+                      </Tag>
+                    ) : (
+                      <Tag bordered={false} className="conv-meta-tag">
+                        {s.agentInstanceId
+                          ? `#${s.agentInstanceId}${
+                              s.agentInstanceName
+                                ? `（${s.agentInstanceName}）`
+                                : ''
+                            }`
+                          : s.agentInstanceName}
+                      </Tag>
+                    )}
+                  </span>
                 )}
               </span>
               <span className="conv-actions">

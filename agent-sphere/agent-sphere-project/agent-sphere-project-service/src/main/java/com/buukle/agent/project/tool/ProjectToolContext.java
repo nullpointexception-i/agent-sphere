@@ -1,6 +1,7 @@
 package com.buukle.agent.project.tool;
 
 import com.buukle.agent.capability.builtin.tool.spi.dtvo.ExecuteContext;
+import com.buukle.agent.project.dtvo.CommentMentionDTO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -30,8 +31,12 @@ public class ProjectToolContext extends ExecuteContext {
     private String memberRole;
 
     private String content;
-    private String insightType;
-    private String severity;
+
+    /** Comment mentions and threading. */
+    private List<CommentMentionDTO> mentions;
+    private Long parentCommentId;
+    private String actionKey;
+    private String authorType;
 
     private Long agentId;
     private String question;

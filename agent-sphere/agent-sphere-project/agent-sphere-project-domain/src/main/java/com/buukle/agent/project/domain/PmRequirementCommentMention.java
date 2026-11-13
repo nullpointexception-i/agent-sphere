@@ -10,21 +10,21 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** One project-level analysis result produced by the Project Assistant. */
+/** Structured @ mention extracted from one requirement comment. */
 @Data
-@TableName("pm_project_insight")
-public class PmProjectInsight {
+@TableName("pm_requirement_comment_mention")
+public class PmRequirementCommentMention {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private Long projectId;
-    private Long requirementId;
-    private String insightType;
-    private String severity;
-    private String title;
-    private String content;
-    private String source;
-    private Long sourceRunId;
+    private Long commentId;
+    /** USER or AVATAR, see CommentMentionType. */
+    private String mentionType;
+    private Long targetUserId;
+    private Long targetAgentId;
     private String status;
+    private LocalDateTime processedAt;
+    private Long replyCommentId;
+    private String errorMessage;
     private String remark;
     @TableLogic(value = "false", delval = "true")
     private Boolean deleteFlag;

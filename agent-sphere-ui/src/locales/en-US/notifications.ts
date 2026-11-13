@@ -20,9 +20,6 @@ const notifications = {
   'workspace.notification.projectAssistant.expired.title':
     'A project assistant question expired',
   'workspace.notification.projectAssistant.expired.body': '{question}',
-  'workspace.notification.projectAssistant.insight.title':
-    'New project insight available',
-  'workspace.notification.projectAssistant.insight.body': '{title}',
 };
 
 export default notifications;

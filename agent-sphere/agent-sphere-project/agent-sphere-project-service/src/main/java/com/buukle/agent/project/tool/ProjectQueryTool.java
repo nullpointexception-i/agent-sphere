@@ -12,8 +12,8 @@ public class ProjectQueryTool extends AbstractProjectTool {
 
     private static final String SCHEMA = """
             {"type":"object","properties":{
-              "operation":{"type":"string","enum":["project","requirements","requirement","members","insights","context","avatars"],
-                "description":"project=overview; requirements=requirement list; requirement=one requirement with comments/activity; members; insights; context=recent shared context; avatars=available member avatars"},
+              "operation":{"type":"string","enum":["project","requirements","requirement","members","context","avatars"],
+                "description":"project=overview; requirements=requirement list; requirement=one requirement with comments/activity; members; context=recent shared context; avatars=available member avatars"},
               "requirementId":{"type":"integer","description":"Requirement id for operation=requirement"},
               "status":{"type":"string","description":"Optional requirement status filter"},
               "keyword":{"type":"string","description":"Optional title/key/description keyword"},
@@ -43,7 +43,7 @@ public class ProjectQueryTool extends AbstractProjectTool {
 
     @Override
     protected String description() {
-        return "Read the current project: overview, members, requirements, comments, activity, insights, shared context, avatars.";
+        return "Read the current project: overview, members, requirements, comments, activity, shared context, avatars.";
     }
 
     @Override

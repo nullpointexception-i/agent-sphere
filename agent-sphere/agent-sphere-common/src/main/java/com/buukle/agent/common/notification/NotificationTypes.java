@@ -9,8 +9,6 @@ public final class NotificationTypes {
     public static final String PROJECT_ASSISTANT_QUESTION = "PROJECT_ASSISTANT_QUESTION";
     /** A targeted project question expired unanswered. */
     public static final String PROJECT_ASSISTANT_EXPIRED = "PROJECT_ASSISTANT_EXPIRED";
-    /** A new project insight is available. */
-    public static final String PROJECT_ASSISTANT_INSIGHT = "PROJECT_ASSISTANT_INSIGHT";
 
     private NotificationTypes() {
     }

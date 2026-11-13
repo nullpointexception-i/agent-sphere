@@ -32,6 +32,9 @@ public final class ProjectAssistantConstants {
     public static final String AUTHOR_TYPE_AGENT = "AGENT";
     public static final String AUTHOR_NAME = "Project Assistant";
 
+    /** Hard cap of assistant comments per analysis run, so one batch cannot spam a project. */
+    public static final int MAX_COMMENTS_PER_RUN = 3;
+
     /** Content row status used by project insights and context events. */
     public static final String STATUS_ACTIVE = "ACTIVE";
 

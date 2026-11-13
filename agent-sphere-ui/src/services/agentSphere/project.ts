@@ -54,14 +54,34 @@ export interface RequirementAttachmentVO {
   sizeBytes?: number;
 }
 
+export interface RequirementCommentMentionVO {
+  id: number;
+  mentionType: string;
+  targetUserId?: number;
+  targetUserName?: string;
+  targetAgentId?: number;
+  targetAgentName?: string;
+  status?: string;
+}
+
 export interface RequirementCommentVO {
   id: number;
   requirementId: number;
   userId: number;
   userName?: string;
+  authorType?: string;
+  authorName?: string;
+  parentCommentId?: number;
   content: string;
   attachments?: RequirementAttachmentVO[];
+  mentions?: RequirementCommentMentionVO[];
   createdAt?: string;
+}
+
+export interface CommentMentionInput {
+  mentionType: 'USER' | 'AVATAR';
+  targetUserId?: number;
+  targetAgentId?: number;
 }
 
 export interface RequirementActivityVO {
@@ -80,21 +100,6 @@ export interface ProjectAssistantSessionVO {
   threadId: number;
   instanceId: number;
   projectId: number;
-}
-
-export interface ProjectInsightVO {
-  id: number;
-  projectId: number;
-  requirementId?: number;
-  requirementKey?: string;
-  insightType: string;
-  severity: string;
-  title?: string;
-  content: string;
-  source?: string;
-  sourceRunId?: number;
-  createdBy?: string;
-  createdAt?: string;
 }
 
 export interface ProjectAssistantInboxVO {
@@ -141,6 +146,16 @@ export interface ProjectContextEventVO {
   canonicalSessionId?: number;
   actorUserId?: number;
   createdAt?: string;
+}
+
+export interface ProjectBaselineVO {
+  projectId: number;
+  autoAnalyze: boolean;
+  pendingEvents: number;
+  runningBatches: number;
+  lastBatchStatus?: string;
+  lastBatchAt?: string;
+  lastBatchError?: string;
 }
 
 export interface PageResult<T> {
@@ -290,10 +305,11 @@ export const projectApi = {
     id: number,
     content: string,
     attachments?: RequirementAttachmentVO[],
+    mentions?: CommentMentionInput[],
   ) {
     return request<RequirementCommentVO>(
       `${BASE}/project/requirements/${id}/comments`,
-      { method: 'POST', data: { content, attachments } },
+      { method: 'POST', data: { content, attachments, mentions } },
     );
   },
 };
@@ -341,10 +357,16 @@ export const projectAssistantApi = {
       { method: 'POST', params: { requirementId } },
     );
   },
-  insights(projectId: number, requirementId?: number, limit = 20) {
-    return request<ProjectInsightVO[]>(
-      `${BASE}/project/projects/${projectId}/insights`,
-      { method: 'GET', params: { requirementId, limit } },
+  baseline(projectId: number) {
+    return request<ProjectBaselineVO>(
+      `${BASE}/project/projects/${projectId}/assistant/baseline`,
+      { method: 'GET' },
+    );
+  },
+  analyzeBaseline(projectId: number, requirementId?: number) {
+    return request<{ sessionId: number; runId: number }>(
+      `${BASE}/project/projects/${projectId}/assistant/baseline/analyze`,
+      { method: 'POST', params: { requirementId } },
     );
   },
   context(projectId: number, limit = 30) {

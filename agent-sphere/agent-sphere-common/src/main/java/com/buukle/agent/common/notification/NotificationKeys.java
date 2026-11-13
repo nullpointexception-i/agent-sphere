@@ -10,8 +10,6 @@ public final class NotificationKeys {
     public static final String PROJECT_ASSISTANT_QUESTION_BODY = "notification.projectAssistant.question.body";
     public static final String PROJECT_ASSISTANT_EXPIRED_TITLE = "notification.projectAssistant.expired.title";
     public static final String PROJECT_ASSISTANT_EXPIRED_BODY = "notification.projectAssistant.expired.body";
-    public static final String PROJECT_ASSISTANT_INSIGHT_TITLE = "notification.projectAssistant.insight.title";
-    public static final String PROJECT_ASSISTANT_INSIGHT_BODY = "notification.projectAssistant.insight.body";
 
     private NotificationKeys() {
     }

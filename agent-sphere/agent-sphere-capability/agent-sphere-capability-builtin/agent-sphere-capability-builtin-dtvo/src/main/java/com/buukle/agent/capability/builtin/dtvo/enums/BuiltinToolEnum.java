@@ -29,7 +29,7 @@ public enum BuiltinToolEnum {
     PROJECT_QUERY(23, ToolAccessMode.READ, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, true),
     PROJECT_MUTATE(24, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
     PROJECT_AVATAR(25, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false),
-    PROJECT_INSIGHT(26, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false);
+    PROJECT_COMMENT(26, ToolAccessMode.WRITE, ToolSecurityLevel.L1, ToolApprovalScope.SESSION, false);
 
     private final int id;
     private final ToolAccessMode accessMode;

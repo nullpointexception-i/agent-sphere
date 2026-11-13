@@ -7,7 +7,6 @@ import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.context.TenantScope;
 import com.buukle.agent.common.context.TenantScopeHolder;
-import com.buukle.agent.common.context.TenantContext;
 import com.buukle.agent.common.error.CommonErrorCode;
 import com.buukle.agent.common.exception.BizException;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
@@ -28,7 +27,6 @@ import com.buukle.agent.project.dtvo.CreateRequirementCommentDTO;
 import com.buukle.agent.project.dtvo.CreateRequirementDTO;
 import com.buukle.agent.project.dtvo.ProjectAssistantAvatarVO;
 import com.buukle.agent.project.dtvo.ProjectContextEventVO;
-import com.buukle.agent.project.dtvo.ProjectInsightVO;
 import com.buukle.agent.project.dtvo.ProjectMemberVO;
 import com.buukle.agent.project.dtvo.ProjectVO;
 import com.buukle.agent.project.dtvo.RequirementActivityVO;
@@ -37,6 +35,7 @@ import com.buukle.agent.project.dtvo.RequirementVO;
 import com.buukle.agent.project.dtvo.UpdateProjectDTO;
 import com.buukle.agent.project.dtvo.UpdateRequirementDTO;
 import com.buukle.agent.project.dtvo.enums.ProjectContextEventType;
+import com.buukle.agent.project.dtvo.enums.CommentAuthorType;
 import com.buukle.agent.project.dtvo.enums.ProjectMemberRole;
 import com.buukle.agent.project.repository.PmProjectMapper;
 import com.buukle.agent.project.repository.PmProjectMemberMapper;
@@ -45,8 +44,8 @@ import com.buukle.agent.project.repository.PmRequirementCommentMapper;
 import com.buukle.agent.project.repository.PmRequirementMapper;
 import com.buukle.agent.project.service.ProjectAssistantSessionRegistry;
 import com.buukle.agent.project.service.ProjectContextEventService;
-import com.buukle.agent.project.service.ProjectInsightService;
 import com.buukle.agent.project.service.ProjectService;
+import com.buukle.agent.project.service.RequirementCommentService;
 import com.buukle.agent.superagent.spi.AvatarConsultCommand;
 import com.buukle.agent.superagent.spi.AvatarConsultResult;
 import com.buukle.agent.superagent.spi.AvatarConsultSpi;
@@ -88,9 +87,9 @@ public class ProjectToolService {
     private final ClarificationSpi clarificationSpi;
     private final UserSpi userSpi;
     private final ProjectService projectService;
-    private final ProjectInsightService insightService;
     private final ProjectContextEventService contextEventService;
     private final ProjectAssistantSessionRegistry sessionRegistry;
+    private final RequirementCommentService commentService;
     private final SuperAgentDirectorySpi directorySpi;
     private final WorkItemDispatchSpi workItemDispatchSpi;
     /**
@@ -167,11 +166,6 @@ public class ProjectToolService {
                 return ProjectToolResult.ok("members loaded",
                         projectService.members(ctx.projectId()));
             }
-            case "insights" -> {
-                List<ProjectInsightVO> insights = insightService.list(
-                        ctx.projectId(), input.getRequirementId(), limit(input));
-                return ProjectToolResult.ok("insights loaded", insights);
-            }
             case "context" -> {
                 List<ProjectContextEventVO> events =
                         contextEventService.recent(ctx.projectId(), limit(input));
@@ -215,7 +209,6 @@ public class ProjectToolService {
         data.put("requirement", projectService.requirement(requirementId));
         data.put("comments", projectService.requirementComments(requirementId));
         data.put("activities", projectService.activities(requirementId));
-        data.put("insights", insightService.list(ctx.projectId(), requirementId, 20));
         return ProjectToolResult.ok("requirement loaded", data);
     }
 
@@ -417,24 +410,50 @@ public class ProjectToolService {
         return ProjectToolResult.ok("requirement deleted", requirementId);
     }
 
-    // ------------------------------------------------------------------ insight
+    // ------------------------------------------------------------------ comment
 
-    public ProjectToolResult insight(ProjectToolContext input) {
+    /** Create a requirement comment authored by the Project Assistant. */
+    public ProjectToolResult comment(ProjectToolContext input) {
         ToolSession ctx = resolve(input);
         requireMember(ctx);
-        String operation = op(input, "create");
-        if ("list".equals(operation)) {
-            return ProjectToolResult.ok("insights loaded",
-                    insightService.list(ctx.projectId(), input.getRequirementId(), limit(input)));
+        Long requirementId = input.getRequirementId();
+        if (requirementId == null || !StringUtils.hasText(input.getContent())) {
+            return ProjectToolResult.failed("requirementId and content are required");
         }
-        if (!StringUtils.hasText(input.getContent())) {
-            return ProjectToolResult.failed("content is required");
+        PmRequirement requirement = requirementMapper.selectById(requirementId);
+        if (requirement == null || !Objects.equals(requirement.getProjectId(), ctx.projectId())) {
+            return ProjectToolResult.failed("requirement not found in this project");
         }
-        Long id = insightService.create(ctx.projectId(), input.getRequirementId(),
-                input.getInsightType(), input.getSeverity(), input.getTitle(), input.getContent(),
-                "ASSISTANT", ctx.runId(), ctx.session().getId(), ctx.canonicalSessionId(),
-                ctx.requesterUserId());
-        return ProjectToolResult.ok("insight saved", id);
+        if (ctx.runId() != null) {
+            long used = commentMapper.selectCount(new LambdaQueryWrapper<PmRequirementComment>()
+                    .eq(PmRequirementComment::getSourceRunId, ctx.runId()));
+            if (used >= ProjectAssistantConstants.MAX_COMMENTS_PER_RUN) {
+                return ProjectToolResult.failed("comment limit reached for this analysis run");
+            }
+        }
+        String actionKey = StringUtils.hasText(input.getActionKey())
+                ? input.getActionKey()
+                : "comment:" + requirementId + ":" + hash(input.getContent());
+        if (actionKey.length() > 128) {
+            actionKey = actionKey.substring(0, 128);
+        }
+        RequirementCommentVO comment = commentService.add(
+                new RequirementCommentService.RequirementCommentCommand(
+                        ctx.tenantId(), ctx.projectId(), requirementId, ctx.requesterUserId(),
+                        CommentAuthorType.ASSISTANT.value(), ProjectAssistantConstants.AUTHOR_NAME,
+                        input.getParentCommentId(), input.getContent(), null, input.getMentions(),
+                        ctx.session().getId(), ctx.runId(), null, actionKey));
+        return ProjectToolResult.ok("comment added", comment);
+    }
+
+    private static String hash(String content) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest).substring(0, 32);
+        } catch (Exception e) {
+            return String.valueOf(content.hashCode());
+        }
     }
 
     // ------------------------------------------------------------------ avatar

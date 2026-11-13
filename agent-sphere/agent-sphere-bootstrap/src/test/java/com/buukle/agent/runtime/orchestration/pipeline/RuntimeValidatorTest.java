@@ -69,7 +69,7 @@ class RuntimeValidatorTest {
         ModelRouteVO fallback = route(3L, 1_000_000L, 384_000L);
 
         when(sessionSpi.getSession(1L)).thenReturn(session);
-        when(instanceSpi.getInstance(2L)).thenReturn(instance);
+        when(instanceSpi.getInstanceShared(2L)).thenReturn(instance);
         when(routeSpi.getRoute(4L)).thenReturn(primary);
         lenient().when(routeSpi.getRoute(3L)).thenReturn(fallback);
 

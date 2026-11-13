@@ -66,19 +66,19 @@ public class ProjectAssistantService {
     private static final String CANONICAL_TITLE_PREFIX = "Project Assistant · ";
     private static final String FORK_KIND = "PROJECT_ASSISTANT";
     private static final String FORK_STATE_ACTIVE = "ACTIVE";
-    private static final String AUTO_ANALYZE_PROMPT = """
-            Analyze the project's recent changes in read-only mode:
+    private static final String MANUAL_ANALYZE_PROMPT = """
+            Analyze the project in read-only mode:
             1. Use project_query to read the project overview, open/overdue/high-priority requirements, and recent comments.
-            2. Identify risks, blockers, priority conflicts, and next-step suggestions.
-            3. Use project_insight to save 1-3 insights (insightType=SUMMARY/RISK/PROGRESS, severity=INFO/WARN/HIGH).
-            4. Do not modify any project or requirement data and do not ask humans any questions.
+            2. Identify concrete risks, blockers, priority conflicts, and next-step suggestions.
+            3. Use project_comment to reply in the most relevant requirement threads. Create at most 3 comments for this analysis; only comment when the finding is actionable.
+            4. Mention a member or avatar only when their action is required.
+            5. Do not modify project data and do not ask humans any questions.
             """;
 
     private final PmProjectMapper projectMapper;
     private final PmProjectMemberMapper memberMapper;
     private final ProjectService projectService;
     private final ProjectContextEventService contextEventService;
-    private final ProjectInsightService insightService;
     private final ProjectAssistantSessionRegistry sessionRegistry;
     private final ProjectAssistantConfigService configService;
     private final InstanceSpi instanceSpi;
@@ -95,56 +95,79 @@ public class ProjectAssistantService {
     public ProjectAssistantSessionVO ensureSession(Long projectId) {
         PmProject project = requireMember(projectId);
         Long tenantId = currentTenant();
+        Canonical canonical = initCanonical(project, tenantId);
+        String username = currentUsername();
+        SessionVO fork = sessionSpi.findProjectForkSession(
+                canonical.threadId(), username, canonical.session().getId());
+        if (fork == null) {
+            fork = sessionSpi.createSession(newSession(
+                    tenantId, canonical.instanceId(), canonical.threadId(), username,
+                    CANONICAL_TITLE_PREFIX + project.getName() + " · " + displayNameOf(currentUser()),
+                    canonical.session().getId()));
+        }
+        sessionRegistry.register(tenantId, projectId, fork.getId(), canonical.session().getId(),
+                currentUser(), PmProjectAssistantSession.ROLE_FORK);
+        return sessionVO(projectId, fork.getId(), canonical.session().getId(),
+                canonical.threadId(), canonical.instanceId());
+    }
+
+    /** Ensure the shared canonical session without a request identity (scheduler/baseline runs). */
+    @Transactional
+    public ProjectAssistantSessionVO ensureCanonicalSession(Long tenantId, PmProject project) {
+        if (tenantId == null || project == null || project.getId() == null) {
+            return null;
+        }
+        Canonical canonical = initCanonical(project, tenantId);
+        return sessionVO(project.getId(), canonical.session().getId(),
+                canonical.session().getId(), canonical.threadId(), canonical.instanceId());
+    }
+
+    private Canonical initCanonical(PmProject project, Long tenantId) {
         InstanceVO instance = instanceSpi.ensureProjectRouter(tenantId);
         if (instance == null) {
             throw new BizException(CommonErrorCode.PARAM_INVALID,
                     "project assistant is not configured: no model route for this tenant");
         }
-        String username = currentUsername();
         String ownerUsername = usernameOf(project.getOwnerUserId());
         Long threadId = projectThreadSpi.ensureProjectThread(
-                tenantId, projectId, project.getName(), username);
+                tenantId, project.getId(), project.getName(), ownerUsername);
         if (threadId == null) {
             throw new BizException(CommonErrorCode.INTERNAL_ERROR, "project thread unavailable");
         }
-
         SessionVO canonical = null;
-        PmProjectAssistantSession canonicalLink = sessionRegistry.findCanonical(projectId);
+        PmProjectAssistantSession canonicalLink = sessionRegistry.findCanonical(project.getId());
         if (canonicalLink != null) {
             canonical = safeSharedSession(canonicalLink.getSessionId());
         }
         if (canonical == null) {
             canonical = sessionSpi.createSession(newSession(
-                    project, tenantId, instance.getId(), threadId, ownerUsername,
-                    CANONICAL_TITLE_PREFIX + project.getName(),
-                    null));
+                    tenantId, instance.getId(), threadId, ownerUsername,
+                    CANONICAL_TITLE_PREFIX + project.getName(), null));
         }
-        sessionRegistry.register(tenantId, projectId, canonical.getId(), null, null,
+        sessionRegistry.register(tenantId, project.getId(), canonical.getId(), null, null,
                 PmProjectAssistantSession.ROLE_CANONICAL);
-        SessionVO fork = sessionSpi.findProjectForkSession(threadId, username, canonical.getId());
-        if (fork == null) {
-            fork = sessionSpi.createSession(newSession(
-                    project, tenantId, instance.getId(), threadId, username,
-                    CANONICAL_TITLE_PREFIX + project.getName() + " · " + displayNameOf(currentUser()),
-                    canonical.getId()));
-        }
-        sessionRegistry.register(tenantId, projectId, fork.getId(), canonical.getId(), currentUser(),
-                PmProjectAssistantSession.ROLE_FORK);
+        return new Canonical(instance.getId(), threadId, canonical);
+    }
 
+    private ProjectAssistantSessionVO sessionVO(Long projectId, Long sessionId, Long canonicalId,
+                                               Long threadId, Long instanceId) {
         ProjectAssistantSessionVO vo = new ProjectAssistantSessionVO();
-        vo.setSessionId(fork.getId());
-        vo.setCanonicalSessionId(canonical.getId());
+        vo.setSessionId(sessionId);
+        vo.setCanonicalSessionId(canonicalId);
         vo.setThreadId(threadId);
-        vo.setInstanceId(instance.getId());
+        vo.setInstanceId(instanceId);
         vo.setProjectId(projectId);
         return vo;
+    }
+
+    private record Canonical(Long instanceId, Long threadId, SessionVO session) {
     }
 
     public ProjectAssistantRunResult triggerAnalysis(Long projectId, Long requirementId) {
         ProjectAssistantSessionVO session = ensureSession(projectId);
         ProjectAssistantRunCommand command = new ProjectAssistantRunCommand(
                 currentTenant(), projectId, currentUser(), currentUsername(), session.getSessionId(),
-                requirementId, AUTO_ANALYZE_PROMPT, RunMode.READ_ONLY.name(), true,
+                requirementId, MANUAL_ANALYZE_PROMPT, RunMode.READ_ONLY.name(), true,
                 ProjectAssistantConstants.SOURCE_MANUAL, null);
         return runPort.runFork(command);
     }
@@ -269,11 +292,9 @@ public class ProjectAssistantService {
         return result;
     }
 
-    public ProjectInsightService insights() {
-        return insightService;
-    }    // ------------------------------------------------------------------ helpers
+    // ------------------------------------------------------------------ helpers
 
-    private CreateSessionDTO newSession(PmProject project, Long tenantId, Long instanceId,
+    private CreateSessionDTO newSession(Long tenantId, Long instanceId,
                                         Long threadId, String createdBy, String title,
                                         Long parentSessionId) {
         CreateSessionDTO dto = new CreateSessionDTO();

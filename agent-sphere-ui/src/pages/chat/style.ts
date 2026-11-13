@@ -492,12 +492,42 @@ export const useStyles = createStyles(({ css, token }) => ({
     align-items: center;
     width: 100%;
     min-width: 0;
+    gap: 8px;
 
     .conv-label {
       flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      overflow: hidden;
+    }
+
+    .conv-title {
+      width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      line-height: 20px;
+    }
+
+    .conv-meta {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .conv-meta-tag {
+      margin: 0;
+      padding: 0 4px;
+      font-size: 10px;
+      line-height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
     }
 
     .conv-actions {

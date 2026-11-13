@@ -3,6 +3,7 @@ package com.buukle.agent.project.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.buukle.agent.project.domain.PmProjectContextEvent;
 import com.buukle.agent.project.dtvo.ProjectContextEventVO;
+import com.buukle.agent.project.dtvo.enums.ProjectAnalysisStatus;
 import com.buukle.agent.project.repository.PmProjectContextEventMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,9 +26,24 @@ public class ProjectContextEventService {
     private static final int MAX_SUMMARY = 600;
 
     private final PmProjectContextEventMapper eventMapper;
+    private final ProjectAssistantConfigService configService;
 
     public void record(Long projectId, Long requirementId, String eventType, String summary,
                        Long sourceSessionId, Long canonicalSessionId, Long actorUserId) {
+        record(projectId, requirementId, eventType, summary, sourceSessionId, canonicalSessionId,
+                actorUserId, true);
+    }
+
+    /** Record an event that must never enter the baseline analysis stream. */
+    public void recordSkipped(Long projectId, Long requirementId, String eventType, String summary,
+                              Long sourceSessionId, Long canonicalSessionId, Long actorUserId) {
+        record(projectId, requirementId, eventType, summary, sourceSessionId, canonicalSessionId,
+                actorUserId, false);
+    }
+
+    private void record(Long projectId, Long requirementId, String eventType, String summary,
+                        Long sourceSessionId, Long canonicalSessionId, Long actorUserId,
+                        boolean analyzable) {
         if (projectId == null || !StringUtils.hasText(summary)) {
             return;
         }
@@ -40,6 +56,10 @@ public class ProjectContextEventService {
         event.setCanonicalSessionId(canonicalSessionId);
         event.setActorUserId(actorUserId);
         event.setStatus(com.buukle.agent.common.constant.ProjectAssistantConstants.STATUS_ACTIVE);
+        event.setAnalysisStatus(analyzable && configService.isAutoAnalyze(projectId)
+                ? ProjectAnalysisStatus.PENDING.value()
+                : ProjectAnalysisStatus.SKIPPED.value());
+        event.setAnalysisAttempts(0);
         eventMapper.insert(event);
     }
 

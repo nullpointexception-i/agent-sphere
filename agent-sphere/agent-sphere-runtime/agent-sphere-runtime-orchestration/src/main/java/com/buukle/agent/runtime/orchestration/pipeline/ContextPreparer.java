@@ -67,9 +67,9 @@ public class ContextPreparer {
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.ASK_CLARIFICATION.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.WAIT.getId(),
             LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROGRESS.getId(),
-            // Insight writing is an analysis side channel, not a project-data mutation, so a
-            // READ_ONLY analysis run may still persist its findings.
-            LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROJECT_INSIGHT.getId(),
+            // Project comments are a controlled analysis side channel: the model may reply in a
+            // requirement thread, but may not mutate project data.
+            LLM_PREFIX_BUILTIN + BuiltinToolEnum.PROJECT_COMMENT.getId(),
             SubAgentConstants.DELEGATE_TOOL);
     private static final Set<Long> ROUTER_TOOL_IDS = Set.of(
             (long) BuiltinToolEnum.DISPATCH_WORKER.getId(),
@@ -98,7 +98,7 @@ public class ContextPreparer {
             (long) BuiltinToolEnum.PROJECT_QUERY.getId(),
             (long) BuiltinToolEnum.PROJECT_MUTATE.getId(),
             (long) BuiltinToolEnum.PROJECT_AVATAR.getId(),
-            (long) BuiltinToolEnum.PROJECT_INSIGHT.getId());
+            (long) BuiltinToolEnum.PROJECT_COMMENT.getId());
     private final InstanceCapabilitySpi capabilitySpi;
     private final CapabilityMcpSpi mcpSpi;
     private final McpHubSpi mcpHubSpi;

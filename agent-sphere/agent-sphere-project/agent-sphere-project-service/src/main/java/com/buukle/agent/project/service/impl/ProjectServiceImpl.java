@@ -22,11 +22,11 @@ import com.buukle.agent.project.dtvo.CreateRequirementDTO;
 import com.buukle.agent.project.dtvo.ProjectMemberVO;
 import com.buukle.agent.project.dtvo.ProjectVO;
 import com.buukle.agent.project.dtvo.RequirementActivityVO;
-import com.buukle.agent.project.dtvo.RequirementAttachmentVO;
 import com.buukle.agent.project.dtvo.RequirementCommentVO;
 import com.buukle.agent.project.dtvo.RequirementVO;
 import com.buukle.agent.project.dtvo.UpdateProjectDTO;
 import com.buukle.agent.project.dtvo.UpdateRequirementDTO;
+import com.buukle.agent.project.dtvo.enums.CommentAuthorType;
 import com.buukle.agent.project.dtvo.enums.ProjectContextEventType;
 import com.buukle.agent.project.dtvo.enums.ProjectMemberRole;
 import com.buukle.agent.project.dtvo.enums.ProjectStatus;
@@ -39,8 +39,7 @@ import com.buukle.agent.project.repository.PmRequirementCommentMapper;
 import com.buukle.agent.project.repository.PmRequirementMapper;
 import com.buukle.agent.project.service.ProjectService;
 import com.buukle.agent.project.service.ProjectContextEventService;
-import com.buukle.agent.util.json.JsonUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.buukle.agent.project.service.RequirementCommentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -74,7 +73,6 @@ public class ProjectServiceImpl implements ProjectService {
             RequirementStatus.APPROVED, RequirementStatus.IN_PROGRESS,
             RequirementStatus.DONE, RequirementStatus.REJECTED);
     private static final String REQUIREMENT_STATUS_DRAFT = RequirementStatus.DRAFT;
-    private static final String COMMENT_STATUS_ACTIVE = "ACTIVE";
     private static final String REQUIREMENT_KEY_FORMAT = "REQ-%04d";
 
     private final PmProjectMapper projectMapper;
@@ -85,6 +83,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectKeyGenerator projectKeyGenerator;
     private final UserSpi userSpi;
     private final ProjectContextEventService contextEventService;
+    private final RequirementCommentService commentService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -441,16 +440,7 @@ public class ProjectServiceImpl implements ProjectService {
     public List<RequirementCommentVO> requirementComments(Long requirementId) {
         PmRequirement requirement = requireRequirement(requirementId);
         requireMember(requirement.getProjectId());
-        List<PmRequirementComment> comments = commentMapper.selectList(
-                new LambdaQueryWrapper<PmRequirementComment>()
-                        .eq(PmRequirementComment::getRequirementId, requirementId)
-                        .orderByAsc(PmRequirementComment::getCreatedAt)
-                        .orderByAsc(PmRequirementComment::getId));
-        Map<Long, UserIdentityVO> identities = identities(
-                comments.stream().map(PmRequirementComment::getUserId).toList());
-        return comments.stream()
-                .map(comment -> toCommentVO(comment, identities))
-                .toList();
+        return commentService.list(requirementId);
     }
 
     @Override
@@ -460,28 +450,11 @@ public class ProjectServiceImpl implements ProjectService {
         PmRequirement requirement = requireRequirement(requirementId);
         requireMember(requirement.getProjectId());
         Long userId = currentUser();
-        String content = dto.getContent() == null ? "" : dto.getContent().trim();
-        List<RequirementAttachmentVO> attachments = dto.getAttachments() == null
-                ? List.of() : dto.getAttachments();
-        if (content.isEmpty() && attachments.isEmpty()) {
-            throw new BizException(CommonErrorCode.PARAM_INVALID,
-                    "comment content or attachments are required");
-        }
-        PmRequirementComment comment = new PmRequirementComment();
-        comment.setRequirementId(requirementId);
-        comment.setUserId(userId);
-        comment.setContent(content);
-        if (!attachments.isEmpty()) {
-            comment.setAttachments(JsonUtils.toJson(attachments));
-        }
-        comment.setStatus(COMMENT_STATUS_ACTIVE);
-        comment.setTenantId(currentTenant());
-        commentMapper.insert(comment);
-        recordContext(requirement.getProjectId(), requirementId, ProjectContextEventType.COMMENT.value(),
-                "Requirement " + requirement.getRequirementKey() + " comment: "
-                        + preview(content) + " by " + currentDisplayName());
-        publishRequirementChanged(requirement.getProjectId(), requirementId);
-        return toCommentVO(comment, identities(List.of(userId)));
+        return commentService.add(new RequirementCommentService.RequirementCommentCommand(
+                currentTenant(), requirement.getProjectId(), requirementId, userId,
+                CommentAuthorType.USER.value(), currentDisplayName(), null,
+                dto.getContent(), dto.getAttachments(), dto.getMentions(),
+                null, null, null, null));
     }
 
     private PmProject requireVisible(Long id) {
@@ -594,25 +567,6 @@ public class ProjectServiceImpl implements ProjectService {
         return vo;
     }
 
-    private RequirementCommentVO toCommentVO(PmRequirementComment comment,
-                                             Map<Long, UserIdentityVO> identities) {
-        RequirementCommentVO vo = new RequirementCommentVO();
-        vo.setId(comment.getId());
-        vo.setRequirementId(comment.getRequirementId());
-        vo.setUserId(comment.getUserId());
-        vo.setUserName(displayName(comment.getUserId(), identities));
-        vo.setContent(comment.getContent());
-        if (StringUtils.hasText(comment.getAttachments())) {
-            List<RequirementAttachmentVO> attachments = JsonUtils.parse(
-                    comment.getAttachments(),
-                    new TypeReference<List<RequirementAttachmentVO>>() {
-                    });
-            vo.setAttachments(attachments == null ? List.of() : attachments);
-        }
-        vo.setCreatedAt(comment.getCreatedAt());
-        return vo;
-    }
-
     private RequirementActivityVO toActivityVO(PmRequirementActivity activity) {
         RequirementActivityVO vo = new RequirementActivityVO();
         vo.setId(activity.getId());
@@ -715,12 +669,5 @@ public class ProjectServiceImpl implements ProjectService {
         return StringUtils.hasText(identity.getUsername()) ? identity.getUsername() : "Project member";
     }
 
-    private static String preview(String content) {
-        if (content == null) {
-            return "";
-        }
-        String text = content.replaceAll("\\s+", " ").strip();
-        return text.length() <= 300 ? text : text.substring(0, 300);
-    }
 }
 

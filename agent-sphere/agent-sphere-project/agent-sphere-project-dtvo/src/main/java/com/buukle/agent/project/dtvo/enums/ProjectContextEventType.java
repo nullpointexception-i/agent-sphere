@@ -6,7 +6,6 @@ public enum ProjectContextEventType {
     PROJECT,
     REQUIREMENT,
     COMMENT,
-    INSIGHT,
     ASSISTANT,
     MEMBER;
 
