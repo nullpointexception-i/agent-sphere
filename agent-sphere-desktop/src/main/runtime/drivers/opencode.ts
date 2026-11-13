@@ -1,4 +1,5 @@
 import type { DriverModel, DriverStatus } from '../../../shared/types';
+import { isDriverStateUsable } from '../../../shared/types';
 import type { DriverRunContext, DriverRunResult, RuntimeDriver } from './types';
 import { logger } from '../../logging/logger';
 
@@ -77,18 +78,23 @@ export class OpenCodeDriver implements RuntimeDriver {
       });
       const info = await client.server.info();
       const version = String(info?.version ?? info?.data?.version ?? '');
+
+      // Keep the connection usable even when the local version is newer than the tested range.
+      this.endpoint = endpoint;
+      this.headers = service.Service.headers(endpoint) as Record<string, string>;
+      this.client = client;
+      this.version = version;
+
       if (!version.startsWith(`${SUPPORTED_MAJOR_MINOR}.`)) {
         return {
           kind: 'OPENCODE',
           state: 'VERSION_MISMATCH',
           version,
-          message: `opencode ${SUPPORTED_MAJOR_MINOR}.x is required; found ${version || 'unknown'}`,
+          path: endpoint.url,
+          message: `opencode ${SUPPORTED_MAJOR_MINOR}.x is recommended; found ${version || 'unknown'}. Continuing anyway.`,
         };
       }
-      this.endpoint = endpoint;
-      this.headers = service.Service.headers(endpoint) as Record<string, string>;
-      this.client = client;
-      this.version = version;
+
       return {
         kind: 'OPENCODE',
         state: 'READY',
@@ -110,7 +116,7 @@ export class OpenCodeDriver implements RuntimeDriver {
   async listModels(): Promise<DriverModel[]> {
     if (!this.client) {
       const status = await this.detect();
-      if (status.state !== 'READY') return [];
+      if (!isDriverStateUsable(status.state)) return [];
     }
     const client = this.client as AnyRecord;
     const result = await client.model.list();
@@ -138,7 +144,9 @@ export class OpenCodeDriver implements RuntimeDriver {
     if (this.disposed) throw new Error('opencode driver disposed');
     if (!this.client || !this.endpoint) {
       const status = await this.detect();
-      if (status.state !== 'READY') throw new Error(status.message ?? 'opencode is not ready');
+      if (!isDriverStateUsable(status.state)) {
+        throw new Error(status.message ?? 'opencode is not ready');
+      }
     }
 
     const client = this.client as AnyRecord;

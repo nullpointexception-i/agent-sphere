@@ -111,20 +111,6 @@ export async function discoverCodex(preferred?: string): Promise<CodexDiscovery>
     };
   }
 
-  if (!version.startsWith(SUPPORTED_PREFIX)) {
-    return {
-      binary,
-      version,
-      status: {
-        kind: 'CODEX',
-        state: 'VERSION_MISMATCH',
-        path: binary,
-        version,
-        message: `Codex ${SUPPORTED_PREFIX}x is required; found ${version}`,
-      },
-    };
-  }
-
   const loginOutput = await run(binary, ['login', 'status']);
   const loggedIn = /logged in/i.test(loginOutput) && !/not logged in/i.test(loginOutput);
   if (!loggedIn) {
@@ -138,6 +124,21 @@ export async function discoverCodex(preferred?: string): Promise<CodexDiscovery>
         path: binary,
         version,
         message: 'Sign in with Codex Desktop or run `codex login` first.',
+      },
+    };
+  }
+
+  if (!version.startsWith(SUPPORTED_PREFIX)) {
+    return {
+      binary,
+      version,
+      loggedIn,
+      status: {
+        kind: 'CODEX',
+        state: 'VERSION_MISMATCH',
+        path: binary,
+        version,
+        message: `Codex ${SUPPORTED_PREFIX}x is recommended; found ${version}. Continuing anyway.`,
       },
     };
   }

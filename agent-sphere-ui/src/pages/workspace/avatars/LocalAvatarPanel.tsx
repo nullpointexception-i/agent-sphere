@@ -166,8 +166,11 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
   const driverOf = (kind: DesktopDriverKind) =>
     drivers.find((item) => item.kind === kind);
 
+  const isUsableDriverState = (state?: string) =>
+    state === 'READY' || state === 'VERSION_MISMATCH';
+
   const driverReady = (kind: DesktopDriverKind) =>
-    driverOf(kind)?.state === 'READY';
+    isUsableDriverState(driverOf(kind)?.state);
 
   const recordOf = (kind: DesktopDriverKind) =>
     boundRuntime?.runtimeKind === kind
@@ -257,7 +260,7 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
       const probe = (await bridge.drivers.detect()).find(
         (item) => item.kind === kind,
       );
-      if (probe?.state !== 'READY') {
+      if (!isUsableDriverState(probe?.state)) {
         throw new Error(
           tw(
             'avatars.probeFailed',
@@ -478,8 +481,19 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                             </div>
                             <div>
                               {tw('avatars.runtimeState', 'State')}:{' '}
-                              {driver?.state ?? '-'}
+                              {driver?.state === 'VERSION_MISMATCH'
+                                ? tw(
+                                    'avatars.runtimeVersionMismatch',
+                                    'Version mismatch',
+                                  )
+                                : (driver?.state ?? '-')}
                             </div>
+                            {driver?.state === 'VERSION_MISMATCH' &&
+                            driver.message ? (
+                              <div style={{ color: '#faad14' }}>
+                                {driver.message}
+                              </div>
+                            ) : null}
                           </div>
                         }
                       >
@@ -493,7 +507,16 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                           }}
                         />
                       </Tooltip>
-                      {!ready ? (
+                      {driver?.state === 'VERSION_MISMATCH' ? (
+                        <Tooltip title={driver.message}>
+                          <Tag color="warning">
+                            {tw(
+                              'avatars.runtimeVersionMismatch',
+                              'Version mismatch',
+                            )}
+                          </Tag>
+                        </Tooltip>
+                      ) : !ready ? (
                         <Tag>
                           {tw('avatars.runtimeMissing', 'Not detected')}
                         </Tag>
@@ -547,8 +570,9 @@ export function LocalAvatarPanel({ agent, onUpdated }: Props) {
                     onClick={() =>
                       void connect(
                         (boundRuntime?.runtimeKind as DesktopDriverKind) ??
-                          (drivers.find((item) => item.state === 'READY')
-                            ?.kind as DesktopDriverKind) ??
+                          (drivers.find((item) =>
+                            isUsableDriverState(item.state),
+                          )?.kind as DesktopDriverKind) ??
                           'OPENCODE',
                       )
                     }

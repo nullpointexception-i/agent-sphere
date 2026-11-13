@@ -59,6 +59,7 @@ export type DriverState =
   | 'DETECTED'
   | 'AUTH_REQUIRED'
   | 'READY'
+  /** Outside the tested version range, but still allowed to run. Surface it as a warning only. */
   | 'VERSION_MISMATCH'
   | 'ERROR';
 
@@ -68,6 +69,11 @@ export interface DriverStatus {
   version?: string;
   path?: string;
   message?: string;
+}
+
+/** Version mismatches are advisory: detection should not block a task from running. */
+export function isDriverStateUsable(state: DriverState): boolean {
+  return state === 'READY' || state === 'VERSION_MISMATCH';
 }
 
 export interface DriverModel {

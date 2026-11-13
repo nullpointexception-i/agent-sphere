@@ -110,6 +110,7 @@ export default {
   'workspace.avatars.runtimeVersion': '版本',
   'workspace.avatars.runtimePath': '路径',
   'workspace.avatars.runtimeState': '状态',
+  'workspace.avatars.runtimeVersionMismatch': '版本不匹配（仍可使用）',
   'workspace.avatars.runtimeConnecting': '正在连接…',
   'workspace.avatars.runtimeEmpty': '选择运行时后连接这台设备。',
   'workspace.avatars.manualConnect': '手动连接',

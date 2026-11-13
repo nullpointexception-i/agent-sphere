@@ -5,6 +5,7 @@ import type {
   ApprovalDecision,
   DriverStatus,
 } from '../../../../shared/types';
+import { isDriverStateUsable } from '../../../../shared/types';
 import type { LocalTaskPayload } from '../../../api/contracts';
 import type { DriverRunContext, DriverRunResult, RuntimeDriver } from '../types';
 import { logger } from '../../../logging/logger';
@@ -225,7 +226,7 @@ export class CodexDriver implements RuntimeDriver {
 
     this.initPromise = (async () => {
       const discovery = await discoverCodex(this.settings.get().codexPath);
-      if (!discovery.binary || discovery.status.state !== 'READY') {
+      if (!discovery.binary || !isDriverStateUsable(discovery.status.state)) {
         throw new Error(discovery.status.message ?? 'Codex is not ready');
       }
 
@@ -240,8 +241,9 @@ export class CodexDriver implements RuntimeDriver {
       })) as InitializeResult;
 
       if (!info.userAgent.includes(SUPPORTED_PREFIX)) {
-        client.dispose();
-        throw new Error(`Unsupported Codex version: ${info.userAgent}`);
+        logger.warn(
+          `Codex version ${info.userAgent} is outside the tested ${SUPPORTED_PREFIX}x range; continuing anyway`,
+        );
       }
       logger.info(`codex app-server connected: ${info.userAgent}`);
       this.client = client;

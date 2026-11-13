@@ -1,5 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import type { AgentProfile, TaskChunk, TaskView } from '../../shared/types';
+import { isDriverStateUsable } from '../../shared/types';
 import type { LocalTaskPayload } from '../api/contracts';
 import type { LocalApiClient } from '../api/client';
 import type { ProfileStore } from '../config/profiles';
@@ -126,7 +127,7 @@ export class TaskRunner {
     let driverStatus = this.deps.drivers
       .getStatuses()
       .find((status) => status.kind === profile.driver);
-    if (!driverStatus || driverStatus.state !== 'READY') {
+    if (!driverStatus || !isDriverStateUsable(driverStatus.state)) {
       try {
         driverStatus = await driver.detect();
       } catch (error) {
@@ -139,7 +140,7 @@ export class TaskRunner {
         return;
       }
     }
-    if (driverStatus.state !== 'READY') {
+    if (!isDriverStateUsable(driverStatus.state)) {
       await this.fail(
         task,
         leaseToken,

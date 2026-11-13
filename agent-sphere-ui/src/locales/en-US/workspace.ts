@@ -117,6 +117,7 @@ export default {
   'workspace.avatars.runtimeVersion': 'Version',
   'workspace.avatars.runtimePath': 'Path',
   'workspace.avatars.runtimeState': 'State',
+  'workspace.avatars.runtimeVersionMismatch': 'Version mismatch (still usable)',
   'workspace.avatars.runtimeConnecting': 'Connecting...',
   'workspace.avatars.runtimeEmpty': 'Choose a runtime to connect this device.',
   'workspace.avatars.manualConnect': 'Manual connect',
