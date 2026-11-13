@@ -109,6 +109,30 @@ class UserResourceProvisionerTest {
     }
 
     @Test
+    void provisionForTenant_shouldUseTargetTenantAndRestorePreviousContext() {
+        when(userSpi.getByUserId(7L)).thenReturn(user(7L, "business_7"));
+        when(coordinator.initialize(anyString(), any(ResourceInitContext.class)))
+                .thenAnswer(inv -> {
+                    assertEquals(3L, TenantContext.get());
+                    assertEquals(3L, TenantScopeHolder.currentTenantId());
+                    assertEquals("business_7", TenantUtil.get());
+                    return new ResourceInitResult();
+                });
+
+        TenantContext.set(2L);
+        TenantScope previousScope = TenantScope.tenantOnly(2L, "admin");
+        TenantScopeHolder.start(previousScope);
+        TenantUtil.start("admin");
+
+        provisioner.provisionForTenant(
+                7L, 3L, "business", "业务身份源", "[{\"type\":\"document\"}]");
+
+        assertEquals(2L, TenantContext.get());
+        assertEquals(previousScope, TenantScopeHolder.get());
+        assertEquals("admin", TenantUtil.get());
+    }
+
+    @Test
     void provision_shouldStopTenantAndReturnFailedOnCoordinatorError() {
         when(userSpi.getByUserId(7L)).thenReturn(user(7L, "business_7"));
         when(coordinator.initialize(anyString(), any(ResourceInitContext.class)))

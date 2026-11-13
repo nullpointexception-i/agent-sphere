@@ -33,7 +33,13 @@ public class ModelProviderInitializer implements ResourceInitializer {
             return;
         }
         List<ModelProviderVO> existing = modelProviderSpi.listProviders(name);
-        if (existing.stream().anyMatch(p -> name.equals(p.getName()))) {
+        ModelProviderVO match = existing.stream()
+                .filter(p -> name.equals(p.getName()))
+                .findFirst()
+                .orElse(null);
+        if (match != null) {
+            // Keep downstream references (routes) usable when the provider was created earlier.
+            ctx.put(TYPE, name, match.getId());
             throw new ResourceExistsException();
         }
         CreateModelProviderDTO dto = new CreateModelProviderDTO();

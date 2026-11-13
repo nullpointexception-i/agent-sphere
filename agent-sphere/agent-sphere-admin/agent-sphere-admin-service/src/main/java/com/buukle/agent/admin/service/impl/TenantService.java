@@ -26,9 +26,11 @@ import com.buukle.agent.common.context.AuthContext;
 import com.buukle.agent.common.context.TenantScope;
 import com.buukle.agent.common.context.TenantScopeHolder;
 import com.buukle.agent.common.error.CommonErrorCode;
+import com.buukle.agent.common.event.UserTenantChangedEvent;
 import com.buukle.agent.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +77,7 @@ public class TenantService implements TenantProvisioningSpi {
     private final SysPermissionMapper permissionMapper;
     private final TenantScopeServiceImpl tenantScopeService;
     private final TenantResourceProvisioner tenantResourceProvisioner;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ==================== queries ====================
 
@@ -328,8 +331,29 @@ public class TenantService implements TenantProvisioningSpi {
 
     /** Runs the tenant resource template and stores the current GROUP_ROUTER instance. */
     private void applyTenantResources(SysTenant tenant) {
-        Long currentInstanceId = tenantResourceProvisioner.provision(tenant, operatorName());
-        if (currentInstanceId == null) {
+        ensureTenantResources(tenant, operatorName());
+    }
+
+    /**
+     * Idempotently ensures a tenant's default resources. Startup repair calls this for the default
+     * tenant only; tenant creation calls it for the newly created tenant.
+     */
+    @Transactional
+    public void ensureTenantResources(Long tenantId, String operator) {
+        if (tenantId == null) {
+            return;
+        }
+        SysTenant tenant = tenantMapper.selectById(tenantId);
+        if (tenant == null || !TenantConstants.STATUS_ACTIVE.equals(tenant.getStatus())) {
+            return;
+        }
+        ensureTenantResources(tenant, operator);
+    }
+
+    private void ensureTenantResources(SysTenant tenant, String operator) {
+        Long currentInstanceId = tenantResourceProvisioner.ensure(tenant, operator);
+        if (currentInstanceId == null
+                || currentInstanceId.equals(tenant.getCurrentInstanceId())) {
             return;
         }
         tenant.setCurrentInstanceId(currentInstanceId);
@@ -499,6 +523,10 @@ public class TenantService implements TenantProvisioningSpi {
             row.setUpdatedAt(LocalDateTime.now());
             userTenantMapper.insert(row);
         }
+        for (UserTenantAssignReq.Assignment assignment : submitted) {
+            eventPublisher.publishEvent(
+                    new UserTenantChangedEvent(userId, assignment.getTenantId()));
+        }
         return listUserAssignments(userId);
     }
 
@@ -531,6 +559,7 @@ public class TenantService implements TenantProvisioningSpi {
         target.setIsCurrent(true);
         target.setUpdatedAt(LocalDateTime.now());
         userTenantMapper.updateById(target);
+        eventPublisher.publishEvent(new UserTenantChangedEvent(userId, tenantId));
 
         SysTenant tenant = tenantMapper.selectById(tenantId);
         TenantSwitchVO vo = new TenantSwitchVO();

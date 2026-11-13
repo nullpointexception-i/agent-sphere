@@ -32,9 +32,13 @@ public class RouteInitializer implements ResourceInitializer {
         if (providerId == null || !StringUtils.hasText(modelName)) {
             return;
         }
-        boolean exists = routeSpi.listRoutesByProvider(providerId, null).stream()
-                .anyMatch(r -> modelName.equals(r.getModelName()));
-        if (exists) {
+        ModelRouteVO match = routeSpi.listRoutesByProvider(providerId, null).stream()
+                .filter(r -> modelName.equals(r.getModelName()))
+                .findFirst()
+                .orElse(null);
+        if (match != null) {
+            // Keep downstream references (completions, instances) usable when the route exists.
+            ctx.put(TYPE, modelName, match.getId());
             throw new ResourceExistsException();
         }
         CreateRouteDTO dto = new CreateRouteDTO();

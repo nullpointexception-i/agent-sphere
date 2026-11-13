@@ -3,7 +3,7 @@ package com.buukle.agent.resource.template;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -18,7 +18,7 @@ public class ResourceInitContext {
     private String providerName;
     private String operator;
 
-    private final Map<String, Long> created = new HashMap<>();
+    private final Map<String, Long> created = new LinkedHashMap<>();
 
     public ResourceInitContext(String providerCode, String providerName, String operator) {
         this.providerCode = providerCode;
@@ -32,6 +32,17 @@ public class ResourceInitContext {
 
     public Long get(String type, String name) {
         return name == null ? null : created.get(key(type, name));
+    }
+
+    /** First created resource of the given type, in template order. */
+    public Long getFirst(String type) {
+        String prefix = type + ":";
+        return created.entrySet().stream()
+                .filter(entry -> entry.getKey().startsWith(prefix))
+                .map(Map.Entry::getValue)
+                .filter(id -> id != null)
+                .findFirst()
+                .orElse(null);
     }
 
     private static String key(String type, String name) {

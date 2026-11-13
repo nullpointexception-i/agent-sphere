@@ -16,12 +16,15 @@ import com.buukle.agent.model.dtvo.vo.ModelProviderVO;
 import com.buukle.agent.model.dtvo.vo.ModelRouteVO;
 import com.buukle.agent.model.spi.ModelProviderSpi;
 import com.buukle.agent.model.spi.RouteSpi;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -106,6 +109,39 @@ class TenantResourceProvisionerTest {
         assertEquals(InstanceRole.GROUP_ROUTER.value(),
                 instanceCaptor.getValue().getInstanceRole());
         assertEquals(22L, instanceCaptor.getValue().getModelRouteId());
+    }
+
+    @Test
+    void ensureReusesExistingTenantOwnedResources() {
+        given(systemConfigSpi.get(SystemConfigKeys.TENANT_RESOURCE_TEMPLATE, ""))
+                .willReturn(TEMPLATE);
+
+        ModelProviderVO provider = new ModelProviderVO();
+        provider.setId(11L);
+        provider.setName("Tenant Provider");
+        provider.setOwnerScope(OwnerScope.TENANT);
+        given(modelProviderSpi.listProviders("Tenant Provider")).willReturn(List.of(provider));
+
+        ModelRouteVO route = new ModelRouteVO();
+        route.setId(22L);
+        route.setModelName("tenant-model");
+        given(routeSpi.listRoutesByProvider(11L, null)).willReturn(List.of(route));
+
+        InstanceVO instance = new InstanceVO();
+        instance.setId(33L);
+        instance.setName("Tenant Router");
+        Page<InstanceVO> page = new Page<>();
+        page.setRecords(List.of(instance));
+        given(instanceSpi.pageInstances(
+                1, 100, "Tenant Router", null, null, "GROUP_ROUTER", OwnerScope.TENANT))
+                .willReturn(page);
+
+        Long current = provisioner().ensure(tenant(), "tester");
+
+        assertEquals(33L, current);
+        verify(modelProviderSpi, never()).createProvider(any());
+        verify(routeSpi, never()).createRoute(any());
+        verify(instanceSpi, never()).createInstance(any());
     }
 
     @Test

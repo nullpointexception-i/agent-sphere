@@ -45,9 +45,13 @@ public class InstanceInitializer implements ResourceInitializer {
         if (!StringUtils.hasText(name)) {
             return;
         }
-        boolean exists = instanceSpi.listInstances(name, null, null).stream()
-                .anyMatch(i -> name.equals(i.getName()));
-        if (exists) {
+        InstanceVO match = instanceSpi.listInstances(name, null, null).stream()
+                .filter(i -> name.equals(i.getName()))
+                .findFirst()
+                .orElse(null);
+        if (match != null) {
+            // Documents created later in the template need the instance id.
+            ctx.put(TYPE, name, match.getId());
             throw new ResourceExistsException();
         }
         CreateInstanceDTO dto = new CreateInstanceDTO();
@@ -68,6 +72,7 @@ public class InstanceInitializer implements ResourceInitializer {
             }
         }
         InstanceVO vo = instanceService.createInstance(dto);
+        ctx.put(TYPE, name, vo.getId());
         bindBuiltinBrowser(vo.getId());
     }
 

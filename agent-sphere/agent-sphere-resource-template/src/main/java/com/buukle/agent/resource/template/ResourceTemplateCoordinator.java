@@ -3,7 +3,11 @@ package com.buukle.agent.resource.template;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.Map;
@@ -20,9 +24,18 @@ import java.util.stream.Collectors;
 public class ResourceTemplateCoordinator {
 
     private final Map<String, ResourceInitializer> byType;
+    private final PlatformTransactionManager transactionManager;
 
+    /** Test/isolated constructor: no per-resource transaction isolation. */
     public ResourceTemplateCoordinator(List<ResourceInitializer> initializers) {
+        this(initializers, null);
+    }
+
+    @Autowired
+    public ResourceTemplateCoordinator(List<ResourceInitializer> initializers,
+                                       PlatformTransactionManager transactionManager) {
         this.byType = initializers.stream().collect(Collectors.toMap(ResourceInitializer::type, Function.identity()));
+        this.transactionManager = transactionManager;
     }
 
     /**
@@ -60,7 +73,7 @@ public class ResourceTemplateCoordinator {
                 continue;
             }
             try {
-                initializer.initialize(item, ctx);
+                initializeInNewTransaction(initializer, item, ctx);
                 result.created();
             } catch (ResourceExistsException e) {
                 result.skipped();
@@ -70,5 +83,28 @@ public class ResourceTemplateCoordinator {
             }
         }
         return result;
+    }
+
+    /**
+     * Isolates each resource so a failing initializer cannot abort the whole template or poison the
+     * caller's transaction. In particular, a missing/duplicate document must not roll back the
+     * provider, route and instance that were already created.
+     */
+    private void initializeInNewTransaction(ResourceInitializer initializer, JsonNode item,
+                                            ResourceInitContext ctx) {
+        if (transactionManager == null) {
+            initializer.initialize(item, ctx);
+            return;
+        }
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        template.executeWithoutResult(status -> {
+            try {
+                initializer.initialize(item, ctx);
+            } catch (RuntimeException e) {
+                status.setRollbackOnly();
+                throw e;
+            }
+        });
     }
 }

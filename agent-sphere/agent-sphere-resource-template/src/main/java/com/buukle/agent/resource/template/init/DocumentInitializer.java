@@ -15,6 +15,9 @@ import org.springframework.util.StringUtils;
 public class DocumentInitializer implements ResourceInitializer {
 
     private static final String TYPE = "document";
+    private static final String INSTANCE_TYPE = "instance";
+    /** Documents initialized from a resource template have no chat session yet. */
+    private static final long STANDALONE_SESSION_ID = 0L;
 
     private final DocumentSpi documentSpi;
 
@@ -34,10 +37,19 @@ public class DocumentInitializer implements ResourceInitializer {
         if (exists) {
             throw new ResourceExistsException();
         }
+        Long instanceId = ctx.getFirst(INSTANCE_TYPE);
+        if (instanceId == null) {
+            // The template doc must belong to an instance; without one it cannot satisfy the
+            // agent_document NOT NULL contract, so skip it instead of aborting the whole template.
+            return;
+        }
         DocumentVO vo = new DocumentVO();
         vo.setTitle(title);
         vo.setContent(descriptor.path("content").asText(""));
         vo.setContentType(descriptor.path("contentType").asText("text"));
+        vo.setSessionId(STANDALONE_SESSION_ID);
+        vo.setInstanceId(instanceId);
+        vo.setCreatedBy(ctx.getOperator());
         documentSpi.create(vo);
     }
 }
