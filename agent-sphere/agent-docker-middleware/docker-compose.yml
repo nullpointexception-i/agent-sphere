@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: buukle123
       POSTGRES_DB: buukle_agent_2026061101
     volumes:
-      - /Users/elvin/Desktop/File/postgrs_2026061101:/var/lib/postgresql/data
+      - /Users/elvin/Desktop/File/postgrs_2026061103:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
