@@ -14,12 +14,12 @@ import com.buukle.agent.instance.dtvo.enums.RunStatus;
 import com.buukle.agent.instance.dtvo.enums.SessionType;
 import com.buukle.agent.instance.dtvo.vo.RunVO;
 import com.buukle.agent.instance.dtvo.vo.SessionVO;
-import com.buukle.agent.instance.spi.InstanceSpi;
 import com.buukle.agent.instance.spi.RunSpi;
 import com.buukle.agent.instance.spi.SessionSpi;
 import com.buukle.agent.runtime.orchestration.dtvo.vo.ChatMessageResponseVO;
 import com.buukle.agent.runtime.orchestration.constants.ChatConstant;
 import com.buukle.agent.runtime.orchestration.service.ChatRuntimeService;
+import com.buukle.agent.superagent.dtvo.enums.AgentType;
 import com.buukle.agent.superagent.spi.AvatarConsultCommand;
 import com.buukle.agent.superagent.spi.AvatarConsultResult;
 import com.buukle.agent.superagent.spi.AvatarConsultSpi;
@@ -46,7 +46,6 @@ public class AvatarConsultService implements AvatarConsultSpi {
     private static final int MAX_TITLE = 120;
 
     private final SuperAgentDirectorySpi directorySpi;
-    private final InstanceSpi instanceSpi;
     private final SessionSpi sessionSpi;
     private final RunSpi runSpi;
     private final ChatRuntimeService chatRuntimeService;
@@ -64,12 +63,11 @@ public class AvatarConsultService implements AvatarConsultSpi {
                 .equals(avatar.status())) {
             return AvatarConsultResult.failed("avatar is not active");
         }
-        Long instanceId = avatar.routerInstanceId();
-        if (instanceId == null) {
-            var router = instanceSpi.findByRole(
-                    com.buukle.agent.instance.dtvo.enums.InstanceRole.GROUP_ROUTER.value());
-            instanceId = router == null ? null : router.getId();
+        if (AgentType.LOCAL.equals(avatar.agentType())) {
+            return AvatarConsultResult.failed(
+                    "local avatar must be dispatched through the local runtime");
         }
+        Long instanceId = avatar.routerInstanceId();
         if (instanceId == null) {
             return AvatarConsultResult.failed("avatar has no runnable instance");
         }
@@ -114,7 +112,15 @@ public class AvatarConsultService implements AvatarConsultSpi {
                 String status = run.getStatus();
                 if (RunStatus.COMPLETED.name().equals(status)) {
                     String reply = run.getAssistantReply();
-                    return AvatarConsultResult.ok(reply == null ? "" : reply);
+                    if (!StringUtils.hasText(reply)) {
+                        return AvatarConsultResult.failed("avatar returned an empty reply");
+                    }
+                    String trimmed = reply.trim();
+                    if (trimmed.startsWith("{\"deliver\"") || trimmed.startsWith("{\"ignore\"")) {
+                        return AvatarConsultResult.failed(
+                                "avatar returned a routing decision instead of a reply");
+                    }
+                    return AvatarConsultResult.ok(trimmed);
                 }
                 if (RunStatus.FAILED.name().equals(status) || RunStatus.CANCELLED.name().equals(status)) {
                     return AvatarConsultResult.failed(run.getErrorMessage() == null

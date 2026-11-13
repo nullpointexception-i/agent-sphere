@@ -21,6 +21,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Mentions,
   Modal,
   Pagination,
   Popconfirm,
@@ -121,7 +122,6 @@ export function ProjectWorkspace({
   const [comments, setComments] = useState<RequirementCommentVO[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentDraft, setCommentDraft] = useState('');
-  const [mentionSelections, setMentionSelections] = useState<string[]>([]);
   const [commentAvatars, setCommentAvatars] = useState<
     ProjectAssistantAvatarVO[]
   >([]);
@@ -579,7 +579,6 @@ export function ProjectWorkspace({
     setDetailRequirement(requirement);
     setCommentDraft('');
     setCommentAttachments([]);
-    setMentionSelections([]);
     refreshProjectMembers(requirement.projectId);
     projectAssistantApi
       .avatars(requirement.projectId)
@@ -621,6 +620,48 @@ export function ProjectWorkspace({
     }
   };
 
+  const collectCommentMentions = (text: string): CommentMentionInput[] => {
+    const mentions = new Map<string, CommentMentionInput>();
+    for (const member of projectMembers) {
+      const name = member.displayName || `#${member.userId}`;
+      if (member.userId && text.includes(`@${name}`)) {
+        mentions.set(`USER:${member.userId}`, {
+          mentionType: 'USER',
+          targetUserId: member.userId,
+        });
+      }
+    }
+    for (const avatar of commentAvatars) {
+      if (text.includes(`@${avatar.name}`)) {
+        mentions.set(`AVATAR:${avatar.agentId}`, {
+          mentionType: 'AVATAR',
+          targetAgentId: avatar.agentId,
+        });
+      }
+    }
+    return Array.from(mentions.values());
+  };
+
+  const commentMentionOptions = [
+    ...projectMembers
+      .filter((member) => member.userId)
+      .map((member) => ({
+        value: member.displayName || `#${member.userId}`,
+        label: `@${member.displayName || `#${member.userId}`} · ${tw(
+          'projects.mentionMembers',
+          'Member',
+        )}`,
+      })),
+    ...commentAvatars.map((avatar) => ({
+      value: avatar.name,
+      label: `@${avatar.name} · ${
+        avatar.agentType === 'LOCAL'
+          ? tw('projects.mentionLocal', 'Local avatar')
+          : tw('projects.mentionAvatars', 'Avatar')
+      }`,
+    })),
+  ];
+
   const addRequirementComment = async () => {
     if (
       !detailRequirement ||
@@ -630,12 +671,7 @@ export function ProjectWorkspace({
     }
     setCommentSubmitting(true);
     try {
-      const mentions: CommentMentionInput[] = mentionSelections.map((value) => {
-        const [mentionType, rawId] = value.split(':');
-        return mentionType === 'AVATAR'
-          ? { mentionType: 'AVATAR', targetAgentId: Number(rawId) }
-          : { mentionType: 'USER', targetUserId: Number(rawId) };
-      });
+      const mentions = collectCommentMentions(commentDraft);
       const comment = await projectApi.addRequirementComment(
         detailRequirement.id,
         commentDraft.trim(),
@@ -645,7 +681,6 @@ export function ProjectWorkspace({
       setComments((previous) => [...previous, comment]);
       setCommentDraft('');
       setCommentAttachments([]);
-      setMentionSelections([]);
       message.success(tw('projects.commentAdded', 'Comment added'));
       if (mentions.some((mention) => mention.mentionType === 'AVATAR')) {
         window.setTimeout(() => {
@@ -1174,13 +1209,29 @@ export function ProjectWorkspace({
                   {comment.mentions?.length ? (
                     <div className={styles.commentAttachments}>
                       {comment.mentions.map((mention) => (
-                        <Tag key={mention.id} bordered={false} color="geekblue">
-                          @
-                          {mention.targetAgentName ||
-                            mention.targetUserName ||
-                            mention.targetAgentId ||
-                            mention.targetUserId}
-                        </Tag>
+                        <Tooltip
+                          key={mention.id}
+                          title={mention.errorMessage || undefined}
+                        >
+                          <Tag
+                            bordered={false}
+                            color={
+                              mention.status === 'FAILED' ? 'red' : 'geekblue'
+                            }
+                          >
+                            @
+                            {mention.targetAgentName ||
+                              mention.targetUserName ||
+                              mention.targetAgentId ||
+                              mention.targetUserId}
+                            {mention.status === 'FAILED'
+                              ? ` · ${tw(
+                                  'projects.mentionFailed',
+                                  'Delivery failed',
+                                )}`
+                              : ''}
+                          </Tag>
+                        </Tooltip>
                       ))}
                     </div>
                   ) : null}
@@ -1227,52 +1278,18 @@ export function ProjectWorkspace({
               ))}
             </div>
           ) : null}
-          <Select
-            mode="multiple"
-            allowClear
-            showSearch
-            optionFilterProp="label"
-            style={{ width: '100%', marginBottom: 8 }}
-            placeholder={tw(
-              'projects.mentionPlaceholder',
-              '@ a member or avatar to notify',
-            )}
-            value={mentionSelections}
-            onChange={(values: string[]) => setMentionSelections(values)}
-            options={[
-              {
-                label: tw('projects.mentionMembers', 'Members'),
-                options: projectMembers
-                  .filter((member) => member.userId)
-                  .map((member) => ({
-                    value: `USER:${member.userId}`,
-                    label: `@${member.displayName || `#${member.userId}`}`,
-                  })),
-              },
-              ...(commentAvatars.length
-                ? [
-                    {
-                      label: tw('projects.mentionAvatars', 'Avatars'),
-                      options: commentAvatars.map((avatar) => ({
-                        value: `AVATAR:${avatar.agentId}`,
-                        label: `@${avatar.name}${
-                          avatar.ownerName ? ` · ${avatar.ownerName}` : ''
-                        }`,
-                      })),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-          <Input.TextArea
+          <Mentions
             rows={3}
-            style={{ resize: 'none' }}
+            style={{ width: '100%', resize: 'none' }}
             value={commentDraft}
             placeholder={tw(
               'projects.commentPlaceholder',
-              'Write a comment...',
+              'Write a comment, type @ to notify a member or avatar...',
             )}
-            onChange={(event) => setCommentDraft(event.target.value)}
+            prefix="@"
+            split=" "
+            options={commentMentionOptions}
+            onChange={(value) => setCommentDraft(value)}
           />
           <div className={styles.commentComposerActions}>
             <Upload

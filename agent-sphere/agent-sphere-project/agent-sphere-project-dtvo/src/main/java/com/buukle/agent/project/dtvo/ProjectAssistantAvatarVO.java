@@ -12,4 +12,6 @@ public class ProjectAssistantAvatarVO {
     private Boolean publicVisible;
     private Boolean ownedByRequester;
     private String status;
+    private String agentType;
+    private Long localRuntimeId;
 }

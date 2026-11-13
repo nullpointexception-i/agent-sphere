@@ -35,6 +35,12 @@ public final class ProjectAssistantConstants {
     /** Hard cap of assistant comments per analysis run, so one batch cannot spam a project. */
     public static final int MAX_COMMENTS_PER_RUN = 3;
 
+    /** Mention delivery retry policy. */
+    public static final int MENTION_MAX_ATTEMPTS = 5;
+    public static final long MENTION_RETRY_BASE_SECONDS = 15;
+    public static final long MENTION_RETRY_MAX_SECONDS = 600;
+    public static final long MENTION_PROCESSING_TIMEOUT_SECONDS = 600;
+
     /** Content row status used by project insights and context events. */
     public static final String STATUS_ACTIVE = "ACTIVE";
 

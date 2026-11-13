@@ -122,7 +122,7 @@ public class SuperAgentDirectoryServiceImpl implements SuperAgentDirectorySpi {
         }
         return new AvatarInfo(agent.getId(), agent.getName(), agent.getOwnerUserId(), agent.getStatus(),
                 Boolean.TRUE.equals(agent.getPublicVisible()), agent.getRouterInstanceId(),
-                agent.getWorkerInstanceId());
+                agent.getWorkerInstanceId(), agent.getAgentType(), agent.getLocalRuntimeId());
     }
 
     @Override

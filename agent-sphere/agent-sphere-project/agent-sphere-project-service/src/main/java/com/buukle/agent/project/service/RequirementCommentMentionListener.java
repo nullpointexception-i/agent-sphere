@@ -18,19 +18,26 @@ import com.buukle.agent.project.event.RequirementCommentMentionedEvent;
 import com.buukle.agent.project.repository.PmProjectMapper;
 import com.buukle.agent.project.repository.PmRequirementCommentMapper;
 import com.buukle.agent.project.repository.PmRequirementMapper;
+import com.buukle.agent.superagent.dtvo.enums.AgentType;
 import com.buukle.agent.superagent.spi.AvatarConsultCommand;
 import com.buukle.agent.superagent.spi.AvatarConsultResult;
 import com.buukle.agent.superagent.spi.AvatarConsultSpi;
 import com.buukle.agent.superagent.spi.AvatarInfo;
+import com.buukle.agent.superagent.spi.LocalProjectMentionCommand;
+import com.buukle.agent.superagent.spi.LocalProjectMentionDispatchPort;
+import com.buukle.agent.superagent.spi.LocalProjectMentionDispatchResult;
+import com.buukle.agent.superagent.spi.ProjectThreadSpi;
 import com.buukle.agent.superagent.spi.SuperAgentDirectorySpi;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -57,6 +64,8 @@ public class RequirementCommentMentionListener {
     private final PmRequirementMapper requirementMapper;
     private final PmRequirementCommentMapper commentMapper;
     private final AvatarConsultSpi avatarConsultSpi;
+    private final ObjectProvider<LocalProjectMentionDispatchPort> localMentionPortProvider;
+    private final ProjectThreadSpi projectThreadSpi;
 
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -89,12 +98,22 @@ public class RequirementCommentMentionListener {
                 return;
             }
             String username = usernameOf(mention.getTargetUserId());
+            String question = buildQuestion(project, requirement, event.commentId(),
+                    event.actorUserId());
+            if (AgentType.LOCAL.equals(avatar.agentType())) {
+                dispatchLocal(event, mention, project, avatar, question, username);
+                return;
+            }
+            if (avatar.routerInstanceId() == null) {
+                mentionService.markFailed(event.mentionId(),
+                        "avatar has no runnable instance");
+                return;
+            }
             AvatarConsultResult result = avatarConsultSpi.consult(new AvatarConsultCommand(
                     event.tenantId(), mention.getTargetUserId(), username, avatar.agentId(),
-                    buildQuestion(project, requirement, event.commentId(), event.actorUserId()),
-                    ProjectAssistantConstants.AVATAR_CONSULT_TIMEOUT_SECONDS));
+                    question, ProjectAssistantConstants.AVATAR_CONSULT_TIMEOUT_SECONDS));
             if (!result.ok()) {
-                mentionService.markFailed(event.mentionId(), result.error());
+                retryOrFail(mention, result.error());
                 return;
             }
             RequirementCommentVO reply = commentService.add(
@@ -109,13 +128,72 @@ public class RequirementCommentMentionListener {
                     event.mentionId(), e.getMessage());
             try {
                 bind(event.tenantId(), event.targetUserId());
-                mentionService.markFailed(event.mentionId(), e.getMessage());
+                PmRequirementCommentMention mention = mentionService.find(event.mentionId());
+                if (mention != null) {
+                    retryOrFail(mention, e.getMessage());
+                }
             } catch (Exception ignored) {
                 // best effort
             }
         } finally {
             snapshot.restore();
         }
+    }
+
+    private void dispatchLocal(RequirementCommentMentionedEvent event,
+                               PmRequirementCommentMention mention, PmProject project,
+                               AvatarInfo avatar, String question, String username) {
+        LocalProjectMentionDispatchPort port = localMentionPortProvider.getIfAvailable();
+        if (port == null) {
+            mentionService.markFailed(event.mentionId(),
+                    "local runtime dispatch is unavailable");
+            return;
+        }
+        Long threadId = projectThreadSpi.ensureProjectThread(
+                event.tenantId(), project.getId(), project.getName(), username);
+        LocalProjectMentionDispatchResult result = port.dispatch(
+                new LocalProjectMentionCommand(
+                        event.tenantId(), avatar.agentId(), event.actorUserId(),
+                        displayName(event.actorUserId()), project.getId(),
+                        event.requirementId(), event.commentId(), event.mentionId(),
+                        threadId, project.getName(), question));
+        if (result == null) {
+            retryOrFail(mention, "local runtime dispatch returned no result");
+            return;
+        }
+        if (result.accepted()) {
+            return;
+        }
+        if (result.retryable()) {
+            retryOrFail(mention, result.message());
+            return;
+        }
+        mentionService.markFailed(event.mentionId(), result.message());
+    }
+
+    private void retryOrFail(PmRequirementCommentMention mention, String error) {
+        int attempts = mention.getAttempts() == null ? 1 : mention.getAttempts();
+        if (attempts >= ProjectAssistantConstants.MENTION_MAX_ATTEMPTS
+                || !retryable(error)) {
+            mentionService.markFailed(mention.getId(), error);
+            return;
+        }
+        long seconds = Math.min(
+                ProjectAssistantConstants.MENTION_RETRY_BASE_SECONDS
+                        * (1L << Math.min(attempts - 1, 6)),
+                ProjectAssistantConstants.MENTION_RETRY_MAX_SECONDS);
+        mentionService.scheduleRetry(mention.getId(), error,
+                LocalDateTime.now().plusSeconds(seconds));
+    }
+
+    private static boolean retryable(String error) {
+        if (error == null) {
+            return false;
+        }
+        String text = error.toLowerCase(java.util.Locale.ROOT);
+        return text.contains("busy") || text.contains("timed out")
+                || text.contains("timeout") || text.contains("offline")
+                || text.contains("temporarily") || text.contains("no result");
     }
 
     private String buildQuestion(PmProject project, PmRequirement requirement, Long commentId,

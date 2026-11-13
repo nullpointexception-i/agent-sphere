@@ -33,6 +33,7 @@ public class LocalTaskPayloadBuilder {
     private static final int MAX_TRANSCRIPT_CHARS = 12_000;
     private static final int DEFAULT_MAX_REPLY_CHARS = 4_000;
     private static final String DEFAULT_SPEAKER = "User";
+    private static final String REASON_PROJECT_MENTION = "project mention";
 
     private final AgentEventMapper eventMapper;
     private final AgentThreadMapper threadMapper;
@@ -51,6 +52,34 @@ public class LocalTaskPayloadBuilder {
         payload.setTrigger(trigger(deliveries));
         payload.setReply(reply(agent));
         payload.setSessionRef(sessionRef(agent.getId(), threadId));
+        payload.setDeadlineAt(LocalDateTime.now().plusSeconds(Math.max(30, timeoutSeconds)).toString());
+        return payload;
+    }
+
+    /** Build a one-off task that is not backed by an IM event delivery. */
+    public LocalTaskPayloadVO buildProjectMention(AgentSuperAgent agent, Long threadId,
+                                                  String threadTitle, String question,
+                                                  String speaker, long timeoutSeconds) {
+        LocalTaskPayloadVO payload = new LocalTaskPayloadVO();
+        payload.setAgentId(agent.getId());
+        payload.setAgentName(agent.getName());
+        LocalTaskPayloadVO.ThreadInfo thread = new LocalTaskPayloadVO.ThreadInfo();
+        thread.setId(threadId);
+        thread.setTitle(threadTitle);
+        payload.setThread(thread);
+        payload.setPersona(persona(agent));
+        LocalTaskPayloadVO.Message message = new LocalTaskPayloadVO.Message();
+        message.setSeq(0L);
+        message.setSpeaker(speaker);
+        message.setSpeakerType(LocalTaskPayloadVO.SPEAKER_TYPE_USER);
+        message.setText(question);
+        message.setAt(LocalDateTime.now().toString());
+        payload.setMessages(List.of(message));
+        LocalTaskPayloadVO.Trigger trigger = new LocalTaskPayloadVO.Trigger();
+        trigger.setReason(REASON_PROJECT_MENTION);
+        payload.setTrigger(trigger);
+        payload.setReply(reply(agent));
+        payload.setSessionRef(threadId == null ? null : sessionRef(agent.getId(), threadId));
         payload.setDeadlineAt(LocalDateTime.now().plusSeconds(Math.max(30, timeoutSeconds)).toString());
         return payload;
     }
@@ -114,7 +143,7 @@ public class LocalTaskPayloadBuilder {
             LocalTaskPayloadVO.Message message = new LocalTaskPayloadVO.Message();
             message.setSeq(event.getSeq());
             message.setSpeaker(speaker(event));
-            message.setSpeakerType("USER");
+            message.setSpeakerType(LocalTaskPayloadVO.SPEAKER_TYPE_USER);
             message.setText(text(event));
             message.setAt(event.getReceivedAt() == null ? null : event.getReceivedAt().toString());
             rows.add(message);

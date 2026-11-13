@@ -83,6 +83,7 @@ public class RequirementCommentMentionService {
             boolean avatar = CommentMentionType.AVATAR.value().equals(mention.getMentionType());
             mention.setStatus(avatar ? CommentMentionStatus.PENDING.value()
                     : CommentMentionStatus.SKIPPED.value());
+            mention.setAttempts(0);
             if (!avatar) {
                 mention.setProcessedAt(LocalDateTime.now());
                 mention.setRemark("User mentions are displayed inline; no automatic action.");
@@ -106,7 +107,54 @@ public class RequirementCommentMentionService {
                 .eq(PmRequirementCommentMention::getStatus, CommentMentionStatus.PENDING.value())
                 .set(PmRequirementCommentMention::getStatus,
                         CommentMentionStatus.PROCESSING.value())
+                .set(PmRequirementCommentMention::getNextRetryAt, null)
+                .setSql("attempts = attempts + 1")
                 .set(PmRequirementCommentMention::getUpdatedAt, LocalDateTime.now())) > 0;
+    }
+
+    public List<PmRequirementCommentMention> findDuePending(int limit) {
+        return mentionMapper.selectList(new LambdaQueryWrapper<PmRequirementCommentMention>()
+                .eq(PmRequirementCommentMention::getStatus,
+                        CommentMentionStatus.PENDING.value())
+                .and(w -> w.isNull(PmRequirementCommentMention::getNextRetryAt)
+                        .or().le(PmRequirementCommentMention::getNextRetryAt,
+                                LocalDateTime.now()))
+                .orderByAsc(PmRequirementCommentMention::getId)
+                .last("LIMIT " + Math.max(1, limit)));
+    }
+
+    public List<PmRequirementCommentMention> findStaleProcessing(int limit) {
+        return mentionMapper.selectList(new LambdaQueryWrapper<PmRequirementCommentMention>()
+                .eq(PmRequirementCommentMention::getStatus,
+                        CommentMentionStatus.PROCESSING.value())
+                .le(PmRequirementCommentMention::getUpdatedAt,
+                        LocalDateTime.now().minusSeconds(
+                                ProjectAssistantConstants.MENTION_PROCESSING_TIMEOUT_SECONDS))
+                .orderByAsc(PmRequirementCommentMention::getId)
+                .last("LIMIT " + Math.max(1, limit)));
+    }
+
+    /** Release a stale PROCESSING claim so the reconciler can retry it. */
+    public void resetProcessing(Long mentionId) {
+        mentionMapper.update(null, new LambdaUpdateWrapper<PmRequirementCommentMention>()
+                .eq(PmRequirementCommentMention::getId, mentionId)
+                .eq(PmRequirementCommentMention::getStatus,
+                        CommentMentionStatus.PROCESSING.value())
+                .set(PmRequirementCommentMention::getStatus,
+                        CommentMentionStatus.PENDING.value())
+                .set(PmRequirementCommentMention::getNextRetryAt, LocalDateTime.now())
+                .set(PmRequirementCommentMention::getUpdatedAt, LocalDateTime.now()));
+    }
+
+    /** Return a mention to PENDING with exponential backoff. */
+    public void scheduleRetry(Long mentionId, String error, LocalDateTime retryAt) {
+        mentionMapper.update(null, new LambdaUpdateWrapper<PmRequirementCommentMention>()
+                .eq(PmRequirementCommentMention::getId, mentionId)
+                .set(PmRequirementCommentMention::getStatus,
+                        CommentMentionStatus.PENDING.value())
+                .set(PmRequirementCommentMention::getErrorMessage, truncate(error))
+                .set(PmRequirementCommentMention::getNextRetryAt, retryAt)
+                .set(PmRequirementCommentMention::getUpdatedAt, LocalDateTime.now()));
     }
 
     public PmRequirementCommentMention find(Long mentionId) {
@@ -119,6 +167,8 @@ public class RequirementCommentMentionService {
                 .set(PmRequirementCommentMention::getStatus,
                         CommentMentionStatus.PROCESSED.value())
                 .set(PmRequirementCommentMention::getReplyCommentId, replyCommentId)
+                .set(PmRequirementCommentMention::getErrorMessage, null)
+                .set(PmRequirementCommentMention::getNextRetryAt, null)
                 .set(PmRequirementCommentMention::getProcessedAt, LocalDateTime.now()));
     }
 
@@ -128,6 +178,7 @@ public class RequirementCommentMentionService {
                 .set(PmRequirementCommentMention::getStatus,
                         CommentMentionStatus.FAILED.value())
                 .set(PmRequirementCommentMention::getErrorMessage, truncate(error))
+                .set(PmRequirementCommentMention::getNextRetryAt, null)
                 .set(PmRequirementCommentMention::getProcessedAt, LocalDateTime.now()));
     }
 
@@ -157,6 +208,7 @@ public class RequirementCommentMentionService {
             AvatarInfo avatar = avatars.get(mention.getTargetAgentId());
             vo.setTargetAgentName(avatar == null ? null : avatar.name());
             vo.setStatus(mention.getStatus());
+            vo.setErrorMessage(mention.getErrorMessage());
             result.computeIfAbsent(mention.getCommentId(), key -> new ArrayList<>()).add(vo);
         }
         return result;

@@ -13,4 +13,5 @@ public class RequirementCommentMentionVO {
     private Long targetAgentId;
     private String targetAgentName;
     private String status;
+    private String errorMessage;
 }

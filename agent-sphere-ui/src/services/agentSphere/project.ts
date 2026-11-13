@@ -62,6 +62,7 @@ export interface RequirementCommentMentionVO {
   targetAgentId?: number;
   targetAgentName?: string;
   status?: string;
+  errorMessage?: string;
 }
 
 export interface RequirementCommentVO {
@@ -129,6 +130,8 @@ export interface ProjectAssistantAvatarVO {
   publicVisible?: boolean;
   ownedByRequester?: boolean;
   status?: string;
+  agentType?: string;
+  localRuntimeId?: number;
 }
 
 export interface ProjectAssistantSettingsVO {

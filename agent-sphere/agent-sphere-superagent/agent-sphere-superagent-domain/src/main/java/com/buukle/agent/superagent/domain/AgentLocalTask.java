@@ -22,6 +22,9 @@ public class AgentLocalTask {
     private Long superAgentId;
     private Long runtimeId;
     private Long threadId;
+    /** Business owner of a non-IM task, e.g. PROJECT_MENTION. */
+    private String businessType;
+    private Long businessId;
     private String status;
     private String inputPayload;
     private String sessionRef;

@@ -25,6 +25,8 @@ public class PmRequirementCommentMention {
     private LocalDateTime processedAt;
     private Long replyCommentId;
     private String errorMessage;
+    private Integer attempts;
+    private LocalDateTime nextRetryAt;
     private String remark;
     @TableLogic(value = "false", delval = "true")
     private Boolean deleteFlag;

@@ -8,6 +8,8 @@ public record AvatarInfo(
         String status,
         boolean publicVisible,
         Long routerInstanceId,
-        Long workerInstanceId
+        Long workerInstanceId,
+        String agentType,
+        Long localRuntimeId
 ) {
 }

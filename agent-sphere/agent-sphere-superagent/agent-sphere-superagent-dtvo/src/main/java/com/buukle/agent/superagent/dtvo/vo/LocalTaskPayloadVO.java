@@ -12,6 +12,9 @@ import java.util.List;
 @Data
 public class LocalTaskPayloadVO implements Serializable {
 
+    public static final String SPEAKER_TYPE_USER = "USER";
+    public static final String SPEAKER_TYPE_AGENT = "AGENT";
+
     private Long taskId;
     private Long agentId;
     private String agentName;

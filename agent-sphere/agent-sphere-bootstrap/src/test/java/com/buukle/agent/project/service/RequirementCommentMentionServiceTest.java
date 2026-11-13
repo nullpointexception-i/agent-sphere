@@ -101,7 +101,7 @@ class RequirementCommentMentionServiceTest {
         when(projectMapper.selectById(PROJECT_ID)).thenReturn(project());
         when(memberMapper.selectList(any())).thenReturn(List.of());
         when(directorySpi.findAvatar(77L)).thenReturn(new AvatarInfo(
-                77L, "Analyst", OWNER_ID, "ACTIVE", true, 5L, 6L));
+                77L, "Analyst", OWNER_ID, "ACTIVE", true, 5L, 6L, "CLOUD", null));
 
         List<PmRequirementCommentMention> rows = service.create(
                 PROJECT_ID, REQUIREMENT_ID, COMMENT_ID, OWNER_ID,

@@ -66,12 +66,15 @@ public class RequirementCommentService {
             throw new BizException(CommonErrorCode.PARAM_INVALID,
                     "comment content or attachments are required");
         }
-        if (StringUtils.hasText(command.actionKey()) && command.sourceRunId() != null) {
-            PmRequirementComment existing = commentMapper.selectOne(
+        if (StringUtils.hasText(command.actionKey())) {
+            LambdaQueryWrapper<PmRequirementComment> existingQuery =
                     new LambdaQueryWrapper<PmRequirementComment>()
-                            .eq(PmRequirementComment::getSourceRunId, command.sourceRunId())
-                            .eq(PmRequirementComment::getActionKey, command.actionKey())
-                            .last("LIMIT 1"));
+                            .eq(PmRequirementComment::getActionKey, command.actionKey());
+            if (command.sourceRunId() != null) {
+                existingQuery.eq(PmRequirementComment::getSourceRunId, command.sourceRunId());
+            }
+            PmRequirementComment existing = commentMapper.selectOne(
+                    existingQuery.last("LIMIT 1"));
             if (existing != null) {
                 return toVO(existing);
             }
@@ -100,7 +103,20 @@ public class RequirementCommentService {
             comment.setAttachments(JsonUtils.toJson(command.attachments()));
         }
         comment.setStatus(COMMENT_STATUS_ACTIVE);
-        commentMapper.insert(comment);
+        try {
+            commentMapper.insert(comment);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            if (StringUtils.hasText(command.actionKey())) {
+                PmRequirementComment existing = commentMapper.selectOne(
+                        new LambdaQueryWrapper<PmRequirementComment>()
+                                .eq(PmRequirementComment::getActionKey, command.actionKey())
+                                .last("LIMIT 1"));
+                if (existing != null) {
+                    return toVO(existing);
+                }
+            }
+            throw e;
+        }
         mentionService.create(command.projectId(), requirement.getId(), comment.getId(),
                 command.authorUserId(), command.mentions());
         recordContext(requirement, command, content);

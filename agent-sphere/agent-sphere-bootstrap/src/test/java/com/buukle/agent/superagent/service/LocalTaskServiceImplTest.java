@@ -17,6 +17,9 @@ import com.buukle.agent.superagent.repository.AgentOutboundMessageMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.event.AgentOutboundWakePublisher;
 import com.buukle.agent.superagent.service.impl.LocalTaskServiceImpl;
+import com.buukle.agent.superagent.spi.LocalTaskBusinessTypes;
+import com.buukle.agent.superagent.spi.ProjectMentionTaskCompletedEvent;
+import com.buukle.agent.superagent.spi.ProjectMentionTaskFailedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +27,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,6 +64,8 @@ class LocalTaskServiceImplTest {
     UserSpi userSpi;
     @Mock
     ObjectProvider<AgentStreamPort> streamPortProvider;
+    @Mock
+    ApplicationEventPublisher eventPublisher;
 
     LocalTaskServiceImpl service;
 
@@ -67,7 +73,7 @@ class LocalTaskServiceImplTest {
     void setUp() {
         service = new LocalTaskServiceImpl(taskMapper, taskDeliveryMapper, sessionMapper,
                 superAgentMapper, outboundMapper, outboundWakePublisher, userSpi,
-                streamPortProvider);
+                streamPortProvider, eventPublisher);
         ReflectionTestUtils.setField(service, "taskTimeoutSeconds", 600L);
         lenient().when(streamPortProvider.getIfAvailable()).thenReturn(null);
     }
@@ -146,6 +152,52 @@ class LocalTaskServiceImplTest {
         verify(taskMapper).fail(TASK_ID, RUNTIME_ID, LocalTaskStatus.CANCELLED,
                 "CANCELLED", "cancelled by user");
         verify(taskDeliveryMapper).markFailed(eq(TASK_ID), any());
+    }
+
+    @Test
+    void complete_projectMentionPublishesReplyAndSkipsOutbound() {
+        AgentLocalTask task = task(LocalTaskStatus.RUNNING, "lease-1");
+        task.setBusinessType(LocalTaskBusinessTypes.PROJECT_MENTION);
+        task.setBusinessId(123L);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+        when(superAgentMapper.selectById(AGENT_ID)).thenReturn(agent());
+        when(taskMapper.complete(eq(TASK_ID), eq(RUNTIME_ID), eq("lease-1"), eq("codex:thr"),
+                eq(null))).thenReturn(1);
+
+        LocalTaskCompleteDTO dto = new LocalTaskCompleteDTO();
+        dto.setLeaseToken("lease-1");
+        dto.setText("analysis result");
+        dto.setSessionRef("codex:thr");
+        service.complete(RUNTIME_ID, TASK_ID, dto);
+
+        verify(outboundMapper, never()).insert(any(AgentOutboundMessage.class));
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        ProjectMentionTaskCompletedEvent event =
+                (ProjectMentionTaskCompletedEvent) captor.getValue();
+        assertEquals(123L, event.mentionId());
+        assertEquals("analysis result", event.text());
+        verify(taskDeliveryMapper).markProcessed(TASK_ID);
+    }
+
+    @Test
+    void fail_projectMentionPublishesFailure() {
+        AgentLocalTask task = task(LocalTaskStatus.RUNNING, "lease-1");
+        task.setBusinessType(LocalTaskBusinessTypes.PROJECT_MENTION);
+        task.setBusinessId(123L);
+        when(taskMapper.selectById(TASK_ID)).thenReturn(task);
+
+        LocalTaskFailDTO dto = new LocalTaskFailDTO();
+        dto.setErrorCode("LOCAL_TASK_FAILED");
+        dto.setErrorMessage("runtime crashed");
+        service.fail(RUNTIME_ID, TASK_ID, dto);
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        ProjectMentionTaskFailedEvent event =
+                (ProjectMentionTaskFailedEvent) captor.getValue();
+        assertEquals(123L, event.mentionId());
+        assertEquals("runtime crashed", event.error());
     }
 
     private static AgentLocalTask task(String status, String leaseToken) {

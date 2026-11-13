@@ -32,12 +32,16 @@ import com.buukle.agent.superagent.repository.AgentOutboundMessageMapper;
 import com.buukle.agent.superagent.repository.AgentSuperAgentMapper;
 import com.buukle.agent.superagent.service.LocalTaskService;
 import com.buukle.agent.superagent.service.event.AgentOutboundWakePublisher;
+import com.buukle.agent.superagent.spi.LocalTaskBusinessTypes;
+import com.buukle.agent.superagent.spi.ProjectMentionTaskCompletedEvent;
+import com.buukle.agent.superagent.spi.ProjectMentionTaskFailedEvent;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,6 +69,7 @@ public class LocalTaskServiceImpl implements LocalTaskService {
     private final AgentOutboundWakePublisher outboundWakePublisher;
     private final UserSpi userSpi;
     private final ObjectProvider<AgentStreamPort> streamPortProvider;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${buukle.agent.super-agent.local.task-timeout-seconds:600}")
     private long taskTimeoutSeconds;
@@ -130,7 +135,9 @@ public class LocalTaskServiceImpl implements LocalTaskService {
         if (agent == null) {
             throw new BizException(CommonErrorCode.RESOURCE_NOT_FOUND, "avatar not found");
         }
-        AgentOutboundMessage outbound = enqueueReply(task, agent, text);
+        boolean projectMention = LocalTaskBusinessTypes.PROJECT_MENTION
+                .equals(task.getBusinessType());
+        AgentOutboundMessage outbound = projectMention ? null : enqueueReply(task, agent, text);
         int updated = taskMapper.complete(taskId, runtimeId, dto.getLeaseToken(),
                 dto.getSessionRef(), outbound == null ? null : outbound.getId());
         if (updated == 0) {
@@ -139,6 +146,11 @@ public class LocalTaskServiceImpl implements LocalTaskService {
         taskDeliveryMapper.markProcessed(taskId);
         upsertSession(task, dto.getSessionRef());
         publishStream(task, AgentStreamPhase.STATUS, "", AgentStreamStatus.COMPLETED, null);
+        if (projectMention && task.getBusinessId() != null) {
+            eventPublisher.publishEvent(new ProjectMentionTaskCompletedEvent(
+                    task.getTenantId(), task.getId(), task.getBusinessId(),
+                    agent.getId(), agent.getName(), text));
+        }
     }
 
     @Override
@@ -160,6 +172,13 @@ public class LocalTaskServiceImpl implements LocalTaskService {
         taskDeliveryMapper.markFailed(taskId, truncate(errorCode + ": " + errorMessage, 500));
         publishStream(task, AgentStreamPhase.STATUS, "",
                 cancelled ? AgentStreamStatus.CANCELLED : AgentStreamStatus.FAILED, errorMessage);
+        if (LocalTaskBusinessTypes.PROJECT_MENTION.equals(task.getBusinessType())
+                && task.getBusinessId() != null) {
+            eventPublisher.publishEvent(new ProjectMentionTaskFailedEvent(
+                    task.getTenantId(), task.getId(), task.getBusinessId(),
+                    task.getSuperAgentId(),
+                    errorMessage == null || errorMessage.isBlank() ? errorCode : errorMessage));
+        }
     }
 
     @Override

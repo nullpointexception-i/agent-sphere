@@ -21,6 +21,10 @@ import com.buukle.agent.superagent.service.LocalRuntimeStreamService;
 import com.buukle.agent.superagent.spi.LocalAgentDispatchCommand;
 import com.buukle.agent.superagent.spi.LocalAgentDispatchPort;
 import com.buukle.agent.superagent.spi.LocalAgentDispatchResult;
+import com.buukle.agent.superagent.spi.LocalProjectMentionCommand;
+import com.buukle.agent.superagent.spi.LocalProjectMentionDispatchPort;
+import com.buukle.agent.superagent.spi.LocalProjectMentionDispatchResult;
+import com.buukle.agent.superagent.spi.LocalTaskBusinessTypes;
 import com.buukle.agent.util.json.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +42,8 @@ import java.util.Objects;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class LocalAgentDispatcher implements LocalAgentDispatchPort {
+public class LocalAgentDispatcher implements LocalAgentDispatchPort,
+        LocalProjectMentionDispatchPort {
 
     private static final long OFFLINE_RETRY_SECONDS = 15;
     private static final int ONLINE_TTL_SECONDS = 90;
@@ -132,6 +137,65 @@ public class LocalAgentDispatcher implements LocalAgentDispatchPort {
         log.info("Local task created: task={}, agent={}, runtime={}, deliveries={}",
                 task.getId(), agent.getId(), runtime.getId(), deliveries.size());
         return new LocalAgentDispatchResult(true, task.getId(), "queued");
+    }
+
+    @Override
+    @Transactional
+    public LocalProjectMentionDispatchResult dispatch(LocalProjectMentionCommand command) {
+        if (command == null || command.agentId() == null || command.mentionId() == null
+                || command.question() == null || command.question().isBlank()) {
+            return LocalProjectMentionDispatchResult.rejected("invalid project mention command");
+        }
+        AgentSuperAgent agent = superAgentMapper.selectById(command.agentId());
+        if (agent == null || !AgentType.LOCAL.equals(agent.getAgentType())
+                || agent.getLocalRuntimeId() == null) {
+            return LocalProjectMentionDispatchResult.rejected(
+                    "local avatar or runtime is not configured");
+        }
+        AgentLocalRuntime runtime = runtimeMapper.selectById(agent.getLocalRuntimeId());
+        if (runtime == null || !LocalRuntimeStatus.ACTIVE.equals(runtime.getStatus())) {
+            return LocalProjectMentionDispatchResult.rejected(
+                    "local runtime is missing or disabled");
+        }
+        if (!online(runtime)) {
+            return LocalProjectMentionDispatchResult.retry("local runtime is offline");
+        }
+        AgentLocalTask existing = taskMapper.selectOne(
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<AgentLocalTask>lambdaQuery()
+                        .eq(AgentLocalTask::getBusinessType, LocalTaskBusinessTypes.PROJECT_MENTION)
+                        .eq(AgentLocalTask::getBusinessId, command.mentionId())
+                        .in(AgentLocalTask::getStatus,
+                                LocalTaskStatus.PENDING, LocalTaskStatus.RUNNING)
+                        .last("LIMIT 1"));
+        if (existing != null) {
+            return LocalProjectMentionDispatchResult.accepted(existing.getId());
+        }
+
+        LocalTaskPayloadVO payload = payloadBuilder.buildProjectMention(
+                agent, command.threadId(), command.threadTitle(), command.question(),
+                command.actorName(), taskTimeoutSeconds);
+        AgentLocalTask task = new AgentLocalTask();
+        task.setTenantId(agent.getTenantId());
+        task.setSuperAgentId(agent.getId());
+        task.setRuntimeId(runtime.getId());
+        task.setThreadId(command.threadId());
+        task.setBusinessType(LocalTaskBusinessTypes.PROJECT_MENTION);
+        task.setBusinessId(command.mentionId());
+        task.setStatus(LocalTaskStatus.PENDING);
+        task.setInputPayload(JsonUtils.toJson(payload));
+        task.setSessionRef(payload.getSessionRef());
+        task.setLastSeq(0L);
+        task.setAttempts(0);
+        task.setDeadlineAt(LocalDateTime.now().plusSeconds(Math.max(30, taskTimeoutSeconds)));
+        taskMapper.insert(task);
+
+        payload.setTaskId(task.getId());
+        task.setInputPayload(JsonUtils.toJson(payload));
+        taskMapper.updateById(task);
+        publishAfterCommit(runtime.getId(), task.getId());
+        log.info("Local project mention task created: task={}, agent={}, mention={}",
+                task.getId(), agent.getId(), command.mentionId());
+        return LocalProjectMentionDispatchResult.accepted(task.getId());
     }
 
     private boolean online(AgentLocalRuntime runtime) {

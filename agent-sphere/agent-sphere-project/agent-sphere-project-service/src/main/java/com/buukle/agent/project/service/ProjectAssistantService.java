@@ -287,6 +287,8 @@ public class ProjectAssistantService {
             vo.setPublicVisible(avatar != null && avatar.publicVisible());
             vo.setOwnedByRequester(Objects.equals(userId, identity.ownerUserId()));
             vo.setStatus(identity.status());
+            vo.setAgentType(avatar == null ? null : avatar.agentType());
+            vo.setLocalRuntimeId(avatar == null ? null : avatar.localRuntimeId());
             result.add(vo);
         }
         return result;
