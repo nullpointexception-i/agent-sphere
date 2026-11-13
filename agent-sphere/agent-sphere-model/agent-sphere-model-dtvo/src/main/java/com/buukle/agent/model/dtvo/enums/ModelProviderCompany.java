@@ -11,6 +11,7 @@ public enum ModelProviderCompany {
     GLM("GLM", "智谱", "GLM"),
     ORCAROUTER("OrcaRouter", "OrcaRouter", "orcarouter"),
     CHEAPERINFERENCE("Cheaper Inference", "Cheaper Inference", "cheaperinference"),
+    UBERLLM("UberLLM", "UberLLM", "uberllm"),
     QWEN("Qwen", "通义千问", "qwen"),
     ;
 
