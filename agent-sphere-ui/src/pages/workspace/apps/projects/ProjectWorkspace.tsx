@@ -645,14 +645,16 @@ export function ProjectWorkspace({
   const commentMentionOptions = [
     ...projectMembers
       .filter((member) => member.userId)
-      .map((member) => ({
-        value: member.displayName || `#${member.userId}`,
-        label: `@${member.displayName || `#${member.userId}`} · ${tw(
-          'projects.mentionMembers',
-          'Member',
-        )}`,
-      })),
+      .map((member) => {
+        const name = member.displayName || `#${member.userId}`;
+        return {
+          key: `mention-user-${member.userId}`,
+          value: name,
+          label: `@${name} · ${tw('projects.mentionMembers', 'Member')}`,
+        };
+      }),
     ...commentAvatars.map((avatar) => ({
+      key: `mention-avatar-${avatar.agentId}`,
       value: avatar.name,
       label: `@${avatar.name} · ${
         avatar.agentType === 'LOCAL'
