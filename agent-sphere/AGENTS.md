@@ -117,7 +117,7 @@ Mandatory guards:
 ### Flyway
 
 - Migrations: `agent-sphere-bootstrap/src/main/resources/db/migration/V<n>__desc.sql`.
-- Current highest: **V149**. Check the directory before adding one.
+- Current highest: **V194** (verify the directory before adding one; this number drifts).
 - `baseline-on-migrate: true`, baseline 0.
 - Never edit an applied migration. New migrations use English comments.
 - Backfills must use the real column types. In particular, check `delete_flag` (see above) and boolean vs smallint comparisons before deploying; a mismatch aborts application startup and leaves the previous pods serving.

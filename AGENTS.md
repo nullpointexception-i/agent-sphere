@@ -11,7 +11,7 @@
   - Generalize URL/path fingerprints into brand-free matching rules.
   - If real site data is unavoidable, move it to config and keep only the key + default in code.
 - **Applied Flyway migrations are immutable**; add a new migration instead. Historical seed data containing a brand must be rewritten by a new migration.
-- **New Flyway migrations use English comments**; historical V1–V149 are frozen.
+- **New Flyway migrations use English comments**; historical migrations are frozen.
 - The four projects are independent: **no root build, no root lockfile**. Run commands inside each project.
 
 ## Projects and reading order
@@ -59,7 +59,7 @@ cd agent-sphere-copilot-widget && npm run dev
 
 ## Deployment (k3s / GitOps)
 
-- `.github/workflows/deploy.yml` is the only workflow: push a `v*` tag (or manual dispatch) → build/push backend/frontend/widget images to ACR → rewrite image tags in `k8s/05-backend.yaml`, `06-frontend.yaml`, `08-widget.yaml` and commit to `main` → package the extension zip and create a Release. No test job.
+- Two workflows: `deploy.yml` — push a `v*` tag (or manual dispatch) → build/push backend/frontend/widget images to ACR → rewrite image tags in `k8s/05-backend.yaml`, `06-frontend.yaml`, `08-widget.yaml` and commit to `main` → package the extension zip and create a Release. `desktop.yml` — `v*` tag or manual dispatch → Electron installers for Windows/macOS/Linux (typecheck only). No test job in either.
 - Tags: `v1.0.NN-alpha`; take the latest with `git tag --sort=-v:refname` and increment.
 - Local `.local-workflow/deploy.sh`: default `--no-tag`; `--tag` increments the version, pushes the tag and creates a Release; `--dry-run` changes nothing; `--skip-existing` skips existing ACR images; `--only backend,frontend,widget` limits scope. Requires `main` and a clean working tree; arm64 hosts automatically add `--platform linux/amd64`.
 - `mirror-middleware-images.sh` pushes PG/Redis images separately and updates `k8s/02`/`03`; wrong architecture causes `exec format error`.
